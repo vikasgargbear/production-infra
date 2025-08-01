@@ -14,8 +14,17 @@ import shutil
 from decimal import Decimal
 
 from ...core.database import get_db
-from bill_parser import parse_pdf
-from bill_parser.models import Invoice, InvoiceItem
+
+# Try to import bill_parser if available
+try:
+    from bill_parser import parse_pdf
+    from bill_parser.models import Invoice, InvoiceItem
+    BILL_PARSER_AVAILABLE = True
+except ImportError:
+    BILL_PARSER_AVAILABLE = False
+    parse_pdf = None
+    Invoice = None
+    InvoiceItem = None
 
 # Try to import custom parser at module level
 try:
@@ -186,7 +195,8 @@ async def parse_purchase_invoice_safe(
         try:
             # Try to parse with bill_parser
             try:
-                from bill_parser import parse_pdf
+                if not BILL_PARSER_AVAILABLE:
+                    raise ImportError("bill_parser not available")
                 invoice_data = parse_pdf(tmp_path)
                 
                 # Check if we got any useful data
