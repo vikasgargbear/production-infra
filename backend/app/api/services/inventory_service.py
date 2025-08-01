@@ -10,7 +10,7 @@ from sqlalchemy import text
 from uuid import UUID
 import logging
 
-from ..schemas_v2.inventory import (
+from ..schemas.inventory import (
     BatchCreate, BatchResponse, StockMovementCreate,
     StockMovementResponse, StockAdjustment,
     CurrentStock, ExpiryAlert,

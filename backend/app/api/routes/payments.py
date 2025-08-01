@@ -11,7 +11,7 @@ from sqlalchemy import text
 from pydantic import BaseModel, Field
 import logging
 
-from ...database import get_db
+from ...core.database import get_db
 from ...services.payment_service import PaymentService
 
 logger = logging.getLogger(__name__)

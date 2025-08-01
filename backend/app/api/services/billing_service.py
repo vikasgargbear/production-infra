@@ -10,7 +10,7 @@ from sqlalchemy import text
 from uuid import UUID
 import logging
 
-from ..schemas_v2.billing import (
+from ..schemas.billing import (
     InvoiceCreate, InvoiceResponse, InvoiceItemBase,
     PaymentCreate, PaymentResponse,
     GSTType, InvoiceStatus, GSTR1Summary,

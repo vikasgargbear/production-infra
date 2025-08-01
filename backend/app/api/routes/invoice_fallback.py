@@ -9,7 +9,7 @@ from fastapi import APIRouter, Depends, HTTPException, Path
 from sqlalchemy.orm import Session
 from sqlalchemy import text
 
-from ...database import get_db
+from ...core.database import get_db
 from ...core.auth import get_current_org
 from ...services.invoice_service import InvoiceService
 

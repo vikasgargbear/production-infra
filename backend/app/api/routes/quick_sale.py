@@ -12,7 +12,7 @@ from sqlalchemy import text
 from pydantic import BaseModel, Field
 import uuid
 
-from ...database import get_db
+from ...core.database import get_db
 from ...core.auth import get_current_org
 
 router = APIRouter(

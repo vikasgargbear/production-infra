@@ -11,7 +11,7 @@ from datetime import datetime, date
 from decimal import Decimal
 import uuid
 
-from ...database import get_db
+from ...core.database import get_db
 
 logger = logging.getLogger(__name__)
 

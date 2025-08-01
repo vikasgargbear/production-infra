@@ -9,7 +9,7 @@ from datetime import timedelta
 from typing import Dict, Any, List
 import uuid
 
-from ...database import get_db
+from ...core.database import get_db
 from ...core.jwt_auth import (
     verify_password, get_password_hash, create_access_token,
     ACCESS_TOKEN_EXPIRE_MINUTES, get_current_user_and_org,

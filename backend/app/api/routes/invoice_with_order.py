@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import text
 from pydantic import BaseModel, Field
 
-from ...database import get_db
+from ...core.database import get_db
 from ...dependencies import get_current_org
 from ...services.order_service import OrderService
 

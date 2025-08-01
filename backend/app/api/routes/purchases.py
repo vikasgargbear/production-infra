@@ -9,7 +9,7 @@ from sqlalchemy import text
 import logging
 from datetime import date
 
-from ...database import get_db
+from ...core.database import get_db
 from ...models import Purchase
 from ...core.crud_base import create_crud
 

@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import text
 import logging
 
-from ...database import get_db
+from ...core.database import get_db
 from ...models import User
 from ...core.crud_base import create_crud
 

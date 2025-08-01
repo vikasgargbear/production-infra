@@ -9,7 +9,7 @@ import json
 import uuid
 from datetime import datetime
 
-from ...database import get_db
+from ...core.database import get_db
 from ...core.auth import get_current_org
 
 router = APIRouter(prefix="/organizations", tags=["organizations"])

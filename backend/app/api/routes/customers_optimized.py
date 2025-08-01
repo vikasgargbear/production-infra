@@ -9,8 +9,8 @@ from sqlalchemy import text
 import logging
 from functools import lru_cache
 
-from ...database import get_db
-from ...schemas_v2.customer import (
+from ...core.database import get_db
+from ..schemas.customer import (
     CustomerCreate, CustomerUpdate, CustomerResponse, CustomerListResponse,
     CustomerLedgerResponse, CustomerOutstandingResponse,
     PaymentRecord, PaymentResponse

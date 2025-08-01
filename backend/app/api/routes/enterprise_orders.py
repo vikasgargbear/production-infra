@@ -9,7 +9,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 import logging
 
-from ...database import get_db
+from ...core.database import get_db
 from ...core.auth import get_current_org
 from ...services.enterprise_order_service import (
     EnterpriseOrderService,

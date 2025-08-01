@@ -13,7 +13,7 @@ import tempfile
 import shutil
 from decimal import Decimal
 
-from ...database import get_db
+from ...core.database import get_db
 from bill_parser import parse_pdf
 from bill_parser.models import Invoice, InvoiceItem
 

@@ -9,8 +9,8 @@ from sqlalchemy import text
 from datetime import date
 from uuid import UUID
 
-from ...database import get_db
-from ...schemas_v2.billing import (
+from ...core.database import get_db
+from ..schemas.billing import (
     InvoiceCreate, InvoiceResponse,
     PaymentCreate, PaymentResponse,
     GSTR1Summary, InvoiceSummary

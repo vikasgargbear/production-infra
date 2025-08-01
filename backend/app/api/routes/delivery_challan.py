@@ -9,7 +9,7 @@ from sqlalchemy import text
 import logging
 from datetime import date, datetime
 
-from ...database import get_db
+from ...core.database import get_db
 
 logger = logging.getLogger(__name__)
 

@@ -9,8 +9,8 @@ from sqlalchemy.orm import Session
 from sqlalchemy import text
 import logging
 
-from ...database import get_db
-from ...schemas_v2.inventory import (
+from ...core.database import get_db
+from ..schemas.inventory import (
     BatchCreate, BatchResponse, StockMovementCreate,
     StockMovementResponse, StockAdjustment,
     CurrentStock, ExpiryAlert,

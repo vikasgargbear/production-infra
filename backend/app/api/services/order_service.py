@@ -10,7 +10,7 @@ from sqlalchemy import text
 from uuid import UUID
 import logging
 
-from ..schemas_v2.order import (
+from ..schemas.order import (
     ReturnRequest
 )
 

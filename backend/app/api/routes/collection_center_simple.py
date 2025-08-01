@@ -12,7 +12,7 @@ from decimal import Decimal
 import json
 import urllib.parse
 
-from ...database import get_db
+from ...core.database import get_db
 
 logger = logging.getLogger(__name__)
 

@@ -10,8 +10,8 @@ from sqlalchemy.orm import Session
 from sqlalchemy import text
 import logging
 
-from ...database import get_db
-from ...schemas_v2.order import (
+from ...core.database import get_db
+from ..schemas.order import (
     OrderCreate, OrderResponse, OrderListResponse, InvoiceRequest,
     InvoiceResponse, DeliveryUpdate, OrderUpdate
 )

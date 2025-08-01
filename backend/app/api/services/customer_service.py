@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import text
 import logging
 
-from ..schemas_v2.customer import (
+from ..schemas.customer import (
     CustomerLedgerEntry, CustomerLedgerResponse, OutstandingInvoice,
     CustomerOutstandingResponse, PaymentRecord,
     PaymentResponse

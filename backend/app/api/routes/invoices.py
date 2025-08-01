@@ -11,7 +11,7 @@ from decimal import Decimal
 from datetime import date
 import logging
 
-from ...database import get_db
+from ...core.database import get_db
 from ...services.invoice_service import InvoiceService
 
 logger = logging.getLogger(__name__)

@@ -10,7 +10,7 @@ import logging
 import bcrypt
 from datetime import datetime
 
-from ...database import get_db
+from ...core.database import get_db
 
 logger = logging.getLogger(__name__)
 

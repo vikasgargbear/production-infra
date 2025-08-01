@@ -10,7 +10,7 @@ import logging
 from datetime import datetime, date, timedelta
 from decimal import Decimal
 
-from ...database import get_db
+from ...core.database import get_db
 
 logger = logging.getLogger(__name__)
 
