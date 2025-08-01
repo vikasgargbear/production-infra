@@ -15,7 +15,7 @@ from ..schemas.billing import (
     PaymentCreate, PaymentResponse,
     GSTR1Summary, InvoiceSummary
 )
-from ...services.billing_service import BillingService
+from ..services.billing_service import BillingService
 import logging
 
 logger = logging.getLogger(__name__)

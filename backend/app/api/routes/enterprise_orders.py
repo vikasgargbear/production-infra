@@ -11,7 +11,7 @@ import logging
 
 from ...core.database import get_db
 from ...core.auth import get_current_org
-from ...services.enterprise_order_service import (
+from ..services.enterprise_order_service import (
     EnterpriseOrderService,
     OrderCreationRequest,
     OrderCreationResponse,

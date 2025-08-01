@@ -15,9 +15,9 @@ from ..schemas.order import (
     OrderCreate, OrderResponse, OrderListResponse, InvoiceRequest,
     InvoiceResponse, DeliveryUpdate, ReturnRequest
 )
-from ...services.order_service import OrderService
-from ...services.customer_service import CustomerService
-from ...services.invoice_service import InvoiceService
+from ..services.order_service import OrderService
+from ..services.customer_service import CustomerService
+from ..services.invoice_service import InvoiceService
 
 logger = logging.getLogger(__name__)
 

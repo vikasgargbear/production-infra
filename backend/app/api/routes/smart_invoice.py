@@ -12,7 +12,7 @@ import json
 
 from ...core.database import get_db
 from ...core.auth import get_current_org
-from ...services.invoice_service import InvoiceService
+from ..services.invoice_service import InvoiceService
 
 router = APIRouter(
     prefix="/api/v1/smart-invoice",

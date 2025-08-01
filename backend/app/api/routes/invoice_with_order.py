@@ -14,7 +14,7 @@ from pydantic import BaseModel, Field
 
 from ...core.database import get_db
 from ...dependencies import get_current_org
-from ...services.order_service import OrderService
+from ..services.order_service import OrderService
 
 router = APIRouter(
     prefix="/api/v1/invoices",
@@ -209,7 +209,7 @@ async def create_invoice_with_order(
         """), {"customer_id": invoice_data.customer_id}).first()
         
         # Generate invoice using the service
-        from ...services.invoice_service import InvoiceService
+        from ..services.invoice_service import InvoiceService
         
         invoice_result = InvoiceService.generate_invoice_for_order(
             db=db,

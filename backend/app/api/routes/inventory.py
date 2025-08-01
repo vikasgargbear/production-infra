@@ -16,7 +16,7 @@ from ..schemas.inventory import (
     CurrentStock, ExpiryAlert,
     StockValuation, InventoryDashboard
 )
-from ...services.inventory_service import InventoryService
+from ..services.inventory_service import InventoryService
 
 logger = logging.getLogger(__name__)
 

@@ -13,7 +13,7 @@ import uuid
 from pydantic import BaseModel, Field
 
 from ...core.database import get_db
-from ...services.gst_service import GSTService, GSTType
+from ..services.gst_service import GSTService, GSTType
 
 logger = logging.getLogger(__name__)
 

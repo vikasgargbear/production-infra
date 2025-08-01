@@ -12,7 +12,7 @@ from datetime import date
 import logging
 
 from ...core.database import get_db
-from ...services.invoice_service import InvoiceService
+from ..services.invoice_service import InvoiceService
 
 logger = logging.getLogger(__name__)
 
