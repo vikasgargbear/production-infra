@@ -1,0 +1,69 @@
+# Dependencies
+node_modules/
+venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+
+# Environment
+.env
+.env.*
+!.env.example
+*.local
+
+# Build outputs
+build/
+dist/
+*.egg-info/
+.eggs/
+frontend/build/
+backend/dist/
+
+# IDE
+.vscode/
+!.vscode/extensions.json
+!.vscode/settings.json.example
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Testing
+coverage/
+.coverage
+.coverage.*
+.pytest_cache/
+htmlcov/
+.nyc_output/
+
+# Database
+*.sqlite
+*.sqlite3
+*.db
+database/backups/
+
+# Temporary
+*.tmp
+*.temp
+*.bak
+.cache/
+temp/
+tmp/
+
+# Production
+*.pem
+*.key
+*.cert
+secrets/

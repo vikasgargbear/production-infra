@@ -1,0 +1,808 @@
+-- =============================================
+-- COMPLIANCE & REGULATORY TRIGGERS
+-- =============================================
+-- Schema: compliance
+-- Critical for pharmaceutical regulatory requirements
+-- Handles licenses, narcotic tracking, inspections
+-- =============================================
+
+-- =============================================
+-- 1. LICENSE EXPIRY ALERT TRIGGER
+-- =============================================
+CREATE OR REPLACE FUNCTION check_license_expiry_alerts()
+RETURNS TRIGGER AS $$
+DECLARE
+    v_days_to_expiry INTEGER;
+    v_renewal_period INTEGER;
+    v_alert_level TEXT;
+    v_alert_title TEXT;
+BEGIN
+    -- Calculate days to expiry
+    v_days_to_expiry := (NEW.valid_until - CURRENT_DATE)::INTEGER;
+    
+    -- Get renewal period for this license type
+    SELECT renewal_before_expiry_days 
+    INTO v_renewal_period
+    FROM compliance.license_types
+    WHERE license_type_id = NEW.license_type_id;
+    
+    -- Determine alert level and create notifications
+    IF v_days_to_expiry <= 0 THEN
+        -- License has expired
+        v_alert_level := 'error';
+        v_alert_title := 'License Expired!';
+        NEW.license_status := 'expired';
+        
+        -- Critical notification
+        INSERT INTO system_config.system_notifications (
+            org_id,
+            notification_type,
+            notification_category,
+            title,
+            message,
+            priority,
+            target_audience,
+            notification_data
+        ) VALUES (
+            NEW.org_id,
+            'error',
+            'compliance',
+            v_alert_title,
+            format('CRITICAL: %s (License #%s) has EXPIRED on %s. Operations may be illegal!',
+                NEW.license_name,
+                NEW.license_number,
+                TO_CHAR(NEW.valid_until, 'DD/MM/YYYY')),
+            'urgent',
+            'compliance_team',
+            jsonb_build_object(
+                'license_id', NEW.license_id,
+                'license_type', NEW.license_name,
+                'license_number', NEW.license_number,
+                'expiry_date', NEW.valid_until,
+                'days_expired', ABS(v_days_to_expiry)
+            )
+        );
+        
+        -- Also notify top management
+        INSERT INTO system_config.system_notifications (
+            org_id,
+            notification_type,
+            notification_category,
+            title,
+            message,
+            priority,
+            target_audience,
+            target_roles,
+            requires_acknowledgment
+        ) VALUES (
+            NEW.org_id,
+            'error',
+            'compliance',
+            'CRITICAL: Operating License Expired',
+            format('IMMEDIATE ACTION REQUIRED: %s has expired. This may result in legal action and business closure.',
+                NEW.license_name),
+            'urgent',
+            'specific',
+            ARRAY['admin', 'director', 'compliance_head'],
+            TRUE
+        );
+        
+    ELSIF v_days_to_expiry <= 7 THEN
+        -- Less than a week - critical
+        v_alert_level := 'error';
+        v_alert_title := 'License Expiring This Week!';
+        
+    ELSIF v_days_to_expiry <= 30 THEN
+        -- Less than a month - high priority
+        v_alert_level := 'warning';
+        v_alert_title := 'License Expiring Soon';
+        
+    ELSIF v_days_to_expiry <= v_renewal_period THEN
+        -- Within renewal period - medium priority
+        v_alert_level := 'info';
+        v_alert_title := 'License Renewal Due';
+        NEW.renewal_status := 'due';
+    END IF;
+    
+    -- Create scheduled reminders
+    IF v_days_to_expiry > 0 AND v_days_to_expiry <= v_renewal_period THEN
+        -- Initial renewal reminder
+        INSERT INTO system_config.scheduled_notifications (
+            org_id,
+            scheduled_for,
+            notification_type,
+            notification_category,
+            title,
+            message,
+            priority,
+            notification_data
+        ) VALUES (
+            NEW.org_id,
+            CURRENT_TIMESTAMP,
+            v_alert_level,
+            'compliance',
+            v_alert_title,
+            format('%s (License #%s) expires on %s (%s days remaining). Please initiate renewal process.',
+                NEW.license_name,
+                NEW.license_number,
+                TO_CHAR(NEW.valid_until, 'DD/MM/YYYY'),
+                v_days_to_expiry),
+            CASE 
+                WHEN v_days_to_expiry <= 7 THEN 'urgent'
+                WHEN v_days_to_expiry <= 30 THEN 'high'
+                ELSE 'medium'
+            END,
+            jsonb_build_object(
+                'license_id', NEW.license_id,
+                'license_type', NEW.license_name,
+                'license_number', NEW.license_number,
+                'expiry_date', NEW.valid_until,
+                'days_remaining', v_days_to_expiry,
+                'renewal_action_url', '/compliance/licenses/' || NEW.license_id || '/renew'
+            )
+        );
+        
+        -- Weekly reminders for last month
+        IF v_days_to_expiry <= 30 THEN
+            FOR i IN 1..4 LOOP
+                IF (v_days_to_expiry - (i * 7)) > 0 THEN
+                    INSERT INTO system_config.scheduled_notifications (
+                        org_id,
+                        scheduled_for,
+                        notification_type,
+                        notification_category,
+                        title,
+                        message,
+                        priority
+                    ) VALUES (
+                        NEW.org_id,
+                        CURRENT_DATE + ((i * 7) || ' days')::INTERVAL,
+                        'warning',
+                        'compliance',
+                        format('License Renewal Reminder #%s', i),
+                        format('%s expires in %s days. Renewal still pending.',
+                            NEW.license_name,
+                            v_days_to_expiry - (i * 7)),
+                        'high'
+                    );
+                END IF;
+            END LOOP;
+        END IF;
+    END IF;
+    
+    -- Update license status based on renewal
+    IF NEW.renewal_status = 'renewed' AND OLD.renewal_status != 'renewed' THEN
+        NEW.license_status := 'active';
+        NEW.renewal_status := 'not_due';
+    END IF;
+    
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trigger_license_expiry_alerts
+    BEFORE INSERT OR UPDATE ON compliance.org_licenses
+    FOR EACH ROW
+    EXECUTE FUNCTION check_license_expiry_alerts();
+
+-- =============================================
+-- 2. NARCOTIC BALANCE CHECK TRIGGER
+-- =============================================
+CREATE OR REPLACE FUNCTION validate_narcotic_balance()
+RETURNS TRIGGER AS $$
+DECLARE
+    v_previous_balance NUMERIC;
+    v_calculated_balance NUMERIC;
+    v_product_name TEXT;
+    v_is_narcotic BOOLEAN;
+    v_discrepancy NUMERIC;
+BEGIN
+    -- Check if product is narcotic/psychotropic
+    SELECT 
+        p.product_name,
+        p.is_narcotic OR p.drug_schedule IN ('X', 'H', 'H1')
+    INTO v_product_name, v_is_narcotic
+    FROM inventory.products p
+    WHERE p.product_id = NEW.product_id;
+    
+    -- Skip if not narcotic
+    IF NOT v_is_narcotic THEN
+        RETURN NEW;
+    END IF;
+    
+    -- Get previous balance
+    SELECT balance_quantity
+    INTO v_previous_balance
+    FROM compliance.narcotic_register
+    WHERE product_id = NEW.product_id
+    AND batch_id = NEW.batch_id
+    AND register_id < NEW.register_id
+    ORDER BY transaction_date DESC, register_id DESC
+    LIMIT 1;
+    
+    -- If no previous record, this should be opening balance
+    IF v_previous_balance IS NULL THEN
+        IF NEW.transaction_type != 'balance' THEN
+            RAISE EXCEPTION 'First entry for narcotic % must be opening balance', v_product_name;
+        END IF;
+        v_calculated_balance := NEW.balance_quantity;
+    ELSE
+        -- Calculate expected balance
+        v_calculated_balance := v_previous_balance + NEW.receipt_quantity - NEW.issue_quantity;
+        
+        -- Check for discrepancy
+        v_discrepancy := ABS(v_calculated_balance - NEW.balance_quantity);
+        
+        IF v_discrepancy > 0.001 THEN -- Allow tiny rounding differences
+            -- Log discrepancy
+            INSERT INTO compliance.narcotic_discrepancies (
+                register_id,
+                expected_balance,
+                actual_balance,
+                discrepancy_quantity,
+                discrepancy_type,
+                reported_date,
+                notes
+            ) VALUES (
+                NEW.register_id,
+                v_calculated_balance,
+                NEW.balance_quantity,
+                v_discrepancy,
+                CASE 
+                    WHEN NEW.balance_quantity > v_calculated_balance THEN 'excess'
+                    ELSE 'shortage'
+                END,
+                CURRENT_DATE,
+                format('System calculated balance mismatch for %s', v_product_name)
+            );
+            
+            -- Create high-priority alert
+            INSERT INTO system_config.system_notifications (
+                org_id,
+                notification_type,
+                notification_category,
+                title,
+                message,
+                priority,
+                target_audience,
+                requires_acknowledgment,
+                notification_data
+            ) VALUES (
+                NEW.org_id,
+                'error',
+                'compliance',
+                'Narcotic Balance Discrepancy Detected',
+                format('CRITICAL: Balance mismatch for %s. Expected: %s, Actual: %s, Discrepancy: %s',
+                    v_product_name,
+                    v_calculated_balance,
+                    NEW.balance_quantity,
+                    v_discrepancy),
+                'urgent',
+                'compliance_team',
+                TRUE,
+                jsonb_build_object(
+                    'product_id', NEW.product_id,
+                    'product_name', v_product_name,
+                    'batch_id', NEW.batch_id,
+                    'expected_balance', v_calculated_balance,
+                    'actual_balance', NEW.balance_quantity,
+                    'discrepancy', v_discrepancy,
+                    'register_id', NEW.register_id
+                )
+            );
+            
+            -- Auto-correct balance if within tolerance
+            IF v_discrepancy <= 1 THEN
+                NEW.balance_quantity := v_calculated_balance;
+                NEW.remarks := COALESCE(NEW.remarks || '; ', '') || 
+                              'Balance auto-corrected by system';
+            ELSE
+                -- Require manual verification for large discrepancies
+                RAISE EXCEPTION 'Narcotic balance discrepancy too large (%). Manual verification required.', 
+                    v_discrepancy;
+            END IF;
+        END IF;
+    END IF;
+    
+    -- Validate required fields for narcotics
+    IF NEW.transaction_type IN ('issue', 'receipt') THEN
+        IF NEW.party_license_number IS NULL THEN
+            RAISE EXCEPTION 'License number required for narcotic transactions';
+        END IF;
+        
+        IF NEW.permit_number IS NULL AND NEW.transaction_type = 'issue' THEN
+            RAISE EXCEPTION 'Permit number required for narcotic issue';
+        END IF;
+    END IF;
+    
+    -- Check for negative balance
+    IF NEW.balance_quantity < 0 THEN
+        RAISE EXCEPTION 'Negative balance not allowed for narcotics. Product: %', v_product_name;
+    END IF;
+    
+    -- Create audit entry
+    INSERT INTO compliance.narcotic_audit_log (
+        register_id,
+        action_type,
+        action_by,
+        action_timestamp,
+        ip_address,
+        changes_made
+    ) VALUES (
+        NEW.register_id,
+        TG_OP,
+        NEW.created_by,
+        CURRENT_TIMESTAMP,
+        inet_client_addr(),
+        jsonb_build_object(
+            'product', v_product_name,
+            'transaction_type', NEW.transaction_type,
+            'quantity_change', COALESCE(NEW.receipt_quantity, 0) - COALESCE(NEW.issue_quantity, 0),
+            'balance', NEW.balance_quantity
+        )
+    );
+    
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trigger_narcotic_balance_check
+    BEFORE INSERT OR UPDATE ON compliance.narcotic_register
+    FOR EACH ROW
+    EXECUTE FUNCTION validate_narcotic_balance();
+
+-- =============================================
+-- 3. INSPECTION FOLLOW-UP TRIGGER
+-- =============================================
+CREATE OR REPLACE FUNCTION manage_inspection_followup()
+RETURNS TRIGGER AS $$
+DECLARE
+    v_critical_count INTEGER;
+    v_major_count INTEGER;
+    v_days_until_followup INTEGER;
+BEGIN
+    -- Count critical and major observations
+    v_critical_count := NEW.critical_observations;
+    v_major_count := NEW.major_observations;
+    
+    -- If inspection completed with issues
+    IF NEW.inspection_status = 'completed' AND 
+       OLD.inspection_status != 'completed' AND
+       (v_critical_count > 0 OR v_major_count > 0) THEN
+        
+        -- Set follow-up requirement
+        IF NOT NEW.follow_up_required THEN
+            NEW.follow_up_required := TRUE;
+            NEW.follow_up_date := CASE
+                WHEN v_critical_count > 0 THEN CURRENT_DATE + INTERVAL '15 days'
+                WHEN v_major_count > 0 THEN CURRENT_DATE + INTERVAL '30 days'
+                ELSE CURRENT_DATE + INTERVAL '45 days'
+            END;
+        END IF;
+        
+        -- Create follow-up task
+        INSERT INTO compliance.inspection_tasks (
+            inspection_id,
+            task_type,
+            task_description,
+            assigned_to,
+            due_date,
+            priority,
+            status
+        ) VALUES (
+            NEW.inspection_id,
+            'follow_up',
+            format('Follow-up inspection required. Critical: %s, Major: %s observations',
+                v_critical_count, v_major_count),
+            NEW.created_by, -- Assign to inspection coordinator
+            NEW.follow_up_date,
+            CASE WHEN v_critical_count > 0 THEN 'urgent' ELSE 'high' END,
+            'pending'
+        );
+        
+        -- Create corrective action plan requirement
+        INSERT INTO compliance.corrective_action_plans (
+            inspection_id,
+            total_observations,
+            critical_observations,
+            major_observations,
+            due_date,
+            status
+        ) VALUES (
+            NEW.inspection_id,
+            NEW.total_observations,
+            v_critical_count,
+            v_major_count,
+            CURRENT_DATE + INTERVAL '7 days',
+            'required'
+        );
+    END IF;
+    
+    -- Check for overdue follow-ups
+    IF NEW.follow_up_required AND 
+       NEW.follow_up_date < CURRENT_DATE AND 
+       NOT NEW.follow_up_completed THEN
+        
+        v_days_until_followup := (CURRENT_DATE - NEW.follow_up_date)::INTEGER;
+        
+        -- Escalating notifications
+        INSERT INTO system_config.system_notifications (
+            org_id,
+            notification_type,
+            notification_category,
+            title,
+            message,
+            priority,
+            target_audience,
+            notification_data
+        ) VALUES (
+            NEW.org_id,
+            'error',
+            'compliance',
+            'Overdue Inspection Follow-up',
+            format('Follow-up for %s inspection on %s is overdue by %s days',
+                NEW.inspection_scope,
+                TO_CHAR(NEW.inspection_date, 'DD/MM/YYYY'),
+                v_days_until_followup),
+            'urgent',
+            'compliance_team',
+            jsonb_build_object(
+                'inspection_id', NEW.inspection_id,
+                'inspection_date', NEW.inspection_date,
+                'authority', (SELECT authority_name FROM compliance.regulatory_authorities 
+                             WHERE authority_id = NEW.authority_id),
+                'days_overdue', v_days_until_followup,
+                'critical_observations', v_critical_count
+            )
+        );
+    END IF;
+    
+    -- Update compliance score
+    IF NEW.inspection_status = 'completed' THEN
+        UPDATE compliance.org_licenses
+        SET compliance_score = CASE
+            WHEN NEW.overall_result = 'satisfactory' THEN 
+                LEAST(100, COALESCE(compliance_score, 70) + 5)
+            WHEN NEW.overall_result = 'conditional' THEN 
+                GREATEST(0, COALESCE(compliance_score, 70) - 10)
+            WHEN NEW.overall_result = 'unsatisfactory' THEN 
+                GREATEST(0, COALESCE(compliance_score, 70) - 20)
+            ELSE compliance_score
+        END,
+        last_inspection_date = NEW.inspection_date,
+        next_inspection_due = CASE
+            WHEN NEW.overall_result = 'satisfactory' THEN 
+                NEW.inspection_date + INTERVAL '1 year'
+            WHEN NEW.overall_result = 'conditional' THEN 
+                NEW.inspection_date + INTERVAL '6 months'
+            ELSE 
+                NEW.inspection_date + INTERVAL '3 months'
+        END
+        WHERE license_id = NEW.license_id;
+    END IF;
+    
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trigger_inspection_followup
+    BEFORE INSERT OR UPDATE ON compliance.regulatory_inspections
+    FOR EACH ROW
+    EXECUTE FUNCTION manage_inspection_followup();
+
+-- =============================================
+-- 4. ENVIRONMENTAL COMPLIANCE BREACH TRIGGER
+-- =============================================
+CREATE OR REPLACE FUNCTION check_environmental_breach()
+RETURNS TRIGGER AS $$
+DECLARE
+    v_breach_level TEXT;
+    v_authority_notification BOOLEAN := FALSE;
+BEGIN
+    -- Check if measurement is within limits
+    IF NEW.measured_value IS NOT NULL AND NEW.prescribed_limit IS NOT NULL THEN
+        NEW.within_limits := (NEW.measured_value <= NEW.prescribed_limit);
+        NEW.deviation_percentage := CASE
+            WHEN NEW.prescribed_limit > 0 THEN 
+                ((NEW.measured_value - NEW.prescribed_limit) / NEW.prescribed_limit) * 100
+            ELSE 0
+        END;
+        
+        -- Determine breach level
+        IF NOT NEW.within_limits THEN
+            v_breach_level := CASE
+                WHEN NEW.deviation_percentage > 100 THEN 'critical'
+                WHEN NEW.deviation_percentage > 50 THEN 'major'
+                WHEN NEW.deviation_percentage > 25 THEN 'moderate'
+                ELSE 'minor'
+            END;
+            
+            -- Set corrective action requirement
+            NEW.corrective_action_required := TRUE;
+            NEW.action_status := 'pending';
+            
+            -- Critical breaches need authority notification
+            IF v_breach_level IN ('critical', 'major') THEN
+                v_authority_notification := TRUE;
+                NEW.reported_to_authority := TRUE;
+                NEW.report_date := CURRENT_DATE;
+            END IF;
+            
+            -- Create breach record
+            INSERT INTO compliance.environmental_breaches (
+                env_compliance_id,
+                breach_date,
+                parameter_name,
+                measured_value,
+                prescribed_limit,
+                deviation_percentage,
+                breach_level,
+                reported_to_authority
+            ) VALUES (
+                NEW.env_compliance_id,
+                NEW.monitoring_date,
+                NEW.parameter_name,
+                NEW.measured_value,
+                NEW.prescribed_limit,
+                NEW.deviation_percentage,
+                v_breach_level,
+                v_authority_notification
+            );
+            
+            -- Create notifications
+            INSERT INTO system_config.system_notifications (
+                org_id,
+                notification_type,
+                notification_category,
+                title,
+                message,
+                priority,
+                target_audience,
+                notification_data
+            ) VALUES (
+                NEW.org_id,
+                CASE 
+                    WHEN v_breach_level = 'critical' THEN 'error'
+                    WHEN v_breach_level = 'major' THEN 'warning'
+                    ELSE 'info'
+                END,
+                'compliance',
+                format('%s Environmental Breach', INITCAP(v_breach_level)),
+                format('%s: %s exceeded limit by %s%% (Measured: %s, Limit: %s)',
+                    NEW.compliance_type,
+                    NEW.parameter_name,
+                    ROUND(NEW.deviation_percentage, 1),
+                    NEW.measured_value,
+                    NEW.prescribed_limit),
+                CASE 
+                    WHEN v_breach_level IN ('critical', 'major') THEN 'urgent'
+                    ELSE 'high'
+                END,
+                'compliance_team',
+                jsonb_build_object(
+                    'compliance_type', NEW.compliance_type,
+                    'parameter', NEW.parameter_name,
+                    'measured_value', NEW.measured_value,
+                    'limit', NEW.prescribed_limit,
+                    'breach_level', v_breach_level,
+                    'requires_authority_notification', v_authority_notification
+                )
+            );
+            
+            -- Schedule authority report if required
+            IF v_authority_notification THEN
+                INSERT INTO compliance.authority_reports (
+                    org_id,
+                    report_type,
+                    authority_type,
+                    due_date,
+                    breach_details,
+                    status
+                ) VALUES (
+                    NEW.org_id,
+                    'environmental_breach',
+                    'pollution_control_board',
+                    CURRENT_DATE + INTERVAL '48 hours',
+                    jsonb_build_object(
+                        'compliance_id', NEW.env_compliance_id,
+                        'breach_date', NEW.monitoring_date,
+                        'parameter', NEW.parameter_name,
+                        'breach_level', v_breach_level,
+                        'details', NEW
+                    ),
+                    'pending'
+                );
+            END IF;
+        END IF;
+    END IF;
+    
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trigger_environmental_breach_check
+    BEFORE INSERT OR UPDATE ON compliance.environmental_compliance
+    FOR EACH ROW
+    EXECUTE FUNCTION check_environmental_breach();
+
+-- =============================================
+-- 5. COMPLIANCE SCORE CALCULATION TRIGGER
+-- =============================================
+CREATE OR REPLACE FUNCTION calculate_compliance_score()
+RETURNS TRIGGER AS $$
+DECLARE
+    v_license_score NUMERIC := 100;
+    v_inspection_score NUMERIC := 100;
+    v_violation_score NUMERIC := 100;
+    v_document_score NUMERIC := 100;
+    v_overall_score NUMERIC;
+    v_compliance_grade TEXT;
+BEGIN
+    -- Calculate license compliance score
+    SELECT 
+        CASE 
+            WHEN COUNT(*) = 0 THEN 100
+            ELSE (COUNT(*) FILTER (WHERE license_status = 'active') * 100.0 / COUNT(*))
+        END INTO v_license_score
+    FROM compliance.org_licenses
+    WHERE org_id = NEW.org_id
+    AND is_active = TRUE;
+    
+    -- Calculate inspection score
+    SELECT 
+        CASE 
+            WHEN COUNT(*) = 0 THEN 100
+            ELSE AVG(
+                CASE overall_result
+                    WHEN 'satisfactory' THEN 100
+                    WHEN 'conditional' THEN 70
+                    WHEN 'unsatisfactory' THEN 40
+                    ELSE 50
+                END
+            )
+        END INTO v_inspection_score
+    FROM compliance.regulatory_inspections
+    WHERE org_id = NEW.org_id
+    AND inspection_date >= CURRENT_DATE - INTERVAL '1 year';
+    
+    -- Calculate violation score (deductions for violations)
+    SELECT 
+        GREATEST(0, 100 - (COUNT(*) * 5)) INTO v_violation_score
+    FROM compliance.compliance_violations
+    WHERE org_id = NEW.org_id
+    AND violation_date >= CURRENT_DATE - INTERVAL '1 year'
+    AND status != 'resolved';
+    
+    -- Calculate overall score
+    v_overall_score := (
+        v_license_score * 0.30 +
+        v_inspection_score * 0.40 +
+        v_violation_score * 0.20 +
+        v_document_score * 0.10
+    );
+    
+    -- Determine grade
+    v_compliance_grade := CASE
+        WHEN v_overall_score >= 90 THEN 'A+'
+        WHEN v_overall_score >= 80 THEN 'A'
+        WHEN v_overall_score >= 70 THEN 'B'
+        WHEN v_overall_score >= 60 THEN 'C'
+        WHEN v_overall_score >= 50 THEN 'D'
+        ELSE 'F'
+    END;
+    
+    -- Update compliance status
+    NEW.overall_compliance_score := v_overall_score;
+    NEW.compliance_grade := v_compliance_grade;
+    NEW.risk_level := CASE
+        WHEN v_overall_score >= 80 THEN 'low'
+        WHEN v_overall_score >= 60 THEN 'medium'
+        WHEN v_overall_score >= 40 THEN 'high'
+        ELSE 'critical'
+    END;
+    
+    -- Alert if score drops significantly
+    IF TG_OP = 'UPDATE' AND 
+       OLD.overall_compliance_score - NEW.overall_compliance_score >= 10 THEN
+        
+        INSERT INTO system_config.system_notifications (
+            org_id,
+            notification_type,
+            notification_category,
+            title,
+            message,
+            priority,
+            target_audience
+        ) VALUES (
+            NEW.org_id,
+            'warning',
+            'compliance',
+            'Compliance Score Dropped',
+            format('Compliance score dropped from %s to %s (Grade: %s)',
+                ROUND(OLD.overall_compliance_score, 1),
+                ROUND(NEW.overall_compliance_score, 1),
+                v_compliance_grade),
+            'high',
+            'compliance_team'
+        );
+    END IF;
+    
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trigger_calculate_compliance_score
+    BEFORE INSERT OR UPDATE ON compliance.org_compliance_status
+    FOR EACH ROW
+    EXECUTE FUNCTION calculate_compliance_score();
+
+-- =============================================
+-- 6. DOCUMENT EXPIRY TRACKING TRIGGER
+-- =============================================
+CREATE OR REPLACE FUNCTION track_compliance_document_expiry()
+RETURNS TRIGGER AS $$
+DECLARE
+    v_doc_type TEXT;
+    v_days_to_expiry INTEGER;
+BEGIN
+    -- Extract document type and expiry
+    v_doc_type := NEW.vendor_documents->0->>'type';
+    v_days_to_expiry := (
+        (NEW.vendor_documents->0->>'valid_until')::DATE - CURRENT_DATE
+    )::INTEGER;
+    
+    -- Check each document in the array
+    FOR i IN 0..jsonb_array_length(NEW.vendor_documents) - 1 LOOP
+        v_doc_type := NEW.vendor_documents->i->>'type';
+        v_days_to_expiry := (
+            (NEW.vendor_documents->i->>'valid_until')::DATE - CURRENT_DATE
+        )::INTEGER;
+        
+        IF v_days_to_expiry <= 30 AND v_days_to_expiry > 0 THEN
+            INSERT INTO system_config.system_notifications (
+                org_id,
+                notification_type,
+                notification_category,
+                title,
+                message,
+                priority
+            ) VALUES (
+                NEW.org_id,
+                'warning',
+                'compliance',
+                'Supplier Document Expiring',
+                format('%s document for %s expires in %s days',
+                    v_doc_type,
+                    NEW.supplier_name,
+                    v_days_to_expiry),
+                'medium'
+            );
+        ELSIF v_days_to_expiry <= 0 THEN
+            -- Mark supplier as non-compliant
+            NEW.compliance_rating := 'poor';
+        END IF;
+    END LOOP;
+    
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trigger_document_expiry_tracking
+    BEFORE INSERT OR UPDATE OF vendor_documents ON parties.suppliers
+    FOR EACH ROW
+    WHEN (NEW.vendor_documents IS NOT NULL)
+    EXECUTE FUNCTION track_compliance_document_expiry();
+
+-- =============================================
+-- SUPPORTING INDEXES FOR COMPLIANCE TRIGGERS
+-- =============================================
+CREATE INDEX IF NOT EXISTS idx_licenses_expiry ON compliance.org_licenses(valid_until, license_status);
+CREATE INDEX idx_narcotic_register_lookup ON compliance.narcotic_register(product_id, batch_id, transaction_date);
+CREATE INDEX idx_inspections_followup ON compliance.regulatory_inspections(follow_up_date) 
+    WHERE follow_up_required = TRUE;
+CREATE INDEX idx_environmental_breaches ON compliance.environmental_compliance(monitoring_date, within_limits);
+
+-- Add comments
+COMMENT ON FUNCTION check_license_expiry_alerts() IS 'Creates alerts and notifications for expiring licenses';
+COMMENT ON FUNCTION validate_narcotic_balance() IS 'Ensures narcotic register balance integrity and compliance';
+COMMENT ON FUNCTION manage_inspection_followup() IS 'Manages follow-up actions after regulatory inspections';
