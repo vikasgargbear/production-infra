@@ -121,24 +121,32 @@ async def check_customer_columns(db: Session = Depends(get_db)):
 async def check_organizations(db: Session = Depends(get_db)):
     """Check existing organizations"""
     try:
+        # First check columns
+        cols_result = db.execute(text("""
+            SELECT column_name
+            FROM information_schema.columns
+            WHERE table_schema = 'master'
+            AND table_name = 'organizations'
+        """))
+        
+        columns = [row.column_name for row in cols_result]
+        
+        # Then get data
         result = db.execute(text("""
-            SELECT 
-                org_id,
-                organization_name,
-                organization_code
+            SELECT *
             FROM master.organizations
             LIMIT 10
         """))
         
         orgs = []
         for row in result:
-            orgs.append({
-                "org_id": str(row.org_id),
-                "name": row.organization_name,
-                "code": row.organization_code
-            })
+            org_dict = dict(row._mapping)
+            if 'org_id' in org_dict:
+                org_dict['org_id'] = str(org_dict['org_id'])
+            orgs.append(org_dict)
         
         return {
+            "columns": columns,
             "organizations": orgs,
             "count": len(orgs)
         }
