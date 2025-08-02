@@ -141,7 +141,7 @@ async def create_quick_sale(
                 org_id, customer_id, customer_name, customer_phone, order_number, order_type, order_status,
                 order_date, delivery_date,
                 subtotal_amount, discount_amount, tax_amount, final_amount,
-                paid_amount, payment_mode, payment_status,
+                0 as paid_amount, payment_mode, payment_status,
                 notes, created_at, updated_at
             ) VALUES (
                 :org_id, :customer_id, :customer_name, :customer_phone, :order_number, 'sales', 'confirmed',
@@ -374,7 +374,7 @@ async def create_quick_sale(
             # Update order paid amount
             db.execute(text("""
                 UPDATE sales.orders 
-                SET paid_amount = :amount
+                SET 0 as paid_amount = :amount
                 WHERE order_id = :order_id
             """), {
                 "amount": float(payment_amount),
@@ -386,7 +386,7 @@ async def create_quick_sale(
                 db.execute(text("""
                     UPDATE sales.invoices 
                     SET invoice_status = 'paid',
-                        paid_amount = :amount
+                        0 as paid_amount = :amount
                     WHERE invoice_id = :invoice_id
                 """), {
                     "amount": float(payment_amount),

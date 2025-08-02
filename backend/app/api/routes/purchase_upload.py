@@ -54,7 +54,7 @@ def _check_supplier_in_result(extracted_data: dict, db: Session):
         if gstin:
             # Check by GSTIN first
             supplier = db.execute(
-                text("SELECT * FROM suppliers WHERE gst_number = :gstin"),
+                text("SELECT * FROM parties.suppliers WHERE gst_number = :gstin"),
                 {"gstin": gstin}
             ).first()
             
@@ -73,7 +73,7 @@ def _check_supplier_in_result(extracted_data: dict, db: Session):
         if name:
             # Check by name
             supplier = db.execute(
-                text("SELECT * FROM suppliers WHERE LOWER(supplier_name) LIKE LOWER(:name)"),
+                text("SELECT * FROM parties.suppliers WHERE LOWER(supplier_name) LIKE LOWER(:name)"),
                 {"name": f"%{name}%"}
             ).first()
             
@@ -118,7 +118,7 @@ async def check_supplier(
         if gstin:
             # First try exact GSTIN match
             supplier = db.execute(
-                text("SELECT * FROM suppliers WHERE gst_number = :gstin"),
+                text("SELECT * FROM parties.suppliers WHERE gst_number = :gstin"),
                 {"gstin": gstin}
             ).first()
             
@@ -140,7 +140,7 @@ async def check_supplier(
             # Try fuzzy name match
             supplier = db.execute(
                 text("""
-                    SELECT * FROM suppliers 
+                    SELECT * FROM parties.suppliers 
                     WHERE LOWER(supplier_name) LIKE LOWER(:name)
                     OR LOWER(supplier_name) LIKE LOWER(:partial_name)
                 """),
@@ -427,7 +427,7 @@ async def parse_purchase_invoice(
             # Try to match supplier
             if invoice_data.supplier_gstin:
                 supplier = db.execute(
-                    text("SELECT supplier_id, supplier_name FROM suppliers WHERE gst_number = :gstin"),
+                    text("SELECT supplier_id, supplier_name FROM parties.suppliers WHERE gst_number = :gstin"),
                     {"gstin": invoice_data.supplier_gstin}
                 ).first()
                 

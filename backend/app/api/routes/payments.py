@@ -241,9 +241,9 @@ async def get_outstanding_invoices(
             SELECT 
                 i.invoice_id, i.invoice_number, i.invoice_date, i.due_date,
                 c.customer_id, c.customer_name, c.customer_code,
-                i.total_amount, 
+                i.final_amount, 
                 COALESCE(i.paid_amount, 0) as paid_amount, 
-                (i.total_amount - COALESCE(i.paid_amount, 0)) as balance_amount,
+                (i.final_amount - COALESCE(i.paid_amount, 0)) as balance_amount,
                 i.payment_status,
                 CASE 
                     WHEN i.due_date < CURRENT_DATE THEN 

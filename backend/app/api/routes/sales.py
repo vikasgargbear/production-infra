@@ -308,7 +308,7 @@ async def get_sales(
         query = """
             SELECT i.invoice_id as sale_id, i.invoice_number, i.invoice_date as sale_date,
                    i.customer_id as party_id, i.customer_name as party_name, 
-                   i.customer_gstin as party_gst, i.total_amount, i.payment_status,
+                   i.customer_gstin as party_gst, i.final_amount, i.payment_status,
                    i.payment_method, i.cgst_amount, i.sgst_amount, i.igst_amount,
                    i.gst_type, i.created_at
             FROM sales.invoices i
@@ -372,9 +372,9 @@ async def get_outstanding_sales(
                 i.invoice_number,
                 i.invoice_date,
                 i.due_date,
-                i.total_amount,
+                i.final_amount,
                 COALESCE(i.paid_amount, 0) as paid_amount,
-                (i.total_amount - COALESCE(i.paid_amount, 0)) as pending_amount,
+                (i.final_amount - COALESCE(i.paid_amount, 0)) as pending_amount,
                 i.payment_status,
                 c.customer_id,
                 c.customer_name,
@@ -431,7 +431,7 @@ async def get_sale_detail(
                 SELECT i.invoice_id as sale_id, i.invoice_number, i.invoice_date as sale_date,
                        i.customer_id as party_id, i.customer_name as party_name,
                        i.customer_gstin as party_gst, i.billing_address as party_address,
-                       i.total_amount, i.subtotal_amount, i.discount_amount,
+                       i.final_amount, i.subtotal_amount, i.discount_amount,
                        i.cgst_amount, i.sgst_amount, i.igst_amount,
                        i.gst_type, i.payment_method, i.payment_status as sale_status,
                        i.notes, i.created_at

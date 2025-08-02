@@ -505,7 +505,7 @@ class EnterpriseOrderService:
         result = self.db.execute(text("""
             SELECT 
                 p.product_id, p.product_code, p.product_name, p.generic_name,
-                p.manufacturer, p.category, p.hsn_code,
+                p.manufacturer, p.category_id, p.hsn_code,
                 p.gst_percent, p.cgst_percent, p.sgst_percent, p.igst_percent,
                 p.sale_price, p.mrp, p.purchase_price,
                 p.drug_schedule, p.prescription_required,
@@ -520,7 +520,7 @@ class EnterpriseOrderService:
                 AND (b.expiry_date IS NULL OR b.expiry_date > CURRENT_DATE)
             WHERE p.product_id = :product_id
             GROUP BY p.product_id, p.product_code, p.product_name, p.generic_name,
-                     p.manufacturer, p.category, p.hsn_code,
+                     p.manufacturer, p.category_id, p.hsn_code,
                      p.gst_percent, p.cgst_percent, p.sgst_percent, p.igst_percent,
                      p.sale_price, p.mrp, p.purchase_price,
                      p.drug_schedule, p.prescription_required,
@@ -784,7 +784,7 @@ class EnterpriseOrderService:
                 subtotal_amount, discount_amount, tax_amount, round_off_amount, final_amount,
                 delivery_charges, other_charges,
                 
-                payment_mode, payment_status, payment_terms, paid_amount, balance_amount,
+                payment_mode, payment_status, payment_terms, 0 as paid_amount, balance_amount,
                 
                 billing_name, billing_address, billing_gstin,
                 shipping_name, shipping_address, shipping_phone,
@@ -802,7 +802,7 @@ class EnterpriseOrderService:
                 :subtotal_amount, :discount_amount, :tax_amount, :round_off_amount, :final_amount,
                 :delivery_charges, :other_charges,
                 
-                :payment_mode, :payment_status, :payment_terms, :paid_amount, :balance_amount,
+                :payment_mode, :payment_status, :payment_terms, :0 as paid_amount, :balance_amount,
                 
                 :billing_name, :billing_address, :billing_gstin,
                 :shipping_name, :shipping_address, :shipping_phone,
@@ -836,7 +836,7 @@ class EnterpriseOrderService:
             "payment_mode": request.payment_mode.value,
             "payment_status": payment_status.value,
             "payment_terms": request.payment_terms or customer.payment_terms,
-            "paid_amount": float(request.payment_amount or 0),
+            "0 as paid_amount": float(request.payment_amount or 0),
             "balance_amount": float(totals['final_amount'] - (request.payment_amount or 0)),
             
             "billing_name": customer.customer_name,
@@ -988,7 +988,7 @@ class EnterpriseOrderService:
                 
                 gst_type, place_of_supply,
                 invoice_type, invoice_status,
-                payment_status, paid_amount,
+                payment_status, 0 as paid_amount,
                 
                 created_at, updated_at
             ) VALUES (
@@ -1159,7 +1159,7 @@ class EnterpriseOrderService:
         self.db.execute(text("""
             UPDATE sales.orders 
             SET 
-                paid_amount = :payment_amount,
+                0 as paid_amount = :payment_amount,
                 balance_amount = final_amount - :payment_amount,
                 payment_status = :payment_status,
                 updated_at = CURRENT_TIMESTAMP
@@ -1174,7 +1174,7 @@ class EnterpriseOrderService:
         self.db.execute(text("""
             UPDATE sales.invoices 
             SET 
-                paid_amount = :payment_amount,
+                0 as paid_amount = :payment_amount,
                 payment_status = :payment_status,
                 invoice_status = :invoice_status,
                 payment_date = CASE WHEN :payment_amount >= total_amount THEN CURRENT_TIMESTAMP ELSE NULL END,

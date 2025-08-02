@@ -159,7 +159,7 @@ async def list_current_stock(
     try:
         query = """
             SELECT 
-                p.product_id, p.product_code, p.product_name, p.category,
+                p.product_id, p.product_code, p.product_name, p.category_id,
                 p.minimum_stock_level, p.reorder_level,
                 COALESCE(b.total_quantity, 0) as total_quantity,
                 COALESCE(b.available_quantity, 0) as available_quantity,
@@ -190,7 +190,7 @@ async def list_current_stock(
         params = {"org_id": DEFAULT_ORG_ID}
         
         if category:
-            query += " AND p.category = :category"
+            query += " AND p.category_id = :category"
             params["category"] = category
         
         if low_stock_only:

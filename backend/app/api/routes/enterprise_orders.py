@@ -228,7 +228,7 @@ async def get_order_details(
             SELECT 
                 o.*,
                 c.customer_name, c.primary_phone, c.primary_email, c.address,
-                i.invoice_number, i.invoice_status, i.total_amount as invoice_amount
+                i.invoice_number, i.invoice_status, i.final_amount as invoice_amount
             FROM sales.orders o
             LEFT JOIN parties.customers c ON o.customer_id = c.customer_id
             LEFT JOIN sales.invoices i ON o.order_id = i.order_id

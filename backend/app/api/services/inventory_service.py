@@ -380,7 +380,7 @@ class InventoryService:
         # Category-wise breakdown
         category_result = db.execute(text("""
             SELECT 
-                p.category,
+                p.category_id,
                 COUNT(DISTINCT b.product_id) as products,
                 COALESCE(SUM(b.quantity_available), 0) as quantity,
                 COALESCE(SUM(b.quantity_available * b.cost_price), 0) as value
@@ -388,7 +388,7 @@ class InventoryService:
             JOIN inventory.products p ON b.product_id = p.product_id
             WHERE b.org_id = :org_id
                 AND b.quantity_available > 0
-            GROUP BY p.category
+            GROUP BY p.category_id
             ORDER BY value DESC
         """), {
             "org_id": org_id

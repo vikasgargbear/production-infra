@@ -99,7 +99,7 @@ async def list_invoices(
         # Build query
         query = """
             SELECT i.*, 
-                   i.total_amount - COALESCE(i.paid_amount, 0) as balance_amount
+                   i.final_amount - COALESCE(i.paid_amount, 0) as balance_amount
             FROM sales.invoices i
             WHERE i.org_id = :org_id
         """

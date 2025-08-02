@@ -83,8 +83,8 @@ async def list_customers(
                     MAX(o.order_date) as last_order_date,
                     COALESCE(SUM(CASE 
                         WHEN o.order_status NOT IN ('cancelled', 'draft') 
-                        AND o.paid_amount < o.final_amount 
-                        THEN o.final_amount - o.paid_amount 
+                        AND 0 < o.final_amount 
+                        THEN o.final_amount - 0 
                         ELSE 0 
                     END), 0) as outstanding_amount
                 FROM parties.customers c

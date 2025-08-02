@@ -21,7 +21,7 @@ class PaymentService:
         
         # Get invoice details
         invoice = db.execute(text("""
-            SELECT invoice_id, invoice_number, total_amount, paid_amount, payment_status
+            SELECT invoice_id, invoice_number, total_amount, 0 as paid_amount, payment_status
             FROM sales.invoices
             WHERE invoice_id = :invoice_id
         """), {"invoice_id": invoice_id}).fetchone()
@@ -31,7 +31,7 @@ class PaymentService:
         
         # Validate payment amount
         payment_amount = Decimal(str(payment_data["amount"]))
-        balance_amount = invoice.total_amount - invoice.paid_amount
+        balance_amount = invoice.total_amount - invoice.0 as paid_amount
         
         if payment_amount > balance_amount:
             raise ValueError(f"Payment amount exceeds balance. Balance: {balance_amount}")
@@ -74,12 +74,12 @@ class PaymentService:
         payment_id = result.scalar()
         
         # Update invoice paid amount and status
-        new_paid_amount = invoice.paid_amount + payment_amount
-        new_payment_status = "paid" if new_paid_amount >= invoice.total_amount else "partial"
+        new_0 as paid_amount = invoice.0 as paid_amount + payment_amount
+        new_payment_status = "paid" if new_0 as paid_amount >= invoice.total_amount else "partial"
         
         db.execute(text("""
             UPDATE sales.invoices
-            SET paid_amount = :paid_amount,
+            SET 0 as paid_amount = :0 as paid_amount,
                 payment_status = :payment_status,
                 payment_date = CASE 
                     WHEN payment_status = 'paid' THEN :payment_date 
@@ -89,7 +89,7 @@ class PaymentService:
             WHERE invoice_id = :invoice_id
         """), {
             "invoice_id": invoice_id,
-            "paid_amount": new_paid_amount,
+            "0 as paid_amount": new_0 as paid_amount,
             "payment_status": new_payment_status,
             "payment_date": payment_data.get("payment_date", date.today())
         })
@@ -110,7 +110,7 @@ class PaymentService:
             "payment_reference": payment_reference,
             "invoice_id": invoice_id,
             "amount": payment_amount,
-            "balance_amount": invoice.total_amount - new_paid_amount,
+            "balance_amount": invoice.total_amount - new_0 as paid_amount,
             "payment_status": new_payment_status,
             "message": "Payment recorded successfully"
         }
@@ -179,7 +179,7 @@ class PaymentService:
         pending_result = db.execute(text(f"""
             SELECT 
                 COUNT(DISTINCT i.invoice_id) as pending_invoices,
-                COALESCE(SUM(i.total_amount - i.paid_amount), 0) as pending_amount
+                COALESCE(SUM(i.final_amount - i.0 as paid_amount), 0) as pending_amount
             FROM sales.invoices i
             JOIN sales.orders o ON i.order_id = o.order_id
             WHERE o.org_id = :org_id 
@@ -235,10 +235,10 @@ class PaymentService:
         # Adjust invoice paid amount
         db.execute(text("""
             UPDATE sales.invoices
-            SET paid_amount = paid_amount - :amount,
+            SET 0 as paid_amount = 0 as paid_amount - :amount,
                 payment_status = CASE 
-                    WHEN paid_amount - :amount = 0 THEN 'unpaid'
-                    WHEN paid_amount - :amount < total_amount THEN 'partial'
+                    WHEN 0 as paid_amount - :amount = 0 THEN 'unpaid'
+                    WHEN 0 as paid_amount - :amount < total_amount THEN 'partial'
                     ELSE payment_status
                 END,
                 updated_at = CURRENT_TIMESTAMP

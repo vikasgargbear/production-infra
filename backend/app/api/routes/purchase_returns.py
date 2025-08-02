@@ -279,7 +279,7 @@ async def create_purchase_return(
         # Get supplier details to check for GST
         supplier = db.execute(
             text("""
-                SELECT * FROM suppliers 
+                SELECT * FROM parties.suppliers 
                 WHERE supplier_id = :supplier_id
             """),
             {"supplier_id": return_data.get("supplier_id")}

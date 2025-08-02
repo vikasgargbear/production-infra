@@ -114,7 +114,7 @@ async def get_returnable_invoices(
                 i.invoice_date,
                 i.customer_id as party_id,
                 p.party_name,
-                i.total_amount as grand_total,
+                i.final_amount as grand_total,
                 COUNT(ii.item_id) as total_items
             FROM sales.invoices i
             LEFT JOIN parties p ON i.customer_id = p.party_id
@@ -133,7 +133,7 @@ async def get_returnable_invoices(
             
         query += """ 
             GROUP BY i.invoice_id, i.invoice_number, i.invoice_date, 
-                     i.customer_id, p.party_name, i.total_amount
+                     i.customer_id, p.party_name, i.final_amount
             ORDER BY i.invoice_date DESC
             LIMIT 50
         """

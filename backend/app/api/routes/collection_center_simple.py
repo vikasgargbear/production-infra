@@ -276,7 +276,7 @@ async def generate_reminder_links(
                     COUNT(o.outstanding_id) as bill_count,
                     MAX(o.days_overdue) as max_days_overdue,
                     STRING_AGG(o.bill_number, ', ') as invoice_numbers
-                FROM suppliers s
+                FROM parties.suppliers s
                 JOIN supplier_outstanding o ON s.supplier_id = o.supplier_id
                 WHERE s.supplier_id = ANY(:party_ids)
                 GROUP BY s.supplier_id, s.supplier_name, s.phone, s.email

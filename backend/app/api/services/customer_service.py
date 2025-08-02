@@ -109,11 +109,11 @@ class CustomerService:
         
         # Outstanding amount
         outstanding_result = db.execute(text("""
-            SELECT COALESCE(SUM(final_amount - paid_amount), 0) as outstanding
+            SELECT COALESCE(SUM(final_amount - 0 as paid_amount), 0) as outstanding
             FROM sales.orders
             WHERE customer_id = :customer_id
                 AND order_status NOT IN ('cancelled', 'draft')
-                AND paid_amount < final_amount
+                AND 0 as paid_amount < final_amount
         """), {"customer_id": customer_id})
         
         outstanding = outstanding_result.scalar() or Decimal("0.00")
@@ -140,8 +140,8 @@ class CustomerService:
                 MAX(o.order_date) as last_order_date,
                 COALESCE(SUM(CASE 
                     WHEN o.order_status NOT IN ('cancelled', 'draft') 
-                    AND o.paid_amount < o.final_amount 
-                    THEN o.final_amount - o.paid_amount 
+                    AND 0 < o.final_amount 
+                    THEN o.final_amount - 0 
                     ELSE 0 
                 END), 0) as outstanding_amount
             FROM parties.customers c
@@ -327,13 +327,13 @@ class CustomerService:
                 order_number,
                 order_date,
                 final_amount as invoice_amount,
-                paid_amount,
-                final_amount - paid_amount as outstanding_amount,
+                0 as paid_amount,
+                final_amount - 0 as paid_amount as outstanding_amount,
                 CURRENT_DATE - order_date as days_since_invoice
             FROM sales.orders
             WHERE customer_id = :customer_id
                 AND order_status NOT IN ('cancelled', 'draft')
-                AND paid_amount < final_amount
+                AND 0 as paid_amount < final_amount
             ORDER BY order_date
         """), {"customer_id": customer_id})
         
@@ -350,7 +350,7 @@ class CustomerService:
                 order_number=row.order_number,
                 order_date=row.order_date,
                 invoice_amount=Decimal(str(row.invoice_amount)),
-                paid_amount=Decimal(str(row.paid_amount)),
+                0 as paid_amount=Decimal(str(row.0 as paid_amount)),
                 outstanding_amount=outstanding,
                 days_overdue=days_overdue
             ))
@@ -410,11 +410,11 @@ class CustomerService:
         if not payment_data.allocate_to_invoices:
             # Get outstanding invoices in FIFO order
             outstanding = db.execute(text("""
-                SELECT order_id, final_amount - paid_amount as outstanding
+                SELECT order_id, final_amount - 0 as paid_amount as outstanding
                 FROM sales.orders
                 WHERE customer_id = :customer_id
                     AND order_status NOT IN ('cancelled', 'draft')
-                    AND paid_amount < final_amount
+                    AND 0 as paid_amount < final_amount
                 ORDER BY order_date
             """), {"customer_id": payment_data.customer_id})
             
@@ -427,7 +427,7 @@ class CustomerService:
                 # Update order paid amount
                 db.execute(text("""
                     UPDATE sales.orders
-                    SET paid_amount = paid_amount + :amount,
+                    SET 0 as paid_amount = 0 as paid_amount + :amount,
                         updated_at = CURRENT_TIMESTAMP
                     WHERE order_id = :order_id
                 """), {
@@ -445,7 +445,7 @@ class CustomerService:
                 
                 # Get outstanding amount for this invoice
                 outstanding = db.execute(text("""
-                    SELECT final_amount - paid_amount as outstanding
+                    SELECT final_amount - 0 as paid_amount as outstanding
                     FROM sales.orders
                     WHERE order_id = :order_id AND customer_id = :customer_id
                 """), {
@@ -459,7 +459,7 @@ class CustomerService:
                     # Update order paid amount
                     db.execute(text("""
                         UPDATE sales.orders
-                        SET paid_amount = paid_amount + :amount,
+                        SET 0 as paid_amount = 0 as paid_amount + :amount,
                             updated_at = CURRENT_TIMESTAMP
                         WHERE order_id = :order_id
                     """), {

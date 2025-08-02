@@ -233,7 +233,7 @@ async def get_party_statement(
             """
             
             # Get party details
-            party_query = "SELECT supplier_name as name, primary_phone as phone, email FROM suppliers WHERE supplier_id = :party_id"
+            party_query = "SELECT supplier_name as name, primary_phone as phone, email FROM parties.suppliers WHERE supplier_id = :party_id"
         
         params = {"party_id": int(party_id)}
         
@@ -328,11 +328,11 @@ async def get_outstanding_bills(
                     i.invoice_number as bill_number,
                     i.invoice_date as bill_date,
                     i.due_date,
-                    i.total_amount as bill_amount,
+                    i.final_amount as bill_amount,
                     COALESCE(SUM(p.amount), 0) as paid_amount,
-                    i.total_amount - COALESCE(SUM(p.amount), 0) as outstanding_amount,
+                    i.final_amount - COALESCE(SUM(p.amount), 0) as outstanding_amount,
                     CASE 
-                        WHEN i.total_amount - COALESCE(SUM(p.amount), 0) <= 0 THEN 'paid'
+                        WHEN i.final_amount - COALESCE(SUM(p.amount), 0) <= 0 THEN 'paid'
                         WHEN COALESCE(SUM(p.amount), 0) > 0 THEN 'partial'
                         WHEN i.due_date < CURRENT_DATE THEN 'overdue'
                         ELSE 'outstanding'
@@ -348,7 +348,7 @@ async def get_outstanding_bills(
                 WHERE i.customer_id = :party_id
                 AND i.status != 'cancelled'
                 GROUP BY i.invoice_id
-                HAVING i.total_amount - COALESCE(SUM(p.amount), 0) > 0
+                HAVING i.final_amount - COALESCE(SUM(p.amount), 0) > 0
             """
         else:  # supplier
             query = """

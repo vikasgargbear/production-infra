@@ -96,7 +96,7 @@ async def create_invoice_with_order(
                 org_id, customer_id, order_type, order_status,
                 order_date, delivery_date,
                 subtotal, discount_amount, other_charges,
-                final_amount, paid_amount,
+                final_amount, 0 as paid_amount,
                 notes, created_at, updated_at
             ) VALUES (
                 :org_id, :customer_id, :order_type, 'confirmed',
@@ -248,7 +248,7 @@ async def create_invoice_with_order(
             # Update order paid amount
             db.execute(text("""
                 UPDATE sales.orders 
-                SET paid_amount = paid_amount + :amount
+                SET 0 as paid_amount = 0 as paid_amount + :amount
                 WHERE order_id = :order_id
             """), {
                 "amount": invoice_data.payment_amount,
@@ -260,7 +260,7 @@ async def create_invoice_with_order(
             db.execute(text("""
                 UPDATE sales.invoices 
                 SET payment_status = :status,
-                    paid_amount = :amount
+                    0 as paid_amount = :amount
                 WHERE invoice_id = :invoice_id
             """), {
                 "status": payment_status,

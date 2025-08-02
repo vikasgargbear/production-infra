@@ -31,7 +31,7 @@ def get_suppliers(
 ):
     """Get suppliers with optional search"""
     try:
-        query = "SELECT * FROM suppliers WHERE 1=1"
+        query = "SELECT * FROM parties.suppliers WHERE 1=1"
         params = {}
         
         if search:

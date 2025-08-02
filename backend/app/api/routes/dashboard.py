@@ -25,7 +25,7 @@ def get_dashboard_stats(db: Session = Depends(get_db)):
                 (SELECT COUNT(*) FROM inventory.products WHERE is_active = true) as total_products,
                 (SELECT COUNT(*) FROM parties.customers) as total_customers,
                 (SELECT COUNT(*) FROM sales.orders WHERE order_date >= CURRENT_DATE - INTERVAL '30 days') as orders_this_month,
-                (SELECT COUNT(*) FROM suppliers) as total_suppliers,
+                (SELECT COUNT(*) FROM parties.suppliers) as total_suppliers,
                 (SELECT COALESCE(SUM(total_amount), 0) FROM sales.orders WHERE order_date >= CURRENT_DATE - INTERVAL '30 days') as revenue_this_month,
                 (SELECT COUNT(*) FROM inventory.batches WHERE quantity_available > 0) as active_batches,
                 (SELECT COUNT(*) FROM inventory.batches WHERE expiry_date <= CURRENT_DATE + INTERVAL '30 days' AND quantity_available > 0) as expiring_soon

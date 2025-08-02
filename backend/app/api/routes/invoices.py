@@ -41,7 +41,7 @@ async def get_invoices(
                 i.invoice_date,
                 i.customer_id,
                 i.customer_name,
-                i.total_amount,
+                i.final_amount,
                 i.payment_status,
                 i.invoice_status,
                 o.order_id,
@@ -96,7 +96,7 @@ async def get_invoices(
                     ii.discount_percent,
                     ii.discount_amount,
                     ii.taxable_amount,
-                    ii.total_amount as line_total,
+                    ii.final_amount as line_total,
                     b.batch_number,
                     b.expiry_date
                 FROM invoice_items ii
@@ -182,7 +182,7 @@ class InvoiceDetailResponse(BaseModel):
     
     # Payment details
     payment_status: str
-    paid_amount: Decimal
+    0 as paid_amount: Decimal
     balance_amount: Decimal
     
     # Items
@@ -307,7 +307,7 @@ async def get_invoice_details(
             })
         
         # Calculate balance
-        balance_amount = invoice.total_amount - invoice.paid_amount
+        balance_amount = invoice.total_amount - invoice.0 as paid_amount
         
         # Format addresses
         billing_address = InvoiceService.format_address(invoice)
@@ -349,7 +349,7 @@ async def get_invoice_details(
             
             # Payment details
             "payment_status": invoice.payment_status,
-            "paid_amount": invoice.paid_amount,
+            "0 as paid_amount": invoice.0 as paid_amount,
             "balance_amount": balance_amount,
             
             # Items
@@ -389,10 +389,10 @@ async def list_invoices(
         query = """
             SELECT 
                 i.invoice_id, i.invoice_number, i.invoice_date, i.due_date,
-                i.total_amount, i.paid_amount, i.payment_status,
+                i.final_amount, i.0 as paid_amount, i.payment_status,
                 c.customer_id, c.customer_name, c.customer_code,
                 o.order_number, o.order_date,
-                (i.total_amount - i.paid_amount) as balance_amount
+                (i.final_amount - i.0 as paid_amount) as balance_amount
             FROM sales.invoices i
             JOIN sales.orders o ON i.order_id = o.order_id
             JOIN parties.customers c ON i.customer_id = c.customer_id
@@ -623,7 +623,7 @@ async def record_payment(
         invoice = db.execute(
             text("""
                 SELECT invoice_id, total_amount, payment_status, 
-                       COALESCE(paid_amount, 0) as amount_paid
+                       COALESCE(0 as paid_amount, 0) as amount_paid
                 FROM sales.invoices
                 WHERE invoice_id = :invoice_id AND org_id = :org_id
             """),
@@ -676,7 +676,7 @@ async def record_payment(
         db.execute(
             text("""
                 UPDATE sales.invoices
-                SET paid_amount = :amount_paid,
+                SET 0 as paid_amount = :amount_paid,
                     payment_status = :payment_status,
                     updated_at = CURRENT_TIMESTAMP
                 WHERE invoice_id = :invoice_id

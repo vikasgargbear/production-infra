@@ -30,7 +30,7 @@ def create_purchase_with_items(purchase_data: dict, db: Session = Depends(get_db
         supplier_name = None
         if purchase_data.get("supplier_id"):
             supplier_result = db.execute(
-                text("SELECT supplier_name FROM suppliers WHERE supplier_id = :id"),
+                text("SELECT supplier_name FROM parties.suppliers WHERE supplier_id = :id"),
                 {"id": purchase_data.get("supplier_id")}
             ).first()
             if supplier_result:
@@ -171,7 +171,7 @@ def get_purchase_items(purchase_id: int, db: Session = Depends(get_db)):
                     pi.*,
                     p.product_name as product_full_name,
                     p.hsn_code,
-                    p.category,
+                    p.category_id,
                     p.brand_name
                 FROM purchase_items pi
                 LEFT JOIN inventory.products p ON pi.product_id = p.product_id

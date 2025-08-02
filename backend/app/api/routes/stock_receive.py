@@ -244,7 +244,7 @@ async def get_current_stock(
                 p.product_id as id,
                 p.product_code as code,
                 p.product_name as name,
-                p.category,
+                p.category_id,
                 COALESCE(p.pack_type, '') as pack_type,
                 COALESCE(p.pack_size, '') as pack_size,
                 COALESCE(p.pack_unit_quantity, 1) as pack_unit_quantity,
@@ -273,10 +273,10 @@ async def get_current_stock(
         params = {"org_id": org_id}
         
         if category:
-            query += " AND p.category = :category"
+            query += " AND p.category_id = :category"
             params["category"] = category
             
-        query += " GROUP BY p.product_id, p.product_code, p.product_name, p.category, p.pack_type, p.pack_size, p.pack_unit_quantity, p.sub_unit_quantity, p.purchase_unit, p.sale_unit, p.mrp, p.sale_price, p.minimum_stock_level"
+        query += " GROUP BY p.product_id, p.product_code, p.product_name, p.category_id, p.pack_type, p.pack_size, p.pack_unit_quantity, p.sub_unit_quantity, p.purchase_unit, p.sale_unit, p.mrp, p.sale_price, p.minimum_stock_level"
         
         if low_stock_only:
             query = f"SELECT * FROM ({query}) AS stock_data WHERE current_stock <= reorder_level"
@@ -438,7 +438,7 @@ async def get_stock_alerts(
                 p.product_id,
                 p.product_name,
                 p.product_code,
-                p.category,
+                p.category_id,
                 COALESCE(p.minimum_stock_level, 20) as reorder_level,
                 COALESCE(SUM(b.quantity_available), 0) as current_stock,
                 'low_stock' as alert_type,
@@ -452,7 +452,7 @@ async def get_stock_alerts(
                 AND b.org_id = :org_id 
                 AND b.batch_status = 'active'
             WHERE p.org_id = :org_id
-            GROUP BY p.product_id, p.product_name, p.product_code, p.category, p.minimum_stock_level
+            GROUP BY p.product_id, p.product_name, p.product_code, p.category_id, p.minimum_stock_level
             HAVING COALESCE(SUM(b.quantity_available), 0) <= COALESCE(p.minimum_stock_level, 20)
         """
         
@@ -563,7 +563,7 @@ async def get_batches(
             query += """,
                 p.product_name,
                 p.product_code,
-                p.category,
+                p.category_id,
                 p.manufacturer,
                 s.supplier_name
             FROM inventory.batches b
