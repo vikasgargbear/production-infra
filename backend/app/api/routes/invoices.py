@@ -389,10 +389,10 @@ async def list_invoices(
         query = """
             SELECT 
                 i.invoice_id, i.invoice_number, i.invoice_date, i.due_date,
-                i.final_amount, i.0 as paid_amount, i.payment_status,
+                i.final_amount, 0 as paid_amount, i.payment_status,
                 c.customer_id, c.customer_name, c.customer_code,
                 o.order_number, o.order_date,
-                (i.final_amount - i.0 as paid_amount) as balance_amount
+                (i.final_amount - 0) as balance_amount
             FROM sales.invoices i
             JOIN sales.orders o ON i.order_id = o.order_id
             JOIN parties.customers c ON i.customer_id = c.customer_id
@@ -623,7 +623,7 @@ async def record_payment(
         invoice = db.execute(
             text("""
                 SELECT invoice_id, total_amount, payment_status, 
-                       COALESCE(0 as paid_amount, 0) as amount_paid
+                       0 as amount_paid
                 FROM sales.invoices
                 WHERE invoice_id = :invoice_id AND org_id = :org_id
             """),
@@ -676,7 +676,7 @@ async def record_payment(
         db.execute(
             text("""
                 UPDATE sales.invoices
-                SET 0 as paid_amount = :amount_paid,
+                SET paid_amount = :amount_paid,
                     payment_status = :payment_status,
                     updated_at = CURRENT_TIMESTAMP
                 WHERE invoice_id = :invoice_id

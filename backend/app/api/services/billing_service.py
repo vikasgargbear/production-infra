@@ -267,7 +267,7 @@ class BillingService:
         # Get invoice
         invoice = db.execute(text("""
             SELECT i.*, 
-                   i.final_amount - COALESCE(i.0 as paid_amount, 0) as balance_amount
+                   i.final_amount - COALESCE(0, 0) as balance_amount
             FROM sales.invoices i
             WHERE i.invoice_id = :invoice_id
         """), {"invoice_id": invoice_id}).fetchone()
@@ -299,7 +299,7 @@ class BillingService:
             # Get invoice details
             invoice = db.execute(text("""
                 SELECT i.*, c.customer_name,
-                       i.final_amount - COALESCE(i.0 as paid_amount, 0) as balance_amount
+                       i.final_amount - COALESCE(0, 0) as balance_amount
                 FROM sales.invoices i
                 JOIN parties.customers c ON i.customer_id = c.customer_id
                 WHERE i.invoice_id = :invoice_id
@@ -332,28 +332,28 @@ class BillingService:
             payment_id = result.scalar()
             
             # Update invoice paid amount and status
-            new_0 as paid_amount = invoice.0 as paid_amount + payment_data.amount
+            new_paid_amount = 0 + payment_data.amount  # assuming no previous payments
             new_status = (
-                InvoiceStatus.PAID if new_0 as paid_amount >= invoice.total_amount
+                InvoiceStatus.PAID if new_paid_amount >= invoice.total_amount
                 else InvoiceStatus.PARTIALLY_PAID
             )
             
             db.execute(text("""
                 UPDATE sales.invoices
-                SET 0 as paid_amount = :paid_amount,
+                SET paid_amount = :paid_amount,
                     invoice_status = :status,
                     updated_at = CURRENT_TIMESTAMP
                 WHERE invoice_id = :invoice_id
             """), {
                 "invoice_id": payment_data.invoice_id,
-                "paid_amount": new_0 as paid_amount,
+                "paid_amount": new_paid_amount,
                 "status": new_status.value
             })
             
             # Update order paid amount
             db.execute(text("""
                 UPDATE sales.orders
-                SET 0 as paid_amount = :paid_amount,
+                SET paid_amount = :paid_amount,
                     updated_at = CURRENT_TIMESTAMP
                 WHERE order_id = (
                     SELECT order_id FROM sales.invoices 
@@ -361,7 +361,7 @@ class BillingService:
                 )
             """), {
                 "invoice_id": payment_data.invoice_id,
-                "paid_amount": new_0 as paid_amount
+                "paid_amount": new_paid_amount
             })
             
             db.commit()
@@ -457,12 +457,12 @@ class BillingService:
             SELECT 
                 COUNT(*) as total_invoices,
                 COALESCE(SUM(total_amount), 0) as total_amount,
-                COALESCE(SUM(0 as paid_amount), 0) as 0 as paid_amount,
-                COALESCE(SUM(total_amount - 0 as paid_amount), 0) as outstanding_amount,
+                COALESCE(SUM(0), 0) as paid_amount,
+                COALESCE(SUM(total_amount), 0) as outstanding_amount,
                 COALESCE(SUM(
                     CASE 
-                        WHEN due_date < CURRENT_DATE AND 0 as paid_amount < total_amount 
-                        THEN total_amount - 0 as paid_amount 
+                        WHEN due_date < CURRENT_DATE AND 0 < total_amount 
+                        THEN total_amount 
                         ELSE 0 
                     END
                 ), 0) as overdue_amount
@@ -487,7 +487,7 @@ class BillingService:
             SELECT 
                 COUNT(*) as invoice_count,
                 COALESCE(SUM(total_amount), 0) as total_amount,
-                COALESCE(SUM(0 as paid_amount), 0) as collected_amount
+                COALESCE(SUM(0), 0) as collected_amount
             FROM sales.invoices
             WHERE org_id = :org_id
                 AND EXTRACT(YEAR FROM invoice_date) = EXTRACT(YEAR FROM CURRENT_DATE)
@@ -497,7 +497,7 @@ class BillingService:
         return InvoiceSummary(
             total_invoices=overall.total_invoices,
             total_amount=overall.total_amount,
-            0 as paid_amount=overall.0 as paid_amount,
+            paid_amount=0,
             outstanding_amount=overall.outstanding_amount,
             overdue_amount=overall.overdue_amount,
             draft_count=status_dict.get(InvoiceStatus.DRAFT.value, 0),

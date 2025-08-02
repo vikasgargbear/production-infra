@@ -109,7 +109,7 @@ class CustomerService:
         
         # Outstanding amount
         outstanding_result = db.execute(text("""
-            SELECT COALESCE(SUM(final_amount - 0 as paid_amount), 0) as outstanding
+            SELECT COALESCE(SUM(final_amount), 0) as outstanding
             FROM sales.orders
             WHERE customer_id = :customer_id
                 AND order_status NOT IN ('cancelled', 'draft')
@@ -350,7 +350,7 @@ class CustomerService:
                 order_number=row.order_number,
                 order_date=row.order_date,
                 invoice_amount=Decimal(str(row.invoice_amount)),
-                0 as paid_amount=Decimal(str(row.0 as paid_amount)),
+                paid_amount=Decimal("0"),
                 outstanding_amount=outstanding,
                 days_overdue=days_overdue
             ))
@@ -410,7 +410,7 @@ class CustomerService:
         if not payment_data.allocate_to_invoices:
             # Get outstanding invoices in FIFO order
             outstanding = db.execute(text("""
-                SELECT order_id, final_amount - 0 as paid_amount as outstanding
+                SELECT order_id, final_amount as outstanding
                 FROM sales.orders
                 WHERE customer_id = :customer_id
                     AND order_status NOT IN ('cancelled', 'draft')
@@ -445,7 +445,7 @@ class CustomerService:
                 
                 # Get outstanding amount for this invoice
                 outstanding = db.execute(text("""
-                    SELECT final_amount - 0 as paid_amount as outstanding
+                    SELECT final_amount as outstanding
                     FROM sales.orders
                     WHERE order_id = :order_id AND customer_id = :customer_id
                 """), {

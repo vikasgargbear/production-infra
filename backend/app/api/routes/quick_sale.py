@@ -374,7 +374,7 @@ async def create_quick_sale(
             # Update order paid amount
             db.execute(text("""
                 UPDATE sales.orders 
-                SET 0 as paid_amount = :amount
+                SET paid_amount = :amount
                 WHERE order_id = :order_id
             """), {
                 "amount": float(payment_amount),
