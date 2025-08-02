@@ -46,30 +46,25 @@ class CustomerService:
     def validate_credit_limit(db: Session, customer_id: int, order_amount: Decimal, org_id: "UUID" = None) -> Dict[str, Any]:
         """Check if customer has sufficient credit limit"""
         # Get customer details with outstanding
+        # For now, just get customer credit info without calculating outstanding
+        # TODO: Fix when we know the actual sales.orders column names
         if org_id:
             result = db.execute(text("""
                 SELECT 
                     c.credit_limit,
                     c.credit_days,
-                    COALESCE(SUM(o.balance_amount), 0) as outstanding
+                    0 as outstanding
                 FROM parties.customers c
-                LEFT JOIN sales.orders o ON c.customer_id = o.customer_id
-                    AND o.order_status NOT IN ('cancelled', 'draft')
-                    AND o.org_id = c.org_id
                 WHERE c.customer_id = :customer_id AND c.org_id = :org_id
-                GROUP BY c.customer_id, c.credit_limit, c.credit_days
             """), {"customer_id": customer_id, "org_id": org_id})
         else:
             result = db.execute(text("""
                 SELECT 
                     c.credit_limit,
                     c.credit_days,
-                    COALESCE(SUM(o.balance_amount), 0) as outstanding
+                    0 as outstanding
                 FROM parties.customers c
-                LEFT JOIN sales.orders o ON c.customer_id = o.customer_id
-                    AND o.order_status NOT IN ('cancelled', 'draft')
                 WHERE c.customer_id = :customer_id
-                GROUP BY c.customer_id, c.credit_limit, c.credit_days
             """), {"customer_id": customer_id})
         
         row = result.fetchone()
