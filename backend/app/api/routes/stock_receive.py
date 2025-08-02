@@ -19,7 +19,7 @@ from ...dependencies import get_current_org
 # Default org ID for now
 
 router = APIRouter(
-    prefix="/api/v1/stock",
+    prefix="/stock",
     tags=["stock"]
 )
 
