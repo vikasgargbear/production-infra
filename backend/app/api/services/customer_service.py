@@ -51,7 +51,7 @@ class CustomerService:
                 SELECT 
                     c.credit_limit,
                     c.credit_days,
-                    COALESCE(SUM(o.final_amount - o.paid_amount), 0) as outstanding
+                    COALESCE(SUM(o.balance_amount), 0) as outstanding
                 FROM parties.customers c
                 LEFT JOIN sales.orders o ON c.customer_id = o.customer_id
                     AND o.order_status NOT IN ('cancelled', 'draft')
@@ -64,7 +64,7 @@ class CustomerService:
                 SELECT 
                     c.credit_limit,
                     c.credit_days,
-                    COALESCE(SUM(o.final_amount - o.paid_amount), 0) as outstanding
+                    COALESCE(SUM(o.balance_amount), 0) as outstanding
                 FROM parties.customers c
                 LEFT JOIN sales.orders o ON c.customer_id = o.customer_id
                     AND o.order_status NOT IN ('cancelled', 'draft')
