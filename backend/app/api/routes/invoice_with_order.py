@@ -92,7 +92,7 @@ async def create_invoice_with_order(
         
         # Create the order
         result = db.execute(text("""
-            INSERT INTO sales.orders (
+            INSERT INTO orders (
                 org_id, customer_id, order_type, order_status,
                 order_date, delivery_date,
                 subtotal, discount_amount, other_charges,
@@ -120,7 +120,7 @@ async def create_invoice_with_order(
         
         # Update order with order number
         db.execute(text("""
-            UPDATE sales.orders 
+            UPDATE orders 
             SET order_number = :order_number 
             WHERE order_id = :order_id
         """), {
@@ -137,7 +137,7 @@ async def create_invoice_with_order(
             # Get product details
             product = db.execute(text("""
                 SELECT product_name, gst_percent
-                FROM master.products
+                FROM products
                 WHERE product_id = :product_id
             """), {"product_id": item["product_id"]}).first()
             
@@ -159,7 +159,7 @@ async def create_invoice_with_order(
             
             # Insert order item
             db.execute(text("""
-                INSERT INTO sales.order_items (
+                INSERT INTO order_items (
                     order_id, product_id, quantity, unit_price,
                     discount_percent, discount_amount,
                     taxable_amount, tax_percent, tax_amount,
@@ -188,7 +188,7 @@ async def create_invoice_with_order(
         final_amount = subtotal - Decimal(str(order_data["discount_amount"])) + Decimal(str(order_data["other_charges"]))
         
         db.execute(text("""
-            UPDATE sales.orders 
+            UPDATE orders 
             SET subtotal = :subtotal,
                 final_amount = :final_amount
             WHERE order_id = :order_id
@@ -204,7 +204,7 @@ async def create_invoice_with_order(
         # Get customer details
         customer = db.execute(text("""
             SELECT customer_name, gst_number as gstin, state, state_code
-            FROM master.customers
+            FROM customers
             WHERE customer_id = :customer_id
         """), {"customer_id": invoice_data.customer_id}).first()
         
@@ -247,7 +247,7 @@ async def create_invoice_with_order(
             
             # Update order paid amount
             db.execute(text("""
-                UPDATE sales.orders 
+                UPDATE orders 
                 SET paid_amount = paid_amount + :amount
                 WHERE order_id = :order_id
             """), {
@@ -258,7 +258,7 @@ async def create_invoice_with_order(
             # Update invoice payment status
             payment_status = "paid" if invoice_data.payment_amount >= final_amount else "partial"
             db.execute(text("""
-                UPDATE sales.invoices 
+                UPDATE invoices 
                 SET payment_status = :status,
                     paid_amount = :amount
                 WHERE invoice_id = :invoice_id

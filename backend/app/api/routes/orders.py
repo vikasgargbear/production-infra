@@ -61,7 +61,7 @@ async def create_order(
         # Get customer details
         customer = db.execute(text("""
             SELECT customer_name, phone, discount_percent 
-            FROM master.customers 
+            FROM customers 
             WHERE customer_id = :id AND org_id = :org_id
         """), {"id": order.customer_id, "org_id": org_id}).fetchone()
         
@@ -115,7 +115,7 @@ async def create_order(
         
         # Insert order
         result = db.execute(text("""
-            INSERT INTO sales.orders (
+            INSERT INTO orders (
                 org_id, order_number, customer_id, customer_name, customer_phone,
                 order_date, delivery_date, order_type, payment_terms, order_status,
                 subtotal_amount, discount_amount, tax_amount, round_off_amount, final_amount,
@@ -145,7 +145,7 @@ async def create_order(
                 item_data.get("discount_amount", 0) + item_data.get("tax_amount", 0))
             
             db.execute(text("""
-                INSERT INTO sales.order_items (
+                INSERT INTO order_items (
                     order_id, product_id, batch_id, quantity,
                     unit_price, selling_price, discount_percent, discount_amount,
                     tax_percent, tax_amount, line_total, total_price
@@ -193,12 +193,12 @@ async def list_orders(
         # Build query
         query = """
             SELECT o.*, c.customer_name, c.customer_code, c.phone as customer_phone
-            FROM sales.orders o
-            JOIN master.customers c ON o.customer_id = c.customer_id
+            FROM orders o
+            JOIN customers c ON o.customer_id = c.customer_id
             WHERE o.org_id = :org_id
         """
         count_query = """
-            SELECT COUNT(*) FROM sales.orders o
+            SELECT COUNT(*) FROM orders o
             WHERE o.org_id = :org_id
         """
         
@@ -244,8 +244,8 @@ async def list_orders(
             order_ids = [row.order_id for row in order_rows]
             items_result = db.execute(text("""
                 SELECT oi.*, p.product_name, p.product_code
-                FROM sales.order_items oi
-                JOIN master.products p ON oi.product_id = p.product_id
+                FROM order_items oi
+                JOIN products p ON oi.product_id = p.product_id
                 WHERE oi.order_id = ANY(:order_ids)
                 ORDER BY oi.order_id, oi.order_item_id
             """), {"order_ids": order_ids})
@@ -292,8 +292,8 @@ async def get_order(
         # Get order with customer details
         result = db.execute(text("""
             SELECT o.*, c.customer_name, c.customer_code, c.phone as customer_phone
-            FROM sales.orders o
-            JOIN master.customers c ON o.customer_id = c.customer_id
+            FROM orders o
+            JOIN customers c ON o.customer_id = c.customer_id
             WHERE o.order_id = :id AND o.org_id = :org_id
         """), {"id": order_id, "org_id": DEFAULT_ORG_ID})
         
@@ -307,9 +307,9 @@ async def get_order(
         items_result = db.execute(text("""
             SELECT oi.*, p.product_name, p.product_code,
                    b.batch_number, b.expiry_date
-            FROM sales.order_items oi
-            JOIN master.products p ON oi.product_id = p.product_id
-            LEFT JOIN inventory.batches b ON oi.batch_id = b.batch_id
+            FROM order_items oi
+            JOIN products p ON oi.product_id = p.product_id
+            LEFT JOIN batches b ON oi.batch_id = b.batch_id
             WHERE oi.order_id = :order_id
         """), {"order_id": order_id})
         
@@ -341,7 +341,7 @@ async def update_order(
     try:
         # Check if order exists
         existing = db.execute(text("""
-            SELECT order_id FROM sales.orders 
+            SELECT order_id FROM orders 
             WHERE order_id = :id AND org_id = :org_id
         """), {"id": order_id, "org_id": DEFAULT_ORG_ID}).scalar()
         
@@ -377,7 +377,7 @@ async def update_order(
         
         # Execute update
         update_query = f"""
-            UPDATE sales.orders 
+            UPDATE orders 
             SET {', '.join(update_fields)}
             WHERE order_id = :order_id AND org_id = :org_id
         """
@@ -406,7 +406,7 @@ async def confirm_order(
     try:
         # Check order exists and is pending
         status = db.execute(text("""
-            SELECT order_status FROM sales.orders WHERE order_id = :id AND org_id = :org_id
+            SELECT order_status FROM orders WHERE order_id = :id AND org_id = :org_id
         """), {"id": order_id, "org_id": DEFAULT_ORG_ID}).scalar()
         
         if not status:
@@ -420,7 +420,7 @@ async def confirm_order(
         
         # Update status
         db.execute(text("""
-            UPDATE sales.orders
+            UPDATE orders
             SET order_status = 'confirmed',
                 confirmed_at = CURRENT_TIMESTAMP,
                 updated_at = CURRENT_TIMESTAMP
@@ -450,13 +450,13 @@ async def generate_invoice(
     try:
         # Check order exists and is confirmed
         order = db.execute(text("""
-            SELECT order_status, order_number FROM sales.orders WHERE order_id = :id AND org_id = :org_id
+            SELECT order_status, order_number FROM orders WHERE order_id = :id AND org_id = :org_id
         """), {"id": order_id, "org_id": DEFAULT_ORG_ID}).fetchone()
         
         if not order:
             # Get helpful debugging info
             latest = db.execute(text("""
-                SELECT MAX(order_id) as max_id FROM sales.orders WHERE org_id = :org_id
+                SELECT MAX(order_id) as max_id FROM orders WHERE org_id = :org_id
             """), {"org_id": DEFAULT_ORG_ID}).scalar()
             
             raise HTTPException(
@@ -511,7 +511,7 @@ async def mark_delivered(
     try:
         # Check order exists and is ready for delivery
         status = db.execute(text("""
-            SELECT order_status FROM sales.orders WHERE order_id = :id AND org_id = :org_id
+            SELECT order_status FROM orders WHERE order_id = :id AND org_id = :org_id
         """), {"id": order_id, "org_id": DEFAULT_ORG_ID}).scalar()
         
         if not status:
@@ -525,7 +525,7 @@ async def mark_delivered(
         
         # Update order
         db.execute(text("""
-            UPDATE sales.orders
+            UPDATE orders
             SET order_status = 'delivered',
                 delivered_at = CURRENT_TIMESTAMP,
                 delivery_notes = :notes,
@@ -538,11 +538,11 @@ async def mark_delivered(
         
         # Release allocated inventory
         db.execute(text("""
-            UPDATE inventory.batches b
+            UPDATE batches b
             SET quantity_sold = quantity_sold - im.quantity_out
             FROM (
                 SELECT batch_id, COALESCE(quantity_out, 0) as quantity_out
-                FROM inventory.inventory_movements
+                FROM inventory_movements
                 WHERE reference_type = 'order' 
                     AND reference_id = :order_id
                     AND movement_type = 'sale'

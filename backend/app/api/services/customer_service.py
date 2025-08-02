@@ -35,7 +35,7 @@ class CustomerService:
         # Get the next sequence number
         result = db.execute(text("""
             SELECT COUNT(*) + 1 as next_num
-            FROM master.customers
+            FROM customers
             WHERE customer_code LIKE :prefix || '%'
         """), {"prefix": prefix})
         
@@ -52,8 +52,8 @@ class CustomerService:
                     c.credit_limit,
                     c.credit_days,
                     COALESCE(SUM(o.final_amount - o.paid_amount), 0) as outstanding
-                FROM master.customers c
-                LEFT JOIN sales.orders o ON c.customer_id = o.customer_id
+                FROM customers c
+                LEFT JOIN orders o ON c.customer_id = o.customer_id
                     AND o.order_status NOT IN ('cancelled', 'draft')
                     AND o.org_id = c.org_id
                 WHERE c.customer_id = :customer_id AND c.org_id = :org_id
@@ -65,8 +65,8 @@ class CustomerService:
                     c.credit_limit,
                     c.credit_days,
                     COALESCE(SUM(o.final_amount - o.paid_amount), 0) as outstanding
-                FROM master.customers c
-                LEFT JOIN sales.orders o ON c.customer_id = o.customer_id
+                FROM customers c
+                LEFT JOIN orders o ON c.customer_id = o.customer_id
                     AND o.order_status NOT IN ('cancelled', 'draft')
                 WHERE c.customer_id = :customer_id
                 GROUP BY c.customer_id, c.credit_limit, c.credit_days
@@ -105,7 +105,7 @@ class CustomerService:
                 COUNT(*) as total_orders,
                 COALESCE(SUM(final_amount), 0) as total_business,
                 MAX(order_date) as last_order_date
-            FROM sales.orders
+            FROM orders
             WHERE customer_id = :customer_id
                 AND order_status NOT IN ('cancelled', 'draft')
         """), {"customer_id": customer_id})
@@ -115,7 +115,7 @@ class CustomerService:
         # Outstanding amount
         outstanding_result = db.execute(text("""
             SELECT COALESCE(SUM(final_amount - paid_amount), 0) as outstanding
-            FROM sales.orders
+            FROM orders
             WHERE customer_id = :customer_id
                 AND order_status NOT IN ('cancelled', 'draft')
                 AND paid_amount < final_amount
@@ -149,8 +149,8 @@ class CustomerService:
                     THEN o.final_amount - o.paid_amount 
                     ELSE 0 
                 END), 0) as outstanding_amount
-            FROM master.customers c
-            LEFT JOIN sales.orders o ON c.customer_id = o.customer_id 
+            FROM customers c
+            LEFT JOIN orders o ON c.customer_id = o.customer_id 
                 AND o.order_status NOT IN ('cancelled', 'draft')
             WHERE c.customer_id = ANY(:customer_ids)
             GROUP BY c.customer_id
@@ -193,7 +193,7 @@ class CustomerService:
         
         # Get customer details
         customer = db.execute(text("""
-            SELECT customer_id, customer_name FROM master.customers WHERE customer_id = :id
+            SELECT customer_id, customer_name FROM customers WHERE customer_id = :id
         """), {"id": customer_id}).fetchone()
         
         if not customer:
@@ -214,7 +214,7 @@ class CustomerService:
                     'invoice' as type,
                     order_date as date,
                     final_amount as amount
-                FROM sales.orders
+                FROM orders
                 WHERE customer_id = :customer_id
                     AND order_date < :from_date
                     AND order_status NOT IN ('cancelled', 'draft')
@@ -248,7 +248,7 @@ class CustomerService:
                     'Sales Invoice' as description,
                     final_amount as debit_amount,
                     0 as credit_amount
-                FROM sales.orders
+                FROM orders
                 WHERE customer_id = :customer_id
                     AND order_date BETWEEN :from_date AND :to_date
                     AND order_status NOT IN ('cancelled', 'draft')
@@ -317,7 +317,7 @@ class CustomerService:
                 customer_name,
                 credit_limit,
                 credit_days
-            FROM master.customers
+            FROM customers
             WHERE customer_id = :customer_id
         """), {"customer_id": customer_id})
         
@@ -335,7 +335,7 @@ class CustomerService:
                 paid_amount,
                 final_amount - paid_amount as outstanding_amount,
                 CURRENT_DATE - order_date as days_since_invoice
-            FROM sales.orders
+            FROM orders
             WHERE customer_id = :customer_id
                 AND order_status NOT IN ('cancelled', 'draft')
                 AND paid_amount < final_amount
@@ -416,7 +416,7 @@ class CustomerService:
             # Get outstanding invoices in FIFO order
             outstanding = db.execute(text("""
                 SELECT order_id, final_amount - paid_amount as outstanding
-                FROM sales.orders
+                FROM orders
                 WHERE customer_id = :customer_id
                     AND order_status NOT IN ('cancelled', 'draft')
                     AND paid_amount < final_amount
@@ -431,7 +431,7 @@ class CustomerService:
                 
                 # Update order paid amount
                 db.execute(text("""
-                    UPDATE sales.orders
+                    UPDATE orders
                     SET paid_amount = paid_amount + :amount,
                         updated_at = CURRENT_TIMESTAMP
                     WHERE order_id = :order_id
@@ -451,7 +451,7 @@ class CustomerService:
                 # Get outstanding amount for this invoice
                 outstanding = db.execute(text("""
                     SELECT final_amount - paid_amount as outstanding
-                    FROM sales.orders
+                    FROM orders
                     WHERE order_id = :order_id AND customer_id = :customer_id
                 """), {
                     "order_id": order_id,
@@ -463,7 +463,7 @@ class CustomerService:
                     
                     # Update order paid amount
                     db.execute(text("""
-                        UPDATE sales.orders
+                        UPDATE orders
                         SET paid_amount = paid_amount + :amount,
                             updated_at = CURRENT_TIMESTAMP
                         WHERE order_id = :order_id

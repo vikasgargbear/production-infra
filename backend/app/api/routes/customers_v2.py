@@ -567,7 +567,7 @@ async def get_customer_outstanding(
                     '[]'::jsonb
                 ) as outstanding_invoices
             FROM parties.customers c
-            LEFT JOIN sales.invoices i ON c.customer_id = i.customer_id 
+            LEFT JOIN invoices i ON c.customer_id = i.customer_id 
                 AND i.payment_status IN ('pending', 'partial')
             WHERE c.customer_id = :customer_id
             AND c.org_id = :org_id

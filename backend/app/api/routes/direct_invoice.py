@@ -74,7 +74,7 @@ async def create_direct_invoice(
         # Get customer details
         customer = db.execute(text("""
             SELECT customer_id, customer_name, gst_number as gstin, state, state_code, credit_period_days as credit_days
-            FROM master.customers
+            FROM customers
             WHERE customer_id = :customer_id AND org_id = :org_id
         """), {
             "customer_id": invoice_data.customer_id,
@@ -96,7 +96,7 @@ async def create_direct_invoice(
             SELECT COALESCE(MAX(CAST(
                 SUBSTRING(invoice_number FROM 4) AS INTEGER
             )), 0) + 1 as next_num
-            FROM sales.invoices
+            FROM invoices
             WHERE invoice_number LIKE 'INV%'
         """)).scalar()
         
@@ -114,7 +114,7 @@ async def create_direct_invoice(
             # Get product details
             product = db.execute(text("""
                 SELECT product_name, gst_percent, hsn_code
-                FROM master.products
+                FROM products
                 WHERE product_id = :product_id
             """), {"product_id": item.product_id}).first()
             
@@ -170,7 +170,7 @@ async def create_direct_invoice(
         
         # Create invoice
         result = db.execute(text("""
-            INSERT INTO sales.invoices (
+            INSERT INTO invoices (
                 org_id, invoice_number, order_id, customer_id,
                 invoice_date, due_date,
                 subtotal, discount_amount, taxable_amount,
@@ -234,7 +234,7 @@ async def create_direct_invoice(
         for item in invoice_data.items:
             if item.batch_id:
                 db.execute(text("""
-                    UPDATE inventory.batches
+                    UPDATE batches
                     SET quantity_available = quantity_available - :quantity,
                         quantity_sold = quantity_sold + :quantity,
                         updated_at = CURRENT_TIMESTAMP

@@ -29,7 +29,7 @@ async def login(
         SELECT u.user_id, u.full_name, u.email, u.password_hash, 
                u.org_id, u.role, u.is_active,
                o.org_name, o.is_active as org_active
-        FROM master.org_users u
+        FROM org_users u
         JOIN organizations o ON u.org_id = o.org_id
         WHERE u.email = :email
     """), {"email": form_data.username}).fetchone()
@@ -55,7 +55,7 @@ async def login(
     
     # Update last login
     db.execute(text("""
-        UPDATE master.org_users 
+        UPDATE org_users 
         SET last_login_at = CURRENT_TIMESTAMP
         WHERE user_id = :user_id
     """), {"user_id": user.user_id})
@@ -115,7 +115,7 @@ async def get_user_organizations(
     organizations = db.execute(text("""
         SELECT DISTINCT o.org_id, o.org_name, o.business_type,
                u.role as user_role
-        FROM master.org_users u
+        FROM org_users u
         JOIN organizations o ON u.org_id = o.org_id
         WHERE u.email = :email
         AND u.is_active = true
@@ -160,7 +160,7 @@ async def switch_organization(
     # Get organization details
     org = db.execute(text("""
         SELECT o.org_id, o.org_name, u.role
-        FROM master.organizations o
+        FROM organizations o
         JOIN org_users u ON u.org_id = o.org_id
         WHERE o.org_id = :org_id
         AND u.user_id = :user_id
@@ -207,7 +207,7 @@ async def register_user(
     try:
         # Check if email already exists
         existing_user = db.execute(text("""
-            SELECT user_id FROM master.org_users WHERE email = :email
+            SELECT user_id FROM org_users WHERE email = :email
         """), {"email": user_data["email"]}).scalar()
         
         if existing_user:
@@ -222,7 +222,7 @@ async def register_user(
             
             # Create organization
             db.execute(text("""
-                INSERT INTO master.organizations (
+                INSERT INTO organizations (
                     org_id, org_name, business_type,
                     primary_contact_name, primary_email, primary_phone,
                     business_address
@@ -248,7 +248,7 @@ async def register_user(
         password_hash = get_password_hash(user_data["password"])
         
         result = db.execute(text("""
-            INSERT INTO master.org_users (
+            INSERT INTO org_users (
                 org_id, full_name, email, phone,
                 password_hash, role, is_active
             ) VALUES (
@@ -305,7 +305,7 @@ async def change_password(
     # Verify current password
     user = db.execute(text("""
         SELECT password_hash
-        FROM master.org_users
+        FROM org_users
         WHERE user_id = :user_id
     """), {"user_id": current_user["user_id"]}).fetchone()
     
@@ -319,7 +319,7 @@ async def change_password(
     new_password_hash = get_password_hash(password_data["new_password"])
     
     db.execute(text("""
-        UPDATE master.org_users
+        UPDATE org_users
         SET password_hash = :password_hash,
             updated_at = CURRENT_TIMESTAMP
         WHERE user_id = :user_id

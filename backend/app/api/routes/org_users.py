@@ -44,7 +44,7 @@ def get_org_users(
                 is_active,
                 last_login_at,
                 created_at
-            FROM master.org_users 
+            FROM org_users 
             WHERE 1=1
         """
         params = {}
@@ -92,7 +92,7 @@ def get_org_user(user_id: int, db: Session = Depends(get_db)):
                     is_active,
                     last_login_at,
                     created_at
-                FROM master.org_users 
+                FROM org_users 
                 WHERE user_id = :user_id
             """),
             {"user_id": user_id}
@@ -125,7 +125,7 @@ def create_org_user(user_data: dict, db: Session = Depends(get_db)):
             
         # Prepare insert query
         query = text("""
-            INSERT INTO master.org_users (
+            INSERT INTO org_users (
                 org_id, full_name, email, phone, employee_id,
                 password_hash, role, permissions, department,
                 can_view_reports, can_modify_prices, can_approve_discounts,
@@ -205,7 +205,7 @@ def update_org_user(user_id: int, user_data: dict, db: Session = Depends(get_db)
             raise HTTPException(status_code=400, detail="No valid fields to update")
         
         query = text(f"""
-            UPDATE master.org_users 
+            UPDATE org_users 
             SET {', '.join(update_fields)}, updated_at = CURRENT_TIMESTAMP
             WHERE user_id = :user_id
             RETURNING user_id
@@ -231,7 +231,7 @@ def delete_org_user(user_id: int, db: Session = Depends(get_db)):
     """Delete an org user"""
     try:
         result = db.execute(
-            text("DELETE FROM master.org_users WHERE user_id = :user_id RETURNING user_id"),
+            text("DELETE FROM org_users WHERE user_id = :user_id RETURNING user_id"),
             {"user_id": user_id}
         )
         
@@ -259,7 +259,7 @@ def reset_password(user_id: int, db: Session = Depends(get_db)):
         
         # For now, just verify user exists
         result = db.execute(
-            text("SELECT email FROM master.org_users WHERE user_id = :user_id"),
+            text("SELECT email FROM org_users WHERE user_id = :user_id"),
             {"user_id": user_id}
         )
         user = result.first()

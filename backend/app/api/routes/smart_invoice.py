@@ -37,7 +37,7 @@ async def smart_invoice_generation(
     # Check if order exists
     order = db.execute(text("""
         SELECT order_id, order_status, customer_id, final_amount
-        FROM sales.orders
+        FROM orders
         WHERE order_id = :order_id AND org_id = :org_id
     """), {
         "order_id": order_id,
@@ -69,7 +69,7 @@ async def smart_invoice_generation(
         
         # Get system info
         latest_order = db.execute(text("""
-            SELECT MAX(order_id) as max_id FROM sales.orders WHERE org_id = :org_id
+            SELECT MAX(order_id) as max_id FROM orders WHERE org_id = :org_id
         """), {"org_id": org_id}).scalar()
         
         next_sequence = db.execute(text("""
@@ -156,7 +156,7 @@ async def debug_sequence_issue(
     
     # Get all relevant info
     latest_order = db.execute(text("""
-        SELECT order_id, created_at FROM sales.orders 
+        SELECT order_id, created_at FROM orders 
         WHERE org_id = :org_id 
         ORDER BY order_id DESC LIMIT 1
     """), {"org_id": org_id}).first()
@@ -167,7 +167,7 @@ async def debug_sequence_issue(
     
     recent_orders = db.execute(text("""
         SELECT order_id, order_status, created_at 
-        FROM sales.orders 
+        FROM orders 
         WHERE org_id = :org_id 
         ORDER BY order_id DESC LIMIT 10
     """), {"org_id": org_id}).fetchall()

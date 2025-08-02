@@ -35,7 +35,7 @@ async def get_stock_movements(
         query = """
             SELECT sm.*, p.product_name, p.hsn_code
             FROM stock_movements sm
-            LEFT JOIN master.products p ON sm.product_id = p.product_id
+            LEFT JOIN products p ON sm.product_id = p.product_id
             WHERE 1=1
         """
         params = {"skip": skip, "limit": limit}
@@ -127,7 +127,7 @@ async def create_stock_receive(
         
         # Get product details
         product = db.execute(
-            text("SELECT * FROM master.products WHERE product_id = :product_id"),
+            text("SELECT * FROM products WHERE product_id = :product_id"),
             {"product_id": receive_data["product_id"]}
         ).first()
         
@@ -192,8 +192,7 @@ async def create_stock_receive(
                 """),
                 {
                     "quantity": receive_data["quantity"],
-                    "inventory_id": inventory.inventory_id
-                }
+                    "inventory_id": inventory_id                 }
             )
         else:
             # Create new inventory entry
@@ -294,7 +293,7 @@ async def create_stock_issue(
         batch_number = issue_data.get("batch_number", "DEFAULT")
         batch = db.execute(
             text("""
-                SELECT * FROM inventory.batches 
+                SELECT * FROM batches 
                 WHERE org_id = :org_id 
                 AND product_id = :product_id 
                 AND batch_number = :batch
@@ -353,7 +352,7 @@ async def create_stock_issue(
         # Update batch quantity
         db.execute(
             text("""
-                UPDATE inventory.batches 
+                UPDATE batches 
                 SET quantity_available = quantity_available - :quantity,
                     updated_at = CURRENT_TIMESTAMP
                 WHERE batch_id = :batch_id
@@ -487,7 +486,7 @@ async def get_product_batches(
                 cost_price as purchase_price,
                 selling_price,
                 mrp
-            FROM inventory.batches
+            FROM batches
             WHERE org_id = :org_id
             AND product_id = :product_id
             AND quantity_available > 0
@@ -527,7 +526,7 @@ async def get_near_expiry_stock(
                 p.hsn_code,
                 EXTRACT(DAY FROM i.expiry_date - CURRENT_DATE) as days_to_expiry
             FROM inventory i
-            LEFT JOIN master.products p ON i.product_id = p.product_id
+            LEFT JOIN products p ON i.product_id = p.product_id
             WHERE i.org_id = :org_id
             AND i.current_stock > 0
             AND i.expiry_date IS NOT NULL
@@ -569,7 +568,7 @@ async def get_low_stock_items(
                 p.reorder_level,
                 p.reorder_quantity,
                 COALESCE(SUM(i.current_stock), 0) as total_stock
-            FROM master.products p
+            FROM products p
             LEFT JOIN inventory i ON p.product_id = i.product_id
             WHERE p.org_id = :org_id
             AND p.reorder_level IS NOT NULL

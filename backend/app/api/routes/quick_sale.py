@@ -81,7 +81,7 @@ async def create_quick_sale(
                    COALESCE(gstin, gst_number) as gstin, state, 
                    state_code, credit_period_days as credit_days, 
                    address, city, pincode
-            FROM master.customers
+            FROM customers
             WHERE customer_id = :customer_id AND org_id = :org_id
         """), {
             "customer_id": sale.customer_id,
@@ -100,7 +100,7 @@ async def create_quick_sale(
         today_prefix = f"ORD{timestamp.strftime('%Y%m%d')}"
         max_order = db.execute(text("""
             SELECT MAX(order_number) 
-            FROM sales.orders 
+            FROM orders 
             WHERE org_id = :org_id 
             AND order_number LIKE :prefix
         """), {
@@ -124,7 +124,7 @@ async def create_quick_sale(
         
         # Double-check uniqueness
         exists = db.execute(text("""
-            SELECT 1 FROM sales.orders 
+            SELECT 1 FROM orders 
             WHERE order_number = :order_number 
             AND org_id = :org_id
         """), {
@@ -137,7 +137,7 @@ async def create_quick_sale(
             order_number = f"{today_prefix}{seq_num:04d}{random.randint(10, 99)}"
         
         order_result = db.execute(text("""
-            INSERT INTO sales.orders (
+            INSERT INTO orders (
                 org_id, customer_id, customer_name, customer_phone, order_number, order_type, order_status,
                 order_date, delivery_date,
                 subtotal_amount, discount_amount, tax_amount, final_amount,
@@ -173,7 +173,7 @@ async def create_quick_sale(
             product = db.execute(text("""
                 SELECT product_id, product_name, mrp, sale_price, 
                        gst_percent, hsn_code
-                FROM master.products
+                FROM products
                 WHERE product_id = :product_id
             """), {"product_id": item.product_id}).first()
             
@@ -189,7 +189,7 @@ async def create_quick_sale(
             # Check inventory
             available_stock = db.execute(text("""
                 SELECT COALESCE(SUM(quantity_available), 0) as stock
-                FROM inventory.batches
+                FROM batches
                 WHERE product_id = :product_id 
                     AND org_id = :org_id
                     AND (expiry_date IS NULL OR expiry_date > CURRENT_DATE)
@@ -217,7 +217,7 @@ async def create_quick_sale(
             
             # Insert order item
             db.execute(text("""
-                INSERT INTO sales.order_items (
+                INSERT INTO order_items (
                     order_id, product_id, quantity, selling_price,
                     discount_percent, discount_amount,
                     tax_percent, tax_amount,
@@ -244,7 +244,7 @@ async def create_quick_sale(
             remaining_qty = item.quantity
             batches = db.execute(text("""
                 SELECT batch_id, quantity_available
-                FROM inventory.batches
+                FROM batches
                 WHERE product_id = :product_id 
                     AND org_id = :org_id
                     AND quantity_available > 0
@@ -263,7 +263,7 @@ async def create_quick_sale(
                 qty_from_batch = min(remaining_qty, batch.quantity_available)
                 
                 db.execute(text("""
-                    UPDATE inventory.batches
+                    UPDATE batches
                     SET quantity_available = quantity_available - :qty,
                         quantity_sold = quantity_sold + :qty,
                         updated_at = CURRENT_TIMESTAMP
@@ -279,7 +279,7 @@ async def create_quick_sale(
         final_amount = subtotal - (sale.discount_amount or 0)
         
         db.execute(text("""
-            UPDATE sales.orders 
+            UPDATE orders 
             SET subtotal_amount = :subtotal,
                 final_amount = :final_amount,
                 tax_amount = :tax_amount
@@ -300,7 +300,7 @@ async def create_quick_sale(
         igst_amount = Decimal("0")
         
         invoice_result = db.execute(text("""
-            INSERT INTO sales.invoices (
+            INSERT INTO invoices (
                 org_id, invoice_number, order_id, customer_id,
                 customer_name, customer_gstin,
                 billing_name, billing_address, billing_city, billing_state, billing_pincode,
@@ -373,7 +373,7 @@ async def create_quick_sale(
             
             # Update order paid amount
             db.execute(text("""
-                UPDATE sales.orders 
+                UPDATE orders 
                 SET paid_amount = :amount
                 WHERE order_id = :order_id
             """), {
@@ -384,7 +384,7 @@ async def create_quick_sale(
             # Update invoice payment status
             if payment_amount >= final_amount:
                 db.execute(text("""
-                    UPDATE sales.invoices 
+                    UPDATE invoices 
                     SET invoice_status = 'paid',
                         paid_amount = :amount
                     WHERE invoice_id = :invoice_id

@@ -34,7 +34,7 @@ async def generate_invoice_with_fallback(
     # First check if order exists
     order = db.execute(text("""
         SELECT order_id, order_status, customer_id, final_amount
-        FROM sales.orders
+        FROM orders
         WHERE order_id = :order_id AND org_id = :org_id
     """), {
         "order_id": order_id,
@@ -45,7 +45,7 @@ async def generate_invoice_with_fallback(
         # Get the latest orders to help debug
         latest_orders = db.execute(text("""
             SELECT order_id, order_number, created_at
-            FROM sales.orders
+            FROM orders
             WHERE org_id = :org_id
             ORDER BY order_id DESC
             LIMIT 5
@@ -55,7 +55,7 @@ async def generate_invoice_with_fallback(
         # (in case frontend is confusing order_id with invoice_id)
         existing_invoice = db.execute(text("""
             SELECT invoice_id, invoice_number, order_id
-            FROM sales.invoices
+            FROM invoices
             WHERE order_id = :order_id OR invoice_id = :order_id
             LIMIT 1
         """), {"order_id": order_id}).first()
@@ -90,7 +90,7 @@ async def generate_invoice_with_fallback(
     # If order exists but already has invoice, return that info
     existing_invoice = db.execute(text("""
         SELECT invoice_id, invoice_number, created_at, total_amount
-        FROM sales.invoices
+        FROM invoices
         WHERE order_id = :order_id
     """), {"order_id": order_id}).first()
     

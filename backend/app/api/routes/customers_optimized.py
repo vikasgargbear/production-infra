@@ -90,18 +90,18 @@ async def list_customers(
                         THEN o.final_amount - o.paid_amount 
                         ELSE 0 
                     END), 0) as outstanding_amount
-                FROM master.customers c
-                LEFT JOIN sales.orders o ON c.customer_id = o.customer_id 
+                FROM customers c
+                LEFT JOIN orders o ON c.customer_id = o.customer_id 
                     AND o.order_status NOT IN ('cancelled', 'draft')
                 WHERE c.org_id = :org_id
             """
             group_by = " GROUP BY c.customer_id"
         else:
             # Simple query without statistics
-            base_query = "SELECT * FROM master.customers c WHERE c.org_id = :org_id"
+            base_query = "SELECT * FROM customers c WHERE c.org_id = :org_id"
             group_by = ""
         
-        count_query = "SELECT COUNT(*) FROM master.customers WHERE org_id = :org_id"
+        count_query = "SELECT COUNT(*) FROM customers WHERE org_id = :org_id"
         params = {"org_id": DEFAULT_ORG_ID}
         
         # Add filters

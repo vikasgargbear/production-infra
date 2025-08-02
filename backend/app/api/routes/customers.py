@@ -74,7 +74,7 @@ async def create_customer(
         try:
             # Try with area field first
             result = db.execute(text("""
-                INSERT INTO master.customers (
+                INSERT INTO customers (
                     org_id, customer_code, customer_name, contact_person,
                     phone, alternate_phone, email,
                     address_line1, address_line2, area, city, state, pincode,
@@ -94,7 +94,7 @@ async def create_customer(
             if "column \"area\" of relation \"customers\" does not exist" in str(e):
                 # Fallback to without area field
                 result = db.execute(text("""
-                    INSERT INTO master.customers (
+                    INSERT INTO customers (
                         org_id, customer_code, customer_name, contact_person,
                         phone, alternate_phone, email,
                         address_line1, address_line2, city, state, pincode,
@@ -150,8 +150,8 @@ async def list_customers(
         logger.info(f"Customer search request: search={search}, limit={limit}, skip={skip}, include_stats={include_stats}")
         
         # Build query
-        query = "SELECT * FROM master.customers WHERE org_id = :org_id"
-        count_query = "SELECT COUNT(*) FROM master.customers WHERE org_id = :org_id"
+        query = "SELECT * FROM customers WHERE org_id = :org_id"
+        count_query = "SELECT COUNT(*) FROM customers WHERE org_id = :org_id"
         params = {"org_id": DEFAULT_ORG_ID}
         
         # Add filters
@@ -285,7 +285,7 @@ async def get_customer(
     try:
         # Get customer
         result = db.execute(text("""
-            SELECT * FROM master.customers WHERE customer_id = :id
+            SELECT * FROM customers WHERE customer_id = :id
         """), {"id": customer_id})
         
         customer = result.fetchone()
@@ -317,7 +317,7 @@ async def update_customer(
     try:
         # Check if customer exists
         exists = db.execute(text("""
-            SELECT 1 FROM master.customers WHERE customer_id = :id
+            SELECT 1 FROM customers WHERE customer_id = :id
         """), {"id": customer_id}).scalar()
         
         if not exists:
@@ -335,7 +335,7 @@ async def update_customer(
         if update_fields:
             update_fields.append("updated_at = CURRENT_TIMESTAMP")
             query = f"""
-                UPDATE master.customers 
+                UPDATE customers 
                 SET {', '.join(update_fields)}
                 WHERE customer_id = :id
             """

@@ -40,7 +40,7 @@ def get_tax_entries(
                     WHEN te.entry_type = 'purchase' THEN s.gstin
                 END as party_gstin
             FROM tax_entries te
-            LEFT JOIN master.customers c ON te.party_id = c.customer_id AND te.entry_type = 'sales'
+            LEFT JOIN customers c ON te.party_id = c.customer_id AND te.entry_type = 'sales'
             LEFT JOIN suppliers s ON te.party_id = s.supplier_id AND te.entry_type = 'purchase'
             WHERE 1=1
         """
@@ -95,7 +95,7 @@ def get_tax_entry(entry_id: int, db: Session = Depends(get_db)):
                         WHEN te.entry_type = 'purchase' THEN s.state_code
                     END as party_state_code
                 FROM tax_entries te
-                LEFT JOIN master.customers c ON te.party_id = c.customer_id AND te.entry_type = 'sales'
+                LEFT JOIN customers c ON te.party_id = c.customer_id AND te.entry_type = 'sales'
                 LEFT JOIN suppliers s ON te.party_id = s.supplier_id AND te.entry_type = 'purchase'
                 WHERE te.entry_id = :entry_id
             """),
@@ -121,7 +121,7 @@ def create_tax_entry(tax_data: dict, db: Session = Depends(get_db)):
         # Validate HSN code if provided
         if tax_data.get("hsn_code"):
             hsn_check = db.execute(
-                text("SELECT COUNT(*) FROM master.products WHERE hsn_code = :hsn_code"),
+                text("SELECT COUNT(*) FROM products WHERE hsn_code = :hsn_code"),
                 {"hsn_code": tax_data.get("hsn_code")}
             ).scalar()
             
@@ -270,7 +270,7 @@ def get_gstr1_summary(
                 SUM(te.igst_amount) as igst,
                 SUM(te.total_tax_amount) as total_tax
             FROM tax_entries te
-            JOIN master.customers c ON te.party_id = c.customer_id
+            JOIN customers c ON te.party_id = c.customer_id
             WHERE te.entry_type = 'sales'
             AND te.entry_date >= :start_date
             AND te.entry_date <= :end_date
@@ -292,7 +292,7 @@ def get_gstr1_summary(
                 SUM(te.igst_amount) as igst,
                 SUM(te.total_tax_amount) as total_tax
             FROM tax_entries te
-            LEFT JOIN master.customers c ON te.party_id = c.customer_id
+            LEFT JOIN customers c ON te.party_id = c.customer_id
             WHERE te.entry_type = 'sales'
             AND te.entry_date >= :start_date
             AND te.entry_date <= :end_date

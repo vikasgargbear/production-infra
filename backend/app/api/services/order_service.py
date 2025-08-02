@@ -30,7 +30,7 @@ class OrderService:
         # Get the next sequence number for today for this org
         result = db.execute(text("""
             SELECT COUNT(*) + 1 as next_num
-            FROM sales.orders
+            FROM orders
             WHERE order_number LIKE :prefix || '%' AND org_id = :org_id
         """), {"prefix": prefix, "org_id": org_id})
         
@@ -47,7 +47,7 @@ class OrderService:
             # Check product exists and is active
             product = db.execute(text("""
                 SELECT product_id, product_name, is_active
-                FROM master.products
+                FROM products
                 WHERE product_id = :product_id AND org_id = :org_id
             """), {"product_id": item['product_id'], "org_id": org_id}).fetchone()
             
@@ -73,7 +73,7 @@ class OrderService:
             if item.get('batch_id'):
                 batch = db.execute(text("""
                     SELECT batch_id, batch_number, quantity_available, expiry_date
-                    FROM inventory.batches
+                    FROM batches
                     WHERE batch_id = :batch_id AND product_id = :product_id AND org_id = :org_id
                 """), {
                     "batch_id": item['batch_id'],
@@ -112,7 +112,7 @@ class OrderService:
                 # Check overall stock
                 stock = db.execute(text("""
                     SELECT COALESCE(SUM(quantity_available), 0) as total_stock
-                    FROM inventory.batches
+                    FROM batches
                     WHERE product_id = :product_id AND org_id = :org_id
                         AND (expiry_date IS NULL OR expiry_date > CURRENT_DATE)
                 """), {"product_id": item['product_id'], "org_id": org_id}).scalar()
@@ -150,13 +150,13 @@ class OrderService:
             if org_id:
                 product = db.execute(text("""
                     SELECT mrp, gst_percent
-                    FROM master.products
+                    FROM products
                     WHERE product_id = :product_id AND org_id = :org_id
                 """), {"product_id": item['product_id'], "org_id": org_id}).fetchone()
             else:
                 product = db.execute(text("""
                     SELECT mrp, gst_percent
-                    FROM master.products
+                    FROM products
                     WHERE product_id = :product_id
                 """), {"product_id": item['product_id']}).fetchone()
             
@@ -203,7 +203,7 @@ class OrderService:
                 if item.get('batch_id'):
                     # Allocate from specific batch
                     db.execute(text("""
-                        UPDATE inventory.batches
+                        UPDATE batches
                         SET quantity_available = quantity_available - :quantity,
                             quantity_sold = quantity_sold + :quantity,
                             updated_at = CURRENT_TIMESTAMP
@@ -221,7 +221,7 @@ class OrderService:
                     # Auto-allocate using FIFO
                     batches = db.execute(text("""
                         SELECT batch_id, quantity_available
-                        FROM inventory.batches
+                        FROM batches
                         WHERE product_id = :product_id AND org_id = :org_id
                             AND quantity_available > 0
                             AND (expiry_date IS NULL OR expiry_date > CURRENT_DATE)
@@ -236,7 +236,7 @@ class OrderService:
                         
                         # Update batch
                         db.execute(text("""
-                            UPDATE inventory.batches
+                            UPDATE batches
                             SET quantity_available = quantity_available - :allocation,
                                 quantity_sold = quantity_sold + :allocation,
                                 updated_at = CURRENT_TIMESTAMP
@@ -268,7 +268,7 @@ class OrderService:
         # Get the next sequence number for this month
         result = db.execute(text("""
             SELECT COUNT(*) + 1 as next_num
-            FROM sales.invoices
+            FROM invoices
             WHERE invoice_number LIKE :prefix || '%'
         """), {"prefix": prefix})
         
@@ -280,7 +280,7 @@ class OrderService:
         """Process order return"""
         # Get order details
         order = db.execute(text("""
-            SELECT * FROM sales.orders WHERE order_id = :order_id
+            SELECT * FROM orders WHERE order_id = :order_id
         """), {"order_id": order_id}).fetchone()
         
         if not order:
@@ -295,7 +295,7 @@ class OrderService:
             
             # Reverse all inventory allocations
             db.execute(text("""
-                INSERT INTO inventory.inventory_movements (
+                INSERT INTO inventory_movements (
                     product_id, batch_id, movement_type, movement_date,
                     quantity_in, reference_type, reference_id,
                     created_at, updated_at
@@ -304,19 +304,19 @@ class OrderService:
                     product_id, batch_id, 'return', CURRENT_DATE,
                     COALESCE(quantity_out, 0), 'return', :order_id,
                     CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
-                FROM inventory.inventory_movements
+                FROM inventory_movements
                 WHERE reference_type = 'order' AND reference_id = :order_id
             """), {"order_id": order_id})
             
             # Update batch quantities
             db.execute(text("""
-                UPDATE inventory.batches b
+                UPDATE batches b
                 SET quantity_available = quantity_available + im.quantity_out,
                     quantity_sold = quantity_sold - im.quantity_out,
                     updated_at = CURRENT_TIMESTAMP
                 FROM (
                     SELECT batch_id, SUM(COALESCE(quantity_out, 0)) as quantity_out
-                    FROM inventory.inventory_movements
+                    FROM inventory_movements
                     WHERE reference_type = 'order' AND reference_id = :order_id
                     GROUP BY batch_id
                 ) im
@@ -349,7 +349,7 @@ class OrderService:
         
         # Update order status
         db.execute(text("""
-            UPDATE sales.orders
+            UPDATE orders
             SET order_status = 'returned',
                 updated_at = CURRENT_TIMESTAMP
             WHERE order_id = :order_id
@@ -382,28 +382,28 @@ class OrderService:
                 COUNT(*) FILTER (WHERE order_status = 'processing') as processing_orders,
                 COUNT(*) FILTER (WHERE order_status = 'delivered') as delivered_orders,
                 COUNT(*) as total_orders
-            FROM sales.orders
+            FROM orders
             WHERE org_id = :org_id
         """), {"org_id": org_id}).fetchone()
         
         # Today's stats
         today_stats = db.execute(text("""
             SELECT COUNT(*) as orders, COALESCE(SUM(final_amount), 0) as amount
-            FROM sales.orders
+            FROM orders
             WHERE org_id = :org_id AND order_date = :today
         """), {"org_id": org_id, "today": today}).fetchone()
         
         # Week stats
         week_stats = db.execute(text("""
             SELECT COUNT(*) as orders, COALESCE(SUM(final_amount), 0) as amount
-            FROM sales.orders
+            FROM orders
             WHERE org_id = :org_id AND order_date >= :week_start
         """), {"org_id": org_id, "week_start": week_start}).fetchone()
         
         # Month stats
         month_stats = db.execute(text("""
             SELECT COUNT(*) as orders, COALESCE(SUM(final_amount), 0) as amount
-            FROM sales.orders
+            FROM orders
             WHERE org_id = :org_id AND order_date >= :month_start
         """), {"org_id": org_id, "month_start": month_start}).fetchone()
         
@@ -414,9 +414,9 @@ class OrderService:
                 p.product_code,
                 SUM(oi.quantity) as total_quantity,
                 SUM(oi.line_total) as total_revenue
-            FROM sales.order_items oi
-            JOIN master.products p ON oi.product_id = p.product_id
-            JOIN sales.orders o ON oi.order_id = o.order_id
+            FROM order_items oi
+            JOIN products p ON oi.product_id = p.product_id
+            JOIN orders o ON oi.order_id = o.order_id
             WHERE o.org_id = :org_id
                 AND o.order_date >= :month_start
             GROUP BY p.product_id, p.product_name, p.product_code

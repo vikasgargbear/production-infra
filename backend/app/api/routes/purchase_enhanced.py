@@ -173,7 +173,7 @@ def get_purchase_items(purchase_id: int, db: Session = Depends(get_db)):
                     p.category,
                     p.brand_name
                 FROM purchase_items pi
-                LEFT JOIN master.products p ON pi.product_id = p.product_id
+                LEFT JOIN products p ON pi.product_id = p.product_id
                 WHERE pi.purchase_id = :purchase_id
                 ORDER BY pi.purchase_item_id
             """),
@@ -265,7 +265,7 @@ def receive_purchase_items(
         if not purchase:
             raise HTTPException(status_code=404, detail="Purchase not found")
         
-        if purchase.purchase_status == "received":
+        if purchase_status == "received":
             raise HTTPException(status_code=400, detail="Purchase already received")
         
         received_items = receive_data.get("items", [])
@@ -294,7 +294,7 @@ def receive_purchase_items(
             # Create batch
             batch_id = db.execute(
                 text("""
-                    INSERT INTO inventory.batches (
+                    INSERT INTO batches (
                         org_id, product_id, batch_number,
                         manufacturing_date, expiry_date,
                         quantity_received, quantity_available,
@@ -325,14 +325,13 @@ def receive_purchase_items(
                     "mrp": pi.mrp,
                     "supplier_id": purchase.supplier_id,
                     "purchase_id": purchase_id,
-                    "invoice_num": purchase.supplier_invoice_number
-                }
+                    "invoice_num": supplier_invoice_number                 }
             ).scalar()
             
             # Create inventory movement
             db.execute(
                 text("""
-                    INSERT INTO inventory.inventory_movements (
+                    INSERT INTO inventory_movements (
                         org_id, movement_date, movement_type,
                         product_id, batch_id,
                         quantity_in, quantity_out,
@@ -352,8 +351,7 @@ def receive_purchase_items(
                     "batch_id": batch_id,
                     "qty_in": received_qty,
                     "purchase_id": purchase_id,
-                    "purchase_number": purchase.purchase_number
-                }
+                    "purchase_number": purchase_number                 }
             )
             
             # Update purchase item
@@ -420,7 +418,7 @@ def receive_purchase_items_fixed(
         if not purchase:
             raise HTTPException(status_code=404, detail="Purchase not found")
         
-        if purchase.purchase_status == "received":
+        if purchase_status == "received":
             raise HTTPException(status_code=400, detail="Purchase already received")
         
         # Update purchase items
@@ -476,7 +474,7 @@ def receive_purchase_items_fixed(
         
         # Count created batches
         batch_count = db.execute(
-            text("SELECT COUNT(*) FROM inventory.batches WHERE purchase_id = :id"),
+            text("SELECT COUNT(*) FROM batches WHERE purchase_id = :id"),
             {"id": purchase_id}
         ).scalar()
         

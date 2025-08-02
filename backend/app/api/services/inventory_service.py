@@ -50,7 +50,7 @@ class InventoryService:
             # Validate product exists
             product = db.execute(text("""
                 SELECT product_id, product_name, product_code 
-                FROM master.products WHERE product_id = :product_id
+                FROM products WHERE product_id = :product_id
             """), {"product_id": batch_data.product_id}).fetchone()
             
             if not product:
@@ -58,7 +58,7 @@ class InventoryService:
             
             # Check for duplicate batch number
             existing = db.execute(text("""
-                SELECT 1 FROM inventory.batches 
+                SELECT 1 FROM batches 
                 WHERE product_id = :product_id AND batch_number = :batch_number
             """), {
                 "product_id": batch_data.product_id,
@@ -71,7 +71,7 @@ class InventoryService:
             # Create batch
             batch_dict = batch_data.dict()
             result = db.execute(text("""
-                INSERT INTO inventory.batches (
+                INSERT INTO batches (
                     org_id, product_id, batch_number, manufacturing_date,
                     expiry_date, quantity_received, quantity_available,
                     cost_price, mrp,
@@ -90,7 +90,7 @@ class InventoryService:
             
             # Record stock movement
             db.execute(text("""
-                INSERT INTO inventory.inventory_movements (
+                INSERT INTO inventory_movements (
                     org_id, product_id, batch_id, movement_type,
                     movement_date, quantity_in, reference_type,
                     notes, created_at
@@ -123,8 +123,8 @@ class InventoryService:
         result = db.execute(text("""
             SELECT b.*, p.product_name, p.product_code,
                    b.quantity_received - b.quantity_available as quantity_sold
-            FROM inventory.batches b
-            JOIN master.products p ON b.product_id = p.product_id
+            FROM batches b
+            JOIN products p ON b.product_id = p.product_id
             WHERE b.batch_id = :batch_id
         """), {"batch_id": batch_id})
         
@@ -157,7 +157,7 @@ class InventoryService:
         product = db.execute(text("""
             SELECT product_id, product_code, product_name,
                    minimum_stock_level, reorder_level
-            FROM master.products WHERE product_id = :product_id
+            FROM products WHERE product_id = :product_id
         """), {"product_id": product_id}).fetchone()
         
         if not product:
@@ -174,7 +174,7 @@ class InventoryService:
                 COALESCE(AVG(cost_price), 0) as average_cost,
                 COUNT(CASE WHEN expiry_date <= CURRENT_DATE THEN 1 END) as expired_batches,
                 COUNT(CASE WHEN expiry_date > CURRENT_DATE AND expiry_date <= CURRENT_DATE + INTERVAL '90 days' THEN 1 END) as near_expiry_batches
-            FROM inventory.batches
+            FROM batches
             WHERE product_id = :product_id
         """), {"product_id": product_id}).fetchone()
         
@@ -204,13 +204,13 @@ class InventoryService:
             # Get current stock levels
             if movement_data.batch_id:
                 current = db.execute(text("""
-                    SELECT quantity_available FROM inventory.batches 
+                    SELECT quantity_available FROM batches 
                     WHERE batch_id = :batch_id
                 """), {"batch_id": movement_data.batch_id}).scalar()
             else:
                 current = db.execute(text("""
                     SELECT COALESCE(SUM(quantity_available), 0) 
-                    FROM inventory.batches WHERE product_id = :product_id
+                    FROM batches WHERE product_id = :product_id
                 """), {"product_id": movement_data.product_id}).scalar()
             
             stock_before = current or 0
@@ -235,7 +235,7 @@ class InventoryService:
             movement_dict["stock_after"] = stock_before + movement_data.quantity
             
             result = db.execute(text("""
-                INSERT INTO inventory.inventory_movements (
+                INSERT INTO inventory_movements (
                     org_id, product_id, batch_id, movement_type,
                     movement_date, quantity_in, quantity_out, reference_type, reference_id,
                     notes, performed_by, created_at
@@ -251,7 +251,7 @@ class InventoryService:
             # Update batch quantities if batch specified
             if movement_data.batch_id:
                 db.execute(text("""
-                    UPDATE inventory.batches
+                    UPDATE batches
                     SET quantity_available = quantity_available + :quantity,
                         updated_at = CURRENT_TIMESTAMP
                     WHERE batch_id = :batch_id
@@ -265,9 +265,9 @@ class InventoryService:
             # Get movement details
             result = db.execute(text("""
                 SELECT im.*, p.product_name, p.product_code, b.batch_number
-                FROM inventory.inventory_movements im
-                JOIN master.products p ON im.product_id = p.product_id
-                LEFT JOIN inventory.batches b ON im.batch_id = b.batch_id
+                FROM inventory_movements im
+                JOIN products p ON im.product_id = p.product_id
+                LEFT JOIN batches b ON im.batch_id = b.batch_id
                 WHERE im.movement_id = :movement_id
             """), {"movement_id": movement_id})
             
@@ -318,8 +318,8 @@ class InventoryService:
                 b.batch_number, b.expiry_date, b.quantity_available,
                 b.quantity_available * b.cost_price as stock_value,
                 b.expiry_date - CURRENT_DATE as days_to_expiry
-            FROM inventory.batches b
-            JOIN master.products p ON b.product_id = p.product_id
+            FROM batches b
+            JOIN products p ON b.product_id = p.product_id
             WHERE b.org_id = :org_id
                 AND b.quantity_available > 0
                 AND b.expiry_date <= :cutoff_date
@@ -366,7 +366,7 @@ class InventoryService:
                 COALESCE(SUM(CASE 
                     WHEN b.expiry_date > :as_of_date AND b.expiry_date <= :as_of_date + INTERVAL '90 days' 
                     THEN b.quantity_available * b.cost_price ELSE 0 END), 0) as near_expiry_value
-            FROM inventory.batches b
+            FROM batches b
             WHERE b.org_id = :org_id
                 AND b.quantity_available > 0
         """), {
@@ -384,8 +384,8 @@ class InventoryService:
                 COUNT(DISTINCT b.product_id) as products,
                 COALESCE(SUM(b.quantity_available), 0) as quantity,
                 COALESCE(SUM(b.quantity_available * b.cost_price), 0) as value
-            FROM inventory.batches b
-            JOIN master.products p ON b.product_id = p.product_id
+            FROM batches b
+            JOIN products p ON b.product_id = p.product_id
             WHERE b.org_id = :org_id
                 AND b.quantity_available > 0
             GROUP BY p.category
@@ -409,7 +409,7 @@ class InventoryService:
                 COUNT(DISTINCT b.product_id) as total_products,
                 COUNT(*) as total_batches,
                 COALESCE(SUM(b.quantity_available * b.cost_price), 0) as total_stock_value
-            FROM inventory.batches b
+            FROM batches b
             WHERE b.org_id = :org_id AND b.quantity_available > 0
         """), {"org_id": org_id}).fetchone()
         
@@ -427,11 +427,11 @@ class InventoryService:
                 COUNT(DISTINCT CASE 
                     WHEN sq.total_quantity = 0 
                     THEN p.product_id END) as out_of_stock_products
-            FROM master.products p
-            LEFT JOIN inventory.batches b ON p.product_id = b.product_id AND b.org_id = :org_id
+            FROM products p
+            LEFT JOIN batches b ON p.product_id = b.product_id AND b.org_id = :org_id
             LEFT JOIN (
                 SELECT product_id, SUM(quantity_available) as total_quantity
-                FROM inventory.batches
+                FROM batches
                 WHERE org_id = :org_id
                 GROUP BY product_id
             ) sq ON p.product_id = sq.product_id
@@ -442,14 +442,14 @@ class InventoryService:
         activity = db.execute(text("""
             SELECT 
                 COUNT(*) as todays_movements
-            FROM inventory.inventory_movements
+            FROM inventory_movements
             WHERE org_id = :org_id AND DATE(created_at) = CURRENT_DATE
         """), {"org_id": org_id}).fetchone()
         
         # Pending orders
         pending = db.execute(text("""
             SELECT COUNT(*) as pending_orders
-            FROM sales.orders
+            FROM orders
             WHERE org_id = :org_id AND order_status IN ('pending', 'confirmed')
         """), {"org_id": org_id}).fetchone()
         
@@ -458,7 +458,7 @@ class InventoryService:
             SELECT 
                 p.product_id, p.product_code, p.product_name,
                 COALESCE(SUM(im.quantity_out), 0) as movement_quantity
-            FROM master.products p
+            FROM products p
             LEFT JOIN inventory_movements im ON p.product_id = im.product_id
                 AND im.org_id = :org_id
                 AND im.movement_type = 'sale'

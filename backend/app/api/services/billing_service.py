@@ -40,7 +40,7 @@ class BillingService:
         # Get next sequence
         result = db.execute(text("""
             SELECT COUNT(*) + 1 as next_num
-            FROM sales.invoices
+            FROM invoices
             WHERE org_id = :org_id
                 AND invoice_number LIKE :prefix || '%'
         """), {
@@ -92,8 +92,8 @@ class BillingService:
                 SELECT o.*, c.customer_name, c.gstin, c.address_line1,
                        c.city, c.state, c.pincode, c.phone,
                        c.credit_days
-                FROM sales.orders o
-                JOIN master.customers c ON o.customer_id = c.customer_id
+                FROM orders o
+                JOIN customers c ON o.customer_id = c.customer_id
                 WHERE o.order_id = :order_id
                     AND o.org_id = :org_id
                     AND o.order_status IN ('confirmed', 'delivered')
@@ -107,7 +107,7 @@ class BillingService:
             
             # Check if invoice already exists
             existing = db.execute(text("""
-                SELECT invoice_id FROM sales.invoices 
+                SELECT invoice_id FROM invoices 
                 WHERE order_id = :order_id
             """), {"order_id": invoice_data.order_id}).scalar()
             
@@ -126,15 +126,15 @@ class BillingService:
             items = db.execute(text("""
                 SELECT oi.*, p.product_name, p.hsn_code, p.gst_rate,
                        b.batch_number
-                FROM sales.order_items oi
-                JOIN master.products p ON oi.product_id = p.product_id
-                LEFT JOIN inventory.batches b ON oi.batch_id = b.batch_id
+                FROM order_items oi
+                JOIN products p ON oi.product_id = p.product_id
+                LEFT JOIN batches b ON oi.batch_id = b.batch_id
                 WHERE oi.order_id = :order_id
             """), {"order_id": invoice_data.order_id}).fetchall()
             
             # Determine GST type based on state
             org_state = db.execute(text("""
-                SELECT state FROM master.organizations
+                SELECT state FROM organizations
                 WHERE org_id = :org_id
             """), {"org_id": org_id}).scalar()
             
@@ -142,7 +142,7 @@ class BillingService:
             
             # Create invoice
             result = db.execute(text("""
-                INSERT INTO sales.invoices (
+                INSERT INTO invoices (
                     org_id, invoice_number, order_id, invoice_date, due_date,
                     customer_id, customer_name, customer_gstin,
                     billing_name, billing_address, billing_city, 
@@ -268,7 +268,7 @@ class BillingService:
         invoice = db.execute(text("""
             SELECT i.*, 
                    i.total_amount - COALESCE(i.paid_amount, 0) as balance_amount
-            FROM sales.invoices i
+            FROM invoices i
             WHERE i.invoice_id = :invoice_id
         """), {"invoice_id": invoice_id}).fetchone()
         
@@ -300,8 +300,8 @@ class BillingService:
             invoice = db.execute(text("""
                 SELECT i.*, c.customer_name,
                        i.total_amount - COALESCE(i.paid_amount, 0) as balance_amount
-                FROM sales.invoices i
-                JOIN master.customers c ON i.customer_id = c.customer_id
+                FROM invoices i
+                JOIN customers c ON i.customer_id = c.customer_id
                 WHERE i.invoice_id = :invoice_id
             """), {"invoice_id": payment_data.invoice_id}).fetchone()
             
@@ -339,7 +339,7 @@ class BillingService:
             )
             
             db.execute(text("""
-                UPDATE sales.invoices
+                UPDATE invoices
                 SET paid_amount = :paid_amount,
                     invoice_status = :status,
                     updated_at = CURRENT_TIMESTAMP
@@ -352,11 +352,11 @@ class BillingService:
             
             # Update order paid amount
             db.execute(text("""
-                UPDATE sales.orders
+                UPDATE orders
                 SET paid_amount = :paid_amount,
                     updated_at = CURRENT_TIMESTAMP
                 WHERE order_id = (
-                    SELECT order_id FROM sales.invoices 
+                    SELECT order_id FROM invoices 
                     WHERE invoice_id = :invoice_id
                 )
             """), {
@@ -370,8 +370,8 @@ class BillingService:
             payment = db.execute(text("""
                 SELECT p.*, i.invoice_number, c.customer_name
                 FROM invoice_payments p
-                JOIN sales.invoices i ON p.invoice_id = i.invoice_id
-                JOIN master.customers c ON i.customer_id = c.customer_id
+                JOIN invoices i ON p.invoice_id = i.invoice_id
+                JOIN customers c ON i.customer_id = c.customer_id
                 WHERE p.payment_id = :payment_id
             """), {"payment_id": payment_id}).fetchone()
             
@@ -398,7 +398,7 @@ class BillingService:
                 COALESCE(SUM(cgst_amount), 0) as cgst,
                 COALESCE(SUM(sgst_amount), 0) as sgst,
                 COALESCE(SUM(igst_amount), 0) as igst
-            FROM sales.invoices
+            FROM invoices
             WHERE org_id = :org_id
                 AND invoice_date BETWEEN :from_date AND :to_date
                 AND invoice_status NOT IN ('draft', 'cancelled')
@@ -417,7 +417,7 @@ class BillingService:
                 COALESCE(SUM(cgst_amount), 0) as cgst,
                 COALESCE(SUM(sgst_amount), 0) as sgst,
                 COALESCE(SUM(igst_amount), 0) as igst
-            FROM sales.invoices
+            FROM invoices
             WHERE org_id = :org_id
                 AND invoice_date BETWEEN :from_date AND :to_date
                 AND invoice_status NOT IN ('draft', 'cancelled')
@@ -466,7 +466,7 @@ class BillingService:
                         ELSE 0 
                     END
                 ), 0) as overdue_amount
-            FROM sales.invoices
+            FROM invoices
             WHERE org_id = :org_id
         """), {"org_id": org_id}).fetchone()
         
@@ -475,7 +475,7 @@ class BillingService:
             SELECT 
                 invoice_status,
                 COUNT(*) as count
-            FROM sales.invoices
+            FROM invoices
             WHERE org_id = :org_id
             GROUP BY invoice_status
         """), {"org_id": org_id}).fetchall()
@@ -488,7 +488,7 @@ class BillingService:
                 COUNT(*) as invoice_count,
                 COALESCE(SUM(total_amount), 0) as total_amount,
                 COALESCE(SUM(paid_amount), 0) as collected_amount
-            FROM sales.invoices
+            FROM invoices
             WHERE org_id = :org_id
                 AND EXTRACT(YEAR FROM invoice_date) = EXTRACT(YEAR FROM CURRENT_DATE)
                 AND EXTRACT(MONTH FROM invoice_date) = EXTRACT(MONTH FROM CURRENT_DATE)

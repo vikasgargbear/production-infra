@@ -45,8 +45,8 @@ async def get_invoices(
                 i.invoice_status,
                 o.order_id,
                 o.order_number
-            FROM sales.invoices i
-            LEFT JOIN sales.orders o ON i.order_id = o.order_id
+            FROM invoices i
+            LEFT JOIN orders o ON i.order_id = o.order_id
             WHERE i.org_id = :org_id
         """
         
@@ -99,7 +99,7 @@ async def get_invoices(
                     b.batch_number,
                     b.expiry_date
                 FROM invoice_items ii
-                LEFT JOIN inventory.batches b ON ii.batch_id = b.batch_id
+                LEFT JOIN batches b ON ii.batch_id = b.batch_id
                 WHERE ii.invoice_id = :invoice_id
             """
             
@@ -110,7 +110,7 @@ async def get_invoices(
             
         # Get total count
         count_query = """
-            SELECT COUNT(*) FROM sales.invoices i
+            SELECT COUNT(*) FROM invoices i
             WHERE i.org_id = :org_id
         """
         
@@ -240,9 +240,9 @@ async def get_invoice_details(
                     o.order_number, o.order_date, o.org_id,
                     c.customer_code, c.phone as customer_phone, c.email as customer_email,
                     c.address_line1, c.address_line2, c.area, c.city, c.state, c.pincode
-                FROM sales.invoices i
-                JOIN sales.orders o ON i.order_id = o.order_id
-                JOIN master.customers c ON i.customer_id = c.customer_id
+                FROM invoices i
+                JOIN orders o ON i.order_id = o.order_id
+                JOIN customers c ON i.customer_id = c.customer_id
                 WHERE i.invoice_id = :invoice_id
             """)
         else:
@@ -252,9 +252,9 @@ async def get_invoice_details(
                     o.order_number, o.order_date, o.org_id,
                     c.customer_code, c.phone as customer_phone, c.email as customer_email,
                     c.address_line1, c.address_line2, NULL as area, c.city, c.state, c.pincode
-                FROM sales.invoices i
-                JOIN sales.orders o ON i.order_id = o.order_id
-                JOIN master.customers c ON i.customer_id = c.customer_id
+                FROM invoices i
+                JOIN orders o ON i.order_id = o.order_id
+                JOIN customers c ON i.customer_id = c.customer_id
                 WHERE i.invoice_id = :invoice_id
             """)
         
@@ -271,10 +271,10 @@ async def get_invoice_details(
                 p.manufacturer, p.composition,
                 b.batch_number, b.expiry_date
             FROM invoice_items ii
-            JOIN master.products p ON ii.product_id = p.product_id
-            LEFT JOIN sales.order_items oi ON oi.product_id = ii.product_id 
+            JOIN products p ON ii.product_id = p.product_id
+            LEFT JOIN order_items oi ON oi.product_id = ii.product_id 
                 AND oi.order_id = :order_id
-            LEFT JOIN inventory.batches b ON oi.batch_id = b.batch_id
+            LEFT JOIN batches b ON oi.batch_id = b.batch_id
             WHERE ii.invoice_id = :invoice_id
             ORDER BY ii.invoice_item_id
         """)
@@ -398,9 +398,9 @@ async def list_invoices(
                 c.customer_id, c.customer_name, c.customer_code,
                 o.order_number, o.order_date,
                 (i.total_amount - i.paid_amount) as balance_amount
-            FROM sales.invoices i
-            JOIN sales.orders o ON i.order_id = o.order_id
-            JOIN master.customers c ON i.customer_id = c.customer_id
+            FROM invoices i
+            JOIN orders o ON i.order_id = o.order_id
+            JOIN customers c ON i.customer_id = c.customer_id
             WHERE o.org_id = :org_id
         """
         
@@ -461,7 +461,7 @@ async def update_invoice_pdf_status(
     """
     try:
         db.execute(text("""
-            UPDATE sales.invoices
+            UPDATE invoices
             SET pdf_url = :pdf_url,
                 pdf_generated_at = CURRENT_TIMESTAMP,
                 updated_at = CURRENT_TIMESTAMP
@@ -515,7 +515,7 @@ async def calculate_invoice_totals(
     try:
         # Get customer details for GST calculations
         customer = db.execute(text("""
-            SELECT state, state_code FROM master.customers
+            SELECT state, state_code FROM customers
             WHERE customer_id = :customer_id
         """), {"customer_id": request.customer_id}).first()
         
@@ -526,7 +526,7 @@ async def calculate_invoice_totals(
         org_state_result = db.execute(text("""
             SELECT business_settings->>'state' as state,
                    business_settings->>'state_code' as state_code
-            FROM master.organizations
+            FROM organizations
             WHERE org_id = '12de5e22-eee7-4d25-b3a7-d16d01c6170f'
         """)).first()
         
@@ -556,7 +556,7 @@ async def calculate_invoice_totals(
                 # Fetch product price from database
                 product = db.execute(text("""
                     SELECT sale_price, mrp, gst_percent 
-                    FROM master.products 
+                    FROM products 
                     WHERE product_id = :product_id
                 """), {"product_id": product_id}).first()
                 
@@ -634,7 +634,7 @@ async def record_payment(
             text("""
                 SELECT invoice_id, total_amount, payment_status, 
                        COALESCE(paid_amount, 0) as amount_paid
-                FROM sales.invoices
+                FROM invoices
                 WHERE invoice_id = :invoice_id AND org_id = :org_id
             """),
             {"invoice_id": invoice_id, "org_id": org_id}
@@ -685,7 +685,7 @@ async def record_payment(
         
         db.execute(
             text("""
-                UPDATE sales.invoices
+                UPDATE invoices
                 SET paid_amount = :amount_paid,
                     payment_status = :payment_status,
                     updated_at = CURRENT_TIMESTAMP

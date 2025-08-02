@@ -39,8 +39,8 @@ def get_delivery_challans(
                 o.delivery_address,
                 o.delivery_date,
                 'challan' as document_type
-            FROM sales.orders o
-            LEFT JOIN master.customers c ON o.customer_id = c.customer_id
+            FROM orders o
+            LEFT JOIN customers c ON o.customer_id = c.customer_id
             WHERE o.order_status IN ('confirmed', 'delivered', 'shipped')
         """
         params = {}
@@ -92,8 +92,8 @@ def get_delivery_challan(challan_id: int, db: Session = Depends(get_db)):
                     o.delivery_date,
                     o.notes,
                     'challan' as document_type
-                FROM sales.orders o
-                LEFT JOIN master.customers c ON o.customer_id = c.customer_id
+                FROM orders o
+                LEFT JOIN customers c ON o.customer_id = c.customer_id
                 WHERE o.order_id = :challan_id
                 AND o.order_status IN ('confirmed', 'delivered', 'shipped')
             """),
@@ -113,8 +113,8 @@ def get_delivery_challan(challan_id: int, db: Session = Depends(get_db)):
                     oi.quantity,
                     oi.price,
                     (oi.quantity * oi.price) as total_amount
-                FROM sales.order_items oi
-                JOIN master.products p ON oi.product_id = p.product_id
+                FROM order_items oi
+                JOIN products p ON oi.product_id = p.product_id
                 WHERE oi.order_id = :challan_id
             """),
             {"challan_id": challan_id}
@@ -148,7 +148,7 @@ def create_delivery_challan(challan_data: dict, db: Session = Depends(get_db)):
         
         result = db.execute(
             text("""
-                INSERT INTO sales.orders (customer_id, order_date, total_amount, order_status, delivery_status, delivery_address, notes)
+                INSERT INTO orders (customer_id, order_date, total_amount, order_status, delivery_status, delivery_address, notes)
                 VALUES (:customer_id, :order_date, :total_amount, :order_status, :delivery_status, :delivery_address, :notes)
                 RETURNING order_id
             """),
@@ -169,7 +169,7 @@ def update_delivery_challan(challan_id: int, challan_data: dict, db: Session = D
     try:
         # Check if order exists
         check_result = db.execute(
-            text("SELECT order_id FROM sales.orders WHERE order_id = :order_id"),
+            text("SELECT order_id FROM orders WHERE order_id = :order_id"),
             {"order_id": challan_id}
         )
         if not check_result.first():
@@ -196,7 +196,7 @@ def update_delivery_challan(challan_id: int, challan_data: dict, db: Session = D
             params["notes"] = challan_data["notes"]
         
         if update_fields:
-            query = f"UPDATE sales.orders SET {', '.join(update_fields)} WHERE order_id = :order_id"
+            query = f"UPDATE orders SET {', '.join(update_fields)} WHERE order_id = :order_id"
             db.execute(text(query), params)
             db.commit()
         
@@ -213,7 +213,7 @@ def delete_delivery_challan(challan_id: int, db: Session = Depends(get_db)):
     """Delete a delivery challan"""
     try:
         result = db.execute(
-            text("DELETE FROM sales.orders WHERE order_id = :order_id RETURNING order_id"),
+            text("DELETE FROM orders WHERE order_id = :order_id RETURNING order_id"),
             {"order_id": challan_id}
         )
         deleted_id = result.scalar()
@@ -235,7 +235,7 @@ def mark_challan_delivered(challan_id: int, db: Session = Depends(get_db)):
     try:
         result = db.execute(
             text("""
-                UPDATE sales.orders 
+                UPDATE orders 
                 SET delivery_status = 'delivered', delivery_date = :delivery_date 
                 WHERE order_id = :order_id 
                 RETURNING order_id
@@ -270,7 +270,7 @@ def get_delivery_analytics(
                 COUNT(CASE WHEN delivery_status = 'pending' THEN 1 END) as pending_count,
                 COUNT(CASE WHEN delivery_status = 'shipped' THEN 1 END) as shipped_count,
                 AVG(total_amount) as avg_challan_amount
-            FROM sales.orders 
+            FROM orders 
             WHERE order_status IN ('confirmed', 'delivered', 'shipped')
         """
         params = {}

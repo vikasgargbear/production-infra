@@ -22,7 +22,7 @@ class PaymentService:
         # Get invoice details
         invoice = db.execute(text("""
             SELECT invoice_id, invoice_number, total_amount, paid_amount, payment_status
-            FROM sales.invoices
+            FROM invoices
             WHERE invoice_id = :invoice_id
         """), {"invoice_id": invoice_id}).fetchone()
         
@@ -78,7 +78,7 @@ class PaymentService:
         new_payment_status = "paid" if new_paid_amount >= invoice.total_amount else "partial"
         
         db.execute(text("""
-            UPDATE sales.invoices
+            UPDATE invoices
             SET paid_amount = :paid_amount,
                 payment_status = :payment_status,
                 payment_date = CASE 
@@ -97,10 +97,10 @@ class PaymentService:
         # Update order payment status if fully paid
         if new_payment_status == "paid":
             db.execute(text("""
-                UPDATE sales.orders o
+                UPDATE orders o
                 SET payment_status = 'paid',
                     updated_at = CURRENT_TIMESTAMP
-                FROM sales.invoices i
+                FROM invoices i
                 WHERE i.order_id = o.order_id
                 AND i.invoice_id = :invoice_id
             """), {"invoice_id": invoice_id})
@@ -170,8 +170,8 @@ class PaymentService:
                 COALESCE(SUM(CASE WHEN ip.payment_mode = 'cheque' THEN ip.payment_amount ELSE 0 END), 0) as cheque_amount,
                 COALESCE(SUM(CASE WHEN ip.payment_mode = 'online' THEN ip.payment_amount ELSE 0 END), 0) as online_amount
             FROM invoice_payments ip
-            JOIN sales.invoices i ON ip.invoice_id = i.invoice_id
-            JOIN sales.orders o ON i.order_id = o.order_id
+            JOIN invoices i ON ip.invoice_id = i.invoice_id
+            JOIN orders o ON i.order_id = o.order_id
             WHERE o.org_id = :org_id {date_filter}
         """), params).fetchone()
         
@@ -180,8 +180,8 @@ class PaymentService:
             SELECT 
                 COUNT(DISTINCT i.invoice_id) as pending_invoices,
                 COALESCE(SUM(i.total_amount - i.paid_amount), 0) as pending_amount
-            FROM sales.invoices i
-            JOIN sales.orders o ON i.order_id = o.order_id
+            FROM invoices i
+            JOIN orders o ON i.order_id = o.order_id
             WHERE o.org_id = :org_id 
                 AND i.payment_status IN ('unpaid', 'partial')
         """), {"org_id": org_id}).fetchone()
@@ -234,7 +234,7 @@ class PaymentService:
         
         # Adjust invoice paid amount
         db.execute(text("""
-            UPDATE sales.invoices
+            UPDATE invoices
             SET paid_amount = paid_amount - :amount,
                 payment_status = CASE 
                     WHEN paid_amount - :amount = 0 THEN 'unpaid'

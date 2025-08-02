@@ -49,7 +49,7 @@ async def get_organization_profile(
                 max_monthly_transactions,
                 created_at,
                 updated_at
-            FROM master.organizations
+            FROM organizations
             WHERE org_id = :org_id AND is_active = true
         """), {"org_id": org_id}).fetchone()
         
@@ -127,7 +127,7 @@ async def update_organization_profile(
         if "business_settings" in profile_data:
             # Merge with existing settings
             existing = db.execute(text(
-                "SELECT business_settings FROM master.organizations WHERE org_id = :org_id"
+                "SELECT business_settings FROM organizations WHERE org_id = :org_id"
             ), {"org_id": org_id}).scalar()
             
             existing_settings = existing or {}
@@ -150,7 +150,7 @@ async def update_organization_profile(
         
         # Execute update
         query = f"""
-            UPDATE master.organizations 
+            UPDATE organizations 
             SET {', '.join(update_fields)}
             WHERE org_id = :org_id
             RETURNING org_id
@@ -189,7 +189,7 @@ async def get_feature_settings(
         
         result = db.execute(text("""
             SELECT business_settings, features_enabled
-            FROM master.organizations
+            FROM organizations
             WHERE org_id = :org_id
         """), {"org_id": org_id}).fetchone()
         
@@ -293,7 +293,7 @@ async def update_feature_settings(
         # Get existing business_settings
         result = db.execute(text("""
             SELECT business_settings
-            FROM master.organizations
+            FROM organizations
             WHERE org_id = :org_id
         """), {"org_id": org_id}).fetchone()
         
@@ -313,7 +313,7 @@ async def update_feature_settings(
         
         # Update in database
         db.execute(text("""
-            UPDATE master.organizations
+            UPDATE organizations
             SET business_settings = :settings,
                 updated_at = CURRENT_TIMESTAMP
             WHERE org_id = :org_id
@@ -364,7 +364,7 @@ async def upload_organization_logo(
         # Get existing business_settings
         result = db.execute(text("""
             SELECT business_settings
-            FROM master.organizations
+            FROM organizations
             WHERE org_id = :org_id
         """), {"org_id": org_id}).fetchone()
         
@@ -377,7 +377,7 @@ async def upload_organization_logo(
         
         # Update in database
         db.execute(text("""
-            UPDATE master.organizations
+            UPDATE organizations
             SET business_settings = :settings,
                 updated_at = CURRENT_TIMESTAMP
             WHERE org_id = :org_id
