@@ -22,8 +22,8 @@ def get_dashboard_stats(db: Session = Depends(get_db)):
         # Get basic counts
         stats_query = """
             SELECT 
-                (SELECT COUNT(*) FROM master.products WHERE is_active = true) as total_products,
-                (SELECT COUNT(*) FROM master.customers) as total_customers,
+                (SELECT COUNT(*) FROM inventory.products WHERE is_active = true) as total_products,
+                (SELECT COUNT(*) FROM parties.customers) as total_customers,
                 (SELECT COUNT(*) FROM sales.orders WHERE order_date >= CURRENT_DATE - INTERVAL '30 days') as orders_this_month,
                 (SELECT COUNT(*) FROM suppliers) as total_suppliers,
                 (SELECT COALESCE(SUM(total_amount), 0) FROM sales.orders WHERE order_date >= CURRENT_DATE - INTERVAL '30 days') as revenue_this_month,
@@ -41,7 +41,7 @@ def get_dashboard_stats(db: Session = Depends(get_db)):
                 SELECT p.product_id, 
                        COALESCE(SUM(b.quantity_available), 0) as total_stock,
                        p.minimum_stock_level
-                FROM master.products p
+                FROM inventory.products p
                 LEFT JOIN inventory.batches b ON p.product_id = b.product_id AND b.quantity_available > 0
                 WHERE p.is_active = true
                 GROUP BY p.product_id, p.minimum_stock_level
@@ -76,7 +76,7 @@ def get_recent_orders(
                 o.order_status,
                 o.delivery_status
             FROM sales.orders o
-            LEFT JOIN master.customers c ON o.customer_id = c.customer_id
+            LEFT JOIN parties.customers c ON o.customer_id = c.customer_id
             ORDER BY o.order_date DESC
             LIMIT :limit
         """
@@ -169,7 +169,7 @@ def get_top_products(
                 SUM(oi.quantity * oi.price) as total_revenue,
                 COUNT(DISTINCT oi.order_id) as order_count
             FROM sales.order_items oi
-            JOIN master.products p ON oi.product_id = p.product_id
+            JOIN inventory.products p ON oi.product_id = p.product_id
             JOIN sales.orders o ON oi.order_id = o.order_id
             WHERE o.order_date >= CURRENT_DATE - INTERVAL ':period_days days'
             AND o.order_status IN ('confirmed', 'delivered')
@@ -200,7 +200,7 @@ def get_inventory_alerts(db: Session = Depends(get_db)):
                 COALESCE(SUM(b.quantity_available), 0) as current_stock,
                 p.minimum_stock_level,
                 'low_stock' as alert_type
-            FROM master.products p
+            FROM inventory.products p
             LEFT JOIN inventory.batches b ON p.product_id = b.product_id AND b.quantity_available > 0
             WHERE p.is_active = true
             GROUP BY p.product_id, p.product_name, p.brand_name, p.minimum_stock_level
@@ -222,7 +222,7 @@ def get_inventory_alerts(db: Session = Depends(get_db)):
                 b.quantity_available,
                 'expiring_soon' as alert_type
             FROM inventory.batches b
-            JOIN master.products p ON b.product_id = p.product_id
+            JOIN inventory.products p ON b.product_id = p.product_id
             WHERE b.expiry_date <= CURRENT_DATE + INTERVAL '30 days'
             AND b.quantity_available > 0
             ORDER BY b.expiry_date ASC
@@ -261,7 +261,7 @@ def get_customer_analytics(
                 COALESCE(SUM(o.total_amount), 0) as total_spent,
                 AVG(o.total_amount) as avg_order_value,
                 MAX(o.order_date) as last_order_date
-            FROM master.customers c
+            FROM parties.customers c
             LEFT JOIN sales.orders o ON c.customer_id = o.customer_id 
                 AND o.order_date >= CURRENT_DATE - INTERVAL ':period_days days'
                 AND o.order_status IN ('confirmed', 'delivered')

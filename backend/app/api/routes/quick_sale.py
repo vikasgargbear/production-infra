@@ -81,7 +81,7 @@ async def create_quick_sale(
                    COALESCE(gstin, gst_number) as gstin, state, 
                    state_code, credit_period_days as credit_days, 
                    address, city, pincode
-            FROM master.customers
+            FROM parties.customers
             WHERE customer_id = :customer_id AND org_id = :org_id
         """), {
             "customer_id": sale.customer_id,
@@ -173,7 +173,7 @@ async def create_quick_sale(
             product = db.execute(text("""
                 SELECT product_id, product_name, mrp, sale_price, 
                        gst_percent, hsn_code
-                FROM master.products
+                FROM inventory.products
                 WHERE product_id = :product_id
             """), {"product_id": item.product_id}).first()
             

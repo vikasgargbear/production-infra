@@ -208,7 +208,7 @@ async def list_payments(
             SELECT p.*, i.invoice_number, c.customer_name
             FROM invoice_payments p
             JOIN sales.invoices i ON p.invoice_id = i.invoice_id
-            JOIN master.customers c ON i.customer_id = c.customer_id
+            JOIN parties.customers c ON i.customer_id = c.customer_id
             WHERE i.org_id = :org_id
         """
         params = {"org_id": org_id}

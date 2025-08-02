@@ -91,7 +91,7 @@ async def create_direct_sale(
         # Get seller GSTIN (from request or organization default)
         if not sale_data.seller_gstin:
             org = db.execute(
-                text("SELECT gst_number FROM master.organizations WHERE org_id = :org_id"),
+                text("SELECT gst_number FROM parties.organizations WHERE org_id = :org_id"),
                 {"org_id": "12de5e22-eee7-4d25-b3a7-d16d01c6170f"}
             ).first()
             seller_gstin = org.gst_number if org else "27AABCU9603R1ZM"  # Default Maharashtra GSTIN
@@ -383,7 +383,7 @@ async def get_outstanding_sales(
                     ELSE 0 
                 END as days_overdue
             FROM sales.invoices i
-            JOIN master.customers c ON i.customer_id = c.customer_id
+            JOIN parties.customers c ON i.customer_id = c.customer_id
             WHERE i.org_id = :org_id
                 AND i.payment_status IN ('unpaid', 'partial')
         """
@@ -448,7 +448,7 @@ async def get_sale_detail(
             text("""
                 SELECT ii.*, p.product_name, p.hsn_code
                 FROM invoice_items ii
-                LEFT JOIN master.products p ON ii.product_id = p.product_id
+                LEFT JOIN inventory.products p ON ii.product_id = p.product_id
                 WHERE ii.invoice_id = :sale_id
             """),
             {"sale_id": sale_id}
@@ -479,7 +479,7 @@ async def calculate_sale_totals(
         # Get seller GSTIN
         if not sale_data.seller_gstin:
             org = db.execute(
-                text("SELECT gst_number FROM master.organizations WHERE org_id = :org_id"),
+                text("SELECT gst_number FROM parties.organizations WHERE org_id = :org_id"),
                 {"org_id": "12de5e22-eee7-4d25-b3a7-d16d01c6170f"}
             ).first()
             seller_gstin = org.gst_number if org else "27AABCU9603R1ZM"
@@ -564,7 +564,7 @@ async def get_sale_print_data(
     try:
         # Get organization details
         org = db.execute(
-            text("SELECT * FROM master.organizations WHERE org_id = :org_id"),
+            text("SELECT * FROM parties.organizations WHERE org_id = :org_id"),
             {"org_id": "12de5e22-eee7-4d25-b3a7-d16d01c6170f"}
         ).first()
         

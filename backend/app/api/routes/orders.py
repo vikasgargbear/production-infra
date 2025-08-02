@@ -61,7 +61,7 @@ async def create_order(
         # Get customer details
         customer = db.execute(text("""
             SELECT customer_name, phone, discount_percent 
-            FROM master.customers 
+            FROM parties.customers 
             WHERE customer_id = :id AND org_id = :org_id
         """), {"id": order.customer_id, "org_id": org_id}).fetchone()
         
@@ -194,7 +194,7 @@ async def list_orders(
         query = """
             SELECT o.*, c.customer_name, c.customer_code, c.phone as customer_phone
             FROM sales.orders o
-            JOIN master.customers c ON o.customer_id = c.customer_id
+            JOIN parties.customers c ON o.customer_id = c.customer_id
             WHERE o.org_id = :org_id
         """
         count_query = """
@@ -245,7 +245,7 @@ async def list_orders(
             items_result = db.execute(text("""
                 SELECT oi.*, p.product_name, p.product_code
                 FROM sales.order_items oi
-                JOIN master.products p ON oi.product_id = p.product_id
+                JOIN inventory.products p ON oi.product_id = p.product_id
                 WHERE oi.order_id = ANY(:order_ids)
                 ORDER BY oi.order_id, oi.order_item_id
             """), {"order_ids": order_ids})
@@ -293,7 +293,7 @@ async def get_order(
         result = db.execute(text("""
             SELECT o.*, c.customer_name, c.customer_code, c.phone as customer_phone
             FROM sales.orders o
-            JOIN master.customers c ON o.customer_id = c.customer_id
+            JOIN parties.customers c ON o.customer_id = c.customer_id
             WHERE o.order_id = :id AND o.org_id = :org_id
         """), {"id": order_id, "org_id": DEFAULT_ORG_ID})
         
@@ -308,7 +308,7 @@ async def get_order(
             SELECT oi.*, p.product_name, p.product_code,
                    b.batch_number, b.expiry_date
             FROM sales.order_items oi
-            JOIN master.products p ON oi.product_id = p.product_id
+            JOIN inventory.products p ON oi.product_id = p.product_id
             LEFT JOIN inventory.batches b ON oi.batch_id = b.batch_id
             WHERE oi.order_id = :order_id
         """), {"order_id": order_id})

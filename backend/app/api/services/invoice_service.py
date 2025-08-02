@@ -40,7 +40,7 @@ class InvoiceService:
                     c.phone, c.email,
                     c.credit_days
                 FROM sales.orders o
-                JOIN master.customers c ON o.customer_id = c.customer_id
+                JOIN parties.customers c ON o.customer_id = c.customer_id
                 WHERE o.order_id = :order_id AND o.org_id = :org_id
             """), {"order_id": order_id, "org_id": org_id}).fetchone()
         else:
@@ -53,7 +53,7 @@ class InvoiceService:
                     c.phone, c.email,
                     c.credit_days
                 FROM sales.orders o
-                JOIN master.customers c ON o.customer_id = c.customer_id
+                JOIN parties.customers c ON o.customer_id = c.customer_id
                 WHERE o.order_id = :order_id AND o.org_id = :org_id
             """), {"order_id": order_id, "org_id": org_id}).fetchone()
         
@@ -240,7 +240,7 @@ class InvoiceService:
                 CASE WHEN NOT :is_same_state THEN oi.tax_amount ELSE 0 END,
                 oi.line_total, p.hsn_code
             FROM sales.order_items oi
-            JOIN master.products p ON oi.product_id = p.product_id
+            JOIN inventory.products p ON oi.product_id = p.product_id
             LEFT JOIN inventory.batches b ON oi.batch_id = b.batch_id
             WHERE oi.order_id = :order_id
         """), {
@@ -260,7 +260,7 @@ class InvoiceService:
                 c.phone, c.email, c.credit_days
             FROM sales.invoices i
             JOIN sales.orders o ON i.order_id = o.order_id
-            JOIN master.customers c ON i.customer_id = c.customer_id
+            JOIN parties.customers c ON i.customer_id = c.customer_id
             WHERE i.invoice_id = :invoice_id
         """), {"invoice_id": invoice_id}).fetchone()
         

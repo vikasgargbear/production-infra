@@ -210,7 +210,7 @@ async def get_purchase_items_for_return(
                 NULL as expiry_date,
                 COALESCE(returned_qty.total_returned, 0) as returned_quantity
             FROM purchase_items pi
-            LEFT JOIN master.products p ON pi.product_id = p.product_id
+            LEFT JOIN inventory.products p ON pi.product_id = p.product_id
             LEFT JOIN (
                 SELECT 
                     rr.return_number,
@@ -515,7 +515,7 @@ async def get_purchase_return_details(
                 b.batch_number,
                 b.expiry_date
             FROM return_items ri
-            LEFT JOIN master.products p ON ri.product_id = p.product_id
+            LEFT JOIN inventory.products p ON ri.product_id = p.product_id
             LEFT JOIN inventory.batches b ON ri.batch_id = b.batch_id
             WHERE ri.return_id = :return_id
         """

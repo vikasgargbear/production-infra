@@ -230,7 +230,7 @@ async def get_order_details(
                 c.customer_name, c.phone, c.email, c.address,
                 i.invoice_number, i.invoice_status, i.total_amount as invoice_amount
             FROM sales.orders o
-            LEFT JOIN master.customers c ON o.customer_id = c.customer_id
+            LEFT JOIN parties.customers c ON o.customer_id = c.customer_id
             LEFT JOIN sales.invoices i ON o.order_id = i.order_id
             WHERE o.order_id = :order_id AND o.org_id = :org_id
         """)
@@ -252,7 +252,7 @@ async def get_order_details(
                 oi.*,
                 p.product_name, p.hsn_code, p.gst_percent
             FROM sales.order_items oi
-            LEFT JOIN master.products p ON oi.product_id = p.product_id
+            LEFT JOIN inventory.products p ON oi.product_id = p.product_id
             WHERE oi.order_id = :order_id
         """)
         

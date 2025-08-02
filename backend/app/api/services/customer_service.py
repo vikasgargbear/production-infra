@@ -35,7 +35,7 @@ class CustomerService:
         # Get the next sequence number
         result = db.execute(text("""
             SELECT COUNT(*) + 1 as next_num
-            FROM master.customers
+            FROM parties.customers
             WHERE customer_code LIKE :prefix || '%'
         """), {"prefix": prefix})
         
@@ -52,7 +52,7 @@ class CustomerService:
                     c.credit_limit,
                     c.credit_days,
                     COALESCE(SUM(o.final_amount - o.paid_amount), 0) as outstanding
-                FROM master.customers c
+                FROM parties.customers c
                 LEFT JOIN sales.orders o ON c.customer_id = o.customer_id
                     AND o.order_status NOT IN ('cancelled', 'draft')
                     AND o.org_id = c.org_id
@@ -65,7 +65,7 @@ class CustomerService:
                     c.credit_limit,
                     c.credit_days,
                     COALESCE(SUM(o.final_amount - o.paid_amount), 0) as outstanding
-                FROM master.customers c
+                FROM parties.customers c
                 LEFT JOIN sales.orders o ON c.customer_id = o.customer_id
                     AND o.order_status NOT IN ('cancelled', 'draft')
                 WHERE c.customer_id = :customer_id
@@ -149,7 +149,7 @@ class CustomerService:
                     THEN o.final_amount - o.paid_amount 
                     ELSE 0 
                 END), 0) as outstanding_amount
-            FROM master.customers c
+            FROM parties.customers c
             LEFT JOIN sales.orders o ON c.customer_id = o.customer_id 
                 AND o.order_status NOT IN ('cancelled', 'draft')
             WHERE c.customer_id = ANY(:customer_ids)
@@ -193,7 +193,7 @@ class CustomerService:
         
         # Get customer details
         customer = db.execute(text("""
-            SELECT customer_id, customer_name FROM master.customers WHERE customer_id = :id
+            SELECT customer_id, customer_name FROM parties.customers WHERE customer_id = :id
         """), {"id": customer_id}).fetchone()
         
         if not customer:
@@ -317,7 +317,7 @@ class CustomerService:
                 customer_name,
                 credit_limit,
                 credit_days
-            FROM master.customers
+            FROM parties.customers
             WHERE customer_id = :customer_id
         """), {"customer_id": customer_id})
         

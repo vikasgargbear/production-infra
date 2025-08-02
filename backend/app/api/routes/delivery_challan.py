@@ -40,7 +40,7 @@ def get_delivery_challans(
                 o.delivery_date,
                 'challan' as document_type
             FROM sales.orders o
-            LEFT JOIN master.customers c ON o.customer_id = c.customer_id
+            LEFT JOIN parties.customers c ON o.customer_id = c.customer_id
             WHERE o.order_status IN ('confirmed', 'delivered', 'shipped')
         """
         params = {}
@@ -93,7 +93,7 @@ def get_delivery_challan(challan_id: int, db: Session = Depends(get_db)):
                     o.notes,
                     'challan' as document_type
                 FROM sales.orders o
-                LEFT JOIN master.customers c ON o.customer_id = c.customer_id
+                LEFT JOIN parties.customers c ON o.customer_id = c.customer_id
                 WHERE o.order_id = :challan_id
                 AND o.order_status IN ('confirmed', 'delivered', 'shipped')
             """),
@@ -114,7 +114,7 @@ def get_delivery_challan(challan_id: int, db: Session = Depends(get_db)):
                     oi.price,
                     (oi.quantity * oi.price) as total_amount
                 FROM sales.order_items oi
-                JOIN master.products p ON oi.product_id = p.product_id
+                JOIN inventory.products p ON oi.product_id = p.product_id
                 WHERE oi.order_id = :challan_id
             """),
             {"challan_id": challan_id}

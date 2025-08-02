@@ -192,7 +192,7 @@ async def get_party_statement(
             """
             
             # Get party details
-            party_query = "SELECT customer_name as name, phone, email FROM master.customers WHERE customer_id = :party_id"
+            party_query = "SELECT customer_name as name, phone, email FROM parties.customers WHERE customer_id = :party_id"
             
         else:  # supplier
             query = """

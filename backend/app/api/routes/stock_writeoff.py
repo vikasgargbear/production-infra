@@ -60,7 +60,7 @@ async def get_expiry_report(
                 END as is_expired,
                 DATE_PART('day', b.expiry_date - :today) as days_to_expiry
             FROM inventory.batches b
-            JOIN master.products p ON b.product_id = p.product_id
+            JOIN inventory.products p ON b.product_id = p.product_id
             LEFT JOIN inventory i ON (
                 i.product_id = b.product_id 
                 AND i.batch_number = b.batch_number
@@ -305,7 +305,7 @@ async def get_writeoffs(
                 STRING_AGG(DISTINCT p.product_name, ', ' ORDER BY p.product_name) as products
             FROM stock_writeoffs w
             LEFT JOIN stock_writeoff_items wi ON w.writeoff_id = wi.writeoff_id
-            LEFT JOIN master.products p ON wi.product_id = p.product_id
+            LEFT JOIN inventory.products p ON wi.product_id = p.product_id
             WHERE 1=1
         """
         params = {"skip": skip, "limit": limit}

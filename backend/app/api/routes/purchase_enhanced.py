@@ -173,7 +173,7 @@ def get_purchase_items(purchase_id: int, db: Session = Depends(get_db)):
                     p.category,
                     p.brand_name
                 FROM purchase_items pi
-                LEFT JOIN master.products p ON pi.product_id = p.product_id
+                LEFT JOIN inventory.products p ON pi.product_id = p.product_id
                 WHERE pi.purchase_id = :purchase_id
                 ORDER BY pi.purchase_item_id
             """),

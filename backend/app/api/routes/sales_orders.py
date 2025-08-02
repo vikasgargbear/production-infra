@@ -48,7 +48,7 @@ async def create_sales_order(
         # Validate customer exists
         customer = db.execute(text("""
             SELECT customer_id, customer_name, phone, discount_percent 
-            FROM master.customers 
+            FROM parties.customers 
             WHERE customer_id = :id AND org_id = :org_id
         """), {"id": order.customer_id, "org_id": org_id}).fetchone()
         
@@ -61,7 +61,7 @@ async def create_sales_order(
         items_dict = [item.dict() for item in order.items]
         for item in items_dict:
             product = db.execute(text("""
-                SELECT product_id, product_name FROM master.products 
+                SELECT product_id, product_name FROM inventory.products 
                 WHERE product_id = :id AND org_id = :org_id
             """), {"id": item["product_id"], "org_id": org_id}).fetchone()
             
@@ -191,7 +191,7 @@ async def list_sales_orders(
         query = """
             SELECT o.*, c.customer_name, c.customer_code, c.phone as customer_phone
             FROM sales.orders o
-            JOIN master.customers c ON o.customer_id = c.customer_id
+            JOIN parties.customers c ON o.customer_id = c.customer_id
             WHERE o.org_id = :org_id AND o.order_type = 'sales'
         """
         count_query = """
@@ -239,7 +239,7 @@ async def list_sales_orders(
             items_result = db.execute(text("""
                 SELECT oi.*, p.product_name, p.product_code
                 FROM sales.order_items oi
-                JOIN master.products p ON oi.product_id = p.product_id
+                JOIN inventory.products p ON oi.product_id = p.product_id
                 WHERE oi.order_id = ANY(:order_ids)
                 ORDER BY oi.order_id, oi.order_item_id
             """), {"order_ids": order_ids})
@@ -282,7 +282,7 @@ async def get_sales_order(
         result = db.execute(text("""
             SELECT o.*, c.customer_name, c.customer_code, c.phone as customer_phone
             FROM sales.orders o
-            JOIN master.customers c ON o.customer_id = c.customer_id
+            JOIN parties.customers c ON o.customer_id = c.customer_id
             WHERE o.order_id = :id AND o.org_id = :org_id AND o.order_type = 'sales'
         """), {"id": order_id, "org_id": DEFAULT_ORG_ID})
         
@@ -297,7 +297,7 @@ async def get_sales_order(
             SELECT oi.*, p.product_name, p.product_code,
                    b.batch_number, b.expiry_date
             FROM sales.order_items oi
-            JOIN master.products p ON oi.product_id = p.product_id
+            JOIN inventory.products p ON oi.product_id = p.product_id
             LEFT JOIN inventory.batches b ON oi.batch_id = b.batch_id
             WHERE oi.order_id = :order_id
         """), {"order_id": order_id})
@@ -577,7 +577,7 @@ async def validate_sales_order(
         
         # Validate customer
         customer = db.execute(text("""
-            SELECT customer_id FROM master.customers 
+            SELECT customer_id FROM parties.customers 
             WHERE customer_id = :id AND org_id = :org_id
         """), {"id": order_data.customer_id, "org_id": org_id}).fetchone()
         
@@ -587,7 +587,7 @@ async def validate_sales_order(
         # Validate products
         for item in order_data.items:
             product = db.execute(text("""
-                SELECT product_id FROM master.products 
+                SELECT product_id FROM inventory.products 
                 WHERE product_id = :id AND org_id = :org_id
             """), {"id": item.product_id, "org_id": org_id}).fetchone()
             

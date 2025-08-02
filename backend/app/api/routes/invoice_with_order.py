@@ -137,7 +137,7 @@ async def create_invoice_with_order(
             # Get product details
             product = db.execute(text("""
                 SELECT product_name, gst_percent
-                FROM master.products
+                FROM inventory.products
                 WHERE product_id = :product_id
             """), {"product_id": item["product_id"]}).first()
             
@@ -204,7 +204,7 @@ async def create_invoice_with_order(
         # Get customer details
         customer = db.execute(text("""
             SELECT customer_name, gst_number as gstin, state, state_code
-            FROM master.customers
+            FROM parties.customers
             WHERE customer_id = :customer_id
         """), {"customer_id": invoice_data.customer_id}).first()
         

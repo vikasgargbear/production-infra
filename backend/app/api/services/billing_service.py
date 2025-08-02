@@ -93,7 +93,7 @@ class BillingService:
                        c.city, c.state, c.pincode, c.phone,
                        c.credit_days
                 FROM sales.orders o
-                JOIN master.customers c ON o.customer_id = c.customer_id
+                JOIN parties.customers c ON o.customer_id = c.customer_id
                 WHERE o.order_id = :order_id
                     AND o.org_id = :org_id
                     AND o.order_status IN ('confirmed', 'delivered')
@@ -127,14 +127,14 @@ class BillingService:
                 SELECT oi.*, p.product_name, p.hsn_code, p.gst_rate,
                        b.batch_number
                 FROM sales.order_items oi
-                JOIN master.products p ON oi.product_id = p.product_id
+                JOIN inventory.products p ON oi.product_id = p.product_id
                 LEFT JOIN inventory.batches b ON oi.batch_id = b.batch_id
                 WHERE oi.order_id = :order_id
             """), {"order_id": invoice_data.order_id}).fetchall()
             
             # Determine GST type based on state
             org_state = db.execute(text("""
-                SELECT state FROM master.organizations
+                SELECT state FROM parties.organizations
                 WHERE org_id = :org_id
             """), {"org_id": org_id}).scalar()
             
@@ -301,7 +301,7 @@ class BillingService:
                 SELECT i.*, c.customer_name,
                        i.total_amount - COALESCE(i.paid_amount, 0) as balance_amount
                 FROM sales.invoices i
-                JOIN master.customers c ON i.customer_id = c.customer_id
+                JOIN parties.customers c ON i.customer_id = c.customer_id
                 WHERE i.invoice_id = :invoice_id
             """), {"invoice_id": payment_data.invoice_id}).fetchone()
             
@@ -371,7 +371,7 @@ class BillingService:
                 SELECT p.*, i.invoice_number, c.customer_name
                 FROM invoice_payments p
                 JOIN sales.invoices i ON p.invoice_id = i.invoice_id
-                JOIN master.customers c ON i.customer_id = c.customer_id
+                JOIN parties.customers c ON i.customer_id = c.customer_id
                 WHERE p.payment_id = :payment_id
             """), {"payment_id": payment_id}).fetchone()
             

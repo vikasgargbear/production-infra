@@ -65,7 +65,7 @@ class ChallanToInvoiceService:
                     cust.state_code
                 FROM challans c
                 JOIN sales.orders o ON c.order_id = o.order_id
-                JOIN master.customers cust ON c.customer_id = cust.customer_id
+                JOIN parties.customers cust ON c.customer_id = cust.customer_id
                 WHERE c.challan_id = ANY(:challan_ids)
                 AND c.org_id = :org_id
                 AND c.status = 'delivered'
@@ -112,7 +112,7 @@ class ChallanToInvoiceService:
                     oi.discount_percent,
                     oi.discount_amount
                 FROM challan_items ci
-                JOIN master.products p ON ci.product_id = p.product_id
+                JOIN inventory.products p ON ci.product_id = p.product_id
                 LEFT JOIN sales.order_items oi ON ci.order_item_id = oi.order_item_id
                 WHERE ci.challan_id = ANY(:challan_ids)
             """),
@@ -161,7 +161,7 @@ class ChallanToInvoiceService:
             org_result = self.db.execute(
                 text("""
                     SELECT business_settings->>'state' as state
-                    FROM master.organizations
+                    FROM parties.organizations
                     WHERE org_id = :org_id
                 """),
                 {"org_id": self.org_id}
@@ -426,7 +426,7 @@ async def get_eligible_challans(
                 o.total_amount,
                 COUNT(ci.challan_item_id) as item_count
             FROM challans c
-            JOIN master.customers cust ON c.customer_id = cust.customer_id
+            JOIN parties.customers cust ON c.customer_id = cust.customer_id
             JOIN sales.orders o ON c.order_id = o.order_id
             LEFT JOIN challan_items ci ON c.challan_id = ci.challan_id
             WHERE c.org_id = :org_id

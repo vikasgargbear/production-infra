@@ -38,7 +38,7 @@ async def get_sale_returns(
                     WHERE ri.return_id = sr.return_id 
                     LIMIT 1) as original_invoice_number
             FROM return_requests sr
-            LEFT JOIN master.customers c ON sr.customer_id = c.customer_id
+            LEFT JOIN parties.customers c ON sr.customer_id = c.customer_id
             WHERE sr.return_type = 'SALES'
         """
         params = {"skip": skip, "limit": limit}
@@ -65,7 +65,7 @@ async def get_sale_returns(
             items_query = """
                 SELECT sri.*, p.product_name, p.hsn_code
                 FROM return_items sri
-                LEFT JOIN master.products p ON sri.product_id = p.product_id
+                LEFT JOIN inventory.products p ON sri.product_id = p.product_id
                 WHERE sri.return_id = :return_id
             """
             items = db.execute(text(items_query), {"return_id": ret.return_id}).fetchall()
@@ -190,7 +190,7 @@ async def get_invoice_items_for_return(
                 p.hsn_code,
                 COALESCE(SUM(sri.return_quantity), 0) as returned_quantity
             FROM invoice_items ii
-            LEFT JOIN master.products p ON ii.product_id = p.product_id
+            LEFT JOIN inventory.products p ON ii.product_id = p.product_id
             LEFT JOIN (
                 SELECT r.product_id, r.batch_id, SUM(r.return_quantity) as return_quantity
                 FROM return_items r
@@ -260,7 +260,7 @@ async def create_sale_return(
         customer = db.execute(
             text("""
                 SELECT customer_id, customer_name, gst_number
-                FROM master.customers
+                FROM parties.customers
                 WHERE customer_id = :customer_id
             """),
             {"customer_id": return_data["customer_id"]}
@@ -400,7 +400,7 @@ async def get_sale_return_detail(
                     WHERE ri.return_id = sr.return_id 
                     LIMIT 1) as original_invoice_number
             FROM return_requests sr
-            LEFT JOIN master.customers c ON sr.customer_id = c.customer_id
+            LEFT JOIN parties.customers c ON sr.customer_id = c.customer_id
             WHERE sr.return_id = :return_id AND sr.return_type = 'SALES'
         """
         
@@ -417,7 +417,7 @@ async def get_sale_return_detail(
             SELECT sri.*, p.product_name, p.hsn_code,
                    b.batch_number, b.expiry_date
             FROM return_items sri
-            LEFT JOIN master.products p ON sri.product_id = p.product_id
+            LEFT JOIN inventory.products p ON sri.product_id = p.product_id
             LEFT JOIN inventory.batches b ON sri.batch_id = b.batch_id
             WHERE sri.return_id = :return_id
         """

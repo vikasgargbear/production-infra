@@ -62,7 +62,7 @@ async def receive_stock(
         # Get product details
         product = db.execute(text("""
             SELECT product_id, product_name, mrp, sale_price, purchase_price
-            FROM master.products
+            FROM inventory.products
             WHERE product_id = :product_id AND org_id = :org_id
         """), {
             "product_id": stock_data.product_id,
@@ -171,7 +171,7 @@ async def check_stock(
     # Get product details
     product = db.execute(text("""
         SELECT product_id, product_name
-        FROM master.products
+        FROM inventory.products
         WHERE product_id = :product_id AND org_id = :org_id
     """), {
         "product_id": product_id,
@@ -262,7 +262,7 @@ async def get_current_stock(
                 COALESCE(SUM(b.quantity_sold), 0) as reserved_stock,
                 COALESCE(SUM(b.quantity_available * b.cost_price), 0) as cost_value,
                 COALESCE(SUM(b.quantity_available * COALESCE(b.selling_price, p.sale_price)), 0) as stock_value
-            FROM master.products p
+            FROM inventory.products p
             LEFT JOIN inventory.batches b ON p.product_id = b.product_id 
                 AND b.org_id = :org_id 
                 AND b.batch_status = 'active'
@@ -396,7 +396,7 @@ async def update_product_properties(
             raise HTTPException(status_code=400, detail="No fields to update")
             
         query = f"""
-            UPDATE master.products 
+            UPDATE inventory.products 
             SET {', '.join(update_fields)}, updated_at = CURRENT_TIMESTAMP
             WHERE product_id = :product_id AND org_id = :org_id
             RETURNING product_id, product_name, category, pack_type, pack_size, pack_unit_quantity, sub_unit_quantity, purchase_unit, sale_unit, minimum_stock_level
@@ -447,7 +447,7 @@ async def get_stock_alerts(
                     WHEN COALESCE(SUM(b.quantity_available), 0) <= 10 THEN 'high'
                     ELSE 'medium'
                 END as priority
-            FROM master.products p
+            FROM inventory.products p
             LEFT JOIN inventory.batches b ON p.product_id = b.product_id 
                 AND b.org_id = :org_id 
                 AND b.batch_status = 'active'
@@ -473,7 +473,7 @@ async def get_stock_alerts(
                     ELSE 'low'
                 END as priority
             FROM inventory.batches b
-            JOIN master.products p ON b.product_id = p.product_id
+            JOIN inventory.products p ON b.product_id = p.product_id
             WHERE b.org_id = :org_id
                 AND b.batch_status = 'active'
                 AND b.quantity_available > 0
@@ -567,7 +567,7 @@ async def get_batches(
                 p.manufacturer,
                 s.supplier_name
             FROM inventory.batches b
-            LEFT JOIN master.products p ON b.product_id = p.product_id
+            LEFT JOIN inventory.products p ON b.product_id = p.product_id
             LEFT JOIN suppliers s ON b.supplier_id = s.supplier_id
             WHERE b.org_id = :org_id
             """
@@ -657,7 +657,7 @@ async def create_stock_adjustment(
             # Get product info
             product = db.execute(text("""
                 SELECT product_id, product_name, product_code
-                FROM master.products
+                FROM inventory.products
                 WHERE product_id = :product_id AND org_id = :org_id
             """), {
                 "product_id": product_id,

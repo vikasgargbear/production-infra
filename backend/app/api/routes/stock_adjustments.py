@@ -56,7 +56,7 @@ def get_stock_adjustments(
                 im.reference_number,
                 u.full_name as adjusted_by_name
             FROM inventory.inventory_movements im
-            JOIN master.products p ON im.product_id = p.product_id
+            JOIN inventory.products p ON im.product_id = p.product_id
             LEFT JOIN inventory.batches b ON im.batch_id = b.batch_id
             LEFT JOIN org_users u ON im.performed_by = u.user_id
             WHERE im.movement_type IN ('stock_damage', 'stock_expiry', 'stock_count', 'stock_adjustment')
@@ -107,7 +107,7 @@ def create_stock_adjustment(adjustment_data: dict, db: Session = Depends(get_db)
             text("""
                 SELECT b.*, p.product_name 
                 FROM inventory.batches b
-                JOIN master.products p ON b.product_id = p.product_id
+                JOIN inventory.products p ON b.product_id = p.product_id
                 WHERE b.batch_id = :batch_id
             """),
             {"batch_id": adjustment_data.get("batch_id")}
@@ -298,7 +298,7 @@ def expire_batches(db: Session = Depends(get_db)):
             text("""
                 SELECT b.*, p.product_name
                 FROM inventory.batches b
-                JOIN master.products p ON b.product_id = p.product_id
+                JOIN inventory.products p ON b.product_id = p.product_id
                 WHERE b.expiry_date <= CURRENT_DATE
                 AND b.quantity_available > 0
                 AND b.batch_status != 'expired'

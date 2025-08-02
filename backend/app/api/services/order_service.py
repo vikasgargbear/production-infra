@@ -47,7 +47,7 @@ class OrderService:
             # Check product exists and is active
             product = db.execute(text("""
                 SELECT product_id, product_name, is_active
-                FROM master.products
+                FROM inventory.products
                 WHERE product_id = :product_id AND org_id = :org_id
             """), {"product_id": item['product_id'], "org_id": org_id}).fetchone()
             
@@ -150,13 +150,13 @@ class OrderService:
             if org_id:
                 product = db.execute(text("""
                     SELECT mrp, gst_percent
-                    FROM master.products
+                    FROM inventory.products
                     WHERE product_id = :product_id AND org_id = :org_id
                 """), {"product_id": item['product_id'], "org_id": org_id}).fetchone()
             else:
                 product = db.execute(text("""
                     SELECT mrp, gst_percent
-                    FROM master.products
+                    FROM inventory.products
                     WHERE product_id = :product_id
                 """), {"product_id": item['product_id']}).fetchone()
             
@@ -415,7 +415,7 @@ class OrderService:
                 SUM(oi.quantity) as total_quantity,
                 SUM(oi.line_total) as total_revenue
             FROM sales.order_items oi
-            JOIN master.products p ON oi.product_id = p.product_id
+            JOIN inventory.products p ON oi.product_id = p.product_id
             JOIN sales.orders o ON oi.order_id = o.order_id
             WHERE o.org_id = :org_id
                 AND o.order_date >= :month_start

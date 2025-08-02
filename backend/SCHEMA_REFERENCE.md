@@ -7,18 +7,18 @@
 ### Master Schema Tables
 ```sql
 -- Customers
-master.customers
-master.addresses          -- Customer addresses (linked via customer_id)
+parties.customers
+parties.addresses          -- Customer addresses (linked via customer_id)
 
 -- Products  
-master.products
+inventory.products
 master.product_categories
 master.manufacturers
 master.compositions
 
 -- Organizations
-master.organizations
-master.org_users
+parties.organizations
+parties.org_users
 master.org_settings
 
 -- Units & Measurements
@@ -71,12 +71,12 @@ accounting.tax_rates
 ```sql
 -- Get customer with addresses
 SELECT c.*, a.* 
-FROM master.customers c
-LEFT JOIN master.addresses a ON c.customer_id = a.customer_id
+FROM parties.customers c
+LEFT JOIN parties.addresses a ON c.customer_id = a.customer_id
 WHERE c.org_id = :org_id;
 
 -- Check customer existence
-SELECT * FROM master.customers 
+SELECT * FROM parties.customers 
 WHERE customer_code = :code AND org_id = :org_id;
 ```
 
@@ -84,7 +84,7 @@ WHERE customer_code = :code AND org_id = :org_id;
 ```sql
 -- Get products with inventory
 SELECT p.*, COALESCE(SUM(b.quantity_available), 0) as stock
-FROM master.products p
+FROM inventory.products p
 LEFT JOIN inventory.batches b ON p.product_id = b.product_id
 WHERE p.org_id = :org_id
 GROUP BY p.product_id;
@@ -95,13 +95,13 @@ GROUP BY p.product_id;
 -- Get order with customer details
 SELECT o.*, c.customer_name, c.phone
 FROM sales.orders o
-JOIN master.customers c ON o.customer_id = c.customer_id
+JOIN parties.customers c ON o.customer_id = c.customer_id
 WHERE o.org_id = :org_id;
 
 -- Get order items with product info
 SELECT oi.*, p.product_name, p.hsn_code
 FROM sales.order_items oi
-JOIN master.products p ON oi.product_id = p.product_id
+JOIN inventory.products p ON oi.product_id = p.product_id
 WHERE oi.order_id = :order_id;
 ```
 
@@ -111,7 +111,7 @@ WHERE oi.order_id = :order_id;
 SELECT i.*, o.order_number, c.customer_name
 FROM sales.invoices i
 JOIN sales.orders o ON i.order_id = o.order_id
-JOIN master.customers c ON i.customer_id = c.customer_id
+JOIN parties.customers c ON i.customer_id = c.customer_id
 WHERE i.org_id = :org_id;
 ```
 
@@ -129,21 +129,21 @@ ORDER BY expiry_date ASC;
 ## Important Notes
 
 1. **NEVER use tables without schema prefix** - This will cause "relation does not exist" errors
-2. **Common mistake**: `FROM customers` ❌ → `FROM master.customers` ✅
+2. **Common mistake**: `FROM customers` ❌ → `FROM parties.customers` ✅
 3. **All main entities have org_id** - Always filter by org_id in WHERE clause
 4. **Default org_id**: `12de5e22-eee7-4d25-b3a7-d16d01c6170f` (for development)
 
 ## Table Relationships
 
 ### Customer Related
-- `master.customers` (1) → (n) `master.addresses`
-- `master.customers` (1) → (n) `sales.orders`
-- `master.customers` (1) → (n) `sales.invoices`
+- `parties.customers` (1) → (n) `parties.addresses`
+- `parties.customers` (1) → (n) `sales.orders`
+- `parties.customers` (1) → (n) `sales.invoices`
 
 ### Product Related
-- `master.products` (1) → (n) `inventory.batches`
-- `master.products` (1) → (n) `sales.order_items`
-- `master.products` (1) → (n) `sales.invoice_items`
+- `inventory.products` (1) → (n) `inventory.batches`
+- `inventory.products` (1) → (n) `sales.order_items`
+- `inventory.products` (1) → (n) `sales.invoice_items`
 
 ### Order Flow
 - `sales.orders` (1) → (n) `sales.order_items`
@@ -178,7 +178,7 @@ SELECT EXISTS (
 ## Common Errors and Solutions
 
 ### Error: relation "customers" does not exist
-**Solution**: Use `master.customers` instead of just `customers`
+**Solution**: Use `parties.customers` instead of just `customers`
 
 ### Error: relation "orders" does not exist  
 **Solution**: Use `sales.orders` instead of just `orders`
@@ -187,7 +187,7 @@ SELECT EXISTS (
 **Solution**: Use `inventory.batches` instead of just `batches`
 
 ### Error: relation "products" does not exist
-**Solution**: Use `master.products` instead of just `products`
+**Solution**: Use `inventory.products` instead of just `products`
 
 ## Quick Checklist Before Running Queries
 

@@ -55,9 +55,9 @@ async def check_customers_table(db: Session = Depends(get_db)):
                 "full_name": f"{row.table_schema}.{row.table_name}"
             })
         
-        # Also try to query from master.customers
+        # Also try to query from parties.customers
         try:
-            count = db.execute(text("SELECT COUNT(*) FROM master.customers")).scalar()
+            count = db.execute(text("SELECT COUNT(*) FROM parties.customers")).scalar()
             master_exists = True
             master_count = count
         except:

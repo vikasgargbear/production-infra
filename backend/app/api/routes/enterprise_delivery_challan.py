@@ -114,7 +114,7 @@ class EnterpriseChallanService:
                 text("""
                     SELECT o.*, c.customer_name 
                     FROM sales.orders o
-                    JOIN master.customers c ON o.customer_id = c.customer_id
+                    JOIN parties.customers c ON o.customer_id = c.customer_id
                     WHERE o.order_id = :order_id
                     AND o.org_id = :org_id
                 """),
@@ -321,7 +321,7 @@ async def list_challans(
                 c.driver_name,
                 c.total_packages
             FROM challans c
-            JOIN master.customers cust ON c.customer_id = cust.customer_id
+            JOIN parties.customers cust ON c.customer_id = cust.customer_id
             WHERE c.org_id = :org_id
         """
         params = {"org_id": org_id}
@@ -368,7 +368,7 @@ async def get_challan_details(
                 SELECT c.*, cust.customer_name, cust.gstin as customer_gstin,
                        cust.address as customer_address, cust.phone as customer_phone
                 FROM challans c
-                JOIN master.customers cust ON c.customer_id = cust.customer_id
+                JOIN parties.customers cust ON c.customer_id = cust.customer_id
                 WHERE c.challan_id = :challan_id
             """),
             {"challan_id": challan_id}
@@ -382,7 +382,7 @@ async def get_challan_details(
             text("""
                 SELECT ci.*, p.hsn_code, p.gst_percent
                 FROM challan_items ci
-                JOIN master.products p ON ci.product_id = p.product_id
+                JOIN inventory.products p ON ci.product_id = p.product_id
                 WHERE ci.challan_id = :challan_id
             """),
             {"challan_id": challan_id}

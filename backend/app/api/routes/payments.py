@@ -264,7 +264,7 @@ async def get_outstanding_invoices(
                     ELSE 0 
                 END as days_overdue
             FROM sales.invoices i
-            JOIN master.customers c ON i.customer_id = c.customer_id
+            JOIN parties.customers c ON i.customer_id = c.customer_id
             WHERE i.org_id = :org_id
                 AND i.payment_status IN ('unpaid', 'partial')
         """

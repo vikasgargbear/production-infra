@@ -360,7 +360,7 @@ class EnterpriseOrderService:
                 COALESCE(gstin, gst_number) as gstin, gst_number,
                 state_code, credit_limit, credit_period_days, payment_terms,
                 drug_license_number, COALESCE(outstanding_amount, 0) as outstanding_amount
-            FROM master.customers 
+            FROM parties.customers 
             WHERE customer_id = :customer_id AND org_id = :org_id
         """), {
             "customer_id": customer_id,
@@ -513,7 +513,7 @@ class EnterpriseOrderService:
                 p.base_uom_code, p.sale_uom_code, p.barcode,
                 p.minimum_stock_level,
                 COALESCE(SUM(b.quantity_available), 0) as available_stock
-            FROM master.products p
+            FROM inventory.products p
             LEFT JOIN inventory.batches b ON p.product_id = b.product_id 
                 AND b.org_id = :org_id
                 AND b.quantity_available > 0
@@ -1192,7 +1192,7 @@ class EnterpriseOrderService:
     def _update_customer_outstanding(self, customer_id: int, order_amount: Decimal):
         """Update customer outstanding amount"""
         self.db.execute(text("""
-            UPDATE master.customers 
+            UPDATE parties.customers 
             SET 
                 outstanding_amount = COALESCE(outstanding_amount, 0) + :order_amount,
                 total_business = COALESCE(total_business, 0) + :order_amount,

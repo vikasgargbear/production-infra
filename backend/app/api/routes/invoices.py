@@ -242,7 +242,7 @@ async def get_invoice_details(
                     c.address_line1, c.address_line2, c.area, c.city, c.state, c.pincode
                 FROM sales.invoices i
                 JOIN sales.orders o ON i.order_id = o.order_id
-                JOIN master.customers c ON i.customer_id = c.customer_id
+                JOIN parties.customers c ON i.customer_id = c.customer_id
                 WHERE i.invoice_id = :invoice_id
             """)
         else:
@@ -254,7 +254,7 @@ async def get_invoice_details(
                     c.address_line1, c.address_line2, NULL as area, c.city, c.state, c.pincode
                 FROM sales.invoices i
                 JOIN sales.orders o ON i.order_id = o.order_id
-                JOIN master.customers c ON i.customer_id = c.customer_id
+                JOIN parties.customers c ON i.customer_id = c.customer_id
                 WHERE i.invoice_id = :invoice_id
             """)
         
@@ -271,7 +271,7 @@ async def get_invoice_details(
                 p.manufacturer, p.composition,
                 b.batch_number, b.expiry_date
             FROM invoice_items ii
-            JOIN master.products p ON ii.product_id = p.product_id
+            JOIN inventory.products p ON ii.product_id = p.product_id
             LEFT JOIN sales.order_items oi ON oi.product_id = ii.product_id 
                 AND oi.order_id = :order_id
             LEFT JOIN inventory.batches b ON oi.batch_id = b.batch_id
@@ -400,7 +400,7 @@ async def list_invoices(
                 (i.total_amount - i.paid_amount) as balance_amount
             FROM sales.invoices i
             JOIN sales.orders o ON i.order_id = o.order_id
-            JOIN master.customers c ON i.customer_id = c.customer_id
+            JOIN parties.customers c ON i.customer_id = c.customer_id
             WHERE o.org_id = :org_id
         """
         
@@ -515,7 +515,7 @@ async def calculate_invoice_totals(
     try:
         # Get customer details for GST calculations
         customer = db.execute(text("""
-            SELECT state, state_code FROM master.customers
+            SELECT state, state_code FROM parties.customers
             WHERE customer_id = :customer_id
         """), {"customer_id": request.customer_id}).first()
         
@@ -526,7 +526,7 @@ async def calculate_invoice_totals(
         org_state_result = db.execute(text("""
             SELECT business_settings->>'state' as state,
                    business_settings->>'state_code' as state_code
-            FROM master.organizations
+            FROM parties.organizations
             WHERE org_id = '12de5e22-eee7-4d25-b3a7-d16d01c6170f'
         """)).first()
         
@@ -556,7 +556,7 @@ async def calculate_invoice_totals(
                 # Fetch product price from database
                 product = db.execute(text("""
                     SELECT sale_price, mrp, gst_percent 
-                    FROM master.products 
+                    FROM inventory.products 
                     WHERE product_id = :product_id
                 """), {"product_id": product_id}).first()
                 

@@ -74,7 +74,7 @@ async def create_direct_invoice(
         # Get customer details
         customer = db.execute(text("""
             SELECT customer_id, customer_name, gst_number as gstin, state, state_code, credit_period_days as credit_days
-            FROM master.customers
+            FROM parties.customers
             WHERE customer_id = :customer_id AND org_id = :org_id
         """), {
             "customer_id": invoice_data.customer_id,
@@ -114,7 +114,7 @@ async def create_direct_invoice(
             # Get product details
             product = db.execute(text("""
                 SELECT product_name, gst_percent, hsn_code
-                FROM master.products
+                FROM inventory.products
                 WHERE product_id = :product_id
             """), {"product_id": item.product_id}).first()
             

@@ -163,7 +163,7 @@ def get_supplier_products(supplier_id: int, db: Session = Depends(get_db)):
     try:
         result = db.execute(
             text("""
-                SELECT p.* FROM master.products p 
+                SELECT p.* FROM inventory.products p 
                 JOIN purchases pur ON p.product_id = pur.product_id
                 WHERE pur.supplier_id = :supplier_id
                 GROUP BY p.product_id
