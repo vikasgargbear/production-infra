@@ -237,6 +237,14 @@ async def list_customers(
         for row in customer_rows:
             customer_dict = dict(row._mapping)
             
+            # Map database columns to schema fields
+            customer_dict["phone"] = customer_dict.pop("primary_phone", None)
+            customer_dict["email"] = customer_dict.pop("primary_email", None)
+            customer_dict["alternate_phone"] = customer_dict.pop("secondary_phone", None)
+            customer_dict["contact_person"] = customer_dict.pop("contact_person_name", None)
+            customer_dict["gstin"] = customer_dict.pop("gst_number", None)
+            customer_dict["notes"] = customer_dict.pop("internal_notes", None)
+            
             # Add statistics from batch lookup or default values
             if include_stats:
                 customer_stats = stats_by_customer.get(row.customer_id, {})
@@ -291,6 +299,15 @@ async def get_customer(
         stats = CustomerService.get_customer_statistics(db, customer_id)
         
         customer_dict = dict(customer._mapping)
+        
+        # Map database columns to schema fields
+        customer_dict["phone"] = customer_dict.pop("primary_phone", None)
+        customer_dict["email"] = customer_dict.pop("primary_email", None)
+        customer_dict["alternate_phone"] = customer_dict.pop("secondary_phone", None)
+        customer_dict["contact_person"] = customer_dict.pop("contact_person_name", None)
+        customer_dict["gstin"] = customer_dict.pop("gst_number", None)
+        customer_dict["notes"] = customer_dict.pop("internal_notes", None)
+        
         customer_dict.update(stats)
         
         return CustomerResponse(**customer_dict)
@@ -322,9 +339,20 @@ async def update_customer(
         update_fields = []
         params = {"id": customer_id}
         
+        # Map schema fields to database columns
+        field_mapping = {
+            "phone": "primary_phone",
+            "email": "primary_email",
+            "alternate_phone": "secondary_phone",
+            "contact_person": "contact_person_name",
+            "gstin": "gst_number",
+            "notes": "internal_notes"
+        }
+        
         for field, value in customer_update.dict(exclude_unset=True).items():
             if value is not None:
-                update_fields.append(f"{field} = :{field}")
+                db_field = field_mapping.get(field, field)
+                update_fields.append(f"{db_field} = :{field}")
                 params[field] = value
         
         if update_fields:
