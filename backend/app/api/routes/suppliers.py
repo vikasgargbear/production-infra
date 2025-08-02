@@ -42,7 +42,25 @@ def get_suppliers(
         params.update({"limit": limit, "skip": skip})
         
         result = db.execute(text(query), params)
-        suppliers = [dict(row._mapping) for row in result]
+        suppliers = []
+        
+        for row in result:
+            suppliers.append({
+                "id": row.supplier_id,
+                "name": row.supplier_name,
+                "code": row.supplier_code,
+                "gst_number": row.gst_number,
+                "pan_number": row.pan_number,
+                "address": row.address,
+                "city": row.city,
+                "state": row.state,
+                "pincode": row.pincode,
+                "phone": row.primary_phone,
+                "email": row.primary_email,
+                "contact_person": row.contact_person_name,
+                "created_at": row.created_at,
+                "updated_at": row.updated_at
+            })
         
         return suppliers
         
@@ -54,85 +72,152 @@ def get_suppliers(
 def get_supplier(supplier_id: int, db: Session = Depends(get_db)):
     """Get a single supplier by ID"""
     try:
-        supplier = db.query(Supplier).filter(Supplier.supplier_id == supplier_id).first()
+        result = db.execute(text("""
+            SELECT * FROM parties.suppliers 
+            WHERE supplier_id = :supplier_id
+        """), {"supplier_id": supplier_id})
+        
+        supplier = result.fetchone()
         if not supplier:
             raise HTTPException(status_code=404, detail="Supplier not found")
-        return supplier
+        
+        # Map database columns to response schema
+        return {
+            "id": supplier.supplier_id,
+            "name": supplier.supplier_name,
+            "code": supplier.supplier_code,
+            "gst_number": supplier.gst_number,
+            "pan_number": supplier.pan_number,
+            "address": supplier.address,
+            "city": supplier.city,
+            "state": supplier.state,
+            "pincode": supplier.pincode,
+            "phone": supplier.primary_phone,
+            "email": supplier.primary_email,
+            "contact_person": supplier.contact_person_name,
+            "created_at": supplier.created_at,
+            "updated_at": supplier.updated_at
+        }
     except HTTPException:
         raise
     except Exception as e:
         logger.error(f"Error fetching supplier {supplier_id}: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to get supplier: {str(e)}")
 
-@router.post("/", response_model=SupplierResponse)
+@router.post("/")
 def create_supplier(supplier_data: SupplierCreate, db: Session = Depends(get_db)):
     """Create a new supplier"""
     try:
-        # Get org_id from somewhere (should come from auth in production)
-        org_id = UUID(DEFAULT_ORG_ID)  # Default org for now
-        
-        # Convert Pydantic model to dict and handle field mappings
-        supplier_dict = supplier_data.dict(exclude_unset=True)
-        
-        # Add org_id
-        supplier_dict['org_id'] = org_id
-        
         # Generate supplier code if not provided
-        if not supplier_dict.get('supplier_code'):
-            count = db.query(Supplier).filter(Supplier.org_id == org_id).count()
-            supplier_dict['supplier_code'] = f"SUP-{count + 1:04d}"
+        supplier_code = supplier_data.code
+        if not supplier_code:
+            count_result = db.execute(text("""
+                SELECT COUNT(*) FROM parties.suppliers 
+                WHERE org_id = :org_id
+            """), {"org_id": DEFAULT_ORG_ID}).scalar()
+            supplier_code = f"SUP-{count_result + 1:04d}"
         
-        # Handle field mappings from frontend to database
-        field_mappings = {
-            'gstin': 'gst_number',
-            'payment_terms': 'credit_period_days',
-            'bank_account_no': 'account_number',
-            'bank_ifsc_code': 'ifsc_code',
-            'drug_license_no': 'drug_license_number'
-        }
+        # Create supplier using SQL
+        result = db.execute(text("""
+            INSERT INTO parties.suppliers (
+                org_id, supplier_code, supplier_name, 
+                gst_number, pan_number, address, city, state, pincode,
+                primary_phone, primary_email, contact_person_name,
+                created_at, updated_at
+            ) VALUES (
+                :org_id, :supplier_code, :supplier_name,
+                :gst_number, :pan_number, :address, :city, :state, :pincode,
+                :phone, :email, :contact_person,
+                CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+            ) RETURNING supplier_id, created_at
+        """), {
+            "org_id": DEFAULT_ORG_ID,
+            "supplier_code": supplier_code,
+            "supplier_name": supplier_data.name,
+            "gst_number": supplier_data.gst_number,
+            "pan_number": supplier_data.pan_number,
+            "address": supplier_data.address,
+            "city": supplier_data.city,
+            "state": supplier_data.state,
+            "pincode": supplier_data.pincode,
+            "phone": supplier_data.phone,
+            "email": supplier_data.email,
+            "contact_person": supplier_data.contact_person
+        })
         
-        for frontend_field, db_field in field_mappings.items():
-            if frontend_field in supplier_dict:
-                supplier_dict[db_field] = supplier_dict.pop(frontend_field)
-        
-        # Handle address fields
-        if 'address_line1' in supplier_dict:
-            address = supplier_dict.pop('address_line1')
-            if 'address_line2' in supplier_dict:
-                address_line2 = supplier_dict.pop('address_line2')
-                if address_line2:
-                    address += f", {address_line2}"
-            supplier_dict['address'] = address
-        else:
-            # Remove address_line2 if present without address_line1
-            supplier_dict.pop('address_line2', None)
-        
-        # Create supplier
-        supplier = Supplier(**supplier_dict)
-        db.add(supplier)
+        row = result.fetchone()
         db.commit()
-        db.refresh(supplier)
-        return supplier
+        
+        return {
+            "id": row.supplier_id,
+            "name": supplier_data.name,
+            "code": supplier_code,
+            "gst_number": supplier_data.gst_number,
+            "pan_number": supplier_data.pan_number,
+            "address": supplier_data.address,
+            "city": supplier_data.city,
+            "state": supplier_data.state,
+            "pincode": supplier_data.pincode,
+            "phone": supplier_data.phone,
+            "email": supplier_data.email,
+            "contact_person": supplier_data.contact_person,
+            "created_at": row.created_at
+        }
     except Exception as e:
         db.rollback()
         logger.error(f"Error creating supplier: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to create supplier: {str(e)}")
 
-@router.put("/{supplier_id}", response_model=SupplierResponse)
+@router.put("/{supplier_id}")
 def update_supplier(supplier_id: int, supplier_data: SupplierUpdate, db: Session = Depends(get_db)):
     """Update a supplier"""
     try:
-        supplier = db.query(Supplier).filter(Supplier.supplier_id == supplier_id).first()
-        if not supplier:
+        # Check if supplier exists
+        exists = db.execute(text("""
+            SELECT 1 FROM parties.suppliers 
+            WHERE supplier_id = :supplier_id
+        """), {"supplier_id": supplier_id}).scalar()
+        
+        if not exists:
             raise HTTPException(status_code=404, detail="Supplier not found")
         
-        update_dict = supplier_data.dict(exclude_unset=True)
-        for key, value in update_dict.items():
-            setattr(supplier, key, value)
+        # Build update query
+        update_fields = []
+        params = {"supplier_id": supplier_id}
         
-        db.commit()
-        db.refresh(supplier)
-        return supplier
+        # Map schema fields to database columns
+        field_mapping = {
+            "name": "supplier_name",
+            "gst_number": "gst_number",
+            "pan_number": "pan_number",
+            "address": "address",
+            "city": "city",
+            "state": "state",
+            "pincode": "pincode",
+            "phone": "primary_phone",
+            "email": "primary_email",
+            "contact_person": "contact_person_name"
+        }
+        
+        for field, value in supplier_data.dict(exclude_unset=True).items():
+            if value is not None:
+                db_field = field_mapping.get(field, field)
+                update_fields.append(f"{db_field} = :{field}")
+                params[field] = value
+        
+        if update_fields:
+            update_fields.append("updated_at = CURRENT_TIMESTAMP")
+            query = f"""
+                UPDATE parties.suppliers 
+                SET {', '.join(update_fields)}
+                WHERE supplier_id = :supplier_id
+            """
+            
+            db.execute(text(query), params)
+            db.commit()
+        
+        # Return updated supplier
+        return get_supplier(supplier_id, db)
     except HTTPException:
         raise
     except Exception as e:
@@ -144,11 +229,21 @@ def update_supplier(supplier_id: int, supplier_data: SupplierUpdate, db: Session
 def delete_supplier(supplier_id: int, db: Session = Depends(get_db)):
     """Delete a supplier"""
     try:
-        supplier = db.query(Supplier).filter(Supplier.supplier_id == supplier_id).first()
-        if not supplier:
+        # Check if supplier exists
+        exists = db.execute(text("""
+            SELECT 1 FROM parties.suppliers 
+            WHERE supplier_id = :supplier_id
+        """), {"supplier_id": supplier_id}).scalar()
+        
+        if not exists:
             raise HTTPException(status_code=404, detail="Supplier not found")
         
-        db.delete(supplier)
+        # Delete supplier
+        db.execute(text("""
+            DELETE FROM parties.suppliers 
+            WHERE supplier_id = :supplier_id
+        """), {"supplier_id": supplier_id})
+        
         db.commit()
         return {"message": "Supplier deleted successfully"}
     except HTTPException:
