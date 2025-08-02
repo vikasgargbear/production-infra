@@ -120,29 +120,30 @@ def create_supplier(supplier_data: SupplierCreate, db: Session = Depends(get_db)
         # Create supplier using SQL
         result = db.execute(text("""
             INSERT INTO parties.suppliers (
-                org_id, supplier_code, supplier_name, 
-                gst_number, pan_number, address, city, state, pincode,
+                org_id, supplier_code, supplier_name, supplier_type,
+                gst_number, pan_number, 
                 primary_phone, primary_email, contact_person_name,
+                payment_days, is_active,
                 created_at, updated_at
             ) VALUES (
-                :org_id, :supplier_code, :supplier_name,
-                :gst_number, :pan_number, :address, :city, :state, :pincode,
+                :org_id, :supplier_code, :supplier_name, :supplier_type,
+                :gst_number, :pan_number,
                 :phone, :email, :contact_person,
+                :payment_days, :is_active,
                 CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
             ) RETURNING supplier_id, created_at
         """), {
             "org_id": DEFAULT_ORG_ID,
             "supplier_code": supplier_code,
             "supplier_name": supplier_data.name,
+            "supplier_type": "distributor",  # Default type
             "gst_number": supplier_data.gst_number,
             "pan_number": supplier_data.pan_number,
-            "address": supplier_data.address,
-            "city": supplier_data.city,
-            "state": supplier_data.state,
-            "pincode": supplier_data.pincode,
             "phone": supplier_data.phone,
             "email": supplier_data.email,
-            "contact_person": supplier_data.contact_person
+            "contact_person": supplier_data.contact_person,
+            "payment_days": 30,  # Default payment terms
+            "is_active": True
         })
         
         row = result.fetchone()
@@ -154,14 +155,11 @@ def create_supplier(supplier_data: SupplierCreate, db: Session = Depends(get_db)
             "code": supplier_code,
             "gst_number": supplier_data.gst_number,
             "pan_number": supplier_data.pan_number,
-            "address": supplier_data.address,
-            "city": supplier_data.city,
-            "state": supplier_data.state,
-            "pincode": supplier_data.pincode,
             "phone": supplier_data.phone,
             "email": supplier_data.email,
             "contact_person": supplier_data.contact_person,
-            "created_at": row.created_at
+            "created_at": row.created_at,
+            "message": "Supplier created successfully"
         }
     except Exception as e:
         db.rollback()
