@@ -3,7 +3,7 @@ Customer management endpoints for enterprise pharma system
 Implements GST-compliant customer management with credit tracking
 """
 from typing import Optional
-from datetime import date
+from datetime import date, datetime
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from sqlalchemy import text
@@ -48,7 +48,7 @@ def check_area_column_exists() -> bool:
         db.close()
 
 
-@router.post("/", response_model=CustomerResponse)
+@router.post("/")
 async def create_customer(
     customer: CustomerCreate,
     db: Session = Depends(get_db)
@@ -109,8 +109,21 @@ async def create_customer(
         customer_id = result.scalar()
         db.commit()
         
-        # Get created customer with statistics
-        return await get_customer(customer_id, db)
+        # Return simplified response
+        return {
+            "customer_id": customer_id,
+            "customer_code": customer_code,
+            "customer_name": customer_data.get("customer_name"),
+            "customer_type": customer_data.get("customer_type"),
+            "phone": customer_data.get("phone"),
+            "email": customer_data.get("email"),
+            "gstin": customer_data.get("gstin"),
+            "credit_limit": customer_data.get("credit_limit", 0),
+            "credit_days": customer_data.get("credit_days", 0),
+            "is_active": True,
+            "created_at": datetime.now().isoformat(),
+            "message": "Customer created successfully"
+        }
         
     except Exception as e:
         db.rollback()
