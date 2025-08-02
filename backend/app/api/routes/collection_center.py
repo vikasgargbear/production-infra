@@ -63,7 +63,7 @@ async def get_aging_data(
                     -- Risk scoring factors
                     AVG(COALESCE(bd.overdue_days, 0)) as avg_overdue_days,
                     (COALESCE(SUM(bd.outstanding_amount), 0) / NULLIF(c.credit_limit, 0) * 100) as credit_utilization
-                FROM customers c
+                FROM master.customers c
                 LEFT JOIN bill_details bd ON c.customer_id = bd.ledger_id 
                     AND bd.status IN ('Outstanding', 'Partial')
                 WHERE c.org_id = :org_id 
@@ -521,10 +521,10 @@ async def get_hub_statistics(
         
         today_result = db.execute(today_payments_query, {"org_id": org_id}).fetchone()
         
-        # Get field agents count (from org_users table)
+        # Get field agents count (FROM master.org_users table)
         agents_query = text("""
             SELECT COUNT(*) as agent_count
-            FROM org_users 
+            FROM master.org_users 
             WHERE org_id = :org_id AND is_active = true
                 AND role ILIKE '%agent%' OR role ILIKE '%collection%'
         """)

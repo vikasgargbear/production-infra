@@ -48,7 +48,7 @@ async def create_sales_order(
         # Validate customer exists
         customer = db.execute(text("""
             SELECT customer_id, customer_name, phone, discount_percent 
-            FROM customers 
+            FROM master.customers 
             WHERE customer_id = :id AND org_id = :org_id
         """), {"id": order.customer_id, "org_id": org_id}).fetchone()
         
@@ -61,7 +61,7 @@ async def create_sales_order(
         items_dict = [item.dict() for item in order.items]
         for item in items_dict:
             product = db.execute(text("""
-                SELECT product_id, product_name FROM products 
+                SELECT product_id, product_name FROM master.products 
                 WHERE product_id = :id AND org_id = :org_id
             """), {"id": item["product_id"], "org_id": org_id}).fetchone()
             
@@ -108,7 +108,7 @@ async def create_sales_order(
         
         # Insert sales order
         result = db.execute(text("""
-            INSERT INTO orders (
+            INSERT INTO sales.orders (
                 org_id, order_number, customer_id, customer_name, customer_phone,
                 order_date, delivery_date, order_type, payment_terms, order_status,
                 subtotal_amount, discount_amount, tax_amount, round_off_amount, final_amount,
@@ -146,7 +146,7 @@ async def create_sales_order(
             })
             
             db.execute(text("""
-                INSERT INTO order_items (
+                INSERT INTO sales.order_items (
                     order_id, product_id, batch_id, quantity,
                     unit_price, selling_price, discount_percent, discount_amount,
                     tax_percent, tax_amount, line_total, total_price
@@ -190,12 +190,12 @@ async def list_sales_orders(
         # Build query - only get sales orders
         query = """
             SELECT o.*, c.customer_name, c.customer_code, c.phone as customer_phone
-            FROM orders o
-            JOIN customers c ON o.customer_id = c.customer_id
+            FROM sales.orders o
+            JOIN master.customers c ON o.customer_id = c.customer_id
             WHERE o.org_id = :org_id AND o.order_type = 'sales'
         """
         count_query = """
-            SELECT COUNT(*) FROM orders o
+            SELECT COUNT(*) FROM sales.orders o
             WHERE o.org_id = :org_id AND o.order_type = 'sales'
         """
         
@@ -238,8 +238,8 @@ async def list_sales_orders(
             order_ids = [row.order_id for row in order_rows]
             items_result = db.execute(text("""
                 SELECT oi.*, p.product_name, p.product_code
-                FROM order_items oi
-                JOIN products p ON oi.product_id = p.product_id
+                FROM sales.order_items oi
+                JOIN master.products p ON oi.product_id = p.product_id
                 WHERE oi.order_id = ANY(:order_ids)
                 ORDER BY oi.order_id, oi.order_item_id
             """), {"order_ids": order_ids})
@@ -281,8 +281,8 @@ async def get_sales_order(
         # Get order with customer details - only sales orders
         result = db.execute(text("""
             SELECT o.*, c.customer_name, c.customer_code, c.phone as customer_phone
-            FROM orders o
-            JOIN customers c ON o.customer_id = c.customer_id
+            FROM sales.orders o
+            JOIN master.customers c ON o.customer_id = c.customer_id
             WHERE o.order_id = :id AND o.org_id = :org_id AND o.order_type = 'sales'
         """), {"id": order_id, "org_id": DEFAULT_ORG_ID})
         
@@ -296,9 +296,9 @@ async def get_sales_order(
         items_result = db.execute(text("""
             SELECT oi.*, p.product_name, p.product_code,
                    b.batch_number, b.expiry_date
-            FROM order_items oi
-            JOIN products p ON oi.product_id = p.product_id
-            LEFT JOIN batches b ON oi.batch_id = b.batch_id
+            FROM sales.order_items oi
+            JOIN master.products p ON oi.product_id = p.product_id
+            LEFT JOIN inventory.batches b ON oi.batch_id = b.batch_id
             WHERE oi.order_id = :order_id
         """), {"order_id": order_id})
         
@@ -326,7 +326,7 @@ async def update_sales_order(
     try:
         # Check if order exists and is editable
         existing = db.execute(text("""
-            SELECT order_status FROM orders 
+            SELECT order_status FROM sales.orders 
             WHERE order_id = :id AND org_id = :org_id AND order_type = 'sales'
         """), {"id": order_id, "org_id": DEFAULT_ORG_ID}).fetchone()
         
@@ -357,7 +357,7 @@ async def update_sales_order(
         
         # Execute update
         update_query = f"""
-            UPDATE orders 
+            UPDATE sales.orders 
             SET {', '.join(update_fields)}
             WHERE order_id = :order_id AND org_id = :org_id
         """
@@ -388,7 +388,7 @@ async def approve_sales_order(
     try:
         # Check order exists and is pending
         order = db.execute(text("""
-            SELECT order_status, customer_id FROM orders 
+            SELECT order_status, customer_id FROM sales.orders 
             WHERE order_id = :id AND org_id = :org_id AND order_type = 'sales'
         """), {"id": order_id, "org_id": DEFAULT_ORG_ID}).fetchone()
         
@@ -404,7 +404,7 @@ async def approve_sales_order(
         # Get order items for inventory validation
         items = db.execute(text("""
             SELECT product_id, batch_id, quantity, unit_price
-            FROM order_items 
+            FROM sales.order_items 
             WHERE order_id = :order_id
         """), {"order_id": order_id}).fetchall()
         
@@ -426,7 +426,7 @@ async def approve_sales_order(
         
         # Check customer credit limit
         total_amount = db.execute(text("""
-            SELECT final_amount FROM orders WHERE order_id = :id
+            SELECT final_amount FROM sales.orders WHERE order_id = :id
         """), {"id": order_id}).scalar()
         
         credit_check = CustomerService.validate_credit_limit(
@@ -438,7 +438,7 @@ async def approve_sales_order(
         
         # Update order status to approved
         db.execute(text("""
-            UPDATE orders
+            UPDATE sales.orders
             SET order_status = 'approved',
                 confirmed_at = CURRENT_TIMESTAMP,
                 updated_at = CURRENT_TIMESTAMP
@@ -475,7 +475,7 @@ async def convert_to_invoice(
     try:
         # Check order exists and is approved
         order = db.execute(text("""
-            SELECT order_status, order_number FROM orders 
+            SELECT order_status, order_number FROM sales.orders 
             WHERE order_id = :id AND org_id = :org_id AND order_type = 'sales'
         """), {"id": order_id, "org_id": DEFAULT_ORG_ID}).fetchone()
         
@@ -498,7 +498,7 @@ async def convert_to_invoice(
         
         # Update order status
         db.execute(text("""
-            UPDATE orders
+            UPDATE sales.orders
             SET order_status = 'invoiced',
                 updated_at = CURRENT_TIMESTAMP
             WHERE order_id = :id
@@ -527,7 +527,7 @@ async def convert_to_challan(
     try:
         # Check order exists and is approved
         order = db.execute(text("""
-            SELECT order_status FROM orders 
+            SELECT order_status FROM sales.orders 
             WHERE order_id = :id AND org_id = :org_id AND order_type = 'sales'
         """), {"id": order_id, "org_id": DEFAULT_ORG_ID}).fetchone()
         
@@ -543,7 +543,7 @@ async def convert_to_challan(
         # TODO: Implement challan generation service
         # For now, just update status
         db.execute(text("""
-            UPDATE orders
+            UPDATE sales.orders
             SET order_status = 'shipped',
                 updated_at = CURRENT_TIMESTAMP
             WHERE order_id = :id
@@ -577,7 +577,7 @@ async def validate_sales_order(
         
         # Validate customer
         customer = db.execute(text("""
-            SELECT customer_id FROM customers 
+            SELECT customer_id FROM master.customers 
             WHERE customer_id = :id AND org_id = :org_id
         """), {"id": order_data.customer_id, "org_id": org_id}).fetchone()
         
@@ -587,7 +587,7 @@ async def validate_sales_order(
         # Validate products
         for item in order_data.items:
             product = db.execute(text("""
-                SELECT product_id FROM products 
+                SELECT product_id FROM master.products 
                 WHERE product_id = :id AND org_id = :org_id
             """), {"id": item.product_id, "org_id": org_id}).fetchone()
             
@@ -614,7 +614,7 @@ async def get_sales_order_dashboard(db: Session = Depends(get_db)):
                 COUNT(*) FILTER (WHERE order_status = 'invoiced') as invoiced_orders,
                 COALESCE(SUM(final_amount), 0) as total_value,
                 COALESCE(SUM(final_amount) FILTER (WHERE order_date = CURRENT_DATE), 0) as today_value
-            FROM orders 
+            FROM sales.orders 
             WHERE org_id = :org_id AND order_type = 'sales'
         """), {"org_id": DEFAULT_ORG_ID}).fetchone()
         

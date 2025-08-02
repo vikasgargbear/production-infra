@@ -64,8 +64,8 @@ class ChallanToInvoiceService:
                     cust.state,
                     cust.state_code
                 FROM challans c
-                JOIN orders o ON c.order_id = o.order_id
-                JOIN customers cust ON c.customer_id = cust.customer_id
+                JOIN sales.orders o ON c.order_id = o.order_id
+                JOIN master.customers cust ON c.customer_id = cust.customer_id
                 WHERE c.challan_id = ANY(:challan_ids)
                 AND c.org_id = :org_id
                 AND c.status = 'delivered'
@@ -112,8 +112,8 @@ class ChallanToInvoiceService:
                     oi.discount_percent,
                     oi.discount_amount
                 FROM challan_items ci
-                JOIN products p ON ci.product_id = p.product_id
-                LEFT JOIN order_items oi ON ci.order_item_id = oi.order_item_id
+                JOIN master.products p ON ci.product_id = p.product_id
+                LEFT JOIN sales.order_items oi ON ci.order_item_id = oi.order_item_id
                 WHERE ci.challan_id = ANY(:challan_ids)
             """),
             {"challan_ids": challan_ids}
@@ -129,7 +129,7 @@ class ChallanToInvoiceService:
         result = self.db.execute(
             text("""
                 SELECT COUNT(*) + 1 as next_seq
-                FROM invoices
+                FROM sales.invoices
                 WHERE org_id = :org_id
                 AND invoice_number LIKE :pattern
             """),
@@ -161,7 +161,7 @@ class ChallanToInvoiceService:
             org_result = self.db.execute(
                 text("""
                     SELECT business_settings->>'state' as state
-                    FROM organizations
+                    FROM master.organizations
                     WHERE org_id = :org_id
                 """),
                 {"org_id": self.org_id}
@@ -235,7 +235,7 @@ class ChallanToInvoiceService:
             # Create invoice
             invoice_result = self.db.execute(
                 text("""
-                    INSERT INTO invoices (
+                    INSERT INTO sales.invoices (
                         org_id, invoice_number, invoice_date, 
                         customer_id, customer_name, customer_gstin,
                         billing_address, billing_name, billing_city,
@@ -341,7 +341,7 @@ class ChallanToInvoiceService:
                 # Update invoice paid amount
                 self.db.execute(
                     text("""
-                        UPDATE invoices
+                        UPDATE sales.invoices
                         SET paid_amount = :paid_amount,
                             payment_status = CASE 
                                 WHEN :paid_amount >= total_amount THEN 'paid'
@@ -426,8 +426,8 @@ async def get_eligible_challans(
                 o.total_amount,
                 COUNT(ci.challan_item_id) as item_count
             FROM challans c
-            JOIN customers cust ON c.customer_id = cust.customer_id
-            JOIN orders o ON c.order_id = o.order_id
+            JOIN master.customers cust ON c.customer_id = cust.customer_id
+            JOIN sales.orders o ON c.order_id = o.order_id
             LEFT JOIN challan_items ci ON c.challan_id = ci.challan_id
             WHERE c.org_id = :org_id
             AND c.status = 'delivered'

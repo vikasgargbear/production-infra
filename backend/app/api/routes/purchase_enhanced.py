@@ -173,7 +173,7 @@ def get_purchase_items(purchase_id: int, db: Session = Depends(get_db)):
                     p.category,
                     p.brand_name
                 FROM purchase_items pi
-                LEFT JOIN products p ON pi.product_id = p.product_id
+                LEFT JOIN master.products p ON pi.product_id = p.product_id
                 WHERE pi.purchase_id = :purchase_id
                 ORDER BY pi.purchase_item_id
             """),
@@ -294,7 +294,7 @@ def receive_purchase_items(
             # Create batch
             batch_id = db.execute(
                 text("""
-                    INSERT INTO batches (
+                    INSERT INTO inventory.batches (
                         org_id, product_id, batch_number,
                         manufacturing_date, expiry_date,
                         quantity_received, quantity_available,
@@ -332,7 +332,7 @@ def receive_purchase_items(
             # Create inventory movement
             db.execute(
                 text("""
-                    INSERT INTO inventory_movements (
+                    INSERT INTO inventory.inventory_movements (
                         org_id, movement_date, movement_type,
                         product_id, batch_id,
                         quantity_in, quantity_out,
@@ -476,7 +476,7 @@ def receive_purchase_items_fixed(
         
         # Count created batches
         batch_count = db.execute(
-            text("SELECT COUNT(*) FROM batches WHERE purchase_id = :id"),
+            text("SELECT COUNT(*) FROM inventory.batches WHERE purchase_id = :id"),
             {"id": purchase_id}
         ).scalar()
         

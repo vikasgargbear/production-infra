@@ -44,7 +44,7 @@ async def search_customers(
             }
         ).scalar()
         
-        return result if result else {"customers": [], "total": 0}
+        return result if result else {"master"."customers": [], "total": 0}
         
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Search failed: {str(e)}")
@@ -129,7 +129,7 @@ async def search_products(
             }
         ).scalar()
         
-        return result if result else {"products": [], "total": 0}
+        return result if result else {"master"."products": [], "total": 0}
         
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Search failed: {str(e)}")

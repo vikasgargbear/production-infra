@@ -85,8 +85,8 @@ async def list_batches(
             SELECT b.*, p.product_name, p.product_code,
                    b.expiry_date - CURRENT_DATE as days_to_expiry,
                    b.quantity_available * b.cost_price as stock_value
-            FROM batches b
-            JOIN products p ON b.product_id = p.product_id
+            FROM inventory.batches b
+            JOIN master.products p ON b.product_id = p.product_id
             WHERE b.org_id = :org_id
         """
         params = {"org_id": DEFAULT_ORG_ID}
@@ -176,7 +176,7 @@ async def list_current_stock(
                 COALESCE(b.near_expiry_batches, 0) as near_expiry_batches,
                 COALESCE(b.total_value, 0) as total_value,
                 COALESCE(b.average_cost, 0) as average_cost
-            FROM products p
+            FROM master.products p
             LEFT JOIN (
                 SELECT 
                     product_id,
@@ -188,7 +188,7 @@ async def list_current_stock(
                     AVG(cost_price) as average_cost,
                     COUNT(CASE WHEN expiry_date <= CURRENT_DATE THEN 1 END) as expired_batches,
                     COUNT(CASE WHEN expiry_date > CURRENT_DATE AND expiry_date <= CURRENT_DATE + INTERVAL '90 days' THEN 1 END) as near_expiry_batches
-                FROM batches
+                FROM inventory.batches
                 WHERE org_id = :org_id
                 GROUP BY product_id
             ) b ON p.product_id = b.product_id
@@ -274,9 +274,9 @@ async def list_stock_movements(
     try:
         query = """
             SELECT im.*, p.product_name, p.product_code, b.batch_number
-            FROM inventory_movements im
-            JOIN products p ON im.product_id = p.product_id
-            LEFT JOIN batches b ON im.batch_id = b.batch_id
+            FROM inventory.inventory_movements im
+            JOIN master.products p ON im.product_id = p.product_id
+            LEFT JOIN inventory.batches b ON im.batch_id = b.batch_id
             WHERE im.org_id = :org_id
         """
         params = {"org_id": DEFAULT_ORG_ID}

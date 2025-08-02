@@ -39,8 +39,8 @@ class InvoiceService:
                     c.address_line1, c.address_line2, c.area, c.city, c.state, c.pincode,
                     c.phone, c.email,
                     c.credit_days
-                FROM orders o
-                JOIN customers c ON o.customer_id = c.customer_id
+                FROM sales.orders o
+                JOIN master.customers c ON o.customer_id = c.customer_id
                 WHERE o.order_id = :order_id AND o.org_id = :org_id
             """), {"order_id": order_id, "org_id": org_id}).fetchone()
         else:
@@ -52,8 +52,8 @@ class InvoiceService:
                     c.address_line1, c.address_line2, NULL as area, c.city, c.state, c.pincode,
                     c.phone, c.email,
                     c.credit_days
-                FROM orders o
-                JOIN customers c ON o.customer_id = c.customer_id
+                FROM sales.orders o
+                JOIN master.customers c ON o.customer_id = c.customer_id
                 WHERE o.order_id = :order_id AND o.org_id = :org_id
             """), {"order_id": order_id, "org_id": org_id}).fetchone()
         
@@ -108,7 +108,7 @@ class InvoiceService:
         
         # Insert invoice
         result = db.execute(text("""
-            INSERT INTO invoices (
+            INSERT INTO sales.invoices (
                 order_id, invoice_number, invoice_date, due_date,
                 customer_id, customer_name, customer_gstin,
                 billing_address, shipping_address,
@@ -136,7 +136,7 @@ class InvoiceService:
         
         # Update order status and invoice details
         db.execute(text("""
-            UPDATE orders
+            UPDATE sales.orders
             SET order_status = 'invoiced',
                 invoice_number = :invoice_number,
                 invoice_date = :invoice_date,
@@ -170,7 +170,7 @@ class InvoiceService:
         # Get the next sequence number for this month
         result = db.execute(text("""
             SELECT COUNT(*) + 1 as next_num
-            FROM invoices
+            FROM sales.invoices
             WHERE invoice_number LIKE :prefix || '%'
         """), {"prefix": prefix})
         
@@ -239,9 +239,9 @@ class InvoiceService:
                 CASE WHEN :is_same_state THEN oi.tax_amount / 2 ELSE 0 END,
                 CASE WHEN NOT :is_same_state THEN oi.tax_amount ELSE 0 END,
                 oi.line_total, p.hsn_code
-            FROM order_items oi
-            JOIN products p ON oi.product_id = p.product_id
-            LEFT JOIN batches b ON oi.batch_id = b.batch_id
+            FROM sales.order_items oi
+            JOIN master.products p ON oi.product_id = p.product_id
+            LEFT JOIN inventory.batches b ON oi.batch_id = b.batch_id
             WHERE oi.order_id = :order_id
         """), {
             "invoice_id": invoice_id,
@@ -258,9 +258,9 @@ class InvoiceService:
                 i.*,
                 o.order_number, o.order_date,
                 c.phone, c.email, c.credit_days
-            FROM invoices i
-            JOIN orders o ON i.order_id = o.order_id
-            JOIN customers c ON i.customer_id = c.customer_id
+            FROM sales.invoices i
+            JOIN sales.orders o ON i.order_id = o.order_id
+            JOIN master.customers c ON i.customer_id = c.customer_id
             WHERE i.invoice_id = :invoice_id
         """), {"invoice_id": invoice_id}).fetchone()
         

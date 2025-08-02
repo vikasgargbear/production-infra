@@ -63,7 +63,7 @@ async def get_invoice(
     try:
         # Verify invoice belongs to organization
         result = db.execute(text("""
-            SELECT org_id FROM invoices 
+            SELECT org_id FROM sales.invoices 
             WHERE invoice_id = :invoice_id
         """), {"invoice_id": invoice_id}).fetchone()
         
@@ -105,7 +105,7 @@ async def list_invoices(
         query = """
             SELECT i.*, 
                    i.total_amount - COALESCE(i.paid_amount, 0) as balance_amount
-            FROM invoices i
+            FROM sales.invoices i
             WHERE i.org_id = :org_id
         """
         params = {"org_id": org_id}
@@ -169,7 +169,7 @@ async def record_payment(
         # Verify invoice belongs to organization
         from sqlalchemy import text
         result = db.execute(text("""
-            SELECT org_id FROM invoices 
+            SELECT org_id FROM sales.invoices 
             WHERE invoice_id = :invoice_id
         """), {"invoice_id": payment_data.invoice_id}).fetchone()
         
@@ -207,8 +207,8 @@ async def list_payments(
         query = """
             SELECT p.*, i.invoice_number, c.customer_name
             FROM invoice_payments p
-            JOIN invoices i ON p.invoice_id = i.invoice_id
-            JOIN customers c ON i.customer_id = c.customer_id
+            JOIN sales.invoices i ON p.invoice_id = i.invoice_id
+            JOIN master.customers c ON i.customer_id = c.customer_id
             WHERE i.org_id = :org_id
         """
         params = {"org_id": org_id}
@@ -293,7 +293,7 @@ async def cancel_invoice(
         # Check invoice status
         result = db.execute(text("""
             SELECT org_id, invoice_status, paid_amount
-            FROM invoices 
+            FROM sales.invoices 
             WHERE invoice_id = :invoice_id
         """), {"invoice_id": invoice_id}).fetchone()
         
@@ -311,7 +311,7 @@ async def cancel_invoice(
         
         # Cancel invoice
         db.execute(text("""
-            UPDATE invoices
+            UPDATE sales.invoices
             SET invoice_status = 'cancelled',
                 notes = COALESCE(notes, '') || E'\\nCancelled: ' || :reason,
                 updated_at = CURRENT_TIMESTAMP
@@ -351,7 +351,7 @@ async def get_printable_invoice(
                    o.city as org_city, o.state as org_state,
                    o.pincode as org_pincode, o.gstin as org_gstin,
                    o.phone as org_phone, o.email as org_email
-            FROM invoices i
+            FROM sales.invoices i
             JOIN organizations o ON i.org_id = o.org_id
             WHERE i.invoice_id = :invoice_id
                 AND i.org_id = :org_id

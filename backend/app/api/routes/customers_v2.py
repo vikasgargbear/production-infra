@@ -18,7 +18,7 @@ from ...schemas.customer import (
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/customers", tags=["customers"])
+router = APIRouter(prefix="/customers", tags=["master"."customers"])
 
 # Default org_id from settings
 DEFAULT_ORG_ID = settings.DEFAULT_ORG_ID

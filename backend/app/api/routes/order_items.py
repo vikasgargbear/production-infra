@@ -29,7 +29,7 @@ def get_order_items(
 ):
     """Get order items with optional filtering"""
     try:
-        query = "SELECT * FROM order_items WHERE 1=1"
+        query = "SELECT * FROM sales.order_items WHERE 1=1"
         params = {}
         
         if order_id:

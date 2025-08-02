@@ -445,7 +445,7 @@ async def parse_purchase_invoice(
                     product_match = db.execute(
                         text("""
                             SELECT product_id, product_name, hsn_code 
-                            FROM products 
+                            FROM master.products 
                             WHERE LOWER(product_name) = LOWER(:name)
                             LIMIT 1
                         """),
@@ -457,7 +457,7 @@ async def parse_purchase_invoice(
                     product_match = db.execute(
                         text("""
                             SELECT product_id, product_name, hsn_code 
-                            FROM products 
+                            FROM master.products 
                             WHERE hsn_code = :hsn
                             LIMIT 1
                         """),
@@ -575,7 +575,7 @@ def create_purchase_from_parsed(
                 product_code = f"PROD{datetime.now().strftime('%Y%m%d%H%M%S')}"
                 product_id = db.execute(
                     text("""
-                        INSERT INTO products (
+                        INSERT INTO master.products (
                             org_id, product_code, product_name,
                             hsn_code, category, purchase_price, sale_price, mrp,
                             gst_percent
