@@ -55,9 +55,9 @@ def get_stock_adjustments(
                 im.notes as reason,
                 im.reference_number,
                 u.full_name as adjusted_by_name
-            FROM inventory_movements im
-            JOIN products p ON im.product_id = p.product_id
-            LEFT JOIN batches b ON im.batch_id = b.batch_id
+            FROM inventory.inventory_movements im
+            JOIN master.products p ON im.product_id = p.product_id
+            LEFT JOIN inventory.batches b ON im.batch_id = b.batch_id
             LEFT JOIN org_users u ON im.performed_by = u.user_id
             WHERE im.movement_type IN ('stock_damage', 'stock_expiry', 'stock_count', 'stock_adjustment')
         """
@@ -106,8 +106,8 @@ def create_stock_adjustment(adjustment_data: dict, db: Session = Depends(get_db)
         batch = db.execute(
             text("""
                 SELECT b.*, p.product_name 
-                FROM batches b
-                JOIN products p ON b.product_id = p.product_id
+                FROM inventory.batches b
+                JOIN master.products p ON b.product_id = p.product_id
                 WHERE b.batch_id = :batch_id
             """),
             {"batch_id": adjustment_data.get("batch_id")}
@@ -137,7 +137,7 @@ def create_stock_adjustment(adjustment_data: dict, db: Session = Depends(get_db)
         # Create inventory movement
         movement_id = db.execute(
             text("""
-                INSERT INTO inventory_movements (
+                INSERT INTO inventory.inventory_movements (
                     org_id, movement_date, movement_type,
                     product_id, batch_id, 
                     quantity_in, quantity_out,
@@ -169,7 +169,7 @@ def create_stock_adjustment(adjustment_data: dict, db: Session = Depends(get_db)
         new_quantity = batch.quantity_available + quantity_adjusted
         db.execute(
             text("""
-                UPDATE batches 
+                UPDATE inventory.batches 
                 SET quantity_available = :new_quantity
                 WHERE batch_id = :batch_id
             """),
@@ -212,7 +212,7 @@ def process_physical_count(count_data: dict, db: Session = Depends(get_db)):
             
             # Get current quantity
             batch = db.execute(
-                text("SELECT * FROM batches WHERE batch_id = :batch_id"),
+                text("SELECT * FROM inventory.batches WHERE batch_id = :batch_id"),
                 {"batch_id": batch_id}
             ).first()
             
@@ -226,7 +226,7 @@ def process_physical_count(count_data: dict, db: Session = Depends(get_db)):
             if difference != 0:
                 movement_id = db.execute(
                     text("""
-                        INSERT INTO inventory_movements (
+                        INSERT INTO inventory.inventory_movements (
                             org_id, movement_date, movement_type,
                             product_id, batch_id,
                             quantity_in, quantity_out,
@@ -256,7 +256,7 @@ def process_physical_count(count_data: dict, db: Session = Depends(get_db)):
                 # Update batch quantity
                 db.execute(
                     text("""
-                        UPDATE batches 
+                        UPDATE inventory.batches 
                         SET quantity_available = :new_quantity
                         WHERE batch_id = :batch_id
                     """),
@@ -297,8 +297,8 @@ def expire_batches(db: Session = Depends(get_db)):
         expired_batches = db.execute(
             text("""
                 SELECT b.*, p.product_name
-                FROM batches b
-                JOIN products p ON b.product_id = p.product_id
+                FROM inventory.batches b
+                JOIN master.products p ON b.product_id = p.product_id
                 WHERE b.expiry_date <= CURRENT_DATE
                 AND b.quantity_available > 0
                 AND b.batch_status != 'expired'
@@ -311,7 +311,7 @@ def expire_batches(db: Session = Depends(get_db)):
             # Create expiry movement
             movement_id = db.execute(
                 text("""
-                    INSERT INTO inventory_movements (
+                    INSERT INTO inventory.inventory_movements (
                         org_id, movement_date, movement_type,
                         product_id, batch_id,
                         quantity_in, quantity_out,
@@ -338,7 +338,7 @@ def expire_batches(db: Session = Depends(get_db)):
             # Update batch
             db.execute(
                 text("""
-                    UPDATE batches 
+                    UPDATE inventory.batches 
                     SET quantity_available = 0,
                         batch_status = 'expired'
                     WHERE batch_id = :batch_id
@@ -386,7 +386,7 @@ def get_adjustment_analytics(
                 COUNT(CASE WHEN movement_type = 'stock_damage' THEN 1 END) as damage_adjustments,
                 COUNT(CASE WHEN movement_type = 'stock_expiry' THEN 1 END) as expiry_adjustments,
                 COUNT(CASE WHEN movement_type = 'stock_count' THEN 1 END) as count_adjustments
-            FROM inventory_movements
+            FROM inventory.inventory_movements
             WHERE movement_type IN ('stock_damage', 'stock_expiry', 'stock_count', 'stock_adjustment')
         """
         params = {}

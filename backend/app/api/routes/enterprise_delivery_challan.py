@@ -113,8 +113,8 @@ class EnterpriseChallanService:
             order_result = self.db.execute(
                 text("""
                     SELECT o.*, c.customer_name 
-                    FROM orders o
-                    JOIN customers c ON o.customer_id = c.customer_id
+                    FROM sales.orders o
+                    JOIN master.customers c ON o.customer_id = c.customer_id
                     WHERE o.order_id = :order_id
                     AND o.org_id = :org_id
                 """),
@@ -183,7 +183,7 @@ class EnterpriseChallanService:
             existing_order_items = self.db.execute(
                 text("""
                     SELECT order_item_id, product_id, quantity
-                    FROM order_items
+                    FROM sales.order_items
                     WHERE order_id = :order_id
                 """),
                 {"order_id": request.order_id}
@@ -321,7 +321,7 @@ async def list_challans(
                 c.driver_name,
                 c.total_packages
             FROM challans c
-            JOIN customers cust ON c.customer_id = cust.customer_id
+            JOIN master.customers cust ON c.customer_id = cust.customer_id
             WHERE c.org_id = :org_id
         """
         params = {"org_id": org_id}
@@ -368,7 +368,7 @@ async def get_challan_details(
                 SELECT c.*, cust.customer_name, cust.gstin as customer_gstin,
                        cust.address as customer_address, cust.phone as customer_phone
                 FROM challans c
-                JOIN customers cust ON c.customer_id = cust.customer_id
+                JOIN master.customers cust ON c.customer_id = cust.customer_id
                 WHERE c.challan_id = :challan_id
             """),
             {"challan_id": challan_id}
@@ -382,7 +382,7 @@ async def get_challan_details(
             text("""
                 SELECT ci.*, p.hsn_code, p.gst_percent
                 FROM challan_items ci
-                JOIN products p ON ci.product_id = p.product_id
+                JOIN master.products p ON ci.product_id = p.product_id
                 WHERE ci.challan_id = :challan_id
             """),
             {"challan_id": challan_id}
@@ -473,7 +473,7 @@ async def dispatch_challan(
         # Update order delivery status
         db.execute(
             text("""
-                UPDATE orders
+                UPDATE sales.orders
                 SET delivery_status = 'shipped'
                 WHERE order_id = (
                     SELECT order_id FROM challans WHERE challan_id = :challan_id
@@ -549,7 +549,7 @@ async def deliver_challan(
         # Update order delivery status
         db.execute(
             text("""
-                UPDATE orders
+                UPDATE sales.orders
                 SET delivery_status = 'delivered',
                     delivery_date = :delivery_date,
                     delivered_at = :delivered_at

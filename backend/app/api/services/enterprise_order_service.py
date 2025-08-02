@@ -276,7 +276,7 @@ class EnterpriseOrderService:
             
             # Step 10.5: Update order with invoice details
             self.db.execute(text("""
-                UPDATE orders
+                UPDATE sales.orders
                 SET invoice_number = :invoice_number,
                     invoice_date = :invoice_date,
                     order_status = 'invoiced',
@@ -360,7 +360,7 @@ class EnterpriseOrderService:
                 COALESCE(gstin, gst_number) as gstin, gst_number,
                 state_code, credit_limit, credit_period_days, payment_terms,
                 drug_license_number, COALESCE(outstanding_amount, 0) as outstanding_amount
-            FROM customers 
+            FROM master.customers 
             WHERE customer_id = :customer_id AND org_id = :org_id
         """), {
             "customer_id": customer_id,
@@ -513,8 +513,8 @@ class EnterpriseOrderService:
                 p.base_uom_code, p.sale_uom_code, p.barcode,
                 p.minimum_stock_level,
                 COALESCE(SUM(b.quantity_available), 0) as available_stock
-            FROM products p
-            LEFT JOIN batches b ON p.product_id = b.product_id 
+            FROM master.products p
+            LEFT JOIN inventory.batches b ON p.product_id = b.product_id 
                 AND b.org_id = :org_id
                 AND b.quantity_available > 0
                 AND (b.expiry_date IS NULL OR b.expiry_date > CURRENT_DATE)
@@ -572,7 +572,7 @@ class EnterpriseOrderService:
                 batch_id, batch_number, manufacturing_date, expiry_date,
                 quantity_available, cost_price, selling_price, supplier_id,
                 days_to_expiry, is_near_expiry
-            FROM batches
+            FROM inventory.batches
             WHERE batch_id = :batch_id 
                 AND product_id = :product_id 
                 AND org_id = :org_id
@@ -609,7 +609,7 @@ class EnterpriseOrderService:
                 batch_id, batch_number, manufacturing_date, expiry_date,
                 quantity_available, cost_price, selling_price, supplier_id,
                 days_to_expiry, is_near_expiry
-            FROM batches
+            FROM inventory.batches
             WHERE product_id = :product_id 
                 AND org_id = :org_id
                 AND quantity_available >= :required_quantity
@@ -744,7 +744,7 @@ class EnterpriseOrderService:
         # Get count of today's orders (simpler approach)
         result = self.db.execute(text("""
             SELECT COUNT(*) as order_count
-            FROM orders 
+            FROM sales.orders 
             WHERE org_id = :org_id 
             AND order_number LIKE :prefix
         """), {
@@ -776,7 +776,7 @@ class EnterpriseOrderService:
         prescription_required = any(item.product_info.prescription_required for item in items)
         
         result = self.db.execute(text("""
-            INSERT INTO orders (
+            INSERT INTO sales.orders (
                 org_id, customer_id, customer_name, customer_phone,
                 order_number, order_date, order_time, order_type, order_status,
                 delivery_date, delivery_type, delivery_address,
@@ -866,7 +866,7 @@ class EnterpriseOrderService:
         """Create comprehensive order item records with all fields"""
         for item in items:
             self.db.execute(text("""
-                INSERT INTO order_items (
+                INSERT INTO sales.order_items (
                     order_id, product_id, product_name, 
                     batch_id, batch_number, expiry_date,
                     quantity, base_quantity, uom_code,
@@ -912,7 +912,7 @@ class EnterpriseOrderService:
             # Get available batches using FIFO/FEFO
             batches_query = text("""
                 SELECT batch_id, batch_number, quantity_available
-                FROM batches
+                FROM inventory.batches
                 WHERE product_id = :product_id 
                     AND org_id = :org_id
                     AND quantity_available > 0
@@ -939,7 +939,7 @@ class EnterpriseOrderService:
                 
                 # Update batch quantities
                 self.db.execute(text("""
-                    UPDATE batches
+                    UPDATE inventory.batches
                     SET 
                         quantity_available = quantity_available - :qty,
                         quantity_sold = quantity_sold + :qty,
@@ -974,7 +974,7 @@ class EnterpriseOrderService:
         place_of_supply = customer.state_code or "29"  # Default to Karnataka
         
         result = self.db.execute(text("""
-            INSERT INTO invoices (
+            INSERT INTO sales.invoices (
                 org_id, invoice_number, order_id, challan_id,
                 invoice_date, due_date,
                 customer_id, customer_name, customer_gstin,
@@ -1116,7 +1116,7 @@ class EnterpriseOrderService:
         
         # Get customer_id from invoice
         customer_result = self.db.execute(text("""
-            SELECT customer_id FROM invoices WHERE invoice_id = :invoice_id
+            SELECT customer_id FROM sales.invoices WHERE invoice_id = :invoice_id
         """), {"invoice_id": invoice_id}).first()
         
         if customer_result:
@@ -1157,7 +1157,7 @@ class EnterpriseOrderService:
         
         # Update order payment status
         self.db.execute(text("""
-            UPDATE orders 
+            UPDATE sales.orders 
             SET 
                 paid_amount = :payment_amount,
                 balance_amount = final_amount - :payment_amount,
@@ -1172,7 +1172,7 @@ class EnterpriseOrderService:
         
         # Update invoice payment status
         self.db.execute(text("""
-            UPDATE invoices 
+            UPDATE sales.invoices 
             SET 
                 paid_amount = :payment_amount,
                 payment_status = :payment_status,
@@ -1192,7 +1192,7 @@ class EnterpriseOrderService:
     def _update_customer_outstanding(self, customer_id: int, order_amount: Decimal):
         """Update customer outstanding amount"""
         self.db.execute(text("""
-            UPDATE customers 
+            UPDATE master.customers 
             SET 
                 outstanding_amount = COALESCE(outstanding_amount, 0) + :order_amount,
                 total_business = COALESCE(total_business, 0) + :order_amount,

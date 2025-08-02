@@ -28,7 +28,7 @@ async def get_party_balance(
     """
     try:
         if party_type == "customer":
-            # Get customer balance FROM invoices and payments
+            # Get customer balance FROM sales.invoices and payments
             query = """
                 WITH ledger AS (
                     -- Invoices (Debit)
@@ -36,7 +36,7 @@ async def get_party_balance(
                         invoice_date as transaction_date,
                         total_amount as debit_amount,
                         0 as credit_amount
-                    FROM invoices
+                    FROM sales.invoices
                     WHERE customer_id = :party_id
                     AND status != 'cancelled'
                     
@@ -136,7 +136,7 @@ async def get_party_statement(
     """
     try:
         if party_type == "customer":
-            # Build customer ledger FROM invoices, payments, and returns
+            # Build customer ledger FROM sales.invoices, payments, and returns
             query = """
                 WITH ledger_entries AS (
                     -- Invoices
@@ -150,7 +150,7 @@ async def get_party_statement(
                         total_amount as debit,
                         0 as credit,
                         'cash' as payment_mode
-                    FROM invoices
+                    FROM sales.invoices
                     WHERE customer_id = :party_id
                     AND status != 'cancelled'
                     
@@ -192,7 +192,7 @@ async def get_party_statement(
             """
             
             # Get party details
-            party_query = "SELECT customer_name as name, phone, email FROM customers WHERE customer_id = :party_id"
+            party_query = "SELECT customer_name as name, phone, email FROM master.customers WHERE customer_id = :party_id"
             
         else:  # supplier
             query = """
@@ -341,7 +341,7 @@ async def get_outstanding_bills(
                         WHEN i.due_date < CURRENT_DATE THEN CURRENT_DATE - i.due_date
                         ELSE 0
                     END as days_overdue
-                FROM invoices i
+                FROM sales.invoices i
                 LEFT JOIN payments p ON i.customer_id = p.customer_id 
                     AND p.reference_number = i.invoice_number
                     AND p.payment_status = 'completed'

@@ -64,7 +64,7 @@ async def get_product(
     try:
         result = db.execute(
             """
-            SELECT * FROM products
+            SELECT * FROM master.products
             WHERE product_id = :product_id
             AND is_active = true
             """,
