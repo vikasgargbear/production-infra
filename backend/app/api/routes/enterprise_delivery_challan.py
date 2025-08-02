@@ -366,7 +366,7 @@ async def get_challan_details(
         challan_result = db.execute(
             text("""
                 SELECT c.*, cust.customer_name, cust.gstin as customer_gstin,
-                       cust.address as customer_address, cust.phone as customer_phone
+                       cust.address as customer_address, cust.primary_phone as customer_phone
                 FROM challans c
                 JOIN parties.customers cust ON c.customer_id = cust.customer_id
                 WHERE c.challan_id = :challan_id

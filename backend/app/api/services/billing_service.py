@@ -89,8 +89,8 @@ class BillingService:
         try:
             # Get order details
             order = db.execute(text("""
-                SELECT o.*, c.customer_name, c.gstin, c.address_line1,
-                       c.city, c.state, c.pincode, c.phone,
+                SELECT o.*, c.customer_name, c.gst_number, 'Address not in customers table' as address_line1,
+                       'City not in customers table' as city, 'State not in customers table' as state, NULL as pincode, c.primary_phone,
                        c.credit_days
                 FROM sales.orders o
                 JOIN parties.customers c ON o.customer_id = c.customer_id

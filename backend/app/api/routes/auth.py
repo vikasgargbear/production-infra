@@ -249,7 +249,7 @@ async def register_user(
         
         result = db.execute(text("""
             INSERT INTO parties.org_users (
-                org_id, full_name, email, phone,
+                org_id, full_name, email, primary_phone as phone,
                 password_hash, role, is_active
             ) VALUES (
                 :org_id, :full_name, :email, :phone,

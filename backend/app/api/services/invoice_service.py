@@ -35,9 +35,9 @@ class InvoiceService:
                 SELECT 
                     o.*,
                     c.customer_name, c.customer_code,
-                    c.gstin, c.pan_number,
-                    c.address_line1, c.address_line2, c.area, c.city, c.state, c.pincode,
-                    c.phone, c.email,
+                    c.gst_number, c.pan_number,
+                    'Address not in customers table' as address_line1, NULL as address_line2, NULL as area, 'City not in customers table' as city, 'State not in customers table' as state, NULL as pincode,
+                    c.primary_phone, c.primary_email,
                     c.credit_days
                 FROM sales.orders o
                 JOIN parties.customers c ON o.customer_id = c.customer_id
@@ -48,9 +48,9 @@ class InvoiceService:
                 SELECT 
                     o.*,
                     c.customer_name, c.customer_code,
-                    c.gstin, c.pan_number,
-                    c.address_line1, c.address_line2, NULL as area, c.city, c.state, c.pincode,
-                    c.phone, c.email,
+                    c.gst_number, c.pan_number,
+                    'Address not in customers table' as address_line1, NULL as address_line2, NULL as area, 'City not in customers table' as city, 'State not in customers table' as state, NULL as pincode,
+                    c.primary_phone, c.primary_email,
                     c.credit_days
                 FROM sales.orders o
                 JOIN parties.customers c ON o.customer_id = c.customer_id
@@ -257,7 +257,7 @@ class InvoiceService:
             SELECT 
                 i.*,
                 o.order_number, o.order_date,
-                c.phone, c.email, c.credit_days
+                c.primary_phone, c.primary_email, c.credit_days
             FROM sales.invoices i
             JOIN sales.orders o ON i.order_id = o.order_id
             JOIN parties.customers c ON i.customer_id = c.customer_id

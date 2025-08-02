@@ -192,7 +192,7 @@ async def get_party_statement(
             """
             
             # Get party details
-            party_query = "SELECT customer_name as name, phone, email FROM parties.customers WHERE customer_id = :party_id"
+            party_query = "SELECT customer_name as name, primary_phone as primary_phone as phone, email FROM parties.customers WHERE customer_id = :party_id"
             
         else:  # supplier
             query = """
@@ -233,7 +233,7 @@ async def get_party_statement(
             """
             
             # Get party details
-            party_query = "SELECT supplier_name as name, phone, email FROM suppliers WHERE supplier_id = :party_id"
+            party_query = "SELECT supplier_name as name, primary_phone as phone, email FROM suppliers WHERE supplier_id = :party_id"
         
         params = {"party_id": int(party_id)}
         

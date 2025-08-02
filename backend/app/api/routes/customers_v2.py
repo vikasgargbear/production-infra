@@ -245,7 +245,7 @@ async def get_customer(
 
 @router.get("/", response_model=CustomerListResponse)
 async def list_customers(
-    search: Optional[str] = Query(None, description="Search in name, code, phone, GST"),
+    search: Optional[str] = Query(None, description="Search in name, code, primary_phone as primary_phone as phone, GST"),
     customer_type: Optional[str] = Query(None, description="Filter by customer type"),
     customer_category: Optional[str] = Query(None, description="Filter by category"),
     city: Optional[str] = Query(None, description="Filter by city"),
@@ -273,7 +273,7 @@ async def list_customers(
                 c.customer_type,
                 c.primary_phone,
                 c.primary_email,
-                c.contact_person_name,
+                c.contact_person_name_name,
                 c.gst_number,
                 c.customer_category,
                 c.credit_limit,

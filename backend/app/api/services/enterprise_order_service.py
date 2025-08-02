@@ -355,9 +355,9 @@ class EnterpriseOrderService:
         result = self.db.execute(text("""
             SELECT 
                 customer_id, customer_code, customer_name, customer_type,
-                phone, alternate_phone, email,
+                primary_phone as phone, alternate_phone, email,
                 address, city, state, pincode,
-                COALESCE(gstin, gst_number) as gstin, gst_number,
+                COALESCE(gst_number as gstin, gst_number) as gstin, gst_number,
                 state_code, credit_limit, credit_period_days, payment_terms,
                 drug_license_number, COALESCE(outstanding_amount, 0) as outstanding_amount
             FROM parties.customers 
@@ -817,7 +817,7 @@ class EnterpriseOrderService:
             "org_id": self.org_id,
             "customer_id": customer.customer_id,
             "customer_name": customer.customer_name,
-            "customer_phone": customer.phone,
+            "customer_phone": customer.primary_phone,
             "order_number": order_number,
             "order_date": request.order_date or date.today(),
             "order_time": datetime.now().time(),
@@ -841,10 +841,10 @@ class EnterpriseOrderService:
             
             "billing_name": customer.customer_name,
             "billing_address": customer.address,
-            "billing_gstin": customer.gstin,
+            "billing_gstin": customer.gst_number,
             "shipping_name": customer.customer_name,
             "shipping_address": request.delivery_address or customer.address,
-            "shipping_phone": customer.phone,
+            "shipping_phone": customer.primary_phone,
             
             "notes": request.notes,
             "is_urgent": request.is_urgent,
@@ -1017,7 +1017,7 @@ class EnterpriseOrderService:
             "due_date": request.delivery_date or date.today(),
             "customer_id": customer.customer_id,
             "customer_name": customer.customer_name,
-            "customer_gstin": customer.gstin or "",
+            "customer_gstin": customer.gst_number or "",
             
             "billing_name": customer.customer_name,
             "billing_address": customer.address or "N/A",

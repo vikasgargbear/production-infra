@@ -73,7 +73,7 @@ async def create_direct_invoice(
     try:
         # Get customer details
         customer = db.execute(text("""
-            SELECT customer_id, customer_name, gst_number as gstin, state, state_code, credit_period_days as credit_days
+            SELECT customer_id, customer_name, gst_number as gst_number as gstin, state, state_code, credit_period_days as credit_days
             FROM parties.customers
             WHERE customer_id = :customer_id AND org_id = :org_id
         """), {

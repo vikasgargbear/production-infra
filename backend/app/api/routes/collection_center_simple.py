@@ -142,8 +142,8 @@ async def get_outstanding_list(
                 SELECT 
                     o.*,
                     c.customer_name as party_name,
-                    c.phone,
-                    c.email
+                    c.primary_phone,
+                    c.primary_email
                 FROM customer_outstanding o
                 JOIN parties.customers c ON o.customer_id = c.customer_id
                 WHERE o.status = 'outstanding'
@@ -160,7 +160,7 @@ async def get_outstanding_list(
                 SELECT 
                     o.*,
                     s.supplier_name as party_name,
-                    s.phone,
+                    s.primary_phone as phone,
                     s.email
                 FROM supplier_outstanding o
                 JOIN suppliers s ON o.supplier_id = s.supplier_id
@@ -253,8 +253,8 @@ async def generate_reminder_links(
                 SELECT 
                     c.customer_id as party_id,
                     c.customer_name as party_name,
-                    c.phone,
-                    c.email,
+                    c.primary_phone,
+                    c.primary_email,
                     SUM(o.outstanding_amount) as total_outstanding,
                     COUNT(o.outstanding_id) as bill_count,
                     MAX(o.days_overdue) as max_days_overdue,
@@ -262,7 +262,7 @@ async def generate_reminder_links(
                 FROM parties.customers c
                 JOIN customer_outstanding o ON c.customer_id = o.customer_id
                 WHERE c.customer_id = ANY(:party_ids)
-                GROUP BY c.customer_id, c.customer_name, c.phone, c.email
+                GROUP BY c.customer_id, c.customer_name, c.primary_phone, c.primary_email
             """
         else:  # supplier
             party_query = """
@@ -380,8 +380,8 @@ async def get_reminder_history(
             SELECT 
                 r.*,
                 c.customer_name,
-                c.phone,
-                c.email
+                c.primary_phone,
+                c.primary_email
             FROM collection_reminders r
             JOIN parties.customers c ON r.customer_id = c.customer_id
             WHERE 1=1

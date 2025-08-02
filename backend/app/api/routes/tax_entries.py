@@ -36,7 +36,7 @@ def get_tax_entries(
                     WHEN te.entry_type = 'purchase' THEN s.supplier_name
                 END as party_name,
                 CASE 
-                    WHEN te.entry_type = 'sales' THEN c.gstin
+                    WHEN te.entry_type = 'sales' THEN c.gst_number
                     WHEN te.entry_type = 'purchase' THEN s.gstin
                 END as party_gstin
             FROM tax_entries te
@@ -87,11 +87,11 @@ def get_tax_entry(entry_id: int, db: Session = Depends(get_db)):
                         WHEN te.entry_type = 'purchase' THEN s.supplier_name
                     END as party_name,
                     CASE 
-                        WHEN te.entry_type = 'sales' THEN c.gstin
+                        WHEN te.entry_type = 'sales' THEN c.gst_number
                         WHEN te.entry_type = 'purchase' THEN s.gstin
                     END as party_gstin,
                     CASE 
-                        WHEN te.entry_type = 'sales' THEN c.state_code
+                        WHEN te.entry_type = 'sales' THEN 'State not in customers table' as state_code
                         WHEN te.entry_type = 'purchase' THEN s.state_code
                     END as party_state_code
                 FROM tax_entries te
@@ -261,7 +261,7 @@ def get_gstr1_summary(
         # B2B Supplies
         b2b_query = """
             SELECT 
-                c.gstin as customer_gstin,
+                c.gst_number as customer_gstin,
                 c.customer_name,
                 COUNT(DISTINCT te.invoice_number) as invoice_count,
                 SUM(te.taxable_amount) as taxable_value,
@@ -274,8 +274,8 @@ def get_gstr1_summary(
             WHERE te.entry_type = 'sales'
             AND te.entry_date >= :start_date
             AND te.entry_date <= :end_date
-            AND c.gstin IS NOT NULL
-            GROUP BY c.gstin, c.customer_name
+            AND c.gst_number IS NOT NULL
+            GROUP BY c.gst_number, c.customer_name
             ORDER BY taxable_value DESC
         """
         
@@ -296,7 +296,7 @@ def get_gstr1_summary(
             WHERE te.entry_type = 'sales'
             AND te.entry_date >= :start_date
             AND te.entry_date <= :end_date
-            AND (c.gstin IS NULL OR c.gstin = '')
+            AND (c.gst_number IS NULL OR c.gst_number = '')
         """
         
         b2c_result = db.execute(text(b2c_query), {"start_date": start_date, "end_date": end_date})

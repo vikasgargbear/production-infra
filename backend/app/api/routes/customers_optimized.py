@@ -62,7 +62,7 @@ async def list_customers(
     """
     List customers with search, filter, and pagination
     
-    - **search**: Search in name, phone, or customer code
+    - **search**: Search in name, primary_phone as primary_phone as phone, or customer code
     - **customer_type**: Filter by type (retail/wholesale/hospital/clinic/pharmacy)
     - **is_active**: Filter active/inactive customers
     - **has_gstin**: Filter customers with/without GST number
@@ -109,12 +109,12 @@ async def list_customers(
             search_condition = """ AND (
                 c.customer_name ILIKE :search OR 
                 c.customer_code ILIKE :search OR 
-                c.phone LIKE :search OR
-                c.gstin LIKE :search OR
-                c.city ILIKE :search"""
+                c.primary_phone LIKE :search OR
+                c.gst_number LIKE :search OR
+                'City not in customers table' as city ILIKE :search"""
             
             if area_exists:
-                search_condition += " OR c.area ILIKE :search"
+                search_condition += " OR NULL as area ILIKE :search"
             
             search_condition += ")"
             
@@ -133,16 +133,16 @@ async def list_customers(
             params["is_active"] = is_active
         
         if city:
-            base_query += " AND c.city ILIKE :city"
+            base_query += " AND 'City not in customers table' as city ILIKE :city"
             count_query += " AND city ILIKE :city"
             params["city"] = f"%{city}%"
         
         if has_gstin is not None:
             if has_gstin:
-                base_query += " AND c.gstin IS NOT NULL"
+                base_query += " AND c.gst_number IS NOT NULL"
                 count_query += " AND gstin IS NOT NULL"
             else:
-                base_query += " AND c.gstin IS NULL"
+                base_query += " AND c.gst_number IS NULL"
                 count_query += " AND gstin IS NULL"
         
         # Get total count

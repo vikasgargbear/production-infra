@@ -57,8 +57,8 @@ async def create_customer(
     Create a new customer with GST details and credit limit
     
     - **customer_name**: Business name
-    - **phone**: 10-digit mobile number
-    - **gstin**: Optional GST number (validated)
+    - **primary_phone as phone**: 10-digit mobile number
+    - **gst_number as gstin**: Optional GST number (validated)
     - **credit_limit**: Maximum credit allowed
     - **credit_days**: Payment terms in days
     """
@@ -146,7 +146,7 @@ async def list_customers(
     """
     List customers with search, filter, and pagination
     
-    - **search**: Search in name, phone, or customer code
+    - **search**: Search in name, primary_phone as phone, or customer code
     - **customer_type**: Filter by type (retail/wholesale/hospital/clinic/pharmacy)
     - **is_active**: Filter active/inactive customers
     - **has_gstin**: Filter customers with/without GST number

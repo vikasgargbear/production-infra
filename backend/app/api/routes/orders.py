@@ -60,7 +60,8 @@ async def create_order(
         
         # Get customer details
         customer = db.execute(text("""
-            SELECT customer_name, phone, discount_percent 
+            SELECT customer_name, primary_phone as phone, 
+                   COALESCE(discount_percent, 0) as discount_percent 
             FROM parties.customers 
             WHERE customer_id = :id AND org_id = :org_id
         """), {"id": order.customer_id, "org_id": org_id}).fetchone()
@@ -192,7 +193,7 @@ async def list_orders(
     try:
         # Build query
         query = """
-            SELECT o.*, c.customer_name, c.customer_code, c.phone as customer_phone
+            SELECT o.*, c.customer_name, c.customer_code, c.primary_phone as customer_phone
             FROM sales.orders o
             JOIN parties.customers c ON o.customer_id = c.customer_id
             WHERE o.org_id = :org_id
@@ -291,7 +292,7 @@ async def get_order(
     try:
         # Get order with customer details
         result = db.execute(text("""
-            SELECT o.*, c.customer_name, c.customer_code, c.phone as customer_phone
+            SELECT o.*, c.customer_name, c.customer_code, c.primary_phone as customer_phone
             FROM sales.orders o
             JOIN parties.customers c ON o.customer_id = c.customer_id
             WHERE o.order_id = :id AND o.org_id = :org_id

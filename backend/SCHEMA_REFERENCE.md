@@ -93,7 +93,7 @@ GROUP BY p.product_id;
 ### Order Queries
 ```sql
 -- Get order with customer details
-SELECT o.*, c.customer_name, c.phone
+SELECT o.*, c.customer_name, c.primary_phone
 FROM sales.orders o
 JOIN parties.customers c ON o.customer_id = c.customer_id
 WHERE o.org_id = :org_id;

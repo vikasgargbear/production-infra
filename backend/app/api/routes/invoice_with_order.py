@@ -203,7 +203,7 @@ async def create_invoice_with_order(
         
         # Get customer details
         customer = db.execute(text("""
-            SELECT customer_name, gst_number as gstin, state, state_code
+            SELECT customer_name, gst_number as gst_number as gstin, state, state_code
             FROM parties.customers
             WHERE customer_id = :customer_id
         """), {"customer_id": invoice_data.customer_id}).first()

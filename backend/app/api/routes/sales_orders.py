@@ -47,7 +47,7 @@ async def create_sales_order(
         
         # Validate customer exists
         customer = db.execute(text("""
-            SELECT customer_id, customer_name, phone, discount_percent 
+            SELECT customer_id, customer_name, primary_phone as primary_phone as phone, discount_percent 
             FROM parties.customers 
             WHERE customer_id = :id AND org_id = :org_id
         """), {"id": order.customer_id, "org_id": org_id}).fetchone()
@@ -86,7 +86,7 @@ async def create_sales_order(
             "order_status": "pending",  # Sales orders start as pending
             "order_type": "sales",  # Must match schema pattern
             "customer_name": customer.customer_name,
-            "customer_phone": customer.phone,
+            "customer_phone": customer.primary_phone,
             "subtotal_amount": totals["subtotal"],
             "discount_amount": totals["discount"],
             "tax_amount": totals["tax"],
@@ -189,7 +189,7 @@ async def list_sales_orders(
     try:
         # Build query - only get sales orders
         query = """
-            SELECT o.*, c.customer_name, c.customer_code, c.phone as customer_phone
+            SELECT o.*, c.customer_name, c.customer_code, c.primary_primary_phone as customer_phone
             FROM sales.orders o
             JOIN parties.customers c ON o.customer_id = c.customer_id
             WHERE o.org_id = :org_id AND o.order_type = 'sales'
@@ -280,7 +280,7 @@ async def get_sales_order(
     try:
         # Get order with customer details - only sales orders
         result = db.execute(text("""
-            SELECT o.*, c.customer_name, c.customer_code, c.phone as customer_phone
+            SELECT o.*, c.customer_name, c.customer_code, c.primary_primary_phone as customer_phone
             FROM sales.orders o
             JOIN parties.customers c ON o.customer_id = c.customer_id
             WHERE o.order_id = :id AND o.org_id = :org_id AND o.order_type = 'sales'

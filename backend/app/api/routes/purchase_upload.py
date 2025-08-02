@@ -516,7 +516,7 @@ def create_purchase_from_parsed(
                 text("""
                     INSERT INTO suppliers (
                         org_id, supplier_code, supplier_name, 
-                        gst_number, address, phone, email, drug_license_number
+                        gst_number, address, primary_phone as phone, email, drug_license_number
                     ) VALUES (
                         '12de5e22-eee7-4d25-b3a7-d16d01c6170f', -- Default org
                         :code, :name, :gstin, :address, :phone, :email, :drug_license

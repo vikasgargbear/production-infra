@@ -126,7 +126,7 @@ def create_org_user(user_data: dict, db: Session = Depends(get_db)):
         # Prepare insert query
         query = text("""
             INSERT INTO parties.org_users (
-                org_id, full_name, email, phone, employee_id,
+                org_id, full_name, email, primary_phone as phone, employee_id,
                 password_hash, role, permissions, department,
                 can_view_reports, can_modify_prices, can_approve_discounts,
                 discount_limit_percent, is_active

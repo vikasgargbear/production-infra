@@ -78,7 +78,7 @@ async def create_quick_sale(
         # Step 1: Validate customer
         customer = db.execute(text("""
             SELECT customer_id, customer_name, 
-                   COALESCE(gstin, gst_number) as gstin, state, 
+                   COALESCE(gst_number as gstin, gst_number) as gstin, state, 
                    state_code, credit_period_days as credit_days, 
                    address, city, pincode
             FROM parties.customers
@@ -327,7 +327,7 @@ async def create_quick_sale(
             "order_id": order_id,
             "customer_id": sale.customer_id,
             "customer_name": customer.customer_name,
-            "customer_gstin": customer.gstin or "",
+            "customer_gstin": customer.gst_number or "",
             "billing_name": customer.customer_name,
             "billing_address": getattr(customer, 'address', None) or "N/A",
             "billing_city": getattr(customer, 'city', None) or "N/A",
