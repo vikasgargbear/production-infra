@@ -9,6 +9,7 @@ from sqlalchemy import text
 import logging
 
 from ...core.database import get_db
+from ...core.config import DEFAULT_ORG_ID
 from ...models import Supplier
 from ...core.crud_base import create_crud
 from ...schemas.supplier import SupplierCreate, SupplierUpdate, SupplierResponse, SupplierListResponse
@@ -68,7 +69,7 @@ def create_supplier(supplier_data: SupplierCreate, db: Session = Depends(get_db)
     """Create a new supplier"""
     try:
         # Get org_id from somewhere (should come from auth in production)
-        org_id = UUID("12de5e22-eee7-4d25-b3a7-d16d01c6170f")  # Default org for now
+        org_id = UUID(DEFAULT_ORG_ID)  # Default org for now
         
         # Convert Pydantic model to dict and handle field mappings
         supplier_dict = supplier_data.dict(exclude_unset=True)

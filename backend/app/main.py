@@ -9,7 +9,9 @@ import os
 # Import routers
 from .api.routes import (
     auth, customers, products, sales, inventory, 
-    payments, dashboard, billing, api_wrapper, test_db
+    payments, dashboard, billing, api_wrapper, test_db,
+    orders, invoices, delivery_challan, enterprise_delivery_challan,
+    enterprise_invoices, purchase_upload, stock_receive
 )
 
 # Lifecycle management
@@ -78,6 +80,13 @@ api_v2.include_router(inventory.router, prefix="/inventory", tags=["Inventory"])
 api_v2.include_router(payments.router, prefix="/payments", tags=["Payments"])
 api_v2.include_router(dashboard.router, prefix="/dashboard", tags=["Dashboard"])
 api_v2.include_router(billing.router, prefix="/billing", tags=["Billing"])
+api_v2.include_router(orders.router, tags=["Orders"])
+api_v2.include_router(invoices.router, tags=["Invoices"])
+api_v2.include_router(delivery_challan.router, tags=["Delivery Challan"])
+api_v2.include_router(enterprise_delivery_challan.router, tags=["Enterprise Challan"])
+api_v2.include_router(enterprise_invoices.router, tags=["Enterprise Invoices"])
+api_v2.include_router(purchase_upload.router, tags=["Purchase Upload"])
+api_v2.include_router(stock_receive.router, tags=["Stock Receive"])
 
 # Include the PostgreSQL function wrappers
 api_v2.include_router(api_wrapper.router, prefix="/pg", tags=["PostgreSQL Functions"])
@@ -98,6 +107,13 @@ api_v1.include_router(inventory.router, prefix="/inventory", tags=["Inventory"])
 api_v1.include_router(payments.router, prefix="/payments", tags=["Payments"])
 api_v1.include_router(dashboard.router, prefix="/dashboard", tags=["Dashboard"])
 api_v1.include_router(billing.router, prefix="/billing", tags=["Billing"])
+api_v1.include_router(orders.router, tags=["Orders"])
+api_v1.include_router(invoices.router, tags=["Invoices"])
+api_v1.include_router(delivery_challan.router, tags=["Delivery Challan"])
+api_v1.include_router(enterprise_delivery_challan.router, tags=["Enterprise Challan"])
+api_v1.include_router(enterprise_invoices.router, tags=["Enterprise Invoices"])
+api_v1.include_router(purchase_upload.router, tags=["Purchase Upload"])
+api_v1.include_router(stock_receive.router, tags=["Stock Receive"])
 
 app.include_router(api_v1)
 

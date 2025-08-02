@@ -11,6 +11,7 @@ from datetime import date, datetime
 from decimal import Decimal
 
 from ...core.database import get_db
+from ...core.config import DEFAULT_ORG_ID
 
 logger = logging.getLogger(__name__)
 
@@ -144,7 +145,7 @@ def create_stock_adjustment(adjustment_data: dict, db: Session = Depends(get_db)
                     reference_type, reference_number,
                     notes, performed_by
                 ) VALUES (
-                    '12de5e22-eee7-4d25-b3a7-d16d01c6170f', -- Default org
+                    DEFAULT_ORG_ID, -- Default org
                     :movement_date, :movement_type,
                     :product_id, :batch_id,
                     :quantity_in, :quantity_out,
@@ -233,7 +234,7 @@ def process_physical_count(count_data: dict, db: Session = Depends(get_db)):
                             reference_type, reference_number,
                             notes, performed_by
                         ) VALUES (
-                            '12de5e22-eee7-4d25-b3a7-d16d01c6170f',
+                            DEFAULT_ORG_ID,
                             :movement_date, 'stock_count',
                             :product_id, :batch_id,
                             :quantity_in, :quantity_out,
@@ -318,7 +319,7 @@ def expire_batches(db: Session = Depends(get_db)):
                         reference_type, reference_number,
                         notes
                     ) VALUES (
-                        '12de5e22-eee7-4d25-b3a7-d16d01c6170f',
+                        DEFAULT_ORG_ID,
                         CURRENT_DATE, 'stock_expiry',
                         :product_id, :batch_id,
                         0, :quantity_out,

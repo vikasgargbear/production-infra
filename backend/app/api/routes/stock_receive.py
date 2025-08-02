@@ -13,10 +13,10 @@ from sqlalchemy import text
 from pydantic import BaseModel, Field
 
 from ...core.database import get_db
+from ...core.config import DEFAULT_ORG_ID
 from ...dependencies import get_current_org
 
 # Default org ID for now
-DEFAULT_ORG_ID = "12de5e22-eee7-4d25-b3a7-d16d01c6170f"
 
 router = APIRouter(
     prefix="/api/v1/stock",

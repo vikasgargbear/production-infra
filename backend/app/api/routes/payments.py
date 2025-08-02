@@ -12,15 +12,12 @@ from pydantic import BaseModel, Field
 import logging
 
 from ...core.database import get_db
+from ...core.config import DEFAULT_ORG_ID
 from ..services.payment_service import PaymentService
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/payments", tags=["payments"])
-
-# Default organization ID (should come from auth in production)
-DEFAULT_ORG_ID = "12de5e22-eee7-4d25-b3a7-d16d01c6170f"
-
 
 class PaymentCreate(BaseModel):
     """Schema for recording a payment"""
@@ -33,7 +30,6 @@ class PaymentCreate(BaseModel):
     cheque_number: Optional[str] = None
     cheque_date: Optional[date] = None
     notes: Optional[str] = None
-
 
 class GeneralPaymentCreate(BaseModel):
     """Schema for creating a general payment (advance or against multiple invoices)"""
@@ -54,7 +50,6 @@ class GeneralPaymentCreate(BaseModel):
     approved_by: Optional[int] = None
     notes: Optional[str] = None
 
-
 class PaymentResponse(BaseModel):
     """Schema for payment response"""
     payment_id: int
@@ -65,12 +60,10 @@ class PaymentResponse(BaseModel):
     payment_status: str
     message: str
 
-
 class PaymentListResponse(BaseModel):
     """Schema for payment list"""
     payments: List[dict]
     total: int
-
 
 class PaymentSummaryResponse(BaseModel):
     """Schema for payment summary"""
@@ -79,7 +72,6 @@ class PaymentSummaryResponse(BaseModel):
     total_collected: Decimal
     payment_modes: dict
     pending: dict
-
 
 @router.post("/", response_model=dict)
 async def create_payment(
@@ -149,7 +141,6 @@ async def create_payment(
         logger.error(f"Error creating payment: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to create payment: {str(e)}")
 
-
 @router.post("/record", response_model=PaymentResponse)
 async def record_payment(
     payment: PaymentCreate,
@@ -173,7 +164,6 @@ async def record_payment(
         logger.error(f"Error recording payment: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to record payment: {str(e)}")
 
-
 @router.get("/invoice/{invoice_id}", response_model=PaymentListResponse)
 async def get_invoice_payments(
     invoice_id: int,
@@ -186,7 +176,6 @@ async def get_invoice_payments(
     except Exception as e:
         logger.error(f"Error getting invoice payments: {str(e)}")
         raise HTTPException(status_code=500, detail="Failed to retrieve payments")
-
 
 @router.get("/summary", response_model=PaymentSummaryResponse)
 async def get_payment_summary(
@@ -209,7 +198,6 @@ async def get_payment_summary(
     except Exception as e:
         logger.error(f"Error getting payment summary: {str(e)}")
         raise HTTPException(status_code=500, detail="Failed to get payment summary")
-
 
 @router.put("/{payment_id}/cancel")
 async def cancel_payment(
@@ -234,7 +222,6 @@ async def cancel_payment(
         db.rollback()
         logger.error(f"Error cancelling payment: {str(e)}")
         raise HTTPException(status_code=500, detail="Failed to cancel payment")
-
 
 @router.get("/outstanding")
 async def get_outstanding_invoices(

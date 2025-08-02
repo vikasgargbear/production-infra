@@ -10,6 +10,7 @@ from sqlalchemy import text
 import logging
 
 from ...core.database import get_db
+from ...core.config import DEFAULT_ORG_ID
 from ..schemas.inventory import (
     BatchCreate, BatchResponse, StockMovementCreate,
     StockMovementResponse, StockAdjustment,
@@ -21,10 +22,6 @@ from ..services.inventory_service import InventoryService
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/inventory", tags=["inventory"])
-
-# Default organization ID (should come from auth in production)
-DEFAULT_ORG_ID = "12de5e22-eee7-4d25-b3a7-d16d01c6170f"
-
 
 @router.post("/batches", response_model=BatchResponse)
 async def create_batch(
@@ -47,7 +44,6 @@ async def create_batch(
         logger.error(f"Error creating batch: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to create batch: {str(e)}")
 
-
 @router.get("/batches/{batch_id}", response_model=BatchResponse)
 async def get_batch(
     batch_id: int,
@@ -61,7 +57,6 @@ async def get_batch(
     except Exception as e:
         logger.error(f"Error getting batch: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to get batch: {str(e)}")
-
 
 @router.get("/batches")
 async def list_batches(
@@ -132,7 +127,6 @@ async def list_batches(
         logger.error(f"Error listing batches: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to list batches: {str(e)}")
 
-
 @router.get("/stock/current/{product_id}", response_model=CurrentStock)
 async def get_current_stock(
     product_id: int,
@@ -146,7 +140,6 @@ async def get_current_stock(
     except Exception as e:
         logger.error(f"Error getting stock: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to get stock: {str(e)}")
-
 
 @router.get("/stock/current")
 async def list_current_stock(
@@ -238,7 +231,6 @@ async def list_current_stock(
         logger.error(f"Error listing stock: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to list stock: {str(e)}")
 
-
 @router.post("/movements", response_model=StockMovementResponse)
 async def record_stock_movement(
     movement: StockMovementCreate,
@@ -258,7 +250,6 @@ async def record_stock_movement(
     except Exception as e:
         logger.error(f"Error recording movement: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to record movement: {str(e)}")
-
 
 @router.get("/movements")
 async def list_stock_movements(
@@ -317,7 +308,6 @@ async def list_stock_movements(
         logger.error(f"Error listing movements: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to list movements: {str(e)}")
 
-
 @router.post("/stock/adjustment", response_model=StockMovementResponse)
 async def adjust_stock(
     adjustment: StockAdjustment,
@@ -337,7 +327,6 @@ async def adjust_stock(
     except Exception as e:
         logger.error(f"Error adjusting stock: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to adjust stock: {str(e)}")
-
 
 @router.get("/expiry/alerts", response_model=List[ExpiryAlert])
 async def get_expiry_alerts(
@@ -364,7 +353,6 @@ async def get_expiry_alerts(
         logger.error(f"Error getting expiry alerts: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to get expiry alerts: {str(e)}")
 
-
 @router.get("/valuation", response_model=StockValuation)
 async def get_stock_valuation(
     as_of_date: Optional[date] = None,
@@ -383,7 +371,6 @@ async def get_stock_valuation(
     except Exception as e:
         logger.error(f"Error getting valuation: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to get valuation: {str(e)}")
-
 
 @router.get("/dashboard", response_model=InventoryDashboard)
 async def get_inventory_dashboard(db: Session = Depends(get_db)):

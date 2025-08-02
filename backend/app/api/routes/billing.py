@@ -10,6 +10,7 @@ from datetime import date
 from uuid import UUID
 
 from ...core.database import get_db
+from ...core.config import DEFAULT_ORG_ID
 from ..schemas.billing import (
     InvoiceCreate, InvoiceResponse,
     PaymentCreate, PaymentResponse,
@@ -21,10 +22,6 @@ import logging
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/billing", tags=["Billing & GST"])
-
-# Default organization ID (should come from auth in production)
-DEFAULT_ORG_ID = "12de5e22-eee7-4d25-b3a7-d16d01c6170f"
-
 
 @router.post("/invoices", response_model=InvoiceResponse)
 async def generate_invoice(
@@ -51,7 +48,6 @@ async def generate_invoice(
     except Exception as e:
         logger.error(f"Error generating invoice: {str(e)}")
         raise HTTPException(status_code=500, detail="Failed to generate invoice")
-
 
 @router.get("/invoices/{invoice_id}", response_model=InvoiceResponse)
 async def get_invoice(
@@ -80,7 +76,6 @@ async def get_invoice(
     except Exception as e:
         logger.error(f"Error fetching invoice: {str(e)}")
         raise HTTPException(status_code=500, detail="Failed to fetch invoice")
-
 
 @router.get("/invoices", response_model=List[InvoiceResponse])
 async def list_invoices(
@@ -151,7 +146,6 @@ async def list_invoices(
         logger.error(f"Error listing invoices: {str(e)}")
         raise HTTPException(status_code=500, detail="Failed to list invoices")
 
-
 @router.post("/payments", response_model=PaymentResponse)
 async def record_payment(
     payment_data: PaymentCreate,
@@ -190,7 +184,6 @@ async def record_payment(
     except Exception as e:
         logger.error(f"Error recording payment: {str(e)}")
         raise HTTPException(status_code=500, detail="Failed to record payment")
-
 
 @router.get("/payments", response_model=List[PaymentResponse])
 async def list_payments(
@@ -237,7 +230,6 @@ async def list_payments(
         logger.error(f"Error listing payments: {str(e)}")
         raise HTTPException(status_code=500, detail="Failed to list payments")
 
-
 @router.get("/gst/gstr1", response_model=GSTR1Summary)
 async def get_gstr1_summary(
     from_date: date = Query(..., description="Start date for GSTR-1 report"),
@@ -264,7 +256,6 @@ async def get_gstr1_summary(
         logger.error(f"Error generating GSTR-1: {str(e)}")
         raise HTTPException(status_code=500, detail="Failed to generate GSTR-1 summary")
 
-
 @router.get("/summary", response_model=InvoiceSummary)
 async def get_invoice_summary(
     db: Session = Depends(get_db),
@@ -277,7 +268,6 @@ async def get_invoice_summary(
     except Exception as e:
         logger.error(f"Error getting invoice summary: {str(e)}")
         raise HTTPException(status_code=500, detail="Failed to get invoice summary")
-
 
 @router.put("/invoices/{invoice_id}/cancel")
 async def cancel_invoice(
@@ -330,7 +320,6 @@ async def cancel_invoice(
         db.rollback()
         logger.error(f"Error cancelling invoice: {str(e)}")
         raise HTTPException(status_code=500, detail="Failed to cancel invoice")
-
 
 @router.get("/invoices/{invoice_id}/print")
 async def get_printable_invoice(

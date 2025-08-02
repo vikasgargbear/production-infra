@@ -13,6 +13,7 @@ import uuid
 from pydantic import BaseModel, Field
 
 from ...core.database import get_db
+from ...core.config import DEFAULT_ORG_ID
 from ..services.gst_service import GSTService, GSTType
 
 logger = logging.getLogger(__name__)
@@ -92,7 +93,7 @@ async def create_direct_sale(
         if not sale_data.seller_gstin:
             org = db.execute(
                 text("SELECT gst_number FROM parties.organizations WHERE org_id = :org_id"),
-                {"org_id": "12de5e22-eee7-4d25-b3a7-d16d01c6170f"}
+                {"org_id": DEFAULT_ORG_ID}
             ).first()
             seller_gstin = org.gst_number if org else "27AABCU9603R1ZM"  # Default Maharashtra GSTIN
         else:
@@ -234,7 +235,7 @@ async def create_direct_sale(
                     {
                         "quantity": item.quantity,
                         "product_id": item.product_id,
-                        "org_id": "12de5e22-eee7-4d25-b3a7-d16d01c6170f"
+                        "org_id": DEFAULT_ORG_ID
                     }
                 )
                 
@@ -254,7 +255,7 @@ async def create_direct_sale(
                 """),
                 {
                     "ledger_id": str(uuid.uuid4()),
-                    "org_id": "12de5e22-eee7-4d25-b3a7-d16d01c6170f",
+                    "org_id": DEFAULT_ORG_ID,
                     "party_id": sale_data.party_id,
                     "date": sale_date,
                     "invoice_id": str(invoice_id),
@@ -388,7 +389,7 @@ async def get_outstanding_sales(
                 AND i.payment_status IN ('unpaid', 'partial')
         """
         
-        params = {"org_id": "12de5e22-eee7-4d25-b3a7-d16d01c6170f"}
+        params = {"org_id": DEFAULT_ORG_ID}
         
         if customer_id:
             query += " AND c.customer_id = :customer_id"
@@ -480,7 +481,7 @@ async def calculate_sale_totals(
         if not sale_data.seller_gstin:
             org = db.execute(
                 text("SELECT gst_number FROM parties.organizations WHERE org_id = :org_id"),
-                {"org_id": "12de5e22-eee7-4d25-b3a7-d16d01c6170f"}
+                {"org_id": DEFAULT_ORG_ID}
             ).first()
             seller_gstin = org.gst_number if org else "27AABCU9603R1ZM"
         else:
@@ -565,7 +566,7 @@ async def get_sale_print_data(
         # Get organization details
         org = db.execute(
             text("SELECT * FROM parties.organizations WHERE org_id = :org_id"),
-            {"org_id": "12de5e22-eee7-4d25-b3a7-d16d01c6170f"}
+            {"org_id": DEFAULT_ORG_ID}
         ).first()
         
         # Get sale with all details

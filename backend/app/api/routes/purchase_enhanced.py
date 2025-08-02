@@ -10,6 +10,7 @@ from datetime import datetime
 from decimal import Decimal
 
 from ...core.database import get_db
+from ...core.config import DEFAULT_ORG_ID
 
 logger = logging.getLogger(__name__)
 
@@ -45,7 +46,7 @@ def create_purchase_with_items(purchase_data: dict, db: Session = Depends(get_db
                     other_charges, final_amount, purchase_status,
                     payment_status, payment_mode, notes, created_by
                 ) VALUES (
-                    '12de5e22-eee7-4d25-b3a7-d16d01c6170f', -- Default org
+                    DEFAULT_ORG_ID, -- Default org
                     :purchase_number, :purchase_date,
                     :supplier_id, :supplier_name, :invoice_number, :invoice_date,
                     :subtotal, :discount, :tax, :other_charges, :total,
@@ -303,7 +304,7 @@ def receive_purchase_items(
                         purchase_invoice_number,
                         batch_status
                     ) VALUES (
-                        '12de5e22-eee7-4d25-b3a7-d16d01c6170f',
+                        DEFAULT_ORG_ID,
                         :product_id, :batch_number,
                         :mfg_date, :exp_date,
                         :qty_received, :qty_available,
@@ -339,7 +340,7 @@ def receive_purchase_items(
                         reference_type, reference_id, reference_number,
                         notes
                     ) VALUES (
-                        '12de5e22-eee7-4d25-b3a7-d16d01c6170f',
+                        DEFAULT_ORG_ID,
                         CURRENT_TIMESTAMP, 'purchase',
                         :product_id, :batch_id,
                         :qty_in, 0,

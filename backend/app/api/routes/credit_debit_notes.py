@@ -12,6 +12,7 @@ from decimal import Decimal
 import uuid
 
 from ...core.database import get_db
+from ...core.config import DEFAULT_ORG_ID
 
 logger = logging.getLogger(__name__)
 
@@ -142,7 +143,7 @@ async def create_credit_note(
             """),
             {
                 "note_id": note_id,
-                "org_id": "12de5e22-eee7-4d25-b3a7-d16d01c6170f",
+                "org_id": DEFAULT_ORG_ID,
                 "note_number": note_number,
                 "note_date": note_data["note_date"],
                 "party_id": note_data["party_id"],
@@ -171,7 +172,7 @@ async def create_credit_note(
             """),
             {
                 "ledger_id": str(uuid.uuid4()),
-                "org_id": "12de5e22-eee7-4d25-b3a7-d16d01c6170f",
+                "org_id": DEFAULT_ORG_ID,
                 "party_id": note_data["party_id"],
                 "date": note_data["note_date"],
                 "note_id": note_id,
@@ -250,7 +251,7 @@ async def create_debit_note(
             """),
             {
                 "note_id": note_id,
-                "org_id": "12de5e22-eee7-4d25-b3a7-d16d01c6170f",
+                "org_id": DEFAULT_ORG_ID,
                 "note_number": note_number,
                 "note_date": note_data["note_date"],
                 "party_id": note_data["party_id"],
@@ -291,7 +292,7 @@ async def create_debit_note(
                 """),
                 {
                     "ledger_id": str(uuid.uuid4()),
-                    "org_id": "12de5e22-eee7-4d25-b3a7-d16d01c6170f",
+                    "org_id": DEFAULT_ORG_ID,
                     "supplier_id": note_data["party_id"],
                     "date": note_data["note_date"],
                     "note_id": note_id,
@@ -317,7 +318,7 @@ async def create_debit_note(
                 """),
                 {
                     "ledger_id": str(uuid.uuid4()),
-                    "org_id": "12de5e22-eee7-4d25-b3a7-d16d01c6170f",
+                    "org_id": DEFAULT_ORG_ID,
                     "party_id": note_data["party_id"],
                     "date": note_data["note_date"],
                     "note_id": note_id,
@@ -392,7 +393,7 @@ async def get_note_print_data(
         # Get organization details
         org_query = """
             SELECT * FROM parties.organizations 
-            WHERE org_id = '12de5e22-eee7-4d25-b3a7-d16d01c6170f'
+            WHERE org_id = DEFAULT_ORG_ID
         """
         organization = db.execute(text(org_query)).first()
         
@@ -470,7 +471,7 @@ async def cancel_note(
                 """),
                 {
                     "ledger_id": str(uuid.uuid4()),
-                    "org_id": "12de5e22-eee7-4d25-b3a7-d16d01c6170f",
+                    "org_id": DEFAULT_ORG_ID,
                     "party_id": note.party_id,
                     "note_id": note_id,
                     "amount": note.total_amount,
@@ -500,7 +501,7 @@ async def cancel_note(
                     """),
                     {
                         "ledger_id": str(uuid.uuid4()),
-                        "org_id": "12de5e22-eee7-4d25-b3a7-d16d01c6170f",
+                        "org_id": DEFAULT_ORG_ID,
                         "party_id": note.party_id,
                         "note_id": note_id,
                         "amount": note.total_amount,
@@ -523,7 +524,7 @@ async def cancel_note(
                     """),
                     {
                         "ledger_id": str(uuid.uuid4()),
-                        "org_id": "12de5e22-eee7-4d25-b3a7-d16d01c6170f",
+                        "org_id": DEFAULT_ORG_ID,
                         "supplier_id": note.party_id,
                         "note_id": note_id,
                         "amount": note.total_amount,

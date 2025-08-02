@@ -11,6 +11,7 @@ from sqlalchemy import text
 import logging
 
 from ...core.database import get_db
+from ...core.config import DEFAULT_ORG_ID
 from ..schemas.order import (
     OrderCreate, OrderResponse, OrderListResponse, InvoiceRequest,
     InvoiceResponse, DeliveryUpdate, ReturnRequest
@@ -22,10 +23,6 @@ from ..services.invoice_service import InvoiceService
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/orders", tags=["orders"])
-
-# Default organization ID (should come from auth in production)
-DEFAULT_ORG_ID = "12de5e22-eee7-4d25-b3a7-d16d01c6170f"
-
 
 @router.post("/", response_model=OrderResponse)
 async def create_order(
@@ -173,7 +170,6 @@ async def create_order(
         logger.error(f"Error creating order: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to create order: {str(e)}")
 
-
 @router.get("/", response_model=OrderListResponse)
 async def list_orders(
     skip: int = Query(0, ge=0),
@@ -282,7 +278,6 @@ async def list_orders(
         logger.error(f"Error listing orders: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to list orders: {str(e)}")
 
-
 @router.get("/{order_id}", response_model=OrderResponse)
 async def get_order(
     order_id: int,
@@ -330,7 +325,6 @@ async def get_order(
     except Exception as e:
         logger.error(f"Error getting order: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to get order: {str(e)}")
-
 
 @router.put("/{order_id}")
 async def update_order(
@@ -397,7 +391,6 @@ async def update_order(
         logger.error(f"Error updating order: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to update order: {str(e)}")
 
-
 @router.put("/{order_id}/confirm")
 async def confirm_order(
     order_id: int,
@@ -439,7 +432,6 @@ async def confirm_order(
         db.rollback()
         logger.error(f"Error confirming order: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to confirm order: {str(e)}")
-
 
 @router.post("/{order_id}/invoice", response_model=InvoiceResponse)
 async def generate_invoice(
@@ -500,7 +492,6 @@ async def generate_invoice(
         db.rollback()
         logger.error(f"Error generating invoice: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to generate invoice: {str(e)}")
-
 
 @router.put("/{order_id}/deliver")
 async def mark_delivered(
@@ -563,7 +554,6 @@ async def mark_delivered(
         logger.error(f"Error marking delivered: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to mark delivered: {str(e)}")
 
-
 @router.post("/{order_id}/return")
 async def process_return(
     order_id: int,
@@ -584,7 +574,6 @@ async def process_return(
     except Exception as e:
         logger.error(f"Error processing return: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to process return: {str(e)}")
-
 
 @router.get("/dashboard/stats")
 async def get_order_dashboard(db: Session = Depends(get_db)):

@@ -10,6 +10,7 @@ import logging
 from functools import lru_cache
 
 from ...core.database import get_db
+from ...core.config import DEFAULT_ORG_ID
 from ..schemas.customer import (
     CustomerCreate, CustomerUpdate, CustomerResponse, CustomerListResponse,
     CustomerLedgerResponse, CustomerOutstandingResponse,
@@ -20,9 +21,6 @@ from ..services.customer_service import CustomerService
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/customers", tags=["master", "customers"])
-
-# Default organization ID (should come from auth in production)
-DEFAULT_ORG_ID = "12de5e22-eee7-4d25-b3a7-d16d01c6170f"
 
 # Cache the area column check result
 @lru_cache(maxsize=1)
@@ -45,7 +43,6 @@ def check_area_column_exists(db_url: str) -> bool:
         return False
     finally:
         db.close()
-
 
 @router.get("/", response_model=CustomerListResponse)
 async def list_customers(
@@ -184,7 +181,6 @@ async def list_customers(
     except Exception as e:
         logger.error(f"Error listing customers: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Failed to list customers: {str(e)}")
-
 
 # You would also need to update the other endpoints similarly...
 # For now, let's focus on the search optimization

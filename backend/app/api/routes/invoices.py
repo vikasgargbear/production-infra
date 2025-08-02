@@ -12,6 +12,7 @@ from datetime import date
 import logging
 
 from ...core.database import get_db
+from ...core.config import DEFAULT_ORG_ID
 from ..services.invoice_service import InvoiceService
 
 logger = logging.getLogger(__name__)
@@ -138,10 +139,6 @@ async def get_invoices(
         logger.error(f"Error fetching invoices: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to fetch invoices: {str(e)}")
 
-# Default organization ID (should come from auth in production)
-DEFAULT_ORG_ID = "12de5e22-eee7-4d25-b3a7-d16d01c6170f"
-
-
 class InvoiceDetailResponse(BaseModel):
     """Comprehensive invoice details for PDF generation"""
     # Invoice details
@@ -203,7 +200,6 @@ class InvoiceDetailResponse(BaseModel):
         "ifsc_code": "HDFC0001234",
         "branch": "Andheri West, Mumbai"
     }
-
 
 @router.get("/{invoice_id}/details", response_model=InvoiceDetailResponse)
 async def get_invoice_details(
@@ -371,7 +367,6 @@ async def get_invoice_details(
         logger.error(f"Error getting invoice details: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to get invoice details: {str(e)}")
 
-
 @router.get("/list")
 async def list_invoices(
     customer_id: Optional[int] = None,
@@ -447,7 +442,6 @@ async def list_invoices(
         logger.error(f"Error listing invoices: {str(e)}")
         raise HTTPException(status_code=500, detail="Failed to list invoices")
 
-
 @router.put("/{invoice_id}/update-pdf")
 async def update_invoice_pdf_status(
     invoice_id: int,
@@ -477,7 +471,6 @@ async def update_invoice_pdf_status(
         logger.error(f"Error updating PDF URL: {str(e)}")
         raise HTTPException(status_code=500, detail="Failed to update PDF URL")
 
-
 class InvoiceCalculateRequest(BaseModel):
     """Request for calculating invoice totals"""
     customer_id: int
@@ -487,7 +480,6 @@ class InvoiceCalculateRequest(BaseModel):
     invoice_date: Optional[date] = None
     discount_amount: Optional[Decimal] = 0
     delivery_charges: Optional[Decimal] = 0
-
 
 class InvoiceCalculateResponse(BaseModel):
     """Response with calculated totals"""
@@ -502,7 +494,6 @@ class InvoiceCalculateResponse(BaseModel):
     net_amount: Decimal
     round_off: Decimal
     final_amount: Decimal
-
 
 @router.post("/calculate-live", response_model=InvoiceCalculateResponse)
 async def calculate_invoice_totals(
@@ -618,7 +609,6 @@ async def calculate_invoice_totals(
     except Exception as e:
         logger.error(f"Error calculating invoice: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to calculate invoice: {str(e)}")
-
 
 @router.post("/{invoice_id}/record-payment")
 async def record_payment(

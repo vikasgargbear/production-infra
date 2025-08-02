@@ -13,6 +13,7 @@ import json
 import urllib.parse
 
 from ...core.database import get_db
+from ...core.config import DEFAULT_ORG_ID
 
 logger = logging.getLogger(__name__)
 
@@ -20,7 +21,7 @@ router = APIRouter(prefix="/collection-center", tags=["collection-center"])
 
 @router.get("/dashboard")
 async def get_collection_dashboard(
-    org_id: str = Query(default="12de5e22-eee7-4d25-b3a7-d16d01c6170f"),
+    org_id: str = Query(default=DEFAULT_ORG_ID),
     db: Session = Depends(get_db)
 ):
     """
@@ -329,7 +330,7 @@ async def generate_reminder_links(
                     )
                 """),
                 {
-                    "org_id": reminder_data.get("org_id", "12de5e22-eee7-4d25-b3a7-d16d01c6170f"),
+                    "org_id": reminder_data.get("org_id", DEFAULT_ORG_ID),
                     "customer_id": party.party_id,
                     "reminder_type": channel,
                     "reminder_date": date.today(),
@@ -461,7 +462,7 @@ async def record_payment_collection(
                 RETURNING collection_id
             """),
             {
-                "org_id": payment_data.get("org_id", "12de5e22-eee7-4d25-b3a7-d16d01c6170f"),
+                "org_id": payment_data.get("org_id", DEFAULT_ORG_ID),
                 "customer_id": payment_data["customer_id"],
                 "payment_date": payment_data.get("payment_date", date.today()),
                 "payment_amount": Decimal(str(payment_data["payment_amount"])),

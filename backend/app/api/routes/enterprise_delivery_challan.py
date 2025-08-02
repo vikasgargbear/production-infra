@@ -12,6 +12,7 @@ from pydantic import BaseModel, Field
 import logging
 
 from ...core.database import get_db
+from ...core.config import DEFAULT_ORG_ID
 
 logger = logging.getLogger(__name__)
 
@@ -285,7 +286,7 @@ class EnterpriseChallanService:
 async def create_delivery_challan(
     request: ChallanCreationRequest,
     db: Session = Depends(get_db),
-    org_id: str = "12de5e22-eee7-4d25-b3a7-d16d01c6170f"  # TODO: Get from session
+    org_id: str = DEFAULT_ORG_ID  # TODO: Get from session
 ):
     """Create new delivery challan"""
     service = EnterpriseChallanService(db, org_id)
@@ -300,7 +301,7 @@ async def list_challans(
     start_date: Optional[date] = None,
     end_date: Optional[date] = None,
     db: Session = Depends(get_db),
-    org_id: str = "12de5e22-eee7-4d25-b3a7-d16d01c6170f"
+    org_id: str = DEFAULT_ORG_ID
 ):
     """List delivery challans with filters"""
     try:
@@ -358,7 +359,7 @@ async def list_challans(
 async def get_challan_details(
     challan_id: int,
     db: Session = Depends(get_db),
-    org_id: str = "12de5e22-eee7-4d25-b3a7-d16d01c6170f"
+    org_id: str = DEFAULT_ORG_ID
 ):
     """Get detailed challan information"""
     try:
@@ -417,7 +418,7 @@ async def dispatch_challan(
     challan_id: int,
     dispatch_data: Dict[str, Any],
     db: Session = Depends(get_db),
-    org_id: str = "12de5e22-eee7-4d25-b3a7-d16d01c6170f"
+    org_id: str = DEFAULT_ORG_ID
 ):
     """Mark challan as dispatched"""
     try:
@@ -498,7 +499,7 @@ async def deliver_challan(
     challan_id: int,
     delivery_data: Dict[str, Any],
     db: Session = Depends(get_db),
-    org_id: str = "12de5e22-eee7-4d25-b3a7-d16d01c6170f"
+    org_id: str = DEFAULT_ORG_ID
 ):
     """Mark challan as delivered"""
     try:
@@ -578,7 +579,7 @@ async def add_tracking_update(
     challan_id: int,
     tracking: ChallanTrackingRequest,
     db: Session = Depends(get_db),
-    org_id: str = "12de5e22-eee7-4d25-b3a7-d16d01c6170f"
+    org_id: str = DEFAULT_ORG_ID
 ):
     """Add tracking update to challan"""
     try:
@@ -632,7 +633,7 @@ async def get_challan_analytics(
     start_date: Optional[date] = None,
     end_date: Optional[date] = None,
     db: Session = Depends(get_db),
-    org_id: str = "12de5e22-eee7-4d25-b3a7-d16d01c6170f"
+    org_id: str = DEFAULT_ORG_ID
 ):
     """Get delivery challan analytics"""
     try:

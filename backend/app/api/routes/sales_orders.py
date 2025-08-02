@@ -11,6 +11,7 @@ from sqlalchemy import text
 import logging
 
 from ...core.database import get_db
+from ...core.config import DEFAULT_ORG_ID
 from ..schemas.order import (
     OrderCreate, OrderResponse, OrderListResponse, InvoiceRequest,
     InvoiceResponse, DeliveryUpdate, OrderUpdate
@@ -22,10 +23,6 @@ from ..services.invoice_service import InvoiceService
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/sales-orders", tags=["sales-orders"])
-
-# Default organization ID (should come from auth in production)
-DEFAULT_ORG_ID = "12de5e22-eee7-4d25-b3a7-d16d01c6170f"
-
 
 @router.post("/", response_model=OrderResponse)
 async def create_sales_order(
@@ -172,7 +169,6 @@ async def create_sales_order(
         logger.error(f"Error creating sales order: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to create sales order: {str(e)}")
 
-
 @router.get("/", response_model=OrderListResponse)
 async def list_sales_orders(
     skip: int = Query(0, ge=0),
@@ -270,7 +266,6 @@ async def list_sales_orders(
         logger.error(f"Error listing sales orders: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to list sales orders: {str(e)}")
 
-
 @router.get("/{order_id}", response_model=OrderResponse)
 async def get_sales_order(
     order_id: int,
@@ -314,7 +309,6 @@ async def get_sales_order(
     except Exception as e:
         logger.error(f"Error getting sales order: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to get sales order: {str(e)}")
-
 
 @router.put("/{order_id}", response_model=OrderResponse)
 async def update_sales_order(
@@ -374,7 +368,6 @@ async def update_sales_order(
         db.rollback()
         logger.error(f"Error updating sales order: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to update sales order: {str(e)}")
-
 
 @router.post("/{order_id}/approve")
 async def approve_sales_order(
@@ -464,7 +457,6 @@ async def approve_sales_order(
         logger.error(f"Error approving sales order: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to approve sales order: {str(e)}")
 
-
 @router.post("/{order_id}/convert-to-invoice", response_model=InvoiceResponse)
 async def convert_to_invoice(
     order_id: int,
@@ -516,7 +508,6 @@ async def convert_to_invoice(
         logger.error(f"Error converting to invoice: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to convert to invoice: {str(e)}")
 
-
 @router.post("/{order_id}/convert-to-challan")
 async def convert_to_challan(
     order_id: int,
@@ -565,7 +556,6 @@ async def convert_to_challan(
         logger.error(f"Error converting to challan: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to convert to challan: {str(e)}")
 
-
 @router.post("/validate")
 async def validate_sales_order(
     order_data: OrderCreate,
@@ -599,7 +589,6 @@ async def validate_sales_order(
     except Exception as e:
         logger.error(f"Error validating sales order: {str(e)}")
         return {"valid": False, "message": f"Validation error: {str(e)}"}
-
 
 @router.get("/dashboard/stats")
 async def get_sales_order_dashboard(db: Session = Depends(get_db)):

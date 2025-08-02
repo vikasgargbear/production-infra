@@ -4,6 +4,7 @@ Authentication utilities
 from fastapi import Depends, HTTPException, status
 from .jwt_auth import oauth2_scheme, jwt, SECRET_KEY, ALGORITHM
 
+from ...core.config import DEFAULT_ORG_ID
 async def get_current_org(token: str = Depends(oauth2_scheme)) -> str:
     """Get current organization ID from token"""
     try:
@@ -11,8 +12,8 @@ async def get_current_org(token: str = Depends(oauth2_scheme)) -> str:
         org_id = payload.get("org_id")
         if not org_id:
             # Return default org ID for testing
-            return "12de5e22-eee7-4d25-b3a7-d16d01c6170f"
+            return DEFAULT_ORG_ID
         return org_id
     except:
         # Return default org ID for testing
-        return "12de5e22-eee7-4d25-b3a7-d16d01c6170f"
+        return DEFAULT_ORG_ID

@@ -12,6 +12,7 @@ from decimal import Decimal
 import uuid
 
 from ...core.database import get_db
+from ...core.config import DEFAULT_ORG_ID
 
 logger = logging.getLogger(__name__)
 
@@ -306,7 +307,7 @@ async def create_sale_return(
                 RETURNING return_id
             """),
             {
-                "org_id": "12de5e22-eee7-4d25-b3a7-d16d01c6170f",  # Default org
+                "org_id": DEFAULT_ORG_ID,  # Default org
                 "return_number": return_number,
                 "return_date": return_data["return_date"],
                 "customer_id": return_data.get("customer_id", return_data.get("party_id")),

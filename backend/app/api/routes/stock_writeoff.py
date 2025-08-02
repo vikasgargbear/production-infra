@@ -12,6 +12,7 @@ from decimal import Decimal
 import uuid
 
 from ...core.database import get_db
+from ...core.config import DEFAULT_ORG_ID
 
 logger = logging.getLogger(__name__)
 
@@ -159,7 +160,7 @@ async def create_stock_writeoff(
             """),
             {
                 "writeoff_id": writeoff_id,
-                "org_id": "12de5e22-eee7-4d25-b3a7-d16d01c6170f",  # Default org
+                "org_id": DEFAULT_ORG_ID,  # Default org
                 "writeoff_number": writeoff_number,
                 "writeoff_date": writeoff_data["write_off_date"],
                 "reason": reason,
@@ -232,7 +233,7 @@ async def create_stock_writeoff(
                 """),
                 {
                     "movement_id": str(uuid.uuid4()),
-                    "org_id": "12de5e22-eee7-4d25-b3a7-d16d01c6170f",
+                    "org_id": DEFAULT_ORG_ID,
                     "date": writeoff_data["write_off_date"],
                     "product_id": item["product_id"],
                     "batch_id": item["batch_id"],
@@ -256,7 +257,7 @@ async def create_stock_writeoff(
                 """),
                 {
                     "adj_id": str(uuid.uuid4()),
-                    "org_id": "12de5e22-eee7-4d25-b3a7-d16d01c6170f",
+                    "org_id": DEFAULT_ORG_ID,
                     "date": writeoff_data["write_off_date"],
                     "writeoff_id": writeoff_id,
                     "amount": total_itc_reversal,

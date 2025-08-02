@@ -12,6 +12,7 @@ from decimal import Decimal
 import uuid
 
 from ...core.database import get_db
+from ...core.config import DEFAULT_ORG_ID
 
 logger = logging.getLogger(__name__)
 
@@ -151,7 +152,7 @@ async def create_stock_receive(
             """),
             {
                 "movement_id": movement_id,
-                "org_id": "12de5e22-eee7-4d25-b3a7-d16d01c6170f",
+                "org_id": DEFAULT_ORG_ID,
                 "movement_number": movement_number,
                 "movement_date": receive_data["movement_date"],
                 "product_id": receive_data["product_id"],
@@ -175,7 +176,7 @@ async def create_stock_receive(
                 AND batch_number = :batch
             """),
             {
-                "org_id": "12de5e22-eee7-4d25-b3a7-d16d01c6170f",
+                "org_id": DEFAULT_ORG_ID,
                 "product_id": receive_data["product_id"],
                 "batch": receive_data.get("batch_number", "DEFAULT")
             }
@@ -211,7 +212,7 @@ async def create_stock_receive(
                 """),
                 {
                     "inv_id": str(uuid.uuid4()),
-                    "org_id": "12de5e22-eee7-4d25-b3a7-d16d01c6170f",
+                    "org_id": DEFAULT_ORG_ID,
                     "product_id": receive_data["product_id"],
                     "batch": receive_data.get("batch_number", "DEFAULT"),
                     "expiry": receive_data.get("expiry_date"),
@@ -242,7 +243,7 @@ async def create_stock_receive(
             """),
             {
                 "ledger_id": str(uuid.uuid4()),
-                "org_id": "12de5e22-eee7-4d25-b3a7-d16d01c6170f",
+                "org_id": DEFAULT_ORG_ID,
                 "product_id": receive_data["product_id"],
                 "date": receive_data["movement_date"],
                 "movement_id": movement_id,
@@ -300,7 +301,7 @@ async def create_stock_issue(
                 AND batch_number = :batch
             """),
             {
-                "org_id": "12de5e22-eee7-4d25-b3a7-d16d01c6170f",
+                "org_id": DEFAULT_ORG_ID,
                 "product_id": issue_data["product_id"],
                 "batch": batch_number
             }
@@ -335,7 +336,7 @@ async def create_stock_issue(
             """),
             {
                 "movement_id": movement_id,
-                "org_id": "12de5e22-eee7-4d25-b3a7-d16d01c6170f",
+                "org_id": DEFAULT_ORG_ID,
                 "movement_number": movement_number,
                 "movement_date": issue_data["movement_date"],
                 "product_id": issue_data["product_id"],
@@ -384,7 +385,7 @@ async def create_stock_issue(
             """),
             {
                 "ledger_id": str(uuid.uuid4()),
-                "org_id": "12de5e22-eee7-4d25-b3a7-d16d01c6170f",
+                "org_id": DEFAULT_ORG_ID,
                 "product_id": issue_data["product_id"],
                 "date": issue_data["movement_date"],
                 "movement_id": movement_id,
@@ -497,7 +498,7 @@ async def get_product_batches(
         batches = db.execute(
             text(query),
             {
-                "org_id": "12de5e22-eee7-4d25-b3a7-d16d01c6170f",
+                "org_id": DEFAULT_ORG_ID,
                 "product_id": product_id
             }
         ).fetchall()
@@ -538,7 +539,7 @@ async def get_near_expiry_stock(
         items = db.execute(
             text(query),
             {
-                "org_id": "12de5e22-eee7-4d25-b3a7-d16d01c6170f",
+                "org_id": DEFAULT_ORG_ID,
                 "days": days
             }
         ).fetchall()
@@ -582,7 +583,7 @@ async def get_low_stock_items(
         
         items = db.execute(
             text(query),
-            {"org_id": "12de5e22-eee7-4d25-b3a7-d16d01c6170f"}
+            {"org_id": DEFAULT_ORG_ID}
         ).fetchall()
         
         return {

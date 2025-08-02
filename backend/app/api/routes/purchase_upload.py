@@ -14,6 +14,7 @@ import shutil
 from decimal import Decimal
 
 from ...core.database import get_db
+from ...core.config import DEFAULT_ORG_ID
 
 # Try to import bill_parser if available
 try:
@@ -516,13 +517,14 @@ def create_purchase_from_parsed(
                 text("""
                     INSERT INTO suppliers (
                         org_id, supplier_code, supplier_name, 
-                        gst_number, address, primary_phone as phone, email, drug_license_number
+                        gst_number, address, phone, email, drug_license_number
                     ) VALUES (
-                        '12de5e22-eee7-4d25-b3a7-d16d01c6170f', -- Default org
+                        :org_id, -- Default org
                         :code, :name, :gstin, :address, :phone, :email, :drug_license
                     ) RETURNING supplier_id
                 """),
                 {
+                    "org_id": DEFAULT_ORG_ID,
                     "code": supplier_code,
                     "name": supplier_data.get("supplier_name"),
                     "gstin": supplier_data.get("supplier_gstin", supplier_data.get("gst_number")),
@@ -544,13 +546,14 @@ def create_purchase_from_parsed(
                     subtotal_amount, discount_amount, tax_amount, 
                     other_charges, final_amount, purchase_status
                 ) VALUES (
-                    '12de5e22-eee7-4d25-b3a7-d16d01c6170f', -- Default org
+                    :org_id, -- Default org
                     :purchase_number, :purchase_date,
                     :supplier_id, :invoice_number, :invoice_date,
                     :subtotal, :discount, :tax, :other_charges, :total, 'draft'
                 ) RETURNING purchase_id
             """),
             {
+                "org_id": DEFAULT_ORG_ID,
                 "purchase_number": purchase_number,
                 "purchase_date": purchase_data.get("purchase_date", datetime.now().date()),
                 "supplier_id": supplier_id,
@@ -580,12 +583,13 @@ def create_purchase_from_parsed(
                             hsn_code, category, purchase_price, sale_price, mrp,
                             gst_percent
                         ) VALUES (
-                            '12de5e22-eee7-4d25-b3a7-d16d01c6170f',
+                            :org_id,
                             :code, :name, :hsn, :category,
                             :purchase_price, :sale_price, :mrp, :gst
                         ) RETURNING product_id
                     """),
                     {
+                        "org_id": DEFAULT_ORG_ID,
                         "code": product_code,
                         "name": item.get("description"),
                         "hsn": item.get("hsn_code"),
