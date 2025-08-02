@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 from sqlalchemy import text
 from ...core.database import get_db
+import traceback
 
 router = APIRouter(prefix="/test", tags=["test"])
 
@@ -153,3 +154,42 @@ async def check_organizations(db: Session = Depends(get_db)):
         
     except Exception as e:
         return {"error": str(e)}
+
+@router.get("/check-suppliers")
+async def check_suppliers_table(db: Session = Depends(get_db)):
+    """Check suppliers table structure"""
+    try:
+        # Get table info
+        result = db.execute(text("""
+            SELECT 
+                column_name,
+                data_type,
+                is_nullable,
+                column_default
+            FROM information_schema.columns
+            WHERE table_schema = 'parties' 
+                AND table_name = 'suppliers'
+            ORDER BY ordinal_position
+        """))
+        
+        columns = [dict(row._mapping) for row in result]
+        
+        # Try to get a sample supplier
+        sample_result = db.execute(text("""
+            SELECT * FROM parties.suppliers LIMIT 1
+        """))
+        
+        sample = None
+        for row in sample_result:
+            sample = dict(row._mapping)
+            break
+        
+        return {
+            "table": "parties.suppliers",
+            "columns": columns,
+            "sample_data": sample,
+            "column_count": len(columns)
+        }
+        
+    except Exception as e:
+        return {"error": str(e), "traceback": traceback.format_exc()}
