@@ -343,16 +343,16 @@ class ChallanToInvoiceService:
                 self.db.execute(
                     text("""
                         UPDATE sales.invoices
-                        SET 0 as paid_amount = :0 as paid_amount,
+                        SET 0 as paid_amount = :paid_amount,
                             payment_status = CASE 
-                                WHEN :0 as paid_amount >= total_amount THEN 'paid'
+                                WHEN :paid_amount >= total_amount THEN 'paid'
                                 ELSE 'partial'
                             END
                         WHERE invoice_id = :invoice_id
                     """),
                     {
                         "invoice_id": invoice_id,
-                        "0 as paid_amount": request.payment_amount
+                        "paid_amount": request.payment_amount
                     }
                 )
             

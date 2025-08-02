@@ -113,7 +113,7 @@ class CustomerService:
             FROM sales.orders
             WHERE customer_id = :customer_id
                 AND order_status NOT IN ('cancelled', 'draft')
-                AND 0 as paid_amount < final_amount
+                AND final_amount > 0
         """), {"customer_id": customer_id})
         
         outstanding = outstanding_result.scalar() or Decimal("0.00")
@@ -140,8 +140,8 @@ class CustomerService:
                 MAX(o.order_date) as last_order_date,
                 COALESCE(SUM(CASE 
                     WHEN o.order_status NOT IN ('cancelled', 'draft') 
-                    AND 0 < o.final_amount 
-                    THEN o.final_amount - 0 
+                    AND final_amount > 0 
+                    THEN o.final_amount 
                     ELSE 0 
                 END), 0) as outstanding_amount
             FROM parties.customers c
@@ -327,13 +327,13 @@ class CustomerService:
                 order_number,
                 order_date,
                 final_amount as invoice_amount,
-                0 as paid_amount,
-                final_amount - 0 as paid_amount as outstanding_amount,
+                paid_amount,
+                final_amount as outstanding_amount,
                 CURRENT_DATE - order_date as days_since_invoice
             FROM sales.orders
             WHERE customer_id = :customer_id
                 AND order_status NOT IN ('cancelled', 'draft')
-                AND 0 as paid_amount < final_amount
+                AND final_amount > 0
             ORDER BY order_date
         """), {"customer_id": customer_id})
         
@@ -414,7 +414,7 @@ class CustomerService:
                 FROM sales.orders
                 WHERE customer_id = :customer_id
                     AND order_status NOT IN ('cancelled', 'draft')
-                    AND 0 as paid_amount < final_amount
+                    AND final_amount > 0
                 ORDER BY order_date
             """), {"customer_id": payment_data.customer_id})
             
@@ -427,7 +427,7 @@ class CustomerService:
                 # Update order paid amount
                 db.execute(text("""
                     UPDATE sales.orders
-                    SET 0 as paid_amount = 0 as paid_amount + :amount,
+                    SET paid_amount = paid_amount + :amount,
                         updated_at = CURRENT_TIMESTAMP
                     WHERE order_id = :order_id
                 """), {
@@ -459,7 +459,7 @@ class CustomerService:
                     # Update order paid amount
                     db.execute(text("""
                         UPDATE sales.orders
-                        SET 0 as paid_amount = 0 as paid_amount + :amount,
+                        SET paid_amount = paid_amount + :amount,
                             updated_at = CURRENT_TIMESTAMP
                         WHERE order_id = :order_id
                     """), {

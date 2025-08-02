@@ -802,7 +802,7 @@ class EnterpriseOrderService:
                 :subtotal_amount, :discount_amount, :tax_amount, :round_off_amount, :final_amount,
                 :delivery_charges, :other_charges,
                 
-                :payment_mode, :payment_status, :payment_terms, :0 as paid_amount, :balance_amount,
+                :payment_mode, :payment_status, :payment_terms, :paid_amount, :balance_amount,
                 
                 :billing_name, :billing_address, :billing_gstin,
                 :shipping_name, :shipping_address, :shipping_phone,
@@ -836,7 +836,7 @@ class EnterpriseOrderService:
             "payment_mode": request.payment_mode.value,
             "payment_status": payment_status.value,
             "payment_terms": request.payment_terms or customer.payment_terms,
-            "0 as paid_amount": float(request.payment_amount or 0),
+            "paid_amount": float(request.payment_amount or 0),
             "balance_amount": float(totals['final_amount'] - (request.payment_amount or 0)),
             
             "billing_name": customer.customer_name,

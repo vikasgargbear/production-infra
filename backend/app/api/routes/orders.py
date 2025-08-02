@@ -95,7 +95,7 @@ async def create_order(
             "tax_amount": totals["tax"],
             "round_off_amount": Decimal("0"),
             "final_amount": totals["total"],
-            "0 as paid_amount": Decimal("0"),
+            "paid_amount": Decimal("0"),
             "balance_amount": totals["total"],
             "payment_mode": "credit",
             "payment_status": "pending",
@@ -117,13 +117,13 @@ async def create_order(
                 org_id, order_number, customer_id, customer_name, customer_phone,
                 order_date, delivery_date, order_type, payment_terms, order_status,
                 subtotal_amount, discount_amount, tax_amount, round_off_amount, final_amount,
-                0 as paid_amount, balance_amount, payment_mode, payment_status,
+                paid_amount, balance_amount, payment_mode, payment_status,
                 notes, created_at, updated_at
             ) VALUES (
                 :org_id, :order_number, :customer_id, :customer_name, :customer_phone,
                 :order_date, :delivery_date, :order_type, :payment_terms, :order_status,
                 :subtotal_amount, :discount_amount, :tax_amount, :round_off_amount, :final_amount,
-                :0 as paid_amount, :balance_amount, :payment_mode, :payment_status,
+                :paid_amount, :balance_amount, :payment_mode, :payment_status,
                 :notes, :created_at, :updated_at
             ) RETURNING order_id
         """), order_data)

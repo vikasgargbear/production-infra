@@ -99,7 +99,7 @@ class InvoiceService:
             "round_off_amount": order.round_off_amount or Decimal("0"),
             "total_amount": order.final_amount,
             "payment_status": "unpaid",
-            "0 as paid_amount": Decimal("0"),
+            "paid_amount": Decimal("0"),
             "invoice_type": "tax_invoice",
             "notes": f"Thank you for your business!",
             "created_at": datetime.now(),
@@ -124,7 +124,7 @@ class InvoiceService:
                 :subtotal_amount, :discount_amount, :taxable_amount,
                 :cgst_amount, :sgst_amount, :igst_amount, :total_tax_amount,
                 :round_off_amount, :total_amount,
-                :payment_status, :0 as paid_amount, :invoice_type, :notes,
+                :payment_status, :paid_amount, :invoice_type, :notes,
                 :created_at, :updated_at
             ) RETURNING invoice_id
         """), invoice_data)

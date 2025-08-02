@@ -141,7 +141,7 @@ async def create_quick_sale(
                 org_id, customer_id, customer_name, customer_phone, order_number, order_type, order_status,
                 order_date, delivery_date,
                 subtotal_amount, discount_amount, tax_amount, final_amount,
-                0 as paid_amount, payment_mode, payment_status,
+                paid_amount, payment_mode, payment_status,
                 notes, created_at, updated_at
             ) VALUES (
                 :org_id, :customer_id, :customer_name, :customer_phone, :order_number, 'sales', 'confirmed',

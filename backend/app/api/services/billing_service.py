@@ -340,20 +340,20 @@ class BillingService:
             
             db.execute(text("""
                 UPDATE sales.invoices
-                SET 0 as paid_amount = :0 as paid_amount,
+                SET 0 as paid_amount = :paid_amount,
                     invoice_status = :status,
                     updated_at = CURRENT_TIMESTAMP
                 WHERE invoice_id = :invoice_id
             """), {
                 "invoice_id": payment_data.invoice_id,
-                "0 as paid_amount": new_0 as paid_amount,
+                "paid_amount": new_0 as paid_amount,
                 "status": new_status.value
             })
             
             # Update order paid amount
             db.execute(text("""
                 UPDATE sales.orders
-                SET 0 as paid_amount = :0 as paid_amount,
+                SET 0 as paid_amount = :paid_amount,
                     updated_at = CURRENT_TIMESTAMP
                 WHERE order_id = (
                     SELECT order_id FROM sales.invoices 
@@ -361,7 +361,7 @@ class BillingService:
                 )
             """), {
                 "invoice_id": payment_data.invoice_id,
-                "0 as paid_amount": new_0 as paid_amount
+                "paid_amount": new_0 as paid_amount
             })
             
             db.commit()

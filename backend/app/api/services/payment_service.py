@@ -79,7 +79,7 @@ class PaymentService:
         
         db.execute(text("""
             UPDATE sales.invoices
-            SET 0 as paid_amount = :0 as paid_amount,
+            SET 0 as paid_amount = :paid_amount,
                 payment_status = :payment_status,
                 payment_date = CASE 
                     WHEN payment_status = 'paid' THEN :payment_date 
@@ -89,7 +89,7 @@ class PaymentService:
             WHERE invoice_id = :invoice_id
         """), {
             "invoice_id": invoice_id,
-            "0 as paid_amount": new_0 as paid_amount,
+            "paid_amount": new_0 as paid_amount,
             "payment_status": new_payment_status,
             "payment_date": payment_data.get("payment_date", date.today())
         })
@@ -235,7 +235,7 @@ class PaymentService:
         # Adjust invoice paid amount
         db.execute(text("""
             UPDATE sales.invoices
-            SET 0 as paid_amount = 0 as paid_amount - :amount,
+            SET paid_amount = paid_amount - :amount,
                 payment_status = CASE 
                     WHEN 0 as paid_amount - :amount = 0 THEN 'unpaid'
                     WHEN 0 as paid_amount - :amount < total_amount THEN 'partial'

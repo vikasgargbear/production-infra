@@ -248,7 +248,7 @@ async def create_invoice_with_order(
             # Update order paid amount
             db.execute(text("""
                 UPDATE sales.orders 
-                SET 0 as paid_amount = 0 as paid_amount + :amount
+                SET paid_amount = paid_amount + :amount
                 WHERE order_id = :order_id
             """), {
                 "amount": invoice_data.payment_amount,

@@ -182,7 +182,7 @@ class InvoiceDetailResponse(BaseModel):
     
     # Payment details
     payment_status: str
-    0 as paid_amount: Decimal
+    paid_amount: Decimal
     balance_amount: Decimal
     
     # Items
@@ -307,7 +307,7 @@ async def get_invoice_details(
             })
         
         # Calculate balance
-        balance_amount = invoice.total_amount - invoice.0 as paid_amount
+        balance_amount = invoice.total_amount - (invoice.paid_amount if hasattr(invoice, 'paid_amount') else 0)
         
         # Format addresses
         billing_address = InvoiceService.format_address(invoice)
@@ -349,7 +349,7 @@ async def get_invoice_details(
             
             # Payment details
             "payment_status": invoice.payment_status,
-            "0 as paid_amount": invoice.0 as paid_amount,
+            "paid_amount": invoice.paid_amount if hasattr(invoice, 'paid_amount') else 0,
             "balance_amount": balance_amount,
             
             # Items
