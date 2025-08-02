@@ -4,7 +4,7 @@ import {
   ChevronRight, AlertCircle, CheckCircle, Printer, Share2, Plus,
   Save, Calculator, History, ArrowLeft, ArrowRight, FileInput, MessageCircle
 } from 'lucide-react';
-import { customerAPI, productAPI, invoiceAPI, ordersAPI, salesOrdersAPI } from '../../services/api';
+import { customerAPI, productAPI, invoiceAPI, ordersAPI, salesOrdersAPI, apiClient } from '../../services/api';
 import { searchCache, smartSearch } from '../../utils/searchCache';
 import InvoiceCalculator from '../../services/invoiceCalculator';
 import InvoiceValidator from '../../services/invoiceValidator';

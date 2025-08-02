@@ -5,8 +5,7 @@
 
 import React, { useState } from 'react';
 import { QueryClient, QueryClientProvider } from 'react-query';
-import { CustomerSearchV2 } from './shared/components/business/CustomerSearchV2';
-import { ProductSearchV2 } from './shared/components/business/ProductSearchV2';
+import { CustomerSearch, ProductSearch } from './components/global';
 import { customerAPI, productAPI, invoiceAPI, dashboardAPI } from './services/api/apiClient';
 
 const queryClient = new QueryClient({
@@ -114,7 +113,7 @@ function TestIntegrationInner() {
         {/* Customer Search Test */}
         <div className="bg-white p-4 rounded-lg shadow">
           <h2 className="text-lg font-semibold mb-4">Customer Search (api.search_customers)</h2>
-          <CustomerSearchV2
+          <CustomerSearch
             onSelect={(customer) => {
               setSelectedCustomer(customer);
               addResult(`✅ Customer selected: ${customer.customer_name} (ID: ${customer.customer_id})`);
@@ -136,7 +135,7 @@ function TestIntegrationInner() {
         {/* Product Search Test */}
         <div className="bg-white p-4 rounded-lg shadow">
           <h2 className="text-lg font-semibold mb-4">Product Search (api.search_products)</h2>
-          <ProductSearchV2
+          <ProductSearch
             onSelect={(product, batch) => {
               setSelectedProduct(product);
               addResult(`✅ Product selected: ${product.product_name} (ID: ${product.product_id})${batch ? ` with batch ${batch.batch_number}` : ''}`);

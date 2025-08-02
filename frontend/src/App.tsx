@@ -2,21 +2,21 @@ import React, { useState, Suspense, lazy } from 'react';
 import { QueryClientProvider } from 'react-query';
 import queryClient from './queryClient';
 // import Sidebar from './components/Sidebar';
-import ErrorBoundary from './components/ErrorBoundary.tsx';
+import ErrorBoundary from './components/ErrorBoundary';
 import LoadingSpinner from './components/LoadingSpinner';
 import Home from './components/Home';
-import SalesHub from './components/sales/SalesHub.tsx';
-import PurchaseHub from './components/purchase/PurchaseHub.tsx';
+import SalesHub from './components/sales/SalesHub';
+import PurchaseHub from './components/purchase/PurchaseHub';
 import EnterprisePaymentEntry from './components/payment/EnterprisePaymentEntry';
 import CompanySettings from './components/CompanySettings';
 import { ToastProvider } from './components/global';
-import ReturnsHub from './components/returns/ReturnsHub.tsx';
-import StockHub from './components/inventory/StockHub.tsx';
+import ReturnsHub from './components/returns/ReturnsHub';
+import StockHub from './components/inventory/StockHub';
 import { LedgerHub } from './components/ledger';
-import NotesHub from './components/notes/NotesHub.tsx';
-import GSTHub from './components/gst/GSTHub.tsx';
-import MasterHub from './components/master/MasterHub.tsx';
-import ReceivablesCollectionCenter from './components/receivables/ReceivablesCollectionCenter';
+import NotesHub from './components/notes/NotesHub';
+import GSTHub from './components/gst/GSTHub';
+import MasterHub from './components/master/MasterHub';
+// import ReceivablesCollectionCenter from './components/receivables/ReceivablesCollectionCenter';
 
 // Lazy load components for better performance and code splitting
 const Dashboard = lazy(() => import('./components/Dashboard'));
@@ -32,7 +32,7 @@ const EnhancedLogin = lazy(() => import('./components/EnhancedLogin'));
 const Profile = lazy(() => import('./components/Profile'));
 const InventoryManagement = lazy(() => import('./components/InventoryManagement'));
 const AccountingLedgers = lazy(() => import('./components/AccountingLedgers'));
-const ComponentsV2Test = lazy(() => import('./pages/ComponentsV2TestFixed'));
+// const ComponentsV2Test = lazy(() => import('./pages/ComponentsV2TestFixed'));
 
 // Define types for better TypeScript support
 type TabName = 
@@ -129,7 +129,7 @@ function App(): JSX.Element {
   const renderActiveComponent = (): JSX.Element => {
     switch (activeTab) {
       case 'home':
-        return <Home key="home" setActiveTab={setActiveTab} />;
+        return <Home key="home" setActiveTab={(tab) => setActiveTab(tab as TabName)} />;
       case 'sales':
         return <SalesHub key="sales" open={true} onClose={() => setActiveTab('home')} />;
       case 'purchase':
@@ -183,11 +183,11 @@ function App(): JSX.Element {
       case 'master':
         return <MasterHub key="master" open={true} onClose={() => setActiveTab('home')} />;
       case 'receivables-collection':
-        return <ReceivablesCollectionCenter key="receivables-collection" open={true} onClose={() => setActiveTab('home')} />;
+        return <div key="receivables-collection">Receivables Collection - Use Ledger Module → Collection Center</div>;
       case 'components-test':
-        return <ComponentsV2Test key="components-test" />;
+        return <div key="components-test">Component Test Page Removed</div>;
       default:
-        return <Home key="home-default" setActiveTab={setActiveTab} />;
+        return <Home key="home-default" setActiveTab={(tab) => setActiveTab(tab as TabName)} />;
     }
   };
 

@@ -3,7 +3,40 @@
  * This file provides proper JavaScript exports for the TypeScript APIs
  */
 
-import apiClient from './apiClient';
+// Use dynamic import to avoid initialization order issues
+import axios from 'axios';
+
+// Create our own apiClient instance to avoid circular dependency
+const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
+const apiClient = axios.create({
+  baseURL: `${API_BASE_URL}/api/v1`,
+  timeout: 30000,
+  headers: {
+    'Content-Type': 'application/json',
+    'Accept': 'application/json',
+  },
+});
+
+// Add request interceptor for auth token
+apiClient.interceptors.request.use((config) => {
+  const token = localStorage.getItem('auth_token');
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`;
+  }
+  return config;
+});
+
+// Add response interceptor for error handling
+apiClient.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (error.response?.status === 401) {
+      localStorage.removeItem('auth_token');
+      window.location.href = '/login';
+    }
+    return Promise.reject(error);
+  }
+);
 
 // Define the customerAPI directly in JavaScript to avoid TypeScript export issues
 export const customerAPI = {
@@ -11,9 +44,9 @@ export const customerAPI = {
    * Search customers using PostgreSQL function
    */
   search: async (query, options = {}) => {
-    const response = await apiClient.get('/pg/customers/search', {
+    const response = await apiClient.get('/customers/', {
       params: {
-        q: query,
+        search: query,
         customer_type: options.customerType,
         limit: options.limit || 50,
         offset: options.offset || 0,
@@ -26,7 +59,7 @@ export const customerAPI = {
    * Get customer details with ledger summary
    */
   getDetails: async (customerId) => {
-    const response = await apiClient.get(`/pg/customers/${customerId}`);
+    const response = await apiClient.get(`/customers/${customerId}`);
     return response.data;
   },
 
@@ -34,7 +67,7 @@ export const customerAPI = {
    * Create new customer
    */
   create: async (customerData) => {
-    const response = await apiClient.post('/pg/customers', customerData);
+    const response = await apiClient.post('/customers/', customerData);
     return response.data;
   },
 
@@ -42,7 +75,7 @@ export const customerAPI = {
    * Get outstanding invoices for customer
    */
   getOutstanding: async (customerId) => {
-    const response = await apiClient.get(`/pg/customers/${customerId}/outstanding`);
+    const response = await apiClient.get(`/customers/${customerId}/outstanding`);
     return response.data;
   },
 };
@@ -53,7 +86,7 @@ export const productAPI = {
    * Search products using PostgreSQL function
    */
   search: async (query, options = {}) => {
-    const response = await apiClient.get('/pg/products/search', {
+    const response = await apiClient.get('/products/search', {
       params: {
         q: query,
         category: options.category,
@@ -69,7 +102,7 @@ export const productAPI = {
    * Get product details with stock info
    */
   getDetails: async (productId) => {
-    const response = await apiClient.get(`/pg/products/${productId}`);
+    const response = await apiClient.get(`/products/${productId}`);
     return response.data;
   },
 
@@ -203,5 +236,5 @@ export const salesOrdersAPI = {
   },
 };
 
-// Export the base client as well
-export { default as apiClient } from './apiClient';
+// Note: We don't re-export apiClient here to avoid circular dependency
+// The apiClient is already available through the main index.js

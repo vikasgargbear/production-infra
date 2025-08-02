@@ -4,18 +4,40 @@
  */
 
 import { useQuery, useMutation, useQueryClient, UseQueryOptions, UseMutationOptions } from 'react-query';
-import { customerService } from '../../services/customers/customer.service';
-import {
-  Customer,
-  CustomerCreateInput,
-  CustomerUpdateInput,
-  CustomerSearchParams,
-  CreditCheckRequest,
-  CreditCheckResponse,
-} from '../../types/models/customer';
-import { ListResponse, SingleResponse, ApiResponse } from '../../types/api/responses';
-import { customerCreateSchema, customerUpdateSchema } from '../../schemas/customer.schema';
+import { customerAPI } from '../../services/api/apiClientExports';
 import { useCallback } from 'react';
+
+// Simplified types for our working API
+interface Customer {
+  customer_id: string;
+  customer_name: string;
+  primary_phone?: string;
+  primary_email?: string;
+  customer_type?: string;
+  status?: string;
+  balance_amount?: number;
+}
+
+interface CustomerCreateInput {
+  customer_name: string;
+  primary_phone?: string;
+  primary_email?: string;
+  customer_type?: string;
+  address?: {
+    address_line1?: string;
+    address_line2?: string;
+    city?: string;
+    state?: string;
+    pincode?: string;
+    country?: string;
+  };
+}
+
+interface ApiResponse<T> {
+  success: boolean;
+  data: T;
+  message?: string;
+}
 
 // Query keys factory for better cache management
 export const customerKeys = {
@@ -30,18 +52,19 @@ export const customerKeys = {
 };
 
 /**
- * Hook to fetch customers with pagination and filtering
+ * Hook to search customers (most commonly used)
  */
-export function useCustomers(
-  params?: CustomerSearchParams,
-  options?: UseQueryOptions<ListResponse<Customer>, unknown, ListResponse<Customer>>
+export function useCustomerSearch(
+  query: string,
+  options?: UseQueryOptions<ApiResponse<Customer[]>, unknown, ApiResponse<Customer[]>>
 ) {
-  return useQuery<ListResponse<Customer>>(
-    customerKeys.list(params),
-    () => customerService.getCustomers(params),
+  return useQuery<ApiResponse<Customer[]>>(
+    customerKeys.search(query),
+    () => customerAPI.search(query),
     {
-      keepPreviousData: true, // Keep previous data while fetching new page
-      staleTime: 5 * 60 * 1000, // Consider data stale after 5 minutes
+      enabled: query.length >= 2, // Only search with 2+ characters
+      staleTime: 1 * 60 * 1000, // 1 minute
+      keepPreviousData: true,
       ...options,
     }
   );
@@ -51,12 +74,12 @@ export function useCustomers(
  * Hook to fetch single customer details
  */
 export function useCustomer(
-  customerId: number,
-  options?: UseQueryOptions<SingleResponse<Customer>, unknown, SingleResponse<Customer>>
+  customerId: string,
+  options?: UseQueryOptions<ApiResponse<Customer>, unknown, ApiResponse<Customer>>
 ) {
-  return useQuery<SingleResponse<Customer>>(
-    customerKeys.detail(customerId),
-    () => customerService.getCustomer(customerId),
+  return useQuery<ApiResponse<Customer>>(
+    customerKeys.detail(parseInt(customerId)),
+    () => customerAPI.getDetails(customerId),
     {
       enabled: !!customerId,
       staleTime: 5 * 60 * 1000,
@@ -66,200 +89,21 @@ export function useCustomer(
 }
 
 /**
- * Hook for customer search (autocomplete)
- */
-export function useCustomerSearch(
-  query: string,
-  options?: UseQueryOptions<ListResponse<Customer>, unknown, ListResponse<Customer>>
-) {
-  return useQuery<ListResponse<Customer>>(
-    customerKeys.search(query),
-    () => customerService.searchCustomers(query),
-    {
-      enabled: query.length >= 2, // Only search with 2+ characters
-      staleTime: 1 * 60 * 1000, // 1 minute
-      ...options,
-    }
-  );
-}
-
-/**
  * Hook to create a new customer
  */
 export function useCreateCustomer(
-  options?: UseMutationOptions<SingleResponse<Customer>, unknown, CustomerCreateInput>
+  options?: UseMutationOptions<ApiResponse<Customer>, unknown, CustomerCreateInput>
 ) {
   const queryClient = useQueryClient();
   
   return useMutation(
-    async (data: CustomerCreateInput) => {
-      // Validate data before sending
-      const validation = customerCreateSchema.safeParse(data);
-      if (!validation.success) {
-        throw new Error(validation.error.errors[0].message);
-      }
-      
-      return customerService.createCustomer(data);
-    },
+    (data: CustomerCreateInput) => customerAPI.create(data),
     {
       onSuccess: (response) => {
-        // Invalidate and refetch customer lists
-        queryClient.invalidateQueries(customerKeys.lists());
-        
-        // Add the new customer to cache
-        if (response.success && response.data) {
-          queryClient.setQueryData(
-            customerKeys.detail(response.data.customer_id),
-            response
-          );
-        }
+        // Invalidate customer queries
+        queryClient.invalidateQueries(customerKeys.all);
       },
       ...options,
     }
   );
-}
-
-/**
- * Hook to update a customer
- */
-export function useUpdateCustomer(
-  options?: UseMutationOptions<SingleResponse<Customer>, unknown, { id: number; data: CustomerUpdateInput }>
-) {
-  const queryClient = useQueryClient();
-  
-  return useMutation<SingleResponse<Customer>, unknown, { id: number; data: CustomerUpdateInput }>(
-    async ({ id, data }) => {
-      // Validate data before sending
-      const validation = customerUpdateSchema.safeParse(data);
-      if (!validation.success) {
-        throw new Error(validation.error.errors[0].message);
-      }
-      
-      return customerService.updateCustomer(id, data);
-    },
-    {
-      onMutate: async ({ id, data }) => {
-        // Cancel any outgoing refetches
-        await queryClient.cancelQueries(customerKeys.detail(id));
-        
-        // Snapshot previous value
-        const previousCustomer = queryClient.getQueryData(customerKeys.detail(id));
-        
-        // Optimistically update
-        queryClient.setQueryData(customerKeys.detail(id), (old: any) => ({
-          ...old,
-          data: { ...old?.data, ...data },
-        }));
-        
-        return { previousCustomer };
-      },
-      onError: (err, variables, context: any) => {
-        // Rollback on error
-        if (context?.previousCustomer) {
-          queryClient.setQueryData(
-            customerKeys.detail(variables.id),
-            context.previousCustomer
-          );
-        }
-      },
-      onSettled: (data, error, variables) => {
-        // Always refetch after error or success
-        queryClient.invalidateQueries(customerKeys.detail(variables.id));
-        queryClient.invalidateQueries(customerKeys.lists());
-      },
-      ...options,
-    }
-  );
-}
-
-/**
- * Hook to check customer credit
- */
-export function useCheckCustomerCredit() {
-  return useMutation<
-    ApiResponse<CreditCheckResponse>,
-    unknown,
-    CreditCheckRequest
-  >(
-    (request) => customerService.checkCredit(request),
-    {
-      // Don't cache credit checks as they're real-time
-    }
-  );
-}
-
-/**
- * Hook to get customer transactions
- */
-export function useCustomerTransactions(
-  customerId: number,
-  params?: {
-    from_date?: string;
-    to_date?: string;
-    page?: number;
-    page_size?: number;
-  }
-) {
-  return useQuery(
-    [...customerKeys.transactions(customerId), params],
-    () => customerService.getCustomerTransactions(customerId, params),
-    {
-      enabled: !!customerId,
-      keepPreviousData: true,
-    }
-  );
-}
-
-/**
- * Hook to validate GST number
- */
-export function useValidateGST() {
-  return useMutation(
-    (gstNumber: string) => customerService.validateGST(gstNumber)
-  );
-}
-
-/**
- * Custom hook for customer selection with credit check
- */
-export function useCustomerSelection() {
-  const queryClient = useQueryClient();
-  const checkCredit = useCheckCustomerCredit();
-  
-  const selectCustomer = useCallback(
-    async (customerId: number, orderAmount?: number) => {
-      // Get customer from cache or fetch
-      let customerData = queryClient.getQueryData<SingleResponse<Customer>>(
-        customerKeys.detail(customerId)
-      );
-      
-      if (!customerData) {
-        customerData = await queryClient.fetchQuery(
-          customerKeys.detail(customerId),
-          () => customerService.getCustomer(customerId)
-        );
-      }
-      
-      // Check credit if amount provided
-      if (orderAmount && customerData?.data) {
-        const creditCheck = await checkCredit.mutateAsync({
-          customer_id: customerId,
-          order_amount: orderAmount,
-        });
-        
-        return {
-          customer: customerData.data,
-          creditCheck: creditCheck.data,
-        };
-      }
-      
-      return {
-        customer: customerData?.data || null,
-        creditCheck: null,
-      };
-    },
-    [queryClient, checkCredit]
-  );
-  
-  return { selectCustomer, isChecking: checkCredit.isLoading };
 }

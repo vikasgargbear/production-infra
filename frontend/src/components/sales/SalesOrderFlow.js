@@ -13,7 +13,7 @@ import {
   NotesSection,
   ModuleHeader
 } from '../global';
-import { ordersApi, salesApi } from '../../services/api';
+import { ordersApi, salesApi, api } from '../../services/api';
 import salesOrdersAPI from '../../services/api/modules/salesOrders.api';
 import { invoicesApi as invoicesApiModule } from '../../services/api/modules/invoices.api';
 import { challansApi as challansApiModule } from '../../services/api/modules/challans.api';

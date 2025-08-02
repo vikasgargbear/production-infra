@@ -27,7 +27,7 @@ router = APIRouter(tags=["master", "customers"])
 @lru_cache(maxsize=1)
 def check_area_column_exists() -> bool:
     """Check if area column exists in customers table (cached)"""
-    from ...database import SessionLocal
+    from ...core.database import SessionLocal
     db = SessionLocal()
     try:
         result = db.execute(text("""

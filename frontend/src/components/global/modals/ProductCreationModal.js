@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { X, Package, Pill, Building2, Hash, Percent, IndianRupee } from 'lucide-react';
-import { productAPI } from '../../../services/api';
+import { productAPI, productsApi } from '../../../services/api';
 import PackTypeSelector from '../PackTypeSelector';
 import MonthYearPicker from '../MonthYearPicker';
 import DataTransformer from '../../../services/dataTransformer';

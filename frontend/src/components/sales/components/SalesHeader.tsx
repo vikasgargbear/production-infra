@@ -1,39 +1,50 @@
 import React from 'react';
 import { FileText, Package, ShoppingCart, Calendar, LucideIcon } from 'lucide-react';
 import { useSales } from '../../../contexts/SalesContext';
-import { DatePicker } from '../../global';
-
-type SalesType = 'invoice' | 'challan' | 'sales-order';
-
-interface SalesIconConfig {
-  icon: LucideIcon;
-  title: string;
-  label: string;
-}
 
 const SalesHeader: React.FC = () => {
   const { salesType, salesData, setSalesField } = useSales();
 
-  const salesConfig: Record<SalesType, SalesIconConfig> = {
-    invoice: {
-      icon: FileText,
-      title: 'New Invoice',
-      label: 'Invoice'
-    },
-    challan: {
-      icon: Package,
-      title: 'New Delivery Challan',
-      label: 'Challan'
-    },
-    'sales-order': {
-      icon: ShoppingCart,
-      title: 'New Sales Order',
-      label: 'Order'
+  const getIcon = (): LucideIcon => {
+    switch (salesType) {
+      case 'invoice':
+        return FileText;
+      case 'challan':
+        return Package;
+      case 'sales-order':
+        return ShoppingCart;
+      default:
+        return FileText;
     }
   };
 
-  const config = salesConfig[salesType as SalesType] || salesConfig.invoice;
-  const Icon = config.icon;
+  const getTitle = (): string => {
+    switch (salesType) {
+      case 'invoice':
+        return 'New Invoice';
+      case 'challan':
+        return 'New Delivery Challan';
+      case 'sales-order':
+        return 'New Sales Order';
+      default:
+        return 'New Document';
+    }
+  };
+
+  const getDocumentLabel = (): string => {
+    switch (salesType) {
+      case 'invoice':
+        return 'Invoice';
+      case 'challan':
+        return 'Challan';
+      case 'sales-order':
+        return 'Order';
+      default:
+        return 'Document';
+    }
+  };
+
+  const Icon = getIcon();
 
   return (
     <div className="bg-blue-50 border-b border-blue-200 px-6 py-4 mb-4">
@@ -42,11 +53,11 @@ const SalesHeader: React.FC = () => {
           <Icon className="w-6 h-6 text-blue-600" />
           <div>
             <h1 className="text-2xl font-bold text-gray-900">
-              {config.title}
+              {getTitle()}
             </h1>
             <div className="flex items-center space-x-4 mt-1">
               <span className="text-lg font-medium text-blue-600">
-                {config.label} #{salesData.document_no}
+                {getDocumentLabel()} #{salesData.document_no}
               </span>
               <span className="text-gray-500">•</span>
               <span className="text-gray-600">
@@ -66,10 +77,11 @@ const SalesHeader: React.FC = () => {
               <Calendar className="w-3 h-3 inline mr-1" />
               Date
             </label>
-            <DatePicker
+            <input
+              type="date"
               value={salesData.document_date}
-              onChange={(value) => setSalesField('document_date', value)}
-              size="sm"
+              onChange={(e) => setSalesField('document_date', e.target.value)}
+              className="px-3 py-1.5 text-sm border border-gray-300 rounded bg-white focus:outline-none focus:ring-1 focus:ring-blue-500"
             />
           </div>
 
@@ -79,10 +91,11 @@ const SalesHeader: React.FC = () => {
                 <Calendar className="w-3 h-3 inline mr-1" />
                 Delivery Date
               </label>
-              <DatePicker
+              <input
+                type="date"
                 value={salesData.delivery_date}
-                onChange={(value) => setSalesField('delivery_date', value)}
-                size="sm"
+                onChange={(e) => setSalesField('delivery_date', e.target.value)}
+                className="px-3 py-1.5 text-sm border border-gray-300 rounded bg-white focus:outline-none focus:ring-1 focus:ring-blue-500"
               />
             </div>
           )}

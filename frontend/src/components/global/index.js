@@ -4,8 +4,8 @@
  */
 
 // Search Components
-export { CustomerSearch } from '../../components-v2/customers/CustomerSearch';
-export { ProductSearch } from '../../components-v2/products/ProductSearch';
+export { CustomerSearch } from './search/CustomerSearch';
+export { ProductSearch } from './search/ProductSearch';
 export { default as ProductSearchSimple } from './search/ProductSearchSimple';
 export { default as PartySearch } from './search/PartySearch';
 export { default as SupplierSearch } from './SupplierSearch';
@@ -74,14 +74,14 @@ export {
   useToast
 } from './ui';
 
-// Ledger Components
-export * from './ledger';
-export {
-  PartyLedgerBalance,
-  PartyStatement,
-  OutstandingBills,
-  AgingAnalysis
-} from './ledger';
+// Ledger Components - temporarily commented out as ledger is empty
+// export * from './ledger';
+// export {
+//   PartyLedgerBalance,
+//   PartyStatement,
+//   OutstandingBills,
+//   AgingAnalysis
+// } from './ledger';
 
 // Navigation Components
 export * from './navigation';
