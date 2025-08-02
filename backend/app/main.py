@@ -9,10 +9,23 @@ import os
 # Import routers
 from .api.routes import (
     auth, customers, products, sales, inventory, 
-    payments, dashboard, billing, api_wrapper, test_db,
-    orders, invoices, delivery_challan, enterprise_delivery_challan,
-    enterprise_invoices, purchase_upload, stock_receive
+    payments, dashboard, billing, api_wrapper, test_db
 )
+
+# Import additional routers that are actually available
+from .api.routes import (
+    customers_router, orders_router, inventory_router, billing_router, 
+    payments_router, invoices_router, order_items_router, users_router, 
+    suppliers_router, purchases_router, delivery_challan_router, 
+    dashboard_router, stock_adjustments_router, tax_entries_router,
+    purchase_upload_router, purchase_enhanced_router, sale_returns_api_router,
+    purchase_returns_router, stock_movements_router, party_ledger_router,
+    credit_debit_notes_router, sales_router, enterprise_orders_router,
+    collection_center_router
+)
+
+# Import additional routers not in __init__.py
+from .api.routes import stock_receive, enterprise_delivery_challan
 
 # Lifecycle management
 @asynccontextmanager
@@ -80,13 +93,27 @@ api_v2.include_router(inventory.router, prefix="/inventory", tags=["Inventory"])
 api_v2.include_router(payments.router, prefix="/payments", tags=["Payments"])
 api_v2.include_router(dashboard.router, prefix="/dashboard", tags=["Dashboard"])
 api_v2.include_router(billing.router, prefix="/billing", tags=["Billing"])
-api_v2.include_router(orders.router, tags=["Orders"])
-api_v2.include_router(invoices.router, tags=["Invoices"])
-api_v2.include_router(delivery_challan.router, tags=["Delivery Challan"])
-api_v2.include_router(enterprise_delivery_challan.router, tags=["Enterprise Challan"])
-api_v2.include_router(enterprise_invoices.router, tags=["Enterprise Invoices"])
-api_v2.include_router(purchase_upload.router, tags=["Purchase Upload"])
+# Register additional routes from __init__.py
+api_v2.include_router(orders_router, tags=["Orders"])
+api_v2.include_router(invoices_router, tags=["Invoices"])
+api_v2.include_router(order_items_router, tags=["Order Items"])
+api_v2.include_router(users_router, tags=["Users"])
+api_v2.include_router(suppliers_router, tags=["Suppliers"])
+api_v2.include_router(purchases_router, tags=["Purchases"])
+api_v2.include_router(delivery_challan_router, tags=["Delivery Challan"])
+api_v2.include_router(stock_adjustments_router, tags=["Stock Adjustments"])
+api_v2.include_router(tax_entries_router, tags=["Tax Entries"])
+api_v2.include_router(purchase_upload_router, tags=["Purchase Upload"])
+api_v2.include_router(purchase_enhanced_router, tags=["Purchase Enhanced"])
+api_v2.include_router(sale_returns_api_router, tags=["Sale Returns"])
+api_v2.include_router(purchase_returns_router, tags=["Purchase Returns"])
+api_v2.include_router(stock_movements_router, tags=["Stock Movements"])
+api_v2.include_router(party_ledger_router, tags=["Party Ledger"])
+api_v2.include_router(credit_debit_notes_router, tags=["Credit/Debit Notes"])
+api_v2.include_router(enterprise_orders_router, tags=["Enterprise Orders"])
+api_v2.include_router(collection_center_router, tags=["Collection Center"])
 api_v2.include_router(stock_receive.router, tags=["Stock Receive"])
+api_v2.include_router(enterprise_delivery_challan.router, tags=["Enterprise Delivery Challan"])
 
 # Include the PostgreSQL function wrappers
 api_v2.include_router(api_wrapper.router, prefix="/pg", tags=["PostgreSQL Functions"])
@@ -107,13 +134,27 @@ api_v1.include_router(inventory.router, prefix="/inventory", tags=["Inventory"])
 api_v1.include_router(payments.router, prefix="/payments", tags=["Payments"])
 api_v1.include_router(dashboard.router, prefix="/dashboard", tags=["Dashboard"])
 api_v1.include_router(billing.router, prefix="/billing", tags=["Billing"])
-api_v1.include_router(orders.router, tags=["Orders"])
-api_v1.include_router(invoices.router, tags=["Invoices"])
-api_v1.include_router(delivery_challan.router, tags=["Delivery Challan"])
-api_v1.include_router(enterprise_delivery_challan.router, tags=["Enterprise Challan"])
-api_v1.include_router(enterprise_invoices.router, tags=["Enterprise Invoices"])
-api_v1.include_router(purchase_upload.router, tags=["Purchase Upload"])
+# Register additional routes from __init__.py
+api_v1.include_router(orders_router, tags=["Orders"])
+api_v1.include_router(invoices_router, tags=["Invoices"])
+api_v1.include_router(order_items_router, tags=["Order Items"])
+api_v1.include_router(users_router, tags=["Users"])
+api_v1.include_router(suppliers_router, tags=["Suppliers"])
+api_v1.include_router(purchases_router, tags=["Purchases"])
+api_v1.include_router(delivery_challan_router, tags=["Delivery Challan"])
+api_v1.include_router(stock_adjustments_router, tags=["Stock Adjustments"])
+api_v1.include_router(tax_entries_router, tags=["Tax Entries"])
+api_v1.include_router(purchase_upload_router, tags=["Purchase Upload"])
+api_v1.include_router(purchase_enhanced_router, tags=["Purchase Enhanced"])
+api_v1.include_router(sale_returns_api_router, tags=["Sale Returns"])
+api_v1.include_router(purchase_returns_router, tags=["Purchase Returns"])
+api_v1.include_router(stock_movements_router, tags=["Stock Movements"])
+api_v1.include_router(party_ledger_router, tags=["Party Ledger"])
+api_v1.include_router(credit_debit_notes_router, tags=["Credit/Debit Notes"])
+api_v1.include_router(enterprise_orders_router, tags=["Enterprise Orders"])
+api_v1.include_router(collection_center_router, tags=["Collection Center"])
 api_v1.include_router(stock_receive.router, tags=["Stock Receive"])
+api_v1.include_router(enterprise_delivery_challan.router, tags=["Enterprise Delivery Challan"])
 
 app.include_router(api_v1)
 

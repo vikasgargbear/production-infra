@@ -4,7 +4,7 @@ Authentication utilities
 from fastapi import Depends, HTTPException, status
 from .jwt_auth import oauth2_scheme, jwt, SECRET_KEY, ALGORITHM
 
-from ...core.config import DEFAULT_ORG_ID
+from .config import DEFAULT_ORG_ID
 async def get_current_org(token: str = Depends(oauth2_scheme)) -> str:
     """Get current organization ID from token"""
     try:
