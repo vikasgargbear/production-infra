@@ -20,7 +20,7 @@ from ..services.customer_service import CustomerService
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(tags=["master"."customers"])
+router = APIRouter(tags=["master", "customers"])
 
 # Default organization ID (should come from auth in production)
 DEFAULT_ORG_ID = "12de5e22-eee7-4d25-b3a7-d16d01c6170f"
