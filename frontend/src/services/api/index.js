@@ -1,39 +1,41 @@
-// Central API export file
+// Central API export file - CLEAN VERSION
 // All API imports should come from this file for consistency
 
-// Import all API modules
+// Import base utilities
+import apiClient, { apiHelpers } from './apiClient';
+import * as dataUtils from './utils/dataUtils';
+
+// Import the reliable JavaScript wrapper APIs (these have .search() methods)
+import { 
+  customerAPI, 
+  productAPI, 
+  supplierAPI,
+  invoiceAPI,
+  ordersAPI,
+  purchasesAPI,
+  paymentAPI,
+  challansAPI,
+  salesOrdersAPI
+} from './apiClientExports';
+
+// Import remaining JavaScript modules
 import { authApi } from './modules/auth.api';
-import { productsApi } from './modules/products.api';
-import { customersApi } from './modules/customers.api';
-import { suppliersApi } from './modules/suppliers.api';
-import { invoicesApi } from './modules/invoices.api';
-import { purchasesApi } from './modules/purchases.api';
-import { challansApi } from './modules/challans.api';
-import { ordersApi } from './modules/orders.api';
-import { paymentsApi } from './modules/payments.api';
-import settingsApi from './modules/settings.api';
-import utilsApi, { apiUtils } from './modules/utils.api';
-import reportsApi from './modules/reports.api';
-import { returnsApi } from './modules/returns.api';
+import { batchesApi } from './modules/batches.api';
+import { deliveryApi } from './modules/delivery.api';
 import { ledgerApi } from './modules/ledger.api';
 import { notesApi } from './modules/notes.api';
+import { returnsApi } from './modules/returns.api';
 import { stockApi } from './modules/stock.api';
 import { salesApi } from './modules/sales.api';
-import salesOrdersAPI from './modules/salesOrders.api';
-import organizationsApi from './modules/organizations.api';
-import partyLedgerApi from './partyLedgerApi';
-
-// Import new modules for backward compatibility
-import { batchesApi } from './modules/batches.api';
-import { orderItemsApi } from './modules/orderItems.api';
-import { inventoryMovementsApi } from './modules/inventoryMovements.api';
 import { usersApi } from './modules/users.api';
 import { dashboardApi } from './modules/dashboard.api';
-import { deliveryApi } from './modules/delivery.api';
-
-// Import utilities
-import apiClient, { apiHelpers, partyLedgerAPI, customerAPI as customerAPIClient, productAPI as productAPIClient } from './apiClient';
-import * as dataUtils from './utils/dataUtils';
+import { inventoryMovementsApi } from './modules/inventoryMovements.api';
+import { orderItemsApi } from './modules/orderItems.api';
+import reportsApi from './modules/reports.api';
+import settingsApi from './modules/settings.api';
+import utilsApi, { apiUtils } from './modules/utils.api';
+import organizationsApi from './modules/organizations.api';
+import partyLedgerApi from './partyLedgerApi';
 
 // Re-export everything for easy access
 export {
@@ -41,41 +43,50 @@ export {
   apiClient,
   apiHelpers,
   
-  // API Modules (All from old api.js)
+  // Primary APIs with search methods (from TypeScript wrapper)
+  customerAPI,
+  productAPI,
+  supplierAPI,
+  invoiceAPI,
+  ordersAPI,
+  purchasesAPI,
+  paymentAPI,
+  challansAPI,
+  salesOrdersAPI,
+  
+  // JavaScript module APIs
   authApi,
-  productsApi,
-  customersApi,
-  suppliersApi,
-  invoicesApi,
-  purchasesApi,
-  purchasesApi as purchaseApi, // Alias for compatibility
-  challansApi,
-  ordersApi,
-  paymentsApi,
+  batchesApi,
+  deliveryApi,
+  ledgerApi,
+  notesApi,
+  returnsApi,
+  stockApi,
+  salesApi,
+  usersApi,
+  dashboardApi,
+  inventoryMovementsApi,
+  orderItemsApi,
   reportsApi,
   settingsApi,
   utilsApi,
-  returnsApi,
-  ledgerApi,
-  notesApi,
-  stockApi,
-  salesApi,
-  salesOrdersAPI,
+  apiUtils,
   organizationsApi,
   partyLedgerApi,
-  partyLedgerAPI,
-  batchesApi as batchAPI,
-  customerAPIClient as customerAPI,
-  productAPIClient as productAPI,
   
-  // Additional APIs for backward compatibility
-  batchesApi,
-  orderItemsApi,
-  inventoryMovementsApi,
-  usersApi,
-  dashboardApi,
-  deliveryApi,
-  apiUtils,
+  // Aliases for backward compatibility
+  customerAPI as customersApi,
+  productAPI as productsApi,
+  supplierAPI as suppliersApi,
+  invoiceAPI as invoicesApi,
+  purchasesAPI as purchasesApi,
+  purchasesAPI as purchaseApi,
+  ordersAPI as ordersApi,
+  paymentAPI as paymentsApi,
+  challansAPI as challansApi,
+  batchesApi as batchAPI,
+  partyLedgerApi as partyLedgerAPI,
+  salesOrdersAPI as salesOrdersAPIAlias,
   
   // Utilities
   dataUtils,
@@ -84,14 +95,14 @@ export {
 // API object with all modules grouped (for named export)
 const apiModules = {
   auth: authApi,
-  products: productsApi,
-  customers: customersApi,
-  suppliers: suppliersApi,
-  invoices: invoicesApi,
-  purchases: purchasesApi,
-  challans: challansApi,
-  orders: ordersApi,
-  payments: paymentsApi,
+  customers: customerAPI,
+  products: productAPI,
+  suppliers: supplierAPI,
+  invoices: invoiceAPI,
+  purchases: purchasesAPI,
+  challans: challansAPI,
+  orders: ordersAPI,
+  payments: paymentAPI,
   reports: reportsApi,
   settings: settingsApi,
   utils: utilsApi,
@@ -107,10 +118,7 @@ const apiModules = {
 };
 
 // For backward compatibility: export the raw axios instance as default
-// This allows code that uses api.post(), api.get() etc to continue working
 const api = apiClient;
-
-// Also attach all the API modules to the axios instance for convenience
 Object.assign(api, apiModules);
 
 export { api, apiModules };
