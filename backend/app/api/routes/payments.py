@@ -16,7 +16,7 @@ from ..services.payment_service import PaymentService
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/api/v1/payments", tags=["payments"])
+router = APIRouter(prefix="/payments", tags=["payments"])
 
 # Default organization ID (should come from auth in production)
 DEFAULT_ORG_ID = "12de5e22-eee7-4d25-b3a7-d16d01c6170f"

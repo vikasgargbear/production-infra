@@ -15,7 +15,7 @@ from ...core.database import get_db
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/api/v1/enterprise-delivery-challan", tags=["enterprise-delivery-challan"])
+router = APIRouter(prefix="/enterprise-delivery-challan", tags=["enterprise-delivery-challan"])
 
 # =============================================
 # PYDANTIC MODELS

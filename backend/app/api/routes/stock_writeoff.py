@@ -15,7 +15,7 @@ from ...core.database import get_db
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/api/v1/stock-writeoff", tags=["stock-writeoff"])
+router = APIRouter(prefix="/stock-writeoff", tags=["stock-writeoff"])
 
 # GST action mapping for write-off reasons
 WRITE_OFF_GST_ACTIONS = {

@@ -15,7 +15,7 @@ from ...core.database import get_db
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/api/v1/sale-returns", tags=["sale-returns"])
+router = APIRouter(prefix="/sale-returns", tags=["sale-returns"])
 
 @router.get("/")
 async def get_sale_returns(

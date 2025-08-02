@@ -14,7 +14,7 @@ from ...core.database import get_db
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/api/v1/org-users", tags=["org-users"])
+router = APIRouter(prefix="/org-users", tags=["org-users"])
 
 @router.get("/")
 def get_org_users(

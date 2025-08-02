@@ -17,7 +17,7 @@ from ..services.gst_service import GSTService, GSTType
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/api/v1/sales", tags=["sales"])
+router = APIRouter(prefix="/sales", tags=["sales"])
 
 # Pydantic models for request/response
 class SaleItemCreate(BaseModel):

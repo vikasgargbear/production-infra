@@ -16,7 +16,7 @@ from ...core.database import get_db
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/api/v1/collection-center", tags=["collection-center"])
+router = APIRouter(prefix="/collection-center", tags=["collection-center"])
 
 @router.get("/dashboard")
 async def get_collection_dashboard(

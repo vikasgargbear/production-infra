@@ -14,7 +14,7 @@ from ...core.database import get_db
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/api/v1/party-ledger", tags=["party-ledger"])
+router = APIRouter(prefix="/party-ledger", tags=["party-ledger"])
 
 @router.get("/balance/{party_id}")
 async def get_party_balance(

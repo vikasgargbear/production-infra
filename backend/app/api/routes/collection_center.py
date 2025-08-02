@@ -17,7 +17,7 @@ from models.customer import Customer
 from models.order import Order, OrderItem
 from models.payment import Payment
 
-router = APIRouter(prefix="/api/v1/collection", tags=["Collection Center"])
+router = APIRouter(prefix="/collection", tags=["Collection Center"])
 logger = logging.getLogger(__name__)
 
 # ============================================================================

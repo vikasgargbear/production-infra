@@ -85,6 +85,19 @@ api_v2.include_router(api_wrapper.router, prefix="/pg", tags=["PostgreSQL Functi
 # Include the v2 API
 app.include_router(api_v2)
 
+# Also include v1 routes for backward compatibility
+api_v1 = APIRouter(prefix="/api/v1")
+api_v1.include_router(auth.router, prefix="/auth", tags=["Authentication"])
+api_v1.include_router(customers.router, prefix="/customers", tags=["Customers"])
+api_v1.include_router(products.router, prefix="/products", tags=["Products"])
+api_v1.include_router(sales.router, prefix="/sales", tags=["Sales"])
+api_v1.include_router(inventory.router, prefix="/inventory", tags=["Inventory"])
+api_v1.include_router(payments.router, prefix="/payments", tags=["Payments"])
+api_v1.include_router(dashboard.router, prefix="/dashboard", tags=["Dashboard"])
+api_v1.include_router(billing.router, prefix="/billing", tags=["Billing"])
+
+app.include_router(api_v1)
+
 # PostgreSQL function wrapper endpoints
 # Since frontend expects REST but backend has PostgreSQL functions
 # We'll create wrapper endpoints

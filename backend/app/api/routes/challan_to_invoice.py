@@ -15,7 +15,7 @@ from ...core.database import get_db
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/api/v1/challan-to-invoice", tags=["challan-to-invoice"])
+router = APIRouter(prefix="/challan-to-invoice", tags=["challan-to-invoice"])
 
 # =============================================
 # PYDANTIC MODELS

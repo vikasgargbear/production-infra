@@ -13,7 +13,7 @@ from ...core.database import get_db
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/api/v1/purchases-enhanced", tags=["purchases-enhanced"])
+router = APIRouter(prefix="/purchases-enhanced", tags=["purchases-enhanced"])
 
 @router.post("/with-items")
 def create_purchase_with_items(purchase_data: dict, db: Session = Depends(get_db)):

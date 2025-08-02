@@ -16,7 +16,7 @@ from ..services.invoice_service import InvoiceService
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/api/v1/invoices", tags=["invoices"])
+router = APIRouter(prefix="/invoices", tags=["invoices"])
 
 @router.get("/")
 async def get_invoices(

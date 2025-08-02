@@ -14,7 +14,7 @@ from ...core.crud_base import create_crud
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/api/v1/order-items", tags=["order-items"])
+router = APIRouter(prefix="/order-items", tags=["order-items"])
 
 # Create CRUD instance
 order_item_crud = create_crud(OrderItem)

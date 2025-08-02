@@ -13,7 +13,7 @@ from ...core.database import get_db
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/api/v1/delivery-challan", tags=["delivery-challan"])
+router = APIRouter(prefix="/delivery-challan", tags=["delivery-challan"])
 
 @router.get("/")
 def get_delivery_challans(

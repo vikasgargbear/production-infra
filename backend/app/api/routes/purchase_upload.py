@@ -40,7 +40,7 @@ except ImportError:
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/api/v1/purchase-upload", tags=["purchase-upload"])
+router = APIRouter(prefix="/purchase-upload", tags=["purchase-upload"])
 
 def _check_supplier_in_result(extracted_data: dict, db: Session):
     """

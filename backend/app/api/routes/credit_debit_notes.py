@@ -15,7 +15,7 @@ from ...core.database import get_db
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/api/v1/notes", tags=["credit-debit-notes"])
+router = APIRouter(prefix="/notes", tags=["credit-debit-notes"])
 
 @router.get("/")
 async def get_notes(

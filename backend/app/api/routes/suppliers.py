@@ -16,7 +16,7 @@ from uuid import UUID
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/api/v1/suppliers", tags=["suppliers"])
+router = APIRouter(prefix="/suppliers", tags=["suppliers"])
 
 # Create CRUD instance
 supplier_crud = create_crud(Supplier)

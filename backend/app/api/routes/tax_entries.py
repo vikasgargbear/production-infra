@@ -14,7 +14,7 @@ from ...core.database import get_db
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/api/v1/tax-entries", tags=["tax-entries"])
+router = APIRouter(prefix="/tax-entries", tags=["tax-entries"])
 
 @router.get("/")
 def get_tax_entries(

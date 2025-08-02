@@ -14,7 +14,7 @@ from ...core.database import get_db
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/api/v1/stock-adjustments", tags=["stock-adjustments"])
+router = APIRouter(prefix="/stock-adjustments", tags=["stock-adjustments"])
 
 @router.get("/")
 def get_stock_adjustments(
