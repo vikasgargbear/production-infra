@@ -116,3 +116,32 @@ async def check_customer_columns(db: Session = Depends(get_db)):
         
     except Exception as e:
         return {"error": str(e)}
+
+@router.get("/check-organizations")
+async def check_organizations(db: Session = Depends(get_db)):
+    """Check existing organizations"""
+    try:
+        result = db.execute(text("""
+            SELECT 
+                org_id,
+                organization_name,
+                organization_code
+            FROM master.organizations
+            LIMIT 10
+        """))
+        
+        orgs = []
+        for row in result:
+            orgs.append({
+                "org_id": str(row.org_id),
+                "name": row.organization_name,
+                "code": row.organization_code
+            })
+        
+        return {
+            "organizations": orgs,
+            "count": len(orgs)
+        }
+        
+    except Exception as e:
+        return {"error": str(e)}
