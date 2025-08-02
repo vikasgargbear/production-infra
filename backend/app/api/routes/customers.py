@@ -70,48 +70,41 @@ async def create_customer(
         customer_data = customer.dict()
         customer_data["customer_code"] = customer_code
         
-        # For backward compatibility, check if we need to include area
-        try:
-            # Try with area field first
-            result = db.execute(text("""
-                INSERT INTO parties.customers (
-                    org_id, customer_code, customer_name, contact_person,
-                    phone, alternate_phone, email,
-                    address_line1, address_line2, area, city, state, pincode,
-                    gstin, pan_number, drug_license_number,
-                    customer_type, credit_limit, credit_days, discount_percent,
-                    is_active, notes, created_at, updated_at
-                ) VALUES (
-                    :org_id, :customer_code, :customer_name, :contact_person,
-                    :phone, :alternate_phone, :email,
-                    :address_line1, :address_line2, :area, :city, :state, :pincode,
-                    :gstin, :pan_number, :drug_license_number,
-                    :customer_type, :credit_limit, :credit_days, :discount_percent,
-                    :is_active, :notes, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
-                ) RETURNING customer_id
-            """), customer_data)
-        except Exception as e:
-            if "column \"area\" of relation \"customers\" does not exist" in str(e):
-                # Fallback to without area field
-                result = db.execute(text("""
-                    INSERT INTO parties.customers (
-                        org_id, customer_code, customer_name, contact_person,
-                        phone, alternate_phone, email,
-                        address_line1, address_line2, city, state, pincode,
-                        gstin, pan_number, drug_license_number,
-                        customer_type, credit_limit, credit_days, discount_percent,
-                        is_active, notes, created_at, updated_at
-                    ) VALUES (
-                        :org_id, :customer_code, :customer_name, :contact_person,
-                        :phone, :alternate_phone, :email,
-                        :address_line1, :address_line2, :city, :state, :pincode,
-                        :gstin, :pan_number, :drug_license_number,
-                        :customer_type, :credit_limit, :credit_days, :discount_percent,
-                        :is_active, :notes, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
-                    ) RETURNING customer_id
-                """), customer_data)
-            else:
-                raise
+        # Map old field names to new column names
+        mapped_data = {
+            "org_id": customer_data.get("org_id"),
+            "customer_code": customer_code,
+            "customer_name": customer_data.get("customer_name"),
+            "customer_type": customer_data.get("customer_type"),
+            "primary_phone": customer_data.get("phone"),
+            "primary_email": customer_data.get("email"),
+            "secondary_phone": customer_data.get("alternate_phone"),
+            "contact_person_name": customer_data.get("contact_person"),
+            "gst_number": customer_data.get("gstin"),
+            "pan_number": customer_data.get("pan_number"),
+            "drug_license_number": customer_data.get("drug_license_number"),
+            "credit_limit": customer_data.get("credit_limit", 0),
+            "credit_days": customer_data.get("credit_days", 0),
+            "internal_notes": customer_data.get("notes"),
+            "is_active": customer_data.get("is_active", True)
+        }
+        
+        # Create customer with correct column names
+        result = db.execute(text("""
+            INSERT INTO parties.customers (
+                org_id, customer_code, customer_name, customer_type,
+                primary_phone, primary_email, secondary_phone,
+                contact_person_name, gst_number, pan_number, drug_license_number,
+                credit_limit, credit_days, internal_notes, is_active,
+                created_at, updated_at
+            ) VALUES (
+                :org_id, :customer_code, :customer_name, :customer_type,
+                :primary_phone, :primary_email, :secondary_phone,
+                :contact_person_name, :gst_number, :pan_number, :drug_license_number,
+                :credit_limit, :credit_days, :internal_notes, :is_active,
+                CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+            ) RETURNING customer_id
+        """), mapped_data)
         
         customer_id = result.scalar()
         db.commit()
@@ -163,33 +156,27 @@ async def list_customers(
                 query += """ AND (
                     customer_name ILIKE :search OR 
                     customer_code ILIKE :search OR 
-                    phone LIKE :search OR
-                    gstin LIKE :search OR
-                    area ILIKE :search OR
-                    city ILIKE :search
+                    primary_phone LIKE :search OR
+                    gst_number LIKE :search
                 )"""
                 count_query += """ AND (
                     customer_name ILIKE :search OR 
                     customer_code ILIKE :search OR 
-                    phone LIKE :search OR
-                    gstin LIKE :search OR
-                    area ILIKE :search OR
-                    city ILIKE :search
+                    primary_phone LIKE :search OR
+                    gst_number LIKE :search
                 )"""
             else:
                 query += """ AND (
                     customer_name ILIKE :search OR 
                     customer_code ILIKE :search OR 
-                    phone LIKE :search OR
-                    gstin LIKE :search OR
-                    city ILIKE :search
+                    primary_phone LIKE :search OR
+                    gst_number LIKE :search
                 )"""
                 count_query += """ AND (
                     customer_name ILIKE :search OR 
                     customer_code ILIKE :search OR 
-                    phone LIKE :search OR
-                    gstin LIKE :search OR
-                    city ILIKE :search
+                    primary_phone LIKE :search OR
+                    gst_number LIKE :search
                 )"""
             params["search"] = f"%{search}%"
         
@@ -203,18 +190,15 @@ async def list_customers(
             count_query += " AND is_active = :is_active"
             params["is_active"] = is_active
         
-        if city:
-            query += " AND city ILIKE :city"
-            count_query += " AND city ILIKE :city"
-            params["city"] = f"%{city}%"
+        # Note: city filter removed as it's not in customers table
         
         if has_gstin is not None:
             if has_gstin:
-                query += " AND gstin IS NOT NULL"
-                count_query += " AND gstin IS NOT NULL"
+                query += " AND gst_number IS NOT NULL"
+                count_query += " AND gst_number IS NOT NULL"
             else:
-                query += " AND gstin IS NULL"
-                count_query += " AND gstin IS NULL"
+                query += " AND gst_number IS NULL"
+                count_query += " AND gst_number IS NULL"
         
         # Get total count
         logger.debug(f"Executing count query: {count_query}")
