@@ -82,3 +82,37 @@ async def check_customers_table(db: Session = Depends(get_db)):
         }
     except Exception as e:
         return {"error": str(e)}
+
+@router.get("/check-customer-columns")
+async def check_customer_columns(db: Session = Depends(get_db)):
+    """Check columns in parties.customers table"""
+    try:
+        result = db.execute(text("""
+            SELECT 
+                column_name,
+                data_type,
+                is_nullable,
+                column_default
+            FROM information_schema.columns
+            WHERE table_schema = 'parties'
+            AND table_name = 'customers'
+            ORDER BY ordinal_position
+        """))
+        
+        columns = []
+        for row in result:
+            columns.append({
+                "name": row.column_name,
+                "type": row.data_type,
+                "nullable": row.is_nullable == 'YES',
+                "default": row.column_default
+            })
+        
+        return {
+            "table": "parties.customers",
+            "columns": columns,
+            "total_columns": len(columns)
+        }
+        
+    except Exception as e:
+        return {"error": str(e)}
