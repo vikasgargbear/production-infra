@@ -142,14 +142,24 @@ class ProductResponse(ProductBase):
             packages_per_box=values.get('packages_per_box')
         )
 
-# Example usage in FastAPI endpoint:
-"""
-@router.post("/products", response_model=ProductResponse)
-async def create_product(product: ProductCreate, db: Session = Depends(get_db)):
-    # Create product with new pack fields
-    db_product = Product(**product.dict())
-    db.add(db_product)
-    db.commit()
-    db.refresh(db_product)
-    return db_product
-"""
+class Product(BaseModel):
+    """Simple product model for API responses"""
+    product_id: int
+    name: str
+    brand: str
+    category: str
+    hsn_code: str
+    gst_rate: float
+    mrp: float
+    sale_rate: float
+    purchase_rate: float
+    current_stock: int
+    unit_of_measure: str
+    
+    class Config:
+        from_attributes = True
+
+class ProductSearch(BaseModel):
+    """Product search parameters"""
+    q: str
+    limit: Optional[int] = 10
