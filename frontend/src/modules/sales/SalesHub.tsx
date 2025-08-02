@@ -2,10 +2,10 @@ import React from 'react';
 import { 
   FileText, Package, ShoppingCart, Truck, TrendingUp
 } from 'lucide-react';
-import { ModuleHub } from '../global';
+import { ModuleHub } from '../../components/global';
 import InvoiceFlow from './InvoiceFlow';
 import SalesOrderFlow from './SalesOrderFlow';
-import ModularChallanCreatorV5 from '../challan/ModularChallanCreatorV5';
+import ModularChallanCreatorV5 from '../../components/challan/ModularChallanCreatorV5';
 
 interface SalesHubProps {
   open?: boolean;

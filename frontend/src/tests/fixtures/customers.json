@@ -1,0 +1,60 @@
+{
+  "testCustomers": [
+    {
+      "customer_id": 1,
+      "customer_name": "ABC Pharmacy",
+      "customer_code": "CUST001",
+      "gst_number": "27AAAAA0000A1Z5",
+      "address": "123 Main Street",
+      "city": "Mumbai",
+      "state": "Maharashtra",
+      "state_code": "27",
+      "pincode": "400001",
+      "phone": "9876543210",
+      "email": "abc@pharmacy.com",
+      "credit_limit": 50000,
+      "outstanding_amount": 15000
+    },
+    {
+      "customer_id": 2,
+      "customer_name": "XYZ Medical Store",
+      "customer_code": "CUST002",
+      "gst_number": "09BBBBB0000B1Z5",
+      "address": "456 Park Road",
+      "city": "Delhi",
+      "state": "Delhi",
+      "state_code": "09",
+      "pincode": "110001",
+      "phone": "9123456789",
+      "email": "xyz@medical.com",
+      "credit_limit": 100000,
+      "outstanding_amount": 0
+    },
+    {
+      "customer_id": 3,
+      "customer_name": "Quick Pharmacy",
+      "customer_code": "CUST003",
+      "gst_number": null,
+      "address": "789 Market Street",
+      "city": "Pune",
+      "state": "Maharashtra",
+      "state_code": "27",
+      "pincode": "411001",
+      "phone": "9988776655",
+      "email": "quick@pharmacy.com",
+      "credit_limit": 25000,
+      "outstanding_amount": 5000
+    }
+  ],
+  "mockCustomer": {
+    "customer_name": "Test Pharmacy",
+    "gst_number": "27AAAAA0000A1Z5",
+    "address": "Test Address",
+    "city": "Mumbai",
+    "state": "Maharashtra",
+    "state_code": "27",
+    "pincode": "400001",
+    "phone": "9999999999",
+    "email": "test@pharmacy.com"
+  }
+}

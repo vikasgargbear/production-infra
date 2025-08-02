@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { History, Eye, Edit, Download, Printer, X } from 'lucide-react';
-import { ordersApi, purchasesApi, paymentsApi, challansApi, invoicesApi, salesOrdersAPI } from '../../../services/api';
+import { ordersAPI, purchasesAPI, paymentAPI, challansAPI, invoiceAPI, salesOrdersAPI } from '../../../services/api';
 
 const ViewHistoryButton = ({ 
   historyType = 'invoice', // 'invoice', 'challan', 'payment', 'purchase', 'order', 'sales-order'
@@ -38,7 +38,7 @@ const ViewHistoryButton = ({
             // Skip trying invoice endpoints since they don't exist yet
             // Just use orders API directly
             try {
-              response = await ordersApi.getAll({ limit: 10 });
+              response = await ordersAPI.search({ limit: 10 });
               console.log('Loaded orders as invoices:', response);
             } catch (e1) {
               console.error('Orders API failed:', e1);
@@ -48,7 +48,7 @@ const ViewHistoryButton = ({
             console.log('All invoice endpoints failed, using orders as fallback');
             // Fallback to orders without order_type filter to avoid validation errors
             // Use limit=10 which we know works
-            response = await ordersApi.getAll({ limit: 10 });
+            response = await ordersAPI.search({ limit: 10 });
           }
           
           // Handle both array response and object with data property
@@ -76,7 +76,7 @@ const ViewHistoryButton = ({
           break;
 
         case 'challan':
-          response = await challansApi.getAll({ limit: 10 });
+          response = await challansAPI.search({ limit: 10 });
           const challanResponse = response.data || response;
           if (challanResponse.data && Array.isArray(challanResponse.data)) {
             formattedItems = challanResponse.data.map(challan => ({
@@ -92,7 +92,7 @@ const ViewHistoryButton = ({
           break;
 
         case 'payment':
-          response = await paymentsApi.getAll({ limit: 10 });
+          response = await paymentAPI.search({ limit: 10 });
           const paymentResponse = response.data || response;
           if (paymentResponse.data && Array.isArray(paymentResponse.data)) {
             formattedItems = paymentResponse.data.map(payment => ({
@@ -109,7 +109,7 @@ const ViewHistoryButton = ({
           break;
 
         case 'purchase':
-          response = await purchasesApi.getAll({ limit: 10 });
+          response = await purchasesAPI.search({ limit: 10 });
           const purchaseResponse = response.data || response;
           if (purchaseResponse.data && Array.isArray(purchaseResponse.data)) {
             formattedItems = purchaseResponse.data.map(purchase => ({
@@ -134,7 +134,7 @@ const ViewHistoryButton = ({
             console.error('Sales orders API failed:', error);
             // Fallback to orders endpoint with limit=10 which works
             try {
-              response = await ordersApi.getAll({ 
+              response = await ordersAPI.search({ 
                 limit: 10
               });
             } catch (orderError) {

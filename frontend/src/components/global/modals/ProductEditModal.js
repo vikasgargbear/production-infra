@@ -3,7 +3,7 @@ import {
   X, Save, Loader2, Package, Tag, Percent, BarChart3,
   DollarSign, Settings, Factory
 } from 'lucide-react';
-import { productsApi } from '../../../services/api';
+import { productAPI, customerAPI, supplierAPI, batchAPI } from '../../../services/api';
 
 const ProductEditModal = ({ 
   isOpen, 

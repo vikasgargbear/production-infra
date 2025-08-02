@@ -3,14 +3,14 @@ import {
   Package, ArrowDownToLine, ArrowUpFromLine, 
   BarChart3, AlertTriangle, ArrowRightLeft, Archive
 } from 'lucide-react';
-import { ModuleHub } from '../global';
-import StockMovement from '../stock/StockMovement';
-import StockTransfer from '../stock/StockTransfer';
-import CurrentStock from '../stock/CurrentStock';
-import BatchTracking from '../stock/BatchTracking';
-import StockAdjustment from '../stock/StockAdjustment';
-import StockReport from '../stock/StockReport';
-import LowStockAlert from '../stock/LowStockAlert';
+import { ModuleHub } from '../../global';
+import StockMovement from '../../stock/StockMovement';
+import StockTransfer from '../../stock/StockTransfer';
+import CurrentStock from '../../stock/CurrentStock';
+import BatchTracking from '../../stock/BatchTracking';
+import StockAdjustment from '../../stock/StockAdjustment';
+import StockReport from '../../stock/StockReport';
+import LowStockAlert from '../../stock/LowStockAlert';
 
 interface StockHubProps {
   open?: boolean;

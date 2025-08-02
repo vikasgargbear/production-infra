@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pharma Frontend Test Suite</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #333;
+            margin-bottom: 20px;
+        }
+        .test-controls {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+        }
+        button {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 4px;
+            background: #007bff;
+            color: white;
+            cursor: pointer;
+            font-size: 14px;
+            transition: background 0.2s;
+        }
+        button:hover {
+            background: #0056b3;
+        }
+        button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+        .test-output {
+            background: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 4px;
+            padding: 15px;
+            font-family: 'Courier New', monospace;
+            font-size: 13px;
+            line-height: 1.5;
+            max-height: 600px;
+            overflow-y: auto;
+            white-space: pre-wrap;
+        }
+        .status {
+            display: inline-block;
+            padding: 5px 10px;
+            border-radius: 4px;
+            font-size: 12px;
+            font-weight: bold;
+            margin-bottom: 10px;
+        }
+        .status.running {
+            background: #ffc107;
+            color: #000;
+        }
+        .status.completed {
+            background: #28a745;
+            color: white;
+        }
+        .status.failed {
+            background: #dc3545;
+            color: white;
+        }
+        .module-select {
+            padding: 8px;
+            border: 1px solid #ced4da;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🧪 Pharma Frontend Test Suite</h1>
+        
+        <div class="test-controls">
+            <button id="runAll" onclick="runAllTests()">Run All Tests</button>
+            <button id="runModules" onclick="runModuleTests()">Run Module Tests</button>
+            <button id="runIntegration" onclick="runIntegrationTests()">Run Integration Tests</button>
+            <button id="runConnectivity" onclick="runConnectivityTest()">Test API Connectivity</button>
+            
+            <select id="moduleSelect" class="module-select">
+                <option value="">Select Module...</option>
+                <option value="sales">Sales Module</option>
+                <option value="purchase">Purchase Module</option>
+                <option value="returns">Returns Module</option>
+                <option value="payment">Payment Module</option>
+                <option value="inventory">Inventory Module</option>
+                <option value="ledger">Ledger Module</option>
+                <option value="notes">Notes Module</option>
+            </select>
+            <button onclick="runSelectedModule()">Test Selected Module</button>
+            
+            <button id="clearOutput" onclick="clearOutput()">Clear Output</button>
+        </div>
+        
+        <div id="status" class="status" style="display: none;"></div>
+        
+        <div id="output" class="test-output">
+            Welcome to Pharma Frontend Test Suite!
+            
+            Available Commands:
+            - Run All Tests: Runs complete test suite
+            - Run Module Tests: Tests all modules individually
+            - Run Integration Tests: Tests module interactions
+            - Test API Connectivity: Checks all API endpoints
+            - Test Selected Module: Tests specific module
+            
+            Or use the browser console:
+            - await runAllTests()
+            - await testModule('sales')
+            - await testSalesModule()
+            
+            Click any button above to start testing...
+        </div>
+    </div>
+
+    <script>
+        // Store original console.log
+        const originalLog = console.log;
+        const originalError = console.error;
+        
+        // Output element
+        const output = document.getElementById('output');
+        const status = document.getElementById('status');
+        
+        // Override console to capture output
+        console.log = function(...args) {
+            originalLog.apply(console, args);
+            appendOutput(args.join(' '));
+        };
+        
+        console.error = function(...args) {
+            originalError.apply(console, args);
+            appendOutput('ERROR: ' + args.join(' '), 'error');
+        };
+        
+        function appendOutput(text, type = 'log') {
+            const timestamp = new Date().toLocaleTimeString();
+            const prefix = type === 'error' ? '❌ ' : '';
+            output.textContent += `\n[${timestamp}] ${prefix}${text}`;
+            output.scrollTop = output.scrollHeight;
+        }
+        
+        function clearOutput() {
+            output.textContent = 'Output cleared. Ready for new tests...\n';
+        }
+        
+        function setStatus(text, type = 'running') {
+            status.textContent = text;
+            status.className = `status ${type}`;
+            status.style.display = 'inline-block';
+        }
+        
+        function disableButtons(disabled) {
+            document.querySelectorAll('button').forEach(btn => {
+                if (btn.id !== 'clearOutput') {
+                    btn.disabled = disabled;
+                }
+            });
+        }
+        
+        async function runAllTests() {
+            clearOutput();
+            setStatus('Running all tests...', 'running');
+            disableButtons(true);
+            
+            try {
+                const results = await window.runAllTests({ verbose: true });
+                const failed = results.summary.failed;
+                setStatus(
+                    failed === 0 ? 'All tests completed successfully!' : `Tests completed with ${failed} failures`,
+                    failed === 0 ? 'completed' : 'failed'
+                );
+            } catch (error) {
+                setStatus('Test suite failed', 'failed');
+                console.error('Test error:', error);
+            } finally {
+                disableButtons(false);
+            }
+        }
+        
+        async function runModuleTests() {
+            clearOutput();
+            setStatus('Running module tests...', 'running');
+            disableButtons(true);
+            
+            try {
+                const results = await window.runModuleTests({ verbose: true });
+                setStatus('Module tests completed', 'completed');
+            } catch (error) {
+                setStatus('Module tests failed', 'failed');
+                console.error('Test error:', error);
+            } finally {
+                disableButtons(false);
+            }
+        }
+        
+        async function runIntegrationTests() {
+            clearOutput();
+            setStatus('Running integration tests...', 'running');
+            disableButtons(true);
+            
+            try {
+                const results = await window.runIntegrationTests({ verbose: true });
+                setStatus('Integration tests completed', 'completed');
+            } catch (error) {
+                setStatus('Integration tests failed', 'failed');
+                console.error('Test error:', error);
+            } finally {
+                disableButtons(false);
+            }
+        }
+        
+        async function runConnectivityTest() {
+            clearOutput();
+            setStatus('Testing API connectivity...', 'running');
+            disableButtons(true);
+            
+            try {
+                // Load the specific test if not already loaded
+                if (!window.testAPIConnectivity) {
+                    appendOutput('Loading API connectivity test...');
+                    await import('./integration/apiConnectivity.test.js');
+                }
+                
+                const results = await window.testAPIConnectivity();
+                const failed = results.failed.length;
+                setStatus(
+                    failed === 0 ? 'All APIs are accessible!' : `${failed} API endpoints failed`,
+                    failed === 0 ? 'completed' : 'failed'
+                );
+            } catch (error) {
+                setStatus('Connectivity test failed', 'failed');
+                console.error('Test error:', error);
+            } finally {
+                disableButtons(false);
+            }
+        }
+        
+        async function runSelectedModule() {
+            const moduleSelect = document.getElementById('moduleSelect');
+            const moduleName = moduleSelect.value;
+            
+            if (!moduleName) {
+                alert('Please select a module to test');
+                return;
+            }
+            
+            clearOutput();
+            setStatus(`Testing ${moduleName} module...`, 'running');
+            disableButtons(true);
+            
+            try {
+                const results = await window.testModule(moduleName, { verbose: true });
+                const failed = results.failed.length;
+                setStatus(
+                    failed === 0 ? `${moduleName} module tests passed!` : `${moduleName} module has ${failed} failures`,
+                    failed === 0 ? 'completed' : 'failed'
+                );
+            } catch (error) {
+                setStatus(`${moduleName} module test failed`, 'failed');
+                console.error('Test error:', error);
+            } finally {
+                disableButtons(false);
+            }
+        }
+        
+        // Load test modules dynamically
+        async function loadTests() {
+            try {
+                appendOutput('Loading test modules...');
+                
+                // Import the main test runner
+                await import('./index.js');
+                
+                appendOutput('✅ Test modules loaded successfully!');
+                appendOutput('\nReady to run tests. Click any button above or use console commands.');
+            } catch (error) {
+                appendOutput('❌ Failed to load test modules: ' + error.message);
+                console.error(error);
+            }
+        }
+        
+        // Load tests on page load
+        window.addEventListener('DOMContentLoaded', loadTests);
+    </script>
+</body>
+</html>

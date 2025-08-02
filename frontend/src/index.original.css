@@ -1,0 +1,310 @@
+/* Tailwind CSS directives */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Reset and base styles */
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
+    sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  background-color: #fafafa;
+}
+
+/* Custom component styles using Tailwind @apply */
+@layer components {
+  /* Modern Swiggy-inspired Sidebar Styles */
+  .sidebar-container {
+    @apply w-80 h-screen bg-gradient-to-br from-gray-50 via-white to-blue-50 border-r border-gray-200 overflow-y-auto;
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  }
+
+  .sidebar-header {
+    @apply p-6 bg-white border-b border-gray-200;
+  }
+
+  .logo-container {
+    @apply flex items-center gap-4;
+  }
+
+  .logo-icon {
+    @apply relative w-12 h-12 bg-gradient-to-br from-primary-600 to-primary-700 rounded-2xl flex items-center justify-center shadow-pharma;
+  }
+
+  .logo-status {
+    @apply absolute -top-1 -right-1 w-4 h-4 bg-status-active-500 rounded-full border-2 border-white;
+  }
+
+  .brand-title {
+    @apply text-xl font-bold bg-gradient-to-br from-gray-800 to-gray-600 bg-clip-text text-transparent;
+  }
+
+  .brand-subtitle {
+    @apply text-sm text-primary-600 font-semibold;
+  }
+
+  .navigation-section {
+    @apply p-4 flex-1;
+  }
+
+  .nav-section-title {
+    @apply flex items-center justify-between mb-4 px-2;
+  }
+
+  .nav-section-label {
+    @apply text-xs font-bold text-gray-500 uppercase tracking-wider;
+  }
+
+  .nav-section-divider {
+    @apply w-6 h-0.5 bg-gradient-to-r from-primary-400 to-transparent rounded-sm;
+  }
+
+  /* Menu Items */
+  .menu-item {
+    @apply mb-3 cursor-pointer transition-all duration-300 ease-out hover:scale-[1.01];
+  }
+
+  .menu-item.active {
+    @apply scale-[1.02];
+  }
+
+  .menu-card {
+    @apply relative overflow-hidden rounded-2xl transition-all duration-300 ease-out bg-white border border-gray-100;
+  }
+
+  .menu-card:hover {
+    @apply border-gray-200 shadow-lg;
+  }
+
+  .menu-card.active {
+    @apply bg-gradient-to-br from-primary-200 to-primary-100 border-2 border-white shadow-pharma-lg;
+  }
+
+  .menu-content {
+    @apply relative p-4 flex items-center gap-4;
+  }
+
+  .menu-icon-container {
+    @apply relative w-12 h-12 rounded-xl flex items-center justify-center transition-all duration-300;
+  }
+
+  .menu-item:not(.active) .menu-icon-container {
+    @apply bg-gray-50 text-gray-500;
+  }
+
+  .menu-item:not(.active):hover .menu-icon-container {
+    @apply bg-gray-100;
+  }
+
+  .menu-item.active .menu-icon-container {
+    @apply bg-gradient-to-br from-primary-600 to-primary-700 text-white shadow-pharma;
+  }
+
+  .menu-text-content {
+    @apply flex-1 min-w-0;
+  }
+
+  .menu-text-wrapper {
+    @apply flex items-center justify-between;
+  }
+
+  .menu-label {
+    @apply text-base font-semibold text-gray-700 transition-colors duration-300;
+  }
+
+  .menu-item.active .menu-label {
+    @apply text-gray-800;
+  }
+
+  .menu-description {
+    @apply text-sm text-gray-500 mt-0.5 transition-colors duration-300;
+  }
+
+  .menu-item.active .menu-description {
+    @apply text-gray-600;
+  }
+
+  .menu-badge-arrow {
+    @apply flex items-center gap-2;
+  }
+
+  .menu-count-badge {
+    @apply px-2 py-1 text-xs font-semibold rounded-lg transition-all duration-300;
+  }
+
+  .menu-item:not(.active) .menu-count-badge {
+    @apply bg-gray-100 text-gray-500;
+  }
+
+  .menu-item:not(.active):hover .menu-count-badge {
+    @apply bg-gray-200;
+  }
+
+  .menu-item.active .menu-count-badge {
+    @apply bg-gradient-to-br from-primary-600 to-primary-700 text-white;
+  }
+
+  .menu-arrow {
+    @apply w-4 h-4 text-gray-400 transition-all duration-300;
+  }
+
+  .menu-item:hover .menu-arrow {
+    @apply text-gray-500 transform translate-x-1;
+  }
+
+  .menu-item.active .menu-arrow {
+    @apply text-gray-600 transform rotate-90;
+  }
+
+  .menu-active-indicator {
+    @apply absolute left-0 top-1/2 transform -translate-y-1/2 w-1 h-8 bg-gradient-to-br from-primary-600 to-primary-700 rounded-r-sm;
+  }
+
+  /* Footer */
+  .sidebar-footer {
+    @apply mt-auto p-4 bg-white border-t border-gray-200;
+  }
+
+  .footer-card {
+    @apply bg-gradient-to-br from-primary-200 to-primary-100 rounded-2xl p-4 border border-primary-400;
+  }
+
+  .footer-content {
+    @apply flex items-center gap-3;
+  }
+
+  .footer-icon {
+    @apply w-10 h-10 bg-gradient-to-br from-primary-600 to-primary-700 rounded-xl flex items-center justify-center shadow-pharma;
+  }
+
+  .footer-text {
+    @apply flex-1;
+  }
+
+  .footer-title {
+    @apply text-sm font-semibold text-primary-800;
+  }
+
+  .footer-subtitle {
+    @apply text-xs text-primary-700;
+  }
+
+  .footer-status {
+    @apply w-2 h-2 bg-status-active-500 rounded-full animate-pulse-slow;
+  }
+}
+
+/* Legacy utility classes for backward compatibility */
+@layer utilities {
+  /* Custom width utilities */
+  .w-70 {
+    width: 17.5rem; /* 280px */
+  }
+  
+  .w-80 {
+    width: 20rem; /* 320px */
+  }
+
+  /* Keep some legacy classes that might be used in components */
+  .animate-pulse-slow {
+    animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  }
+
+  /* Responsive classes for older devices */
+  @media (max-width: 768px) {
+    .sidebar-container {
+      @apply w-70;
+    }
+    
+    .menu-content {
+      @apply p-3 gap-3;
+    }
+    
+    .menu-icon-container {
+      @apply w-10 h-10;
+    }
+  }
+}
+
+/* Performance optimizations */
+@layer base {
+  /* Improve rendering performance */
+  * {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+  
+  /* Optimize transitions */
+  .transition-optimized {
+    will-change: transform, opacity;
+    backface-visibility: hidden;
+    perspective: 1000px;
+  }
+  
+  /* Remove number input spinners */
+  input[type="number"]::-webkit-inner-spin-button,
+  input[type="number"]::-webkit-outer-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+  }
+  
+  input[type="number"] {
+    -moz-appearance: textfield;
+  }
+}
+
+/* Smooth animations for modals */
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes slide-in-from-bottom {
+  from {
+    transform: translateY(100px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+@keyframes scale-in {
+  from {
+    transform: scale(0);
+    opacity: 0;
+  }
+  to {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+.animate-fade-in {
+  animation: fade-in 0.2s ease-out;
+}
+
+.animate-slide-up {
+  animation: slide-in-from-bottom 0.3s ease-out;
+}
+
+.animate-scale-in {
+  animation: scale-in 0.2s ease-out;
+}
+
+.animate-in {
+  animation: fade-in 0.2s ease-out;
+}

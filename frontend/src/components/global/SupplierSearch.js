@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useRef, forwardRef, useImperativeHandle } from 'react';
 import { Search, Building2, Phone, MapPin, CreditCard } from 'lucide-react';
-import { suppliersApi } from '../../services/api';
+import { supplierAPI } from '../../services/api';
 import { debounce } from '../../utils/debounce';
+import DataTransformer from '../../services/dataTransformer';
 
 const SupplierSearch = forwardRef(({ 
   onSupplierSelect = () => {}, 
@@ -38,9 +39,13 @@ const SupplierSearch = forwardRef(({
 
       setLoading(true);
       try {
-        const response = await suppliersApi.search(query);
+        const response = await supplierAPI.search(query);
         const results = response.data || [];
-        setSearchResults(results);
+        // Transform results to consistent format
+        const transformedResults = results.map(supplier => 
+          DataTransformer.transformSupplier(supplier, 'search')
+        );
+        setSearchResults(transformedResults);
         setSelectedIndex(-1);
       } catch (error) {
         console.error('Error searching suppliers:', error);

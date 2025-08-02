@@ -3,7 +3,7 @@ import {
   FileText, AlertCircle, Clock, CheckCircle, 
   AlertTriangle, Filter, ChevronDown 
 } from 'lucide-react';
-import { partyLedgerApi } from '../../../services/api';
+import { partyLedgerAPI } from '../../../services/api';
 import { formatCurrency, formatDate } from '../../../utils/formatters';
 
 const OutstandingBills = ({ 
@@ -29,7 +29,7 @@ const OutstandingBills = ({
     
     try {
       const params = filter !== 'all' ? { status: filter } : {};
-      const response = await partyLedgerApi.getOutstandingBills(partyId, partyType, params);
+      const response = await partyLedgerAPI.getOutstandingBills(partyId, partyType, params);
       setBills(response.data);
     } catch (err) {
       console.error('Error fetching outstanding bills:', err);

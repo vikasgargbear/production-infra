@@ -1,0 +1,41 @@
+[
+  {
+    "customer_name": "ABC Medical Store",
+    "contact_person": "Dr. Rajesh Kumar",
+    "phone": "9876543210",
+    "email": "rajesh@abcmedical.com",
+    "address": "123 Medical Complex, Delhi",
+    "gst_no": "07ABCDE1234F1Z5",
+    "city": "Delhi",
+    "state": "Delhi",
+    "pincode": "110001",
+    "credit_limit": 50000,
+    "credit_days": 30
+  },
+  {
+    "customer_name": "XYZ Pharmacy",
+    "contact_person": "Mr. Sunil Sharma", 
+    "phone": "9876543211",
+    "email": "sunil@xyzpharma.com",
+    "address": "456 Health Center, Mumbai",
+    "gst_no": "27XYZAB5678G2H9",
+    "city": "Mumbai",
+    "state": "Maharashtra",
+    "pincode": "400001",
+    "credit_limit": 75000,
+    "credit_days": 45
+  },
+  {
+    "customer_name": "HealthCare Plus",
+    "contact_person": "Ms. Priya Singh",
+    "phone": "9876543213",
+    "email": "priya@healthcareplus.com",
+    "address": "789 Wellness Street, Bangalore",
+    "gst_no": "29HEALTH567H8I9",
+    "city": "Bangalore",
+    "state": "Karnataka",
+    "pincode": "560001",
+    "credit_limit": 100000,
+    "credit_days": 60
+  }
+]

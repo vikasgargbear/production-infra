@@ -2,10 +2,10 @@ import React from 'react';
 import { 
   ShoppingBag, FileText, Package, ShoppingCart
 } from 'lucide-react';
-import { ModuleHub } from '../global';
-import SimplifiedPurchaseEntry from './SimplifiedPurchaseEntry';
-import PurchaseOrderFlow from './PurchaseOrderFlow';
-import GRNFlow from './GRNFlow';
+import { ModuleHub } from '../../components/global';
+import SimplifiedPurchaseEntry from '../../components/purchase/SimplifiedPurchaseEntry';
+import PurchaseOrderFlow from '../../components/purchase/PurchaseOrderFlow';
+import GRNFlow from '../../components/purchase/GRNFlow';
 import { PurchaseProvider } from '../../contexts/PurchaseContext';
 
 interface PurchaseHubProps {

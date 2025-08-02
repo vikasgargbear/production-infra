@@ -3,7 +3,7 @@ import {
   X, Save, Loader2, Building, Phone, Mail, 
   MapPin, CreditCard, Tag, Percent
 } from 'lucide-react';
-import { customersApi, suppliersApi } from '../../../services/api';
+import { productAPI, customerAPI, supplierAPI, batchAPI } from '../../../services/api';
 
 const PartyEditModal = ({ 
   isOpen, 

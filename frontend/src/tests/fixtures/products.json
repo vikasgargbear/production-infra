@@ -1,0 +1,88 @@
+{
+  "testProducts": [
+    {
+      "product_id": 1,
+      "product_name": "Paracetamol 500mg",
+      "product_code": "PARA500",
+      "hsn_code": "3004",
+      "category": "Tablet",
+      "manufacturer": "ABC Pharma",
+      "composition": "Paracetamol 500mg",
+      "mrp": 10.00,
+      "sale_price": 8.50,
+      "purchase_price": 6.00,
+      "gst_percent": 12,
+      "unit": "strip",
+      "pack_size": 10,
+      "current_stock": 500,
+      "min_stock": 50,
+      "max_stock": 1000
+    },
+    {
+      "product_id": 2,
+      "product_name": "Amoxicillin 250mg",
+      "product_code": "AMOX250",
+      "hsn_code": "3004",
+      "category": "Capsule",
+      "manufacturer": "XYZ Pharma",
+      "composition": "Amoxicillin 250mg",
+      "mrp": 50.00,
+      "sale_price": 45.00,
+      "purchase_price": 35.00,
+      "gst_percent": 12,
+      "unit": "strip",
+      "pack_size": 10,
+      "current_stock": 200,
+      "min_stock": 20,
+      "max_stock": 500
+    },
+    {
+      "product_id": 3,
+      "product_name": "Cough Syrup 100ml",
+      "product_code": "COUGH100",
+      "hsn_code": "3004",
+      "category": "Syrup",
+      "manufacturer": "Health Care Ltd",
+      "composition": "Dextromethorphan",
+      "mrp": 80.00,
+      "sale_price": 72.00,
+      "purchase_price": 55.00,
+      "gst_percent": 18,
+      "unit": "bottle",
+      "pack_size": 1,
+      "current_stock": 100,
+      "min_stock": 10,
+      "max_stock": 200
+    }
+  ],
+  "testBatches": [
+    {
+      "batch_id": 1,
+      "product_id": 1,
+      "batch_number": "BATCH001",
+      "expiry_date": "2025-12-31",
+      "current_stock": 200,
+      "purchase_price": 6.00,
+      "mrp": 10.00
+    },
+    {
+      "batch_id": 2,
+      "product_id": 1,
+      "batch_number": "BATCH002",
+      "expiry_date": "2026-06-30",
+      "current_stock": 300,
+      "purchase_price": 6.00,
+      "mrp": 10.00
+    }
+  ],
+  "mockProduct": {
+    "product_name": "Test Medicine",
+    "hsn_code": "3004",
+    "category": "Tablet",
+    "manufacturer": "Test Pharma",
+    "mrp": 100.00,
+    "sale_price": 90.00,
+    "gst_percent": 12,
+    "unit": "strip"
+  }
+}

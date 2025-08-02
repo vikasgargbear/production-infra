@@ -1,8 +1,10 @@
 import React, { useState } from 'react';
 import { X, Package, Pill, Building2, Hash, Percent, IndianRupee } from 'lucide-react';
-import { productsApi } from '../../../services/api';
+import { productAPI } from '../../../services/api';
 import PackTypeSelector from '../PackTypeSelector';
 import MonthYearPicker from '../MonthYearPicker';
+import DataTransformer from '../../../services/dataTransformer';
+import { APP_CONFIG } from '../../../config/app.config';
 
 const ProductCreationModal = ({ 
   show, 
@@ -98,69 +100,45 @@ const ProductCreationModal = ({
         return `${monthYearString}-01`;
       };
 
-      // Create product
+      // Create product data matching the schema
       const productData = {
-        org_id: '12de5e22-eee7-4d25-b3a7-d16d01c6170f',
         product_name: newProduct.product_name,
-        product_code: newProduct.product_code || `PRD${Date.now().toString().slice(-6)}`,
+        product_code: newProduct.product_code || `PROD${Date.now().toString().slice(-6)}`,
+        generic_name: newProduct.generic_name || newProduct.salt_composition,
+        brand: newProduct.brand || newProduct.manufacturer,
         manufacturer: newProduct.manufacturer,
+        category_id: newProduct.category_id || null,
+        product_type: 'standard',
+        product_class: 'medicine',
+        composition: newProduct.salt_composition ? { active: newProduct.salt_composition } : {},
+        strength: newProduct.strength || null,
         hsn_code: newProduct.hsn_code,
-        gst_percent: parseFloat(newProduct.gst_percent),
-        mrp: parseFloat(newProduct.mrp),
-        sale_price: parseFloat(newProduct.sale_price),
-        category: newProduct.category || 'Other',
-        salt_composition: newProduct.salt_composition || null,
-        quantity_received: parseInt(newProduct.quantity_available) || 0,
-        cost_price: parseFloat(newProduct.cost_price) || 0,
+        gst_percentage: parseFloat(newProduct.gst_percent),
+        barcode: newProduct.barcode || null,
+        pack_config: {
+          base_uom: packConfig.base_unit || 'TABLET',
+          pack_size: packConfig.qty_per_strip,
+          pack_unit: packConfig.sale_unit || 'STRIP',
+          box_size: packConfig.use_boxes ? packConfig.strips_per_box : null
+        },
+        // Inventory settings
+        maintain_batch: true,
+        maintain_expiry: true,
+        is_active: true,
+        is_saleable: true,
+        is_purchasable: true
+      };
+      
+      // Prepare batch data separately
+      const batchData = {
+        batch_number: newProduct.batch_number || `BATCH${Date.now().toString().slice(-8)}`,
+        manufacturing_date: formatDateForAPI(newProduct.mfg_date),
         expiry_date: formatDateForAPI(newProduct.expiry_date),
-        
-        // Unit configuration
-        base_unit: newProduct.category === 'Tablet' ? 'Tablet' : 
-                   newProduct.category === 'Capsule' ? 'Capsule' :
-                   newProduct.category === 'Syrup' ? 'ML' :
-                   newProduct.category === 'Injection' ? 'ML' :
-                   newProduct.category === 'Cream' ? 'Gm' :
-                   newProduct.category === 'Drops' ? 'ML' :
-                   newProduct.category === 'Powder' ? 'Gm' : 'Unit',
-        sale_unit: packConfig.sale_unit || 'Unit',
-        
-        // Pack configuration - new clear structure
-        pack_input: packConfig.pack_type_input || (packConfig.use_boxes 
-          ? `${packConfig.qty_per_strip}*${packConfig.strips_per_box}` 
-          : `${packConfig.qty_per_strip}`), // User's raw input
-        
-        // For units with suffix (ML, GM), qty_per_strip is the size, strips_per_box is the count
-        // For tablets without suffix, qty_per_strip is qty per strip, strips_per_box is strips per box
-        pack_quantity: packConfig.pack_unit 
-          ? parseInt(packConfig.strips_per_box) || 1  // Number of containers for ML/GM
-          : parseInt(packConfig.qty_per_strip) || 1,  // Qty per strip for tablets
-        
-        pack_multiplier: packConfig.pack_unit
-          ? parseInt(packConfig.pack_size) || parseInt(packConfig.qty_per_strip) // Size per container for ML/GM
-          : (packConfig.use_boxes ? parseInt(packConfig.strips_per_box) : null), // Strips per box for tablets
-          
-        pack_unit_type: packConfig.pack_unit || null, // Unit suffix
-        
-        // Structured fields
-        unit_count: packConfig.pack_unit
-          ? parseInt(packConfig.pack_size) || parseInt(packConfig.qty_per_strip) // Size for ML/GM products
-          : parseInt(packConfig.qty_per_strip) || 1, // Qty per strip for tablets
-          
-        unit_measurement: packConfig.pack_unit && packConfig.pack_size 
-          ? `${packConfig.pack_size}${packConfig.pack_unit}` 
-          : null,
-          
-        packages_per_box: packConfig.pack_unit
-          ? parseInt(packConfig.strips_per_box) // Number of bottles/sachets
-          : (packConfig.use_boxes ? parseInt(packConfig.strips_per_box) : null), // Strips per box
-        
-        // Legacy fields for backward compatibility (remove once backend is updated)
-        pack_type: packConfig.pack_type_input || (packConfig.use_boxes 
-          ? `${packConfig.qty_per_strip}*${packConfig.strips_per_box}` 
-          : `${packConfig.qty_per_strip}`),
-        pack_size: packConfig.pack_type_input || (packConfig.use_boxes 
-          ? `${packConfig.qty_per_strip}*${packConfig.strips_per_box}` 
-          : `${packConfig.qty_per_strip}`)
+        quantity_received: parseInt(newProduct.quantity_available) || 0,
+        quantity_available: parseInt(newProduct.quantity_available) || 0,
+        cost_per_unit: parseFloat(newProduct.cost_price) || 0,
+        mrp_per_unit: parseFloat(newProduct.mrp) || 0,
+        sale_price_per_unit: parseFloat(newProduct.sale_price) || 0
       };
 
       console.log('Pack Config state:', packConfig);
@@ -185,27 +163,21 @@ const ProductCreationModal = ({
         packages_per_box: productData.packages_per_box ? parseInt(productData.packages_per_box) : null
       };
       
-      const productResponse = await productsApi.create(apiData);
+      const productResponse = await productAPI.create(productData);
       console.log('Product creation response:', productResponse);
       
       if (productResponse.data) {
-        // Always create a batch (auto-generate batch number if not provided)
-        const batchNumber = newProduct.batch_number || `BATCH${Date.now().toString().slice(-8)}`;
-        const batchData = {
-          org_id: '12de5e22-eee7-4d25-b3a7-d16d01c6170f',
-          product_id: productResponse.data.product_id,
-          batch_number: batchNumber,
-          mfg_date: formatDateForAPI(newProduct.mfg_date),
-          expiry_date: formatDateForAPI(newProduct.expiry_date),
-          quantity_available: parseInt(newProduct.quantity_available) || 0,
-          mrp: parseFloat(newProduct.mrp),
-          sale_price: parseFloat(newProduct.sale_price)
-        };
-
-        // Note: Batch creation will be handled by the backend or as a separate feature
-        // await api.batches.create(batchData);
+        // Transform response data
+        const transformedProduct = DataTransformer.transformProduct(productResponse.data, 'display');
         
-        // Return product with batch info
+        // Add batch info if needed
+        const batchNumber = newProduct.batch_number || `BATCH${Date.now().toString().slice(-8)}`;
+        transformedProduct.batch_number = batchNumber;
+        transformedProduct.mfg_date = newProduct.mfg_date;
+        transformedProduct.expiry_date = newProduct.expiry_date;
+        transformedProduct.quantity_available = parseInt(newProduct.quantity_available) || 0;
+        
+        // Return transformed product
         const createdProduct = {
           ...productResponse.data,
           batch_number: batchNumber,

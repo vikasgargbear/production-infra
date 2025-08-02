@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Package, Search, Plus, X, Box, AlertCircle, TrendingUp } from 'lucide-react';
 import { searchCache, smartSearch } from '../../../utils/searchCache';
-import { productsApi, batchesApi } from '../../../services/api';
+import { productAPI, batchAPI } from '../../../services/api';
 import DataTransformer from '../../../services/dataTransformer';
 import { INVOICE_CONFIG, getStockLevelInfo } from '../../../config/invoice.config';
 import { APP_CONFIG } from '../../../config/app.config';
@@ -75,7 +75,7 @@ const ProductSearch = ({
       setSearchLoading(true);
       try {
         const results = await smartSearch('products', query, 
-          (q) => productsApi.search(q),
+          (q) => productAPI.search(q),
           { 
             useLocalSearch: true, 
             limit: INVOICE_CONFIG.SEARCH.MAX_RESULTS.API,
@@ -92,7 +92,7 @@ const ProductSearch = ({
           transformedResults = await Promise.all(
             transformedResults.map(async (product) => {
               try {
-                const batchResponse = await batchesApi.getByProduct(product.product_id);
+                const batchResponse = await batchAPI.getByProduct(product.product_id);
                 const batches = batchResponse.data?.batches || batchResponse.data || [];
                 const availableBatches = batches.filter(b => b.quantity_available > 0);
                 const totalQuantity = availableBatches.reduce((sum, batch) => 

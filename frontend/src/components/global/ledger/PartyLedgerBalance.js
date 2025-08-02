@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { TrendingUp, TrendingDown, Activity, Calendar } from 'lucide-react';
-import { partyLedgerApi } from '../../../services/api';
+import { partyLedgerAPI } from '../../../services/api';
 import { formatCurrency, formatDate } from '../../../utils/formatters';
 
 const PartyLedgerBalance = ({ 
@@ -25,7 +25,7 @@ const PartyLedgerBalance = ({
     setError(null);
     
     try {
-      const response = await partyLedgerApi.getBalance(partyId, partyType);
+      const response = await partyLedgerAPI.getBalance(partyId, partyType);
       setBalance(response.data);
       
       if (onBalanceUpdate) {

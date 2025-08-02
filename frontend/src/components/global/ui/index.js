@@ -4,6 +4,7 @@ export { default as DatePicker } from './forms/DatePicker';
 export { default as NumberInput } from './forms/NumberInput';
 export { default as CurrencyInput } from './forms/CurrencyInput';
 export { default as Button } from './Button';
+export { default as SearchBar } from './SearchBar';
 
 // Display Components
 export { default as DataTable } from './display/DataTable';

@@ -51,6 +51,7 @@ export {
   NumberInput,
   CurrencyInput,
   Button,
+  SearchBar,
   // Display
   DataTable,
   StatusBadge,

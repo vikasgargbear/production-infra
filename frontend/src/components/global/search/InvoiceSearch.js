@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef, forwardRef, useImperativeHandle } from 'react';
 import { Search, FileText, Calendar, Package, User, ChevronRight, AlertCircle } from 'lucide-react';
-import { invoicesApi } from '../../../services/api';
+import { invoiceAPI } from '../../../services/api';
 import { useDebounce } from '../../../hooks/useDebounce';
 import { format } from 'date-fns';
 
@@ -83,7 +83,8 @@ const InvoiceSearch = forwardRef(({
     setError(null);
 
     try {
-      const response = await invoicesApi.getByCustomer(customerIdStr, {
+      // TODO: Implement getByCustomer method or use search with customerId filter
+      const response = await invoiceAPI.search({
         limit: 10,
         sort: 'invoice_date',
         order: 'desc',
@@ -151,7 +152,7 @@ const InvoiceSearch = forwardRef(({
         ...filters
       };
 
-      const response = await invoicesApi.searchInvoices(searchParams);
+      const response = await invoiceAPI.search(searchParams);
       
       if (response.success) {
         const results = response.data.invoices || [];

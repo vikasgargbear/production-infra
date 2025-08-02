@@ -3,7 +3,7 @@ import {
   X, Package, Calendar, AlertCircle, CheckCircle, 
   Zap, Shield, Clock, Box, TrendingDown
 } from 'lucide-react';
-import { batchesApi } from '../../../services/api';
+import { productAPI, customerAPI, supplierAPI, batchAPI } from '../../../services/api';
 import { searchCache } from '../../../utils/searchCache';
 import DataTransformer from '../../../services/dataTransformer';
 import DateFormatter from '../../../services/dateFormatter';
@@ -89,7 +89,7 @@ const BatchSelector = ({
     setError(null);
     
     try {
-      const response = await batchesApi.getByProduct(product.product_id);
+      const response = await batchAPI.getByProduct(product.product_id);
       const batchesData = response.data?.batches || response.data || [];
       
       // Cache the results

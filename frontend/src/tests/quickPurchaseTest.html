@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Quick Purchase Module Test</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            margin: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        h1 { color: #333; }
+        .test-section {
+            margin: 20px 0;
+            padding: 15px;
+            background: #f8f9fa;
+            border-radius: 4px;
+        }
+        .success { color: #28a745; }
+        .error { color: #dc3545; }
+        .info { color: #17a2b8; }
+        button {
+            padding: 10px 20px;
+            margin: 5px;
+            border: none;
+            border-radius: 4px;
+            background: #007bff;
+            color: white;
+            cursor: pointer;
+        }
+        button:hover { background: #0056b3; }
+        pre {
+            background: #f1f3f4;
+            padding: 10px;
+            border-radius: 4px;
+            overflow-x: auto;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🧪 Quick Purchase Module Test</h1>
+        
+        <div class="test-section">
+            <h2>Test Data Transformer</h2>
+            <button onclick="testTransformer()">Run Transformer Test</button>
+            <div id="transformer-result"></div>
+        </div>
+        
+        <div class="test-section">
+            <h2>Test API Connectivity</h2>
+            <button onclick="testAPI()">Test Purchase API</button>
+            <div id="api-result"></div>
+        </div>
+        
+        <div class="test-section">
+            <h2>Test PDF Parse</h2>
+            <input type="file" id="pdf-file" accept=".pdf">
+            <button onclick="testPDFParse()">Test PDF Parse</button>
+            <div id="pdf-result"></div>
+        </div>
+    </div>
+
+    <script type="module">
+        // Import required modules
+        import { purchaseDataTransformer } from './services/api/utils/purchaseDataTransformer.js';
+        import { api } from './services/api/index.js';
+        
+        // Make functions global
+        window.purchaseDataTransformer = purchaseDataTransformer;
+        window.api = api;
+        
+        window.testTransformer = function() {
+            const resultDiv = document.getElementById('transformer-result');
+            resultDiv.innerHTML = '<p class="info">Testing data transformer...</p>';
+            
+            try {
+                // Test data
+                const frontendData = {
+                    supplier_id: 1,
+                    invoice_number: 'INV-TEST-001',
+                    invoice_date: '2024-01-01',
+                    items: [{
+                        product_id: 1,
+                        product_name: 'Test Product',
+                        quantity: 10,
+                        purchase_price: 100,
+                        tax_percent: 18
+                    }],
+                    subtotal_amount: 1000,
+                    tax_amount: 180,
+                    final_amount: 1180
+                };
+                
+                // Transform to backend
+                const backendData = purchaseDataTransformer.transformPurchaseToBackend(frontendData);
+                
+                // Check transformations
+                const checks = [
+                    {
+                        test: 'Invoice number transformation',
+                        expected: 'INV-TEST-001',
+                        actual: backendData.supplier_invoice_number,
+                        pass: backendData.supplier_invoice_number === 'INV-TEST-001'
+                    },
+                    {
+                        test: 'Quantity transformation',
+                        expected: 10,
+                        actual: backendData.items[0].ordered_quantity,
+                        pass: backendData.items[0].ordered_quantity === 10
+                    },
+                    {
+                        test: 'Price transformation',
+                        expected: 100,
+                        actual: backendData.items[0].cost_price,
+                        pass: backendData.items[0].cost_price === 100
+                    }
+                ];
+                
+                let html = '<h3 class="success">✅ Transformer Test Results</h3>';
+                html += '<table style="width:100%; border-collapse: collapse;">';
+                html += '<tr><th>Test</th><th>Expected</th><th>Actual</th><th>Result</th></tr>';
+                
+                checks.forEach(check => {
+                    html += `<tr>
+                        <td>${check.test}</td>
+                        <td>${check.expected}</td>
+                        <td>${check.actual}</td>
+                        <td class="${check.pass ? 'success' : 'error'}">${check.pass ? '✅ Pass' : '❌ Fail'}</td>
+                    </tr>`;
+                });
+                
+                html += '</table>';
+                html += '<h4>Transformed Data:</h4>';
+                html += `<pre>${JSON.stringify(backendData, null, 2)}</pre>`;
+                
+                resultDiv.innerHTML = html;
+            } catch (error) {
+                resultDiv.innerHTML = `<p class="error">❌ Error: ${error.message}</p>`;
+            }
+        };
+        
+        window.testAPI = async function() {
+            const resultDiv = document.getElementById('api-result');
+            resultDiv.innerHTML = '<p class="info">Testing API connectivity...</p>';
+            
+            try {
+                const tests = [];
+                
+                // Test 1: Get purchases
+                try {
+                    const response = await api.purchases.getAll({ limit: 5 });
+                    tests.push({
+                        name: 'Get Purchases',
+                        status: 'success',
+                        message: `Retrieved ${response.data?.length || 0} purchases`
+                    });
+                } catch (error) {
+                    tests.push({
+                        name: 'Get Purchases',
+                        status: 'error',
+                        message: error.message
+                    });
+                }
+                
+                // Test 2: Get pending receipts
+                try {
+                    const response = await api.purchases.enhanced.getPendingReceipts();
+                    tests.push({
+                        name: 'Get Pending Receipts',
+                        status: 'success',
+                        message: `Found ${response.data?.length || 0} pending receipts`
+                    });
+                } catch (error) {
+                    tests.push({
+                        name: 'Get Pending Receipts',
+                        status: 'error',
+                        message: error.message
+                    });
+                }
+                
+                // Display results
+                let html = '<h3>API Test Results</h3>';
+                tests.forEach(test => {
+                    html += `<p class="${test.status}">
+                        ${test.status === 'success' ? '✅' : '❌'} ${test.name}: ${test.message}
+                    </p>`;
+                });
+                
+                resultDiv.innerHTML = html;
+            } catch (error) {
+                resultDiv.innerHTML = `<p class="error">❌ Error: ${error.message}</p>`;
+            }
+        };
+        
+        window.testPDFParse = async function() {
+            const resultDiv = document.getElementById('pdf-result');
+            const fileInput = document.getElementById('pdf-file');
+            
+            if (!fileInput.files[0]) {
+                resultDiv.innerHTML = '<p class="error">Please select a PDF file</p>';
+                return;
+            }
+            
+            resultDiv.innerHTML = '<p class="info">Testing PDF parse...</p>';
+            
+            try {
+                const formData = new FormData();
+                formData.append('file', fileInput.files[0]);
+                
+                const response = await api.purchases.parseInvoice(formData);
+                
+                let html = '<h3>PDF Parse Results</h3>';
+                
+                if (response.data.success) {
+                    html += '<p class="success">✅ PDF parsed successfully</p>';
+                } else {
+                    html += '<p class="info">⚠️ PDF parsing failed, manual entry template returned</p>';
+                }
+                
+                html += '<h4>Response Data:</h4>';
+                html += `<pre>${JSON.stringify(response.data, null, 2)}</pre>`;
+                
+                resultDiv.innerHTML = html;
+            } catch (error) {
+                resultDiv.innerHTML = `<p class="error">❌ Error: ${error.message}</p>`;
+            }
+        };
+    </script>
+</body>
+</html>

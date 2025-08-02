@@ -1,0 +1,122 @@
+[
+  {
+    "bill_no": "PB-2025-001",
+    "purchase_date": "2025-01-10",
+    "supplier_id": 1,
+    "supplier_name": "MedSupply India Pvt Ltd",
+    "total_amount": 2400.00,
+    "tax_amount": 288.00,
+    "final_amount": 2688.00,
+    "payment_status": "PAID",
+    "items": [
+      {
+        "product_id": 1,
+        "product_name": "Paracetamol 500mg",
+        "quantity": 50,
+        "purchase_price": 18.00,
+        "amount": 900.00,
+        "tax_rate": 12.0,
+        "tax_amount": 108.00,
+        "batch_number": "PCM001",
+        "hsn_code": "30049099",
+        "expiry_date": "2025-12-31"
+      },
+      {
+        "product_id": 3,
+        "product_name": "Crocin Advanced 650mg",
+        "quantity": 30,
+        "purchase_price": 32.00,
+        "amount": 960.00,
+        "tax_rate": 12.0,
+        "tax_amount": 115.20,
+        "batch_number": "CRC003",
+        "hsn_code": "30049099",
+        "expiry_date": "2026-03-15"
+      },
+      {
+        "product_id": 4,
+        "product_name": "Vitamin D3 60000 IU",
+        "quantity": 15,
+        "purchase_price": 95.00,
+        "amount": 1425.00,
+        "tax_rate": 18.0,
+        "tax_amount": 256.50,
+        "batch_number": "VTD004",
+        "hsn_code": "29362900",
+        "expiry_date": "2025-09-20"
+      }
+    ]
+  },
+  {
+    "bill_no": "PB-2025-002",
+    "purchase_date": "2025-01-12",
+    "supplier_id": 2,
+    "supplier_name": "PharmaDistributors Ltd",
+    "total_amount": 1800.00,
+    "tax_amount": 216.00,
+    "final_amount": 2016.00,
+    "payment_status": "PENDING",
+    "items": [
+      {
+        "product_id": 2,
+        "product_name": "Amoxicillin 250mg",
+        "quantity": 20,
+        "purchase_price": 65.00,
+        "amount": 1300.00,
+        "tax_rate": 12.0,
+        "tax_amount": 156.00,
+        "batch_number": "AMX002",
+        "hsn_code": "30041090",
+        "expiry_date": "2025-06-30"
+      },
+      {
+        "product_id": 5,
+        "product_name": "Azithromycin 500mg",
+        "quantity": 10,
+        "purchase_price": 75.00,
+        "amount": 750.00,
+        "tax_rate": 12.0,
+        "tax_amount": 90.00,
+        "batch_number": "AZT005",
+        "hsn_code": "30041090",
+        "expiry_date": "2025-11-10"
+      }
+    ]
+  },
+  {
+    "bill_no": "PB-2025-003",
+    "purchase_date": "2025-01-14",
+    "supplier_id": 3,
+    "supplier_name": "Generic Medicines Co",
+    "total_amount": 3200.00,
+    "tax_amount": 384.00,
+    "final_amount": 3584.00,
+    "payment_status": "PARTIAL",
+    "items": [
+      {
+        "product_id": 1,
+        "product_name": "Paracetamol 500mg",
+        "quantity": 100,
+        "purchase_price": 18.00,
+        "amount": 1800.00,
+        "tax_rate": 12.0,
+        "tax_amount": 216.00,
+        "batch_number": "PCM001",
+        "hsn_code": "30049099",
+        "expiry_date": "2025-12-31"
+      },
+      {
+        "product_id": 2,
+        "product_name": "Amoxicillin 250mg",
+        "quantity": 25,
+        "purchase_price": 65.00,
+        "amount": 1625.00,
+        "tax_rate": 12.0,
+        "tax_amount": 195.00,
+        "batch_number": "AMX002",
+        "hsn_code": "30041090",
+        "expiry_date": "2025-06-30"
+      }
+    ]
+  }
+]

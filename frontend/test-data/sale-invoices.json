@@ -1,0 +1,126 @@
+[
+  {
+    "invoice_no": "INV-2025-001",
+    "invoice_date": "2025-01-15",
+    "customer_id": 1,
+    "customer_name": "ABC Medical Store",
+    "total_amount": 1250.00,
+    "tax_amount": 150.00,
+    "final_amount": 1400.00,
+    "payment_status": "PAID",
+    "items": [
+      {
+        "product_id": 1,
+        "product_name": "Paracetamol 500mg",
+        "quantity": 20,
+        "rate": 22.50,
+        "amount": 450.00,
+        "tax_rate": 12.0,
+        "tax_amount": 54.00,
+        "batch_number": "PCM001",
+        "hsn_code": "30049099"
+      },
+      {
+        "product_id": 3,
+        "product_name": "Crocin Advanced 650mg", 
+        "quantity": 15,
+        "rate": 38.00,
+        "amount": 570.00,
+        "tax_rate": 12.0,
+        "tax_amount": 68.40,
+        "batch_number": "CRC003",
+        "hsn_code": "30049099"
+      },
+      {
+        "product_id": 4,
+        "product_name": "Vitamin D3 60000 IU",
+        "quantity": 2,
+        "rate": 108.00,
+        "amount": 216.00,
+        "tax_rate": 18.0,
+        "tax_amount": 38.88,
+        "batch_number": "VTD004",
+        "hsn_code": "29362900"
+      }
+    ]
+  },
+  {
+    "invoice_no": "INV-2025-002",
+    "invoice_date": "2025-01-18",
+    "customer_id": 2,
+    "customer_name": "XYZ Pharmacy",
+    "total_amount": 920.00,
+    "tax_amount": 110.40,
+    "final_amount": 1030.40,
+    "payment_status": "PENDING",
+    "items": [
+      {
+        "product_id": 2,
+        "product_name": "Amoxicillin 250mg",
+        "quantity": 8,
+        "rate": 75.00,
+        "amount": 600.00,
+        "tax_rate": 12.0,
+        "tax_amount": 72.00,
+        "batch_number": "AMX002",
+        "hsn_code": "30041090"
+      },
+      {
+        "product_id": 5,
+        "product_name": "Azithromycin 500mg",
+        "quantity": 4,
+        "rate": 85.00,
+        "amount": 340.00,
+        "tax_rate": 12.0,
+        "tax_amount": 40.80,
+        "batch_number": "AZT005",
+        "hsn_code": "30041090"
+      }
+    ]
+  },
+  {
+    "invoice_no": "INV-2025-003",
+    "invoice_date": "2025-01-20",
+    "customer_id": 3,
+    "customer_name": "HealthCare Plus",
+    "total_amount": 1850.00,
+    "tax_amount": 222.00,
+    "final_amount": 2072.00,
+    "payment_status": "PARTIAL",
+    "items": [
+      {
+        "product_id": 1,
+        "product_name": "Paracetamol 500mg",
+        "quantity": 25,
+        "rate": 22.50,
+        "amount": 562.50,
+        "tax_rate": 12.0,
+        "tax_amount": 67.50,
+        "batch_number": "PCM001",
+        "hsn_code": "30049099"
+      },
+      {
+        "product_id": 2,
+        "product_name": "Amoxicillin 250mg",
+        "quantity": 12,
+        "rate": 75.00,
+        "amount": 900.00,
+        "tax_rate": 12.0,
+        "tax_amount": 108.00,
+        "batch_number": "AMX002", 
+        "hsn_code": "30041090"
+      },
+      {
+        "product_id": 4,
+        "product_name": "Vitamin D3 60000 IU",
+        "quantity": 4,
+        "rate": 108.00,
+        "amount": 432.00,
+        "tax_rate": 18.0,
+        "tax_amount": 77.76,
+        "batch_number": "VTD004",
+        "hsn_code": "29362900"
+      }
+    ]
+  }
+]

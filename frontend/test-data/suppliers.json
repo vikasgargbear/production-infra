@@ -1,0 +1,41 @@
+[
+  {
+    "supplier_name": "MedSupply India Pvt Ltd",
+    "contact_person": "Mr. Amit Patel",
+    "phone": "9876543212",
+    "email": "amit@medsupply.com",
+    "address": "789 Industrial Area, Ahmedabad",
+    "gst_no": "24MEDSUP1234M1N2",
+    "city": "Ahmedabad",
+    "state": "Gujarat",
+    "pincode": "380001",
+    "payment_terms": "30 days",
+    "bank_details": "ICICI Bank, Ahmedabad"
+  },
+  {
+    "supplier_name": "PharmaDistributors Ltd",
+    "contact_person": "Dr. Neha Gupta",
+    "phone": "9876543214", 
+    "email": "neha@pharmadist.com",
+    "address": "456 Distribution Hub, Hyderabad",
+    "gst_no": "36PHARMA789P4Q5",
+    "city": "Hyderabad",
+    "state": "Telangana",
+    "pincode": "500001",
+    "payment_terms": "45 days",
+    "bank_details": "HDFC Bank, Hyderabad"
+  },
+  {
+    "supplier_name": "Generic Medicines Co",
+    "contact_person": "Mr. Ravi Mehta",
+    "phone": "9876543215",
+    "email": "ravi@genericmed.com", 
+    "address": "123 Pharma Park, Pune",
+    "gst_no": "27GENERIC123G4H5",
+    "city": "Pune",
+    "state": "Maharashtra", 
+    "pincode": "411001",
+    "payment_terms": "60 days",
+    "bank_details": "SBI Bank, Pune"
+  }
+]

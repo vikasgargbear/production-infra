@@ -1,0 +1,50 @@
+{
+  "testSuppliers": [
+    {
+      "supplier_id": 1,
+      "supplier_name": "MediCare Distributors",
+      "supplier_code": "SUPP001",
+      "gst_number": "27CCCCC0000C1Z5",
+      "address": "Industrial Area, Phase 1",
+      "city": "Mumbai",
+      "state": "Maharashtra",
+      "state_code": "27",
+      "pincode": "400070",
+      "phone": "9876543210",
+      "email": "contact@medicare.com",
+      "contact_person": "Mr. Sharma",
+      "credit_days": 30,
+      "credit_limit": 500000,
+      "outstanding_amount": 125000
+    },
+    {
+      "supplier_id": 2,
+      "supplier_name": "Pharma Wholesale Ltd",
+      "supplier_code": "SUPP002",
+      "gst_number": "27DDDDD0000D1Z5",
+      "address": "Market Road",
+      "city": "Pune",
+      "state": "Maharashtra", 
+      "state_code": "27",
+      "pincode": "411001",
+      "phone": "9123456789",
+      "email": "sales@pharmawholesale.com",
+      "contact_person": "Ms. Patel",
+      "credit_days": 45,
+      "credit_limit": 1000000,
+      "outstanding_amount": 0
+    }
+  ],
+  "mockSupplier": {
+    "supplier_name": "Test Supplier",
+    "gst_number": "27EEEEE0000E1Z5",
+    "address": "Test Industrial Area",
+    "city": "Mumbai",
+    "state": "Maharashtra",
+    "state_code": "27",
+    "pincode": "400001",
+    "phone": "9999999999",
+    "email": "test@supplier.com",
+    "contact_person": "Test Person"
+  }
+}

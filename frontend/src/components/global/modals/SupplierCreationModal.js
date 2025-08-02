@@ -1,8 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { X, Building2, Phone, Mail, MapPin, CreditCard, FileText, Save } from 'lucide-react';
-import { suppliersApi } from '../../../services/api';
+import { supplierAPI } from '../../../services/api';
 import { searchCache } from '../../../utils/searchCache';
 import { useToast } from '../ui';
+import DataTransformer from '../../../services/dataTransformer';
+import { APP_CONFIG } from '../../../config/app.config';
 
 // Indian states for dropdown
 const INDIAN_STATES = [
@@ -156,56 +158,23 @@ const SupplierCreationModal = ({
     
     setSaving(true);
     try {
-      // Prepare data for API - matching PRODUCTION database schema exactly
-      const supplierData = {
-        // Required fields
-        supplier_name: formData.supplier_name,
-        supplier_code: formData.supplier_code || undefined, // Will be auto-generated if not provided
-        
-        // Optional fields that exist in the database
-        company_name: formData.supplier_name, // Using supplier name as company name
-        supplier_type: formData.supplier_type || 'manufacturer',
-        contact_person: formData.contact_person || undefined,
-        phone: formData.phone.replace(/\D/g, ''),
-        alternate_phone: formData.alternate_phone?.replace(/\D/g, '') || undefined,
-        email: formData.email || undefined,
-        
-        // Address - send as address_line1 and address_line2, backend will combine them
-        address_line1: formData.address_line1 || undefined,
-        address_line2: formData.address_line2 || undefined,
-        city: formData.city,
-        state: formData.state,
-        pincode: formData.pincode || undefined,
-        
-        // Tax details - use field names from schema (not aliases)
-        gstin: formData.gstin ? formData.gstin.toUpperCase() : undefined,
-        pan_number: formData.pan_number ? formData.pan_number.toUpperCase() : undefined,
-        drug_license_no: formData.drug_license_no || undefined,
-        
-        // Commercial terms - use field names from schema
-        payment_terms: parseInt(formData.payment_terms) || 30,
-        
-        // Banking details - use field names from schema
-        bank_name: formData.bank_name || undefined,
-        bank_account_no: formData.bank_account_no || undefined,
-        bank_ifsc_code: formData.bank_ifsc_code || undefined,
-        
-        // Additional fields
-        notes: formData.notes || undefined,
-        is_active: formData.is_active
-      };
+      // Prepare data for API using DataTransformer
+      const supplierData = DataTransformer.prepareSupplierForAPI(formData);
       
       console.log('Sending supplier data:', supplierData);
-      const response = await suppliersApi.create(supplierData);
+      const response = await supplierAPI.create(supplierData);
       
       if (response) {
         // Clear supplier cache to force refresh on next search
         searchCache.clearType('suppliers');
         
+        // Transform response data
+        const transformedSupplier = DataTransformer.transformSupplier(response.data || response, 'display');
+        
         toast.success('Supplier created successfully');
         
         if (onSupplierCreated) {
-          onSupplierCreated(response);
+          onSupplierCreated(transformedSupplier);
         }
         
         onClose();

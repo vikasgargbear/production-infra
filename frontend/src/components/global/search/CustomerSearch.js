@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef, forwardRef, useImperativeHandle } from 'react';
 import { User, Search, Plus, X, MapPin, Phone, Mail, Building } from 'lucide-react';
 import { searchCache, smartSearch } from '../../../utils/searchCache';
-import { customersApi } from '../../../services/api';
+import { customerAPI } from '../../../services/api';
 import DataTransformer from '../../../services/dataTransformer';
 import { INVOICE_CONFIG } from '../../../config/invoice.config';
 import { APP_CONFIG } from '../../../config/app.config';
@@ -71,7 +71,7 @@ const CustomerSearch = forwardRef(({
       setSearchLoading(true);
       try {
         const results = await smartSearch('customers', query, 
-          (q) => customersApi.search(q),
+          (q) => customerAPI.search(q),
           { 
             useLocalSearch: true, 
             limit: INVOICE_CONFIG.SEARCH.MAX_RESULTS.API,

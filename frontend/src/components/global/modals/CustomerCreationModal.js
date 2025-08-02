@@ -1,19 +1,28 @@
 import React, { useState } from 'react';
 import { X, User, Phone, Mail, MapPin, Building, FileText } from 'lucide-react';
-import { customersApi } from '../../../services/api';
+import { customerAPI } from '../../../services/api';
+import DataTransformer from '../../../services/dataTransformer';
+import { APP_CONFIG } from '../../../config/app.config';
 
 const CustomerCreationModal = ({ show, onClose, onCustomerCreated }) => {
   const [newCustomer, setNewCustomer] = useState({
     customer_name: '',
-    phone: '',
-    email: '',
-    address_line1: '',
-    city: '',
-    state: '',
-    pincode: '',
+    primary_phone: '',
+    primary_email: '',
     customer_type: 'retail',
     gst_number: '',
-    drug_license_number: ''
+    pan_number: '',
+    drug_license_number: '',
+    credit_limit: 0,
+    credit_days: 0,
+    address: {
+      address_line1: '',
+      address_line2: '',
+      city: '',
+      state: '',
+      pincode: '',
+      country: 'India'
+    }
   });
   const [saving, setSaving] = useState(false);
   const [errors, setErrors] = useState([]);
@@ -22,43 +31,34 @@ const CustomerCreationModal = ({ show, onClose, onCustomerCreated }) => {
     setSaving(true);
     setErrors([]);
     try {
-      const customerData = {
-        org_id: '12de5e22-eee7-4d25-b3a7-d16d01c6170f',
-        customer_name: newCustomer.customer_name,
-        phone: newCustomer.phone,
-        email: newCustomer.email || null,
-        address_line1: newCustomer.address_line1,
-        city: newCustomer.city,
-        state: newCustomer.state,
-        pincode: newCustomer.pincode,
-        customer_type: newCustomer.customer_type,
-        gst_number: newCustomer.gst_number || null,
-        drug_license_number: newCustomer.drug_license_number || null,
-        customer_code: `CUST${Date.now().toString().slice(-6)}`
-      };
+      const customerData = DataTransformer.prepareCustomerForAPI({
+        ...newCustomer,
+        org_id: APP_CONFIG?.DEFAULT_ORG_ID || 'ad808530-1ddb-4377-ab20-67bef145d80d'
+      });
 
-      const response = await customersApi.create(customerData);
+      const response = await customerAPI.create(customerData);
       
       if (response.data) {
-        const createdCustomer = {
-          ...response.data,
-          customer_id: response.data.customer_id,
-          customer_name: response.data.customer_name,
-          customer_code: response.data.customer_code
-        };
-        
+        const createdCustomer = DataTransformer.transformCustomer(response.data, 'display');
         onCustomerCreated(createdCustomer);
         setNewCustomer({
           customer_name: '',
-          phone: '',
-          email: '',
-          address_line1: '',
-          city: '',
-          state: '',
-          pincode: '',
+          primary_phone: '',
+          primary_email: '',
           customer_type: 'retail',
           gst_number: '',
-          drug_license_number: ''
+          pan_number: '',
+          drug_license_number: '',
+          credit_limit: 0,
+          credit_days: 0,
+          address: {
+            address_line1: '',
+            address_line2: '',
+            city: '',
+            state: '',
+            pincode: '',
+            country: 'India'
+          }
         });
         onClose();
       }
@@ -137,8 +137,8 @@ const CustomerCreationModal = ({ show, onClose, onCustomerCreated }) => {
                     <Phone className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
                     <input
                       type="text"
-                      value={newCustomer.phone}
-                      onChange={(e) => setNewCustomer({ ...newCustomer, phone: e.target.value })}
+                      value={newCustomer.primary_phone}
+                      onChange={(e) => setNewCustomer({ ...newCustomer, primary_phone: e.target.value })}
                       className="w-full pl-10 pr-3 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
                       placeholder="Enter phone number"
                     />
@@ -153,8 +153,8 @@ const CustomerCreationModal = ({ show, onClose, onCustomerCreated }) => {
                     <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
                     <input
                       type="email"
-                      value={newCustomer.email}
-                      onChange={(e) => setNewCustomer({ ...newCustomer, email: e.target.value })}
+                      value={newCustomer.primary_email}
+                      onChange={(e) => setNewCustomer({ ...newCustomer, primary_email: e.target.value })}
                       className="w-full pl-10 pr-3 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
                       placeholder="Enter email address"
                     />
@@ -174,8 +174,8 @@ const CustomerCreationModal = ({ show, onClose, onCustomerCreated }) => {
                   <div className="relative">
                     <MapPin className="absolute left-3 top-3 w-5 h-5 text-gray-400" />
                     <textarea
-                      value={newCustomer.address_line1}
-                      onChange={(e) => setNewCustomer({ ...newCustomer, address_line1: e.target.value })}
+                      value={newCustomer.address.address_line1}
+                      onChange={(e) => setNewCustomer({ ...newCustomer, address: { ...newCustomer.address, address_line1: e.target.value } })}
                       className="w-full pl-10 pr-3 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all resize-none"
                       rows="2"
                       placeholder="Enter complete address"
@@ -192,8 +192,8 @@ const CustomerCreationModal = ({ show, onClose, onCustomerCreated }) => {
                       <Building className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
                       <input
                         type="text"
-                        value={newCustomer.city}
-                        onChange={(e) => setNewCustomer({ ...newCustomer, city: e.target.value })}
+                        value={newCustomer.address.city}
+                        onChange={(e) => setNewCustomer({ ...newCustomer, address: { ...newCustomer.address, city: e.target.value } })}
                         className="w-full pl-10 pr-3 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
                         placeholder="Enter city"
                       />
@@ -205,8 +205,8 @@ const CustomerCreationModal = ({ show, onClose, onCustomerCreated }) => {
                       State *
                     </label>
                     <select
-                      value={newCustomer.state}
-                      onChange={(e) => setNewCustomer({ ...newCustomer, state: e.target.value })}
+                      value={newCustomer.address.state}
+                      onChange={(e) => setNewCustomer({ ...newCustomer, address: { ...newCustomer.address, state: e.target.value } })}
                       className="w-full px-3 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
                     >
                       <option value="">Select State</option>
@@ -257,8 +257,8 @@ const CustomerCreationModal = ({ show, onClose, onCustomerCreated }) => {
                     </label>
                     <input
                       type="text"
-                      value={newCustomer.pincode}
-                      onChange={(e) => setNewCustomer({ ...newCustomer, pincode: e.target.value })}
+                      value={newCustomer.address.pincode}
+                      onChange={(e) => setNewCustomer({ ...newCustomer, address: { ...newCustomer.address, pincode: e.target.value } })}
                       className="w-full px-3 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
                       placeholder="Enter pincode"
                       maxLength="6"
@@ -274,13 +274,11 @@ const CustomerCreationModal = ({ show, onClose, onCustomerCreated }) => {
                       onChange={(e) => setNewCustomer({ ...newCustomer, customer_type: e.target.value })}
                       className="w-full px-3 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
                     >
-                      <option value="retail">Retail</option>
-                      <option value="wholesale">Wholesale</option>
-                      <option value="distributor">Distributor</option>
+                      <option value="pharmacy">Pharmacy</option>
                       <option value="hospital">Hospital</option>
                       <option value="clinic">Clinic</option>
-                      <option value="pharmacy">Pharmacy</option>
-                      <option value="other">Other</option>
+                      <option value="institution">Institution</option>
+                      <option value="doctor">Doctor</option>
                     </select>
                   </div>
                 </div>
@@ -351,7 +349,7 @@ const CustomerCreationModal = ({ show, onClose, onCustomerCreated }) => {
           </button>
           <button
             onClick={saveCustomer}
-            disabled={saving || !newCustomer.customer_name || !newCustomer.phone || !newCustomer.address_line1 || !newCustomer.city || !newCustomer.state || !newCustomer.pincode || !newCustomer.customer_type}
+            disabled={saving || !newCustomer.customer_name || !newCustomer.primary_phone || !newCustomer.address.address_line1 || !newCustomer.address.city || !newCustomer.address.state || !newCustomer.address.pincode || !newCustomer.customer_type}
             className="px-6 py-3 bg-blue-600 text-white rounded-xl hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 font-medium flex items-center space-x-2"
           >
             {saving ? (

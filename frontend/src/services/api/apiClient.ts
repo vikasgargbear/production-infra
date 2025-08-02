@@ -146,6 +146,24 @@ export const productAPI = {
     const response = await apiClient.get(`/products/${productId}`);
     return response.data;
   },
+
+  /**
+   * Create new product
+   * Wraps: api.create_product()
+   */
+  create: async (productData: any) => {
+    const response = await apiClient.post('/pg/products', productData);
+    return response.data;
+  },
+
+  /**
+   * Update product
+   * Wraps: api.update_product()
+   */
+  update: async (productId: number, productData: any) => {
+    const response = await apiClient.put(`/pg/products/${productId}`, productData);
+    return response.data;
+  },
 };
 
 // ============= INVOICE APIs =============
@@ -210,6 +228,57 @@ export const invoiceAPI = {
   },
 };
 
+// ============= SUPPLIER APIs =============
+
+export const supplierAPI = {
+  /**
+   * Search suppliers
+   * Wraps: api.search_suppliers()
+   */
+  search: async (query: string, options?: {
+    supplierType?: string;
+    limit?: number;
+    offset?: number;
+  }) => {
+    const response = await apiClient.get('/pg/suppliers/search', {
+      params: {
+        q: query,
+        supplier_type: options?.supplierType,
+        limit: options?.limit || 50,
+        offset: options?.offset || 0,
+      },
+    });
+    return response.data;
+  },
+
+  /**
+   * Get supplier details
+   * Wraps: api.get_supplier_details()
+   */
+  getDetails: async (supplierId: number) => {
+    const response = await apiClient.get(`/pg/suppliers/${supplierId}`);
+    return response.data;
+  },
+
+  /**
+   * Create new supplier
+   * Wraps: api.create_supplier()
+   */
+  create: async (supplierData: any) => {
+    const response = await apiClient.post('/pg/suppliers', supplierData);
+    return response.data;
+  },
+
+  /**
+   * Update supplier
+   * Wraps: api.update_supplier()
+   */
+  update: async (supplierId: number, supplierData: any) => {
+    const response = await apiClient.put(`/pg/suppliers/${supplierId}`, supplierData);
+    return response.data;
+  },
+};
+
 // ============= PAYMENT APIs =============
 
 export const paymentAPI = {
@@ -230,6 +299,42 @@ export const paymentAPI = {
   }) => {
     const response = await apiClient.post('/pg/payments', {
       payment_data: paymentData
+    });
+    return response.data;
+  },
+};
+
+// ============= BATCH APIs =============
+
+export const batchAPI = {
+  /**
+   * Get batches for a specific product
+   * Wraps: api.get_product_batches()
+   */
+  getByProduct: async (productId: number) => {
+    const response = await apiClient.get(`/pg/products/${productId}/batches`);
+    return response.data;
+  },
+
+  /**
+   * Get batch details
+   * Wraps: api.get_batch_details()
+   */
+  getDetails: async (batchId: number) => {
+    const response = await apiClient.get(`/pg/batches/${batchId}`);
+    return response.data;
+  },
+
+  /**
+   * Search batches with filters
+   */
+  search: async (filters: {
+    productId?: number;
+    expiryAfter?: string;
+    inStock?: boolean;
+  }) => {
+    const response = await apiClient.get('/pg/batches/search', {
+      params: filters,
     });
     return response.data;
   },
@@ -319,6 +424,99 @@ export const gstAPI = {
     const response = await apiClient.get('/pg/gst/gstr1', {
       params: { month, year },
     });
+    return response.data;
+  },
+};
+
+// ============= ORDERS APIs =============
+
+export const ordersAPI = {
+  search: async (filters?: any) => {
+    const response = await apiClient.get('/pg/orders', { params: filters });
+    return response.data;
+  },
+  getDetails: async (orderId: number) => {
+    const response = await apiClient.get(`/pg/orders/${orderId}`);
+    return response.data;
+  },
+};
+
+// ============= PURCHASES APIs =============
+
+export const purchasesAPI = {
+  search: async (filters?: any) => {
+    const response = await apiClient.get('/pg/purchases', { params: filters });
+    return response.data;
+  },
+  getDetails: async (purchaseId: number) => {
+    const response = await apiClient.get(`/pg/purchases/${purchaseId}`);
+    return response.data;
+  },
+};
+
+// ============= CHALLANS APIs =============
+
+export const challansAPI = {
+  search: async (filters?: any) => {
+    const response = await apiClient.get('/pg/challans', { params: filters });
+    return response.data;
+  },
+  getDetails: async (challanId: number) => {
+    const response = await apiClient.get(`/pg/challans/${challanId}`);
+    return response.data;
+  },
+};
+
+// ============= SALES ORDERS APIs =============
+
+export const salesOrdersAPI = {
+  search: async (filters?: any) => {
+    const response = await apiClient.get('/pg/sales-orders', { params: filters });
+    return response.data;
+  },
+  getDetails: async (orderId: number) => {
+    const response = await apiClient.get(`/pg/sales-orders/${orderId}`);
+    return response.data;
+  },
+};
+
+// ============= PARTY LEDGER APIs =============
+
+export const partyLedgerAPI = {
+  /**
+   * Get party ledger balance
+   */
+  getBalance: async (partyId: number, partyType: 'customer' | 'supplier') => {
+    const response = await apiClient.get(`/pg/ledger/${partyType}/${partyId}/balance`);
+    return response.data;
+  },
+
+  /**
+   * Get party statement
+   */
+  getStatement: async (partyId: number, partyType: 'customer' | 'supplier', dateRange?: {
+    fromDate: string;
+    toDate: string;
+  }) => {
+    const response = await apiClient.get(`/pg/ledger/${partyType}/${partyId}/statement`, {
+      params: dateRange,
+    });
+    return response.data;
+  },
+
+  /**
+   * Get outstanding bills
+   */
+  getOutstandingBills: async (partyId: number, partyType: 'customer' | 'supplier') => {
+    const response = await apiClient.get(`/pg/ledger/${partyType}/${partyId}/outstanding`);
+    return response.data;
+  },
+
+  /**
+   * Get aging analysis
+   */
+  getAgingAnalysis: async (partyId: number, partyType: 'customer' | 'supplier') => {
+    const response = await apiClient.get(`/pg/ledger/${partyType}/${partyId}/aging`);
     return response.data;
   },
 };

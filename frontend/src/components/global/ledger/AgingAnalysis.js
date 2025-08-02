@@ -3,7 +3,7 @@ import {
   TrendingUp, AlertTriangle, Users, Building2, 
   Download, Filter, BarChart3 
 } from 'lucide-react';
-import { partyLedgerApi } from '../../../services/api';
+import { partyLedgerAPI } from '../../../services/api';
 import { formatCurrency } from '../../../utils/formatters';
 
 const AgingAnalysis = ({ 
@@ -26,7 +26,7 @@ const AgingAnalysis = ({
     
     try {
       const params = filter ? { party_type: filter } : {};
-      const response = await partyLedgerApi.getAgingAnalysis(params);
+      const response = await partyLedgerAPI.getAgingAnalysis(params);
       setData(response.data);
     } catch (err) {
       console.error('Error fetching aging analysis:', err);

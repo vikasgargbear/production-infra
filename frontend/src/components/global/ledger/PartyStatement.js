@@ -3,7 +3,7 @@ import {
   FileText, Calendar, Filter, Download, Printer, 
   ChevronLeft, ChevronRight, RefreshCw, X
 } from 'lucide-react';
-import { partyLedgerApi } from '../../../services/api';
+import { partyLedgerAPI } from '../../../services/api';
 import { formatCurrency, formatDate } from '../../../utils/formatters';
 import { DatePicker } from '../ui';
 
@@ -39,7 +39,7 @@ const PartyStatement = ({
         limit: pageSize
       };
       
-      const response = await partyLedgerApi.getStatement(partyId, partyType, params);
+      const response = await partyLedgerAPI.getStatement(partyId, partyType, params);
       setStatement(response.data);
     } catch (err) {
       console.error('Error fetching statement:', err);

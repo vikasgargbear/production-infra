@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useCallback, forwardRef, useImperativeHandle, useRef } from 'react';
 import { Search, Package, Plus } from 'lucide-react';
-import { productsApi } from '../../../services/api';
+import { productAPI } from '../../../services/api';
 import { debounce } from '../../../utils/debounce';
 import BatchSelectionModalV2 from '../../invoice/modals/BatchSelectionModalV2';
+import DataTransformer from '../../../services/dataTransformer';
 
 const ProductSearchSimple = forwardRef(({ onAddItem, onCreateProduct, showBatchSelection = true }, ref) => {
   const [searchQuery, setSearchQuery] = useState('');
@@ -33,9 +34,13 @@ const ProductSearchSimple = forwardRef(({ onAddItem, onCreateProduct, showBatchS
 
       setLoading(true);
       try {
-        const response = await productsApi.search(query);
+        const response = await productAPI.search(query);
         const results = response.data || [];
-        setSearchResults(results);
+        // Transform results to consistent format
+        const transformedResults = results.map(product => 
+          DataTransformer.transformProduct(product, 'search')
+        );
+        setSearchResults(transformedResults);
       } catch (error) {
         console.error('Error searching products:', error);
         setSearchResults([]);
