@@ -9,7 +9,7 @@ import os
 # Import routers
 from .api.routes import (
     auth, customers, products, sales, inventory, 
-    payments, dashboard, billing, api_wrapper
+    payments, dashboard, billing, api_wrapper, test_db
 )
 
 # Lifecycle management
@@ -84,6 +84,9 @@ api_v2.include_router(api_wrapper.router, prefix="/pg", tags=["PostgreSQL Functi
 
 # Include the v2 API
 app.include_router(api_v2)
+
+# Include test routes for debugging
+app.include_router(test_db.router)
 
 # Also include v1 routes for backward compatibility
 api_v1 = APIRouter(prefix="/api/v1")
