@@ -92,11 +92,11 @@ async def get_invoices(
                     ii.quantity,
                     ii.unit_price as rate,
                     ii.mrp,
-                    ii.gst_percentage as tax_percent,
-                    ii.discount_percentage as discount_percent,
+                    COALESCE(ii.igst_rate, ii.cgst_rate + ii.sgst_rate, 0) as tax_percent,
+                    ii.discount_percent,
                     ii.discount_amount,
-                    ii.line_total as taxable_amount,
-                    ii.line_total_with_tax as line_total,
+                    ii.taxable_amount,
+                    ii.line_total,
                     b.batch_number,
                     b.expiry_date
                 FROM sales.invoice_items ii
@@ -654,44 +654,50 @@ async def create_invoice(
                 
                 total_amount = taxable_amount + cgst_amount + sgst_amount + igst_amount
                 
-                # Insert invoice item (using correct column names from schema)
+                # Insert invoice item (using ACTUAL column names from database)
                 db.execute(text("""
                     INSERT INTO sales.invoice_items (
-                        invoice_id, product_id, product_name, product_code,
+                        invoice_id, product_id, product_name,
                         hsn_code, batch_id, batch_number,
                         quantity, unit_price, mrp,
-                        discount_percentage, discount_amount,
-                        gst_percentage, cgst_amount, sgst_amount, igst_amount,
-                        line_total, line_total_with_tax,
-                        created_at, updated_at
+                        discount_percent, discount_amount,
+                        taxable_amount, cgst_rate, cgst_amount, 
+                        sgst_rate, sgst_amount, igst_rate, igst_amount,
+                        total_tax_amount, line_total,
+                        uom, pack_type, created_at
                     ) VALUES (
-                        :invoice_id, :product_id, :product_name, :product_code,
+                        :invoice_id, :product_id, :product_name,
                         :hsn_code, :batch_id, :batch_number,
                         :quantity, :unit_price, :mrp,
-                        :discount_percentage, :discount_amount,
-                        :gst_percentage, :cgst_amount, :sgst_amount, :igst_amount,
-                        :line_total, :line_total_with_tax,
-                        CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+                        :discount_percent, :discount_amount,
+                        :taxable_amount, :cgst_rate, :cgst_amount,
+                        :sgst_rate, :sgst_amount, :igst_rate, :igst_amount,
+                        :total_tax_amount, :line_total,
+                        :uom, :pack_type, CURRENT_TIMESTAMP
                     )
                 """), {
                     "invoice_id": invoice_id,
                     "product_id": product.product_id,
                     "product_name": item.get("product_name") or product.product_name,
-                    "product_code": item.get("product_code") or product.product_code,
                     "hsn_code": item.get("hsn_code") or product.hsn_code,
                     "batch_id": item.get("batch_id"),
-                    "batch_number": item.get("batch_number") or item.get("batch_no", "DEFAULT"),
+                    "batch_number": item.get("batch_number") or item.get("batch_no", ""),
                     "quantity": quantity,
                     "unit_price": unit_price,
                     "mrp": float(item.get("mrp", 0)),
-                    "discount_percentage": discount_percent,  # Fixed: was discount_percent
+                    "discount_percent": discount_percent,
                     "discount_amount": discount_amount,
-                    "gst_percentage": gst_percent,  # Fixed: was gst_percent
+                    "taxable_amount": taxable_amount,
+                    "cgst_rate": gst_percent / 2,  # Half of GST rate
                     "cgst_amount": cgst_amount,
+                    "sgst_rate": gst_percent / 2,  # Half of GST rate
                     "sgst_amount": sgst_amount,
+                    "igst_rate": 0,  # Would be full GST for interstate
                     "igst_amount": igst_amount,
-                    "line_total": taxable_amount,  # Fixed: was taxable_amount
-                    "line_total_with_tax": total_amount  # Fixed: was total_amount
+                    "total_tax_amount": cgst_amount + sgst_amount + igst_amount,
+                    "line_total": total_amount,  # Total including tax
+                    "uom": item.get("uom", "PCS"),  # Default unit of measure
+                    "pack_type": item.get("pack_type", "STRIP")  # Default pack type
                 })
                 
                 logger.info(f"Created invoice item for product {product.product_name}")
