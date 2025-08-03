@@ -130,7 +130,7 @@ async def fix_existing_products(
                 AND NOT EXISTS (
                     SELECT 1 FROM inventory.batches b 
                     WHERE b.product_id = p.product_id 
-                    AND b.is_active = true
+                    AND b.quantity_available > 0
                 )
                 LIMIT 10
             """),
