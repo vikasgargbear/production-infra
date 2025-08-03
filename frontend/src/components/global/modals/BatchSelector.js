@@ -89,19 +89,24 @@ const BatchSelector = ({
     setError(null);
     
     try {
+      console.log('🔍 Loading batches for product:', product.product_id);
       const response = await batchAPI.getByProduct(product.product_id);
+      console.log('📦 Raw batch API response:', response);
       const batchesData = response.data?.batches || response.data || [];
+      console.log('📦 Processed batches data:', batchesData);
       
       // Cache the results
       searchCache.set('batches', { product_id: product.product_id }, batchesData);
       processBatches(batchesData);
       
     } catch (error) {
-      console.error('Error fetching batches:', error);
+      console.error('❌ Error fetching batches for product', product.product_id, ':', error);
+      console.error('❌ Error details:', error.response?.data);
       setError('Failed to load batches. Please try again.');
       
       // Create a fallback batch if allowed
       if (allowCreateDefault) {
+        console.log('🔧 Creating fallback batch for product:', product.product_id);
         const fallbackBatch = createDefaultBatch(product);
         setBatches([fallbackBatch]);
       }

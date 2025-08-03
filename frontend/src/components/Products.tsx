@@ -208,15 +208,21 @@ const Products: React.FC = () => {
           const response = await api.post('/products/', productData);
           console.log('Create response:', response.data);
         }
+        
+        console.log('✅ Product saved successfully - about to close modal');
+        
+        // Reset form and close modal
+        form.reset();
+        setShowAddModal(false);
+        setEditingProduct(null);
+        
+        console.log('✅ Modal should be closed now');
+        
       } catch (error: any) {
-        console.error('API Error details:', error.response?.data || error.message);
+        console.error('❌ API Error details:', error.response?.data || error.message);
+        console.error('❌ Full error:', error);
         throw error; // Re-throw to be caught by the outer try/catch
       }
-
-      // Reset form and close modal
-      form.reset();
-      setShowAddModal(false);
-      setEditingProduct(null);
       
       // Refresh the products list
       await fetchProducts();
