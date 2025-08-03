@@ -45,14 +45,14 @@ async def get_batches(
                     b.cost_per_unit as purchase_price,
                     COALESCE(b.sale_price_per_unit, b.mrp_per_unit, 100) as sale_price,
                     COALESCE(b.mrp_per_unit, b.sale_price_per_unit, 100) as mrp,
-                    b.is_active,
+                    -- b.is_active, -- TODO: Column may not exist in all deployments
                     b.created_at,
                     b.updated_at
                 FROM inventory.batches b
                 LEFT JOIN inventory.products p ON b.product_id = p.product_id
                 WHERE b.product_id = :product_id
                     AND b.org_id = :org_id
-                    AND b.is_active = true
+                    -- AND b.is_active = true -- TODO: Column may not exist
                     AND b.quantity_available > 0
                 ORDER BY b.expiry_date DESC, b.batch_number
                 LIMIT :limit OFFSET :skip
@@ -78,7 +78,7 @@ async def get_batches(
                 FROM inventory.batches b
                 LEFT JOIN inventory.products p ON b.product_id = p.product_id
                 WHERE b.org_id = :org_id
-                    AND b.is_active = true
+                    -- AND b.is_active = true -- TODO: Column may not exist
                 ORDER BY b.created_at DESC
                 LIMIT :limit OFFSET :skip
             """
@@ -128,7 +128,7 @@ async def get_batches(
                     "quantity_available": 1000,
                     "sale_price": 100,  # Default price
                     "mrp": 120,  # Default MRP
-                    "is_active": True
+                    # "is_active": True  # TODO: Column may not exist
                 }]
         
         return {
@@ -173,7 +173,7 @@ async def get_available_batches(
             LEFT JOIN inventory.products p ON b.product_id = p.product_id
             WHERE b.product_id = :product_id
                 AND b.org_id = :org_id
-                AND b.is_active = true
+                -- AND b.is_active = true -- TODO: Column may not exist
                 AND b.quantity_available > 0
                 AND (b.expiry_date IS NULL OR b.expiry_date > CURRENT_DATE)
             ORDER BY b.expiry_date ASC NULLS LAST
@@ -210,7 +210,7 @@ async def get_expiring_batches(
             FROM inventory.batches b
             LEFT JOIN inventory.products p ON b.product_id = p.product_id
             WHERE b.org_id = :org_id
-                AND b.is_active = true
+                -- AND b.is_active = true -- TODO: Column may not exist
                 AND b.quantity_available > 0
                 AND b.expiry_date <= :expiry_date
                 AND b.expiry_date > CURRENT_DATE
@@ -253,14 +253,14 @@ async def create_batch(
                 initial_quantity, quantity_available,
                 cost_per_unit, sale_price_per_unit, mrp_per_unit,
                 supplier_id, purchase_invoice_no,
-                is_active
+                created_at, updated_at
             ) VALUES (
                 :org_id, :product_id, :batch_number,
                 :expiry_date, :manufacturing_date,
                 :initial_quantity, :quantity_available,
                 :cost_per_unit, :sale_price_per_unit, :mrp_per_unit,
                 :supplier_id, :purchase_invoice_no,
-                true
+                CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
             )
             RETURNING batch_id
         """

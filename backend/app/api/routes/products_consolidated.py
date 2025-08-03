@@ -256,13 +256,13 @@ async def create_product(
                         manufacturing_date, expiry_date,
                         initial_quantity, quantity_available,
                         cost_per_unit, sale_price_per_unit, mrp_per_unit,
-                        created_at, updated_at, is_active
+                        created_at, updated_at
                     ) VALUES (
                         :org_id, :product_id, :batch_number,
                         :manufacturing_date, :expiry_date,
                         :initial_quantity, :quantity_available,
                         :cost_per_unit, :sale_price_per_unit, :mrp_per_unit,
-                        CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, true
+                        CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
                     ) RETURNING batch_id
                 """), batch_data)
                 

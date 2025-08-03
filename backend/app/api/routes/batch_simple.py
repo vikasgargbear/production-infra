@@ -53,13 +53,13 @@ async def create_batch_simple(
                     manufacturing_date, expiry_date,
                     initial_quantity, quantity_available,
                     cost_per_unit, sale_price_per_unit, mrp_per_unit,
-                    is_active, created_at, updated_at
+                    created_at, updated_at
                 ) VALUES (
                     :org_id, :product_id, :batch_number,
                     :mfg_date, :expiry_date,
                     :quantity, :quantity,
                     :cost_price, :sale_price, :mrp,
-                    true, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+                    CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
                 ) RETURNING batch_id, batch_number
             """),
             {
