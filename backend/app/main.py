@@ -134,10 +134,6 @@ app.include_router(api)
 # Include test routes for debugging
 app.include_router(test_db.router)
 
-# Temporary: Database fixes endpoint
-from app.api.routes import apply_db_fixes
-app.include_router(apply_db_fixes.router, prefix="/api", tags=["Database Fixes"])
-
 # No v1 routes - everything is consolidated under /api/
 
 # PostgreSQL function wrapper endpoints
