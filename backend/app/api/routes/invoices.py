@@ -626,30 +626,12 @@ async def create_invoice(
             except Exception as item_error:
                 logger.warning(f"Could not create invoice item with minimal fields: {item_error}")
                 # TODO: Fix invoice_items table schema to match expected columns
-            
-            # TODO: Batch quantity updates disabled due to prevent_mrp_decrease trigger issues
-            # TODO: The trigger looks for non-existent current_mrp column in inventory.batches
-            # TODO: Fix needed:
-            #   1. Add current_mrp column to inventory.batches table
-            #   2. Or modify trigger to use mrp_per_unit column instead
-            #   3. Or remove trigger if MRP decrease prevention is not needed
-            if item.get("batch_id") and not str(item.get("batch_id")).startswith("fallback_"):
-                pass  # Batch updates disabled until trigger is fixed
-                # Original code to restore after fixing trigger:
-                # db.execute(
-                #     text("""
-                #         UPDATE inventory.batches
-                #         SET quantity_available = quantity_available - :quantity,
-                #             quantity_reserved = COALESCE(quantity_reserved, 0) + :quantity
-                #         WHERE batch_id = :batch_id
-                #     """),
-                #     {
-                #         "quantity": item.get("quantity", 1),
-                #         "batch_id": item.get("batch_id")
-                #     }
-                # )
         
-        # Create financial entry for outstanding tracking
+        # Commit the core invoice creation first to ensure it's saved
+        db.commit()
+        logger.info(f"Invoice {invoice_number} committed successfully")
+        
+        # Create financial entry for outstanding tracking (optional - won't rollback invoice if it fails)
         try:
             db.execute(
                 text("""
@@ -681,8 +663,7 @@ async def create_invoice(
         except Exception as e:
             # Log but don't fail invoice creation if financial tracking fails
             logger.warning(f"Could not create financial outstanding entry: {e}")
-        
-        db.commit()
+            # Invoice already committed above, so this doesn't affect the main transaction
         
         return {
             "invoice_id": invoice_id,
