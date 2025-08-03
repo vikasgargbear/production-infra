@@ -533,7 +533,7 @@ async def create_invoice(
                     :subtotal_amount, :discount_amount, :taxable_amount,
                     :cgst_amount, :sgst_amount, :igst_amount, :total_tax_amount,
                     :final_amount, 'posted', 'unpaid',
-                    :notes, 'admin', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+                    :notes, 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
                 )
                 RETURNING invoice_id
             """),
