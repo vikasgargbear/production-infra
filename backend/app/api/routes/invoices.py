@@ -715,12 +715,16 @@ async def create_invoice(
         
         # Step 5: Create order items and invoice items
         items_created = 0
-        for item in invoice_data.get("items", []):
+        items_list = invoice_data.get("items", [])
+        logger.info(f"Processing {len(items_list)} items for invoice {invoice_id}")
+        
+        for idx, item in enumerate(items_list):
             try:
                 product_id = item.get("product_id")
-                logger.info(f"Processing item with product_id: {product_id}")
+                logger.info(f"Processing item {idx+1}/{len(items_list)} with product_id: {product_id}")
                 
                 # Get batch details first (simpler query)
+                logger.info(f"Querying batch for product_id {product_id}")
                 product_batch = db.execute(text("""
                     SELECT b.batch_id, b.product_id, b.batch_number, 
                            b.sale_price_per_unit, b.mrp, b.quantity_available
@@ -732,8 +736,10 @@ async def create_invoice(
                 """), {"product_id": product_id}).fetchone()
                 
                 if not product_batch:
-                    logger.warning(f"No batch with stock for product {product_id}")
+                    logger.warning(f"No batch with stock for product {product_id} - skipping item")
                     continue
+                
+                logger.info(f"Found batch {product_batch.batch_number} with {product_batch.quantity_available} units")
                 
                 # Get product details separately
                 product_info = db.execute(text("""
@@ -818,6 +824,7 @@ async def create_invoice(
                 })
                 
                 # Insert invoice item with all required fields
+                logger.info(f"Inserting invoice item for product {product_name} into invoice {invoice_id}")
                 db.execute(text("""
                     INSERT INTO sales.invoice_items (
                         invoice_id, product_id, product_name,
@@ -983,11 +990,17 @@ async def create_invoice(
         
     except Exception as e:
         db.rollback()
-        logger.error(f"Error in invoice creation attempt: {str(e)}")
+        error_msg = str(e) if e else "Unknown error occurred"
+        logger.error(f"Error in invoice creation attempt: {error_msg}")
         logger.error(f"Error type: {type(e).__name__}")
         import traceback
         logger.error(f"Traceback: {traceback.format_exc()}")
-        raise HTTPException(status_code=500, detail=f"Invoice creation failed: {str(e)}")
+        
+        # If the error message is empty, provide more context
+        if not str(e):
+            error_msg = f"Database operation failed - check logs for details"
+        
+        raise HTTPException(status_code=500, detail=f"Invoice creation failed: {error_msg}")
 
 @router.get("/{invoice_id}")
 async def get_invoice(
