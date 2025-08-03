@@ -33,6 +33,82 @@ def _format_composition(composition_value):
         return {"active": composition_value}
     return {}
 
+@router.get("/", response_model=List[Product])
+async def get_products(
+    limit: int = Query(10, ge=1, le=100, description="Number of products to return"),
+    skip: int = Query(0, ge=0, description="Number of products to skip"),
+    search: str = Query("", description="Search query"),
+    product_type: str = Query("", description="Filter by product type"),
+    manufacturer: str = Query("", description="Filter by manufacturer"),
+    db: Session = Depends(get_db)
+):
+    """
+    Get products with optional filtering and search
+    """
+    try:
+        query = """
+            SELECT 
+                product_id, org_id, product_code, product_name, generic_name,
+                brand, manufacturer, category_id, product_type, product_class,
+                composition, strength, hsn_code, drug_schedule, 
+                requires_prescription, is_narcotic, is_controlled_substance,
+                barcode, manufacturer_code, pack_config, base_uom_id,
+                gst_percentage, cess_percentage, storage_conditions,
+                requires_cold_chain, maintain_batch, maintain_expiry,
+                allow_negative_stock, min_stock_quantity, reorder_level,
+                reorder_quantity, max_stock_quantity, critical_stock_level,
+                product_status, launch_date, discontinuation_date,
+                search_keywords, tags, product_images, documents,
+                is_active, is_saleable, is_purchasable,
+                created_at, updated_at, created_by, current_mrp
+            FROM inventory.products
+            WHERE 1=1
+        """
+        
+        params = {}
+        
+        # Add search filter
+        if search:
+            query += """ AND (
+                LOWER(product_name) LIKE LOWER(:search) OR
+                LOWER(generic_name) LIKE LOWER(:search) OR
+                LOWER(brand) LIKE LOWER(:search) OR
+                LOWER(manufacturer) LIKE LOWER(:search) OR
+                LOWER(product_code) LIKE LOWER(:search)
+            )"""
+            params["search"] = f"%{search}%"
+        
+        # Add product type filter
+        if product_type:
+            query += " AND product_type = :product_type"
+            params["product_type"] = product_type
+            
+        # Add manufacturer filter
+        if manufacturer:
+            query += " AND LOWER(manufacturer) LIKE LOWER(:manufacturer)"
+            params["manufacturer"] = f"%{manufacturer}%"
+        
+        query += " ORDER BY created_at DESC LIMIT :limit OFFSET :skip"
+        params.update({"limit": limit, "skip": skip})
+        
+        result = db.execute(text(query), params)
+        products = result.fetchall()
+        
+        # Convert to list of dicts
+        product_list = []
+        for product in products:
+            product_dict = dict(product._mapping)
+            product_list.append(product_dict)
+        
+        return product_list
+        
+    except Exception as e:
+        logger.error(f"Error fetching products: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to fetch products: {str(e)}"
+        )
+
 @router.get("/search", response_model=List[Product])
 async def search_products(
     q: str = Query("", description="Search query"),
