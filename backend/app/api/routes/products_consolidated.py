@@ -135,11 +135,11 @@ async def create_product(
             "brand": product.get("brand") or product.get("brand_name") or product.get("manufacturer"),
             "manufacturer": product.get("manufacturer"),
             "composition": json.dumps(_format_composition(product.get("composition"))),
-            "category_id": product.get("category_id") or 1,  # Default category
+            "category_id": None,  # Let it be NULL if no categories exist
             "hsn_code": product.get("hsn_code") or "3004",
             "gst_percentage": product.get("gst_percentage") or product.get("gst_rate") or 12,
             "pack_config": json.dumps({}),  # Default empty JSONB
-            "base_uom_id": 1,  # Default UOM
+            "base_uom_id": None,  # Let it be NULL if no UOMs exist
             "maintain_batch": True,
             "maintain_expiry": True,
             "is_active": product.get("is_active", True)
@@ -167,20 +167,29 @@ async def create_product(
             }
         
         # Create product
-        result = db.execute(text("""
-            INSERT INTO inventory.products (
-                org_id, product_code, product_name, generic_name,
-                brand, manufacturer, composition, category_id, 
-                hsn_code, gst_percentage, pack_config, base_uom_id,
-                maintain_batch, maintain_expiry,
-                is_active, created_at, updated_at
-            ) VALUES (
-                :org_id, :product_code, :product_name, :generic_name,
-                :brand, :manufacturer, CAST(:composition AS jsonb), :category_id,
-                :hsn_code, :gst_percentage, CAST(:pack_config AS jsonb), :base_uom_id,
-                :maintain_batch, :maintain_expiry,
-                :is_active, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
-            ) RETURNING product_id, product_code, product_name
+        # Build INSERT with only non-NULL foreign keys
+        columns = ["org_id", "product_code", "product_name", "generic_name",
+                  "brand", "manufacturer", "composition", "hsn_code", 
+                  "gst_percentage", "pack_config", "maintain_batch", 
+                  "maintain_expiry", "is_active", "created_at", "updated_at"]
+        values = [":org_id", ":product_code", ":product_name", ":generic_name",
+                 ":brand", ":manufacturer", "CAST(:composition AS jsonb)", ":hsn_code",
+                 ":gst_percentage", "CAST(:pack_config AS jsonb)", ":maintain_batch",
+                 ":maintain_expiry", ":is_active", "CURRENT_TIMESTAMP", "CURRENT_TIMESTAMP"]
+        
+        # Only add foreign keys if they're not None
+        if product_data.get("category_id") is not None:
+            columns.insert(7, "category_id")
+            values.insert(7, ":category_id")
+        
+        if product_data.get("base_uom_id") is not None:
+            columns.insert(-2, "base_uom_id")
+            values.insert(-2, ":base_uom_id")
+        
+        result = db.execute(text(f"""
+            INSERT INTO inventory.products ({', '.join(columns)})
+            VALUES ({', '.join(values)})
+            RETURNING product_id, product_code, product_name
         """), product_data)
         
         created = result.fetchone()
