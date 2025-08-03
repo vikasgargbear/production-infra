@@ -1,0 +1,15 @@
+{
+  "customer_name": "Quick Customer",
+  "primary_phone": "9999999999",
+  "items": [
+    {
+      "product_id": 1,
+      "product_name": "Generic Medicine",
+      "quantity": 5,
+      "unit_price": 50,
+      "gst_percentage": 18
+    }
+  ],
+  "payment_method": "cash",
+  "notes": "Minimal invoice example - auto-calculates totals"
+}
