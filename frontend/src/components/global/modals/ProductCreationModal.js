@@ -193,9 +193,10 @@ const ProductCreationModal = ({
           strips_per_box: packConfig.use_boxes ? packConfig.strips_per_box : null
         };
         
-        onProductCreated(createdProduct);
+        // Show success message
+        alert(`✅ Product "${createdProduct.product_name}" added successfully!${createdProduct.quantity_available ? ` Stock: ${createdProduct.quantity_available} units` : ''}`);
         
-        // Reset form
+        // Reset form for next use
         setNewProduct({
           product_name: '',
           product_code: '',
@@ -223,7 +224,8 @@ const ProductCreationModal = ({
           pack_unit: null
         });
         
-        onClose();
+        // Call onProductCreated which will handle closing
+        onProductCreated(createdProduct);
       }
     } catch (error) {
       console.error('Error saving product:', error);
