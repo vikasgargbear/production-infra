@@ -688,20 +688,28 @@ async def calculate_invoice_totals(
     Calculate invoice totals server-side for security and consistency
     """
     try:
-        # Get customer details for GST calculations
-        # Note: state and state_code are not in customers table in current schema
+        # Get customer details and address for GST calculations
         customer = db.execute(text("""
-            SELECT customer_id, customer_name FROM parties.customers
-            WHERE customer_id = :customer_id
+            SELECT 
+                c.customer_id, 
+                c.customer_name,
+                a.state_name as state,
+                a.state_code
+            FROM parties.customers c
+            LEFT JOIN master.addresses a ON 
+                a.entity_type = 'customer' AND 
+                a.entity_id = c.customer_id AND
+                a.address_type = 'billing' AND
+                a.is_default = true
+            WHERE c.customer_id = :customer_id
         """), {"customer_id": request.customer_id}).first()
         
         if not customer:
             raise HTTPException(status_code=404, detail="Customer not found")
         
-        # For MVP, treat all as intrastate transactions (CGST + SGST)
-        # Address management can be enhanced later
-        customer_state = None
-        customer_state_code = None
+        # Get state from address table
+        customer_state = customer.state if customer else None
+        customer_state_code = customer.state_code if customer else None
         
         # Get company/seller state from organization settings
         org_state_result = db.execute(text("""
