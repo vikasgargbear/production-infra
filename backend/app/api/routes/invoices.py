@@ -573,6 +573,9 @@ async def create_invoice(
                 logger.warning(f"KPI trigger failed, retrying without triggers: {trigger_error}")
                 
                 try:
+                    # Rollback the failed transaction first
+                    db.rollback()
+                    
                     # Temporarily disable problematic triggers (PostgreSQL doesn't support IF EXISTS with DISABLE TRIGGER)
                     try:
                         db.execute(text("ALTER TABLE sales.invoices DISABLE TRIGGER calculate_realtime_kpis"))
@@ -584,7 +587,7 @@ async def create_invoice(
                     except:
                         pass  # Trigger doesn't exist, which is fine
                     
-                    # Retry invoice creation
+                    # Retry invoice creation with fresh transaction
                     invoice_result = db.execute(
                         text("""
                             INSERT INTO sales.invoices (
