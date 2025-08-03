@@ -9,7 +9,7 @@ import axios from 'axios';
 // Create our own apiClient instance to avoid circular dependency
 const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
 const apiClient = axios.create({
-  baseURL: `${API_BASE_URL}/api/v1`,
+  baseURL: `${API_BASE_URL}/api`,  // Consolidated API - no version numbers
   timeout: 30000,
   headers: {
     'Content-Type': 'application/json',
@@ -94,8 +94,8 @@ export const productAPI = {
    */
   search: async (query, options = {}) => {
     try {
-      // Try v2 endpoint first (deployed)
-      const response = await apiClient.get('/api/v2/products/search', {
+      // Use products/search endpoint
+      const response = await apiClient.get('/products/search', {
         params: {
           q: query,
           category: options.category,
@@ -213,7 +213,7 @@ export const productAPI = {
 // Define other commonly used APIs
 export const invoiceAPI = {
   search: async (query, options = {}) => {
-    const response = await apiClient.get('/pg/invoices/search', {
+    const response = await apiClient.get('/invoices', {
       params: {
         q: query,
         customer_id: options.customerId,
@@ -227,14 +227,14 @@ export const invoiceAPI = {
   },
 
   getDetails: async (invoiceId) => {
-    const response = await apiClient.get(`/pg/invoices/${invoiceId}`);
+    const response = await apiClient.get(`/invoices/${invoiceId}`);
     return response.data;
   },
 };
 
 export const ordersAPI = {
   search: async (query, options = {}) => {
-    const response = await apiClient.get('/pg/orders/search', {
+    const response = await apiClient.get('/orders', {
       params: {
         q: query,
         customer_id: options.customerId,
@@ -249,7 +249,7 @@ export const ordersAPI = {
 
 export const purchasesAPI = {
   search: async (query, options = {}) => {
-    const response = await apiClient.get('/pg/purchases/search', {
+    const response = await apiClient.get('/purchases', {
       params: {
         q: query,
         supplier_id: options.supplierId,
@@ -263,7 +263,7 @@ export const purchasesAPI = {
 
 export const supplierAPI = {
   search: async (query, options = {}) => {
-    const response = await apiClient.get('/pg/suppliers/search', {
+    const response = await apiClient.get('/suppliers', {
       params: {
         q: query,
         limit: options.limit || 50,
@@ -274,7 +274,7 @@ export const supplierAPI = {
   },
 
   create: async (supplierData) => {
-    const response = await apiClient.post('/pg/suppliers', supplierData);
+    const response = await apiClient.post('/suppliers', supplierData);
     return response.data;
   },
 };

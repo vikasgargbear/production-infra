@@ -23,8 +23,8 @@ export const API_CONFIG: APIConfig = {
   // Base URL configuration - use HTTPS directly (Railway forces HTTPS anyway)
   BASE_URL: process.env.REACT_APP_API_BASE_URL || 'https://pharma-backend-production-0c09.up.railway.app',
   
-  // API Version
-  API_VERSION: '/api/v1',
+  // API Version - consolidated, no version numbers
+  API_VERSION: '/api',
   
   // Timeout settings
   TIMEOUT: 30000, // 30 seconds
@@ -61,6 +61,7 @@ export const API_CONFIG: APIConfig = {
     PRODUCTS: {
       BASE: '/products',
       SEARCH: '/products/search',
+      CREATE: '/products',  // POST endpoint for creation
       BATCH_UPLOAD: '/products/batch-upload',
       CATEGORIES: '/products/categories',
       STOCK_UPDATE: '/products/stock-update',
@@ -69,15 +70,15 @@ export const API_CONFIG: APIConfig = {
     // Customers
     CUSTOMERS: {
       BASE: '/customers',
-      SEARCH: '/customers/search',
+      SEARCH: '/customers',  // Use same endpoint with search param
       CREDIT_CHECK: '/customers/credit-check',
       TRANSACTIONS: '/customers/transactions',
     },
     
     // Suppliers
     SUPPLIERS: {
-      BASE: '/suppliers/',
-      SEARCH: '/suppliers/search',
+      BASE: '/suppliers',
+      SEARCH: '/suppliers',  // Use same endpoint with search param
       TRANSACTIONS: '/suppliers/transactions',
     },
     

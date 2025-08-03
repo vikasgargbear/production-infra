@@ -1,17 +1,15 @@
 /**
  * API Client for PostgreSQL Function Wrappers
- * Uses new /api/v2/pg/* endpoints that wrap PostgreSQL functions
+ * Uses consolidated /api/pg/* endpoints that wrap PostgreSQL functions
  */
 
 import axios, { AxiosInstance, AxiosError } from 'axios';
 
 // Get API URL from environment or use default
 const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
-const API_VERSION = 'v2';
-
 // Create axios instance with default config
 const apiClient: AxiosInstance = axios.create({
-  baseURL: `${API_BASE_URL}/api/${API_VERSION}`,
+  baseURL: `${API_BASE_URL}/api`,  // Consolidated API - no version
   timeout: 30000,
   headers: {
     'Content-Type': 'application/json',

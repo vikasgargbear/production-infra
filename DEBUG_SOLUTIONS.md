@@ -1,30 +1,39 @@
 # Debug Solutions Document
 
-## Product Creation Issue
-**Problem**: Product creation failing with 404 error
-**Root Cause**: Backend `/api/v1/products/` POST endpoint not deployed to Railway
+## API Consolidation - COMPLETED ✅
+**All v1/v2 version references have been removed!**
 
-### Solution Approaches:
-1. **Backend Fix** (Requires deployment):
-   - The endpoint exists in code at `/api/routers/products.py`
-   - Router is included in main.py line 199
-   - Need to push and redeploy backend
+### Current Status:
+All endpoints now use simple `/api/*` prefix without version numbers:
+- `/api/customers/` - Customer management
+- `/api/products/` - Products management  
+- `/api/orders/` - Order management
+- `/api/inventory/` - Inventory management
+- `/api/sales/` - Sales management
+- `/api/purchases/` - Purchase management
+- `/api/suppliers/` - Supplier management
+- `/api/pg/*` - PostgreSQL function wrappers
 
-2. **Frontend Workaround**:
-   - Use alternative endpoints if available
-   - Create products through batch upload
-   - Use direct database operations
+### What Was Changed:
 
-### API Endpoint Mapping:
-- **Deployed Endpoints** (from OpenAPI spec):
-  - GET `/api/v2/products/search` - Product search
-  - GET `/api/v2/products/{product_id}` - Get product details
-  - No POST endpoint for product creation currently
+#### Backend (production-infra/backend/app/main.py):
+- Removed `api_v1 = APIRouter(prefix="/api/v1")` 
+- Removed `api_v2 = APIRouter(prefix="/api/v2")`
+- Replaced with single `api = APIRouter(prefix="/api")`
+- All routes now under `/api/` without version numbers
 
-- **Expected Endpoints** (in code):
-  - POST `/api/v1/products/` - Create product
-  - PUT `/api/v1/products/{product_id}` - Update product
-  - DELETE `/api/v1/products/{product_id}` - Delete product
+#### Frontend (production-infra/frontend/src/):
+- `services/api/apiClientExports.js`: baseURL changed to `/api`
+- `services/api/apiClient.ts`: baseURL changed to `/api`
+- `config/api.config.ts`: API_VERSION set to `/api`
+- `config/purchase.config.js`: All endpoints updated to `/api/`
+- `services/api/partyLedgerApi.js`: BASE_URL changed to `/api/party-ledger`
+- `services/invoiceApiService.js`: Updated to use `/api/`
+
+### Next Steps:
+1. Deploy backend changes to Railway
+2. Test all endpoints work correctly
+3. No more v1/v2 confusion!
 
 ## Customer Search Solution Pattern
 **Working Solution**: Successfully implemented in `apiClientExports.js`

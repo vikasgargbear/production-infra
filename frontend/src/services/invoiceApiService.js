@@ -214,7 +214,7 @@ class InvoiceApiService {
    */
   static async checkCustomerCredit(customerId, invoiceAmount) {
     try {
-      const response = await api.post(`/api/v1/customers/${customerId}/credit-check`, {
+      const response = await api.post(`/api/customers/${customerId}/credit-check`, {
         invoice_amount: parseFloat(invoiceAmount),
         include_pending_invoices: true
       });

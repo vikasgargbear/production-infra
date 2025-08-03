@@ -11,12 +11,12 @@ export const PURCHASE_CONFIG = {
 
   // API Endpoints
   API_ENDPOINTS: {
-    SUPPLIERS: '/api/v1/suppliers/',
-    PRODUCTS: '/api/v1/products/',
-    PURCHASES: '/api/v1/purchases/',
-    PURCHASES_ENHANCED: '/api/v1/purchases-enhanced/',
-    PURCHASE_UPLOAD: '/api/v1/purchase-upload/',
-    PENDING_RECEIPTS: '/api/v1/purchases-enhanced/pending-receipts',
+    SUPPLIERS: '/api/suppliers/',
+    PRODUCTS: '/api/products/',
+    PURCHASES: '/api/purchases/',
+    PURCHASES_ENHANCED: '/api/purchases-enhanced/',
+    PURCHASE_UPLOAD: '/api/purchase-upload/',
+    PENDING_RECEIPTS: '/api/purchases-enhanced/pending-receipts',
     RECEIVE_ITEMS: (purchaseId) => `/api/v1/purchases-enhanced/${purchaseId}/receive-fixed`,
   },
 

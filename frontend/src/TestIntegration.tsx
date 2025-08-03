@@ -207,12 +207,12 @@ function TestIntegrationInner() {
       <div className="mt-6 bg-blue-50 p-4 rounded-lg">
         <h3 className="font-semibold mb-2">API Endpoints Being Tested:</h3>
         <ul className="text-sm space-y-1">
-          <li>• <code>/api/v2/pg/customers/search</code> → <code>api.search_customers()</code></li>
-          <li>• <code>/api/v2/pg/products/search</code> → <code>api.search_products()</code></li>
-          <li>• <code>/api/v2/pg/products/{'{id}'}/stock</code> → <code>api.get_stock_availability()</code></li>
-          <li>• <code>/api/v2/pg/customers/{'{id}'}/outstanding</code> → <code>api.get_outstanding_invoices()</code></li>
-          <li>• <code>/api/v2/pg/invoices</code> → <code>api.create_invoice()</code></li>
-          <li>• <code>/api/v2/pg/dashboard/stats</code> → <code>api.get_dashboard_summary()</code></li>
+          <li>• <code>/api/pg/customers/search</code> → <code>api.search_customers()</code></li>
+          <li>• <code>/api/pg/products/search</code> → <code>api.search_products()</code></li>
+          <li>• <code>/api/pg/products/{'{id}'}/stock</code> → <code>api.get_stock_availability()</code></li>
+          <li>• <code>/api/pg/customers/{'{id}'}/outstanding</code> → <code>api.get_outstanding_invoices()</code></li>
+          <li>• <code>/api/pg/invoices</code> → <code>api.create_invoice()</code></li>
+          <li>• <code>/api/pg/dashboard/stats</code> → <code>api.get_dashboard_summary()</code></li>
         </ul>
       </div>
     </div>
