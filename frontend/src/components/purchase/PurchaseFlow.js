@@ -493,7 +493,7 @@ const PurchaseFlow = ({ onClose }) => {
               handleSupplierSelect(supplier);
               setShowSupplierModal(false);
               setMessage('Supplier created successfully', 'success');
-              searchCache.clearCache('suppliers');
+              searchCache.clear();  // Clear cache after supplier creation
             }}
           />
         )}
@@ -505,7 +505,7 @@ const PurchaseFlow = ({ onClose }) => {
             onProductCreated={(product) => {
               setShowProductModal(false);
               setMessage('Product created successfully', 'success');
-              searchCache.clearCache('products');
+              searchCache.clear();  // Clear cache after product creation
             }}
           />
         )}

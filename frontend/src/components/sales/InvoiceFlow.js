@@ -763,7 +763,7 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
               setShowProductModal(false);
               setMessage('Product created successfully');
               setMessageType('success');
-              searchCache.clearCache('products');
+              searchCache.clear();  // Clear all cache after product creation
             }}
           />
         )}

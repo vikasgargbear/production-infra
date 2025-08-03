@@ -8,7 +8,7 @@ import os
 
 # Import routers
 from .api.routes import (
-    auth, customers, products, sales, inventory, 
+    auth, customers, products_consolidated, sales, inventory, 
     payments, dashboard, billing, api_wrapper, test_db
 )
 
@@ -91,7 +91,7 @@ api = APIRouter(prefix="/api")
 # Register routes
 api.include_router(auth.router, prefix="/auth", tags=["Authentication"])
 api.include_router(customers.router, prefix="/customers", tags=["Customers"])
-api.include_router(products.router, prefix="/products", tags=["Products"])
+api.include_router(products_consolidated.router, prefix="/products", tags=["Products"])
 api.include_router(sales.router, prefix="/sales", tags=["Sales"])
 api.include_router(inventory.router, prefix="/inventory", tags=["Inventory"])
 api.include_router(payments.router, prefix="/payments", tags=["Payments"])
