@@ -243,17 +243,16 @@ async def create_product(
                 "quantity_available": quantity,
                 "cost_per_unit": cost_price,
                 "sale_price_per_unit": sale_price,
-                "mrp_per_unit": mrp
+                "mrp_per_unit": mrp,
+                "source_type": "initial_stock"
             }
             
-            # TODO: prevent_mrp_decrease trigger references non-existent 'current_mrp' column
-            # TODO: Need to either add the column or fix the trigger to use mrp_per_unit
-            # For now, try to disable the trigger temporarily
+            # Trigger should be working now after database fixes
+            # Enable trigger if it was disabled during debugging
             try:
-                db.execute(text("ALTER TABLE inventory.batches DISABLE TRIGGER prevent_mrp_decrease"))
-                db.commit()
+                db.execute(text("ALTER TABLE inventory.batches ENABLE TRIGGER prevent_mrp_decrease"))
             except:
-                db.rollback()  # Ignore if we can't disable trigger
+                pass  # Ignore if trigger doesn't exist or already enabled
             
             try:
                 batch_result = db.execute(text("""
@@ -262,13 +261,13 @@ async def create_product(
                         manufacturing_date, expiry_date,
                         initial_quantity, quantity_available,
                         cost_per_unit, sale_price_per_unit, mrp_per_unit,
-                        created_at, updated_at
+                        source_type, created_at, updated_at
                     ) VALUES (
                         :org_id, :product_id, :batch_number,
                         :manufacturing_date, :expiry_date,
                         :initial_quantity, :quantity_available,
                         :cost_per_unit, :sale_price_per_unit, :mrp_per_unit,
-                        CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+                        :source_type, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
                     ) RETURNING batch_id
                 """), batch_data)
                 
@@ -286,11 +285,7 @@ async def create_product(
                 except Exception as mrp_error:
                     logger.warning(f"Could not update product current_mrp: {mrp_error}")
                 
-                # Try to re-enable trigger
-                try:
-                    db.execute(text("ALTER TABLE inventory.batches ENABLE TRIGGER prevent_mrp_decrease"))
-                except:
-                    pass  # Ignore if trigger doesn't exist
+                # Trigger should remain enabled for future batch operations
                     
             except Exception as batch_error:
                 # TODO: If batch creation still fails, we need to fix the database schema
