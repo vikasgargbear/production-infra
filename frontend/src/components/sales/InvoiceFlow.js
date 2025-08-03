@@ -417,10 +417,54 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
       
       console.log('Creating quick sale with payload:', saleData);
 
-      // Use enterprise-grade order API for atomic order + invoice creation
-      const response = await apiClient.post('/enterprise-orders/quick-sale', saleData);
-      
-      console.log('Quick sale created successfully:', response.data);
+      // Try enterprise-grade order API first, fallback to invoice API
+      let response;
+      try {
+        response = await apiClient.post('/enterprise-orders/quick-sale', saleData);
+        console.log('Quick sale created successfully:', response.data);
+      } catch (orderError) {
+        console.log('Quick sale failed, trying direct invoice creation:', orderError);
+        
+        // Fallback to direct invoice creation
+        const invoiceData = {
+          customer_id: invoice.customer_id,
+          customer_name: selectedCustomer?.customer_name || invoice.customer_name,
+          customer_phone: selectedCustomer?.phone || selectedCustomer?.primary_phone,
+          billing_address: invoice.billing_address,
+          invoice_date: invoice.invoice_date || new Date().toISOString().split('T')[0],
+          invoice_type: 'tax_invoice',
+          payment_terms: invoice.payment_mode || 'cash',
+          subtotal: invoice.subtotal || invoice.gross_amount,
+          discount_amount: invoice.discount_amount || 0,
+          cgst_amount: invoice.cgst_amount || 0,
+          sgst_amount: invoice.sgst_amount || 0,
+          igst_amount: invoice.igst_amount || 0,
+          tax_amount: invoice.tax_amount || 0,
+          total_amount: invoice.total_amount || invoice.net_amount,
+          items: invoice.items.map(item => ({
+            product_id: item.product_id,
+            product_name: item.product_name,
+            product_code: item.product_code,
+            batch_id: item.batch_id || `default_${item.product_id}`,
+            batch_number: item.batch_number || item.batch_no || 'DEFAULT',
+            hsn_code: item.hsn_code,
+            quantity: item.quantity || 1,
+            rate: item.rate || item.sale_price || 0,
+            mrp: item.mrp || 0,
+            discount_percent: item.discount_percent || 0,
+            discount_amount: item.discount_amount || 0,
+            gst_percent: item.gst_percent || item.tax_rate || 12,
+            cgst_amount: item.cgst_amount || 0,
+            sgst_amount: item.sgst_amount || 0,
+            igst_amount: item.igst_amount || 0,
+            total_amount: item.total_amount || (item.quantity * (item.rate || 0))
+          })),
+          notes: invoice.notes
+        };
+        
+        response = await apiClient.post('/invoices', invoiceData);
+        console.log('Invoice created successfully:', response.data);
+      }
       
       // Store the invoice details for future reference
       if (response.data) {

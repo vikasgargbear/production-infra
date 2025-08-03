@@ -210,45 +210,60 @@ async def create_product(
         
         created = result.fetchone()
         
-        # If quantity is provided, create an initial batch (simplified workflow for non-technical users)
-        if product.get("quantity_available") and float(product.get("quantity_available", 0)) > 0:
+        # If quantity OR price is provided, create an initial batch (simplified workflow for non-technical users)
+        if (product.get("quantity_available") and float(product.get("quantity_available", 0)) > 0) or \
+           (product.get("mrp") and float(product.get("mrp", 0)) > 0):
+            
+            # Use provided prices or set defaults
+            mrp = float(product.get("mrp", 100))  # Default MRP ₹100
+            sale_price = float(product.get("sale_price", 0)) or float(product.get("selling_price", 0)) or (mrp * 0.8)  # 20% discount from MRP
+            cost_price = float(product.get("cost_price", 0)) or float(product.get("purchase_price", 0)) or (sale_price * 0.6)  # 40% margin
+            quantity = float(product.get("quantity_available", 100))  # Default 100 units
+            
+            # Calculate expiry date if not provided (default 1 year from now)
+            from datetime import datetime, timedelta
+            if product.get("expiry_date"):
+                expiry_date = product.get("expiry_date")
+            else:
+                expiry_date = (datetime.now() + timedelta(days=365)).strftime("%Y-%m-%d")
+            
             batch_data = {
                 "org_id": DEFAULT_ORG_ID,
                 "product_id": created.product_id,
                 "batch_number": product.get("batch_number") or f"BATCH{random.randint(100000, 999999)}",
-                "manufacturing_date": product.get("manufacturing_date") or product.get("mfg_date"),
-                "expiry_date": product.get("expiry_date"),
-                "quantity_received": float(product.get("quantity_available", 0)),
-                "quantity_available": float(product.get("quantity_available", 0)),
-                "quantity_sold": 0,
-                "cost_per_unit": float(product.get("cost_price", 0)) or float(product.get("cost_per_unit", 0)),
-                "selling_price": float(product.get("sale_price", 0)) or float(product.get("mrp", 0)),
-                "mrp": float(product.get("mrp", 0)),
-                "batch_status": "active",
-                "expiry_status": "fresh",
-                "created_at": "CURRENT_TIMESTAMP"
+                "manufacturing_date": product.get("manufacturing_date") or datetime.now().strftime("%Y-%m-%d"),
+                "expiry_date": expiry_date,
+                "quantity_received": quantity,
+                "quantity_available": quantity,
+                "quantity_allocated": 0,
+                "cost_price": cost_price,
+                "selling_price": sale_price,
+                "mrp": mrp,
+                "is_active": True
             }
             
-            # Create batch if expiry date is provided
-            if batch_data["expiry_date"]:
+            try:
                 batch_result = db.execute(text("""
                     INSERT INTO inventory.batches (
                         org_id, product_id, batch_number,
                         manufacturing_date, expiry_date,
-                        quantity_received, quantity_available, quantity_sold,
-                        cost_per_unit, selling_price, mrp,
-                        batch_status, expiry_status, created_at
+                        quantity_received, quantity_available, quantity_allocated,
+                        cost_price, selling_price, mrp,
+                        is_active, created_at, updated_at
                     ) VALUES (
                         :org_id, :product_id, :batch_number,
                         :manufacturing_date, :expiry_date,
-                        :quantity_received, :quantity_available, :quantity_sold,
-                        :cost_per_unit, :selling_price, :mrp,
-                        :batch_status, :expiry_status, CURRENT_TIMESTAMP
+                        :quantity_received, :quantity_available, :quantity_allocated,
+                        :cost_price, :selling_price, :mrp,
+                        :is_active, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
                     ) RETURNING batch_id
                 """), batch_data)
                 
                 batch = batch_result.fetchone()
-                logger.info(f"Initial batch created for product {created.product_code}: Batch ID {batch.batch_id}")
+                logger.info(f"Initial batch created for product {created.product_code}: Batch ID {batch.batch_id}, MRP: {mrp}, Selling: {sale_price}")
+            except Exception as batch_error:
+                logger.warning(f"Could not create initial batch: {str(batch_error)}")
+                # Don't fail product creation if batch fails
         
         db.commit()
         
