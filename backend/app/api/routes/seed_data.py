@@ -140,7 +140,7 @@ async def seed_batches(db: Session = Depends(get_db)):
                                 org_id, product_id, batch_number,
                                 manufacturing_date, expiry_date,
                                 quantity_received, quantity_available, quantity_allocated,
-                                cost_price, selling_price, mrp,
+                                cost_per_unit, selling_price, mrp,
                                 is_active, created_at, updated_at
                             ) VALUES (
                                 :org_id, :product_id, :batch_number,
@@ -158,7 +158,7 @@ async def seed_batches(db: Session = Depends(get_db)):
                             "expiry_date": expiry_date.date(),
                             "quantity_received": batch['quantity'],
                             "quantity_available": batch['quantity'],
-                            "cost_price": batch['cost_price'],
+                            "cost_per_unit": batch['cost_price'],
                             "selling_price": batch['selling_price'],
                             "mrp": batch['mrp']
                         }

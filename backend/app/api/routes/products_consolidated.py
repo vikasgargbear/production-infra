@@ -235,11 +235,9 @@ async def create_product(
                 "expiry_date": expiry_date,
                 "quantity_received": quantity,
                 "quantity_available": quantity,
-                "quantity_allocated": 0,
-                "cost_price": cost_price,
+                "cost_per_unit": cost_price,  # Changed from cost_price
                 "selling_price": sale_price,
-                "mrp": mrp,
-                "is_active": True
+                "mrp": mrp
             }
             
             try:
@@ -247,15 +245,15 @@ async def create_product(
                     INSERT INTO inventory.batches (
                         org_id, product_id, batch_number,
                         manufacturing_date, expiry_date,
-                        quantity_received, quantity_available, quantity_allocated,
-                        cost_price, selling_price, mrp,
-                        is_active, created_at, updated_at
+                        quantity_received, quantity_available,
+                        cost_per_unit, selling_price, mrp,
+                        created_at, updated_at
                     ) VALUES (
                         :org_id, :product_id, :batch_number,
                         :manufacturing_date, :expiry_date,
-                        :quantity_received, :quantity_available, :quantity_allocated,
-                        :cost_price, :selling_price, :mrp,
-                        :is_active, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+                        :quantity_received, :quantity_available,
+                        :cost_per_unit, :selling_price, :mrp,
+                        CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
                     ) RETURNING batch_id
                 """), batch_data)
                 

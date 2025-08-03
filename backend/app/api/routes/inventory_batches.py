@@ -41,8 +41,8 @@ async def get_batches(
                     b.expiry_date,
                     b.manufacturing_date as mfg_date,
                     b.quantity_available,
-                    b.quantity_allocated,
-                    b.cost_price as purchase_price,
+                    b.quantity_reserved as quantity_allocated,
+                    b.cost_per_unit as purchase_price,
                     COALESCE(b.selling_price, b.mrp, 100) as sale_price,
                     COALESCE(b.mrp, b.selling_price, 100) as mrp,
                     b.is_active,
@@ -251,7 +251,7 @@ async def create_batch(
                 org_id, product_id, batch_number, 
                 expiry_date, manufacturing_date,
                 quantity_received, quantity_available,
-                cost_price, selling_price, mrp,
+                cost_per_unit, selling_price, mrp,
                 supplier_id, purchase_invoice_no,
                 is_active
             ) VALUES (
@@ -273,7 +273,7 @@ async def create_batch(
             "manufacturing_date": batch_data.get("manufacturing_date"),
             "quantity_received": batch_data.get("quantity_received", 0),
             "quantity_available": batch_data.get("quantity_available", batch_data.get("quantity_received", 0)),
-            "cost_price": batch_data.get("cost_price", 0),
+            "cost_per_unit": batch_data.get("cost_price", 0),
             "selling_price": batch_data.get("selling_price", 0),
             "mrp": batch_data.get("mrp", 0),
             "supplier_id": batch_data.get("supplier_id"),
