@@ -16,6 +16,123 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/purchases-enhanced", tags=["purchases-enhanced"])
 
+# Default org_id - should come from auth in production
+DEFAULT_ORG_ID = "ad808530-1ddb-4377-ab20-67bef145d80d"
+
+@router.post("/simple-purchase")
+def create_simple_purchase_with_batch(purchase_data: dict, db: Session = Depends(get_db)):
+    """
+    Simplified purchase entry that automatically creates batches
+    For non-technical users who want to directly add stock
+    """
+    import random
+    
+    try:
+        # Generate PO number
+        po_number = f"PO-{datetime.now().strftime('%Y%m%d')}-{random.randint(1000, 9999)}"
+        
+        # Create purchase order
+        po_result = db.execute(text("""
+            INSERT INTO procurement.purchase_orders (
+                org_id, branch_id, po_number, po_date, po_type,
+                supplier_id, supplier_name,
+                subtotal_amount, tax_amount, total_amount,
+                po_status, grn_status, payment_status,
+                created_at
+            ) VALUES (
+                :org_id, 1, :po_number, :po_date, 'regular',
+                :supplier_id, :supplier_name,
+                :subtotal, :tax, :total,
+                'completed', 'completed', :payment_status,
+                CURRENT_TIMESTAMP
+            ) RETURNING po_id
+        """), {
+            "org_id": DEFAULT_ORG_ID,
+            "po_number": po_number,
+            "po_date": purchase_data.get("purchase_date", datetime.now().date()),
+            "supplier_id": purchase_data.get("supplier_id"),
+            "supplier_name": purchase_data.get("supplier_name", "Direct Purchase"),
+            "subtotal": purchase_data.get("subtotal_amount", 0),
+            "tax": purchase_data.get("tax_amount", 0),
+            "total": purchase_data.get("total_amount", 0),
+            "payment_status": purchase_data.get("payment_status", "paid")
+        })
+        
+        po = po_result.fetchone()
+        
+        # Process items and create batches
+        items = purchase_data.get("items", [])
+        for item in items:
+            # Create PO item
+            item_result = db.execute(text("""
+                INSERT INTO procurement.purchase_order_items (
+                    po_id, product_id, product_name,
+                    ordered_quantity, unit_price, line_total,
+                    tax_percentage, tax_amount, final_amount
+                ) VALUES (
+                    :po_id, :product_id, :product_name,
+                    :quantity, :unit_price, :line_total,
+                    :tax_percent, :tax_amount, :final_amount
+                ) RETURNING po_item_id
+            """), {
+                "po_id": po.po_id,
+                "product_id": item.get("product_id"),
+                "product_name": item.get("product_name"),
+                "quantity": item.get("quantity", 0),
+                "unit_price": item.get("unit_price", 0),
+                "line_total": item.get("quantity", 0) * item.get("unit_price", 0),
+                "tax_percent": item.get("tax_percent", 12),
+                "tax_amount": item.get("tax_amount", 0),
+                "final_amount": item.get("total_amount", 0)
+            })
+            
+            # Create batch automatically
+            if item.get("batch_number") and item.get("expiry_date"):
+                batch_result = db.execute(text("""
+                    INSERT INTO inventory.batches (
+                        org_id, product_id, supplier_id,
+                        batch_number, expiry_date,
+                        quantity_received, quantity_available,
+                        cost_per_unit, selling_price, mrp,
+                        batch_status, expiry_status,
+                        created_at
+                    ) VALUES (
+                        :org_id, :product_id, :supplier_id,
+                        :batch_number, :expiry_date,
+                        :quantity, :quantity,
+                        :cost_price, :selling_price, :mrp,
+                        'active', 'fresh',
+                        CURRENT_TIMESTAMP
+                    ) RETURNING batch_id
+                """), {
+                    "org_id": DEFAULT_ORG_ID,
+                    "product_id": item.get("product_id"),
+                    "supplier_id": purchase_data.get("supplier_id"),
+                    "batch_number": item.get("batch_number"),
+                    "expiry_date": item.get("expiry_date"),
+                    "quantity": item.get("quantity", 0),
+                    "cost_price": item.get("unit_price", 0),
+                    "selling_price": item.get("selling_price", item.get("mrp", 0)),
+                    "mrp": item.get("mrp", 0)
+                })
+                
+                batch = batch_result.fetchone()
+                logger.info(f"Batch {batch.batch_id} created for product {item.get('product_id')}")
+        
+        db.commit()
+        
+        return {
+            "success": True,
+            "po_id": po.po_id,
+            "po_number": po_number,
+            "message": f"Purchase {po_number} created with {len(items)} items and batches"
+        }
+        
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Error in simple purchase: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 @router.post("/with-items")
 def create_purchase_with_items(purchase_data: dict, db: Session = Depends(get_db)):
     """
