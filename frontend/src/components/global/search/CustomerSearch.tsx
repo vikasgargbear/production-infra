@@ -102,9 +102,7 @@ export const CustomerSearch = forwardRef<CustomerSearchRef, CustomerSearchProps>
     <div className="space-y-2">
       <div>
         <p className="font-medium text-gray-900">{customer.customer_name}</p>
-        {customer.customer_code && (
-          <p className="text-sm text-gray-500">Code: {customer.customer_code}</p>
-        )}
+        {/* Customer code hidden for cleaner UI - available in search results */}
       </div>
       
       <div className="text-sm text-gray-600 space-y-1">
@@ -274,7 +272,7 @@ export const CustomerSearch = forwardRef<CustomerSearchRef, CustomerSearchProps>
                 <User className="w-5 h-5 text-gray-500" />
                 <div>
                   <p className="font-medium">{value.customer_name}</p>
-                  <p className="text-sm text-gray-500">{value.customer_code}</p>
+                  {/* Customer code hidden for cleaner UI */}
                 </div>
               </div>
               {clearable && !disabled && (

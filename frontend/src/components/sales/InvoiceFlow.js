@@ -720,9 +720,10 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
                 value={invoice?.customer_details || null}
                 onChange={handleCustomerSelect}
                 onCreateNew={() => setShowCustomerModal(true)}
-                displayMode="full"
+                displayMode="inline"
                 placeholder="Search customer by name, phone, or code..."
                 required
+                clearable={true}
               />
             </div>
 
