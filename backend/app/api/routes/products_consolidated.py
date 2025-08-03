@@ -44,16 +44,64 @@ async def search_products(
     Search products by name, brand, or HSN
     """
     try:
-        # Try PostgreSQL function first if it exists
-        result = db.execute(
-            """
-            SELECT * FROM api.search_products(
-                p_search_term := :search_term,
-                p_limit := :limit
-            )
-            """,
-            {"search_term": q, "limit": limit}
-        )
+        # Direct query with correct column names
+        if q:
+            # Search with filter
+            result = db.execute(text("""
+                SELECT 
+                    product_id,
+                    product_name as name,
+                    brand,
+                    manufacturer,
+                    hsn_code,
+                    gst_percentage as gst_rate,
+                    0 as mrp,
+                    0 as sale_rate,
+                    0 as purchase_rate,
+                    0 as current_stock,
+                    'PCS' as unit_of_measure,
+                    'General' as category
+                FROM inventory.products
+                WHERE org_id = :org_id
+                    AND (product_name ILIKE :search 
+                         OR brand ILIKE :search 
+                         OR manufacturer ILIKE :search
+                         OR hsn_code ILIKE :search)
+                    AND is_active = true
+                ORDER BY product_name
+                LIMIT :limit OFFSET :offset
+            """), {
+                "org_id": DEFAULT_ORG_ID,
+                "search": f"%{q}%",
+                "limit": limit,
+                "offset": offset
+            })
+        else:
+            # Get all products
+            result = db.execute(text("""
+                SELECT 
+                    product_id,
+                    product_name as name,
+                    brand,
+                    manufacturer,
+                    hsn_code,
+                    gst_percentage as gst_rate,
+                    0 as mrp,
+                    0 as sale_rate,
+                    0 as purchase_rate,
+                    0 as current_stock,
+                    'PCS' as unit_of_measure,
+                    'General' as category
+                FROM inventory.products
+                WHERE org_id = :org_id
+                    AND is_active = true
+                ORDER BY product_name
+                LIMIT :limit OFFSET :offset
+            """), {
+                "org_id": DEFAULT_ORG_ID,
+                "limit": limit,
+                "offset": offset
+            })
         
         products = []
         for row in result:
@@ -73,49 +121,9 @@ async def search_products(
         
         return products
     except Exception as e:
-        # Fallback to direct query if function doesn't exist
-        logger.warning(f"PostgreSQL function failed, using direct query: {e}")
-        
-        result = db.execute(text("""
-            SELECT 
-                product_id,
-                product_name as name,
-                brand_name as brand,
-                'General' as category,
-                hsn_code,
-                gst_rate,
-                mrp,
-                sale_price as sale_rate,
-                purchase_price as purchase_rate,
-                0 as current_stock,
-                unit_of_measure
-            FROM inventory.products
-            WHERE org_id = :org_id
-                AND (product_name ILIKE :search OR brand_name ILIKE :search)
-            LIMIT :limit
-        """), {
-            "org_id": DEFAULT_ORG_ID,
-            "search": f"%{q}%",
-            "limit": limit
-        })
-        
-        products = []
-        for row in result:
-            products.append({
-                "product_id": row.product_id,
-                "name": row.name,
-                "brand": row.brand,
-                "category": row.category,
-                "hsn_code": row.hsn_code,
-                "gst_rate": float(row.gst_rate) if row.gst_rate else 0,
-                "mrp": float(row.mrp) if row.mrp else 0,
-                "sale_rate": float(row.sale_rate) if row.sale_rate else 0,
-                "purchase_rate": float(row.purchase_rate) if row.purchase_rate else 0,
-                "current_stock": row.current_stock or 0,
-                "unit_of_measure": row.unit_of_measure or "PCS"
-            })
-        
-        return products
+        logger.error(f"Product search failed: {str(e)}")
+        # Return empty list on error rather than 500
+        return []
 
 @router.post("/", status_code=status.HTTP_201_CREATED)
 async def create_product(
