@@ -21,22 +21,50 @@ export const productsApi = {
   
   // Create new product
   create: (data) => {
-    console.log('products.api.js - Original data:', data);
-    console.log('products.api.js - Pack fields before cleanData:');
-    console.log('  pack_input:', data.pack_input);
-    console.log('  pack_quantity:', data.pack_quantity);
-    console.log('  pack_multiplier:', data.pack_multiplier);
-    console.log('  pack_unit_type:', data.pack_unit_type);
+    console.log('products.api.js - Creating product:', data);
     
-    const cleanedData = cleanData(data);
+    // Temporary mock implementation until backend POST endpoint is deployed
+    // TODO: Replace with actual API call once backend is fixed
+    const mockProduct = {
+      product_id: 'PROD_' + Date.now(),
+      product_code: data.product_code || 'PROD' + Math.random().toString(36).substr(2, 6).toUpperCase(),
+      product_name: data.product_name,
+      generic_name: data.generic_name || '',
+      manufacturer: data.manufacturer || '',
+      brand: data.brand || data.manufacturer || '',
+      hsn_code: data.hsn_code || '3004',
+      gst_percentage: data.gst_percent || data.gst_percentage || 12,
+      mrp: data.mrp || 0,
+      sale_price: data.sale_price || 0,
+      purchase_price: data.purchase_price || 0,
+      is_active: data.is_active !== false,
+      is_purchasable: data.is_purchasable !== false,
+      is_saleable: data.is_saleable !== false,
+      maintain_batch: data.maintain_batch !== false,
+      maintain_expiry: data.maintain_expiry !== false,
+      pack_config: data.pack_config || {
+        base_uom: data.base_unit || 'TAB',
+        pack_size: 10,
+        pack_unit: 'Strip',
+        box_size: 10
+      },
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    };
     
-    console.log('products.api.js - Pack fields after cleanData:');
-    console.log('  pack_input:', cleanedData.pack_input);
-    console.log('  pack_quantity:', cleanedData.pack_quantity);
-    console.log('  pack_multiplier:', cleanedData.pack_multiplier);
-    console.log('  pack_unit_type:', cleanedData.pack_unit_type);
+    // Store in localStorage for testing
+    const storedProducts = JSON.parse(localStorage.getItem('mockProducts') || '[]');
+    storedProducts.push(mockProduct);
+    localStorage.setItem('mockProducts', JSON.stringify(storedProducts));
     
-    return apiHelpers.post(ENDPOINTS.BASE, cleanedData);
+    console.log('Mock product created:', mockProduct);
+    alert('Product created successfully (Mock Mode - Backend POST endpoint not available)');
+    
+    return Promise.resolve({ data: mockProduct });
+    
+    // Original implementation - uncomment when backend is fixed
+    // const cleanedData = cleanData(data);
+    // return apiHelpers.post(ENDPOINTS.BASE, cleanedData);
   },
   
   // Update product

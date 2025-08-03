@@ -419,7 +419,7 @@ const AgingAnalysis: React.FC<AgingAnalysisProps> = ({ open = true, onClose }) =
               
               <div className="text-center p-4 bg-red-50 rounded-lg">
                 <div className="w-4 h-4 bg-red-800 rounded mx-auto mb-2"></div>
-                <div className="text-sm font-medium text-gray-700">>120 Days</div>
+                <div className="text-sm font-medium text-gray-700">&gt;120 Days</div>
                 <div className="text-lg font-bold text-red-800">{formatCurrency(agingSummary.daysOver120)}</div>
               </div>
             </div>

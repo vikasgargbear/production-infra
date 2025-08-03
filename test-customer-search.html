@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Customer Search Test</title>
+    <script src="https://cdn.jsdelivr.net/npm/axios@1.6.0/dist/axios.min.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            padding: 20px;
+            max-width: 800px;
+            margin: 0 auto;
+        }
+        .search-box {
+            padding: 10px;
+            width: 100%;
+            font-size: 16px;
+            margin-bottom: 20px;
+        }
+        .results {
+            border: 1px solid #ddd;
+            padding: 10px;
+            border-radius: 5px;
+            min-height: 200px;
+        }
+        .customer {
+            padding: 10px;
+            margin: 5px 0;
+            background: #f5f5f5;
+            border-radius: 3px;
+        }
+        .success { color: green; }
+        .error { color: red; }
+    </style>
+</head>
+<body>
+    <h1>Customer Search Test</h1>
+    
+    <input type="text" class="search-box" id="searchBox" placeholder="Type to search customers..." />
+    
+    <div class="results" id="results">
+        <p>Start typing to search...</p>
+    </div>
+    
+    <h3>Debug Info:</h3>
+    <pre id="debug"></pre>
+    
+    <script>
+        const API_URL = 'https://pharma-backend-production-0c09.up.railway.app/api/v1';
+        const searchBox = document.getElementById('searchBox');
+        const results = document.getElementById('results');
+        const debug = document.getElementById('debug');
+        
+        let searchTimeout;
+        
+        searchBox.addEventListener('input', (e) => {
+            clearTimeout(searchTimeout);
+            const query = e.target.value;
+            
+            if (query.length < 2) {
+                results.innerHTML = '<p>Type at least 2 characters to search...</p>';
+                return;
+            }
+            
+            searchTimeout = setTimeout(() => searchCustomers(query), 300);
+        });
+        
+        async function searchCustomers(query) {
+            results.innerHTML = '<p>Searching...</p>';
+            
+            try {
+                const response = await axios.get(`${API_URL}/customers/`, {
+                    params: {
+                        search: query,
+                        limit: 10
+                    }
+                });
+                
+                debug.textContent = JSON.stringify(response.data, null, 2);
+                
+                if (response.data.customers && response.data.customers.length > 0) {
+                    results.innerHTML = `
+                        <h3 class="success">Found ${response.data.total} customers:</h3>
+                        ${response.data.customers.map(c => `
+                            <div class="customer">
+                                <strong>${c.customer_name}</strong> (${c.customer_code})<br>
+                                Phone: ${c.phone || 'N/A'}<br>
+                                Type: ${c.customer_type}<br>
+                                ID: ${c.customer_id}
+                            </div>
+                        `).join('')}
+                    `;
+                } else {
+                    results.innerHTML = '<p class="error">No customers found</p>';
+                }
+            } catch (error) {
+                results.innerHTML = `<p class="error">Error: ${error.message}</p>`;
+                debug.textContent = `Error: ${error.response?.data?.detail || error.message}`;
+            }
+        }
+        
+        // Test searches
+        setTimeout(() => {
+            console.log('Testing "test" search...');
+            searchBox.value = 'test';
+            searchCustomers('test');
+        }, 1000);
+        
+        setTimeout(() => {
+            console.log('Testing "abc" search...');
+            searchBox.value = 'abc';
+            searchCustomers('abc');
+        }, 3000);
+        
+        setTimeout(() => {
+            console.log('Testing "vikas" search...');
+            searchBox.value = 'vikas';
+            searchCustomers('vikas');
+        }, 5000);
+    </script>
+</body>
+</html>
