@@ -698,7 +698,7 @@ async def test_invoice_flow(db: Session = Depends(get_db)) -> Dict[str, Any]:
                 6.00, 6.00,
                 'PIECE', 'PIECE', 100.00, 12.00,
                 CURRENT_TIMESTAMP
-            ) RETURNING item_id
+            ) RETURNING invoice_item_id
         """), {"invoice_id": invoice_id})
         
         item = item_result.fetchone()
