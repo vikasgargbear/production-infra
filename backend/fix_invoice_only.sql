@@ -1,5 +1,6 @@
--- Fix ONLY Invoice Creation Issues
--- Minimal changes to make invoice creation work properly
+-- PRODUCTION DATABASE FIX - Invoice Module
+-- Run this script in Supabase SQL Editor to enable invoice creation
+-- This script adds minimal required tables/columns to make invoices work
 
 -- ============================================================
 -- STEP 1: Create analytics schema and dashboard_cache table

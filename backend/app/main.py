@@ -26,10 +26,7 @@ from .api.routes import (
 
 # Import additional routers not in __init__.py
 from .api.routes import stock_receive, enterprise_delivery_challan, inventory_batches, seed_data, create_user
-# Import working invoice endpoint
-from .api.routes import invoice_working
-# Import simple batch endpoint
-from .api.routes import batch_simple
+# All temporary endpoints removed - using main endpoints only
 
 # Lifecycle management
 @asynccontextmanager
@@ -127,10 +124,7 @@ api.include_router(enterprise_delivery_challan.router, tags=["Enterprise Deliver
 api.include_router(inventory_batches.router, tags=["Inventory Batches"])
 api.include_router(seed_data.router, tags=["Seed Data"])
 api.include_router(create_user.router, tags=["Setup"])
-# TODO: Working invoice endpoint - temporary until main invoice endpoint is fixed
-api.include_router(invoice_working.router, tags=["Working Invoice"])
-# TODO: Simple batch endpoint - temporary until trigger issues are fixed
-api.include_router(batch_simple.router, tags=["Simple Batch"])
+# All endpoints consolidated - no temporary workarounds
 
 # Include the PostgreSQL function wrappers
 api.include_router(api_wrapper.router, prefix="/pg", tags=["PostgreSQL Functions"])
