@@ -84,7 +84,7 @@ def create_basim_invoice():
     
     try:
         response = requests.post(
-            f"{API_BASE}/invoices",
+            f"{API_BASE}/invoices/",  # IMPORTANT: Trailing slash required!
             json=invoice_data,
             headers={
                 "X-Org-Id": ORG_ID,
