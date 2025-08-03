@@ -696,6 +696,39 @@ async def create_invoice(
         logger.error(f"Error in invoice creation attempt: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
+@router.get("/{invoice_id}")
+async def get_invoice(
+    invoice_id: int,
+    db: Session = Depends(get_db)
+):
+    """
+    Get basic invoice information by ID
+    """
+    try:
+        result = db.execute(
+            text("""
+                SELECT 
+                    invoice_id, invoice_number, invoice_date, customer_id,
+                    customer_name, final_amount as total_amount, invoice_status,
+                    payment_status, notes
+                FROM sales.invoices
+                WHERE invoice_id = :invoice_id
+            """),
+            {"invoice_id": invoice_id}
+        )
+        
+        invoice = result.fetchone()
+        if not invoice:
+            raise HTTPException(status_code=404, detail=f"Invoice {invoice_id} not found")
+        
+        return dict(invoice._mapping)
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error getting invoice {invoice_id}: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to get invoice: {str(e)}")
+
 @router.post("/calculate-live", response_model=InvoiceCalculateResponse)
 async def calculate_invoice_totals(
     request: InvoiceCalculateRequest,
