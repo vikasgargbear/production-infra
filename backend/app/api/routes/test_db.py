@@ -118,6 +118,38 @@ async def check_customer_columns(db: Session = Depends(get_db)):
     except Exception as e:
         return {"error": str(e)}
 
+@router.get("/check-batch-columns")
+async def check_batch_columns(db: Session = Depends(get_db)):
+    """Check columns in inventory.batches table"""
+    try:
+        result = db.execute(text("""
+            SELECT 
+                column_name,
+                data_type,
+                is_nullable
+            FROM information_schema.columns
+            WHERE table_schema = 'inventory' 
+                AND table_name = 'batches'
+            ORDER BY ordinal_position
+        """))
+        
+        columns = []
+        for row in result:
+            columns.append({
+                "name": row.column_name,
+                "type": row.data_type,
+                "nullable": row.is_nullable == 'YES'
+            })
+        
+        return {
+            "table": "inventory.batches",
+            "columns": columns,
+            "total_columns": len(columns)
+        }
+        
+    except Exception as e:
+        return {"error": str(e), "traceback": traceback.format_exc()}
+
 @router.get("/check-organizations")
 async def check_organizations(db: Session = Depends(get_db)):
     """Check existing organizations"""
