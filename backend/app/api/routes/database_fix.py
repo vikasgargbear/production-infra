@@ -529,18 +529,24 @@ async def test_invoice_flow(db: Session = Depends(get_db)) -> Dict[str, Any]:
         # Step 2: Create test order
         steps.append({"step": "create_order", "status": "creating"})
         
-        # Get a branch_id and created_by first
+        # Get a branch_id first (required)
         branch_check = db.execute(text("""
             SELECT branch_id FROM master.org_branches LIMIT 1
         """))
         branch = branch_check.fetchone()
         branch_id = branch[0] if branch else 1
         
-        user_check = db.execute(text("""
-            SELECT user_id FROM master.users LIMIT 1
-        """))
-        user = user_check.fetchone()
-        created_by = user[0] if user else 1
+        # Try to get a user_id, fallback to 1 if users table doesn't exist
+        created_by = 1
+        try:
+            user_check = db.execute(text("""
+                SELECT user_id FROM master.users LIMIT 1
+            """))
+            user = user_check.fetchone()
+            if user:
+                created_by = user[0]
+        except:
+            pass  # Use default created_by = 1
         
         order_result = db.execute(text("""
             INSERT INTO sales.orders (
