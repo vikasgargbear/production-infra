@@ -134,6 +134,10 @@ app.include_router(api)
 # Include test routes for debugging
 app.include_router(test_db.router)
 
+# Debug endpoints
+from .api.routes import debug_invoice
+app.include_router(debug_invoice.router)
+
 # No v1 routes - everything is consolidated under /api/
 
 # PostgreSQL function wrapper endpoints
