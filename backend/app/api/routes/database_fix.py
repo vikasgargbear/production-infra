@@ -546,6 +546,7 @@ async def test_invoice_flow(db: Session = Depends(get_db)) -> Dict[str, Any]:
             if user:
                 created_by = user[0]
         except:
+            db.rollback()  # Clear the failed transaction
             pass  # Use default created_by = 1
         
         order_result = db.execute(text("""
