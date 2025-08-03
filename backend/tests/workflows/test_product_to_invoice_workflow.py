@@ -193,9 +193,10 @@ class ProductToInvoiceWorkflowTest:
         print("\n👥 STEP 4: Get Customer for Invoice")
         
         try:
-            response = requests.get(f"{API_BASE_URL}/customers?limit=1", timeout=30)
+            response = requests.get(f"{API_BASE_URL}/customers/?limit=1", timeout=30)
             if response.status_code == 200:
-                customers = response.json()
+                customer_data = response.json()
+                customers = customer_data.get('customers', [])
                 if customers and len(customers) > 0:
                     customer = customers[0]
                     self.test_data['customer'] = customer
@@ -243,7 +244,7 @@ class ProductToInvoiceWorkflowTest:
         }
         
         try:
-            response = requests.post(f"{API_BASE_URL}/sales/invoices/", json=invoice_data, timeout=30)
+            response = requests.post(f"{API_BASE_URL}/invoices/", json=invoice_data, timeout=30)
             if response.status_code == 201:
                 invoice = response.json()
                 self.test_data['invoice'] = invoice
@@ -274,7 +275,7 @@ class ProductToInvoiceWorkflowTest:
         invoice_id = self.test_data['invoice_id']
         
         try:
-            response = requests.get(f"{API_BASE_URL}/sales/invoices/{invoice_id}", timeout=30)
+            response = requests.get(f"{API_BASE_URL}/invoices/{invoice_id}", timeout=30)
             if response.status_code == 200:
                 invoice = response.json()
                 
