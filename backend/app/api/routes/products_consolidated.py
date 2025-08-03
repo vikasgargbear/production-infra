@@ -21,10 +21,23 @@ router = APIRouter()
 # Default org_id - should come from auth in production
 DEFAULT_ORG_ID = "ad808530-1ddb-4377-ab20-67bef145d80d"
 
+def _format_composition(composition_value):
+    """Convert composition to string if it's a dict"""
+    if isinstance(composition_value, dict):
+        # If it's a dict like {'active': 'Amoxy'}, extract the value
+        if 'active' in composition_value:
+            return composition_value['active']
+        # Otherwise join all values
+        return ', '.join(str(v) for v in composition_value.values() if v)
+    elif composition_value:
+        return str(composition_value)
+    return ""
+
 @router.get("/search", response_model=List[Product])
 async def search_products(
-    q: str = Query(..., description="Search query"),
+    q: str = Query("", description="Search query"),
     limit: int = Query(10, ge=1, le=100),
+    offset: int = Query(0, ge=0),
     db: Session = Depends(get_db)
 ):
     """
@@ -120,7 +133,7 @@ async def create_product(
             "product_name": product.get("product_name"),
             "brand_name": product.get("brand") or product.get("brand_name") or product.get("manufacturer"),
             "manufacturer": product.get("manufacturer"),
-            "composition": product.get("composition") or product.get("generic_name"),
+            "composition": _format_composition(product.get("composition")) or product.get("generic_name") or "",
             "category_id": product.get("category_id") or 1,  # Default category
             "hsn_code": product.get("hsn_code") or "3004",
             "gst_rate": product.get("gst_percentage") or product.get("gst_rate") or 12,

@@ -279,6 +279,45 @@ export const salesOrdersAPI = {
     });
     return response.data;
   },
+  
+  getAll: async (params = {}) => {
+    const response = await apiClient.get('/sales-orders', {
+      params: {
+        limit: params.limit || 100,
+        offset: params.offset || 0,
+        status: params.status,
+        customer_id: params.customer_id,
+        date_from: params.date_from,
+        date_to: params.date_to,
+      },
+    });
+    return response.data;
+  },
+  
+  getById: async (id) => {
+    const response = await apiClient.get(`/sales-orders/${id}`);
+    return response.data;
+  },
+  
+  create: async (data) => {
+    const response = await apiClient.post('/sales-orders', data);
+    return response.data;
+  },
+  
+  update: async (id, data) => {
+    const response = await apiClient.put(`/sales-orders/${id}`, data);
+    return response.data;
+  },
+  
+  convertToInvoice: async (id) => {
+    const response = await apiClient.post(`/sales-orders/${id}/convert-to-invoice`);
+    return response.data;
+  },
+  
+  convertToChallan: async (id) => {
+    const response = await apiClient.post(`/sales-orders/${id}/convert-to-challan`);
+    return response.data;
+  },
 };
 
 // Note: We don't re-export apiClient here to avoid circular dependency
