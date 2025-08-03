@@ -25,7 +25,7 @@ from .api.routes import (
 )
 
 # Import additional routers not in __init__.py
-from .api.routes import stock_receive, enterprise_delivery_challan, inventory_batches, seed_data
+from .api.routes import stock_receive, enterprise_delivery_challan, inventory_batches, seed_data, create_user
 
 # Lifecycle management
 @asynccontextmanager
@@ -121,6 +121,7 @@ api.include_router(stock_receive.router, tags=["Stock Receive"])
 api.include_router(enterprise_delivery_challan.router, tags=["Enterprise Delivery Challan"])
 api.include_router(inventory_batches.router, tags=["Inventory Batches"])
 api.include_router(seed_data.router, tags=["Seed Data"])
+api.include_router(create_user.router, tags=["Setup"])
 
 # Include the PostgreSQL function wrappers
 api.include_router(api_wrapper.router, prefix="/pg", tags=["PostgreSQL Functions"])
