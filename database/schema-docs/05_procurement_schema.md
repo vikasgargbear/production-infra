@@ -33,7 +33,7 @@ The `procurement` schema manages the complete procurement process from purchase 
 | `currency_code` | TEXT | - | Transaction currency | Multi-currency support |
 | `exchange_rate` | NUMERIC(10,6) | - | Currency exchange rate | Currency conversion |
 | `subtotal_amount` | NUMERIC(15,2) | ✓ | Subtotal before taxes | Amount calculations |
-| `discount_percentage` | NUMERIC(5,2) | - | Overall discount % | Discount tracking |
+| `discount_percent` | NUMERIC(5,2) | - | Overall discount % | Discount tracking |
 | `discount_amount` | NUMERIC(15,2) | - | Total discount amount | Discount calculations |
 | `freight_amount` | NUMERIC(15,2) | - | Freight/shipping charges | Additional costs |
 | `other_charges` | NUMERIC(15,2) | - | Other charges | Additional costs |
@@ -127,7 +127,7 @@ The `procurement` schema manages the complete procurement process from purchase 
   "discount_percentage": 5.0,
   "line_total": 9975.00,
   "gst_percentage": 12.0,
-  "line_total_with_tax": 11172.00,
+  "line_total": 11172.00,
   "received_quantity": 0.0,
   "pending_quantity": 1000.0
 }

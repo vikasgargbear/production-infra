@@ -75,7 +75,7 @@ The `analytics` schema provides business intelligence, reporting, and data analy
 | `total_sales_revenue` | NUMERIC(15,2) | - | Total sales revenue | Revenue metrics |
 | `total_purchase_value` | NUMERIC(15,2) | - | Total purchases | Purchase metrics |
 | `gross_profit` | NUMERIC(15,2) | - | Gross profit | Profit metrics |
-| `gross_margin_percentage` | NUMERIC(5,2) | - | Gross margin % | Margin metrics |
+| `gross_margin_percent` | NUMERIC(5,2) | - | Gross margin % | Margin metrics |
 | `operating_expenses` | NUMERIC(15,2) | - | Operating expenses | Expense metrics |
 | `net_profit` | NUMERIC(15,2) | - | Net profit | Profit metrics |
 | `total_customers_served` | INTEGER | - | Unique customers | Customer metrics |
@@ -109,7 +109,7 @@ The `analytics` schema provides business intelligence, reporting, and data analy
 | `units_sold` | NUMERIC(15,3) | - | Units sold | Volume metrics |
 | `revenue_generated` | NUMERIC(15,2) | - | Revenue from product | Revenue metrics |
 | `profit_generated` | NUMERIC(15,2) | - | Profit from product | Profit metrics |
-| `margin_percentage` | NUMERIC(5,2) | - | Profit margin % | Margin metrics |
+| `margin_percent` | NUMERIC(5,2) | - | Profit margin % | Margin metrics |
 | `stock_level` | NUMERIC(15,3) | - | Current stock | Inventory metrics |
 | `days_of_stock` | NUMERIC(10,2) | - | Stock coverage days | Stock planning |
 | `stock_turnover_days` | NUMERIC(10,2) | - | Turnover in days | Efficiency metrics |

@@ -6,6 +6,7 @@ WORKING Invoice Creation Test - Creates customer first, then invoice
 import requests
 import json
 from datetime import datetime
+from price_validator import PriceValidator
 
 API_BASE = "https://pharma-backend-production-0c09.up.railway.app/api"
 ORG_ID = "11111111-1111-1111-1111-111111111111"
@@ -113,6 +114,9 @@ def create_invoice(customer_id):
     """Create invoice for the customer"""
     print(f"\n2️⃣ Step 2: Invoice Creation...")
     
+    # Initialize price validator
+    validator = PriceValidator()
+    
     invoice_data = {
         "customer_id": customer_id,
         "customer_name": "Basim",
@@ -129,28 +133,32 @@ def create_invoice(customer_id):
                 "product_code": "ATL001",
                 "hsn_code": "3004",
                 "quantity": 12,
-                "unit_price": 100.00,
-                "mrp": 120.00,
+                "unit_price": 11.00,  # Correct price from database
+                "mrp": 15.00,  # Approximate MRP
                 "discount_percent": 10.0,
                 "uom": "STRIP",
                 "pack_type": "STRIP"
             }
         ],
-        "subtotal_amount": 1200.00,
-        "discount_amount": 120.00,
-        "taxable_amount": 1080.00,
-        "cgst_amount": 97.20,
-        "sgst_amount": 97.20,
+        "subtotal_amount": 132.00,  # 12 * 11
+        "discount_amount": 13.20,   # 10% of 132
+        "taxable_amount": 118.80,   # 132 - 13.20
+        "cgst_amount": 7.13,        # 6% of 118.80
+        "sgst_amount": 7.13,        # 6% of 118.80
         "igst_amount": 0,
-        "total_tax_amount": 194.40,
+        "total_tax_amount": 14.26,  # 12% of 118.80
         "other_charges": 20.00,
         "other_charges_description": "Transportation",
-        "final_amount": 1294.40,
-        "total_amount": 1294.40,
-        "net_amount": 1294.40,
-        "paid_amount": 1294.40,
+        "final_amount": 153.06,     # 118.80 + 14.26 + 20
+        "total_amount": 153.06,
+        "net_amount": 153.06,
+        "paid_amount": 153.06,
         "notes": "Basim invoice - Atlas x12, 10% discount, ₹20 transport"
     }
+    
+    # Validate and correct pricing
+    print("\n🔍 Validating prices...")
+    invoice_data = validator.validate_invoice_data(invoice_data)
     
     response = requests.post(
         f"{API_BASE}/invoices/",  # WITH trailing slash!

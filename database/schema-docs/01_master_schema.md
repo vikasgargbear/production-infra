@@ -205,7 +205,7 @@ The `master` schema contains core organizational data, user management, and syst
 | `standard_rate` | NUMERIC | - | Standard selling price | Pricing |
 | `purchase_rate` | NUMERIC | - | Standard purchase price | Cost management |
 | `mrp` | NUMERIC | - | Maximum retail price | Price validation |
-| `margin_percentage` | NUMERIC | - | Profit margin percentage | Pricing strategy |
+| `margin_percent` | NUMERIC | - | Profit margin percentage | Pricing strategy |
 | `barcode` | TEXT | - | Product barcode | Scanning integration |
 | `qr_code` | TEXT | - | QR code data | Mobile integration |
 | `product_image_url` | TEXT | - | Product image URL | Visual display |

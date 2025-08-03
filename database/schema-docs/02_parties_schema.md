@@ -253,7 +253,7 @@ The `parties` schema manages customers, suppliers, and business relationships. T
 | `group_name` | TEXT | ✓ | Group display name | Display name |
 | `group_type` | TEXT | ✓ | Type: 'territory', 'category', 'price', 'discount', 'custom' | Group classification |
 | `parent_group_id` | INTEGER | - | Parent group ID | Hierarchy structure |
-| `discount_percentage` | NUMERIC(5,2) | - | Group discount percentage | Pricing calculations |
+| `discount_percent` | NUMERIC(5,2) | - | Group discount percentage | Pricing calculations |
 | `price_list_id` | INTEGER | - | Special price list ID | Pricing strategy |
 | `payment_terms_days` | INTEGER | - | Payment terms in days | Payment terms |
 | `credit_limit_multiplier` | NUMERIC(3,2) | - | Credit limit multiplier | Credit calculations |
@@ -269,7 +269,7 @@ The `parties` schema manages customers, suppliers, and business relationships. T
   "group_code": "VIP_CUSTOMERS",
   "group_name": "VIP Customers",
   "group_type": "discount",
-  "discount_percentage": 15.00,
+  "discount_percent": 15.00,
   "credit_limit_multiplier": 2.0,
   "eligibility_criteria": {
     "minimum_business": 100000,

@@ -84,15 +84,17 @@ The `sales` schema manages the complete sales process from orders to invoices, i
 | `quantity` | NUMERIC(15,3) | ✓ | Ordered quantity | Quantity tracking |
 | `delivered_quantity` | NUMERIC(15,3) | - | Delivered quantity | Fulfillment tracking |
 | `unit_price` | NUMERIC(15,4) | ✓ | Unit selling price | Price calculations |
-| `discount_percentage` | NUMERIC(5,2) | - | Line item discount % | Discount calculations |
+| `discount_percent` | NUMERIC(5,2) | - | Line item discount % | Discount calculations |
 | `discount_amount` | NUMERIC(15,2) | - | Line item discount amount | Discount tracking |
 | `line_total` | NUMERIC(15,2) | ✓ | Line total before tax | Amount calculations |
-| `gst_percentage` | NUMERIC(5,2) | - | GST rate % | Tax calculations |
+| `cgst_rate` | NUMERIC(5,2) | - | CGST rate % | Tax calculations |
+| `sgst_rate` | NUMERIC(5,2) | - | SGST rate % | Tax calculations |
+| `igst_rate` | NUMERIC(5,2) | - | IGST rate % | Tax calculations |
 | `cgst_amount` | NUMERIC(15,2) | - | CGST amount | Tax breakdown |
 | `sgst_amount` | NUMERIC(15,2) | - | SGST amount | Tax breakdown |
 | `igst_amount` | NUMERIC(15,2) | - | IGST amount | Tax breakdown |
 | `cess_amount` | NUMERIC(15,2) | - | Cess amount | Tax calculations |
-| `line_total_with_tax` | NUMERIC(15,2) | ✓ | Final line total | Final calculations |
+| `line_total` | NUMERIC(15,2) | ✓ | Final line total | Final calculations |
 | `delivery_status` | TEXT | - | Status: 'pending', 'partial', 'delivered' | Delivery tracking |
 | `notes` | TEXT | - | Line item notes | Documentation |
 | `created_at` | TIMESTAMPTZ | - | Creation timestamp | Audit trails |
@@ -107,12 +109,12 @@ The `sales` schema manages the complete sales process from orders to invoices, i
   "product_name": "Paracetamol 500mg",
   "quantity": 100.0,
   "unit_price": 15.00,
-  "discount_percentage": 5.0,
+  "discount_percent": 5.0,
   "line_total": 1425.00,
   "gst_percentage": 12.0,
   "cgst_amount": 85.50,
   "sgst_amount": 85.50,
-  "line_total_with_tax": 1596.00,
+  "line_total": 1596.00,
   "delivery_status": "pending"
 }
 ```
@@ -205,10 +207,12 @@ The `sales` schema manages the complete sales process from orders to invoices, i
 | `batch_allocation` | JSONB | - | Batch allocation details | Batch tracking |
 | `quantity` | NUMERIC(15,3) | ✓ | Invoiced quantity | Quantity tracking |
 | `unit_price` | NUMERIC(15,4) | ✓ | Unit selling price | Price calculations |
-| `discount_percentage` | NUMERIC(5,2) | - | Line item discount % | Discount calculations |
+| `discount_percent` | NUMERIC(5,2) | - | Line item discount % | Discount calculations |
 | `discount_amount` | NUMERIC(15,2) | - | Line item discount amount | Discount tracking |
 | `line_total` | NUMERIC(15,2) | ✓ | Line total before tax | Amount calculations |
-| `gst_percentage` | NUMERIC(5,2) | - | GST rate % | Tax calculations |
+| `cgst_rate` | NUMERIC(5,2) | - | CGST rate % | Tax calculations |
+| `sgst_rate` | NUMERIC(5,2) | - | SGST rate % | Tax calculations |
+| `igst_rate` | NUMERIC(5,2) | - | IGST rate % | Tax calculations |
 | `cgst_percentage` | NUMERIC(5,2) | - | CGST rate % | Tax breakdown |
 | `sgst_percentage` | NUMERIC(5,2) | - | SGST rate % | Tax breakdown |
 | `igst_percentage` | NUMERIC(5,2) | - | IGST rate % | Tax breakdown |
@@ -217,7 +221,7 @@ The `sales` schema manages the complete sales process from orders to invoices, i
 | `igst_amount` | NUMERIC(15,2) | - | IGST amount | Tax breakdown |
 | `cess_percentage` | NUMERIC(5,2) | - | Cess rate % | Tax calculations |
 | `cess_amount` | NUMERIC(15,2) | - | Cess amount | Tax calculations |
-| `line_total_with_tax` | NUMERIC(15,2) | ✓ | Final line total | Final calculations |
+| `line_total` | NUMERIC(15,2) | ✓ | Final line total | Final calculations |
 | `pack_size` | INTEGER | - | Pack size (snapshot) | Inventory calculations |
 | `mrp` | NUMERIC(15,4) | - | MRP (snapshot) | Price validation |
 | `expiry_date` | DATE | - | Product expiry date | Compliance tracking |

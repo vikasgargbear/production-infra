@@ -1,23 +1,42 @@
-# Invoice Creation Validation Suite
+# Invoice Validation & Testing Tools
 
-This folder contains validation tests for the end-to-end invoice creation workflow.
+This folder contains validation and testing tools for invoice creation and database operations.
 
-## 📁 Files
+## 📁 Main Scripts
 
-- **`test_invoice_creation.js`** - Main test script for invoice creation
-- **`sample_invoice_input.json`** - Sample JSON input with Basim invoice data
-- **Additional test cases can be added as JSON files**
+### Core Invoice Creation
+- **`complete_invoice_flow.py`** - Main invoice creation class that fetches all data from backend
+- **`multi_item_invoice.py`** - Handles invoices with multiple products
+- **`working_invoice_test.py`** - Working test with correct column names
 
-## 🚀 Usage
+### Validation Tools
+- **`price_validator.py`** - Validates pricing calculations
+- **`validate_pricing.py`** - Price and tax validation from backend
+- **`check_invoice_items.py`** - Checks if invoice items are saved
 
-### Run with default sample data (Basim invoice):
-```bash
-node test_invoice_creation.js
-```
+### Testing & Debugging
+- **`test_backend_apis.py`** - Tests backend API endpoints
+- **`debug_invoice_creation.py`** - Debug tool for invoice issues
+- **`final_corrected_invoice_test.py`** - Test with corrected pricing
+- **`proper_invoice_test.py`** - Gets all data from backend APIs
 
-### Run with custom JSON input:
-```bash
-node test_invoice_creation.js custom_invoice.json
+### Utilities
+- **`find_valid_org.py`** - Finds valid org_id from database
+- **`check_actual_data.py`** - Checks actual database values
+- **`test_invoice_creation.py`** - Basic invoice creation test
+
+## 🚀 Usage Example
+
+```python
+from complete_invoice_flow import InvoiceCreator
+
+creator = InvoiceCreator()
+invoice = creator.create_invoice(
+    customer_name="Basim",
+    product_name="Atlas",
+    quantity=10,
+    payment_method="cash"
+)
 ```
 
 ## 📋 Test Coverage
@@ -42,25 +61,25 @@ The script validates:
    - Inventory deduction (if applicable)
    - Invoice retrieval verification
 
-## 📊 Sample Invoice Details
+## 📊 Key Findings
 
-The default `sample_invoice_input.json` contains:
-- **Customer**: Basim (Phone: 7738228969)
-- **Product**: Atlas Tablet x 12 units
-- **Pricing**: ₹100 per unit
-- **Discount**: 10% (₹120)
-- **GST**: 18% (₹194.40)
-- **Transportation**: ₹20
-- **Total**: ₹1,294.40
-- **Payment**: Cash (Paid in full)
+### Correct Values to Use:
+- **Organization ID**: `ad808530-1ddb-4377-ab20-67bef145d80d`
+- **Atlas Product Price**: ₹11 per unit (not ₹100)
+- **GST Rate**: 12% (not 18%)
+- **API Endpoint**: `/api/invoices/` (with trailing slash)
+
+### Correct Column Names:
+- Use `discount_percent` NOT `discount_percentage`
+- Use `cgst_rate`, `sgst_rate`, `igst_rate` NOT `gst_percentage`
+- Use `line_total` NOT `line_total_with_tax`
+- Include required fields: `uom`, `pack_type`, `taxable_amount`, `total_tax_amount`
 
 ## 🛠️ Configuration
 
-The script uses these defaults:
+The scripts use:
 - **API Base URL**: `https://pharma-backend-production-0c09.up.railway.app/api`
-- **Organization ID**: `11111111-1111-1111-1111-111111111111`
-
-To use different endpoints, modify the constants in `test_invoice_creation.js`.
+- **Organization ID**: `ad808530-1ddb-4377-ab20-67bef145d80d` (actual from database)
 
 ## ✅ Success Criteria
 
@@ -141,6 +160,7 @@ node test_invoice_creation.js
 
 ## 📚 Related Documentation
 
-- Database Schema: `/database/schema-docs/04_sales_schema.md`
-- API Routes: `/backend/app/api/routes/invoices.py`
-- Frontend Flow: `/frontend/src/components/sales/InvoiceFlow.js`
+- **Schema Documentation**: `/database/schema-docs/`
+- **Master Schema Index**: `/database/schema-docs/MASTER_SCHEMA_INDEX.md`
+- **Schema Validation**: `/database/schema-docs/validate_schemas.py`
+- **API Routes**: `/backend/app/api/routes/invoices.py`

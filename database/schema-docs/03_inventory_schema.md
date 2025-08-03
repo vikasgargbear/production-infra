@@ -306,7 +306,7 @@ The `inventory` schema manages stock, batches, locations, and inventory movement
 | `purchase_unit` | TEXT | - | Purchase unit of measurement | Purchase planning |
 | `minimum_order_quantity` | NUMERIC(15,3) | - | Minimum order quantity | Order planning |
 | `purchase_rate` | NUMERIC(15,4) | - | Current purchase rate | Cost planning |
-| `discount_percentage` | NUMERIC(5,2) | - | Standard discount % | Cost calculations |
+| `discount_percent` | NUMERIC(5,2) | - | Standard discount % | Cost calculations |
 | `lead_time_days` | INTEGER | - | Lead time in days | Planning calculations |
 | `is_preferred_supplier` | BOOLEAN | - | Preferred supplier flag | Supplier prioritization |
 | `quality_rating` | NUMERIC(3,2) | - | Quality rating (1-5) | Supplier evaluation |
