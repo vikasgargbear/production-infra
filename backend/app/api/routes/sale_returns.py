@@ -111,7 +111,7 @@ async def get_returnable_invoices(
                 i.customer_id as party_id,
                 p.party_name,
                 i.final_amount as grand_total,
-                COUNT(ii.item_id) as total_items
+                COUNT(ii.invoice_item_id) as total_items
             FROM sales.invoices i
             LEFT JOIN parties p ON i.customer_id = p.party_id
             LEFT JOIN invoice_items ii ON i.invoice_id = ii.invoice_id
@@ -196,7 +196,7 @@ async def get_invoice_items_for_return(
                 GROUP BY r.product_id, r.batch_id
             ) sri ON (sri.product_id = ii.product_id AND (sri.batch_id = ii.batch_id OR (sri.batch_id IS NULL AND ii.batch_id IS NULL)))
             WHERE ii.invoice_id = :invoice_id
-            GROUP BY ii.item_id, p.product_name, p.hsn_code
+            GROUP BY ii.invoice_item_id, p.product_name, p.hsn_code
         """
         
         items = db.execute(text(items_query), {"invoice_id": invoice_id, "invoice_pattern": f"%Invoice: {invoice_id}%"}).fetchall()

@@ -84,7 +84,7 @@ async def get_invoices(
             # Get invoice items
             items_query = """
                 SELECT 
-                    ii.item_id,
+                    ii.invoice_item_id as item_id,
                     ii.product_id,
                     ii.product_name,
                     ii.hsn_code,
