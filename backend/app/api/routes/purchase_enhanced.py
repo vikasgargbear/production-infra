@@ -19,19 +19,21 @@ router = APIRouter(prefix="/purchases-enhanced", tags=["purchases-enhanced"])
 # Default org_id - should come from auth in production
 DEFAULT_ORG_ID = "ad808530-1ddb-4377-ab20-67bef145d80d"
 
-@router.post("/simple-purchase")
-def create_simple_purchase_with_batch(purchase_data: dict, db: Session = Depends(get_db)):
+@router.post("/direct-purchase-entry")
+def create_direct_purchase_entry(purchase_data: dict, db: Session = Depends(get_db)):
     """
-    Simplified purchase entry that automatically creates batches
-    For non-technical users who want to directly add stock
+    Direct Purchase Entry (Bill Entry) - When goods are received with supplier invoice
+    This creates supplier invoice and adds stock to inventory via batches
+    For users who don't need separate PO workflow
     """
     import random
     
     try:
-        # Generate PO number
-        po_number = f"PO-{datetime.now().strftime('%Y%m%d')}-{random.randint(1000, 9999)}"
+        # For Purchase Entry, we create a completed PO (since there's no separate supplier_invoice table)
+        # This represents goods already received with bill
+        po_number = f"BILL-{datetime.now().strftime('%Y%m%d')}-{random.randint(1000, 9999)}"
         
-        # Create purchase order
+        # Create purchase order marked as completed (represents bill entry)
         po_result = db.execute(text("""
             INSERT INTO procurement.purchase_orders (
                 org_id, branch_id, po_number, po_date, po_type,
