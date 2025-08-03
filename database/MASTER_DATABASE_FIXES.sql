@@ -14,6 +14,43 @@
 -- SECTION 1: SCHEMA FIXES
 -- =============================================
 
+-- 1.0 Add missing columns to invoice_items and customers
+-- Date: 2024-08-03
+-- Issue: API expecting item_id column in invoice_items, gstin in customers
+DO $$
+BEGIN
+    -- Add item_id to invoice_items if not exists
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_schema = 'sales' 
+        AND table_name = 'invoice_items' 
+        AND column_name = 'item_id'
+    ) THEN
+        ALTER TABLE sales.invoice_items 
+        ADD COLUMN item_id SERIAL;
+        
+        RAISE NOTICE '✅ Added item_id column to invoice_items table';
+    END IF;
+    
+    -- Add gstin to customers if not exists
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_schema = 'parties' 
+        AND table_name = 'customers' 
+        AND column_name = 'gstin'
+    ) THEN
+        ALTER TABLE parties.customers 
+        ADD COLUMN gstin TEXT;
+        
+        -- Copy values from gst_number
+        UPDATE parties.customers 
+        SET gstin = gst_number 
+        WHERE gstin IS NULL;
+        
+        RAISE NOTICE '✅ Added gstin column to customers table';
+    END IF;
+END $$;
+
 -- 1.1 Add missing columns to products table
 -- Date: 2024-08-02
 -- Issue: Products table missing MRP column needed for pricing
