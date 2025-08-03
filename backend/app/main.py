@@ -135,8 +135,9 @@ app.include_router(api)
 app.include_router(test_db.router)
 
 # Debug endpoints
-from .api.routes import debug_invoice
+from .api.routes import debug_invoice, database_fix
 app.include_router(debug_invoice.router)
+app.include_router(database_fix.router)
 
 # No v1 routes - everything is consolidated under /api/
 

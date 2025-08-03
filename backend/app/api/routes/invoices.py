@@ -832,6 +832,11 @@ async def create_invoice(
                 
                 # Insert invoice item with all required fields
                 logger.info(f"Inserting invoice item for product {product_name} into invoice {invoice_id}")
+                
+                # Workaround for trigger issue - ensure branch_id exists
+                # The trigger tries to join master.branches which doesn't exist
+                # We need to either fix the trigger or work around it
+                
                 db.execute(text("""
                     INSERT INTO sales.invoice_items (
                         invoice_id, product_id, product_name,
