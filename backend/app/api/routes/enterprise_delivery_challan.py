@@ -160,7 +160,7 @@ class EnterpriseChallanService:
                     "challan_date": date.today(),
                     "dispatch_date": request.dispatch_date,
                     "expected_delivery_date": request.expected_delivery_date,
-                    "status": "draft",
+                    "challan_status": "draft",
                     "vehicle_number": request.vehicle_number,
                     "driver_name": request.driver_name,
                     "driver_phone": request.driver_phone,
@@ -255,7 +255,7 @@ class EnterpriseChallanService:
                 {
                     "challan_id": challan_id,
                     "location": "Warehouse",
-                    "status": "draft",
+                    "challan_status": "draft",
                     "remarks": "Challan created",
                     "timestamp": datetime.now()
                 }
@@ -313,7 +313,7 @@ async def list_delivery_challans(
                 c.order_id,
                 c.customer_id,
                 cust.customer_name,
-                c.status,
+                c.challan_status as status,
                 c.dispatch_date,
                 c.expected_delivery_date,
                 c.delivery_address,
@@ -332,7 +332,7 @@ async def list_delivery_challans(
             params["customer_id"] = customer_id
             
         if status:
-            query += " AND c.status = :status"
+            query += " AND c.challan_status = :status"
             params["status"] = status
             
         if start_date:
@@ -426,7 +426,7 @@ async def dispatch_challan(
         result = db.execute(
             text("""
                 UPDATE sales.delivery_challans
-                SET status = 'dispatched',
+                SET challan_status = 'dispatched',
                     dispatch_date = :dispatch_date,
                     dispatch_time = :dispatch_time,
                     vehicle_number = COALESCE(:vehicle_number, vehicle_number),
@@ -435,7 +435,7 @@ async def dispatch_challan(
                     dispatched_by = :dispatched_by
                 WHERE challan_id = :challan_id
                 AND org_id = :org_id
-                AND status = 'draft'
+                AND challan_status = 'draft'
                 RETURNING challan_id
             """),
             {
@@ -507,11 +507,11 @@ async def deliver_challan(
         result = db.execute(
             text("""
                 UPDATE sales.delivery_challans
-                SET status = 'delivered',
+                SET challan_status = 'delivered',
                     delivery_time = :delivery_time
                 WHERE challan_id = :challan_id
                 AND org_id = :org_id
-                AND status = 'dispatched'
+                AND challan_status = 'dispatched'
                 RETURNING challan_id, order_id
             """),
             {
@@ -640,13 +640,13 @@ async def get_challan_analytics(
         query = """
             SELECT 
                 COUNT(*) as total_sales.delivery_challans,
-                COUNT(CASE WHEN status = 'draft' THEN 1 END) as draft_count,
-                COUNT(CASE WHEN status = 'dispatched' THEN 1 END) as dispatched_count,
-                COUNT(CASE WHEN status = 'delivered' THEN 1 END) as delivered_count,
-                COUNT(CASE WHEN status = 'cancelled' THEN 1 END) as cancelled_count,
+                COUNT(CASE WHEN challan_status = 'draft' THEN 1 END) as draft_count,
+                COUNT(CASE WHEN challan_status = 'dispatched' THEN 1 END) as dispatched_count,
+                COUNT(CASE WHEN challan_status = 'delivered' THEN 1 END) as delivered_count,
+                COUNT(CASE WHEN challan_status = 'cancelled' THEN 1 END) as cancelled_count,
                 SUM(freight_amount) as total_freight,
                 AVG(CASE 
-                    WHEN status = 'delivered' AND dispatch_time IS NOT NULL 
+                    WHEN challan_status = 'delivered' AND dispatch_time IS NOT NULL 
                     THEN EXTRACT(EPOCH FROM (delivery_time - dispatch_time))/3600 
                 END) as avg_delivery_hours
             FROM sales.delivery_challans
@@ -673,7 +673,7 @@ async def get_challan_analytics(
                     COUNT(*) as challan_count,
                     COUNT(CASE WHEN status = 'delivered' THEN 1 END) as delivered_count,
                     AVG(CASE 
-                        WHEN status = 'delivered' AND dispatch_time IS NOT NULL 
+                        WHEN challan_status = 'delivered' AND dispatch_time IS NOT NULL 
                         THEN EXTRACT(EPOCH FROM (delivery_time - dispatch_time))/3600 
                     END) as avg_delivery_hours
                 FROM sales.delivery_challans

@@ -60,7 +60,17 @@ def get_purchases(
             query += " AND p.po_date <= :end_date"
             params["end_date"] = end_date
             
-        query += " GROUP BY p.po_id, s.supplier_name"
+        # PostgreSQL requires all non-aggregated columns in GROUP BY
+        query += " GROUP BY p.po_id, p.org_id, p.branch_id, p.po_number, p.po_date, p.po_type,"
+        query += " p.supplier_id, p.supplier_name, p.supplier_contact, p.supplier_gst,"
+        query += " p.requisition_id, p.buyer_id, p.delivery_date, p.delivery_branch_id,"
+        query += " p.delivery_address, p.payment_terms, p.payment_days, p.currency_code,"
+        query += " p.exchange_rate, p.subtotal_amount, p.discount_percentage, p.discount_amount,"
+        query += " p.freight_amount, p.other_charges, p.tax_amount, p.total_amount, p.advance_amount,"
+        query += " p.po_status, p.approval_status, p.approved_by, p.approved_at, p.grn_status,"
+        query += " p.payment_status, p.quality_check_required, p.special_instructions, p.internal_notes,"
+        query += " p.supplier_notes, p.cancelled_reason, p.cancelled_by, p.cancelled_at,"
+        query += " p.created_by, p.created_at, p.updated_at, s.supplier_name"
         query += " ORDER BY p.po_date DESC LIMIT :limit OFFSET :skip"
         params.update({"limit": limit, "skip": skip})
         
@@ -79,13 +89,12 @@ def get_purchase(purchase_id: int, db: Session = Depends(get_db)):
     try:
         result = db.execute(
             text("""
-                SELECT p.*, s.supplier_name, pr.product_name 
-                FROM purchases p
-                LEFT JOIN suppliers s ON p.supplier_id = s.supplier_id
-                LEFT JOIN inventory.products pr ON p.product_id = pr.product_id
-                WHERE p.purchase_id = :purchase_id
+                SELECT p.*, s.supplier_name
+                FROM procurement.purchase_orders p
+                LEFT JOIN parties.suppliers s ON p.supplier_id = s.supplier_id
+                WHERE p.po_id = :po_id
             """),
-            {"purchase_id": purchase_id}
+            {"po_id": purchase_id}
         )
         purchase = result.first()
         if not purchase:
@@ -165,22 +174,23 @@ def get_purchase_analytics(
                 SUM(total_amount) as total_amount,
                 AVG(total_amount) as avg_purchase_amount,
                 COUNT(DISTINCT supplier_id) as unique_suppliers,
-                COUNT(DISTINCT product_id) as unique_products
-            FROM purchases 
+                COUNT(DISTINCT pi.product_id) as unique_products
+            FROM procurement.purchase_orders p
+            LEFT JOIN procurement.purchase_order_items pi ON p.po_id = pi.po_id 
             WHERE 1=1
         """
         params = {}
         
         if start_date:
-            query += " AND purchase_date >= :start_date"
+            query += " AND po_date >= :start_date"
             params["start_date"] = start_date
             
         if end_date:
-            query += " AND purchase_date <= :end_date"
+            query += " AND po_date <= :end_date"
             params["end_date"] = end_date
             
         if supplier_id:
-            query += " AND supplier_id = :supplier_id"
+            query += " AND p.supplier_id = :supplier_id"
             params["supplier_id"] = supplier_id
         
         result = db.execute(text(query), params)

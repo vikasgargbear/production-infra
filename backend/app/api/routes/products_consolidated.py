@@ -127,14 +127,22 @@ async def create_product(
     """
     try:
         # Map frontend fields to database fields (matching actual table columns)
+        # Handle composition - could be dict or string
+        composition_value = product.get("composition", "")
+        if isinstance(composition_value, dict):
+            # Extract active ingredient for generic_name
+            generic_name_default = composition_value.get("active", "")
+        else:
+            generic_name_default = str(composition_value) if composition_value else ""
+        
         product_data = {
             "org_id": DEFAULT_ORG_ID,
             "product_code": product.get("product_code") or f"PROD{random.randint(100000, 999999)}",
             "product_name": product.get("product_name"),
-            "generic_name": product.get("generic_name") or product.get("composition", ""),
+            "generic_name": product.get("generic_name") or generic_name_default,
             "brand": product.get("brand") or product.get("brand_name") or product.get("manufacturer"),
             "manufacturer": product.get("manufacturer"),
-            "composition": json.dumps(_format_composition(product.get("composition"))),
+            "composition": json.dumps(_format_composition(composition_value)),
             "category_id": None,  # Let it be NULL if no categories exist
             "hsn_code": product.get("hsn_code") or "3004",
             "gst_percentage": product.get("gst_percentage") or product.get("gst_rate") or 12,

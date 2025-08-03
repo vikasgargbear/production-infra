@@ -40,7 +40,7 @@ async def get_collection_dashboard(
                     COUNT(CASE WHEN days_overdue > 60 AND days_overdue <= 90 THEN 1 END) as overdue_60_count,
                     COUNT(CASE WHEN days_overdue > 90 THEN 1 END) as overdue_90_count
                 FROM financial.customer_outstanding
-                WHERE org_id = :org_id AND status = 'outstanding'
+                WHERE org_id = :org_id AND status = 'open'
             """),
             {"org_id": org_id}
         ).first()
@@ -53,7 +53,7 @@ async def get_collection_dashboard(
                     SUM(outstanding_amount) as total_outstanding,
                     AVG(days_overdue) as avg_days_overdue
                 FROM financial.supplier_outstanding
-                WHERE org_id = :org_id AND status = 'outstanding'
+                WHERE org_id = :org_id AND status = 'open'
             """),
             {"org_id": org_id}
         ).first()
@@ -147,7 +147,7 @@ async def get_outstanding_list(
                     c.primary_email
                 FROM financial.customer_outstanding o
                 JOIN parties.customers c ON o.customer_id = c.customer_id
-                WHERE o.status = 'outstanding'
+                WHERE o.status = 'open'
             """
             
             if search:
@@ -165,7 +165,7 @@ async def get_outstanding_list(
                     s.email
                 FROM financial.supplier_outstanding o
                 JOIN suppliers s ON o.supplier_id = s.supplier_id
-                WHERE o.status = 'outstanding'
+                WHERE o.status = 'open'
             """
             
             if search:

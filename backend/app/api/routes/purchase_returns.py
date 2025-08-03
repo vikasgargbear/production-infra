@@ -36,9 +36,9 @@ async def get_purchase_returns(
             SELECT pr.*, s.supplier_name as party_name, 
                    -- Extract invoice ID from return number
                    SUBSTRING(pr.return_number FROM 'INV([0-9]+)$') as original_invoice_number
-            FROM return_requests pr
-            LEFT JOIN suppliers s ON pr.supplier_id = s.supplier_id
-            WHERE pr.return_type = 'PURCHASE'
+            FROM procurement.purchase_returns pr
+            LEFT JOIN parties.suppliers s ON pr.supplier_id = s.supplier_id
+            WHERE 1=1
         """
         params = {"skip": skip, "limit": limit}
         
@@ -82,38 +82,38 @@ async def get_returnable_purchases(
         logger.info(f"Getting returnable purchases for supplier_id: {supplier_id}, invoice: {invoice_number}")
         query = """
             SELECT 
-                p.purchase_id,
-                p.supplier_invoice_number as invoice_number,
-                p.supplier_invoice_date as invoice_date,
+                p.po_id as purchase_id,
+                p.po_number as invoice_number,
+                p.po_date as invoice_date,
                 p.supplier_id,
                 s.supplier_name,
-                s.gst_number as supplier_gst,
-                p.final_amount as total_amount,
-                COUNT(pi.purchase_item_id) as total_items
-            FROM purchases p
-            LEFT JOIN suppliers s ON p.supplier_id = s.supplier_id
-            LEFT JOIN purchase_items pi ON p.purchase_id = pi.purchase_id
+                s.gstin as supplier_gst,
+                p.total_amount,
+                COUNT(pi.po_item_id) as total_items
+            FROM procurement.purchase_orders p
+            LEFT JOIN parties.suppliers s ON p.supplier_id = s.supplier_id
+            LEFT JOIN procurement.purchase_order_items pi ON p.po_id = pi.po_id
             WHERE 1=1
         """
         params = {}
         
         # Log all purchase statuses to debug
         status_check = db.execute(
-            text("SELECT DISTINCT purchase_status FROM purchases LIMIT 10")
+            text("SELECT DISTINCT po_status FROM procurement.purchase_orders LIMIT 10")
         ).fetchall()
-        logger.info(f"Available purchase statuses: {[s.purchase_status for s in status_check]}")
+        logger.info(f"Available purchase statuses: {[s.po_status for s in status_check]}")
         
         if supplier_id:
             query += " AND p.supplier_id = :supplier_id"
             params["supplier_id"] = supplier_id
             
         if invoice_number:
-            query += " AND p.supplier_invoice_number LIKE :invoice"
+            query += " AND p.po_number LIKE :invoice"
             params["invoice"] = f"%{invoice_number}%"
             
         query += """ 
-            GROUP BY p.purchase_id, p.supplier_invoice_number, p.supplier_invoice_date,
-                     p.supplier_id, s.supplier_name, s.gst_number, p.final_amount
+            GROUP BY p.po_id, p.po_number, p.po_date,
+                     p.supplier_id, s.supplier_name, s.gstin, p.total_amount
             ORDER BY p.supplier_invoice_date DESC
             LIMIT 50
         """
@@ -125,7 +125,7 @@ async def get_returnable_purchases(
         # If no purchases found, check if we have any purchases at all
         if not purchases and supplier_id:
             total_count = db.execute(
-                text("SELECT COUNT(*) FROM purchases WHERE supplier_id = :supplier_id"),
+                text("SELECT COUNT(*) FROM procurement.purchase_orders WHERE supplier_id = :supplier_id"),
                 {"supplier_id": supplier_id}
             ).scalar()
             logger.info(f"Total purchases for supplier {supplier_id}: {total_count}")

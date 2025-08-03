@@ -1,6 +1,6 @@
 {
-  "passed": 4,
-  "failed": 18,
+  "passed": 5,
+  "failed": 17,
   "endpoints": [
     {
       "method": "GET",
@@ -20,7 +20,7 @@
       "method": "POST",
       "path": "/products/",
       "data": {
-        "product_name": "Test Product 1754183628104",
+        "product_name": "Test Product 1754186016741",
         "brand": "Test Brand",
         "manufacturer": "Test Manufacturer",
         "composition": {
@@ -31,7 +31,7 @@
       },
       "description": "Create new product",
       "success": false,
-      "error": "Failed to create product: (psycopg2.errors.UndefinedColumn) column \"brand_name\" of relation \"products\" does not exist\nLINE 3: ...              org_id, product_code, product_name, brand_name...\n                                                             ^\n\n[SQL: \n            INSERT INTO inventory.products (\n                org_id, product_code, product_name, brand_name,\n                manufacturer, composition, category_id, \n                hsn_code, gst_rate, unit_of_measure,\n                pack_size, mrp, sale_price, purchase_price,\n                min_stock_level, max_stock_level,\n                is_active, created_at, updated_at\n            ) VALUES (\n                %(org_id)s, %(product_code)s, %(product_name)s, %(brand_name)s,\n                %(manufacturer)s, %(composition)s, %(category_id)s,\n                %(hsn_code)s, %(gst_rate)s, %(unit_of_measure)s,\n                %(pack_size)s, %(mrp)s, %(sale_price)s, %(purchase_price)s,\n                %(min_stock_level)s, %(max_stock_level)s,\n                %(is_active)s, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP\n            ) RETURNING product_id, product_code, product_name\n        ]\n[parameters: {'org_id': 'ad808530-1ddb-4377-ab20-67bef145d80d', 'product_code': None, 'product_name': 'Test Product 1754183628104', 'brand_name': 'Test Brand', 'manufacturer': 'Test Manufacturer', 'composition': 'Test Compound', 'category_id': 1, 'hsn_code': '3004', 'gst_rate': 12, 'unit_of_measure': 'TAB', 'pack_size': 1, 'mrp': 0, 'sale_price': 0, 'purchase_price': 0, 'min_stock_level': 0, 'max_stock_level': 0, 'is_active': True}]\n(Background on this error at: https://sqlalche.me/e/20/f405)"
+      "error": "Failed to create product: (psycopg2.ProgrammingError) can't adapt type 'dict'\n[SQL: \n            INSERT INTO inventory.products (org_id, product_code, product_name, generic_name, brand, manufacturer, composition, hsn_code, gst_percentage, pack_config, maintain_batch, maintain_expiry, is_active, created_at, updated_at)\n            VALUES (%(org_id)s, %(product_code)s, %(product_name)s, %(generic_name)s, %(brand)s, %(manufacturer)s, CAST(%(composition)s AS jsonb), %(hsn_code)s, %(gst_percentage)s, CAST(%(pack_config)s AS jsonb), %(maintain_batch)s, %(maintain_expiry)s, %(is_active)s, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)\n            RETURNING product_id, product_code, product_name\n        ]\n[parameters: {'org_id': 'ad808530-1ddb-4377-ab20-67bef145d80d', 'product_code': 'PROD488962', 'product_name': 'Test Product 1754186016741', 'generic_name': {'active': 'Test Compound'}, 'brand': 'Test Brand', 'manufacturer': 'Test Manufacturer', 'composition': '{\"active\": \"Test Compound\"}', 'hsn_code': '3004', 'gst_percentage': 12, 'pack_config': '{}', 'maintain_batch': True, 'maintain_expiry': True, 'is_active': True}]\n(Background on this error at: https://sqlalche.me/e/20/f405)"
     },
     {
       "method": "GET",
@@ -112,14 +112,14 @@
       "path": "/enterprise-delivery-challan/",
       "description": "List delivery challans",
       "success": false,
-      "error": "(psycopg2.errors.UndefinedTable) relation \"challans\" does not exist\nLINE 17:             FROM challans c\n                          ^\n\n[SQL: \n            SELECT \n                c.challan_id,\n                c.challan_number,\n                c.challan_date,\n                c.order_id,\n                c.customer_id,\n                cust.customer_name,\n                c.status,\n                c.dispatch_date,\n                c.expected_delivery_date,\n                c.delivery_address,\n                c.delivery_city,\n                c.vehicle_number,\n                c.driver_name,\n                c.total_packages\n            FROM challans c\n            JOIN parties.customers cust ON c.customer_id = cust.customer_id\n            WHERE c.org_id = %(org_id)s\n         ORDER BY c.challan_date DESC, c.challan_id DESC LIMIT %(limit)s OFFSET %(skip)s]\n[parameters: {'org_id': 'ad808530-1ddb-4377-ab20-67bef145d80d', 'limit': 100, 'skip': 0}]\n(Background on this error at: https://sqlalche.me/e/20/f405)"
+      "error": "(psycopg2.errors.UndefinedColumn) column c.status does not exist\nLINE 9:                 c.status,\n                        ^\n\n[SQL: \n            SELECT \n                c.challan_id,\n                c.challan_number,\n                c.challan_date,\n                c.order_id,\n                c.customer_id,\n                cust.customer_name,\n                c.status,\n                c.dispatch_date,\n                c.expected_delivery_date,\n                c.delivery_address,\n                c.delivery_city,\n                c.vehicle_number,\n                c.driver_name,\n                c.total_packages\n            FROM sales.delivery_challans c\n            JOIN parties.customers cust ON c.customer_id = cust.customer_id\n            WHERE c.org_id = %(org_id)s\n         ORDER BY c.challan_date DESC, c.challan_id DESC LIMIT %(limit)s OFFSET %(skip)s]\n[parameters: {'org_id': 'ad808530-1ddb-4377-ab20-67bef145d80d', 'limit': 100, 'skip': 0}]\n(Background on this error at: https://sqlalche.me/e/20/f405)"
     },
     {
       "method": "GET",
       "path": "/purchases/",
       "description": "List purchases",
       "success": false,
-      "error": "Failed to get purchases: (psycopg2.errors.UndefinedTable) relation \"purchases\" does not exist\nLINE 5:             FROM purchases p\n                         ^\n\n[SQL: \n            SELECT p.*, s.supplier_name,\n                   COUNT(pi.purchase_item_id) as item_count,\n                   STRING_AGG(DISTINCT pr.product_name, ', ') as products\n            FROM purchases p\n            LEFT JOIN suppliers s ON p.supplier_id = s.supplier_id\n            LEFT JOIN purchase_items pi ON p.purchase_id = pi.purchase_id\n            LEFT JOIN inventory.products pr ON pi.product_id = pr.product_id\n            WHERE 1=1\n         GROUP BY p.purchase_id, s.supplier_name ORDER BY p.purchase_date DESC LIMIT %(limit)s OFFSET %(skip)s]\n[parameters: {'limit': 100, 'skip': 0}]\n(Background on this error at: https://sqlalche.me/e/20/f405)"
+      "error": "Failed to get purchases: (psycopg2.errors.UndefinedColumn) column p.po_id does not exist\nLINE 7: ... LEFT JOIN procurement.purchase_order_items pi ON p.po_id = ...\n                                                             ^\n\n[SQL: \n            SELECT p.*, s.supplier_name,\n                   COUNT(pi.po_item_id) as item_count,\n                   STRING_AGG(DISTINCT pr.product_name, ', ') as products\n            FROM procurement.purchase_orders p\n            LEFT JOIN parties.suppliers s ON p.supplier_id = s.supplier_id\n            LEFT JOIN procurement.purchase_order_items pi ON p.po_id = pi.po_id\n            LEFT JOIN inventory.products pr ON pi.product_id = pr.product_id\n            WHERE 1=1\n         GROUP BY p.po_id, s.supplier_name ORDER BY p.po_date DESC LIMIT %(limit)s OFFSET %(skip)s]\n[parameters: {'limit': 100, 'skip': 0}]\n(Background on this error at: https://sqlalche.me/e/20/f405)"
     },
     {
       "method": "GET",
@@ -139,8 +139,7 @@
       "method": "GET",
       "path": "/stock-movements/",
       "description": "Stock movements",
-      "success": false,
-      "error": "(psycopg2.errors.UndefinedTable) relation \"stock_movements\" does not exist\nLINE 3:             FROM stock_movements sm\n                         ^\n\n[SQL: \n            SELECT sm.*, p.product_name, p.hsn_code\n            FROM stock_movements sm\n            LEFT JOIN inventory.products p ON sm.product_id = p.product_id\n            WHERE 1=1\n         ORDER BY sm.movement_date DESC, sm.created_at DESC LIMIT %(limit)s OFFSET %(skip)s]\n[parameters: {'limit': 20, 'skip': 0}]\n(Background on this error at: https://sqlalche.me/e/20/f405)"
+      "success": true
     },
     {
       "method": "GET",
@@ -154,14 +153,14 @@
       "path": "/collection-center/dashboard",
       "description": "Collection center dashboard",
       "success": false,
-      "error": "(psycopg2.errors.UndefinedTable) relation \"customer_outstanding\" does not exist\nLINE 10:                 FROM customer_outstanding\n                              ^\n\n[SQL: \n                SELECT \n                    COUNT(DISTINCT customer_id) as total_customers,\n                    SUM(outstanding_amount) as total_outstanding,\n                    AVG(days_overdue) as avg_days_overdue,\n                    COUNT(CASE WHEN days_overdue <= 30 THEN 1 END) as current_count,\n                    COUNT(CASE WHEN days_overdue > 30 AND days_overdue <= 60 THEN 1 END) as overdue_30_count,\n                    COUNT(CASE WHEN days_overdue > 60 AND days_overdue <= 90 THEN 1 END) as overdue_60_count,\n                    COUNT(CASE WHEN days_overdue > 90 THEN 1 END) as overdue_90_count\n                FROM customer_outstanding\n                WHERE org_id = %(org_id)s AND status = 'outstanding'\n            ]\n[parameters: {'org_id': 'ad808530-1ddb-4377-ab20-67bef145d80d'}]\n(Background on this error at: https://sqlalche.me/e/20/f405)"
+      "error": "(psycopg2.errors.UndefinedColumn) column \"days_overdue\" does not exist\nLINE 5:                     AVG(days_overdue) as avg_days_overdue\n                                ^\n\n[SQL: \n                SELECT \n                    COUNT(DISTINCT supplier_id) as total_suppliers,\n                    SUM(outstanding_amount) as total_outstanding,\n                    AVG(days_overdue) as avg_days_overdue\n                FROM financial.supplier_outstanding\n                WHERE org_id = %(org_id)s AND status = 'outstanding'\n            ]\n[parameters: {'org_id': 'ad808530-1ddb-4377-ab20-67bef145d80d'}]\n(Background on this error at: https://sqlalche.me/e/20/f405)"
     },
     {
       "method": "GET",
       "path": "/sale-returns/",
       "description": "Sales returns",
       "success": false,
-      "error": "(psycopg2.errors.UndefinedTable) relation \"return_requests\" does not exist\nLINE 8:             FROM return_requests sr\n                         ^\n\n[SQL: \n            SELECT sr.*, c.customer_name as party_name, \n                   -- Extract invoice number from return items remarks\n                   (SELECT SUBSTRING(ri.remarks, 'Invoice: ([^,]+)')\n                    FROM return_items ri \n                    WHERE ri.return_id = sr.return_id \n                    LIMIT 1) as original_invoice_number\n            FROM return_requests sr\n            LEFT JOIN parties.customers c ON sr.customer_id = c.customer_id\n            WHERE sr.return_type = 'SALES'\n         ORDER BY sr.return_date DESC, sr.created_at DESC LIMIT %(limit)s OFFSET %(skip)s]\n[parameters: {'limit': 20, 'skip': 0}]\n(Background on this error at: https://sqlalche.me/e/20/f405)"
+      "error": "(psycopg2.errors.UndefinedColumn) column ri.remarks does not exist\nLINE 4:                    (SELECT SUBSTRING(ri.remarks, 'Invoice: (...\n                                             ^\n\n[SQL: \n            SELECT sr.*, c.customer_name as party_name, \n                   -- Extract invoice number from return items remarks\n                   (SELECT SUBSTRING(ri.remarks, 'Invoice: ([^,]+)')\n                    FROM sales.sales_return_items ri \n                    WHERE ri.return_id = sr.return_id \n                    LIMIT 1) as original_invoice_number\n            FROM sales.sales_returns sr\n            LEFT JOIN parties.customers c ON sr.customer_id = c.customer_id\n            WHERE sr.return_type = 'SALES'\n         ORDER BY sr.return_date DESC, sr.created_at DESC LIMIT %(limit)s OFFSET %(skip)s]\n[parameters: {'limit': 20, 'skip': 0}]\n(Background on this error at: https://sqlalche.me/e/20/f405)"
     },
     {
       "method": "GET",

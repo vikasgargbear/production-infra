@@ -32,15 +32,11 @@ async def get_sale_returns(
     """
     try:
         query = """
-            SELECT sr.*, c.customer_name as party_name, 
-                   -- Extract invoice number from return items remarks
-                   (SELECT SUBSTRING(ri.remarks, 'Invoice: ([^,]+)')
-                    FROM sales.sales_return_items ri 
-                    WHERE ri.return_id = sr.return_id 
-                    LIMIT 1) as original_invoice_number
+            SELECT sr.*, c.customer_name as party_name,
+                   sr.invoice_number as original_invoice_number
             FROM sales.sales_returns sr
             LEFT JOIN parties.customers c ON sr.customer_id = c.customer_id
-            WHERE sr.return_type = 'SALES'
+            WHERE 1=1
         """
         params = {"skip": skip, "limit": limit}
         
@@ -77,7 +73,7 @@ async def get_sale_returns(
             
         # Get total count
         count_query = """
-            SELECT COUNT(*) FROM sales.sales_returns sr WHERE 1=1 AND sr.return_type = 'SALES'
+            SELECT COUNT(*) FROM sales.sales_returns sr WHERE 1=1
         """
         if party_id:
             count_query += " AND sr.customer_id = :party_id"
