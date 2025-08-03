@@ -181,7 +181,7 @@ class InvoiceDetailResponse(BaseModel):
     igst_amount: Decimal
     total_tax_amount: Decimal
     round_off_amount: Decimal
-    total_amount: Decimal
+    final_amount: Decimal
     
     # Payment details
     payment_status: str
@@ -310,7 +310,7 @@ async def get_invoice_details(
             })
         
         # Calculate balance
-        balance_amount = invoice.total_amount - (invoice.paid_amount if hasattr(invoice, 'paid_amount') else 0)
+        balance_amount = invoice.final_amount - (invoice.paid_amount if hasattr(invoice, 'paid_amount') else 0)
         
         # Format addresses
         billing_address = InvoiceService.format_address(invoice)
@@ -348,7 +348,7 @@ async def get_invoice_details(
             "igst_amount": invoice.igst_amount,
             "total_tax_amount": invoice.total_tax_amount,
             "round_off_amount": invoice.round_off_amount,
-            "total_amount": invoice.total_amount,
+            "final_amount": invoice.final_amount,
             
             # Payment details
             "payment_status": invoice.payment_status,
@@ -585,7 +585,7 @@ async def create_invoice(
                 logger.warning(f"Could not calculate item totals: {calc_error}")
         
         # Use calculated totals
-        final_total = round(total_calculated, 2) if total_calculated > 0 else invoice_data.get("total_amount", 0)
+        final_total = round(total_calculated, 2) if total_calculated > 0 else invoice_data.get("final_amount", 0)
         final_subtotal = round(subtotal_calculated, 2) if subtotal_calculated > 0 else invoice_data.get("subtotal", 0)
         
         # Step 3: Create Order (required by invoice foreign key)
@@ -598,7 +598,7 @@ async def create_invoice(
                         customer_id, customer_name, delivery_type, payment_mode,
                         subtotal_amount, discount_amount, taxable_amount,
                         cgst_amount, sgst_amount, igst_amount, total_tax_amount,
-                        delivery_charges, total_amount, order_status,
+                        delivery_charges, final_amount, order_status,
                         created_by, created_at, updated_at
                     ) VALUES (
                         :org_id, 1, :order_number, :order_date, 'sales',
@@ -998,7 +998,7 @@ async def create_invoice(
             "order_id": order_id,
             "order_number": order_number,
             "message": "Invoice created successfully with all entries",
-            "total_amount": final_total,
+            "final_amount": final_total,
             "customer_id": invoice_data["customer_id"]
         }
         

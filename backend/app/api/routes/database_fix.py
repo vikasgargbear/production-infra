@@ -423,7 +423,7 @@ async def get_invoice_details(invoice_id: int, db: Session = Depends(get_db)) ->
                 i.customer_id,
                 i.customer_name,
                 i.invoice_date,
-                i.total_amount,
+                i.final_amount,
                 i.status,
                 i.created_at
             FROM sales.invoices i
@@ -484,7 +484,7 @@ async def get_invoice_details(invoice_id: int, db: Session = Depends(get_db)) ->
                 "customer_id": invoice[2],
                 "customer_name": invoice[3],
                 "invoice_date": str(invoice[4]),
-                "total_amount": float(invoice[5]) if invoice[5] else 0,
+                "final_amount": float(invoice[5]) if invoice[5] else 0,
                 "status": invoice[6],
                 "created_at": str(invoice[7])
             },
@@ -595,7 +595,7 @@ async def test_invoice_flow(db: Session = Depends(get_db)) -> Dict[str, Any]:
         invoice_result = db.execute(text("""
             INSERT INTO sales.invoices (
                 order_id, customer_id, customer_name,
-                invoice_date, subtotal_amount, total_amount,
+                invoice_date, subtotal_amount, final_amount,
                 status, org_id, created_at
             ) VALUES (
                 :order_id, 35, 'Test Customer',
