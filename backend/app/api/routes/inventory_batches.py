@@ -258,7 +258,7 @@ async def create_batch(
                 :org_id, :product_id, :batch_number,
                 :expiry_date, :manufacturing_date,
                 :quantity_received, :quantity_available,
-                :cost_price, :selling_price, :mrp,
+                :cost_per_unit, :selling_price, :mrp,
                 :supplier_id, :purchase_invoice_no,
                 true
             )

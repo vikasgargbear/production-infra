@@ -139,14 +139,14 @@ async def seed_batches(db: Session = Depends(get_db)):
                             INSERT INTO inventory.batches (
                                 org_id, product_id, batch_number,
                                 manufacturing_date, expiry_date,
-                                quantity_received, quantity_available, quantity_allocated,
+                                quantity_received, quantity_available, quantity_reserved,
                                 cost_per_unit, selling_price, mrp,
                                 is_active, created_at, updated_at
                             ) VALUES (
                                 :org_id, :product_id, :batch_number,
                                 :manufacturing_date, :expiry_date,
                                 :quantity_received, :quantity_available, 0,
-                                :cost_price, :selling_price, :mrp,
+                                :cost_per_unit, :selling_price, :mrp,
                                 true, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
                             )
                         """),
