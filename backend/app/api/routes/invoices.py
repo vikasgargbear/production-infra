@@ -631,39 +631,9 @@ async def create_invoice(
         db.commit()
         logger.info(f"Invoice {invoice_number} committed successfully")
         
-        # Create financial entry for outstanding tracking (optional - won't rollback invoice if it fails)
-        try:
-            db.execute(
-                text("""
-                    INSERT INTO financial.customer_outstanding (
-                        org_id, customer_id, document_type, document_id,
-                        document_number, document_date, due_date,
-                        original_amount, outstanding_amount, status
-                    ) VALUES (
-                        :org_id, :customer_id, 'invoice', :invoice_id,
-                        :invoice_number, :invoice_date, :due_date,
-                        :amount, :amount, 'open'
-                    )
-                    ON CONFLICT (org_id, document_type, document_id)
-                    DO UPDATE SET
-                        original_amount = EXCLUDED.original_amount,
-                        outstanding_amount = EXCLUDED.outstanding_amount,
-                        updated_at = NOW()
-                """),
-                {
-                    "org_id": DEFAULT_ORG_ID,
-                    "customer_id": invoice_data["customer_id"],
-                    "invoice_id": invoice_id,
-                    "invoice_number": invoice_number,
-                    "invoice_date": invoice_data.get("invoice_date", date.today()),
-                    "due_date": invoice_data.get("due_date"),
-                    "amount": invoice_data.get("total_amount", 0)
-                }
-            )
-        except Exception as e:
-            # Log but don't fail invoice creation if financial tracking fails
-            logger.warning(f"Could not create financial outstanding entry: {e}")
-            # Invoice already committed above, so this doesn't affect the main transaction
+        # TODO: Financial tracking will be implemented separately later
+        # TODO: User noted that parties.customers has current_outstanding field
+        # TODO: Keep all financial operations separate from core invoice creation
         
         return {
             "invoice_id": invoice_id,
