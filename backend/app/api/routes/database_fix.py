@@ -40,7 +40,8 @@ async def drop_all_broken_triggers(db: Session = Depends(get_db)) -> FixResult:
         triggers_to_drop = [
             ("calculate_gst_on_invoice_item_trigger", "sales.invoice_items"),
             ("trigger_sync_order_invoice_status", "sales.invoices"),
-            ("sync_order_invoice_status_trigger", "sales.invoices")
+            ("sync_order_invoice_status_trigger", "sales.invoices"),
+            ("trigger_inventory_update_on_sale", "sales.invoice_items")
         ]
         
         for trigger_name, table_name in triggers_to_drop:
@@ -53,7 +54,8 @@ async def drop_all_broken_triggers(db: Session = Depends(get_db)) -> FixResult:
         # Also drop the functions
         functions_to_drop = [
             "calculate_gst_on_invoice_item",
-            "sync_order_invoice_status"
+            "sync_order_invoice_status",
+            "update_inventory_on_sale"
         ]
         
         for func_name in functions_to_drop:
