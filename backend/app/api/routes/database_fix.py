@@ -553,7 +553,7 @@ async def test_invoice_flow(db: Session = Depends(get_db)) -> Dict[str, Any]:
             INSERT INTO sales.orders (
                 org_id, branch_id, order_number,
                 order_date, order_type, customer_id,
-                created_by, subtotal_amount, total_amount
+                created_by, subtotal_amount, final_amount
             ) VALUES (
                 'ad808530-1ddb-4377-ab20-67bef145d80d',
                 :branch_id,
