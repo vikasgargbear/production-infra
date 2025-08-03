@@ -599,33 +599,11 @@ async def create_invoice(
             logger.error(f"Invoice creation failed: {invoice_error}")
             raise invoice_error
         
-        # Create invoice items
-        for item in invoice_data.get("items", []):
-            # Try to create invoice item with minimal required fields (MVP approach)
-            try:
-                db.execute(
-                    text("""
-                        INSERT INTO sales.invoice_items (
-                            invoice_id, product_id, quantity, unit_price, 
-                            discount_percent, gst_percent, final_amount
-                        ) VALUES (
-                            :invoice_id, :product_id, :quantity, :unit_price,
-                            :discount_percent, :gst_percent, :final_amount
-                        )
-                    """),
-                    {
-                        "invoice_id": invoice_id,
-                        "product_id": item.get("product_id"),
-                        "quantity": item.get("quantity", 1),
-                        "unit_price": item.get("unit_price", 0),
-                        "discount_percent": item.get("discount_percentage", 0),
-                        "gst_percent": item.get("gst_percentage", 12),
-                        "final_amount": item.get("quantity", 1) * item.get("unit_price", 0)
-                    }
-                )
-            except Exception as item_error:
-                logger.warning(f"Could not create invoice item with minimal fields: {item_error}")
-                # TODO: Fix invoice_items table schema to match expected columns
+        # TODO: Create invoice items - temporarily disabled for debugging transaction issues
+        # TODO: The invoice creation should work without items for MVP testing
+        # for item in invoice_data.get("items", []):
+        #     # Invoice items creation disabled until core invoice creation is stable
+        #     pass
         
         # Commit the core invoice creation first to ensure it's saved
         db.commit()
