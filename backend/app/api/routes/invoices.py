@@ -715,17 +715,34 @@ async def create_invoice(
             try:
                 product_id = item.get("product_id")
                 
-                # Get product and batch details 
-                product_batch = db.execute(text("""
-                    SELECT p.product_id, p.product_name, p.product_code, p.hsn_code, p.gst_percentage,
-                           b.batch_id, b.batch_number, b.sale_price_per_unit, b.mrp, b.quantity_available
-                    FROM inventory.products p
-                    LEFT JOIN inventory.batches b ON p.product_id = b.product_id
-                    WHERE p.product_id = :product_id
-                    AND b.quantity_available > 0
-                    ORDER BY b.expiry_date NULLS LAST, b.batch_id
-                    LIMIT 1
-                """), {"product_id": product_id}).fetchone()
+                # Get product and batch details - check which GST column exists
+                try:
+                    # First try with gst_percentage
+                    product_batch = db.execute(text("""
+                        SELECT p.product_id, p.product_name, p.product_code, p.hsn_code, 
+                               COALESCE(p.gst_percentage, p.gst_percent, p.gst_rate, 12) as gst_percentage,
+                               b.batch_id, b.batch_number, b.sale_price_per_unit, b.mrp, b.quantity_available
+                        FROM inventory.products p
+                        LEFT JOIN inventory.batches b ON p.product_id = b.product_id
+                        WHERE p.product_id = :product_id
+                        AND b.quantity_available > 0
+                        ORDER BY b.expiry_date NULLS LAST, b.batch_id
+                        LIMIT 1
+                    """), {"product_id": product_id}).fetchone()
+                except Exception as e:
+                    # Fallback without GST field
+                    logger.warning(f"GST field issue: {e}, using default GST")
+                    product_batch = db.execute(text("""
+                        SELECT p.product_id, p.product_name, p.product_code, p.hsn_code, 
+                               12 as gst_percentage,
+                               b.batch_id, b.batch_number, b.sale_price_per_unit, b.mrp, b.quantity_available
+                        FROM inventory.products p
+                        LEFT JOIN inventory.batches b ON p.product_id = b.product_id
+                        WHERE p.product_id = :product_id
+                        AND b.quantity_available > 0
+                        ORDER BY b.expiry_date NULLS LAST, b.batch_id
+                        LIMIT 1
+                    """), {"product_id": product_id}).fetchone()
                 
                 if not product_batch:
                     logger.warning(f"Product {product_id} not found or no stock, skipping item")
@@ -839,7 +856,7 @@ async def create_invoice(
                     "pack_type": item.get("pack_type", "STRIP")
                 })
                 
-                logger.info(f"Created invoice item for product {product_batch.product_name}")
+                logger.info(f"Created invoice item for product {product_batch.product_name} in invoice {invoice_id}")
                 
                 # Step 6: Deduct inventory from the specific batch
                 db.execute(text("""
@@ -876,8 +893,9 @@ async def create_invoice(
                 
             except Exception as item_error:
                 logger.error(f"Error creating invoice item: {item_error}")
-                # Continue with other items even if one fails
-                continue
+                logger.error(f"Product ID: {item.get('product_id')}, Invoice ID: {invoice_id}")
+                # Raise the error to see what's happening
+                raise HTTPException(status_code=500, detail=f"Failed to create invoice item: {str(item_error)}")
         
         # Step 8: Update customer outstanding balance
         db.execute(text("""
