@@ -240,17 +240,21 @@ class DataTransformer {
   static prepareCustomerForAPI(customerData) {
     return {
       customer_name: customerData.customer_name,
-      primary_phone: customerData.primary_phone,
-      primary_email: customerData.primary_email || null,
+      phone: customerData.primary_phone, // Map primary_phone to phone for API
+      email: customerData.primary_email || null, // Map primary_email to email
       customer_type: customerData.customer_type || 'retail',
-      gst_number: customerData.gst_number || null,
+      gstin: customerData.gst_number || null, // Map gst_number to gstin
       pan_number: customerData.pan_number || null,
       drug_license_number: customerData.drug_license_number || null,
       credit_limit: parseFloat(customerData.credit_limit || 0),
       credit_days: parseInt(customerData.credit_days || 0),
       org_id: customerData.org_id,
-      // Address as separate object (will be handled by backend)
-      address: customerData.address
+      // Flatten address fields to match API schema
+      address_line1: customerData.address?.address_line1 || '',
+      address_line2: customerData.address?.address_line2 || '',
+      city: customerData.address?.city || '',
+      state: customerData.address?.state || '',
+      pincode: customerData.address?.pincode || '',
     };
   }
 

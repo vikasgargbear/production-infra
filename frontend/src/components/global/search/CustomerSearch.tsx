@@ -93,7 +93,9 @@ export const CustomerSearch = forwardRef<CustomerSearchRef, CustomerSearchProps>
   };
 
   // Handle remove customer
-  const handleRemoveCustomer = () => {
+  const handleRemoveCustomer = (e?: React.MouseEvent) => {
+    e?.preventDefault();
+    e?.stopPropagation();
     onChange(null);
   };
 
@@ -232,8 +234,9 @@ export const CustomerSearch = forwardRef<CustomerSearchRef, CustomerSearchProps>
             {renderCustomerInfo ? renderCustomerInfo(value) : defaultRenderCustomerInfo(value)}
             {clearable && !disabled && (
               <button
+                type="button"
                 onClick={handleRemoveCustomer}
-                className="mt-3 text-sm text-red-600 hover:text-red-700"
+                className="mt-3 text-sm text-red-600 hover:text-red-700 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-opacity-50 rounded px-2 py-1"
               >
                 Remove Customer
               </button>
@@ -277,8 +280,10 @@ export const CustomerSearch = forwardRef<CustomerSearchRef, CustomerSearchProps>
               </div>
               {clearable && !disabled && (
                 <button
+                  type="button"
                   onClick={handleRemoveCustomer}
-                  className="p-1 hover:bg-gray-200 rounded"
+                  className="p-1 hover:bg-gray-200 rounded focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-opacity-50"
+                  title="Remove customer"
                 >
                   <X className="w-4 h-4 text-gray-500" />
                 </button>
@@ -321,8 +326,10 @@ export const CustomerSearch = forwardRef<CustomerSearchRef, CustomerSearchProps>
             </div>
             {clearable && !disabled && (
               <button
+                type="button"
                 onClick={handleRemoveCustomer}
-                className="ml-3 p-1 hover:bg-gray-200 rounded"
+                className="ml-3 p-1 hover:bg-gray-200 rounded focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-opacity-50"
+                title="Remove customer"
               >
                 <X className="w-4 h-4 text-gray-500" />
               </button>

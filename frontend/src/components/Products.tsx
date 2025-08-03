@@ -229,6 +229,8 @@ const Products: React.FC = () => {
     } catch (err: any) {
       console.error("Error saving product:", err);
       setError("Failed to save product. Please try again.");
+      // TODO: Consider closing modal on error with proper error display
+      // Currently modal stays open on error, which might confuse users
     } finally {
       setSubmitting(false);
     }

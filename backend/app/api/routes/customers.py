@@ -105,6 +105,62 @@ async def create_customer(
         """), mapped_data)
         
         customer_id = result.scalar()
+        
+        # Create address record if address data is provided
+        if any([customer_data.get(f) for f in ['address_line1', 'city', 'state', 'pincode']]):
+            # Map state name to state code (simplified mapping for common states)
+            state_code_map = {
+                'maharashtra': '27', 'rajasthan': '08', 'gujarat': '24',
+                'delhi': '07', 'karnataka': '29', 'tamil nadu': '33',
+                'uttar pradesh': '09', 'west bengal': '19', 'haryana': '06',
+                'punjab': '03', 'kerala': '32', 'telangana': '36'
+            }
+            
+            state_name = customer_data.get('state', '')
+            state_code = state_code_map.get(state_name.lower(), '27')  # Default to Maharashtra
+            
+            address_data = {
+                "org_id": customer_data.get("org_id"),
+                "entity_type": "customer",
+                "entity_id": customer_id,
+                "address_type": "billing",  # Default billing address
+                "address_line1": customer_data.get("address_line1", ""),
+                "address_line2": customer_data.get("address_line2", ""),
+                "city": customer_data.get("city", ""),
+                "state_code": state_code,
+                "state_name": state_name or "Maharashtra",
+                "pincode": customer_data.get("pincode", ""),
+                "country": "India",
+                "is_default": True
+            }
+            
+            # Insert address
+            db.execute(text("""
+                INSERT INTO master.addresses (
+                    org_id, entity_type, entity_id, address_type,
+                    address_line1, address_line2, city, state_code, state_name,
+                    pincode, country, is_default, created_at, updated_at
+                ) VALUES (
+                    :org_id, :entity_type, :entity_id, :address_type,
+                    :address_line1, :address_line2, :city, :state_code, :state_name,
+                    :pincode, :country, :is_default, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+                )
+            """), address_data)
+            
+            # Also create shipping address (same as billing for now)
+            address_data["address_type"] = "shipping"
+            db.execute(text("""
+                INSERT INTO master.addresses (
+                    org_id, entity_type, entity_id, address_type,
+                    address_line1, address_line2, city, state_code, state_name,
+                    pincode, country, is_default, created_at, updated_at
+                ) VALUES (
+                    :org_id, :entity_type, :entity_id, :address_type,
+                    :address_line1, :address_line2, :city, :state_code, :state_name,
+                    :pincode, :country, :is_default, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+                )
+            """), address_data)
+        
         db.commit()
         
         # Return simplified response

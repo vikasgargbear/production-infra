@@ -1,7 +1,7 @@
 # 🔧 DEBUGGING CHECKLIST FOR PHARMACY ERP MODULES
 
 *Created: 2025-08-03 | A systematic guide for troubleshooting API endpoints and database issues*
-
+For any schema issues or schema validation - all tables and schema and databases are here -  '/Users/vikasgarg/Documents/AASO/Infrastructure/production-infra/database/schema-docs'          
 ## 📋 QUICK DEBUGGING WORKFLOW
 
 ### 1. **Initial Problem Analysis**

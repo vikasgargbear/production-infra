@@ -16,16 +16,16 @@ const ProductCreationModal = ({
     product_name: initialProductName,
     product_code: '',
     manufacturer: '',
-    hsn_code: '',
+    hsn_code: '3004',
     gst_percent: 12,
-    mrp: '',
-    sale_price: '',
+    mrp: '',  // No default - user must enter
+    sale_price: '',  // No default - user must enter
     category: '',
     batch_number: '',
     mfg_date: '',
     expiry_date: '',
-    quantity_available: '',
-    cost_price: '',
+    quantity_available: '',  // No default - user must enter
+    cost_price: '',  // No default - user must enter
     salt_composition: ''
   });
   
@@ -100,7 +100,7 @@ const ProductCreationModal = ({
         return `${monthYearString}-01`;
       };
 
-      // Create product data matching the schema
+      // Create product data matching the schema WITH PRICING AND BATCH INFO
       const productData = {
         product_name: newProduct.product_name,
         product_code: newProduct.product_code || `PROD${Date.now().toString().slice(-6)}`,
@@ -121,6 +121,15 @@ const ProductCreationModal = ({
           pack_unit: packConfig.sale_unit || 'STRIP',
           box_size: packConfig.use_boxes ? packConfig.strips_per_box : null
         },
+        // IMPORTANT: Include pricing data that backend expects!
+        mrp: parseFloat(newProduct.mrp) || 0,
+        sale_price: parseFloat(newProduct.sale_price) || 0,
+        cost_price: parseFloat(newProduct.cost_price) || 0,
+        quantity_available: parseInt(newProduct.quantity_available) || 0,
+        // Include batch info for backend to create initial batch
+        batch_number: newProduct.batch_number || `BATCH${Date.now().toString().slice(-8)}`,
+        manufacturing_date: formatDateForAPI(newProduct.mfg_date),
+        expiry_date: formatDateForAPI(newProduct.expiry_date),
         // Inventory settings
         maintain_batch: true,
         maintain_expiry: true,
@@ -166,9 +175,10 @@ const ProductCreationModal = ({
       const productResponse = await productAPI.create(productData);
       console.log('Product creation response:', productResponse);
       
-      if (productResponse.data) {
-        // Transform response data
-        const transformedProduct = DataTransformer.transformProduct(productResponse.data, 'display');
+      // API returns the product directly, not wrapped in data
+      if (productResponse) {
+        // Transform response data - productResponse is the product itself
+        const transformedProduct = DataTransformer.transformProduct(productResponse, 'display');
         
         // Add batch info if needed
         const batchNumber = newProduct.batch_number || `BATCH${Date.now().toString().slice(-8)}`;
@@ -179,7 +189,7 @@ const ProductCreationModal = ({
         
         // Return transformed product
         const createdProduct = {
-          ...productResponse.data,
+          ...productResponse,  // productResponse is the product itself
           batch_number: batchNumber,
           mfg_date: newProduct.mfg_date, // Keep MM/YY format for frontend
           expiry_date: newProduct.expiry_date, // Keep MM/YY format for frontend
@@ -226,6 +236,8 @@ const ProductCreationModal = ({
         
         // Call onProductCreated which will handle closing
         onProductCreated(createdProduct);
+        // Close the modal
+        onClose();
       }
     } catch (error) {
       console.error('Error saving product:', error);

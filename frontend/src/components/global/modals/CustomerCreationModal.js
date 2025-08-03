@@ -13,7 +13,7 @@ const CustomerCreationModal = ({ show, onClose, onCustomerCreated }) => {
     gst_number: '',
     pan_number: '',
     drug_license_number: '',
-    credit_limit: 0,
+    credit_limit: 5000,
     credit_days: 0,
     address: {
       address_line1: '',
@@ -37,10 +37,18 @@ const CustomerCreationModal = ({ show, onClose, onCustomerCreated }) => {
       });
 
       const response = await customerAPI.create(customerData);
+      console.log('Customer creation response:', response);
       
-      if (response.data) {
-        const createdCustomer = DataTransformer.transformCustomer(response.data, 'display');
-        onCustomerCreated(createdCustomer);
+      // The API returns the created customer directly, not wrapped in data
+      if (response) {
+        const createdCustomer = DataTransformer.transformCustomer(response, 'display');
+        console.log('Created customer:', createdCustomer);
+        
+        if (onCustomerCreated) {
+          onCustomerCreated(createdCustomer);
+        }
+        
+        // Reset form
         setNewCustomer({
           customer_name: '',
           primary_phone: '',
@@ -49,7 +57,7 @@ const CustomerCreationModal = ({ show, onClose, onCustomerCreated }) => {
           gst_number: '',
           pan_number: '',
           drug_license_number: '',
-          credit_limit: 0,
+          credit_limit: 5000,
           credit_days: 0,
           address: {
             address_line1: '',
@@ -60,7 +68,12 @@ const CustomerCreationModal = ({ show, onClose, onCustomerCreated }) => {
             country: 'India'
           }
         });
+        
+        // Close modal
         onClose();
+      } else {
+        console.error('Unexpected response structure:', response);
+        setErrors(['Customer created but response format unexpected']);
       }
     } catch (error) {
       console.error('Error saving customer:', error);
