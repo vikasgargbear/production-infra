@@ -145,19 +145,33 @@ class OrderService:
         total_tax = Decimal("0")
         
         for item in items:
-            # Get product details
+            # Get product details and MRP from latest batch
             query_params = {"product_id": item['product_id']}
             if org_id:
                 product = db.execute(text("""
-                    SELECT mrp, gst_percent
-                    FROM inventory.products
-                    WHERE product_id = :product_id AND org_id = :org_id
+                    SELECT 
+                        p.gst_percentage as gst_percent,
+                        COALESCE(b.mrp, b.mrp_per_unit, 100) as mrp
+                    FROM inventory.products p
+                    LEFT JOIN inventory.batches b ON p.product_id = b.product_id
+                        AND b.batch_status = 'active'
+                        AND (b.expiry_date IS NULL OR b.expiry_date > CURRENT_DATE)
+                    WHERE p.product_id = :product_id AND p.org_id = :org_id
+                    ORDER BY b.created_at DESC
+                    LIMIT 1
                 """), {"product_id": item['product_id'], "org_id": org_id}).fetchone()
             else:
                 product = db.execute(text("""
-                    SELECT mrp, gst_percent
-                    FROM inventory.products
-                    WHERE product_id = :product_id
+                    SELECT 
+                        p.gst_percentage as gst_percent,
+                        COALESCE(b.mrp, b.mrp_per_unit, 100) as mrp
+                    FROM inventory.products p
+                    LEFT JOIN inventory.batches b ON p.product_id = b.product_id
+                        AND b.batch_status = 'active'
+                        AND (b.expiry_date IS NULL OR b.expiry_date > CURRENT_DATE)
+                    WHERE p.product_id = :product_id
+                    ORDER BY b.created_at DESC
+                    LIMIT 1
                 """), {"product_id": item['product_id']}).fetchone()
             
             if product:
