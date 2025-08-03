@@ -689,13 +689,19 @@ async def calculate_invoice_totals(
     """
     try:
         # Get customer details for GST calculations
+        # Note: state and state_code are not in customers table in current schema
         customer = db.execute(text("""
-            SELECT state, state_code FROM parties.customers
+            SELECT customer_id, customer_name FROM parties.customers
             WHERE customer_id = :customer_id
         """), {"customer_id": request.customer_id}).first()
         
         if not customer:
             raise HTTPException(status_code=404, detail="Customer not found")
+        
+        # For MVP, treat all as intrastate transactions (CGST + SGST)
+        # Address management can be enhanced later
+        customer_state = None
+        customer_state_code = None
         
         # Get company/seller state from organization settings
         org_state_result = db.execute(text("""
@@ -710,10 +716,11 @@ async def calculate_invoice_totals(
         company_state_code = org_state_result.state_code if org_state_result and org_state_result.state_code else None
         
         # Determine if interstate
-        if company_state and customer.state:
-            is_interstate = customer.state.lower() != company_state.lower()
+        if company_state and customer_state:
+            is_interstate = customer_state.lower() != company_state.lower()
         else:
             # If either state is missing, default to intrastate (CGST/SGST)
+            # For MVP, all transactions are intrastate
             is_interstate = False
         
         subtotal = Decimal("0")
