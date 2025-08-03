@@ -715,45 +715,47 @@ async def create_invoice(
             try:
                 product_id = item.get("product_id")
                 
-                # Get product and batch details - check which GST column exists
-                try:
-                    # First try with gst_percentage
-                    product_batch = db.execute(text("""
-                        SELECT p.product_id, p.product_name, p.product_code, p.hsn_code, 
-                               COALESCE(p.gst_percentage, p.gst_percent, p.gst_rate, 12) as gst_percentage,
-                               b.batch_id, b.batch_number, b.sale_price_per_unit, b.mrp, b.quantity_available
-                        FROM inventory.products p
-                        LEFT JOIN inventory.batches b ON p.product_id = b.product_id
-                        WHERE p.product_id = :product_id
-                        AND b.quantity_available > 0
-                        ORDER BY b.expiry_date NULLS LAST, b.batch_id
-                        LIMIT 1
-                    """), {"product_id": product_id}).fetchone()
-                except Exception as e:
-                    # Fallback without GST field
-                    logger.warning(f"GST field issue: {e}, using default GST")
-                    product_batch = db.execute(text("""
-                        SELECT p.product_id, p.product_name, p.product_code, p.hsn_code, 
-                               12 as gst_percentage,
-                               b.batch_id, b.batch_number, b.sale_price_per_unit, b.mrp, b.quantity_available
-                        FROM inventory.products p
-                        LEFT JOIN inventory.batches b ON p.product_id = b.product_id
-                        WHERE p.product_id = :product_id
-                        AND b.quantity_available > 0
-                        ORDER BY b.expiry_date NULLS LAST, b.batch_id
-                        LIMIT 1
-                    """), {"product_id": product_id}).fetchone()
+                # Get batch details first (simpler query)
+                product_batch = db.execute(text("""
+                    SELECT b.batch_id, b.product_id, b.batch_number, 
+                           b.sale_price_per_unit, b.mrp, b.quantity_available
+                    FROM inventory.batches b
+                    WHERE b.product_id = :product_id
+                    AND b.quantity_available > 0
+                    ORDER BY b.expiry_date NULLS LAST, b.batch_id
+                    LIMIT 1
+                """), {"product_id": product_id}).fetchone()
                 
                 if not product_batch:
-                    logger.warning(f"Product {product_id} not found or no stock, skipping item")
+                    logger.warning(f"No batch with stock for product {product_id}")
                     continue
+                
+                # Get product details separately
+                product_info = db.execute(text("""
+                    SELECT product_name, product_code, hsn_code
+                    FROM inventory.products
+                    WHERE product_id = :product_id
+                """), {"product_id": product_id}).fetchone()
+                
+                # Combine the data
+                if product_info:
+                    product_name = product_info.product_name
+                    product_code = product_info.product_code
+                    hsn_code = product_info.hsn_code or "3004"
+                else:
+                    product_name = item.get("product_name", f"Product {product_id}")
+                    product_code = f"PROD{product_id}"
+                    hsn_code = "3004"
+                
+                # Use GST from item or default
+                gst_percentage = float(item.get("gst_percent", 12) or item.get("gst_percentage", 12))
                 
                 # Calculate item amounts using batch price
                 quantity = float(item.get("quantity", 1))
                 unit_price = float(product_batch.sale_price_per_unit or item.get("unit_price", 0))
                 mrp = float(product_batch.mrp or unit_price)
                 discount_percent = float(item.get("discount_percent", 0) or item.get("discount_percentage", 0))
-                gst_percent = float(product_batch.gst_percentage or 12)
+                gst_percent = gst_percentage  # Use the GST from above
                 
                 # Calculate line totals
                 subtotal = quantity * unit_price
@@ -792,7 +794,7 @@ async def create_invoice(
                 """), {
                     "order_id": order_id,
                     "product_id": product_batch.product_id,
-                    "product_name": product_batch.product_name,
+                    "product_name": product_name,  # Use the combined product_name
                     "batch_id": product_batch.batch_id,
                     "quantity": quantity,
                     "unit_price": unit_price,
@@ -834,8 +836,8 @@ async def create_invoice(
                 """), {
                     "invoice_id": invoice_id,
                     "product_id": product_batch.product_id,
-                    "product_name": product_batch.product_name,
-                    "hsn_code": product_batch.hsn_code or "3004",
+                    "product_name": product_name,  # Use the combined product_name
+                    "hsn_code": hsn_code,  # Use the combined hsn_code
                     "batch_id": product_batch.batch_id,
                     "batch_number": product_batch.batch_number,
                     "quantity": quantity,
@@ -856,7 +858,7 @@ async def create_invoice(
                     "pack_type": item.get("pack_type", "STRIP")
                 })
                 
-                logger.info(f"Created invoice item for product {product_batch.product_name} in invoice {invoice_id}")
+                logger.info(f"Created invoice item for product {product_name} in invoice {invoice_id}")
                 
                 # Step 6: Deduct inventory from the specific batch
                 db.execute(text("""
@@ -868,7 +870,7 @@ async def create_invoice(
                     AND quantity_available >= :quantity
                 """), {"batch_id": product_batch.batch_id, "quantity": quantity})
                 
-                logger.info(f"Deducted {quantity} units from batch {product_batch.batch_number}")
+                logger.info(f"Deducted {quantity} units from batch {product_batch.batch_number} for product {product_name}")
                 
                 # Step 7: Create inventory movement record for tracking
                 db.execute(text("""
