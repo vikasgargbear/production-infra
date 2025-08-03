@@ -596,15 +596,15 @@ async def test_invoice_flow(db: Session = Depends(get_db)) -> Dict[str, Any]:
             INSERT INTO sales.invoices (
                 order_id, branch_id, invoice_number, customer_id, customer_name,
                 invoice_date, subtotal_amount, final_amount,
-                invoice_status, org_id, created_at
+                invoice_status, org_id, created_by, created_at
             ) VALUES (
                 :order_id, :branch_id, 
                 'TEST-INV-' || TO_CHAR(CURRENT_TIMESTAMP, 'YYYYMMDD-HH24MISS'),
                 35, 'Test Customer',
                 :invoice_date, 100.00, 100.00,
-                'draft', 'ad808530-1ddb-4377-ab20-67bef145d80d', CURRENT_TIMESTAMP
+                'draft', 'ad808530-1ddb-4377-ab20-67bef145d80d', :created_by, CURRENT_TIMESTAMP
             ) RETURNING invoice_id, invoice_number
-        """), {"order_id": order_id, "invoice_date": date.today(), "branch_id": branch_id})
+        """), {"order_id": order_id, "invoice_date": date.today(), "branch_id": branch_id, "created_by": created_by})
         
         invoice = invoice_result.fetchone()
         invoice_id = invoice[0]
