@@ -594,11 +594,13 @@ async def test_invoice_flow(db: Session = Depends(get_db)) -> Dict[str, Any]:
         
         invoice_result = db.execute(text("""
             INSERT INTO sales.invoices (
-                order_id, branch_id, customer_id, customer_name,
+                order_id, branch_id, invoice_number, customer_id, customer_name,
                 invoice_date, subtotal_amount, final_amount,
                 invoice_status, org_id, created_at
             ) VALUES (
-                :order_id, :branch_id, 35, 'Test Customer',
+                :order_id, :branch_id, 
+                'TEST-INV-' || TO_CHAR(CURRENT_TIMESTAMP, 'YYYYMMDD-HH24MISS'),
+                35, 'Test Customer',
                 :invoice_date, 100.00, 100.00,
                 'draft', 'ad808530-1ddb-4377-ab20-67bef145d80d', CURRENT_TIMESTAMP
             ) RETURNING invoice_id, invoice_number
@@ -697,6 +699,7 @@ async def cleanup_test_data(db: Session = Depends(get_db)) -> Dict[str, Any]:
         invoices_deleted = db.execute(text("""
             DELETE FROM sales.invoices 
             WHERE customer_name = 'Test Customer'
+            OR invoice_number LIKE 'TEST-INV-%'
         """))
         
         # Delete test orders
