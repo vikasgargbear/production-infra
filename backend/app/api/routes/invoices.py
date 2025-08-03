@@ -526,14 +526,14 @@ async def create_invoice(
                     subtotal_amount, discount_amount, taxable_amount,
                     cgst_amount, sgst_amount, igst_amount, total_tax_amount,
                     final_amount, invoice_status, payment_status,
-                    notes, created_by
+                    notes
                 ) VALUES (
                     :org_id, 1, :invoice_number, :invoice_date, :invoice_type,
                     :customer_id, :customer_name, :payment_terms, :due_date, :place_of_supply,
                     :subtotal_amount, :discount_amount, :taxable_amount,
                     :cgst_amount, :sgst_amount, :igst_amount, :total_tax_amount,
                     :final_amount, 'posted', 'unpaid',
-                    :notes, :created_by
+                    :notes
                 )
                 RETURNING invoice_id
             """),
@@ -555,8 +555,7 @@ async def create_invoice(
                 "igst_amount": invoice_data.get("igst_amount", 0),
                 "total_tax_amount": invoice_data.get("tax_amount", 0),
                 "final_amount": invoice_data.get("total_amount", 0),
-                "notes": invoice_data.get("notes"),
-                "created_by": invoice_data.get("created_by", 1)
+                "notes": invoice_data.get("notes")
             }
         )
         invoice_id = invoice_result.scalar()
