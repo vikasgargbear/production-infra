@@ -594,15 +594,15 @@ async def test_invoice_flow(db: Session = Depends(get_db)) -> Dict[str, Any]:
         
         invoice_result = db.execute(text("""
             INSERT INTO sales.invoices (
-                order_id, customer_id, customer_name,
+                order_id, branch_id, customer_id, customer_name,
                 invoice_date, subtotal_amount, final_amount,
                 invoice_status, org_id, created_at
             ) VALUES (
-                :order_id, 35, 'Test Customer',
+                :order_id, :branch_id, 35, 'Test Customer',
                 :invoice_date, 100.00, 100.00,
                 'draft', 'ad808530-1ddb-4377-ab20-67bef145d80d', CURRENT_TIMESTAMP
             ) RETURNING invoice_id, invoice_number
-        """), {"order_id": order_id, "invoice_date": date.today()})
+        """), {"order_id": order_id, "invoice_date": date.today(), "branch_id": branch_id})
         
         invoice = invoice_result.fetchone()
         invoice_id = invoice[0]
