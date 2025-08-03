@@ -176,8 +176,8 @@ async def create_product(
                 is_active, created_at, updated_at
             ) VALUES (
                 :org_id, :product_code, :product_name, :generic_name,
-                :brand, :manufacturer, :composition::jsonb, :category_id,
-                :hsn_code, :gst_percentage, :pack_config::jsonb, :base_uom_id,
+                :brand, :manufacturer, CAST(:composition AS jsonb), :category_id,
+                :hsn_code, :gst_percentage, CAST(:pack_config AS jsonb), :base_uom_id,
                 :maintain_batch, :maintain_expiry,
                 :is_active, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
             ) RETURNING product_id, product_code, product_name

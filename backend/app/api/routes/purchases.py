@@ -34,11 +34,11 @@ def get_purchases(
     try:
         query = """
             SELECT p.*, s.supplier_name,
-                   COUNT(pi.purchase_item_id) as item_count,
+                   COUNT(pi.po_item_id) as item_count,
                    STRING_AGG(DISTINCT pr.product_name, ', ') as products
-            FROM purchases p
-            LEFT JOIN suppliers s ON p.supplier_id = s.supplier_id
-            LEFT JOIN purchase_items pi ON p.purchase_id = pi.purchase_id
+            FROM procurement.purchase_orders p
+            LEFT JOIN parties.suppliers s ON p.supplier_id = s.supplier_id
+            LEFT JOIN procurement.purchase_order_items pi ON p.po_id = pi.po_id
             LEFT JOIN inventory.products pr ON pi.product_id = pr.product_id
             WHERE 1=1
         """
@@ -53,15 +53,15 @@ def get_purchases(
             params["product_id"] = product_id
             
         if start_date:
-            query += " AND p.purchase_date >= :start_date"
+            query += " AND p.po_date >= :start_date"
             params["start_date"] = start_date
             
         if end_date:
-            query += " AND p.purchase_date <= :end_date"
+            query += " AND p.po_date <= :end_date"
             params["end_date"] = end_date
             
-        query += " GROUP BY p.purchase_id, s.supplier_name"
-        query += " ORDER BY p.purchase_date DESC LIMIT :limit OFFSET :skip"
+        query += " GROUP BY p.po_id, s.supplier_name"
+        query += " ORDER BY p.po_date DESC LIMIT :limit OFFSET :skip"
         params.update({"limit": limit, "skip": skip})
         
         result = db.execute(text(query), params)
