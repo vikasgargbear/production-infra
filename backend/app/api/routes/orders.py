@@ -57,8 +57,7 @@ async def create_order(
         
         # Get customer details
         customer = db.execute(text("""
-            SELECT customer_name, primary_phone as phone, 
-                   COALESCE(discount_percent, 0) as discount_percent 
+            SELECT customer_name, primary_phone as phone
             FROM parties.customers 
             WHERE customer_id = :id AND org_id = :org_id
         """), {"id": order.customer_id, "org_id": org_id}).fetchone()
@@ -66,7 +65,8 @@ async def create_order(
         if not customer:
             raise HTTPException(status_code=404, detail="Customer not found")
         
-        customer_discount = customer.discount_percent or Decimal("0")
+        # No discount_percent column in customers table, set to 0
+        customer_discount = Decimal("0")
         
         totals = OrderService.calculate_order_totals(
             db, items_dict, customer_discount, org_id
