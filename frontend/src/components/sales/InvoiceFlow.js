@@ -155,17 +155,20 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
     searchCache.preloadData('products', () => productAPI.search('', { limit: 100 }));
   }, []);
 
-  // Calculate totals using backend API whenever items change
+  // Calculate totals using frontend calculator (backend API is causing 500 errors)
   useEffect(() => {
-    if (invoice.items.length > 0 && invoice.customer_id) {
-      // Try backend calculation but fallback to frontend if it fails
-      calculateTotalsBackend().catch(() => {
-        console.warn('Backend calculation failed, using frontend calculation');
-        calculateTotals();
-      });
-    } else {
-      calculateTotals(); // Fallback to frontend calculation
-    }
+    // Temporarily disabled backend calculation due to 500 errors
+    // if (invoice.items.length > 0 && invoice.customer_id) {
+    //   calculateTotalsBackend().catch(() => {
+    //     console.warn('Backend calculation failed, using frontend calculation');
+    //     calculateTotals();
+    //   });
+    // } else {
+    //   calculateTotals();
+    // }
+    
+    // Always use frontend calculation for now
+    calculateTotals();
   }, [invoice.items, invoice.discount_amount, invoice.delivery_charges, invoice.customer_id]);
 
   const calculateTotals = () => {
@@ -760,7 +763,7 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
           <div className="border-t border-gray-200 bg-white px-6 py-4">
             <div className="flex justify-between items-center">
               <div className="text-sm text-gray-600">
-                Total Items: {invoice.items.length} | Total Amount: <span className="text-2xl font-bold text-gray-900">₹{invoice.net_amount.toFixed(2)}</span>
+                Total Items: {invoice.items.length}
               </div>
               
               <div className="flex items-center gap-3">

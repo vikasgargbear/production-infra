@@ -369,6 +369,55 @@ The `master` schema contains core organizational data, user management, and syst
 
 ---
 
+### 9. addresses
+**Purpose**: Polymorphic address storage for multiple entity types (customers, suppliers, branches)
+**API Endpoint**: Addresses are managed through their parent entity endpoints
+
+| Field | Type | Required | Description | Frontend Usage |
+|-------|------|----------|-------------|----------------|
+| `address_id` | SERIAL | ✓ | Unique address identifier | Primary key |
+| `org_id` | UUID | ✓ | Organization ID | Multi-tenant filtering |
+| `entity_type` | TEXT | ✓ | Entity type: 'customer', 'supplier', 'branch' | Polymorphic discriminator |
+| `entity_id` | INTEGER | ✓ | ID from the respective entity table | Polymorphic foreign key |
+| `address_type` | TEXT | ✓ | Type: 'billing', 'shipping', 'registered' | Address classification |
+| `address_line1` | TEXT | ✓ | Primary address line | Main address |
+| `address_line2` | TEXT | - | Secondary address line | Additional details |
+| `city` | TEXT | ✓ | City name | Location |
+| `state_code` | TEXT | ✓ | GST state code (e.g., '27' for Maharashtra) | GST calculations |
+| `state_name` | TEXT | ✓ | State name | Display purposes |
+| `pincode` | TEXT | ✓ | Postal code | Delivery zones |
+| `country` | TEXT | - | Country (default: 'India') | International addresses |
+| `is_default` | BOOLEAN | - | Default address flag | UI selection |
+| `is_active` | BOOLEAN | - | Address active status | Soft delete |
+| `created_at` | TIMESTAMPTZ | - | Creation timestamp | Audit trail |
+
+**⚠️ IMPORTANT: Referential Integrity Warning**
+This table uses a polymorphic relationship pattern where `entity_type` + `entity_id` identifies the owner. This design **lacks traditional foreign key constraints** because `entity_id` can reference different tables based on `entity_type`. 
+
+Key implications:
+- No database-enforced referential integrity
+- Same `entity_id` value can exist for different entity types (e.g., customer_id=32 and supplier_id=32)
+- **ALWAYS** query with both `entity_type` AND `entity_id` fields together
+- Manual validation required when deleting parent entities
+- Orphaned records possible if parent entities are deleted without cleaning up addresses
+
+**Example API Response**:
+```json
+{
+  "address_id": 1,
+  "entity_type": "customer",
+  "entity_id": 32,
+  "address_type": "billing",
+  "address_line1": "Shop No. 15, Medical Complex",
+  "city": "Jaipur",
+  "state_code": "08",
+  "state_name": "Rajasthan",
+  "pincode": "302001"
+}
+```
+
+---
+
 ## API Integration Notes
 
 ### Authentication

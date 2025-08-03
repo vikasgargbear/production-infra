@@ -622,11 +622,132 @@ async def create_invoice(
             logger.error(f"Invoice creation failed: {invoice_error}")
             raise invoice_error
         
-        # TODO: Create invoice items in separate table (for future enhancement)
-        # For MVP: Invoice totals are calculated and stored in main invoice record
-        # Items details will be added once invoice_items table schema is confirmed
+        # Create invoice items in the invoice_items table
+        for item in invoice_data.get("items", []):
+            try:
+                # Get product details for the item
+                product = db.execute(text("""
+                    SELECT product_id, product_name, product_code, hsn_code, gst_percentage
+                    FROM inventory.products
+                    WHERE product_id = :product_id
+                """), {"product_id": item.get("product_id")}).fetchone()
+                
+                if not product:
+                    logger.warning(f"Product {item.get('product_id')} not found, skipping item")
+                    continue
+                
+                # Calculate item amounts
+                quantity = float(item.get("quantity", 1))
+                unit_price = float(item.get("rate") or item.get("unit_price", 0))
+                discount_percent = float(item.get("discount_percent", 0))
+                gst_percent = float(item.get("gst_percent") or product.gst_percentage or 12)
+                
+                # Calculate line totals
+                subtotal = quantity * unit_price
+                discount_amount = subtotal * (discount_percent / 100)
+                taxable_amount = subtotal - discount_amount
+                
+                # Calculate GST (for now assuming intrastate - CGST/SGST)
+                cgst_amount = taxable_amount * (gst_percent / 200)  # Half of GST
+                sgst_amount = taxable_amount * (gst_percent / 200)  # Half of GST
+                igst_amount = 0  # For interstate, would be full GST
+                
+                total_amount = taxable_amount + cgst_amount + sgst_amount + igst_amount
+                
+                # Insert invoice item
+                db.execute(text("""
+                    INSERT INTO sales.invoice_items (
+                        invoice_id, product_id, product_name, product_code,
+                        hsn_code, batch_id, batch_number,
+                        quantity, unit_price, mrp,
+                        discount_percent, discount_amount,
+                        gst_percent, cgst_amount, sgst_amount, igst_amount,
+                        taxable_amount, final_amount,
+                        created_at, updated_at
+                    ) VALUES (
+                        :invoice_id, :product_id, :product_name, :product_code,
+                        :hsn_code, :batch_id, :batch_number,
+                        :quantity, :unit_price, :mrp,
+                        :discount_percent, :discount_amount,
+                        :gst_percent, :cgst_amount, :sgst_amount, :igst_amount,
+                        :taxable_amount, :total_amount,
+                        CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+                    )
+                """), {
+                    "invoice_id": invoice_id,
+                    "product_id": product.product_id,
+                    "product_name": item.get("product_name") or product.product_name,
+                    "product_code": item.get("product_code") or product.product_code,
+                    "hsn_code": item.get("hsn_code") or product.hsn_code,
+                    "batch_id": item.get("batch_id"),
+                    "batch_number": item.get("batch_number") or item.get("batch_no", "DEFAULT"),
+                    "quantity": quantity,
+                    "unit_price": unit_price,
+                    "mrp": float(item.get("mrp", 0)),
+                    "discount_percent": discount_percent,
+                    "discount_amount": discount_amount,
+                    "gst_percent": gst_percent,
+                    "cgst_amount": cgst_amount,
+                    "sgst_amount": sgst_amount,
+                    "igst_amount": igst_amount,
+                    "taxable_amount": taxable_amount,
+                    "total_amount": total_amount
+                })
+                
+                logger.info(f"Created invoice item for product {product.product_name}")
+                
+                # CRITICAL: Deduct inventory from batches (FIFO allocation)
+                remaining_qty = quantity
+                if item.get("batch_id"):
+                    # Specific batch provided - deduct from that batch
+                    db.execute(text("""
+                        UPDATE inventory.batches
+                        SET quantity_available = quantity_available - :quantity,
+                            quantity_sold = COALESCE(quantity_sold, 0) + :quantity,
+                            updated_at = CURRENT_TIMESTAMP
+                        WHERE batch_id = :batch_id
+                        AND quantity_available >= :quantity
+                    """), {"batch_id": item.get("batch_id"), "quantity": quantity})
+                    
+                    logger.info(f"Deducted {quantity} units from batch {item.get('batch_id')}")
+                else:
+                    # No specific batch - use FIFO allocation
+                    batches = db.execute(text("""
+                        SELECT batch_id, quantity_available
+                        FROM inventory.batches
+                        WHERE product_id = :product_id
+                        AND quantity_available > 0
+                        AND (expiry_date IS NULL OR expiry_date > CURRENT_DATE)
+                        ORDER BY expiry_date NULLS LAST, batch_id
+                        FOR UPDATE
+                    """), {"product_id": product.product_id})
+                    
+                    for batch in batches:
+                        if remaining_qty <= 0:
+                            break
+                        
+                        deduct_qty = min(batch.quantity_available, remaining_qty)
+                        
+                        db.execute(text("""
+                            UPDATE inventory.batches
+                            SET quantity_available = quantity_available - :deduct_qty,
+                                quantity_sold = COALESCE(quantity_sold, 0) + :deduct_qty,
+                                updated_at = CURRENT_TIMESTAMP
+                            WHERE batch_id = :batch_id
+                        """), {"batch_id": batch.batch_id, "deduct_qty": deduct_qty})
+                        
+                        logger.info(f"Deducted {deduct_qty} units from batch {batch.batch_id} (FIFO)")
+                        remaining_qty -= deduct_qty
+                    
+                    if remaining_qty > 0:
+                        logger.warning(f"Could not fully allocate {quantity} units for product {product.product_name}, {remaining_qty} units short")
+                
+            except Exception as item_error:
+                logger.error(f"Error creating invoice item: {item_error}")
+                # Continue with other items even if one fails
+                continue
         
-        # Commit the complete invoice creation 
+        # Commit the complete invoice creation with items
         db.commit()
         logger.info(f"Invoice {invoice_number} committed successfully with total ₹{final_total}")
         
