@@ -260,7 +260,9 @@ async def create_product(
                 batch = batch_result.fetchone()
                 logger.info(f"Initial batch created for product {created.product_code}: Batch ID {batch.batch_id}, MRP: {mrp}, Selling: {sale_price}")
             except Exception as batch_error:
-                logger.warning(f"Could not create initial batch: {str(batch_error)}")
+                # TODO: Fix after database trigger prevent_mrp_decrease() is updated
+                # Trigger looks for non-existent column 'current_mrp' in products table
+                logger.warning(f"Could not create initial batch (trigger issue): {str(batch_error)}")
                 # Don't fail product creation if batch fails
         
         db.commit()

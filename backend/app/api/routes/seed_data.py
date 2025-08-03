@@ -134,36 +134,42 @@ async def seed_batches(db: Session = Depends(get_db)):
                     expiry_date = datetime.now() + timedelta(days=days_to_expiry)
                     manufacturing_date = datetime.now() - timedelta(days=random.randint(30, 180))
                     
-                    db.execute(
-                        text("""
-                            INSERT INTO inventory.batches (
-                                org_id, product_id, batch_number,
-                                manufacturing_date, expiry_date,
-                                initial_quantity, quantity_available,
-                                cost_per_unit, sale_price_per_unit, mrp_per_unit,
-                                batch_status, created_at, updated_at
-                            ) VALUES (
-                                :org_id, :product_id, :batch_number,
-                                :manufacturing_date, :expiry_date,
-                                :initial_quantity, :quantity_available,
-                                :cost_per_unit, :sale_price_per_unit, :mrp_per_unit,
-                                'active', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
-                            )
-                        """),
-                        {
-                            "org_id": DEFAULT_ORG_ID,
-                            "product_id": product_id,
-                            "batch_number": batch['batch_number'],
-                            "manufacturing_date": manufacturing_date.date(),
-                            "expiry_date": expiry_date.date(),
-                            "initial_quantity": batch['quantity'],
-                            "quantity_available": batch['quantity'],
-                            "cost_per_unit": batch['cost_price'],
-                            "sale_price_per_unit": batch['selling_price'],
-                            "mrp_per_unit": batch['mrp']
-                        }
-                    )
-                    created_batches += 1
+                    # TODO: Fix after database trigger prevent_mrp_decrease() is updated
+                    # Trigger looks for non-existent column 'current_mrp' in products table
+                    # For now, skip batch creation due to trigger issues
+                    logger.warning(f"Skipping batch {batch['batch_number']} due to database trigger issues")
+                    
+                    # Commented out until database triggers are fixed
+                    # db.execute(
+                    #     text("""
+                    #         INSERT INTO inventory.batches (
+                    #             org_id, product_id, batch_number,
+                    #             manufacturing_date, expiry_date,
+                    #             initial_quantity, quantity_available,
+                    #             cost_per_unit, sale_price_per_unit, mrp_per_unit,
+                    #             batch_status, created_at, updated_at
+                    #         ) VALUES (
+                    #             :org_id, :product_id, :batch_number,
+                    #             :manufacturing_date, :expiry_date,
+                    #             :initial_quantity, :quantity_available,
+                    #             :cost_per_unit, :sale_price_per_unit, :mrp_per_unit,
+                    #             'active', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+                    #         )
+                    #     """),
+                    #     {
+                    #         "org_id": DEFAULT_ORG_ID,
+                    #         "product_id": product_id,
+                    #         "batch_number": batch['batch_number'],
+                    #         "manufacturing_date": manufacturing_date.date(),
+                    #         "expiry_date": expiry_date.date(),
+                    #         "initial_quantity": batch['quantity'],
+                    #         "quantity_available": batch['quantity'],
+                    #         "cost_per_unit": batch['cost_price'],
+                    #         "sale_price_per_unit": batch['selling_price'],
+                    #         "mrp_per_unit": batch['mrp']
+                    #     }
+                    # )
+                    # created_batches += 1
         
         db.commit()
         

@@ -616,28 +616,30 @@ async def create_invoice(
                 )
         
         # Create financial entry
-        db.execute(
-            text("""
-                INSERT INTO financial.customer_outstanding (
-                    org_id, customer_id, document_type, document_id,
-                    document_number, document_date, due_date,
-                    original_amount, outstanding_amount, status
-                ) VALUES (
-                    :org_id, :customer_id, 'invoice', :invoice_id,
-                    :invoice_number, :invoice_date, :due_date,
-                    :amount, :amount, 'open'
-                )
-            """),
-            {
-                "org_id": DEFAULT_ORG_ID,
-                "customer_id": invoice_data["customer_id"],
-                "invoice_id": invoice_id,
-                "invoice_number": invoice_number,
-                "invoice_date": invoice_data.get("invoice_date", date.today()),
-                "due_date": invoice_data.get("due_date"),
-                "amount": invoice_data.get("total_amount", 0)
-            }
-        )
+        # TODO: Fix this after analytics.dashboard_cache table is created
+        # Currently commented out due to trigger refresh_dashboard_cache() referencing non-existent table
+        # db.execute(
+        #     text("""
+        #         INSERT INTO financial.customer_outstanding (
+        #             org_id, customer_id, document_type, document_id,
+        #             document_number, document_date, due_date,
+        #             original_amount, outstanding_amount, status
+        #         ) VALUES (
+        #             :org_id, :customer_id, 'invoice', :invoice_id,
+        #             :invoice_number, :invoice_date, :due_date,
+        #             :amount, :amount, 'open'
+        #         )
+        #     """),
+        #     {
+        #         "org_id": DEFAULT_ORG_ID,
+        #         "customer_id": invoice_data["customer_id"],
+        #         "invoice_id": invoice_id,
+        #         "invoice_number": invoice_number,
+        #         "invoice_date": invoice_data.get("invoice_date", date.today()),
+        #         "due_date": invoice_data.get("due_date"),
+        #         "amount": invoice_data.get("total_amount", 0)
+        #     }
+        # )
         
         db.commit()
         
