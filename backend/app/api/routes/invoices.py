@@ -517,19 +517,8 @@ async def create_invoice(
         next_num = result.scalar() or 1
         invoice_number = f"INV-{next_num:06d}"
         
-        # TODO: Database trigger refresh_dashboard_cache references non-existent analytics.dashboard_cache table
-        # TODO: Need database admin to either:
-        #   1. Create the analytics.dashboard_cache table with proper structure
-        #   2. Remove the trigger if analytics module is not needed
-        #   3. Fix the trigger to check if table exists before updating
-        # For now, we'll try to disable it temporarily
-        try:
-            db.execute(text("ALTER TABLE sales.invoices DISABLE TRIGGER refresh_dashboard_cache"))
-            db.commit()
-        except:
-            # TODO: Need proper permissions to disable triggers
-            # Contact database admin for ALTER TABLE permissions
-            db.rollback()
+        # The database should now have analytics.dashboard_cache table
+        # If not, run fix_invoice_only.sql first
         
         # Create invoice record
         invoice_result = db.execute(
@@ -636,25 +625,38 @@ async def create_invoice(
                 #     }
                 # )
         
-        # TODO: Financial entry creation disabled
-        # TODO: Issues to fix:
-        #   1. Check if financial.customer_outstanding table exists
-        #   2. Verify table structure matches our insert statement
-        #   3. Check for any triggers on financial tables
-        # Original code to restore after verification:
-        # db.execute(
-        #     text("""
-        #         INSERT INTO financial.customer_outstanding (
-        #             org_id, customer_id, document_type, document_id,
-        #             document_number, document_date, due_date,
-        #             original_amount, outstanding_amount, status
-        #         ) VALUES (
-        #             :org_id, :customer_id, 'invoice', :invoice_id,
-        #             :invoice_number, :invoice_date, :due_date,
-        #             :amount, :amount, 'open'
-        #         )
-        #     """)
-        # )
+        # Create financial entry for outstanding tracking
+        try:
+            db.execute(
+                text("""
+                    INSERT INTO financial.customer_outstanding (
+                        org_id, customer_id, document_type, document_id,
+                        document_number, document_date, due_date,
+                        original_amount, outstanding_amount, status
+                    ) VALUES (
+                        :org_id, :customer_id, 'invoice', :invoice_id,
+                        :invoice_number, :invoice_date, :due_date,
+                        :amount, :amount, 'open'
+                    )
+                    ON CONFLICT (org_id, document_type, document_id)
+                    DO UPDATE SET
+                        original_amount = EXCLUDED.original_amount,
+                        outstanding_amount = EXCLUDED.outstanding_amount,
+                        updated_at = NOW()
+                """),
+                {
+                    "org_id": DEFAULT_ORG_ID,
+                    "customer_id": invoice_data["customer_id"],
+                    "invoice_id": invoice_id,
+                    "invoice_number": invoice_number,
+                    "invoice_date": invoice_data.get("invoice_date", date.today()),
+                    "due_date": invoice_data.get("due_date"),
+                    "amount": invoice_data.get("total_amount", 0)
+                }
+            )
+        except Exception as e:
+            # Log but don't fail invoice creation if financial tracking fails
+            logger.warning(f"Could not create financial outstanding entry: {e}")
         
         db.commit()
         
