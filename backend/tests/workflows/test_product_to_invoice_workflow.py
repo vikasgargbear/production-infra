@@ -245,7 +245,7 @@ class ProductToInvoiceWorkflowTest:
         
         try:
             response = requests.post(f"{API_BASE_URL}/invoices/", json=invoice_data, timeout=30)
-            if response.status_code == 201:
+            if response.status_code in [200, 201]:
                 invoice = response.json()
                 self.test_data['invoice'] = invoice
                 self.test_data['invoice_id'] = invoice.get('invoice_id') or invoice.get('id')

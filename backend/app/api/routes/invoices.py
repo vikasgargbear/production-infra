@@ -517,10 +517,33 @@ async def create_invoice(
         next_num = result.scalar() or 1
         invoice_number = f"INV-{next_num:06d}"
         
-        # The database should now have analytics.dashboard_cache table
-        # If not, run fix_invoice_only.sql first
+        # Calculate totals from items BEFORE creating invoice
+        total_calculated = 0
+        subtotal_calculated = 0
         
-        # Create invoice record (with KPI trigger error handling)
+        for item in invoice_data.get("items", []):
+            try:
+                quantity = item.get("quantity", 1)
+                unit_price = item.get("unit_price", 0)
+                discount_percent = item.get("discount_percentage", 0)
+                gst_percent = item.get("gst_percentage", 12)
+                
+                # Calculate: qty * price * (1 - discount/100) * (1 + gst/100)
+                subtotal = quantity * unit_price
+                after_discount = subtotal * (1 - discount_percent/100)
+                final_amount = after_discount * (1 + gst_percent/100)
+                
+                total_calculated += final_amount
+                subtotal_calculated += after_discount
+                
+            except Exception as calc_error:
+                logger.warning(f"Could not calculate item totals: {calc_error}")
+        
+        # Use calculated totals or fallback to provided values
+        final_total = round(total_calculated, 2) if total_calculated > 0 else invoice_data.get("total_amount", 0)
+        final_subtotal = round(subtotal_calculated, 2) if subtotal_calculated > 0 else invoice_data.get("subtotal", 0)
+        
+        # Create invoice record with pre-calculated totals
         invoice_params = {
             "org_id": DEFAULT_ORG_ID,
             "invoice_number": invoice_number,
@@ -531,14 +554,14 @@ async def create_invoice(
             "payment_terms": invoice_data.get("payment_terms", "cash"),
             "due_date": invoice_data.get("due_date"),
             "place_of_supply": invoice_data.get("place_of_supply", "Gujarat"),
-            "subtotal_amount": invoice_data.get("subtotal", 0),
+            "subtotal_amount": final_subtotal,
             "discount_amount": invoice_data.get("discount_amount", 0),
-            "taxable_amount": invoice_data.get("subtotal", 0) - invoice_data.get("discount_amount", 0),
+            "taxable_amount": final_subtotal,
             "cgst_amount": invoice_data.get("cgst_amount", 0),
             "sgst_amount": invoice_data.get("sgst_amount", 0),
             "igst_amount": invoice_data.get("igst_amount", 0),
-            "total_tax_amount": invoice_data.get("tax_amount", 0),
-            "final_amount": invoice_data.get("total_amount", 0),
+            "total_tax_amount": final_total - final_subtotal,
+            "final_amount": final_total,
             "notes": invoice_data.get("notes")
         }
         
@@ -599,70 +622,13 @@ async def create_invoice(
             logger.error(f"Invoice creation failed: {invoice_error}")
             raise invoice_error
         
-        # Create invoice items (simplified for MVP)
-        total_calculated = 0
-        for item in invoice_data.get("items", []):
-            try:
-                # Calculate item totals
-                quantity = item.get("quantity", 1)
-                unit_price = item.get("unit_price", 0) 
-                discount_percent = item.get("discount_percentage", 0)
-                gst_percent = item.get("gst_percentage", 12)
-                
-                # Simple calculation: qty * price * (1 - discount/100) * (1 + gst/100)
-                subtotal = quantity * unit_price
-                after_discount = subtotal * (1 - discount_percent/100)
-                final_amount = after_discount * (1 + gst_percent/100)
-                total_calculated += final_amount
-                
-                # Try to create invoice item if table exists
-                try:
-                    db.execute(
-                        text("""
-                            INSERT INTO sales.invoice_items (
-                                invoice_id, product_id, quantity, unit_price, final_amount
-                            ) VALUES (
-                                :invoice_id, :product_id, :quantity, :unit_price, :final_amount
-                            )
-                        """),
-                        {
-                            "invoice_id": invoice_id,
-                            "product_id": item.get("product_id"),
-                            "quantity": quantity,
-                            "unit_price": unit_price,
-                            "final_amount": final_amount
-                        }
-                    )
-                except Exception as item_error:
-                    logger.warning(f"Could not store invoice item in database: {item_error}")
-                    # Continue - item calculation done, storage optional
-                    
-            except Exception as calc_error:
-                logger.warning(f"Could not calculate item totals: {calc_error}")
-        
-        # Update invoice with calculated totals BEFORE commit
-        if total_calculated > 0:
-            try:
-                db.execute(
-                    text("""
-                        UPDATE sales.invoices 
-                        SET final_amount = :total, subtotal_amount = :subtotal
-                        WHERE invoice_id = :invoice_id
-                    """),
-                    {
-                        "total": total_calculated,
-                        "subtotal": total_calculated / 1.12,  # Rough estimate removing GST
-                        "invoice_id": invoice_id
-                    }
-                )
-                logger.info(f"Updated invoice totals: ₹{total_calculated}")
-            except Exception as update_error:
-                logger.error(f"Failed to update invoice totals: {update_error}")
-                # Don't fail the entire invoice creation for totals update
+        # TODO: Create invoice items in separate table (for future enhancement)
+        # For MVP: Invoice totals are calculated and stored in main invoice record
+        # Items details will be added once invoice_items table schema is confirmed
         
         # Commit the complete invoice creation 
         db.commit()
-        logger.info(f"Invoice {invoice_number} committed successfully with total ₹{total_calculated}")
+        logger.info(f"Invoice {invoice_number} committed successfully with total ₹{final_total}")
         
         # TODO: Financial tracking will be implemented separately later
         # TODO: User noted that parties.customers has current_outstanding field
@@ -672,7 +638,7 @@ async def create_invoice(
             "invoice_id": invoice_id,
             "invoice_number": invoice_number,
             "message": "Invoice created successfully",
-            "total_amount": total_calculated if total_calculated > 0 else invoice_data.get("total_amount", 0)
+            "total_amount": final_total
         }
         
     except Exception as e:

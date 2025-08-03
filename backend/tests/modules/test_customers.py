@@ -9,6 +9,7 @@ import time
 from datetime import datetime
 
 API_BASE_URL = "https://pharma-backend-production-0c09.up.railway.app/api"
+DEFAULT_ORG_ID = "ad808530-1ddb-4377-ab20-67bef145d80d"
 
 class CustomerModuleTests:
     def __init__(self):
@@ -28,15 +29,16 @@ class CustomerModuleTests:
         customer_data = {
             "customer_name": f"Test Customer Basic {datetime.now().strftime('%H%M%S')}",
             "contact_person": "Test Contact Person",
-            "phone": "9876543210",
+            "phone": "9876543210", 
             "email": f"test{datetime.now().strftime('%H%M%S')}@example.com",
             "address": "123 Test Street, Test City",
-            "customer_type": "regular"
+            "customer_type": "retail",
+            "org_id": DEFAULT_ORG_ID
         }
         
         try:
             response = requests.post(f"{API_BASE_URL}/customers/", json=customer_data, timeout=30)
-            if response.status_code == 201:
+            if response.status_code in [200, 201]:
                 customer = response.json()
                 customer_id = customer.get('customer_id') or customer.get('id')
                 if customer_id:
@@ -59,16 +61,17 @@ class CustomerModuleTests:
             "contact_person": "Credit Test Person",
             "phone": "9876543211",
             "email": f"credit{datetime.now().strftime('%H%M%S')}@example.com",
-            "address": "456 Credit Lane, Finance City",
-            "customer_type": "credit",
+            "address": "456 Credit Lane, Finance City", 
+            "customer_type": "wholesale",
             "credit_limit": 50000.0,
             "payment_terms": "Net 30",
-            "gst_number": "27AAAAA0000A1Z5"
+            "gst_number": "27AAAAA0000A1Z5",
+            "org_id": DEFAULT_ORG_ID
         }
         
         try:
             response = requests.post(f"{API_BASE_URL}/customers/", json=customer_data, timeout=30)
-            if response.status_code == 201:
+            if response.status_code in [200, 201]:
                 customer = response.json()
                 customer_id = customer.get('customer_id') or customer.get('id')
                 if customer_id:

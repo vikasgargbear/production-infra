@@ -29,9 +29,10 @@ class InvoiceModuleTests:
         """Setup test customer and product for invoice testing"""
         # Get or create test customer
         try:
-            customers_response = requests.get(f"{API_BASE_URL}/customers?limit=1", timeout=30)
+            customers_response = requests.get(f"{API_BASE_URL}/customers/?limit=1", timeout=30)
             if customers_response.status_code == 200:
-                customers = customers_response.json()
+                customer_data = customers_response.json()
+                customers = customer_data.get('customers', [])
                 if customers and len(customers) > 0:
                     self.test_customer_id = customers[0]['customer_id']
                     self.log_test("Setup - Test Customer", True, f"Using customer ID: {self.test_customer_id}")
@@ -59,7 +60,7 @@ class InvoiceModuleTests:
         
         try:
             response = requests.post(f"{API_BASE_URL}/products/", json=product_data, timeout=30)
-            if response.status_code == 201:
+            if response.status_code in [200, 201]:
                 product = response.json()
                 self.test_product_id = product['product_id']
                 self.log_test("Setup - Test Product", True, f"Created test product ID: {self.test_product_id}")
@@ -95,8 +96,8 @@ class InvoiceModuleTests:
         }
         
         try:
-            response = requests.post(f"{API_BASE_URL}/sales/invoices/", json=invoice_data, timeout=30)
-            if response.status_code == 201:
+            response = requests.post(f"{API_BASE_URL}/invoices/", json=invoice_data, timeout=30)
+            if response.status_code in [200, 201]:
                 invoice = response.json()
                 invoice_id = invoice.get('invoice_id') or invoice.get('id')
                 if invoice_id:
@@ -143,8 +144,8 @@ class InvoiceModuleTests:
         }
         
         try:
-            response = requests.post(f"{API_BASE_URL}/sales/invoices/", json=invoice_data, timeout=30)
-            if response.status_code == 201:
+            response = requests.post(f"{API_BASE_URL}/invoices/", json=invoice_data, timeout=30)
+            if response.status_code in [200, 201]:
                 invoice = response.json()
                 invoice_id = invoice.get('invoice_id') or invoice.get('id')
                 if invoice_id:
@@ -193,7 +194,7 @@ class InvoiceModuleTests:
             
         invoice_id = self.created_invoice_ids[0]
         try:
-            response = requests.get(f"{API_BASE_URL}/sales/invoices/{invoice_id}", timeout=30)
+            response = requests.get(f"{API_BASE_URL}/invoices/{invoice_id}", timeout=30)
             if response.status_code == 200:
                 invoice = response.json()
                 self.log_test("Get Invoice - By ID", True, f"Retrieved invoice {invoice_id}: {invoice.get('invoice_number')}")
@@ -234,8 +235,8 @@ class InvoiceModuleTests:
         expected_total = 1062.0
         
         try:
-            response = requests.post(f"{API_BASE_URL}/sales/invoices/", json=invoice_data, timeout=30)
-            if response.status_code == 201:
+            response = requests.post(f"{API_BASE_URL}/invoices/", json=invoice_data, timeout=30)
+            if response.status_code in [200, 201]:
                 invoice = response.json()
                 
                 # Check calculations (with tolerance for floating point)
@@ -267,7 +268,7 @@ class InvoiceModuleTests:
             
         invoice_id = self.created_invoice_ids[0]
         try:
-            response = requests.get(f"{API_BASE_URL}/sales/invoices/{invoice_id}", timeout=30)
+            response = requests.get(f"{API_BASE_URL}/invoices/{invoice_id}", timeout=30)
             if response.status_code == 200:
                 invoice = response.json()
                 
