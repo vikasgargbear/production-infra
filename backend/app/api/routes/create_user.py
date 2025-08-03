@@ -24,11 +24,11 @@ async def create_default_user(db: Session = Depends(get_db)):
         # Create user
         result = db.execute(text("""
             INSERT INTO master.org_users (
-                org_id, username, email, full_name, 
+                org_id, username, email, first_name, last_name,
                 is_active, created_at, updated_at
             ) VALUES (
                 'ad808530-1ddb-4377-ab20-67bef145d80d',
-                'admin', 'admin@pharma.com', 'Admin User',
+                'admin', 'admin@pharma.com', 'Admin', 'User',
                 true, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
             ) RETURNING user_id
         """))
