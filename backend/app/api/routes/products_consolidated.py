@@ -44,6 +44,9 @@ async def get_products(
 ):
     """
     Get products with optional filtering and search
+    TODO: Fix HTTP 500 error - SQL query has issues with column names or data types
+    TODO: Add proper error handling and user-friendly error messages
+    TODO: Add database indexes for search performance optimization
     """
     try:
         query = """
