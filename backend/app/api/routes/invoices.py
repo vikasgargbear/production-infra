@@ -522,16 +522,14 @@ async def create_invoice(
             text("""
                 INSERT INTO sales.invoices (
                     org_id, branch_id, invoice_number, invoice_date, invoice_type,
-                    customer_id, customer_name, customer_phone, customer_address,
-                    customer_gst, payment_terms, due_date, place_of_supply,
+                    customer_id, customer_name, payment_terms, due_date, place_of_supply,
                     subtotal_amount, discount_amount, taxable_amount,
                     cgst_amount, sgst_amount, igst_amount, total_tax_amount,
                     final_amount, invoice_status, payment_status,
                     notes, created_by
                 ) VALUES (
                     :org_id, 1, :invoice_number, :invoice_date, :invoice_type,
-                    :customer_id, :customer_name, :customer_phone, :customer_address,
-                    :customer_gst, :payment_terms, :due_date, :place_of_supply,
+                    :customer_id, :customer_name, :payment_terms, :due_date, :place_of_supply,
                     :subtotal_amount, :discount_amount, :taxable_amount,
                     :cgst_amount, :sgst_amount, :igst_amount, :total_tax_amount,
                     :final_amount, 'posted', 'unpaid',
@@ -546,9 +544,6 @@ async def create_invoice(
                 "invoice_type": invoice_data.get("invoice_type", "tax_invoice"),
                 "customer_id": invoice_data["customer_id"],
                 "customer_name": invoice_data.get("customer_name", ""),
-                "customer_phone": invoice_data.get("customer_phone"),
-                "customer_address": invoice_data.get("billing_address"),
-                "customer_gst": invoice_data.get("customer_gst"),
                 "payment_terms": invoice_data.get("payment_terms", "cash"),
                 "due_date": invoice_data.get("due_date"),
                 "place_of_supply": invoice_data.get("place_of_supply", "Gujarat"),
@@ -606,13 +601,13 @@ async def create_invoice(
                 }
             )
             
-            # Update batch quantity if batch_id provided
-            if item.get("batch_id"):
+            # Update batch quantity if batch_id provided (skip fallback batches)
+            if item.get("batch_id") and not str(item.get("batch_id")).startswith("fallback_"):
                 db.execute(
                     text("""
                         UPDATE inventory.batches
                         SET quantity_available = quantity_available - :quantity,
-                            quantity_allocated = quantity_allocated + :quantity
+                            quantity_reserved = COALESCE(quantity_reserved, 0) + :quantity
                         WHERE batch_id = :batch_id
                     """),
                     {
