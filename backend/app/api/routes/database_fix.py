@@ -529,17 +529,36 @@ async def test_invoice_flow(db: Session = Depends(get_db)) -> Dict[str, Any]:
         # Step 2: Create test order
         steps.append({"step": "create_order", "status": "creating"})
         
+        # Get a branch_id and created_by first
+        branch_check = db.execute(text("""
+            SELECT branch_id FROM master.org_branches LIMIT 1
+        """))
+        branch = branch_check.fetchone()
+        branch_id = branch[0] if branch else 1
+        
+        user_check = db.execute(text("""
+            SELECT user_id FROM master.users LIMIT 1
+        """))
+        user = user_check.fetchone()
+        created_by = user[0] if user else 1
+        
         order_result = db.execute(text("""
             INSERT INTO sales.orders (
-                customer_id, order_date,
-                order_type, status, total_amount,
-                org_id, created_at
+                org_id, branch_id, order_number,
+                order_date, order_type, customer_id,
+                created_by, subtotal_amount, total_amount
             ) VALUES (
-                35, :order_date,
-                'sales', 'pending', 100.00,
-                'ad808530-1ddb-4377-ab20-67bef145d80d', CURRENT_TIMESTAMP
+                'ad808530-1ddb-4377-ab20-67bef145d80d',
+                :branch_id,
+                'TEST-' || TO_CHAR(CURRENT_TIMESTAMP, 'YYYYMMDD-HH24MISS'),
+                :order_date,
+                'standard',
+                35,
+                :created_by,
+                100.00,
+                100.00
             ) RETURNING order_id, order_number
-        """), {"order_date": date.today()})
+        """), {"order_date": date.today(), "branch_id": branch_id, "created_by": created_by})
         
         order = order_result.fetchone()
         order_id = order[0]
@@ -659,9 +678,7 @@ async def cleanup_test_data(db: Session = Depends(get_db)) -> Dict[str, Any]:
         # Delete test orders
         orders_deleted = db.execute(text("""
             DELETE FROM sales.orders 
-            WHERE customer_id = 35 
-            AND total_amount = 100.00
-            AND status = 'pending'
+            WHERE order_number LIKE 'TEST-%'
         """))
         
         db.commit()
