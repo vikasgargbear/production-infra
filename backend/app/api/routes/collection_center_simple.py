@@ -39,7 +39,7 @@ async def get_collection_dashboard(
                     COUNT(CASE WHEN days_overdue > 30 AND days_overdue <= 60 THEN 1 END) as overdue_30_count,
                     COUNT(CASE WHEN days_overdue > 60 AND days_overdue <= 90 THEN 1 END) as overdue_60_count,
                     COUNT(CASE WHEN days_overdue > 90 THEN 1 END) as overdue_90_count
-                FROM customer_outstanding
+                FROM financial.customer_outstanding
                 WHERE org_id = :org_id AND status = 'outstanding'
             """),
             {"org_id": org_id}
@@ -52,7 +52,7 @@ async def get_collection_dashboard(
                     COUNT(DISTINCT supplier_id) as total_suppliers,
                     SUM(outstanding_amount) as total_outstanding,
                     AVG(days_overdue) as avg_days_overdue
-                FROM supplier_outstanding
+                FROM financial.supplier_outstanding
                 WHERE org_id = :org_id AND status = 'outstanding'
             """),
             {"org_id": org_id}
@@ -145,7 +145,7 @@ async def get_outstanding_list(
                     c.customer_name as party_name,
                     c.primary_phone,
                     c.primary_email
-                FROM customer_outstanding o
+                FROM financial.customer_outstanding o
                 JOIN parties.customers c ON o.customer_id = c.customer_id
                 WHERE o.status = 'outstanding'
             """
@@ -163,7 +163,7 @@ async def get_outstanding_list(
                     s.supplier_name as party_name,
                     s.primary_phone as phone,
                     s.email
-                FROM supplier_outstanding o
+                FROM financial.supplier_outstanding o
                 JOIN suppliers s ON o.supplier_id = s.supplier_id
                 WHERE o.status = 'outstanding'
             """
@@ -261,7 +261,7 @@ async def generate_reminder_links(
                     MAX(o.days_overdue) as max_days_overdue,
                     STRING_AGG(o.invoice_number, ', ') as invoice_numbers
                 FROM parties.customers c
-                JOIN customer_outstanding o ON c.customer_id = o.customer_id
+                JOIN financial.customer_outstanding o ON c.customer_id = o.customer_id
                 WHERE c.customer_id = ANY(:party_ids)
                 GROUP BY c.customer_id, c.customer_name, c.primary_phone, c.primary_email
             """
@@ -277,7 +277,7 @@ async def generate_reminder_links(
                     MAX(o.days_overdue) as max_days_overdue,
                     STRING_AGG(o.bill_number, ', ') as invoice_numbers
                 FROM parties.suppliers s
-                JOIN supplier_outstanding o ON s.supplier_id = o.supplier_id
+                JOIN financial.supplier_outstanding o ON s.supplier_id = o.supplier_id
                 WHERE s.supplier_id = ANY(:party_ids)
                 GROUP BY s.supplier_id, s.supplier_name, s.phone, s.email
             """
@@ -486,7 +486,7 @@ async def record_payment_collection(
             outstanding = db.execute(
                 text("""
                     SELECT outstanding_amount 
-                    FROM customer_outstanding
+                    FROM financial.customer_outstanding
                     WHERE invoice_id = :invoice_id
                 """),
                 {"invoice_id": invoice_id}
@@ -514,7 +514,7 @@ async def record_payment_collection(
                 # Update outstanding
                 new_paid = db.execute(
                     text("""
-                        UPDATE customer_outstanding
+                        UPDATE financial.customer_outstanding
                         SET paid_amount = paid_amount + :allocated_amount,
                             outstanding_amount = outstanding_amount - :allocated_amount,
                             status = CASE 

@@ -19,7 +19,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/stock-movements", tags=["stock-movements"])
 
 @router.get("/")
-async def get_stock_movements(
+async def get_inventory.inventory_movements(
     skip: int = Query(0, ge=0),
     limit: int = Query(20, ge=1, le=100),
     movement_type: Optional[str] = Query(None, description="receive/issue"),
@@ -35,7 +35,7 @@ async def get_stock_movements(
     try:
         query = """
             SELECT sm.*, p.product_name, p.hsn_code
-            FROM stock_movements sm
+            FROM inventory.inventory_movements sm
             LEFT JOIN inventory.products p ON sm.product_id = p.product_id
             WHERE 1=1
         """
@@ -138,7 +138,7 @@ async def create_stock_receive(
         # Create movement record
         db.execute(
             text("""
-                INSERT INTO stock_movements (
+                INSERT INTO inventory.inventory_movements (
                     movement_id, org_id, movement_number, movement_type,
                     movement_date, product_id, batch_number, expiry_date,
                     quantity, unit, reason, source_location,
@@ -322,7 +322,7 @@ async def create_stock_issue(
         # Create movement record
         db.execute(
             text("""
-                INSERT INTO stock_movements (
+                INSERT INTO inventory.inventory_movements (
                     movement_id, org_id, movement_number, movement_type,
                     movement_date, product_id, batch_number, expiry_date,
                     quantity, unit, reason, destination_location,

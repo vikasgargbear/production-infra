@@ -96,7 +96,7 @@ class EnterpriseChallanService:
         result = self.db.execute(
             text("""
                 SELECT COUNT(*) + 1 as next_seq
-                FROM challans
+                FROM sales.delivery_challans
                 WHERE challan_number LIKE :pattern
             """),
             {
@@ -131,7 +131,7 @@ class EnterpriseChallanService:
             # Create challan record WITH org_id
             challan_result = self.db.execute(
                 text("""
-                    INSERT INTO challans (
+                    INSERT INTO sales.delivery_challans (
                         org_id, order_id, customer_id, challan_number,
                         challan_date, dispatch_date, expected_delivery_date,
                         status, vehicle_number, driver_name, driver_phone,
@@ -212,7 +212,7 @@ class EnterpriseChallanService:
                 
                 self.db.execute(
                     text("""
-                        INSERT INTO challan_items (
+                        INSERT INTO sales.delivery_challan_items (
                             challan_id, order_item_id, product_id,
                             product_name, batch_id, batch_number,
                             expiry_date, ordered_quantity, dispatched_quantity,
@@ -293,7 +293,7 @@ async def create_delivery_challan(
     return service.create_challan(request)
 
 @router.get("/")
-async def list_challans(
+async def list_sales.delivery_challans(
     skip: int = 0,
     limit: int = 100,
     customer_id: Optional[int] = None,
@@ -303,7 +303,7 @@ async def list_challans(
     db: Session = Depends(get_db),
     org_id: str = DEFAULT_ORG_ID
 ):
-    """List delivery challans with filters"""
+    """List delivery sales.delivery_challans with filters"""
     try:
         query = """
             SELECT 
@@ -321,7 +321,7 @@ async def list_challans(
                 c.vehicle_number,
                 c.driver_name,
                 c.total_packages
-            FROM challans c
+            FROM sales.delivery_challans c
             JOIN parties.customers cust ON c.customer_id = cust.customer_id
             WHERE c.org_id = :org_id
         """
@@ -347,12 +347,12 @@ async def list_challans(
         params.update({"limit": limit, "skip": skip})
         
         result = db.execute(text(query), params)
-        challans = [dict(row._mapping) for row in result]
+        sales.delivery_challans = [dict(row._mapping) for row in result]
         
-        return challans
+        return sales.delivery_challans
         
     except Exception as e:
-        logger.error(f"Error listing challans: {str(e)}")
+        logger.error(f"Error listing sales.delivery_challans: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/{challan_id}")
@@ -368,7 +368,7 @@ async def get_challan_details(
             text("""
                 SELECT c.*, cust.customer_name, cust.gstin as customer_gstin,
                        cust.address as customer_address, cust.primary_phone as customer_phone
-                FROM challans c
+                FROM sales.delivery_challans c
                 JOIN parties.customers cust ON c.customer_id = cust.customer_id
                 WHERE c.challan_id = :challan_id
             """),
@@ -382,7 +382,7 @@ async def get_challan_details(
         items_result = db.execute(
             text("""
                 SELECT ci.*, p.hsn_code, p.gst_percent
-                FROM challan_items ci
+                FROM sales.delivery_challan_items ci
                 JOIN inventory.products p ON ci.product_id = p.product_id
                 WHERE ci.challan_id = :challan_id
             """),
@@ -425,7 +425,7 @@ async def dispatch_challan(
         # Update challan status
         result = db.execute(
             text("""
-                UPDATE challans
+                UPDATE sales.delivery_challans
                 SET status = 'dispatched',
                     dispatch_date = :dispatch_date,
                     dispatch_time = :dispatch_time,
@@ -477,7 +477,7 @@ async def dispatch_challan(
                 UPDATE sales.orders
                 SET delivery_status = 'shipped'
                 WHERE order_id = (
-                    SELECT order_id FROM challans WHERE challan_id = :challan_id
+                    SELECT order_id FROM sales.delivery_challans WHERE challan_id = :challan_id
                 )
             """),
             {"challan_id": challan_id}
@@ -506,7 +506,7 @@ async def deliver_challan(
         # Update challan status
         result = db.execute(
             text("""
-                UPDATE challans
+                UPDATE sales.delivery_challans
                 SET status = 'delivered',
                     delivery_time = :delivery_time
                 WHERE challan_id = :challan_id
@@ -586,7 +586,7 @@ async def add_tracking_update(
         # Verify challan exists
         check_result = db.execute(
             text("""
-                SELECT challan_id FROM challans
+                SELECT challan_id FROM sales.delivery_challans
                 WHERE challan_id = :challan_id
                 AND org_id = :org_id
             """),
@@ -639,7 +639,7 @@ async def get_challan_analytics(
     try:
         query = """
             SELECT 
-                COUNT(*) as total_challans,
+                COUNT(*) as total_sales.delivery_challans,
                 COUNT(CASE WHEN status = 'draft' THEN 1 END) as draft_count,
                 COUNT(CASE WHEN status = 'dispatched' THEN 1 END) as dispatched_count,
                 COUNT(CASE WHEN status = 'delivered' THEN 1 END) as delivered_count,
@@ -649,7 +649,7 @@ async def get_challan_analytics(
                     WHEN status = 'delivered' AND dispatch_time IS NOT NULL 
                     THEN EXTRACT(EPOCH FROM (delivery_time - dispatch_time))/3600 
                 END) as avg_delivery_hours
-            FROM challans
+            FROM sales.delivery_challans
             WHERE 1=1
         """
         params = {}
@@ -676,7 +676,7 @@ async def get_challan_analytics(
                         WHEN status = 'delivered' AND dispatch_time IS NOT NULL 
                         THEN EXTRACT(EPOCH FROM (delivery_time - dispatch_time))/3600 
                     END) as avg_delivery_hours
-                FROM challans
+                FROM sales.delivery_challans
                 WHERE challan_date >= COALESCE(:start_date, challan_date)
                 AND challan_date <= COALESCE(:end_date, challan_date)
                 GROUP BY delivery_city
@@ -696,12 +696,12 @@ async def get_challan_analytics(
 
 # Backwards compatibility endpoint
 @router.get("/legacy")
-async def get_legacy_challans(
+async def get_legacy_sales.delivery_challans(
     skip: int = 0,
     limit: int = 100,
     db: Session = Depends(get_db)
 ):
     """Legacy endpoint for backward compatibility"""
-    # Redirect to order-based challans
+    # Redirect to order-based sales.delivery_challans
     from . import delivery_challan as legacy_router
-    return legacy_router.get_delivery_challans(skip, limit, None, None, None, None, db)
+    return legacy_router.get_delivery_sales.delivery_challans(skip, limit, None, None, None, None, db)

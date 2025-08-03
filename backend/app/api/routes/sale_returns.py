@@ -35,10 +35,10 @@ async def get_sale_returns(
             SELECT sr.*, c.customer_name as party_name, 
                    -- Extract invoice number from return items remarks
                    (SELECT SUBSTRING(ri.remarks, 'Invoice: ([^,]+)')
-                    FROM return_items ri 
+                    FROM sales.sales_return_items ri 
                     WHERE ri.return_id = sr.return_id 
                     LIMIT 1) as original_invoice_number
-            FROM return_requests sr
+            FROM sales.sales_returns sr
             LEFT JOIN parties.customers c ON sr.customer_id = c.customer_id
             WHERE sr.return_type = 'SALES'
         """
@@ -65,7 +65,7 @@ async def get_sale_returns(
         for ret in returns:
             items_query = """
                 SELECT sri.*, p.product_name, p.hsn_code
-                FROM return_items sri
+                FROM sales.sales_return_items sri
                 LEFT JOIN inventory.products p ON sri.product_id = p.product_id
                 WHERE sri.return_id = :return_id
             """
@@ -77,7 +77,7 @@ async def get_sale_returns(
             
         # Get total count
         count_query = """
-            SELECT COUNT(*) FROM return_requests sr WHERE 1=1 AND sr.return_type = 'SALES'
+            SELECT COUNT(*) FROM sales.sales_returns sr WHERE 1=1 AND sr.return_type = 'SALES'
         """
         if party_id:
             count_query += " AND sr.customer_id = :party_id"
@@ -145,8 +145,8 @@ async def get_returnable_invoices(
             # Check how much has already been returned
             returned_query = """
                 SELECT COALESCE(SUM(sri.return_quantity), 0) as total_returned
-                FROM return_requests sr
-                JOIN return_items sri ON sr.return_id = sri.return_id
+                FROM sales.sales_returns sr
+                JOIN sales.sales_return_items sri ON sr.return_id = sri.return_id
                 WHERE sr.order_id = :invoice_id AND sr.return_type = 'SALES'
             """
             total_returned = db.execute(
@@ -194,8 +194,8 @@ async def get_invoice_items_for_return(
             LEFT JOIN inventory.products p ON ii.product_id = p.product_id
             LEFT JOIN (
                 SELECT r.product_id, r.batch_id, SUM(r.return_quantity) as return_quantity
-                FROM return_items r
-                JOIN return_requests sr ON r.return_id = sr.return_id  
+                FROM sales.sales_return_items r
+                JOIN sales.sales_returns sr ON r.return_id = sr.return_id  
                 WHERE sr.order_id = :invoice_id AND sr.return_type = 'SALES'
                 GROUP BY r.product_id, r.batch_id
             ) sri ON (sri.product_id = ii.product_id AND (sri.batch_id = ii.batch_id OR (sri.batch_id IS NULL AND ii.batch_id IS NULL)))
@@ -289,11 +289,11 @@ async def create_sale_return(
             tax_amount += item_tax
             total_amount += item_total + item_tax
             
-        # Create return record using return_requests table
+        # Create return record using sales.sales_returns table
         # Note: order_id can be NULL for direct invoice returns
         result = db.execute(
             text("""
-                INSERT INTO return_requests (
+                INSERT INTO sales.sales_returns (
                     org_id, return_number, return_date,
                     return_type, order_id, customer_id,
                     return_reason, return_status,
@@ -321,10 +321,10 @@ async def create_sale_return(
         
         # Create return items and update inventory
         for item in return_data["items"]:
-            # Insert return item using existing return_items table
+            # Insert return item using existing sales.sales_return_items table
             db.execute(
                 text("""
-                    INSERT INTO return_items (
+                    INSERT INTO sales.sales_return_items (
                         return_id, product_id,
                         batch_id, return_quantity, 
                         original_price, return_price
@@ -397,10 +397,10 @@ async def get_sale_return_detail(
             SELECT sr.*, c.customer_name as party_name, c.gst_number as party_gst,
                    -- Extract invoice number from return items remarks
                    (SELECT SUBSTRING(ri.remarks, 'Invoice: ([^,]+)')
-                    FROM return_items ri 
+                    FROM sales.sales_return_items ri 
                     WHERE ri.return_id = sr.return_id 
                     LIMIT 1) as original_invoice_number
-            FROM return_requests sr
+            FROM sales.sales_returns sr
             LEFT JOIN parties.customers c ON sr.customer_id = c.customer_id
             WHERE sr.return_id = :return_id AND sr.return_type = 'SALES'
         """
@@ -417,7 +417,7 @@ async def get_sale_return_detail(
         items_query = """
             SELECT sri.*, p.product_name, p.hsn_code,
                    b.batch_number, b.expiry_date
-            FROM return_items sri
+            FROM sales.sales_return_items sri
             LEFT JOIN inventory.products p ON sri.product_id = p.product_id
             LEFT JOIN inventory.batches b ON sri.batch_id = b.batch_id
             WHERE sri.return_id = :return_id
@@ -462,7 +462,7 @@ async def cancel_sale_return(
             
         # Get return items to reverse inventory
         items = db.execute(
-            text("SELECT * FROM return_items WHERE return_id = :return_id"),
+            text("SELECT * FROM sales.sales_return_items WHERE return_id = :return_id"),
             {"return_id": return_id}
         ).fetchall()
         
