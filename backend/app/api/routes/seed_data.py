@@ -139,15 +139,15 @@ async def seed_batches(db: Session = Depends(get_db)):
                             INSERT INTO inventory.batches (
                                 org_id, product_id, batch_number,
                                 manufacturing_date, expiry_date,
-                                quantity_received, quantity_available, quantity_reserved,
-                                cost_per_unit, selling_price, mrp,
-                                is_active, created_at, updated_at
+                                initial_quantity, quantity_available,
+                                cost_per_unit, sale_price_per_unit, mrp_per_unit,
+                                batch_status, created_at, updated_at
                             ) VALUES (
                                 :org_id, :product_id, :batch_number,
                                 :manufacturing_date, :expiry_date,
-                                :quantity_received, :quantity_available, 0,
-                                :cost_per_unit, :selling_price, :mrp,
-                                true, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+                                :initial_quantity, :quantity_available,
+                                :cost_per_unit, :sale_price_per_unit, :mrp_per_unit,
+                                'active', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
                             )
                         """),
                         {
@@ -156,11 +156,11 @@ async def seed_batches(db: Session = Depends(get_db)):
                             "batch_number": batch['batch_number'],
                             "manufacturing_date": manufacturing_date.date(),
                             "expiry_date": expiry_date.date(),
-                            "quantity_received": batch['quantity'],
+                            "initial_quantity": batch['quantity'],
                             "quantity_available": batch['quantity'],
                             "cost_per_unit": batch['cost_price'],
-                            "selling_price": batch['selling_price'],
-                            "mrp": batch['mrp']
+                            "sale_price_per_unit": batch['selling_price'],
+                            "mrp_per_unit": batch['mrp']
                         }
                     )
                     created_batches += 1

@@ -43,8 +43,8 @@ async def get_batches(
                     b.quantity_available,
                     b.quantity_reserved as quantity_allocated,
                     b.cost_per_unit as purchase_price,
-                    COALESCE(b.selling_price, b.mrp, 100) as sale_price,
-                    COALESCE(b.mrp, b.selling_price, 100) as mrp,
+                    COALESCE(b.sale_price_per_unit, b.mrp_per_unit, 100) as sale_price,
+                    COALESCE(b.mrp_per_unit, b.sale_price_per_unit, 100) as mrp,
                     b.is_active,
                     b.created_at,
                     b.updated_at
@@ -73,8 +73,8 @@ async def get_batches(
                     p.product_name,
                     b.expiry_date,
                     b.quantity_available,
-                    COALESCE(b.selling_price, b.mrp, 100) as sale_price,
-                    COALESCE(b.mrp, b.selling_price, 100) as mrp
+                    COALESCE(b.sale_price_per_unit, b.mrp_per_unit, 100) as sale_price,
+                    COALESCE(b.mrp_per_unit, b.sale_price_per_unit, 100) as mrp
                 FROM inventory.batches b
                 LEFT JOIN inventory.products p ON b.product_id = p.product_id
                 WHERE b.org_id = :org_id
@@ -250,15 +250,15 @@ async def create_batch(
             INSERT INTO inventory.batches (
                 org_id, product_id, batch_number, 
                 expiry_date, manufacturing_date,
-                quantity_received, quantity_available,
-                cost_per_unit, selling_price, mrp,
+                initial_quantity, quantity_available,
+                cost_per_unit, sale_price_per_unit, mrp_per_unit,
                 supplier_id, purchase_invoice_no,
                 is_active
             ) VALUES (
                 :org_id, :product_id, :batch_number,
                 :expiry_date, :manufacturing_date,
-                :quantity_received, :quantity_available,
-                :cost_per_unit, :selling_price, :mrp,
+                :initial_quantity, :quantity_available,
+                :cost_per_unit, :sale_price_per_unit, :mrp_per_unit,
                 :supplier_id, :purchase_invoice_no,
                 true
             )
@@ -271,11 +271,11 @@ async def create_batch(
             "batch_number": batch_data["batch_number"],
             "expiry_date": batch_data.get("expiry_date"),
             "manufacturing_date": batch_data.get("manufacturing_date"),
-            "quantity_received": batch_data.get("quantity_received", 0),
-            "quantity_available": batch_data.get("quantity_available", batch_data.get("quantity_received", 0)),
+            "initial_quantity": batch_data.get("initial_quantity", batch_data.get("quantity_received", 0)),
+            "quantity_available": batch_data.get("quantity_available", batch_data.get("initial_quantity", 0)),
             "cost_per_unit": batch_data.get("cost_price", 0),
-            "selling_price": batch_data.get("selling_price", 0),
-            "mrp": batch_data.get("mrp", 0),
+            "sale_price_per_unit": batch_data.get("selling_price", 0),
+            "mrp_per_unit": batch_data.get("mrp", 0),
             "supplier_id": batch_data.get("supplier_id"),
             "purchase_invoice_no": batch_data.get("purchase_invoice_no")
         }

@@ -233,11 +233,11 @@ async def create_product(
                 "batch_number": product.get("batch_number") or f"BATCH{random.randint(100000, 999999)}",
                 "manufacturing_date": product.get("manufacturing_date") or datetime.now().strftime("%Y-%m-%d"),
                 "expiry_date": expiry_date,
-                "quantity_received": quantity,
+                "initial_quantity": quantity,
                 "quantity_available": quantity,
-                "cost_per_unit": cost_price,  # Changed from cost_price
-                "selling_price": sale_price,
-                "mrp": mrp
+                "cost_per_unit": cost_price,
+                "sale_price_per_unit": sale_price,
+                "mrp_per_unit": mrp
             }
             
             try:
@@ -245,14 +245,14 @@ async def create_product(
                     INSERT INTO inventory.batches (
                         org_id, product_id, batch_number,
                         manufacturing_date, expiry_date,
-                        quantity_received, quantity_available,
-                        cost_per_unit, selling_price, mrp,
+                        initial_quantity, quantity_available,
+                        cost_per_unit, sale_price_per_unit, mrp_per_unit,
                         created_at, updated_at
                     ) VALUES (
                         :org_id, :product_id, :batch_number,
                         :manufacturing_date, :expiry_date,
-                        :quantity_received, :quantity_available,
-                        :cost_per_unit, :selling_price, :mrp,
+                        :initial_quantity, :quantity_available,
+                        :cost_per_unit, :sale_price_per_unit, :mrp_per_unit,
                         CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
                     ) RETURNING batch_id
                 """), batch_data)
