@@ -640,7 +640,7 @@ async def create_invoice(
             except Exception as calc_error:
                 logger.warning(f"Could not calculate item totals: {calc_error}")
         
-        # Update invoice with calculated totals
+        # Update invoice with calculated totals BEFORE commit
         if total_calculated > 0:
             try:
                 db.execute(
@@ -655,12 +655,14 @@ async def create_invoice(
                         "invoice_id": invoice_id
                     }
                 )
+                logger.info(f"Updated invoice totals: ₹{total_calculated}")
             except Exception as update_error:
-                logger.warning(f"Could not update invoice totals: {update_error}")
+                logger.error(f"Failed to update invoice totals: {update_error}")
+                # Don't fail the entire invoice creation for totals update
         
-        # Commit the core invoice creation first to ensure it's saved
+        # Commit the complete invoice creation 
         db.commit()
-        logger.info(f"Invoice {invoice_number} committed successfully")
+        logger.info(f"Invoice {invoice_number} committed successfully with total ₹{total_calculated}")
         
         # TODO: Financial tracking will be implemented separately later
         # TODO: User noted that parties.customers has current_outstanding field
