@@ -31,8 +31,8 @@ const BusinessSalesEntry = ({ open, onClose }) => {
     notes: ''
   });
 
-  // Sample data for demonstration
-  const sampleCustomers = [
+  // Customer data will be fetched from API
+  const sampleCustomers = [  // TODO: Remove once API integration is complete
     {
       customer_id: 'CUST001',
       customer_code: 'RMS001',
@@ -180,7 +180,7 @@ const BusinessSalesEntry = ({ open, onClose }) => {
     }
   ];
 
-  const sampleProducts = [
+  const sampleProducts = [  // TODO: Remove once API integration is complete
     {
       product_id: 'PROD001',
       product_code: 'PAR500',
@@ -219,7 +219,7 @@ const BusinessSalesEntry = ({ open, onClose }) => {
     }
   ];
 
-  const sampleBatches = [
+  const sampleBatches = [  // TODO: Remove once API integration is complete
     {
       batch_id: 'BAT001',
       batch_number: 'B2024A',
