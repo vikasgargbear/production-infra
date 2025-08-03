@@ -19,7 +19,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/stock-movements", tags=["stock-movements"])
 
 @router.get("/")
-async def get_inventory.inventory_movements(
+async def get_inventory_movements(
     skip: int = Query(0, ge=0),
     limit: int = Query(20, ge=1, le=100),
     movement_type: Optional[str] = Query(None, description="receive/issue"),

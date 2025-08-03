@@ -293,7 +293,7 @@ async def create_delivery_challan(
     return service.create_challan(request)
 
 @router.get("/")
-async def list_sales.delivery_challans(
+async def list_delivery_challans(
     skip: int = 0,
     limit: int = 100,
     customer_id: Optional[int] = None,
@@ -696,7 +696,7 @@ async def get_challan_analytics(
 
 # Backwards compatibility endpoint
 @router.get("/legacy")
-async def get_legacy_sales.delivery_challans(
+async def get_legacy_delivery_challans(
     skip: int = 0,
     limit: int = 100,
     db: Session = Depends(get_db)
