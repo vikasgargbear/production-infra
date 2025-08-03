@@ -29,6 +29,54 @@ class SchemaIssue(BaseModel):
     suggested_fix: str
     can_auto_fix: bool
 
+@router.post("/drop-all-broken-triggers")
+async def drop_all_broken_triggers(db: Session = Depends(get_db)) -> FixResult:
+    """Drop all known broken triggers"""
+    try:
+        dropped = []
+        errors = []
+        
+        # List of triggers to drop
+        triggers_to_drop = [
+            ("calculate_gst_on_invoice_item_trigger", "sales.invoice_items"),
+            ("trigger_sync_order_invoice_status", "sales.invoices"),
+            ("sync_order_invoice_status_trigger", "sales.invoices")
+        ]
+        
+        for trigger_name, table_name in triggers_to_drop:
+            try:
+                db.execute(text(f"DROP TRIGGER IF EXISTS {trigger_name} ON {table_name} CASCADE"))
+                dropped.append(f"{trigger_name} on {table_name}")
+            except Exception as e:
+                errors.append(f"{trigger_name}: {str(e)}")
+        
+        # Also drop the functions
+        functions_to_drop = [
+            "calculate_gst_on_invoice_item",
+            "sync_order_invoice_status"
+        ]
+        
+        for func_name in functions_to_drop:
+            try:
+                db.execute(text(f"DROP FUNCTION IF EXISTS {func_name}() CASCADE"))
+                dropped.append(f"Function {func_name}")
+            except Exception as e:
+                errors.append(f"Function {func_name}: {str(e)}")
+        
+        if dropped:
+            db.commit()
+            
+        return FixResult(
+            success=len(dropped) > 0,
+            action="dropped_triggers",
+            message=f"Dropped {len(dropped)} triggers/functions",
+            details={"dropped": dropped, "errors": errors}
+        )
+        
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+
 @router.post("/fix-invoice-trigger")
 async def fix_invoice_trigger(db: Session = Depends(get_db)) -> FixResult:
     """
