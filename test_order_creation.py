@@ -27,8 +27,8 @@ order_data = {
     "org_id": ORG_ID,
     "customer_id": 35,  # Basim
     "customer_name": "Basim",
-    "order_date": datetime.now().isoformat(),
-    "order_type": "sales_order",
+    "order_date": datetime.now().date().isoformat(),
+    "order_type": "sales",
     "delivery_type": "pickup",
     "payment_mode": "cash",
     "items": [

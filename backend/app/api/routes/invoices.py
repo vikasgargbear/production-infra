@@ -507,6 +507,8 @@ async def create_invoice(
     Create a new invoice with items
     """
     try:
+        logger.info(f"Starting invoice creation for customer {invoice_data.get('customer_id')}")
+        
         # Generate invoice number
         result = db.execute(
             text("""
