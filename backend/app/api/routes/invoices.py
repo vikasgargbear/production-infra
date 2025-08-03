@@ -711,9 +711,11 @@ async def create_invoice(
             raise invoice_error
         
         # Step 5: Create order items and invoice items
+        items_created = 0
         for item in invoice_data.get("items", []):
             try:
                 product_id = item.get("product_id")
+                logger.info(f"Processing item with product_id: {product_id}")
                 
                 # Get batch details first (simpler query)
                 product_batch = db.execute(text("""
@@ -859,6 +861,7 @@ async def create_invoice(
                 })
                 
                 logger.info(f"Created invoice item for product {product_name} in invoice {invoice_id}")
+                items_created += 1
                 
                 # Step 6: Deduct inventory from the specific batch
                 db.execute(text("""
@@ -898,6 +901,9 @@ async def create_invoice(
                 logger.error(f"Product ID: {item.get('product_id')}, Invoice ID: {invoice_id}")
                 # Raise the error to see what's happening
                 raise HTTPException(status_code=500, detail=f"Failed to create invoice item: {str(item_error)}")
+        
+        # Log items created
+        logger.info(f"Created {items_created} invoice items for invoice {invoice_id}")
         
         # Step 8: Update customer outstanding balance
         db.execute(text("""
@@ -975,7 +981,10 @@ async def create_invoice(
     except Exception as e:
         db.rollback()
         logger.error(f"Error in invoice creation attempt: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"Error type: {type(e).__name__}")
+        import traceback
+        logger.error(f"Traceback: {traceback.format_exc()}")
+        raise HTTPException(status_code=500, detail=f"Invoice creation failed: {str(e)}")
 
 @router.get("/{invoice_id}")
 async def get_invoice(
