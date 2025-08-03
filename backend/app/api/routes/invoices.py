@@ -654,23 +654,23 @@ async def create_invoice(
                 
                 total_amount = taxable_amount + cgst_amount + sgst_amount + igst_amount
                 
-                # Insert invoice item
+                # Insert invoice item (using correct column names from schema)
                 db.execute(text("""
                     INSERT INTO sales.invoice_items (
                         invoice_id, product_id, product_name, product_code,
                         hsn_code, batch_id, batch_number,
                         quantity, unit_price, mrp,
-                        discount_percent, discount_amount,
-                        gst_percent, cgst_amount, sgst_amount, igst_amount,
-                        taxable_amount, final_amount,
+                        discount_percentage, discount_amount,
+                        gst_percentage, cgst_amount, sgst_amount, igst_amount,
+                        line_total, line_total_with_tax,
                         created_at, updated_at
                     ) VALUES (
                         :invoice_id, :product_id, :product_name, :product_code,
                         :hsn_code, :batch_id, :batch_number,
                         :quantity, :unit_price, :mrp,
-                        :discount_percent, :discount_amount,
-                        :gst_percent, :cgst_amount, :sgst_amount, :igst_amount,
-                        :taxable_amount, :total_amount,
+                        :discount_percentage, :discount_amount,
+                        :gst_percentage, :cgst_amount, :sgst_amount, :igst_amount,
+                        :line_total, :line_total_with_tax,
                         CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
                     )
                 """), {
@@ -684,14 +684,14 @@ async def create_invoice(
                     "quantity": quantity,
                     "unit_price": unit_price,
                     "mrp": float(item.get("mrp", 0)),
-                    "discount_percent": discount_percent,
+                    "discount_percentage": discount_percent,  # Fixed: was discount_percent
                     "discount_amount": discount_amount,
-                    "gst_percent": gst_percent,
+                    "gst_percentage": gst_percent,  # Fixed: was gst_percent
                     "cgst_amount": cgst_amount,
                     "sgst_amount": sgst_amount,
                     "igst_amount": igst_amount,
-                    "taxable_amount": taxable_amount,
-                    "total_amount": total_amount
+                    "line_total": taxable_amount,  # Fixed: was taxable_amount
+                    "line_total_with_tax": total_amount  # Fixed: was total_amount
                 })
                 
                 logger.info(f"Created invoice item for product {product.product_name}")
