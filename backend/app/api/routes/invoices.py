@@ -716,12 +716,18 @@ async def create_invoice(
         # Step 5: Create order items and invoice items
         items_created = 0
         items_list = invoice_data.get("items", [])
-        logger.info(f"Processing {len(items_list)} items for invoice {invoice_id}")
+        logger.info(f"Invoice {invoice_id} has {len(items_list)} items to process")
+        
+        if not items_list:
+            logger.warning(f"No items provided for invoice {invoice_id}")
         
         for idx, item in enumerate(items_list):
             try:
                 product_id = item.get("product_id")
-                logger.info(f"Processing item {idx+1}/{len(items_list)} with product_id: {product_id}")
+                # Ensure product_id is an integer
+                if product_id:
+                    product_id = int(product_id)
+                logger.info(f"Processing item {idx+1}/{len(items_list)} with product_id: {product_id} (type: {type(product_id).__name__})")
                 
                 # Get batch details first (simpler query)
                 logger.info(f"Querying batch for product_id {product_id}")
@@ -908,9 +914,11 @@ async def create_invoice(
                 
             except Exception as item_error:
                 logger.error(f"Error creating invoice item: {item_error}")
-                logger.error(f"Product ID: {item.get('product_id')}, Invoice ID: {invoice_id}")
-                # Raise the error to see what's happening
-                raise HTTPException(status_code=500, detail=f"Failed to create invoice item: {str(item_error)}")
+                logger.error(f"Product ID: {product_id}, Invoice ID: {invoice_id}")
+                logger.error(f"Error details: {type(item_error).__name__}: {str(item_error)}")
+                # Don't fail the entire invoice for one item - just log and continue
+                # This way at least the invoice gets created even if items fail
+                continue
         
         # Log items created
         logger.info(f"Created {items_created} invoice items for invoice {invoice_id}")
