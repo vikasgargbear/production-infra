@@ -4,7 +4,7 @@ import requests
 import json
 from datetime import datetime, date
 
-BASE_URL = "https://pharma-backend-production-0c09.up.railway.app/api/v1"
+BASE_URL = "https://pharma-backend-production-0c09.up.railway.app/api"
 ORG_ID = "ad808530-1ddb-4377-ab20-67bef145d80d"
 
 def test_api(method, endpoint, data=None, description=""):

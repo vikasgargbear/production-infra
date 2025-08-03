@@ -158,7 +158,7 @@ class WhatsAppService:
             
             if template_name:
                 # Send template message
-                url = f"{self.base_url}/api/v1/sendTemplateMessage"
+                url = f"{self.base_url}/api/sendTemplateMessage"
                 payload = {
                     "whatsappNumber": phone,
                     "templateName": template_name,
@@ -166,7 +166,7 @@ class WhatsAppService:
                 }
             else:
                 # Send text message
-                url = f"{self.base_url}/api/v1/sendSessionMessage"
+                url = f"{self.base_url}/api/sendSessionMessage"
                 payload = {
                     "whatsappNumber": phone,
                     "messageText": message

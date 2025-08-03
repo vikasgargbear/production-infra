@@ -25,7 +25,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 router = APIRouter(
-    prefix="/api/v1/enterprise-orders",
+    prefix="/enterprise-orders",
     tags=["enterprise-orders"]
 )
 
@@ -188,7 +188,7 @@ def _transform_to_legacy_response(enterprise_response: OrderCreationResponse) ->
         "total_amount": float(enterprise_response.total_amount),
         "order_id": enterprise_response.order_id,
         "invoice_id": enterprise_response.invoice_id,
-        "invoice_url": f"/api/v1/invoices/{enterprise_response.invoice_id}/print",
+        "invoice_url": f"/api/invoices/{enterprise_response.invoice_id}/print",
         "message": enterprise_response.message
     }
 

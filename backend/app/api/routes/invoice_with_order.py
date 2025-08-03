@@ -17,7 +17,7 @@ from ...dependencies import get_current_org
 from ..services.order_service import OrderService
 
 router = APIRouter(
-    prefix="/api/v1/invoices",
+    prefix="/invoices",
     tags=["invoices"]
 )
 

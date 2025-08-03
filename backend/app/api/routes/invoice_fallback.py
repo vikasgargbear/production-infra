@@ -14,7 +14,7 @@ from ...core.auth import get_current_org
 from ..services.invoice_service import InvoiceService
 
 router = APIRouter(
-    prefix="/api/v1/orders",
+    prefix="/orders",
     tags=["orders"]
 )
 
@@ -69,7 +69,7 @@ async def generate_invoice_with_fallback(
         if existing_invoice:
             error_detail += f"Note: Invoice {existing_invoice.invoice_number} exists with invoice_id={existing_invoice.invoice_id}. "
         
-        error_detail += "Please use /api/v1/invoices/create-with-order to create both order and invoice together."
+        error_detail += "Please use /api/invoices/create-with-order to create both order and invoice together."
         
         raise HTTPException(
             status_code=404,
@@ -83,7 +83,7 @@ async def generate_invoice_with_fallback(
                         "created_at": o.created_at.isoformat() if o.created_at else None
                     } for o in latest_orders
                 ] if latest_orders else [],
-                "suggestion": "Use POST /api/v1/invoices/create-with-order instead"
+                "suggestion": "Use POST /api/invoices/create-with-order instead"
             }
         )
     

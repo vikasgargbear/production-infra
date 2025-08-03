@@ -17,8 +17,7 @@ class Settings:
     DATABASE_URL: Optional[str] = os.environ.get("DATABASE_URL")
     
     # API settings
-    API_V1_PREFIX: str = "/api/v1"
-    API_V2_PREFIX: str = "/api/v2"
+    API_PREFIX: str = "/api"  # Consolidated API prefix
     
     # Security settings
     SECRET_KEY: str = os.environ.get("SECRET_KEY", "your-secret-key-here")

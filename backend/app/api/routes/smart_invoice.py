@@ -15,7 +15,7 @@ from ...core.auth import get_current_org
 from ..services.invoice_service import InvoiceService
 
 router = APIRouter(
-    prefix="/api/v1/smart-invoice",
+    prefix="/smart-invoice",
     tags=["smart-invoice"]
 )
 
@@ -128,8 +128,8 @@ async def smart_invoice_generation(
                 "gap_in_sequence": order_id - latest_order if latest_order else None,
                 "message": f"Order {order_id} does not exist. Latest order is #{latest_order}.",
                 "instructions": {
-                    "option_1": "Use POST /api/v1/invoices/create-with-order to create both",
-                    "option_2": "Create order first using POST /api/v1/orders/",
+                    "option_1": "Use POST /api/invoices/create-with-order to create both",
+                    "option_2": "Create order first using POST /api/orders/",
                     "option_3": "Provide order data in invoice_data parameter to auto-create"
                 },
                 "required_for_auto_create": {

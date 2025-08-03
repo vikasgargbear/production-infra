@@ -72,7 +72,7 @@ async def root():
         "endpoints": {
             "health": "/health",
             "docs": "/docs",
-            "api": "/api/v2"
+            "api": "/api"
         }
     }
 

@@ -14,7 +14,7 @@ const formatPhone = (phone) => phone ? phone.replace(/\D/g, '').slice(-10) : nul
 const moduleTests = {
   invoice: {
     name: 'Invoice Module',
-    endpoint: '/api/v1/orders/',
+    endpoint: '/api/orders/',
     requiredFields: ['org_id', 'customer_id', 'order_date', 'order_type', 'payment_terms', 'items'],
     payload: {
       org_id: DEFAULT_ORG_ID,
@@ -57,7 +57,7 @@ const moduleTests = {
   
   salesOrder: {
     name: 'Sales Order Module',
-    endpoint: '/api/v1/orders/',
+    endpoint: '/api/orders/',
     requiredFields: ['org_id', 'customer_id', 'order_date', 'delivery_date', 'items'],
     payload: {
       org_id: DEFAULT_ORG_ID,
@@ -94,7 +94,7 @@ const moduleTests = {
   
   purchase: {
     name: 'Purchase Entry Module',
-    endpoint: '/api/v1/purchases/',
+    endpoint: '/api/purchases/',
     requiredFields: ['org_id', 'supplier_id', 'invoice_number', 'invoice_date', 'items'],
     payload: {
       org_id: DEFAULT_ORG_ID,
@@ -135,7 +135,7 @@ const moduleTests = {
   
   challan: {
     name: 'Delivery Challan Module',
-    endpoint: '/api/v1/challans/',
+    endpoint: '/api/challans/',
     requiredFields: ['org_id', 'customer_id', 'challan_no', 'challan_date', 'items'],
     payload: {
       org_id: DEFAULT_ORG_ID,

@@ -5,7 +5,7 @@
 
 const axios = require('axios');
 
-const API_BASE_URL = 'https://pharma-backend-production-0c09.up.railway.app/api/v1';
+const API_BASE_URL = 'https://pharma-backend-production-0c09.up.railway.app/api';
 
 // Test results storage
 const results = {

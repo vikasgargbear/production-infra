@@ -17,7 +17,7 @@ export const PURCHASE_CONFIG = {
     PURCHASES_ENHANCED: '/api/purchases-enhanced/',
     PURCHASE_UPLOAD: '/api/purchase-upload/',
     PENDING_RECEIPTS: '/api/purchases-enhanced/pending-receipts',
-    RECEIVE_ITEMS: (purchaseId) => `/api/v1/purchases-enhanced/${purchaseId}/receive-fixed`,
+    RECEIVE_ITEMS: (purchaseId) => `/api/purchases-enhanced/${purchaseId}/receive-fixed`,
   },
 
   // Validation Rules

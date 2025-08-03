@@ -16,7 +16,7 @@ from ...core.database import get_db
 from ...core.auth import get_current_org
 
 router = APIRouter(
-    prefix="/api/v1/quick-sale",
+    prefix="/quick-sale",
     tags=["quick-sale"]
 )
 
@@ -403,7 +403,7 @@ async def create_quick_sale(
             total_amount=final_amount,
             order_id=order_id,
             invoice_id=invoice_id,
-            invoice_url=f"/api/v1/invoices/{invoice_id}/print",  # If implemented
+            invoice_url=f"/api/invoices/{invoice_id}/print",  # If implemented
             message=f"Sale completed! Invoice {invoice_number} generated."
         )
         

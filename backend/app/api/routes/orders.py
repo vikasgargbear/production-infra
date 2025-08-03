@@ -463,7 +463,7 @@ async def generate_invoice(
                         "The frontend is using a cached/incorrect order ID",
                         "Try using the create-with-order endpoint instead"
                     ],
-                    "solution": "Use POST /api/v1/invoices/create-with-order to create both order and invoice together"
+                    "solution": "Use POST /api/invoices/create-with-order to create both order and invoice together"
                 }
             )
         

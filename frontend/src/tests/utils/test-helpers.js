@@ -12,7 +12,7 @@ const TEST_ORG_ID = 'ad808530-1ddb-4377-ab20-67bef145d80d';
 
 // Create configured API client
 const apiClient = axios.create({
-  baseURL: `${API_BASE_URL}/api/v2`,
+  baseURL: `${API_BASE_URL}/api`,
   timeout: 10000,
   headers: {
     'Content-Type': 'application/json',
