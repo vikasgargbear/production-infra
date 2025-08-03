@@ -56,6 +56,7 @@ app.add_middleware(
         "https://pharma-erp.vercel.app",  # Vercel deployment
         "https://*.vercel.app",  # Any Vercel preview
         "https://*.railway.app",  # Any Railway preview
+        "*"  # Allow all origins temporarily for debugging
     ],
     allow_credentials=True,
     allow_methods=["*"],

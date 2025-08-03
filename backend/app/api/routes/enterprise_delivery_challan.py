@@ -133,8 +133,8 @@ class EnterpriseChallanService:
                 text("""
                     INSERT INTO sales.delivery_challans (
                         org_id, order_id, customer_id, challan_number,
-                        challan_date, dispatch_date, expected_delivery_date,
-                        status, vehicle_number, driver_name, driver_phone,
+                        challan_date, dispatch_date,
+                        challan_status, vehicle_number, driver_name, driver_phone,
                         transport_company, lr_number, freight_amount,
                         delivery_address, delivery_city, delivery_state,
                         delivery_pincode, delivery_contact_person,
@@ -142,8 +142,8 @@ class EnterpriseChallanService:
                         prepared_by
                     ) VALUES (
                         :org_id, :order_id, :customer_id, :challan_number,
-                        :challan_date, :dispatch_date, :expected_delivery_date,
-                        :status, :vehicle_number, :driver_name, :driver_phone,
+                        :challan_date, :dispatch_date,
+                        :challan_status, :vehicle_number, :driver_name, :driver_phone,
                         :transport_company, :lr_number, :freight_amount,
                         :delivery_address, :delivery_city, :delivery_state,
                         :delivery_pincode, :delivery_contact_person,
@@ -159,7 +159,7 @@ class EnterpriseChallanService:
                     "challan_number": challan_number,
                     "challan_date": date.today(),
                     "dispatch_date": request.dispatch_date,
-                    "expected_delivery_date": request.expected_delivery_date,
+                    # "expected_delivery_date": request.expected_delivery_date,  # TODO: Column doesn't exist
                     "challan_status": "draft",
                     "vehicle_number": request.vehicle_number,
                     "driver_name": request.driver_name,
@@ -315,7 +315,7 @@ async def list_delivery_challans(
                 cust.customer_name,
                 c.challan_status as status,
                 c.dispatch_date,
-                c.expected_delivery_date,
+                -- c.expected_delivery_date,  -- TODO: Column doesn't exist in database
                 c.delivery_address,
                 c.delivery_city,
                 c.vehicle_number,
