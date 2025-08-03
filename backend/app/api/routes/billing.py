@@ -133,7 +133,7 @@ async def list_invoices(
             invoice_dict = dict(row._mapping)
             # Get items for each invoice
             items_result = db.execute(text("""
-                SELECT * FROM invoice_items
+                SELECT * FROM sales.invoice_items
                 WHERE invoice_id = :invoice_id
                 ORDER BY product_name
             """), {"invoice_id": row.invoice_id})

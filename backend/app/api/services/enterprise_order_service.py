@@ -1047,7 +1047,7 @@ class EnterpriseOrderService:
         """Create comprehensive invoice item records"""
         for item in items:
             self.db.execute(text("""
-                INSERT INTO invoice_items (
+                INSERT INTO sales.invoice_items (
                     invoice_id, product_id, product_name,
                     hsn_code, batch_id, batch_number,
                     quantity, unit_price, mrp,

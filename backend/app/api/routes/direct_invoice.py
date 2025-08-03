@@ -212,7 +212,7 @@ async def create_direct_invoice(
         # Insert invoice items
         for item_data in invoice_items:
             db.execute(text("""
-                INSERT INTO invoice_items (
+                INSERT INTO sales.invoice_items (
                     invoice_id, product_id, batch_id,
                     quantity, unit_price,
                     discount_percent, discount_amount, taxable_amount,

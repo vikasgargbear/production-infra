@@ -180,7 +180,7 @@ async def create_direct_sale(
         for idx, (item, calc_item) in enumerate(zip(sale_data.items, invoice_calc["items"])):
             db.execute(
                 text("""
-                    INSERT INTO invoice_items (
+                    INSERT INTO sales.invoice_items (
                         invoice_id, product_id, product_name,
                         quantity, unit_price, 
                         discount_percent, discount_amount,
@@ -448,7 +448,7 @@ async def get_sale_detail(
         items = db.execute(
             text("""
                 SELECT ii.*, p.product_name, p.hsn_code
-                FROM invoice_items ii
+                FROM sales.invoice_items ii
                 LEFT JOIN inventory.products p ON ii.product_id = p.product_id
                 WHERE ii.invoice_id = :sale_id
             """),

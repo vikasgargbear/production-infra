@@ -186,7 +186,7 @@ async def get_invoice_items_for_return(
                 p.product_name,
                 p.hsn_code,
                 COALESCE(SUM(sri.return_quantity), 0) as returned_quantity
-            FROM invoice_items ii
+            FROM sales.invoice_items ii
             LEFT JOIN inventory.products p ON ii.product_id = p.product_id
             LEFT JOIN (
                 SELECT r.product_id, r.batch_id, SUM(r.return_quantity) as return_quantity

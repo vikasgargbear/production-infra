@@ -99,7 +99,7 @@ async def get_invoices(
                     ii.final_amount as line_total,
                     b.batch_number,
                     b.expiry_date
-                FROM invoice_items ii
+                FROM sales.invoice_items ii
                 LEFT JOIN inventory.batches b ON ii.batch_id = b.batch_id
                 WHERE ii.invoice_id = :invoice_id
             """
@@ -266,7 +266,7 @@ async def get_invoice_details(
                 p.product_name, p.product_code, p.hsn_code,
                 p.manufacturer, p.composition,
                 b.batch_number, b.expiry_date
-            FROM invoice_items ii
+            FROM sales.invoice_items ii
             JOIN inventory.products p ON ii.product_id = p.product_id
             LEFT JOIN sales.order_items oi ON oi.product_id = ii.product_id 
                 AND oi.order_id = :order_id

@@ -218,7 +218,7 @@ class BillingService:
                 )
                 
                 db.execute(text("""
-                    INSERT INTO invoice_items (
+                    INSERT INTO sales.invoice_items (
                         invoice_id, product_id, product_name, hsn_code,
                         batch_id, batch_number, quantity, unit_price, mrp,
                         discount_percent, discount_amount,
@@ -277,7 +277,7 @@ class BillingService:
         
         # Get invoice items
         items = db.execute(text("""
-            SELECT * FROM invoice_items
+            SELECT * FROM sales.invoice_items
             WHERE invoice_id = :invoice_id
             ORDER BY product_name
         """), {"invoice_id": invoice_id}).fetchall()

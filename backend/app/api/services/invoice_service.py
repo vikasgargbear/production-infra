@@ -223,7 +223,7 @@ class InvoiceService:
     def copy_order_items_to_invoice(db: Session, order_id: int, invoice_id: int):
         """Copy order items to invoice items table"""
         db.execute(text("""
-            INSERT INTO invoice_items (
+            INSERT INTO sales.invoice_items (
                 invoice_id, product_id, product_name, product_code,
                 batch_number, quantity, unit_price, 
                 discount_percent, discount_amount,
@@ -269,7 +269,7 @@ class InvoiceService:
         
         # Get invoice items
         items = db.execute(text("""
-            SELECT * FROM invoice_items
+            SELECT * FROM sales.invoice_items
             WHERE invoice_id = :invoice_id
             ORDER BY invoice_item_id
         """), {"invoice_id": invoice_id}).fetchall()
