@@ -210,9 +210,15 @@ async def create_product(
         
         created = result.fetchone()
         
-        # If quantity OR price is provided, create an initial batch (simplified workflow for non-technical users)
-        if (product.get("quantity_available") and float(product.get("quantity_available", 0)) > 0) or \
-           (product.get("mrp") and float(product.get("mrp", 0)) > 0):
+        # Create initial batch for products that maintain batches (simplified workflow for non-technical users)
+        # Check if product should have batches - either maintain_batch is True OR explicit values provided
+        should_create_batch = (
+            product_data.get("maintain_batch", True) or  # Default to True for pharmacy products
+            (product.get("quantity_available") and float(product.get("quantity_available", 0)) > 0) or 
+            (product.get("mrp") and float(product.get("mrp", 0)) > 0)
+        )
+        
+        if should_create_batch:
             
             # Use provided prices or set defaults
             mrp = float(product.get("mrp", 100))  # Default MRP ₹100
@@ -268,6 +274,17 @@ async def create_product(
                 
                 batch = batch_result.fetchone()
                 logger.info(f"Initial batch created for product {created.product_code}: Batch ID {batch.batch_id}, MRP: {mrp}, Selling: {sale_price}")
+                
+                # Update product's current_mrp with the batch MRP
+                try:
+                    db.execute(text("""
+                        UPDATE inventory.products 
+                        SET current_mrp = :mrp 
+                        WHERE product_id = :product_id
+                    """), {"mrp": mrp, "product_id": created.product_id})
+                    logger.info(f"Updated product current_mrp to ₹{mrp}")
+                except Exception as mrp_error:
+                    logger.warning(f"Could not update product current_mrp: {mrp_error}")
                 
                 # Try to re-enable trigger
                 try:
