@@ -1,24 +1,24 @@
 {
-  "timestamp": "2025-08-03T02:03:11.384Z",
+  "timestamp": "2025-08-03T02:06:39.280Z",
   "summary": {
     "total": 53,
-    "passed": 9,
-    "failed": 44
+    "passed": 11,
+    "failed": 42
   },
   "groups": {
     "products": {
       "total": 4,
-      "passed": 0,
-      "failed": 4,
+      "passed": 2,
+      "failed": 2,
       "endpoints": [
         {
           "method": "GET",
           "path": "/products/search?q=&limit=10",
           "description": "Product search (empty)",
           "result": {
-            "success": false,
-            "error": "Request failed with status code 500",
-            "status": 500
+            "success": true,
+            "status": 200,
+            "hasData": true
           }
         },
         {
@@ -26,9 +26,9 @@
           "path": "/products/search?q=test&limit=10",
           "description": "Product search with query",
           "result": {
-            "success": false,
-            "error": "Request failed with status code 500",
-            "status": 500
+            "success": true,
+            "status": 200,
+            "hasData": true
           }
         },
         {

@@ -495,6 +495,170 @@ class InvoiceCalculateResponse(BaseModel):
     round_off: Decimal
     final_amount: Decimal
 
+@router.post("/")
+async def create_invoice(
+    invoice_data: dict,
+    db: Session = Depends(get_db)
+):
+    """
+    Create a new invoice with items
+    """
+    try:
+        # Generate invoice number
+        result = db.execute(
+            text("""
+                SELECT COALESCE(MAX(CAST(SUBSTRING(invoice_number FROM '[0-9]+') AS INTEGER)), 0) + 1 as next_num
+                FROM sales.invoices
+                WHERE org_id = :org_id
+                AND invoice_number LIKE 'INV-%'
+            """),
+            {"org_id": DEFAULT_ORG_ID}
+        )
+        next_num = result.scalar() or 1
+        invoice_number = f"INV-{next_num:06d}"
+        
+        # Create invoice record
+        invoice_result = db.execute(
+            text("""
+                INSERT INTO sales.invoices (
+                    org_id, branch_id, invoice_number, invoice_date, invoice_type,
+                    customer_id, customer_name, customer_phone, customer_address,
+                    customer_gst, payment_terms, due_date, place_of_supply,
+                    subtotal_amount, discount_amount, taxable_amount,
+                    cgst_amount, sgst_amount, igst_amount, total_tax_amount,
+                    final_amount, invoice_status, payment_status,
+                    notes, created_by
+                ) VALUES (
+                    :org_id, 1, :invoice_number, :invoice_date, :invoice_type,
+                    :customer_id, :customer_name, :customer_phone, :customer_address,
+                    :customer_gst, :payment_terms, :due_date, :place_of_supply,
+                    :subtotal_amount, :discount_amount, :taxable_amount,
+                    :cgst_amount, :sgst_amount, :igst_amount, :total_tax_amount,
+                    :final_amount, 'posted', 'unpaid',
+                    :notes, :created_by
+                )
+                RETURNING invoice_id
+            """),
+            {
+                "org_id": DEFAULT_ORG_ID,
+                "invoice_number": invoice_number,
+                "invoice_date": invoice_data.get("invoice_date", date.today()),
+                "invoice_type": invoice_data.get("invoice_type", "tax_invoice"),
+                "customer_id": invoice_data["customer_id"],
+                "customer_name": invoice_data.get("customer_name", ""),
+                "customer_phone": invoice_data.get("customer_phone"),
+                "customer_address": invoice_data.get("billing_address"),
+                "customer_gst": invoice_data.get("customer_gst"),
+                "payment_terms": invoice_data.get("payment_terms", "cash"),
+                "due_date": invoice_data.get("due_date"),
+                "place_of_supply": invoice_data.get("place_of_supply", "Gujarat"),
+                "subtotal_amount": invoice_data.get("subtotal", 0),
+                "discount_amount": invoice_data.get("discount_amount", 0),
+                "taxable_amount": invoice_data.get("subtotal", 0) - invoice_data.get("discount_amount", 0),
+                "cgst_amount": invoice_data.get("cgst_amount", 0),
+                "sgst_amount": invoice_data.get("sgst_amount", 0),
+                "igst_amount": invoice_data.get("igst_amount", 0),
+                "total_tax_amount": invoice_data.get("tax_amount", 0),
+                "final_amount": invoice_data.get("total_amount", 0),
+                "notes": invoice_data.get("notes"),
+                "created_by": invoice_data.get("created_by", 1)
+            }
+        )
+        invoice_id = invoice_result.scalar()
+        
+        # Create invoice items
+        for item in invoice_data.get("items", []):
+            db.execute(
+                text("""
+                    INSERT INTO sales.invoice_items (
+                        invoice_id, product_id, product_name, product_code,
+                        batch_id, batch_number, hsn_code, quantity,
+                        unit_price, mrp, discount_percent, discount_amount,
+                        taxable_amount, gst_percent, cgst_amount, sgst_amount,
+                        igst_amount, final_amount
+                    ) VALUES (
+                        :invoice_id, :product_id, :product_name, :product_code,
+                        :batch_id, :batch_number, :hsn_code, :quantity,
+                        :unit_price, :mrp, :discount_percent, :discount_amount,
+                        :taxable_amount, :gst_percent, :cgst_amount, :sgst_amount,
+                        :igst_amount, :final_amount
+                    )
+                """),
+                {
+                    "invoice_id": invoice_id,
+                    "product_id": item.get("product_id"),
+                    "product_name": item.get("product_name"),
+                    "product_code": item.get("product_code"),
+                    "batch_id": item.get("batch_id"),
+                    "batch_number": item.get("batch_number", "DEFAULT"),
+                    "hsn_code": item.get("hsn_code"),
+                    "quantity": item.get("quantity", 1),
+                    "unit_price": item.get("rate", 0),
+                    "mrp": item.get("mrp", 0),
+                    "discount_percent": item.get("discount_percent", 0),
+                    "discount_amount": item.get("discount_amount", 0),
+                    "taxable_amount": item.get("taxable_amount", item.get("rate", 0) * item.get("quantity", 1)),
+                    "gst_percent": item.get("gst_percent", 12),
+                    "cgst_amount": item.get("cgst_amount", 0),
+                    "sgst_amount": item.get("sgst_amount", 0),
+                    "igst_amount": item.get("igst_amount", 0),
+                    "final_amount": item.get("total_amount", 0)
+                }
+            )
+            
+            # Update batch quantity if batch_id provided
+            if item.get("batch_id"):
+                db.execute(
+                    text("""
+                        UPDATE inventory.batches
+                        SET quantity_available = quantity_available - :quantity,
+                            quantity_allocated = quantity_allocated + :quantity
+                        WHERE batch_id = :batch_id
+                    """),
+                    {
+                        "quantity": item.get("quantity", 1),
+                        "batch_id": item.get("batch_id")
+                    }
+                )
+        
+        # Create financial entry
+        db.execute(
+            text("""
+                INSERT INTO financial.customer_outstanding (
+                    org_id, customer_id, document_type, document_id,
+                    document_number, document_date, due_date,
+                    original_amount, outstanding_amount, status
+                ) VALUES (
+                    :org_id, :customer_id, 'invoice', :invoice_id,
+                    :invoice_number, :invoice_date, :due_date,
+                    :amount, :amount, 'open'
+                )
+            """),
+            {
+                "org_id": DEFAULT_ORG_ID,
+                "customer_id": invoice_data["customer_id"],
+                "invoice_id": invoice_id,
+                "invoice_number": invoice_number,
+                "invoice_date": invoice_data.get("invoice_date", date.today()),
+                "due_date": invoice_data.get("due_date"),
+                "amount": invoice_data.get("total_amount", 0)
+            }
+        )
+        
+        db.commit()
+        
+        return {
+            "invoice_id": invoice_id,
+            "invoice_number": invoice_number,
+            "message": "Invoice created successfully",
+            "total_amount": invoice_data.get("total_amount", 0)
+        }
+        
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Error creating invoice: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 @router.post("/calculate-live", response_model=InvoiceCalculateResponse)
 async def calculate_invoice_totals(
     request: InvoiceCalculateRequest,
