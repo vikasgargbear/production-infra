@@ -598,7 +598,7 @@ async def create_invoice(
                         delivery_charges, total_amount, order_status,
                         created_by, created_at, updated_at
                     ) VALUES (
-                        :org_id, 1, :order_number, :order_date, 'sales_order',
+                        :org_id, 1, :order_number, :order_date, 'sales',
                         :customer_id, :customer_name, 'pickup', :payment_mode,
                         :subtotal, :discount, :taxable,
                         :cgst, :sgst, 0, :total_tax,
@@ -610,7 +610,7 @@ async def create_invoice(
                 {
                     "org_id": ACTUAL_ORG_ID,
                     "order_number": order_number,
-                    "order_date": invoice_data.get("invoice_date", date.today()),
+                    "order_date": date.today(),  # Use date, not datetime
                     "customer_id": invoice_data["customer_id"],
                     "customer_name": invoice_data.get("customer_name", ""),
                     "payment_mode": invoice_data.get("payment_method", "cash"),
@@ -628,14 +628,15 @@ async def create_invoice(
             
         except Exception as order_error:
             logger.error(f"Failed to create order: {order_error}")
-            raise HTTPException(status_code=500, detail=f"Failed to create order: {order_error}")
+            db.rollback()
+            raise HTTPException(status_code=500, detail=f"Failed to create order: {str(order_error)}")
         
         # Step 4: Create invoice record with order_id
         invoice_params = {
             "org_id": ACTUAL_ORG_ID,
             "order_id": order_id,  # Link to order
             "invoice_number": invoice_number,
-            "invoice_date": invoice_data.get("invoice_date", date.today()),
+            "invoice_date": date.today(),  # Use date, not datetime from request
             "invoice_type": invoice_data.get("invoice_type", "tax_invoice"),
             "customer_id": invoice_data["customer_id"],
             "customer_name": invoice_data.get("customer_name", ""),
@@ -932,7 +933,7 @@ async def create_invoice(
                 RETURNING entry_id
             """), {
                 "org_id": ACTUAL_ORG_ID,
-                "entry_date": invoice_data.get("invoice_date", date.today()),
+                "entry_date": date.today(),  # Use date object
                 "invoice_id": invoice_id,
                 "narration": f"Sales Invoice {invoice_number}",
                 "amount": final_total
@@ -952,7 +953,7 @@ async def create_invoice(
                     )
                 """), {
                     "org_id": ACTUAL_ORG_ID,
-                    "trans_date": invoice_data.get("invoice_date", date.today()),
+                    "trans_date": date.today(),  # Use date object
                     "invoice_id": invoice_id,
                     "gstin": "27AABCU9603R1ZM",  # Company GSTIN
                     "cgst": round(total_cgst, 2),
