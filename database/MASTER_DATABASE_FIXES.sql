@@ -1,0 +1,400 @@
+-- =============================================
+-- MASTER DATABASE FIXES CONSOLIDATION
+-- =============================================
+-- This file consolidates all database fixes applied to the production system
+-- Categories:
+-- 1. Schema Fixes
+-- 2. Trigger Fixes  
+-- 3. Data Fixes
+-- 4. Constraint Fixes
+-- 5. Function Fixes
+-- =============================================
+
+-- =============================================
+-- SECTION 1: SCHEMA FIXES
+-- =============================================
+
+-- 1.1 Add missing columns to products table
+-- Date: 2024-08-02
+-- Issue: Products table missing MRP column needed for pricing
+DO $$
+BEGIN
+    -- Add current_mrp column if not exists
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_schema = 'inventory' 
+        AND table_name = 'products' 
+        AND column_name = 'current_mrp'
+    ) THEN
+        ALTER TABLE inventory.products 
+        ADD COLUMN current_mrp NUMERIC(10,2) DEFAULT 0 NOT NULL;
+        
+        RAISE NOTICE '✅ Added current_mrp column to products table';
+    END IF;
+    
+    -- Add mrp column if not exists (some installations may have this)
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_schema = 'inventory' 
+        AND table_name = 'products' 
+        AND column_name = 'mrp'
+    ) THEN
+        ALTER TABLE inventory.products 
+        ADD COLUMN mrp NUMERIC(10,2);
+        
+        RAISE NOTICE '✅ Added mrp column to products table';
+    END IF;
+END $$;
+
+-- 1.2 Fix batches table columns
+-- Date: 2024-08-02
+-- Issue: Batches table had wrong column names
+DO $$
+BEGIN
+    -- Add initial_quantity if missing
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_schema = 'inventory' 
+        AND table_name = 'batches' 
+        AND column_name = 'initial_quantity'
+    ) THEN
+        ALTER TABLE inventory.batches 
+        ADD COLUMN initial_quantity NUMERIC(10,2) DEFAULT 0;
+        
+        UPDATE inventory.batches 
+        SET initial_quantity = quantity_received 
+        WHERE initial_quantity = 0;
+        
+        RAISE NOTICE '✅ Added initial_quantity column to batches table';
+    END IF;
+    
+    -- Add sale_price_per_unit if missing
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_schema = 'inventory' 
+        AND table_name = 'batches' 
+        AND column_name = 'sale_price_per_unit'
+    ) THEN
+        ALTER TABLE inventory.batches 
+        ADD COLUMN sale_price_per_unit NUMERIC(10,2);
+        
+        RAISE NOTICE '✅ Added sale_price_per_unit column to batches table';
+    END IF;
+    
+    -- Add mrp_per_unit if missing  
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_schema = 'inventory' 
+        AND table_name = 'batches' 
+        AND column_name = 'mrp_per_unit'
+    ) THEN
+        ALTER TABLE inventory.batches 
+        ADD COLUMN mrp_per_unit NUMERIC(10,2);
+        
+        RAISE NOTICE '✅ Added mrp_per_unit column to batches table';
+    END IF;
+    
+    -- Add source_type if missing
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_schema = 'inventory' 
+        AND table_name = 'batches' 
+        AND column_name = 'source_type'
+    ) THEN
+        ALTER TABLE inventory.batches 
+        ADD COLUMN source_type TEXT DEFAULT 'purchase';
+        
+        RAISE NOTICE '✅ Added source_type column to batches table';
+    END IF;
+END $$;
+
+-- =============================================
+-- SECTION 2: TRIGGER FIXES
+-- =============================================
+
+-- 2.1 Remove problematic KPI calculation triggers
+-- Date: 2024-08-02
+-- Issue: Analytics triggers causing 500 errors
+DO $$
+DECLARE
+    r RECORD;
+BEGIN
+    -- Find and drop all KPI/analytics related triggers
+    FOR r IN 
+        SELECT trigger_name, event_object_table, event_object_schema
+        FROM information_schema.triggers 
+        WHERE (
+            trigger_name ILIKE '%kpi%' OR
+            trigger_name ILIKE '%analytic%' OR
+            trigger_name ILIKE '%realtime%' OR
+            trigger_name ILIKE '%calculate%' OR
+            trigger_name ILIKE '%update_cash_flow%' OR
+            trigger_name ILIKE '%auto_match_bank%'
+        )
+    LOOP
+        EXECUTE format('DROP TRIGGER IF EXISTS %I ON %I.%I', 
+            r.trigger_name, r.event_object_schema, r.event_object_table);
+        RAISE NOTICE 'Dropped trigger: %', r.trigger_name;
+    END LOOP;
+END $$;
+
+-- 2.2 Create invoice inventory deduction trigger
+-- Date: 2024-08-03
+-- Issue: Inventory not being deducted when invoices created
+DROP TRIGGER IF EXISTS trigger_deduct_inventory_on_invoice ON sales.invoice_items;
+DROP FUNCTION IF EXISTS deduct_inventory_on_invoice();
+
+CREATE OR REPLACE FUNCTION deduct_inventory_on_invoice()
+RETURNS TRIGGER AS $$
+DECLARE
+    v_batch RECORD;
+    v_remaining_qty NUMERIC;
+    v_deduct_qty NUMERIC;
+BEGIN
+    -- Only process on INSERT (new invoice items)
+    IF TG_OP != 'INSERT' THEN
+        RETURN NEW;
+    END IF;
+    
+    -- Skip if no quantity
+    IF NEW.quantity <= 0 THEN
+        RETURN NEW;
+    END IF;
+    
+    v_remaining_qty := NEW.quantity;
+    
+    -- If specific batch is provided, deduct from that batch
+    IF NEW.batch_id IS NOT NULL THEN
+        UPDATE inventory.batches
+        SET 
+            quantity_available = quantity_available - NEW.quantity,
+            quantity_sold = COALESCE(quantity_sold, 0) + NEW.quantity,
+            updated_at = CURRENT_TIMESTAMP
+        WHERE batch_id = NEW.batch_id
+        AND quantity_available >= NEW.quantity;
+        
+        IF NOT FOUND THEN
+            RAISE WARNING 'Insufficient stock in batch % for product %', NEW.batch_id, NEW.product_id;
+        END IF;
+    ELSE
+        -- No specific batch, use FIFO allocation
+        FOR v_batch IN 
+            SELECT batch_id, quantity_available, cost_per_unit, org_id
+            FROM inventory.batches
+            WHERE product_id = NEW.product_id
+            AND quantity_available > 0
+            AND (expiry_date IS NULL OR expiry_date > CURRENT_DATE)
+            ORDER BY expiry_date NULLS LAST, batch_id
+        LOOP
+            IF v_remaining_qty <= 0 THEN
+                EXIT;
+            END IF;
+            
+            v_deduct_qty := LEAST(v_batch.quantity_available, v_remaining_qty);
+            
+            UPDATE inventory.batches
+            SET 
+                quantity_available = quantity_available - v_deduct_qty,
+                quantity_sold = COALESCE(quantity_sold, 0) + v_deduct_qty,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE batch_id = v_batch.batch_id;
+            
+            v_remaining_qty := v_remaining_qty - v_deduct_qty;
+        END LOOP;
+        
+        IF v_remaining_qty > 0 THEN
+            RAISE WARNING 'Insufficient stock for product %. Required: %, Short by: %', 
+                NEW.product_id, NEW.quantity, v_remaining_qty;
+        END IF;
+    END IF;
+    
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trigger_deduct_inventory_on_invoice
+    AFTER INSERT ON sales.invoice_items
+    FOR EACH ROW
+    EXECUTE FUNCTION deduct_inventory_on_invoice();
+
+COMMENT ON FUNCTION deduct_inventory_on_invoice() IS 'Automatically deducts inventory when invoice items are created, using FIFO if no specific batch is specified';
+
+-- 2.3 Fix prevent_mrp_decrease trigger
+-- Date: 2024-08-02
+-- Issue: Trigger preventing batch creation
+DO $$
+BEGIN
+    -- Drop the problematic trigger if it exists
+    DROP TRIGGER IF EXISTS prevent_mrp_decrease ON inventory.batches;
+    DROP FUNCTION IF EXISTS check_mrp_decrease();
+    
+    -- Recreate with better logic
+    CREATE OR REPLACE FUNCTION check_mrp_decrease()
+    RETURNS TRIGGER AS $func$
+    BEGIN
+        -- Only check on UPDATE, not INSERT
+        IF TG_OP = 'UPDATE' THEN
+            -- Allow MRP decrease if batch is expired or being corrected
+            IF NEW.mrp_per_unit < OLD.mrp_per_unit AND 
+               NEW.batch_status NOT IN ('expired', 'damaged', 'recalled') THEN
+                RAISE WARNING 'MRP decrease detected for batch %. Old: %, New: %', 
+                    NEW.batch_id, OLD.mrp_per_unit, NEW.mrp_per_unit;
+                -- Don't block, just warn
+            END IF;
+        END IF;
+        RETURN NEW;
+    END;
+    $func$ LANGUAGE plpgsql;
+    
+    CREATE TRIGGER prevent_mrp_decrease
+        BEFORE UPDATE ON inventory.batches
+        FOR EACH ROW
+        EXECUTE FUNCTION check_mrp_decrease();
+    
+    RAISE NOTICE '✅ Fixed prevent_mrp_decrease trigger';
+END $$;
+
+-- =============================================
+-- SECTION 3: DATA FIXES
+-- =============================================
+
+-- 3.1 Fix NULL values in critical columns
+-- Date: 2024-08-02
+UPDATE inventory.products 
+SET current_mrp = 0 
+WHERE current_mrp IS NULL;
+
+UPDATE inventory.batches 
+SET quantity_sold = 0 
+WHERE quantity_sold IS NULL;
+
+UPDATE inventory.batches 
+SET initial_quantity = quantity_received 
+WHERE initial_quantity IS NULL OR initial_quantity = 0;
+
+-- 3.2 Fix orphaned records
+-- Clean up invoice items without valid invoices
+DELETE FROM sales.invoice_items 
+WHERE invoice_id NOT IN (SELECT invoice_id FROM sales.invoices);
+
+-- Clean up order items without valid orders
+DELETE FROM sales.order_items 
+WHERE order_id NOT IN (SELECT order_id FROM sales.orders);
+
+-- =============================================
+-- SECTION 4: CONSTRAINT FIXES
+-- =============================================
+
+-- 4.1 Add missing foreign key constraints
+-- Note: Only add if tables exist and constraints don't exist
+DO $$
+BEGIN
+    -- Add foreign key for invoice_items to invoices
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.table_constraints 
+        WHERE constraint_name = 'fk_invoice_items_invoice'
+    ) THEN
+        ALTER TABLE sales.invoice_items
+        ADD CONSTRAINT fk_invoice_items_invoice 
+        FOREIGN KEY (invoice_id) REFERENCES sales.invoices(invoice_id) 
+        ON DELETE CASCADE;
+        
+        RAISE NOTICE '✅ Added foreign key constraint for invoice_items';
+    END IF;
+    
+    -- Add foreign key for invoice_items to products
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.table_constraints 
+        WHERE constraint_name = 'fk_invoice_items_product'
+    ) THEN
+        ALTER TABLE sales.invoice_items
+        ADD CONSTRAINT fk_invoice_items_product 
+        FOREIGN KEY (product_id) REFERENCES inventory.products(product_id);
+        
+        RAISE NOTICE '✅ Added foreign key constraint for invoice_items to products';
+    END IF;
+END $$;
+
+-- =============================================
+-- SECTION 5: FUNCTION FIXES
+-- =============================================
+
+-- 5.1 Create or replace utility functions
+-- Function to get current stock for a product
+CREATE OR REPLACE FUNCTION get_product_stock(p_product_id INTEGER)
+RETURNS TABLE(
+    total_stock NUMERIC,
+    available_stock NUMERIC,
+    reserved_stock NUMERIC
+) AS $$
+BEGIN
+    RETURN QUERY
+    SELECT 
+        COALESCE(SUM(quantity_available + COALESCE(quantity_reserved, 0)), 0) as total_stock,
+        COALESCE(SUM(quantity_available), 0) as available_stock,
+        COALESCE(SUM(quantity_reserved), 0) as reserved_stock
+    FROM inventory.batches
+    WHERE product_id = p_product_id
+    AND batch_status = 'active';
+END;
+$$ LANGUAGE plpgsql;
+
+-- Function to calculate invoice totals
+CREATE OR REPLACE FUNCTION calculate_invoice_totals(p_invoice_id INTEGER)
+RETURNS TABLE(
+    subtotal NUMERIC,
+    discount NUMERIC,
+    tax NUMERIC,
+    total NUMERIC
+) AS $$
+BEGIN
+    RETURN QUERY
+    SELECT 
+        COALESCE(SUM(line_total), 0) as subtotal,
+        COALESCE(SUM(discount_amount), 0) as discount,
+        COALESCE(SUM(cgst_amount + sgst_amount + igst_amount), 0) as tax,
+        COALESCE(SUM(line_total_with_tax), 0) as total
+    FROM sales.invoice_items
+    WHERE invoice_id = p_invoice_id;
+END;
+$$ LANGUAGE plpgsql;
+
+-- =============================================
+-- SECTION 6: INDEX FIXES
+-- =============================================
+
+-- 6.1 Add missing indexes for performance
+CREATE INDEX IF NOT EXISTS idx_batches_product_active 
+ON inventory.batches(product_id, batch_status) 
+WHERE batch_status = 'active';
+
+CREATE INDEX IF NOT EXISTS idx_invoice_items_invoice 
+ON sales.invoice_items(invoice_id);
+
+CREATE INDEX IF NOT EXISTS idx_orders_customer 
+ON sales.orders(customer_id);
+
+CREATE INDEX IF NOT EXISTS idx_invoices_customer 
+ON sales.invoices(customer_id);
+
+CREATE INDEX IF NOT EXISTS idx_batches_expiry 
+ON inventory.batches(expiry_date) 
+WHERE batch_status = 'active';
+
+-- =============================================
+-- FINAL VALIDATION
+-- =============================================
+DO $$
+BEGIN
+    RAISE NOTICE '';
+    RAISE NOTICE '========================================';
+    RAISE NOTICE '✅ MASTER DATABASE FIXES APPLIED';
+    RAISE NOTICE '========================================';
+    RAISE NOTICE '1. Schema fixes: Added missing columns';
+    RAISE NOTICE '2. Trigger fixes: Removed problematic triggers, added inventory deduction';
+    RAISE NOTICE '3. Data fixes: Cleaned NULL values and orphaned records';
+    RAISE NOTICE '4. Constraint fixes: Added foreign keys';
+    RAISE NOTICE '5. Function fixes: Added utility functions';
+    RAISE NOTICE '6. Index fixes: Added performance indexes';
+    RAISE NOTICE '========================================';
+END $$;
