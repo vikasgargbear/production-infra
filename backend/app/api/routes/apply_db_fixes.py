@@ -41,7 +41,76 @@ async def apply_column_fixes(db: Session = Depends(get_db)):
         except Exception as e:
             logger.error(f"Error adding item_id: {e}")
         
-        # Fix 2: Add gstin to customers
+        # Fix 2: Add missing columns to invoice_items
+        try:
+            # Check and add gst_percentage
+            result = db.execute(text("""
+                SELECT column_name 
+                FROM information_schema.columns 
+                WHERE table_schema = 'sales' 
+                AND table_name = 'invoice_items' 
+                AND column_name = 'gst_percentage'
+            """))
+            
+            if not result.fetchone():
+                db.execute(text("""
+                    ALTER TABLE sales.invoice_items 
+                    ADD COLUMN gst_percentage NUMERIC(5,2) DEFAULT 0
+                """))
+                fixes_applied.append("Added gst_percentage column to sales.invoice_items")
+                
+            # Check and add discount_percentage
+            result = db.execute(text("""
+                SELECT column_name 
+                FROM information_schema.columns 
+                WHERE table_schema = 'sales' 
+                AND table_name = 'invoice_items' 
+                AND column_name = 'discount_percentage'
+            """))
+            
+            if not result.fetchone():
+                db.execute(text("""
+                    ALTER TABLE sales.invoice_items 
+                    ADD COLUMN discount_percentage NUMERIC(5,2) DEFAULT 0
+                """))
+                fixes_applied.append("Added discount_percentage column to sales.invoice_items")
+                
+            # Check and add line_total
+            result = db.execute(text("""
+                SELECT column_name 
+                FROM information_schema.columns 
+                WHERE table_schema = 'sales' 
+                AND table_name = 'invoice_items' 
+                AND column_name = 'line_total'
+            """))
+            
+            if not result.fetchone():
+                db.execute(text("""
+                    ALTER TABLE sales.invoice_items 
+                    ADD COLUMN line_total NUMERIC(15,2) DEFAULT 0
+                """))
+                fixes_applied.append("Added line_total column to sales.invoice_items")
+                
+            # Check and add line_total_with_tax
+            result = db.execute(text("""
+                SELECT column_name 
+                FROM information_schema.columns 
+                WHERE table_schema = 'sales' 
+                AND table_name = 'invoice_items' 
+                AND column_name = 'line_total_with_tax'
+            """))
+            
+            if not result.fetchone():
+                db.execute(text("""
+                    ALTER TABLE sales.invoice_items 
+                    ADD COLUMN line_total_with_tax NUMERIC(15,2) DEFAULT 0
+                """))
+                fixes_applied.append("Added line_total_with_tax column to sales.invoice_items")
+                
+        except Exception as e:
+            logger.error(f"Error adding invoice_items columns: {e}")
+        
+        # Fix 3: Add gstin to customers
         try:
             result = db.execute(text("""
                 SELECT column_name 
@@ -68,7 +137,7 @@ async def apply_column_fixes(db: Session = Depends(get_db)):
         except Exception as e:
             logger.error(f"Error adding gstin: {e}")
         
-        # Fix 3: Update API function to use gst_number instead of gstin
+        # Fix 4: Update API function to use gst_number instead of gstin
         try:
             db.execute(text("""
                 CREATE OR REPLACE FUNCTION api.search_customers(
