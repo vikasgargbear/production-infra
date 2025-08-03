@@ -536,18 +536,35 @@ async def test_invoice_flow(db: Session = Depends(get_db)) -> Dict[str, Any]:
         branch = branch_check.fetchone()
         branch_id = branch[0] if branch else 1
         
-        # Try to get a user_id, fallback to 1 if users table doesn't exist
-        created_by = 1
-        try:
-            user_check = db.execute(text("""
-                SELECT user_id FROM master.users LIMIT 1
-            """))
-            user = user_check.fetchone()
-            if user:
-                created_by = user[0]
-        except:
-            db.rollback()  # Clear the failed transaction
-            pass  # Use default created_by = 1
+        # Get a valid user_id from org_users
+        user_check = db.execute(text("""
+            SELECT user_id FROM master.org_users 
+            WHERE org_id = 'ad808530-1ddb-4377-ab20-67bef145d80d'
+            LIMIT 1
+        """))
+        user = user_check.fetchone()
+        created_by = user[0] if user else None
+        
+        # If no user found, create a test user
+        if not created_by:
+            try:
+                user_create = db.execute(text("""
+                    INSERT INTO master.org_users (
+                        org_id, username, email, full_name, 
+                        is_active, created_at
+                    ) VALUES (
+                        'ad808530-1ddb-4377-ab20-67bef145d80d',
+                        'test_user', 'test@example.com', 'Test User',
+                        true, CURRENT_TIMESTAMP
+                    ) RETURNING user_id
+                """))
+                created_by = user_create.fetchone()[0]
+            except:
+                db.rollback()
+                # Try to get any user
+                any_user = db.execute(text("SELECT user_id FROM master.org_users LIMIT 1"))
+                result = any_user.fetchone()
+                created_by = result[0] if result else 1
         
         order_result = db.execute(text("""
             INSERT INTO sales.orders (
