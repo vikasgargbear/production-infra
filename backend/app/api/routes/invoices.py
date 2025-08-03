@@ -543,14 +543,33 @@ async def create_invoice(
         }
         
         try:
-            # Remove problematic real-time KPI triggers first (user requested removal)
+            # Remove ALL analytics/KPI related triggers (user is OK without analytics for now)
             try:
-                db.execute(text("DROP TRIGGER IF EXISTS calculate_realtime_kpis ON sales.invoices"))
-                db.execute(text("DROP TRIGGER IF EXISTS update_kpi_actuals ON sales.invoices"))
-                db.execute(text("DROP TRIGGER IF EXISTS refresh_kpi_cache ON sales.invoices"))
-                logger.info("Removed real-time KPI triggers as requested - will use batch KPIs later")
-            except:
-                pass  # Triggers might not exist
+                # Get all triggers on sales.invoices table and drop any analytics-related ones
+                trigger_result = db.execute(text("""
+                    SELECT trigger_name FROM information_schema.triggers 
+                    WHERE event_object_table = 'invoices' 
+                    AND event_object_schema = 'sales'
+                    AND (trigger_name ILIKE '%kpi%' 
+                         OR trigger_name ILIKE '%analytic%' 
+                         OR trigger_name ILIKE '%realtime%'
+                         OR trigger_name ILIKE '%calculate%')
+                """))
+                
+                triggers_to_drop = [row[0] for row in trigger_result.fetchall()]
+                
+                for trigger_name in triggers_to_drop:
+                    db.execute(text(f"DROP TRIGGER IF EXISTS {trigger_name} ON sales.invoices"))
+                    logger.info(f"Dropped analytics trigger: {trigger_name}")
+                
+                if triggers_to_drop:
+                    logger.info(f"Removed {len(triggers_to_drop)} analytics triggers as requested")
+                else:
+                    logger.info("No analytics triggers found to remove")
+                    
+            except Exception as trigger_error:
+                logger.warning(f"Could not clean up analytics triggers: {trigger_error}")
+                # Continue anyway
             
             # Create invoice record (KPI triggers now removed)
             invoice_result = db.execute(
