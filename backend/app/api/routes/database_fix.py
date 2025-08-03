@@ -314,7 +314,16 @@ async def auto_fix_issues(db: Session = Depends(get_db)) -> Dict[str, Any]:
             """))
             fixed.append("Dropped broken GST trigger")
         except Exception as e:
-            failed.append(f"Drop trigger: {str(e)}")
+            failed.append(f"Drop GST trigger: {str(e)}")
+        
+        # Fix 4: Drop sync_order_invoice_status trigger that references non-existent columns
+        try:
+            db.execute(text("""
+                DROP TRIGGER IF EXISTS sync_order_invoice_status_trigger ON sales.invoices CASCADE
+            """))
+            fixed.append("Dropped broken sync_order_invoice_status trigger")
+        except Exception as e:
+            failed.append(f"Drop sync trigger: {str(e)}")
         
         if fixed:
             db.commit()
