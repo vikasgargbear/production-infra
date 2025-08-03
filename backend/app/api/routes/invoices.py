@@ -589,6 +589,7 @@ async def create_invoice(
         final_subtotal = round(subtotal_calculated, 2) if subtotal_calculated > 0 else invoice_data.get("subtotal", 0)
         
         # Step 3: Create Order (required by invoice foreign key)
+        logger.info(f"Creating order for customer {invoice_data.get('customer_id')}")
         try:
             order_create = db.execute(
                 text("""
@@ -729,11 +730,11 @@ async def create_invoice(
                     product_id = int(product_id)
                 logger.info(f"Processing item {idx+1}/{len(items_list)} with product_id: {product_id} (type: {type(product_id).__name__})")
                 
-                # Get batch details first (simpler query)
+                # Get batch details first (simpler query - no mrp column in batches!)
                 logger.info(f"Querying batch for product_id {product_id}")
                 product_batch = db.execute(text("""
                     SELECT b.batch_id, b.product_id, b.batch_number, 
-                           b.sale_price_per_unit, b.mrp, b.quantity_available
+                           b.sale_price_per_unit, b.quantity_available
                     FROM inventory.batches b
                     WHERE b.product_id = :product_id
                     AND b.quantity_available > 0
@@ -770,7 +771,7 @@ async def create_invoice(
                 # Calculate item amounts using batch price
                 quantity = float(item.get("quantity", 1))
                 unit_price = float(product_batch.sale_price_per_unit or item.get("unit_price", 0))
-                mrp = float(product_batch.mrp or unit_price)
+                mrp = float(item.get("mrp", unit_price * 1.2))  # Use mrp from item or calculate from unit_price
                 discount_percent = float(item.get("discount_percent", 0) or item.get("discount_percentage", 0))
                 gst_percent = gst_percentage  # Use the GST from above
                 

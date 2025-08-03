@@ -111,7 +111,7 @@ async def test_batch_query(product_id: int, db: Session = Depends(get_db)):
     try:
         result = db.execute(text("""
             SELECT b.batch_id, b.product_id, b.batch_number, 
-                   b.sale_price_per_unit, b.mrp, b.quantity_available
+                   b.sale_price_per_unit, b.quantity_available
             FROM inventory.batches b
             WHERE b.product_id = :product_id
             AND b.quantity_available > 0
@@ -128,8 +128,7 @@ async def test_batch_query(product_id: int, db: Session = Depends(get_db)):
                 "product_id": batch[1],
                 "batch_number": batch[2],
                 "sale_price": float(batch[3]) if batch[3] else None,
-                "mrp": float(batch[4]) if batch[4] else None,
-                "quantity": float(batch[5]) if batch[5] else None
+                "quantity": float(batch[4]) if batch[4] else None
             }
         else:
             return {"found": False, "product_id": product_id}
