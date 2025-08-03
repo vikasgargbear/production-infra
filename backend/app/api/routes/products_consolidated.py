@@ -9,6 +9,8 @@ from typing import List, Optional
 from datetime import datetime
 from decimal import Decimal
 import logging
+import random
+import json
 
 from ...core.database import get_db
 from ...core.config import settings
@@ -22,16 +24,14 @@ router = APIRouter()
 DEFAULT_ORG_ID = "ad808530-1ddb-4377-ab20-67bef145d80d"
 
 def _format_composition(composition_value):
-    """Convert composition to string if it's a dict"""
+    """Convert composition to JSONB format for database"""
     if isinstance(composition_value, dict):
-        # If it's a dict like {'active': 'Amoxy'}, extract the value
-        if 'active' in composition_value:
-            return composition_value['active']
-        # Otherwise join all values
-        return ', '.join(str(v) for v in composition_value.values() if v)
-    elif composition_value:
-        return str(composition_value)
-    return ""
+        # Already in correct format
+        return composition_value
+    elif isinstance(composition_value, str) and composition_value:
+        # Convert string to dict format
+        return {"active": composition_value}
+    return {}
 
 @router.get("/search", response_model=List[Product])
 async def search_products(
@@ -126,24 +126,22 @@ async def create_product(
     Create a new product
     """
     try:
-        # Map frontend fields to database fields
+        # Map frontend fields to database fields (matching actual table columns)
         product_data = {
             "org_id": DEFAULT_ORG_ID,
-            "product_code": product.get("product_code"),
+            "product_code": product.get("product_code") or f"PROD{random.randint(100000, 999999)}",
             "product_name": product.get("product_name"),
-            "brand_name": product.get("brand") or product.get("brand_name") or product.get("manufacturer"),
+            "generic_name": product.get("generic_name") or product.get("composition", ""),
+            "brand": product.get("brand") or product.get("brand_name") or product.get("manufacturer"),
             "manufacturer": product.get("manufacturer"),
-            "composition": _format_composition(product.get("composition")) or product.get("generic_name") or "",
+            "composition": json.dumps(_format_composition(product.get("composition"))),
             "category_id": product.get("category_id") or 1,  # Default category
             "hsn_code": product.get("hsn_code") or "3004",
-            "gst_rate": product.get("gst_percentage") or product.get("gst_rate") or 12,
-            "unit_of_measure": product.get("unit_of_measure") or product.get("base_unit") or "TAB",
-            "pack_size": product.get("pack_size") or 1,
-            "mrp": product.get("mrp") or 0,
-            "sale_price": product.get("sale_price") or product.get("selling_price") or 0,
-            "purchase_price": product.get("purchase_price") or 0,
-            "min_stock_level": product.get("min_stock_level") or product.get("minimum_stock_level") or 0,
-            "max_stock_level": product.get("max_stock_level") or product.get("maximum_stock_level") or 0,
+            "gst_percentage": product.get("gst_percentage") or product.get("gst_rate") or 12,
+            "pack_config": json.dumps({}),  # Default empty JSONB
+            "base_uom_id": 1,  # Default UOM
+            "maintain_batch": True,
+            "maintain_expiry": True,
             "is_active": product.get("is_active", True)
         }
         
@@ -171,18 +169,16 @@ async def create_product(
         # Create product
         result = db.execute(text("""
             INSERT INTO inventory.products (
-                org_id, product_code, product_name, brand_name,
-                manufacturer, composition, category_id, 
-                hsn_code, gst_rate, unit_of_measure,
-                pack_size, mrp, sale_price, purchase_price,
-                min_stock_level, max_stock_level,
+                org_id, product_code, product_name, generic_name,
+                brand, manufacturer, composition, category_id, 
+                hsn_code, gst_percentage, pack_config, base_uom_id,
+                maintain_batch, maintain_expiry,
                 is_active, created_at, updated_at
             ) VALUES (
-                :org_id, :product_code, :product_name, :brand_name,
-                :manufacturer, :composition, :category_id,
-                :hsn_code, :gst_rate, :unit_of_measure,
-                :pack_size, :mrp, :sale_price, :purchase_price,
-                :min_stock_level, :max_stock_level,
+                :org_id, :product_code, :product_name, :generic_name,
+                :brand, :manufacturer, :composition::jsonb, :category_id,
+                :hsn_code, :gst_percentage, :pack_config::jsonb, :base_uom_id,
+                :maintain_batch, :maintain_expiry,
                 :is_active, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
             ) RETURNING product_id, product_code, product_name
         """), product_data)
