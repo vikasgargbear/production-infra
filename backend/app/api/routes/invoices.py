@@ -165,78 +165,83 @@ async def create_invoice(
         })
         invoice_id = invoice_create.scalar()
         
-        # Step 8: Create invoice items (simplified)
+        # Step 8: Create invoice items
+        # With triggers, we only need to insert basic data - triggers will calculate the rest
         items_created = 0
         for item in items:
-            try:
-                product_id = int(item.get("product_id"))
-                quantity = float(item.get("quantity", 1))
-                unit_price = float(item.get("unit_price", 0))
-                gst_percent = float(item.get("gst_percent", 12))
-                
-                # Get product name
+            product_id = int(item.get("product_id"))
+            quantity = float(item.get("quantity", 1))
+            unit_price = float(item.get("unit_price", 0))
+            
+            # Get product name if not provided
+            product_name = item.get("product_name")
+            if not product_name:
                 prod_result = db.execute(text("""
                     SELECT product_name FROM inventory.products
                     WHERE product_id = :product_id
                 """), {"product_id": product_id})
                 prod = prod_result.fetchone()
-                product_name = prod[0] if prod else f"Product {product_id}"
-                
-                # Calculate item amounts
-                line_total = quantity * unit_price
-                discount_percent = float(item.get("discount_percent", 0))
-                discount_amt = line_total * discount_percent / 100
-                taxable = line_total - discount_amt
-                cgst_rate = gst_percent / 2
-                sgst_rate = gst_percent / 2
-                cgst_amt = taxable * cgst_rate / 100
-                sgst_amt = taxable * sgst_rate / 100
-                total_with_tax = taxable + cgst_amt + sgst_amt
-                
-                # Insert invoice item (using ONLY existing columns)
-                db.execute(text("""
-                    INSERT INTO sales.invoice_items (
-                        invoice_id, product_id, product_name,
-                        quantity, unit_price, line_total,
-                        discount_percent, discount_amount, taxable_amount,
-                        cgst_rate, cgst_amount, sgst_rate, sgst_amount,
-                        total_tax_amount, uom, pack_type,
-                        created_at
-                    ) VALUES (
-                        :invoice_id, :product_id, :product_name,
-                        :quantity, :unit_price, :line_total,
-                        :discount_percent, :discount_amount, :taxable_amount,
-                        :cgst_rate, :cgst_amount, :sgst_rate, :sgst_amount,
-                        :total_tax, :uom, :pack_type,
-                        CURRENT_TIMESTAMP
-                    )
-                """), {
-                    "invoice_id": invoice_id,
-                    "product_id": product_id,
-                    "product_name": product_name,
-                    "quantity": quantity,
-                    "unit_price": unit_price,
-                    "line_total": line_total,
-                    "discount_percent": discount_percent,
-                    "discount_amount": discount_amt,
-                    "taxable_amount": taxable,
-                    "cgst_rate": cgst_rate,
-                    "cgst_amount": cgst_amt,
-                    "sgst_rate": sgst_rate,
-                    "sgst_amount": sgst_amt,
-                    "total_tax": cgst_amt + sgst_amt,
-                    "uom": item.get("uom", "PIECE"),
-                    "pack_type": item.get("pack_type", "PIECE")
-                })
-                
-                items_created += 1
-                
-            except Exception as item_error:
-                logger.error(f"Failed to create invoice item: {item_error}")
-                # Continue with other items
+                product_name = prod[0] if prod else item.get("product_name", f"Product {product_id}")
+            
+            # Basic calculations (triggers will recalculate if needed)
+            discount_percent = float(item.get("discount_percent", 0))
+            discount_amt = quantity * unit_price * discount_percent / 100
+            
+            # Get batch_id if not provided (for inventory trigger)
+            batch_id = item.get("batch_id")
+            if not batch_id:
+                # Try to get FIFO batch
+                batch_result = db.execute(text("""
+                    SELECT batch_id FROM inventory.batches
+                    WHERE product_id = :product_id
+                    AND quantity_available > 0
+                    ORDER BY expiry_date NULLS LAST, batch_id
+                    LIMIT 1
+                """), {"product_id": product_id})
+                batch = batch_result.fetchone()
+                batch_id = batch[0] if batch else None
+            
+            # Insert invoice item - let triggers handle calculations
+            db.execute(text("""
+                INSERT INTO sales.invoice_items (
+                    invoice_id, product_id, product_name,
+                    quantity, unit_price, 
+                    discount_percent, discount_amount,
+                    batch_id, uom, pack_type,
+                    hsn_code, created_at
+                ) VALUES (
+                    :invoice_id, :product_id, :product_name,
+                    :quantity, :unit_price,
+                    :discount_percent, :discount_amount,
+                    :batch_id, :uom, :pack_type,
+                    :hsn_code, CURRENT_TIMESTAMP
+                )
+            """), {
+                "invoice_id": invoice_id,
+                "product_id": product_id,
+                "product_name": product_name,
+                "quantity": quantity,
+                "unit_price": unit_price,
+                "discount_percent": discount_percent,
+                "discount_amount": discount_amt,
+                "batch_id": batch_id,
+                "uom": item.get("uom", "PIECE"),
+                "pack_type": item.get("pack_type", "PIECE"),
+                "hsn_code": item.get("hsn_code")
+            })
+            
+            items_created += 1
         
         # Commit transaction
         db.commit()
+        
+        # Get updated totals after triggers have run
+        updated_result = db.execute(text("""
+            SELECT final_amount FROM sales.invoices
+            WHERE invoice_id = :invoice_id
+        """), {"invoice_id": invoice_id})
+        updated = updated_result.fetchone()
+        final_amount_updated = float(updated[0]) if updated else final_amount
         
         return {
             "success": True,
@@ -245,7 +250,7 @@ async def create_invoice(
             "order_id": order_id,
             "order_number": order_number,
             "items_created": items_created,
-            "total_amount": final_amount
+            "total_amount": final_amount_updated
         }
         
     except Exception as e:
