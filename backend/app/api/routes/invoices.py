@@ -201,17 +201,20 @@ async def create_invoice(
                 batch = batch_result.fetchone()
                 batch_id = batch[0] if batch else None
             
-            # Insert invoice item - let triggers handle calculations
+            # Calculate line_total for non-null constraint
+            line_total = quantity * unit_price - discount_amt
+            
+            # Insert invoice item - triggers will recalculate with tax
             db.execute(text("""
                 INSERT INTO sales.invoice_items (
                     invoice_id, product_id, product_name,
-                    quantity, unit_price, 
+                    quantity, unit_price, line_total,
                     discount_percent, discount_amount,
                     batch_id, uom, pack_type,
                     hsn_code, created_at
                 ) VALUES (
                     :invoice_id, :product_id, :product_name,
-                    :quantity, :unit_price,
+                    :quantity, :unit_price, :line_total,
                     :discount_percent, :discount_amount,
                     :batch_id, :uom, :pack_type,
                     :hsn_code, CURRENT_TIMESTAMP
@@ -222,6 +225,7 @@ async def create_invoice(
                 "product_name": product_name,
                 "quantity": quantity,
                 "unit_price": unit_price,
+                "line_total": line_total,
                 "discount_percent": discount_percent,
                 "discount_amount": discount_amt,
                 "batch_id": batch_id,
