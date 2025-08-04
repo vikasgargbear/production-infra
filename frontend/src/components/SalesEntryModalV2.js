@@ -536,15 +536,16 @@ const SalesEntryModalV2 = ({ open = true, onClose }) => {
           discount_percent: parseFloat(item.discount_percent || 0),
           batch_id: item.batch_id || null
         })),
-        payment_mode: invoice.payment_mode === 'cash' ? 'Cash' : 'Credit',
+        payment_terms: invoice.payment_mode === 'cash' ? 'Cash' : 'Credit',
         payment_amount: invoice.payment_mode === 'cash' ? parseFloat(invoice.net_amount) : 0,
         discount_amount: parseFloat(invoice.discount_amount || 0),
         other_charges: parseFloat(invoice.other_charges || 0),
-        notes: `${invoice.notes || ''}\nDelivery: ${invoice.delivery_type || ''}\nTransport: ${invoice.transport_company || ''}\nVehicle: ${invoice.vehicle_number || ''}\nLR: ${invoice.lr_number || ''}`.trim()
+        notes: `${invoice.notes || ''}\nDelivery: ${invoice.delivery_type || ''}\nTransport: ${invoice.transport_company || ''}\nVehicle: ${invoice.vehicle_number || ''}\nLR: ${invoice.lr_number || ''}`.trim(),
+        delivery_priority: invoice.delivery_type === 'PICKUP' ? 'normal' : 'urgent'
       };
 
-      // Use quick-sale endpoint for atomic order + invoice creation
-      const response = await api.post('/quick-sale/', saleData);
+      // Use invoices endpoint for atomic order + invoice creation
+      const response = await api.post('/invoices/', saleData);
       console.log('Quick sale created:', response.data);
       
       // Store order and invoice IDs for reference
