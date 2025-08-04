@@ -135,11 +135,10 @@ app.include_router(api)
 app.include_router(test_db.router)
 
 # Debug endpoints
-from .api.routes import debug_invoice, database_fix, table_inspector, invoice_fixed, create_fixed_triggers
+from .api.routes import debug_invoice, database_fix, table_inspector, create_fixed_triggers
 app.include_router(debug_invoice.router)
 app.include_router(database_fix.router)
 app.include_router(table_inspector.router)
-app.include_router(invoice_fixed.router)
 app.include_router(create_fixed_triggers.router)
 
 # No v1 routes - everything is consolidated under /api/
