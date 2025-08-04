@@ -236,6 +236,7 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
   };
 
   const handleCustomerSelect = (customer) => {
+    console.log('handleCustomerSelect called with:', customer);
     setSelectedCustomer(customer);
     if (customer) {
       const companyState = localStorage.getItem('companyState') || 'Gujarat';
@@ -257,6 +258,18 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
           productSearchRef.current.focus();
         }
       }, 300);
+    } else {
+      // Customer was removed
+      console.log('Customer removed');
+      setInvoice(prev => ({
+        ...prev,
+        customer_id: null,
+        customer_name: '',
+        customer_details: null,
+        billing_address: '',
+        shipping_address: '',
+        gst_type: 'CGST/SGST'
+      }));
     }
   };
 
@@ -355,6 +368,9 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
   };
 
   const validateInvoice = (checkPayment = false) => {
+    console.log('validateInvoice - selectedCustomer:', selectedCustomer);
+    console.log('validateInvoice - invoice.items:', invoice.items);
+    
     if (!selectedCustomer) {
       setMessage('Please select a customer');
       setMessageType('error');
