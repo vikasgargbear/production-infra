@@ -478,8 +478,8 @@ class InvoiceCalculateRequest(BaseModel):
     """Request for calculating invoice totals"""
     customer_id: int
     items: list
-    delivery_type: Optional[str] = "PICKUP"
-    payment_mode: Optional[str] = "cash"
+    delivery_priority: Optional[str] = "normal"
+    payment_terms: Optional[str] = "cash"
     invoice_date: Optional[date] = None
     discount_amount: Optional[Decimal] = 0
     delivery_charges: Optional[Decimal] = 0
@@ -595,14 +595,14 @@ async def create_invoice(
                 text("""
                     INSERT INTO sales.orders (
                         org_id, branch_id, order_number, order_date, order_type,
-                        customer_id, customer_name, delivery_type, payment_mode,
+                        customer_id, delivery_priority, payment_terms,
                         subtotal_amount, discount_amount, taxable_amount,
                         cgst_amount, sgst_amount, igst_amount, total_tax_amount,
                         delivery_charges, final_amount, order_status,
                         created_by, created_at, updated_at
                     ) VALUES (
                         :org_id, 1, :order_number, :order_date, 'sales',
-                        :customer_id, :customer_name, 'pickup', :payment_mode,
+                        :customer_id, :delivery_priority, :payment_terms,
                         :subtotal, :discount, :taxable,
                         :cgst, :sgst, 0, :total_tax,
                         0, :total, 'confirmed',
@@ -615,8 +615,8 @@ async def create_invoice(
                     "order_number": order_number,
                     "order_date": date.today(),  # Use date, not datetime
                     "customer_id": invoice_data["customer_id"],
-                    "customer_name": invoice_data.get("customer_name", ""),
-                    "payment_mode": invoice_data.get("payment_method", "cash"),
+                    "delivery_priority": invoice_data.get("delivery_priority", "normal"),
+                    "payment_terms": invoice_data.get("payment_terms", "cash"),
                     "subtotal": final_subtotal,
                     "discount": invoice_data.get("discount_amount", 0),
                     "taxable": final_subtotal,
