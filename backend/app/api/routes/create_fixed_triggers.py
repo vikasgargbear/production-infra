@@ -64,30 +64,36 @@ async def create_fixed_triggers(db: Session = Depends(get_db)) -> Dict[str, Any]
                     v_gst_rate NUMERIC;
                     v_taxable_amount NUMERIC;
                 BEGIN
-                    -- Get GST rate from product (column is gst_percentage not gst_percent)
-                    SELECT COALESCE(gst_percentage, 12) INTO v_gst_rate
-                    FROM inventory.products
-                    WHERE product_id = NEW.product_id;
+                    -- Default GST rate if not found
+                    v_gst_rate := 12;
+                    
+                    -- Try to get GST rate from product
+                    BEGIN
+                        SELECT COALESCE(gst_percentage, 12) INTO v_gst_rate
+                        FROM inventory.products
+                        WHERE product_id = NEW.product_id;
+                    EXCEPTION WHEN OTHERS THEN
+                        v_gst_rate := 12;
+                    END;
                     
                     -- Calculate taxable amount
                     v_taxable_amount := NEW.quantity * NEW.unit_price - COALESCE(NEW.discount_amount, 0);
                     NEW.taxable_amount := v_taxable_amount;
                     
                     -- For simplicity, always use CGST+SGST (intrastate)
-                    NEW.cgst_rate := v_gst_rate / 2;
-                    NEW.sgst_rate := v_gst_rate / 2;
+                    NEW.cgst_rate := COALESCE(v_gst_rate / 2, 6);
+                    NEW.sgst_rate := COALESCE(v_gst_rate / 2, 6);
                     NEW.igst_rate := 0;
-                    NEW.cgst_amount := v_taxable_amount * (v_gst_rate / 200);
-                    NEW.sgst_amount := v_taxable_amount * (v_gst_rate / 200);
+                    NEW.cgst_amount := COALESCE(v_taxable_amount * (v_gst_rate / 200), 0);
+                    NEW.sgst_amount := COALESCE(v_taxable_amount * (v_gst_rate / 200), 0);
                     NEW.igst_amount := 0;
                     
-                    -- Calculate totals
-                    NEW.total_tax_amount := NEW.cgst_amount + NEW.sgst_amount;
-                    NEW.line_total := v_taxable_amount + NEW.total_tax_amount;
+                    -- Calculate totals with COALESCE to prevent NULL
+                    NEW.total_tax_amount := COALESCE(NEW.cgst_amount, 0) + COALESCE(NEW.sgst_amount, 0);
                     
-                    -- Ensure line_total is never null
-                    IF NEW.line_total IS NULL THEN
-                        NEW.line_total := NEW.quantity * NEW.unit_price;
+                    -- Preserve existing line_total if provided, otherwise calculate
+                    IF NEW.line_total IS NULL OR NEW.line_total = 0 THEN
+                        NEW.line_total := v_taxable_amount + COALESCE(NEW.total_tax_amount, 0);
                     END IF;
                     
                     RETURN NEW;
