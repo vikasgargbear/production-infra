@@ -64,8 +64,8 @@ async def create_fixed_triggers(db: Session = Depends(get_db)) -> Dict[str, Any]
                     v_gst_rate NUMERIC;
                     v_taxable_amount NUMERIC;
                 BEGIN
-                    -- Get GST rate from product
-                    SELECT COALESCE(gst_percent, 12) INTO v_gst_rate
+                    -- Get GST rate from product (column is gst_percentage not gst_percent)
+                    SELECT COALESCE(gst_percentage, 12) INTO v_gst_rate
                     FROM inventory.products
                     WHERE product_id = NEW.product_id;
                     

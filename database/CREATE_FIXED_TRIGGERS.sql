@@ -26,7 +26,7 @@ DECLARE
     v_taxable_amount NUMERIC;
 BEGIN
     -- Get GST rate from product (using correct column names)
-    SELECT COALESCE(gst_percent, 12) INTO v_gst_rate
+    SELECT COALESCE(gst_percentage, 12) INTO v_gst_rate
     FROM inventory.products
     WHERE product_id = NEW.product_id;
     
