@@ -496,7 +496,7 @@ async def get_invoice_details(invoice_id: int, db: Session = Depends(get_db)) ->
         # Get invoice items
         items_result = db.execute(text("""
             SELECT 
-                ii.item_id,
+                ii.invoice_item_id,
                 ii.product_id,
                 ii.product_name,
                 ii.quantity,
