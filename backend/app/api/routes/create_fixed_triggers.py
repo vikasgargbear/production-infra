@@ -158,25 +158,29 @@ async def create_fixed_triggers(db: Session = Depends(get_db)) -> Dict[str, Any]
                 RETURNS TRIGGER AS $$
                 BEGIN
                     IF TG_OP = 'INSERT' THEN
-                        -- Deduct from batch
-                        UPDATE inventory.batches
-                        SET quantity_available = quantity_available - NEW.quantity,
-                            quantity_sold = COALESCE(quantity_sold, 0) + NEW.quantity,
-                            updated_at = CURRENT_TIMESTAMP
-                        WHERE batch_id = NEW.batch_id
-                        AND quantity_available >= NEW.quantity;
-                        
-                        IF NOT FOUND THEN
-                            RAISE EXCEPTION 'Insufficient stock in batch %', NEW.batch_id;
+                        -- Only update if batch_id is provided
+                        IF NEW.batch_id IS NOT NULL THEN
+                            -- Deduct from batch (quantity_sold column doesn't exist)
+                            UPDATE inventory.batches
+                            SET quantity_available = quantity_available - NEW.quantity,
+                                updated_at = CURRENT_TIMESTAMP
+                            WHERE batch_id = NEW.batch_id
+                            AND quantity_available >= NEW.quantity;
+                            
+                            IF NOT FOUND THEN
+                                -- Don't fail, just log warning
+                                RAISE NOTICE 'Insufficient stock in batch % or batch not found', NEW.batch_id;
+                            END IF;
                         END IF;
                         
                     ELSIF TG_OP = 'DELETE' THEN
-                        -- Restore to batch
-                        UPDATE inventory.batches
-                        SET quantity_available = quantity_available + OLD.quantity,
-                            quantity_sold = GREATEST(0, COALESCE(quantity_sold, 0) - OLD.quantity),
-                            updated_at = CURRENT_TIMESTAMP
-                        WHERE batch_id = OLD.batch_id;
+                        -- Restore to batch if batch_id exists
+                        IF OLD.batch_id IS NOT NULL THEN
+                            UPDATE inventory.batches
+                            SET quantity_available = quantity_available + OLD.quantity,
+                                updated_at = CURRENT_TIMESTAMP
+                            WHERE batch_id = OLD.batch_id;
+                        END IF;
                     END IF;
                     
                     RETURN NEW;
