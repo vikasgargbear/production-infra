@@ -21,6 +21,7 @@ import api, { customersApi, productsApi, ordersApi, orderItemsApi, batchesApi } 
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
 import { searchCache, cachedSearch } from '../utils/searchCache';
+import CustomerSearch from './global/search/CustomerSearch';
 
 const SalesEntryModalV2 = ({ open = true, onClose }) => {
   const [invoice, setInvoice] = useState({
@@ -76,9 +77,7 @@ const SalesEntryModalV2 = ({ open = true, onClose }) => {
 
   const [currentStep, setCurrentStep] = useState(1);
   const [saving, setSaving] = useState(false);
-  const [searchQuery, setSearchQuery] = useState('');
   const [productSearchQuery, setProductSearchQuery] = useState('');
-  const [showCustomerSearch, setShowCustomerSearch] = useState(false);
   const [showProductSearch, setShowProductSearch] = useState(false);
   const [selectedCustomer, setSelectedCustomer] = useState(null);
   const [isGeneratingPDF, setIsGeneratingPDF] = useState(false);
@@ -119,7 +118,6 @@ const SalesEntryModalV2 = ({ open = true, onClose }) => {
   });
   const [availableChallans] = useState([]); // No mock data
 
-  const customerSearchRef = useRef(null);
   const productSearchRef = useRef(null);
 
   // Sample medical representatives
@@ -132,8 +130,6 @@ const SalesEntryModalV2 = ({ open = true, onClose }) => {
 
   // Customer data - loaded from API
   const [customers, setCustomers] = useState([]);
-  const [customerSearchResults, setCustomerSearchResults] = useState([]);
-  const [customerSearchLoading, setCustomerSearchLoading] = useState(false);
 
   // Load all products initially for quick access
   const loadProducts = async () => {
@@ -222,18 +218,7 @@ const SalesEntryModalV2 = ({ open = true, onClose }) => {
     }
   };
 
-  const handleCustomerSelect = (customer) => {
-    setSelectedCustomer(customer);
-    setInvoice({
-      ...invoice,
-      customer_id: customer.customer_id,
-      customer_name: customer.customer_name,
-      customer_code: customer.customer_code,
-      customer_details: customer
-    });
-    setShowCustomerSearch(false);
-    setSearchQuery('');
-  };
+  // Customer selection is now handled by CustomerSearch component
 
   const handleProductSelect = async (product) => {
     // Load batches for this product if not already loaded
@@ -476,8 +461,13 @@ const SalesEntryModalV2 = ({ open = true, onClose }) => {
   };
 
   const goToSummary = () => {
+    console.log('goToSummary called');
+    console.log('Customer ID:', invoice.customer_id);
+    console.log('Items length:', invoice.items.length);
+    console.log('Invoice state:', invoice);
+    
     if (!invoice.customer_id || invoice.items.length === 0) {
-      alert('Please select a customer and add at least one product');
+      alert(`Please select a customer and add at least one product\nCustomer ID: ${invoice.customer_id}\nItems: ${invoice.items.length}`);
       return;
     }
     setCurrentStep(2);
@@ -613,9 +603,6 @@ const SalesEntryModalV2 = ({ open = true, onClose }) => {
 
   useEffect(() => {
     const handleClickOutside = (event) => {
-      if (customerSearchRef.current && !customerSearchRef.current.contains(event.target)) {
-        setShowCustomerSearch(false);
-      }
       if (productSearchRef.current && !productSearchRef.current.contains(event.target)) {
         setShowProductSearch(false);
       }
@@ -648,48 +635,7 @@ const SalesEntryModalV2 = ({ open = true, onClose }) => {
     }
   };
 
-  // Search customers from backend with caching
-  const searchCustomers = async (query) => {
-    if (!query || query.length < 2) {
-      setCustomerSearchResults([]);
-      return;
-    }
-    
-    setCustomerSearchLoading(true);
-    try {
-      // Use cached search
-      const response = await cachedSearch(
-        'customers',
-        { search: query },
-        async (params) => await customersApi.getAll(params)
-      );
-      
-      // Handle response structure - could be { customers, total } or just array
-      const customerData = response.data.customers || response.data;
-      const resultsArray = Array.isArray(customerData) ? customerData : [];
-      setCustomerSearchResults(resultsArray);
-      console.log('Customer search results:', resultsArray.length, 'customers found for query:', query);
-    } catch (error) {
-      console.error('Failed to search customers:', error);
-      setCustomerSearchResults([]);
-    } finally {
-      setCustomerSearchLoading(false);
-    }
-  };
-
-  // Debounced customer search - ultra-fast
-  const customerDebounceTimer = useRef(null);
-  const debouncedCustomerSearch = useCallback((query) => {
-    if (customerDebounceTimer.current) {
-      clearTimeout(customerDebounceTimer.current);
-    }
-    
-    if (query.length >= 2) {
-      customerDebounceTimer.current = setTimeout(() => {
-        searchCustomers(query);
-      }, 100); // Reduced to 100ms for ultra-fast response
-    }
-  }, []);
+  // Customer search is now handled by CustomerSearch component
 
   return (
     <>
@@ -777,97 +723,45 @@ const SalesEntryModalV2 = ({ open = true, onClose }) => {
                 <div>
                   <div className="flex items-center justify-between mb-2">
                     <h3 className="text-sm font-medium text-gray-700 uppercase tracking-wide">Customer</h3>
-                    <button
-                      onClick={() => setShowCreateCustomer(true)}
-                      className="text-xs text-blue-600 hover:text-blue-700 font-medium"
-                    >
-                      + New
-                    </button>
                   </div>
-
-                  {selectedCustomer ? (
-                    <div className="p-2 bg-gray-50 rounded border-l-2 border-blue-500">
-                      <div className="flex justify-between items-center">
-                        <div>
-                          <p className="font-medium text-gray-900 text-sm">{selectedCustomer.customer_name}</p>
-                          <p className="text-xs text-gray-600">{selectedCustomer.phone} • {selectedCustomer.city}</p>
-                        </div>
-                        <button
-                          onClick={() => {
-                            setSelectedCustomer(null);
-                            setInvoice({ ...invoice, customer_id: '', customer_name: '', customer_details: null });
-                          }}
-                          className="text-xs text-blue-600 hover:text-blue-700"
-                        >
-                          Change
-                        </button>
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="relative" ref={customerSearchRef}>
-                      <Search className="absolute left-3 top-2.5 w-4 h-4 text-gray-400" />
-                      <input
-                        type="text"
-                        placeholder="Search customers..."
-                        value={searchQuery}
-                        onChange={(e) => {
-                          setSearchQuery(e.target.value);
-                          debouncedCustomerSearch(e.target.value);
-                        }}
-                        onFocus={() => setShowCustomerSearch(true)}
-                        className="w-full pl-9 pr-3 py-2 text-sm border border-gray-200 rounded focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
-                      />
-
-                      {showCustomerSearch && (
-                        <div className="absolute z-10 w-full mt-1 bg-white border border-gray-200 rounded shadow-lg max-h-48 overflow-y-auto">
-                          {customerSearchLoading ? (
-                            <div className="px-3 py-4 text-center text-gray-500">
-                              Searching customers...
-                            </div>
-                          ) : (
-                            <>
-                              {/* Show message if no query entered */}
-                              {(!searchQuery || searchQuery.length < 2) && (
-                                <div className="px-3 py-2 text-sm text-gray-500">
-                                  Type at least 2 characters to search customers...
-                                </div>
-                              )}
-                              
-                              {/* Show search results when searching */}
-                              {searchQuery && searchQuery.length >= 2 && Array.isArray(customerSearchResults) && 
-                                customerSearchResults.map(customer => (
-                              <div
-                                key={customer.customer_id}
-                                onClick={() => handleCustomerSelect(customer)}
-                                className="px-3 py-2 hover:bg-gray-50 cursor-pointer border-b border-gray-100 last:border-0"
-                              >
-                                <div className="text-sm font-medium text-gray-900">{customer.customer_name}</div>
-                                <div className="text-xs text-gray-500">{customer.phone} • {customer.city || customer.address_line1 || 'No address'}</div>
-                              </div>
-                            ))}
-                              
-                              {/* Show "Create new customer" if no results found */}
-                              {searchQuery && searchQuery.length >= 2 && customerSearchResults.length === 0 && !customerSearchLoading && (
-                                <div
-                                  onClick={() => {
-                                    setShowCreateCustomer(true);
-                                    setShowCustomerSearch(false);
-                                    setNewCustomer({ ...newCustomer, customer_name: searchQuery });
-                                  }}
-                                  className="px-3 py-2 bg-blue-50 hover:bg-blue-100 cursor-pointer border-b border-gray-100 flex items-center justify-between"
-                                >
-                                  <div>
-                                    <div className="text-sm font-medium text-blue-900">Create "{searchQuery}"</div>
-                                  </div>
-                                  <Plus className="w-4 h-4 text-blue-600" />
-                                </div>
-                              )}
-                            </>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  )}
+                  
+                  <CustomerSearch
+                    value={invoice.customer_id ? {
+                      customer_id: invoice.customer_id,
+                      customer_name: invoice.customer_name,
+                      phone: invoice.customer_details?.phone,
+                      email: invoice.customer_details?.email,
+                      city: invoice.customer_details?.city,
+                      state: invoice.customer_details?.state,
+                      gst_number: invoice.customer_details?.gst_number,
+                      address: invoice.customer_details?.address
+                    } : null}
+                    onChange={(customer) => {
+                      if (customer) {
+                        setInvoice({
+                          ...invoice,
+                          customer_id: customer.customer_id,
+                          customer_name: customer.customer_name,
+                          customer_code: customer.customer_code,
+                          customer_details: customer
+                        });
+                        setSelectedCustomer(customer);
+                      } else {
+                        // Customer removed
+                        setInvoice({
+                          ...invoice,
+                          customer_id: '',
+                          customer_name: '',
+                          customer_code: '',
+                          customer_details: null
+                        });
+                        setSelectedCustomer(null);
+                      }
+                    }}
+                    placeholder="Search customers..."
+                    clearable={true}
+                    className="w-full"
+                  />
                 </div>
 
                 {/* Divider */}
