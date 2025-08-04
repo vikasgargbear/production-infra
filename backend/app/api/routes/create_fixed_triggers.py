@@ -85,6 +85,11 @@ async def create_fixed_triggers(db: Session = Depends(get_db)) -> Dict[str, Any]
                     NEW.total_tax_amount := NEW.cgst_amount + NEW.sgst_amount;
                     NEW.line_total := v_taxable_amount + NEW.total_tax_amount;
                     
+                    -- Ensure line_total is never null
+                    IF NEW.line_total IS NULL THEN
+                        NEW.line_total := NEW.quantity * NEW.unit_price;
+                    END IF;
+                    
                     RETURN NEW;
                 END;
                 $$ LANGUAGE plpgsql
