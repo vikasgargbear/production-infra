@@ -26,6 +26,8 @@ from .api.routes import (
 
 # Import additional routers not in __init__.py
 from .api.routes import stock_receive, enterprise_delivery_challan, inventory_batches, create_user
+# Import new APIs
+from .api.routes import master_settings, schemes_discounts, loyalty_points, compliance
 # All temporary endpoints removed - using main endpoints only
 
 # Lifecycle management
@@ -106,8 +108,8 @@ api.include_router(order_items_router, tags=["Order Items"])
 api.include_router(users_router, tags=["Users"])
 api.include_router(suppliers_router, tags=["Suppliers"])
 api.include_router(purchases_router, tags=["Purchases"])
-# Removed - using enterprise_delivery_challan instead to avoid conflicts
-# api.include_router(delivery_challan_router, tags=["Delivery Challan"])
+# Include both - they have different functionality
+api.include_router(delivery_challan_router, tags=["Delivery Challan"])
 api.include_router(stock_adjustments_router, tags=["Stock Adjustments"])
 api.include_router(tax_entries_router, tags=["Tax Entries"])
 api.include_router(purchase_upload_router, tags=["Purchase Upload"])
@@ -123,6 +125,13 @@ api.include_router(stock_receive.router, tags=["Stock Receive"])
 api.include_router(enterprise_delivery_challan.router, tags=["Enterprise Delivery Challan"])
 api.include_router(inventory_batches.router, tags=["Inventory Batches"])
 api.include_router(create_user.router, tags=["Setup"])
+
+# Register new APIs
+api.include_router(master_settings.router, tags=["Master Settings"])
+api.include_router(schemes_discounts.router, tags=["Schemes & Discounts"])
+api.include_router(loyalty_points.router, tags=["Loyalty Points"])
+api.include_router(compliance.router, tags=["Compliance"])
+
 # All endpoints consolidated - no temporary workarounds
 
 # Include the PostgreSQL function wrappers

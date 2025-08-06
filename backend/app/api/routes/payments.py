@@ -287,3 +287,344 @@ async def get_outstanding_invoices(
     except Exception as e:
         logger.error(f"Error getting outstanding invoices: {str(e)}")
         raise HTTPException(status_code=500, detail="Failed to get outstanding invoices")
+
+@router.post("/bank-reconciliation")
+async def create_bank_reconciliation(
+    reconciliation_data: dict,
+    db: Session = Depends(get_db)
+):
+    """
+    Create bank reconciliation entry
+    
+    - Match bank statement with system records
+    - Identify unmatched transactions
+    - Update payment clearing status
+    """
+    try:
+        # Extract reconciliation details
+        bank_account = reconciliation_data.get("bank_account")
+        statement_date = reconciliation_data.get("statement_date")
+        opening_balance = reconciliation_data.get("opening_balance", 0)
+        closing_balance = reconciliation_data.get("closing_balance", 0)
+        transactions = reconciliation_data.get("transactions", [])
+        
+        # Create reconciliation record
+        recon_query = """
+            INSERT INTO financial.bank_reconciliations (
+                org_id, bank_account, statement_date, opening_balance, 
+                closing_balance, reconciled_by, reconciliation_date
+            ) VALUES (
+                :org_id, :bank_account, :statement_date, :opening_balance,
+                :closing_balance, :reconciled_by, CURRENT_DATE
+            ) RETURNING reconciliation_id
+        """
+        
+        result = db.execute(text(recon_query), {
+            "org_id": DEFAULT_ORG_ID,
+            "bank_account": bank_account,
+            "statement_date": statement_date,
+            "opening_balance": opening_balance,
+            "closing_balance": closing_balance,
+            "reconciled_by": 1  # Default user
+        })
+        
+        reconciliation_id = result.scalar()
+        
+        # Process each transaction
+        matched = 0
+        unmatched = 0
+        
+        for txn in transactions:
+            # Try to match with existing payments
+            match_query = """
+                SELECT payment_id FROM payments 
+                WHERE org_id = :org_id 
+                AND amount = :amount 
+                AND payment_date = :date
+                AND payment_status != 'cancelled'
+                AND cleared_date IS NULL
+                LIMIT 1
+            """
+            
+            match_result = db.execute(text(match_query), {
+                "org_id": DEFAULT_ORG_ID,
+                "amount": abs(txn.get("amount", 0)),
+                "date": txn.get("date")
+            })
+            
+            payment_match = match_result.first()
+            
+            if payment_match:
+                # Update payment as cleared
+                update_query = """
+                    UPDATE payments 
+                    SET cleared_date = :cleared_date,
+                        reconciliation_id = :reconciliation_id
+                    WHERE payment_id = :payment_id
+                """
+                db.execute(text(update_query), {
+                    "cleared_date": txn.get("date"),
+                    "reconciliation_id": reconciliation_id,
+                    "payment_id": payment_match.payment_id
+                })
+                matched += 1
+            else:
+                # Record unmatched transaction
+                unmatched_query = """
+                    INSERT INTO financial.unmatched_transactions (
+                        reconciliation_id, transaction_date, description,
+                        amount, transaction_type
+                    ) VALUES (
+                        :reconciliation_id, :transaction_date, :description,
+                        :amount, :transaction_type
+                    )
+                """
+                db.execute(text(unmatched_query), {
+                    "reconciliation_id": reconciliation_id,
+                    "transaction_date": txn.get("date"),
+                    "description": txn.get("description", ""),
+                    "amount": txn.get("amount", 0),
+                    "transaction_type": "credit" if txn.get("amount", 0) > 0 else "debit"
+                })
+                unmatched += 1
+        
+        db.commit()
+        
+        return {
+            "reconciliation_id": reconciliation_id,
+            "matched_transactions": matched,
+            "unmatched_transactions": unmatched,
+            "status": "completed"
+        }
+        
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Error creating bank reconciliation: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to create bank reconciliation: {str(e)}")
+
+@router.post("/payment-allocation")
+async def allocate_payment(
+    allocation_data: dict,
+    db: Session = Depends(get_db)
+):
+    """
+    Allocate a payment to multiple invoices
+    
+    - Split payment across invoices
+    - Handle advance payments
+    - Update invoice payment status
+    """
+    try:
+        payment_id = allocation_data.get("payment_id")
+        allocations = allocation_data.get("allocations", [])
+        
+        # Get payment details
+        payment_query = """
+            SELECT payment_id, amount, customer_id, payment_type
+            FROM payments
+            WHERE payment_id = :payment_id AND payment_status = 'completed'
+        """
+        payment_result = db.execute(text(payment_query), {"payment_id": payment_id})
+        payment = payment_result.first()
+        
+        if not payment:
+            raise ValueError("Payment not found or not completed")
+        
+        total_allocated = 0
+        
+        for allocation in allocations:
+            invoice_id = allocation.get("invoice_id")
+            allocated_amount = allocation.get("amount", 0)
+            
+            if allocated_amount <= 0:
+                continue
+                
+            # Get invoice balance
+            invoice_query = """
+                SELECT invoice_id, final_amount, paid_amount
+                FROM sales.invoices
+                WHERE invoice_id = :invoice_id
+            """
+            invoice_result = db.execute(text(invoice_query), {"invoice_id": invoice_id})
+            invoice = invoice_result.first()
+            
+            if not invoice:
+                raise ValueError(f"Invoice {invoice_id} not found")
+            
+            balance = invoice.final_amount - (invoice.paid_amount or 0)
+            
+            # Don't allocate more than balance
+            actual_allocation = min(allocated_amount, balance)
+            
+            if actual_allocation > 0:
+                # Create allocation record
+                allocation_query = """
+                    INSERT INTO financial.payment_allocations (
+                        payment_id, invoice_id, allocated_amount,
+                        allocation_date, created_by
+                    ) VALUES (
+                        :payment_id, :invoice_id, :allocated_amount,
+                        CURRENT_DATE, :created_by
+                    )
+                """
+                db.execute(text(allocation_query), {
+                    "payment_id": payment_id,
+                    "invoice_id": invoice_id,
+                    "allocated_amount": actual_allocation,
+                    "created_by": 1
+                })
+                
+                # Update invoice paid amount
+                update_invoice_query = """
+                    UPDATE sales.invoices
+                    SET paid_amount = COALESCE(paid_amount, 0) + :amount,
+                        payment_status = CASE 
+                            WHEN COALESCE(paid_amount, 0) + :amount >= final_amount THEN 'paid'
+                            ELSE 'partial'
+                        END
+                    WHERE invoice_id = :invoice_id
+                """
+                db.execute(text(update_invoice_query), {
+                    "amount": actual_allocation,
+                    "invoice_id": invoice_id
+                })
+                
+                total_allocated += actual_allocation
+        
+        # Update payment with allocated amount
+        update_payment_query = """
+            UPDATE payments
+            SET allocated_amount = :allocated_amount,
+                unallocated_amount = amount - :allocated_amount
+            WHERE payment_id = :payment_id
+        """
+        db.execute(text(update_payment_query), {
+            "allocated_amount": total_allocated,
+            "payment_id": payment_id
+        })
+        
+        db.commit()
+        
+        return {
+            "payment_id": payment_id,
+            "total_allocated": total_allocated,
+            "unallocated_amount": float(payment.amount) - total_allocated,
+            "status": "success"
+        }
+        
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Error allocating payment: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to allocate payment: {str(e)}")
+
+@router.get("/aging-report")
+async def get_aging_report(
+    as_of_date: Optional[date] = Query(None, description="Aging as of date"),
+    customer_id: Optional[int] = Query(None, description="Filter by customer"),
+    db: Session = Depends(get_db)
+):
+    """
+    Get detailed aging report for outstanding invoices
+    
+    - Categorize by aging buckets (0-30, 31-60, 61-90, 90+)
+    - Customer-wise breakdown
+    - Summary statistics
+    """
+    try:
+        aging_date = as_of_date or date.today()
+        
+        query = """
+            WITH invoice_aging AS (
+                SELECT 
+                    i.invoice_id,
+                    i.invoice_number,
+                    i.invoice_date,
+                    i.due_date,
+                    c.customer_id,
+                    c.customer_name,
+                    c.customer_code,
+                    i.final_amount,
+                    COALESCE(i.paid_amount, 0) as paid_amount,
+                    (i.final_amount - COALESCE(i.paid_amount, 0)) as balance_amount,
+                    (:aging_date - i.due_date) as days_overdue,
+                    CASE 
+                        WHEN (:aging_date - i.due_date) <= 0 THEN 'current'
+                        WHEN (:aging_date - i.due_date) BETWEEN 1 AND 30 THEN '1-30'
+                        WHEN (:aging_date - i.due_date) BETWEEN 31 AND 60 THEN '31-60'
+                        WHEN (:aging_date - i.due_date) BETWEEN 61 AND 90 THEN '61-90'
+                        ELSE '90+'
+                    END as aging_bucket
+                FROM sales.invoices i
+                JOIN parties.customers c ON i.customer_id = c.customer_id
+                WHERE i.org_id = :org_id
+                    AND i.payment_status IN ('unpaid', 'partial')
+                    AND (i.final_amount - COALESCE(i.paid_amount, 0)) > 0
+        """
+        
+        params = {
+            "org_id": DEFAULT_ORG_ID,
+            "aging_date": aging_date
+        }
+        
+        if customer_id:
+            query += " AND c.customer_id = :customer_id"
+            params["customer_id"] = customer_id
+            
+        query += """
+            )
+            SELECT 
+                customer_id,
+                customer_name,
+                customer_code,
+                COUNT(*) as invoice_count,
+                SUM(balance_amount) as total_outstanding,
+                SUM(CASE WHEN aging_bucket = 'current' THEN balance_amount ELSE 0 END) as current,
+                SUM(CASE WHEN aging_bucket = '1-30' THEN balance_amount ELSE 0 END) as days_1_30,
+                SUM(CASE WHEN aging_bucket = '31-60' THEN balance_amount ELSE 0 END) as days_31_60,
+                SUM(CASE WHEN aging_bucket = '61-90' THEN balance_amount ELSE 0 END) as days_61_90,
+                SUM(CASE WHEN aging_bucket = '90+' THEN balance_amount ELSE 0 END) as days_90_plus,
+                MAX(days_overdue) as max_days_overdue
+            FROM invoice_aging
+            GROUP BY customer_id, customer_name, customer_code
+            ORDER BY total_outstanding DESC
+        """
+        
+        result = db.execute(text(query), params)
+        customer_aging = [dict(row._mapping) for row in result]
+        
+        # Calculate totals
+        total_outstanding = sum(row["total_outstanding"] for row in customer_aging)
+        total_current = sum(row["current"] for row in customer_aging)
+        total_1_30 = sum(row["days_1_30"] for row in customer_aging)
+        total_31_60 = sum(row["days_31_60"] for row in customer_aging)
+        total_61_90 = sum(row["days_61_90"] for row in customer_aging)
+        total_90_plus = sum(row["days_90_plus"] for row in customer_aging)
+        
+        return {
+            "as_of_date": aging_date,
+            "customer_aging": customer_aging,
+            "summary": {
+                "total_customers": len(customer_aging),
+                "total_outstanding": total_outstanding,
+                "aging_buckets": {
+                    "current": total_current,
+                    "1-30_days": total_1_30,
+                    "31-60_days": total_31_60,
+                    "61-90_days": total_61_90,
+                    "90+_days": total_90_plus
+                },
+                "aging_percentages": {
+                    "current": round((total_current / total_outstanding * 100) if total_outstanding > 0 else 0, 2),
+                    "1-30_days": round((total_1_30 / total_outstanding * 100) if total_outstanding > 0 else 0, 2),
+                    "31-60_days": round((total_31_60 / total_outstanding * 100) if total_outstanding > 0 else 0, 2),
+                    "61-90_days": round((total_61_90 / total_outstanding * 100) if total_outstanding > 0 else 0, 2),
+                    "90+_days": round((total_90_plus / total_outstanding * 100) if total_outstanding > 0 else 0, 2)
+                }
+            }
+        }
+        
+    except Exception as e:
+        logger.error(f"Error generating aging report: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to generate aging report: {str(e)}")

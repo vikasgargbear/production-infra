@@ -291,3 +291,416 @@ def get_delivery_analytics(
     except Exception as e:
         logger.error(f"Error fetching delivery analytics: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to get delivery analytics: {str(e)}")
+
+@router.post("/{challan_id}/generate-eway-bill")
+def generate_eway_bill(
+    challan_id: int,
+    eway_data: dict,
+    db: Session = Depends(get_db)
+):
+    """
+    Generate e-way bill for delivery challan
+    
+    - Validate required fields
+    - Generate e-way bill number
+    - Store e-way bill details
+    """
+    try:
+        # Verify challan exists
+        challan_check = db.execute(
+            text("SELECT order_id FROM sales.orders WHERE order_id = :order_id"),
+            {"order_id": challan_id}
+        )
+        if not challan_check.first():
+            raise HTTPException(status_code=404, detail="Delivery challan not found")
+        
+        # Extract e-way bill data
+        eway_bill_data = {
+            "challan_id": challan_id,
+            "supply_type": eway_data.get("supply_type", "outward"),
+            "sub_type": eway_data.get("sub_type", "supply"),
+            "document_type": eway_data.get("document_type", "delivery_challan"),
+            "document_number": f"DC-{challan_id}",
+            "document_date": eway_data.get("document_date", datetime.utcnow()),
+            "from_gstin": eway_data.get("from_gstin"),
+            "to_gstin": eway_data.get("to_gstin"),
+            "transport_mode": eway_data.get("transport_mode", "road"),
+            "transport_distance": eway_data.get("distance_km", 0),
+            "transporter_name": eway_data.get("transporter_name"),
+            "transporter_id": eway_data.get("transporter_gstin"),
+            "transporter_doc_no": eway_data.get("transport_document_number"),
+            "transporter_doc_date": eway_data.get("transport_document_date"),
+            "vehicle_number": eway_data.get("vehicle_number"),
+            "vehicle_type": eway_data.get("vehicle_type", "regular"),
+            "eway_bill_number": f"EWB{datetime.now().strftime('%Y%m%d%H%M%S')}",
+            "valid_until": datetime.utcnow() + timedelta(days=1),  # 1 day validity for <100km
+            "status": "active"
+        }
+        
+        # Adjust validity based on distance
+        if eway_bill_data["transport_distance"] > 100:
+            days_valid = 1 + ((eway_bill_data["transport_distance"] - 1) // 100)
+            eway_bill_data["valid_until"] = datetime.utcnow() + timedelta(days=days_valid)
+        
+        # Insert e-way bill record
+        insert_query = """
+            INSERT INTO sales.eway_bills (
+                challan_id, eway_bill_number, supply_type, sub_type,
+                document_type, document_number, document_date,
+                from_gstin, to_gstin, transport_mode, transport_distance,
+                transporter_name, transporter_id, vehicle_number,
+                valid_until, status, generated_date
+            ) VALUES (
+                :challan_id, :eway_bill_number, :supply_type, :sub_type,
+                :document_type, :document_number, :document_date,
+                :from_gstin, :to_gstin, :transport_mode, :transport_distance,
+                :transporter_name, :transporter_id, :vehicle_number,
+                :valid_until, :status, CURRENT_TIMESTAMP
+            ) RETURNING eway_bill_id, eway_bill_number
+        """
+        
+        result = db.execute(text(insert_query), eway_bill_data)
+        eway_bill = result.first()
+        
+        # Update challan with e-way bill reference
+        update_query = """
+            UPDATE sales.orders 
+            SET eway_bill_number = :eway_bill_number,
+                notes = COALESCE(notes || ' | ', '') || 'E-way Bill: ' || :eway_bill_number
+            WHERE order_id = :order_id
+        """
+        db.execute(text(update_query), {
+            "eway_bill_number": eway_bill.eway_bill_number,
+            "order_id": challan_id
+        })
+        
+        db.commit()
+        
+        return {
+            "eway_bill_id": eway_bill.eway_bill_id,
+            "eway_bill_number": eway_bill.eway_bill_number,
+            "valid_until": eway_bill_data["valid_until"].isoformat(),
+            "status": "generated"
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Error generating e-way bill: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to generate e-way bill: {str(e)}")
+
+@router.post("/{challan_id}/pod")
+def record_proof_of_delivery(
+    challan_id: int,
+    pod_data: dict,
+    db: Session = Depends(get_db)
+):
+    """
+    Record Proof of Delivery (POD)
+    
+    - Capture delivery details
+    - Store signature/photo
+    - Update delivery status
+    """
+    try:
+        # Verify challan exists
+        challan_check = db.execute(
+            text("SELECT order_id, customer_id FROM sales.orders WHERE order_id = :order_id"),
+            {"order_id": challan_id}
+        )
+        challan = challan_check.first()
+        if not challan:
+            raise HTTPException(status_code=404, detail="Delivery challan not found")
+        
+        # Create POD record
+        pod_insert = """
+            INSERT INTO sales.proof_of_delivery (
+                challan_id, customer_id, delivered_date, delivered_time,
+                received_by_name, received_by_designation, received_by_phone,
+                delivery_location, delivery_notes, signature_image,
+                delivery_photo, gps_latitude, gps_longitude,
+                delivery_rating, created_date
+            ) VALUES (
+                :challan_id, :customer_id, :delivered_date, :delivered_time,
+                :received_by_name, :received_by_designation, :received_by_phone,
+                :delivery_location, :delivery_notes, :signature_image,
+                :delivery_photo, :gps_latitude, :gps_longitude,
+                :delivery_rating, CURRENT_TIMESTAMP
+            ) RETURNING pod_id
+        """
+        
+        pod_params = {
+            "challan_id": challan_id,
+            "customer_id": challan.customer_id,
+            "delivered_date": pod_data.get("delivered_date", date.today()),
+            "delivered_time": pod_data.get("delivered_time", datetime.now().time()),
+            "received_by_name": pod_data.get("received_by_name"),
+            "received_by_designation": pod_data.get("received_by_designation"),
+            "received_by_phone": pod_data.get("received_by_phone"),
+            "delivery_location": pod_data.get("delivery_location"),
+            "delivery_notes": pod_data.get("remarks"),
+            "signature_image": pod_data.get("signature"),
+            "delivery_photo": pod_data.get("delivery_photo"),
+            "gps_latitude": pod_data.get("gps_latitude"),
+            "gps_longitude": pod_data.get("gps_longitude"),
+            "delivery_rating": pod_data.get("delivery_rating")
+        }
+        
+        result = db.execute(text(pod_insert), pod_params)
+        pod_id = result.scalar()
+        
+        # Update challan status to delivered
+        update_query = """
+            UPDATE sales.orders 
+            SET delivery_status = 'delivered',
+                delivery_date = :delivery_date,
+                pod_recorded = true
+            WHERE order_id = :order_id
+        """
+        db.execute(text(update_query), {
+            "delivery_date": pod_params["delivered_date"],
+            "order_id": challan_id
+        })
+        
+        db.commit()
+        
+        return {
+            "pod_id": pod_id,
+            "challan_id": challan_id,
+            "status": "POD recorded successfully",
+            "delivered_to": pod_params["received_by_name"]
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Error recording POD: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to record POD: {str(e)}")
+
+@router.get("/{challan_id}/tracking")
+def get_delivery_tracking(challan_id: int, db: Session = Depends(get_db)):
+    """
+    Get real-time delivery tracking information
+    
+    - Current status and location
+    - Tracking history
+    - Estimated delivery time
+    """
+    try:
+        # Get challan details with tracking info
+        challan_query = """
+            SELECT 
+                o.order_id as challan_id,
+                o.customer_id,
+                c.customer_name,
+                o.delivery_status,
+                o.delivery_address,
+                o.delivery_date,
+                o.order_date as dispatch_date,
+                ewb.eway_bill_number,
+                ewb.vehicle_number,
+                ewb.transporter_name,
+                ewb.valid_until
+            FROM sales.orders o
+            LEFT JOIN parties.customers c ON o.customer_id = c.customer_id
+            LEFT JOIN sales.eway_bills ewb ON ewb.challan_id = o.order_id
+            WHERE o.order_id = :challan_id
+        """
+        
+        result = db.execute(text(challan_query), {"challan_id": challan_id})
+        challan = result.first()
+        
+        if not challan:
+            raise HTTPException(status_code=404, detail="Delivery challan not found")
+        
+        # Get tracking history
+        tracking_query = """
+            SELECT 
+                tracking_id,
+                status,
+                location,
+                timestamp,
+                notes,
+                updated_by
+            FROM sales.delivery_tracking
+            WHERE challan_id = :challan_id
+            ORDER BY timestamp DESC
+        """
+        
+        tracking_result = db.execute(text(tracking_query), {"challan_id": challan_id})
+        tracking_history = [dict(row._mapping) for row in tracking_result]
+        
+        # Calculate estimated delivery
+        estimated_delivery = None
+        if challan.delivery_status in ['pending', 'shipped']:
+            # Simple estimation: dispatch date + 2 days
+            estimated_delivery = (challan.dispatch_date + timedelta(days=2)).isoformat()
+        
+        return {
+            "challan_id": challan_id,
+            "customer_name": challan.customer_name,
+            "current_status": challan.delivery_status,
+            "delivery_address": challan.delivery_address,
+            "vehicle_number": challan.vehicle_number,
+            "transporter": challan.transporter_name,
+            "eway_bill_number": challan.eway_bill_number,
+            "dispatch_date": challan.dispatch_date.isoformat() if challan.dispatch_date else None,
+            "estimated_delivery": estimated_delivery,
+            "actual_delivery": challan.delivery_date.isoformat() if challan.delivery_date else None,
+            "tracking_history": tracking_history,
+            "tracking_url": f"/track/{challan_id}"  # Public tracking URL
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error getting delivery tracking: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to get delivery tracking: {str(e)}")
+
+@router.post("/{challan_id}/update-tracking")
+def update_delivery_tracking(
+    challan_id: int,
+    tracking_data: dict,
+    db: Session = Depends(get_db)
+):
+    """
+    Update delivery tracking status
+    
+    - Add tracking checkpoint
+    - Update current location
+    - Send notifications if configured
+    """
+    try:
+        # Verify challan exists
+        challan_check = db.execute(
+            text("SELECT order_id FROM sales.orders WHERE order_id = :order_id"),
+            {"order_id": challan_id}
+        )
+        if not challan_check.first():
+            raise HTTPException(status_code=404, detail="Delivery challan not found")
+        
+        # Insert tracking record
+        tracking_insert = """
+            INSERT INTO sales.delivery_tracking (
+                challan_id, status, location, timestamp,
+                gps_latitude, gps_longitude, notes, updated_by
+            ) VALUES (
+                :challan_id, :status, :location, :timestamp,
+                :gps_latitude, :gps_longitude, :notes, :updated_by
+            ) RETURNING tracking_id
+        """
+        
+        tracking_params = {
+            "challan_id": challan_id,
+            "status": tracking_data.get("status"),
+            "location": tracking_data.get("location"),
+            "timestamp": tracking_data.get("timestamp", datetime.utcnow()),
+            "gps_latitude": tracking_data.get("gps_latitude"),
+            "gps_longitude": tracking_data.get("gps_longitude"),
+            "notes": tracking_data.get("notes"),
+            "updated_by": tracking_data.get("updated_by", "System")
+        }
+        
+        result = db.execute(text(tracking_insert), tracking_params)
+        tracking_id = result.scalar()
+        
+        # Update challan delivery status if changed
+        if tracking_data.get("update_challan_status", False):
+            update_query = """
+                UPDATE sales.orders 
+                SET delivery_status = :status,
+                    last_tracking_update = CURRENT_TIMESTAMP
+                WHERE order_id = :order_id
+            """
+            db.execute(text(update_query), {
+                "status": tracking_data.get("status"),
+                "order_id": challan_id
+            })
+        
+        db.commit()
+        
+        return {
+            "tracking_id": tracking_id,
+            "challan_id": challan_id,
+            "status": tracking_data.get("status"),
+            "location": tracking_data.get("location"),
+            "message": "Tracking updated successfully"
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Error updating tracking: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to update tracking: {str(e)}")
+
+@router.get("/pending-deliveries")
+def get_pending_deliveries(
+    driver_id: Optional[int] = Query(None),
+    date_filter: Optional[date] = Query(None),
+    db: Session = Depends(get_db)
+):
+    """
+    Get list of pending deliveries
+    
+    - Filter by driver/vehicle
+    - Group by route/area
+    - Priority-based sorting
+    """
+    try:
+        query = """
+            SELECT 
+                o.order_id as challan_id,
+                o.customer_id,
+                c.customer_name,
+                c.customer_address,
+                c.customer_phone,
+                o.delivery_address,
+                o.delivery_priority,
+                o.total_amount,
+                o.order_date,
+                o.expected_delivery_date,
+                ewb.vehicle_number,
+                ewb.transporter_name
+            FROM sales.orders o
+            LEFT JOIN parties.customers c ON o.customer_id = c.customer_id
+            LEFT JOIN sales.eway_bills ewb ON ewb.challan_id = o.order_id
+            WHERE o.delivery_status IN ('pending', 'shipped')
+            AND o.order_status != 'cancelled'
+        """
+        
+        params = {}
+        
+        if date_filter:
+            query += " AND DATE(o.expected_delivery_date) = :date_filter"
+            params["date_filter"] = date_filter
+        
+        query += " ORDER BY o.delivery_priority DESC, o.order_date ASC"
+        
+        result = db.execute(text(query), params)
+        pending_deliveries = [dict(row._mapping) for row in result]
+        
+        # Group by area/route if needed
+        deliveries_by_area = {}
+        for delivery in pending_deliveries:
+            area = delivery.get("delivery_area", "unassigned")
+            if area not in deliveries_by_area:
+                deliveries_by_area[area] = []
+            deliveries_by_area[area].append(delivery)
+        
+        return {
+            "total_pending": len(pending_deliveries),
+            "deliveries": pending_deliveries,
+            "by_area": deliveries_by_area,
+            "summary": {
+                "high_priority": len([d for d in pending_deliveries if d.get("delivery_priority") == "high"]),
+                "normal_priority": len([d for d in pending_deliveries if d.get("delivery_priority") == "normal"]),
+                "total_value": sum(d.get("total_amount", 0) for d in pending_deliveries)
+            }
+        }
+        
+    except Exception as e:
+        logger.error(f"Error getting pending deliveries: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to get pending deliveries: {str(e)}")

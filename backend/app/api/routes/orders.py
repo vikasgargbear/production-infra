@@ -99,6 +99,7 @@ async def create_order(
             "balance_amount": totals["total"],
             "payment_mode": "credit",
             "payment_status": "pending",
+            "created_by": 1,  # Default user ID
             "created_at": datetime.now(),
             "updated_at": datetime.now()
         })
@@ -130,13 +131,13 @@ async def create_order(
                 order_date, delivery_date, order_type, payment_terms, order_status,
                 subtotal_amount, discount_amount, tax_amount, round_off_amount, final_amount,
                 paid_amount, balance_amount, payment_mode, payment_status,
-                notes, created_at, updated_at
+                notes, created_by, created_at, updated_at
             ) VALUES (
                 :org_id, :branch_id, :order_number, :customer_id, :customer_name, :customer_phone,
                 :order_date, :delivery_date, :order_type, :payment_terms, :order_status,
                 :subtotal_amount, :discount_amount, :tax_amount, :round_off_amount, :final_amount,
                 :paid_amount, :balance_amount, :payment_mode, :payment_status,
-                :notes, :created_at, :updated_at
+                :notes, :created_by, :created_at, :updated_at
             ) RETURNING order_id
         """), order_data)
         
