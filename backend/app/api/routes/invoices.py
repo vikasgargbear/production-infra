@@ -241,11 +241,37 @@ async def create_invoice(
         
         # Get updated totals after triggers have run
         updated_result = db.execute(text("""
-            SELECT final_amount FROM sales.invoices
+            SELECT 
+                final_amount,
+                subtotal_amount,
+                tax_amount,
+                discount_amount
+            FROM sales.invoices
             WHERE invoice_id = :invoice_id
         """), {"invoice_id": invoice_id})
         updated = updated_result.fetchone()
-        final_amount_updated = float(updated[0]) if updated else final_amount
+        
+        if updated:
+            final_amount_updated = float(updated[0])
+            subtotal_updated = float(updated[1])
+            tax_updated = float(updated[2])
+            discount_updated = float(updated[3])
+            
+            # Check for mismatches between frontend and backend calculations
+            frontend_total = invoice_data.get("final_amount", 0)
+            if frontend_total and abs(final_amount_updated - frontend_total) > 0.01:
+                logger.warning(f"""
+                Invoice {invoice_id} calculation mismatch detected:
+                Frontend total: {frontend_total}
+                Backend total: {final_amount_updated}
+                Difference: {final_amount_updated - frontend_total}
+                Frontend subtotal: {invoice_data.get('subtotal_amount', 0)}
+                Backend subtotal: {subtotal_updated}
+                Frontend tax: {invoice_data.get('tax_amount', 0)}
+                Backend tax: {tax_updated}
+                """)
+        else:
+            final_amount_updated = final_amount
         
         return {
             "success": True,

@@ -174,6 +174,9 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
   const calculateTotals = () => {
     const totals = InvoiceCalculator.calculateInvoiceTotals(invoice.items, invoice.gst_type);
     
+    console.log('calculateTotals - items:', invoice.items);
+    console.log('calculateTotals - totals:', totals);
+    
     // Add delivery charges to the net amount (don't subtract discount as it's already in item calculations)
     const totalWithCharges = totals.netAmount + (invoice.delivery_charges || 0);
     
@@ -182,6 +185,8 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
     
     const roundOff = Math.round(totalAfterDiscount) - totalAfterDiscount;
     const net = totalAfterDiscount + roundOff;
+    
+    console.log('calculateTotals - final amount:', net);
 
     setInvoice(prev => ({
       ...prev,
@@ -191,8 +196,10 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
       sgst_amount: totals.sgstAmount,
       igst_amount: totals.igstAmount,
       total_amount: totals.grossAmount,
+      taxable_amount: totals.taxableAmount,
       round_off: roundOff,
-      net_amount: net
+      net_amount: net,
+      final_amount: net  // Add final_amount for validation
     }));
   };
 
@@ -402,6 +409,16 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
   const handleSaveInvoice = async () => {
     if (!validateInvoice(true)) return; // Check payment method when saving
 
+    // Ensure totals are calculated before saving
+    calculateTotals();
+    
+    // Validate totals
+    if (!invoice.final_amount || invoice.final_amount <= 0) {
+      setMessage('Invoice total must be greater than zero');
+      setMessageType('error');
+      return;
+    }
+
     setSaving(true);
     try {
       // Get org_id as UUID
@@ -453,13 +470,15 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
           invoice_date: invoice.invoice_date || new Date().toISOString().split('T')[0],
           invoice_type: 'tax_invoice',
           payment_terms: invoice.payment_mode || 'cash',
-          subtotal: invoice.subtotal || invoice.gross_amount,
-          discount_amount: invoice.discount_amount || 0,
+          // Include frontend calculated totals for mismatch detection
+          subtotal_amount: invoice.gross_amount || invoice.subtotal || 0,
+          discount_amount: invoice.total_discount || invoice.discount_amount || 0,
+          taxable_amount: invoice.taxable_amount || 0,
           cgst_amount: invoice.cgst_amount || 0,
           sgst_amount: invoice.sgst_amount || 0,
           igst_amount: invoice.igst_amount || 0,
-          tax_amount: invoice.tax_amount || 0,
-          total_amount: invoice.total_amount || invoice.net_amount,
+          tax_amount: invoice.gst_amount || invoice.tax_amount || 0,
+          final_amount: invoice.final_amount || invoice.net_amount || 0,
           items: invoice.items.map(item => ({
             product_id: item.product_id,
             product_name: item.product_name,

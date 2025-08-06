@@ -34,6 +34,16 @@ Complete testing documentation for the Sales Invoice creation flow in the Pharma
 
 **Use this for:** Development tasks, bug fixing, implementation
 
+### 4. [Complete Trigger & Function Flow](04_COMPLETE_TRIGGER_FLOW.md) ✨ NEW
+- Analysis of 75+ enterprise triggers
+- Complete mapping of what should execute during invoice creation
+- Missing triggers identified
+- Verification queries for each phase
+- Performance considerations
+- Transaction management guide
+
+**Use this for:** Understanding complete database flow, implementing missing triggers
+
 ---
 
 ## 🎯 Quick Navigation

@@ -14,7 +14,7 @@ class DataTransformer {
       product_id: String(product.product_id || product.id || ''),
       product_name: product.product_name || product.name || product.productName || '',
       hsn_code: product.hsn_code || product.hsnCode || '3004',
-      gst_percent: parseFloat(product.gst_percent || product.gstPercent || 12),
+      gst_percent: parseFloat(product.gst_percent || product.gst_percentage || product.gst_rate || product.gstPercent || 18),
       mrp: parseFloat(product.mrp || 0),
       sale_price: parseFloat(product.sale_price || product.selling_price || product.rate || product.mrp || 0),
       manufacturer: product.manufacturer || product.company || '',
