@@ -110,17 +110,29 @@ async def create_order(
         # Ensure payment_terms has a value (it might be None even with schema default)
         if not order_data.get("payment_terms"):
             order_data["payment_terms"] = "credit"
+            
+        # Get branch_id - use first branch for the org
+        branch_result = db.execute(text("""
+            SELECT branch_id FROM master.org_branches 
+            WHERE org_id = :org_id 
+            LIMIT 1
+        """), {"org_id": order_data["org_id"]}).fetchone()
+        
+        if branch_result:
+            order_data["branch_id"] = branch_result.branch_id
+        else:
+            order_data["branch_id"] = 1  # Default branch
         
         # Insert order
         result = db.execute(text("""
             INSERT INTO sales.orders (
-                org_id, order_number, customer_id, customer_name, customer_phone,
+                org_id, branch_id, order_number, customer_id, customer_name, customer_phone,
                 order_date, delivery_date, order_type, payment_terms, order_status,
                 subtotal_amount, discount_amount, tax_amount, round_off_amount, final_amount,
                 paid_amount, balance_amount, payment_mode, payment_status,
                 notes, created_at, updated_at
             ) VALUES (
-                :org_id, :order_number, :customer_id, :customer_name, :customer_phone,
+                :org_id, :branch_id, :order_number, :customer_id, :customer_name, :customer_phone,
                 :order_date, :delivery_date, :order_type, :payment_terms, :order_status,
                 :subtotal_amount, :discount_amount, :tax_amount, :round_off_amount, :final_amount,
                 :paid_amount, :balance_amount, :payment_mode, :payment_status,

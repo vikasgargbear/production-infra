@@ -151,7 +151,7 @@ class OrderService:
                 product = db.execute(text("""
                     SELECT 
                         gst_percentage as gst_percent,
-                        COALESCE(mrp, 100) as mrp
+                        COALESCE(current_mrp, 100) as mrp
                     FROM inventory.products
                     WHERE product_id = :product_id AND org_id = :org_id
                 """), {"product_id": item['product_id'], "org_id": org_id}).fetchone()
@@ -159,7 +159,7 @@ class OrderService:
                 product = db.execute(text("""
                     SELECT 
                         gst_percentage as gst_percent,
-                        COALESCE(mrp, 100) as mrp
+                        COALESCE(current_mrp, 100) as mrp
                     FROM inventory.products
                     WHERE product_id = :product_id
                 """), {"product_id": item['product_id']}).fetchone()
