@@ -48,7 +48,8 @@ const InvoicePreview = ({
     const discount = parseFloat(invoice.discount_amount) || 0;
     
     const taxableAmount = subtotal - discount;
-    const totalAmount = taxableAmount + totalTax + deliveryCharges;
+    // Use the pre-calculated net_amount if available (which includes rounding), otherwise calculate
+    const totalAmount = invoice.net_amount || Math.round(taxableAmount + totalTax + deliveryCharges);
     
     return {
       subtotal: subtotal,

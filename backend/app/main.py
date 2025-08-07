@@ -16,7 +16,7 @@ from .api.routes import (
 from .api.routes import (
     customers_router, orders_router, inventory_router, billing_router, 
     payments_router, invoices_router, order_items_router, users_router, 
-    suppliers_router, purchases_router,  # Removed delivery_challan_router
+    suppliers_router, purchases_router, purchase_orders_router,  # Removed delivery_challan_router
     dashboard_router, stock_adjustments_router, tax_entries_router,
     purchase_upload_router, purchase_enhanced_router, sale_returns_api_router,
     purchase_returns_router, stock_movements_router, party_ledger_router,
@@ -108,6 +108,7 @@ api.include_router(order_items_router, tags=["Order Items"])
 api.include_router(users_router, tags=["Users"])
 api.include_router(suppliers_router, tags=["Suppliers"])
 api.include_router(purchases_router, tags=["Purchases"])
+api.include_router(purchase_orders_router, tags=["Purchase Orders"])
 # Include both - they have different functionality
 api.include_router(delivery_challan.router, tags=["Delivery Challan"])
 api.include_router(stock_adjustments_router, tags=["Stock Adjustments"])

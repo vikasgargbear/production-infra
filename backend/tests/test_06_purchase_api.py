@@ -48,7 +48,10 @@ class TestPurchaseAPI:
                 suppliers = data.get("suppliers", data) if isinstance(data, dict) else data
                 if suppliers and len(suppliers) > 0:
                     supplier = suppliers[0]
-                    cls.test_supplier_id = supplier.get("supplier_id") if isinstance(supplier, dict) else supplier["supplier_id"]
+                    if isinstance(supplier, dict):
+                        cls.test_supplier_id = supplier.get("supplier_id", supplier.get("id", 1))
+                    else:
+                        cls.test_supplier_id = 1
                     logger.info(f"Using supplier ID: {cls.test_supplier_id}")
             else:
                 cls.test_supplier_id = 1  # Default
@@ -102,10 +105,22 @@ class TestPurchaseAPI:
                 headers=HEADERS
             )
             
+            logger.info(f"Tried {endpoint}: Status {response.status_code}")
+            
             if response.status_code in [200, 201]:
                 data = response.json()
-                self.__class__.test_po_id = data.get("po_id", data.get("purchase_order_id", data.get("id")))
-                self.__class__.test_po_number = data.get("po_number", data.get("order_number"))
+                logger.info(f"Response type: {type(data)}, content: {data}")
+                
+                # Handle both list and dict responses
+                if isinstance(data, list):
+                    if len(data) > 0:
+                        po = data[0]
+                        self.__class__.test_po_id = po.get("po_id", po.get("purchase_order_id", po.get("id")))
+                        self.__class__.test_po_number = po.get("po_number", po.get("order_number"))
+                else:
+                    self.__class__.test_po_id = data.get("po_id", data.get("purchase_order_id", data.get("id")))
+                    self.__class__.test_po_number = data.get("po_number", data.get("order_number"))
+                    
                 logger.info(f"✅ Created PO: {self.test_po_number} (ID: {self.test_po_id})")
                 break
             elif response.status_code == 422:
@@ -114,6 +129,11 @@ class TestPurchaseAPI:
                 po_data["org_id"] = DEFAULT_ORG_ID
             elif response.status_code == 404:
                 continue
+            elif response.status_code == 501:
+                logger.warning(f"⚠️ {endpoint} disabled: {response.text}")
+                continue
+            else:
+                logger.warning(f"⚠️ {endpoint} returned {response.status_code}: {response.text}")
                 
     def test_02_get_purchase_orders(self):
         """Test retrieving purchase orders list"""
