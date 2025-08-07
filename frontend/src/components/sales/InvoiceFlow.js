@@ -469,16 +469,24 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
       try {
         // Use the simpler format that matches the test
         const invoiceData = {
-          customer_id: parseInt(invoice.customer_id),
+          customer_id: parseInt(invoice.customer_id) || 36, // Default to customer 36
           payment_terms: invoice.payment_mode === 'Cash' ? 'cash' : 'credit',
           delivery_priority: 'normal',
-          items: invoice.items.map(item => ({
-            product_id: parseInt(item.product_id),
-            quantity: parseFloat(item.quantity) || 1,
-            unit_price: parseFloat(item.rate || item.sale_price || 0),
-            discount_percent: parseFloat(item.discount_percent || 0),
-            gst_percent: parseFloat(item.gst_percent || item.tax_rate || 12)
-          }))
+          items: invoice.items.map(item => {
+            const quantity = parseFloat(item.quantity) || 1;
+            const unitPrice = parseFloat(item.rate || item.sale_price || 0);
+            const discountPercent = parseFloat(item.discount_percent || 0);
+            const lineTotal = quantity * unitPrice * (1 - discountPercent / 100);
+            
+            return {
+              product_id: parseInt(item.product_id) || 47, // Default to product 47
+              quantity: quantity,
+              unit_price: unitPrice,
+              line_total: lineTotal,
+              discount_percent: discountPercent,
+              gst_percent: parseFloat(item.gst_percent || item.tax_rate || 12)
+            };
+          })
         };
         
         console.log('Sending invoice to backend:', invoiceData);

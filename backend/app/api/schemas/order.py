@@ -29,7 +29,7 @@ class OrderItemBase(BaseModel):
         quantity = values.get('quantity', 0)
         unit_price = values.get('unit_price', Decimal("0"))
         discount_amount = values.get('discount_amount', Decimal("0"))
-        tax_amount = values.get('tax_amount', Decimal("0"))
+        tax_amount = values.get('tax_amount') or Decimal("0")  # Handle None
         
         subtotal = quantity * unit_price
         return subtotal - discount_amount + tax_amount
