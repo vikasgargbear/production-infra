@@ -99,7 +99,7 @@ async def create_order(
             "balance_amount": totals["total"],
             "payment_mode": "credit",
             "payment_status": "pending",
-            "created_by": 1,  # Default user ID
+            "created_by": None,  # Will be set to NULL if no user context
             "created_at": datetime.now(),
             "updated_at": datetime.now()
         })

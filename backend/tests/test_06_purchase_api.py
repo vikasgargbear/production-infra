@@ -64,7 +64,8 @@ class TestPurchaseAPI:
                 data = response.json()
                 products = data.get("products", data) if isinstance(data, dict) else data
                 if products and len(products) > 0:
-                    cls.test_product_id = products[0].get("product_id")
+                    product = products[0]
+                    cls.test_product_id = product.get("product_id") if isinstance(product, dict) else product["product_id"]
                     logger.info(f"Using product ID: {cls.test_product_id}")
         except:
             cls.test_product_id = 1

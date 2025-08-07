@@ -244,7 +244,7 @@ async def create_invoice(
             SELECT 
                 final_amount,
                 subtotal_amount,
-                tax_amount,
+                total_tax_amount as tax_amount,
                 discount_amount
             FROM sales.invoices
             WHERE invoice_id = :invoice_id

@@ -449,52 +449,6 @@ const InvoiceListV2: React.FC<InvoiceListProps> = () => {
             pageSize={25}
           />
         </div>
-
-        {/* Quick Stats */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mt-6">
-          <div className="bg-white p-4 rounded-lg border border-gray-200">
-            <div className="flex items-center">
-              <FileText className="w-8 h-8 text-blue-500 mr-3" />
-              <div>
-                <p className="text-sm text-gray-600">Total Invoices</p>
-                <p className="text-xl font-bold text-gray-900">{invoices.length}</p>
-              </div>
-            </div>
-          </div>
-          <div className="bg-white p-4 rounded-lg border border-gray-200">
-            <div className="flex items-center">
-              <IndianRupee className="w-8 h-8 text-green-500 mr-3" />
-              <div>
-                <p className="text-sm text-gray-600">Total Amount</p>
-                <p className="text-xl font-bold text-gray-900">
-                  {formatCurrency(invoices.reduce((sum, inv) => sum + inv.amount, 0))}
-                </p>
-              </div>
-            </div>
-          </div>
-          <div className="bg-white p-4 rounded-lg border border-gray-200">
-            <div className="flex items-center">
-              <Clock className="w-8 h-8 text-amber-500 mr-3" />
-              <div>
-                <p className="text-sm text-gray-600">Pending</p>
-                <p className="text-xl font-bold text-gray-900">
-                  {invoices.filter(inv => inv.paymentStatus === 'Pending').length}
-                </p>
-              </div>
-            </div>
-          </div>
-          <div className="bg-white p-4 rounded-lg border border-gray-200">
-            <div className="flex items-center">
-              <AlertCircle className="w-8 h-8 text-red-500 mr-3" />
-              <div>
-                <p className="text-sm text-gray-600">Overdue</p>
-                <p className="text-xl font-bold text-gray-900">
-                  {invoices.filter(inv => inv.status === 'Overdue').length}
-                </p>
-              </div>
-            </div>
-          </div>
-        </div>
       </div>
 
       {/* Filter Panel */}
