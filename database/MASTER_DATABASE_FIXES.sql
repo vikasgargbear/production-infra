@@ -589,6 +589,190 @@ ON inventory.batches(expiry_date)
 WHERE batch_status = 'active';
 
 -- =============================================
+-- SECTION 8: API TEST FIXES (2025-08-07)
+-- =============================================
+-- These fixes were applied during API testing to resolve schema mismatches
+
+-- 8.1 Orders Table Fixes
+-- Make created_by nullable since we don't always have user context
+ALTER TABLE sales.orders 
+ALTER COLUMN created_by DROP NOT NULL;
+
+ALTER TABLE sales.orders 
+ALTER COLUMN updated_by DROP NOT NULL;
+
+-- 8.2 Order Items Table - Add Missing Columns
+-- Add tax rate columns (from schema documentation)
+ALTER TABLE sales.order_items 
+ADD COLUMN IF NOT EXISTS cgst_rate NUMERIC(5,2);
+
+ALTER TABLE sales.order_items 
+ADD COLUMN IF NOT EXISTS sgst_rate NUMERIC(5,2);
+
+ALTER TABLE sales.order_items 
+ADD COLUMN IF NOT EXISTS igst_rate NUMERIC(5,2);
+
+-- Add tax amount columns
+ALTER TABLE sales.order_items 
+ADD COLUMN IF NOT EXISTS cgst_amount NUMERIC(15,2);
+
+ALTER TABLE sales.order_items 
+ADD COLUMN IF NOT EXISTS sgst_amount NUMERIC(15,2);
+
+ALTER TABLE sales.order_items 
+ADD COLUMN IF NOT EXISTS igst_amount NUMERIC(15,2);
+
+-- Add cess columns
+ALTER TABLE sales.order_items 
+ADD COLUMN IF NOT EXISTS cess_rate NUMERIC(5,2);
+
+ALTER TABLE sales.order_items 
+ADD COLUMN IF NOT EXISTS cess_amount NUMERIC(15,2);
+
+-- Add status and tracking columns
+ALTER TABLE sales.order_items 
+ADD COLUMN IF NOT EXISTS delivery_status TEXT DEFAULT 'pending';
+
+ALTER TABLE sales.order_items 
+ADD COLUMN IF NOT EXISTS notes TEXT;
+
+-- Add product snapshot columns
+ALTER TABLE sales.order_items 
+ADD COLUMN IF NOT EXISTS product_name TEXT;
+
+ALTER TABLE sales.order_items 
+ADD COLUMN IF NOT EXISTS product_code TEXT;
+
+ALTER TABLE sales.order_items 
+ADD COLUMN IF NOT EXISTS batch_number TEXT;
+
+ALTER TABLE sales.order_items 
+ADD COLUMN IF NOT EXISTS delivered_quantity NUMERIC(15,3) DEFAULT 0;
+
+-- Add timestamps
+ALTER TABLE sales.order_items 
+ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP;
+
+ALTER TABLE sales.order_items 
+ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP;
+
+-- 8.3 Order Items Table - Make Columns Nullable
+-- These columns are not always provided by the API
+ALTER TABLE sales.order_items 
+ALTER COLUMN uom DROP NOT NULL;
+
+ALTER TABLE sales.order_items 
+ALTER COLUMN product_name DROP NOT NULL;
+
+ALTER TABLE sales.order_items 
+ALTER COLUMN batch_id DROP NOT NULL;
+
+ALTER TABLE sales.order_items 
+ALTER COLUMN batch_number DROP NOT NULL;
+
+ALTER TABLE sales.order_items 
+ALTER COLUMN product_code DROP NOT NULL;
+
+ALTER TABLE sales.order_items 
+ALTER COLUMN hsn_code DROP NOT NULL;
+
+ALTER TABLE sales.order_items 
+ALTER COLUMN mrp DROP NOT NULL;
+
+ALTER TABLE sales.order_items 
+ALTER COLUMN pack_type DROP NOT NULL;
+
+-- 8.4 Drop Problematic Pack Configuration Trigger
+-- This trigger was blocking order creation
+DROP TRIGGER IF EXISTS calculate_pack_quantities_trigger ON sales.order_items;
+DROP FUNCTION IF EXISTS calculate_pack_quantities() CASCADE;
+
+-- 8.5 Invoice Items Table Fixes
+-- Make created_by nullable if it exists
+DO $$ 
+BEGIN
+    IF EXISTS (SELECT 1 FROM information_schema.columns 
+               WHERE table_schema = 'sales' 
+               AND table_name = 'invoice_items' 
+               AND column_name = 'created_by') THEN
+        ALTER TABLE sales.invoice_items ALTER COLUMN created_by DROP NOT NULL;
+    END IF;
+END $$;
+
+-- =============================================
+-- SECTION 9: PACK CONFIGURATION CLEANUP (2025-08-07)
+-- =============================================
+-- Remove redundant product_pack_configurations table and add pack columns to products
+
+-- 9.1 Add pack columns to products table
+ALTER TABLE inventory.products 
+ADD COLUMN IF NOT EXISTS units_per_pack INTEGER,
+ADD COLUMN IF NOT EXISTS packs_per_box INTEGER,
+ADD COLUMN IF NOT EXISTS pack_unit TEXT,     -- 'STRIP', 'BOTTLE', 'VIAL', 'TUBE'
+ADD COLUMN IF NOT EXISTS box_unit TEXT;      -- 'BOX', 'CASE', 'CARTON'
+
+-- 9.2 Migrate existing pack_config JSON data to new columns
+UPDATE inventory.products 
+SET 
+    units_per_pack = CASE 
+        WHEN pack_config->>'pack_quantity' IS NOT NULL 
+        THEN (pack_config->>'pack_quantity')::INTEGER 
+        ELSE NULL 
+    END,
+    packs_per_box = CASE 
+        WHEN pack_config->>'pack_multiplier' IS NOT NULL 
+        THEN (pack_config->>'pack_multiplier')::INTEGER 
+        ELSE NULL 
+    END,
+    pack_unit = CASE
+        WHEN pack_config->>'pack_unit_type' IS NOT NULL
+        THEN pack_config->>'pack_unit_type'
+        ELSE NULL
+    END
+WHERE pack_config IS NOT NULL 
+AND pack_config != '{}'::jsonb;
+
+-- 9.3 Drop the redundant product_pack_configurations table
+-- This table was designed but never used - pack info is stored in products.pack_config JSON
+DROP TABLE IF EXISTS inventory.product_pack_configurations CASCADE;
+
+-- 9.4 Add comments to document the pack columns
+COMMENT ON COLUMN inventory.products.units_per_pack IS 'Number of base units per pack (e.g., 10 tablets per strip)';
+COMMENT ON COLUMN inventory.products.packs_per_box IS 'Number of packs per box (e.g., 10 strips per box)';
+COMMENT ON COLUMN inventory.products.pack_unit IS 'Pack unit type (e.g., STRIP, BOTTLE, VIAL)';
+COMMENT ON COLUMN inventory.products.box_unit IS 'Box unit type (e.g., BOX, CASE, CARTON)';
+
+-- 9.5 Create index for pack configuration queries
+CREATE INDEX IF NOT EXISTS idx_products_pack_config 
+ON inventory.products(units_per_pack, packs_per_box) 
+WHERE units_per_pack IS NOT NULL;
+
+-- =============================================
+-- SECTION 10: INVENTORY MOVEMENTS CLEANUP (2025-08-07)
+-- =============================================
+-- Drop redundant inventory_movements table as all movement data
+-- already exists in transaction-specific tables
+
+-- 10.1 Drop the redundant inventory_movements table
+DROP TABLE IF EXISTS inventory.inventory_movements CASCADE;
+
+-- 10.2 Create simple view for movement reporting
+CREATE OR REPLACE VIEW inventory.movement_summary AS
+SELECT 
+    'sale'::TEXT as movement_type,
+    ii.product_id,
+    ii.quantity,
+    i.invoice_date::DATE as movement_date,
+    i.invoice_number as document_number,
+    i.customer_name as party_name,
+    i.org_id
+FROM sales.invoice_items ii
+JOIN sales.invoices i ON ii.invoice_id = i.invoice_id;
+
+COMMENT ON VIEW inventory.movement_summary IS 
+'Simple movement summary. For detailed audit trail, query transaction tables directly (invoice_items, purchase_order_items, etc.)';
+
+-- =============================================
 -- FINAL VALIDATION
 -- =============================================
 DO $$
@@ -604,5 +788,8 @@ BEGIN
     RAISE NOTICE '5. Function fixes: Added utility functions';
     RAISE NOTICE '6. Invoice triggers: Added totals, GST, and inventory update triggers';
     RAISE NOTICE '7. Index fixes: Added performance indexes';
+    RAISE NOTICE '8. API test fixes: Fixed schema mismatches for orders and invoice tables';
+    RAISE NOTICE '9. Pack config cleanup: Removed redundant table, added pack columns to products';
+    RAISE NOTICE '10. Inventory movements cleanup: Dropped redundant table, created summary view';
     RAISE NOTICE '========================================';
 END $$;

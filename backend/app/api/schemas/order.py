@@ -17,8 +17,8 @@ class OrderItemBase(BaseModel):
     unit_price: Decimal = Field(..., ge=0)
     discount_percent: Decimal = Field(default=Decimal("0.00"), ge=0, le=100)
     discount_amount: Decimal = Field(default=Decimal("0.00"), ge=0)
-    tax_percent: Decimal = Field(..., ge=0)
-    tax_amount: Decimal = Field(..., ge=0)
+    tax_percent: Optional[Decimal] = Field(None, ge=0)
+    tax_amount: Optional[Decimal] = Field(None, ge=0)
     
     # Computed fields
     line_total: Optional[Decimal] = None
@@ -37,6 +37,9 @@ class OrderItemBase(BaseModel):
 
 class OrderItemCreate(OrderItemBase):
     """Schema for creating order item"""
+    # Override to make tax fields optional for creation
+    tax_percent: Optional[Decimal] = Field(default=Decimal("0.00"), ge=0)
+    tax_amount: Optional[Decimal] = Field(default=Decimal("0.00"), ge=0)
 
 
 class OrderItemResponse(OrderItemBase):
@@ -46,7 +49,7 @@ class OrderItemResponse(OrderItemBase):
     product_name: str
     product_code: str
     batch_number: Optional[str]
-    expiry_date: Optional[date]
+    expiry_date: Optional[date] = None
     
     class Config:
         from_attributes = True

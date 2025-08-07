@@ -6,7 +6,7 @@
 import axios, { AxiosInstance, AxiosError } from 'axios';
 
 // Get API URL from environment or use default
-const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
+const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || 'http://localhost:8000';
 // Create axios instance with default config
 const apiClient: AxiosInstance = axios.create({
   baseURL: `${API_BASE_URL}/api`,  // Consolidated API - no version

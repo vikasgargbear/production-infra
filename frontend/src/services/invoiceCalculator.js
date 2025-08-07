@@ -76,7 +76,7 @@ class InvoiceCalculator {
       cgstAmount: this.round(cgstAmount),
       sgstAmount: this.round(sgstAmount),
       igstAmount: this.round(igstAmount),
-      netAmount: this.round(netAmount),
+      netAmount: finalAmount,  // Use the rounded final amount instead of decimal netAmount
       roundOff: this.round(roundOff),
       finalAmount
     };
