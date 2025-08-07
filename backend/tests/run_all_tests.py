@@ -74,41 +74,75 @@ def main():
     print(f"Started at: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     print("="*80)
     
-    # Define all tests to run
+    # Define all tests to run in priority order
     test_suite = [
-        # Core Module Tests
-        {
-            "file": "tests/modules/test_products.py",
-            "name": "Product Module Tests"
-        },
-        {
-            "file": "tests/modules/test_batches.py", 
-            "name": "Batch Module Tests"
-        },
-        {
-            "file": "tests/modules/test_customers.py",
-            "name": "Customer Module Tests"
-        },
-        {
-            "file": "tests/modules/test_suppliers.py",
-            "name": "Supplier Module Tests"
-        },
-        {
-            "file": "tests/modules/test_invoices.py",
-            "name": "Invoice Module Tests"  
-        },
+        # Already Tested Core APIs (12 APIs completed)
+        {"file": "test_01_invoice_api.py", "name": "Invoice API Tests"},
+        {"file": "test_02_products_api.py", "name": "Products API Tests"},
+        {"file": "test_03_customers_api.py", "name": "Customers API Tests"},
+        {"file": "test_04_orders_api.py", "name": "Orders API Tests"},
+        {"file": "test_05_inventory_api.py", "name": "Inventory API Tests"},
+        {"file": "test_06_purchase_api.py", "name": "Purchase API Tests"},
+        {"file": "test_07_financial_api.py", "name": "Financial API Tests"},
+        {"file": "test_08_delivery_api.py", "name": "Delivery API Tests"},
+        {"file": "test_09_compliance_api.py", "name": "Compliance API Tests (New)"},
+        {"file": "test_10_prescription_api.py", "name": "Prescription API Tests"},
+        {"file": "test_11_batch_recall_api.py", "name": "Batch Recall API Tests"},
+        {"file": "test_12_cold_chain_api.py", "name": "Cold Chain API Tests"},
         
-        # API Functionality Tests
-        {
-            "file": "tests/api/test_search_functionality.py",
-            "name": "Search Functionality Tests"
-        },
+        # HIGH PRIORITY - Stock Management (Core Operations)
+        {"file": "test_13_stock_movements_api.py", "name": "Stock Movements API Tests"},
+        {"file": "test_14_stock_adjustments_api.py", "name": "Stock Adjustments API Tests"},
+        {"file": "test_15_stock_receive_api.py", "name": "Stock Receive API Tests"},
         
-        # Workflow Tests
-        {
-            "file": "tests/workflows/test_product_to_invoice_workflow.py",
-            "name": "Product to Invoice Workflow Test"
-        }
+        # HIGH PRIORITY - Returns Management
+        {"file": "test_16_sales_returns_api.py", "name": "Sales Returns API Tests"},
+        {"file": "test_17_purchase_returns_api.py", "name": "Purchase Returns API Tests"},
+        
+        # HIGH PRIORITY - Financial Operations
+        {"file": "test_18_party_ledger_api.py", "name": "Party Ledger API Tests"},
+        {"file": "test_19_credit_debit_notes_api.py", "name": "Credit/Debit Notes API Tests"},
+        {"file": "test_20_tax_entries_api.py", "name": "Tax Entries API Tests"},
+        
+        # MEDIUM PRIORITY - Collection Center
+        {"file": "test_21_collection_center_api.py", "name": "Collection Center API Tests"},
+        {"file": "test_22_collection_center_simple_api.py", "name": "Collection Center Simple API Tests"},
+        
+        # MEDIUM PRIORITY - Analytics & Reporting
+        {"file": "test_23_dashboard_api.py", "name": "Dashboard API Tests"},
+        {"file": "test_24_pharma_invoice_parser_api.py", "name": "Pharma Invoice Parser API Tests"},
+        
+        # LOW PRIORITY - User Management
+        {"file": "test_25_users_api.py", "name": "Users API Tests"},
+        {"file": "test_26_org_users_api.py", "name": "Organization Users API Tests"},
+        {"file": "test_27_auth_api.py", "name": "Authentication API Tests"},
+        
+        # SPECIALIZED - Additional APIs
+        {"file": "test_28_inventory_batches_api.py", "name": "Inventory Batches API Tests"},
+        {"file": "test_29_stock_writeoff_api.py", "name": "Stock Write-off API Tests"},
+        {"file": "test_30_purchase_enhanced_api.py", "name": "Purchase Enhanced API Tests"},
+        {"file": "test_31_purchase_upload_api.py", "name": "Purchase Upload API Tests"},
+        {"file": "test_32_enterprise_orders_api.py", "name": "Enterprise Orders API Tests"},
+        {"file": "test_33_enterprise_delivery_api.py", "name": "Enterprise Delivery API Tests"},
+        {"file": "test_34_challan_to_invoice_api.py", "name": "Challan to Invoice API Tests"},
+        {"file": "test_35_direct_invoice_api.py", "name": "Direct Invoice API Tests"},
+        {"file": "test_36_smart_invoice_api.py", "name": "Smart Invoice API Tests"},
+        {"file": "test_37_quick_sale_api.py", "name": "Quick Sale API Tests"},
+        {"file": "test_38_order_items_api.py", "name": "Order Items API Tests"},
+        {"file": "test_39_sales_api.py", "name": "Sales API Tests"},
+        {"file": "test_40_sales_orders_api.py", "name": "Sales Orders API Tests"},
+        {"file": "test_41_billing_api.py", "name": "Billing API Tests"},
+        {"file": "test_42_suppliers_api.py", "name": "Suppliers API Tests"},
+        {"file": "test_43_organization_settings_api.py", "name": "Organization Settings API Tests"},
+        
+        # Original Module Tests (Keep for regression)
+        {"file": "tests/modules/test_products.py", "name": "Product Module Tests"},
+        {"file": "tests/modules/test_batches.py", "name": "Batch Module Tests"},
+        {"file": "tests/modules/test_customers.py", "name": "Customer Module Tests"},
+        {"file": "tests/modules/test_suppliers.py", "name": "Supplier Module Tests"},
+        {"file": "tests/modules/test_invoices.py", "name": "Invoice Module Tests"},
+        {"file": "tests/api/test_search_functionality.py", "name": "Search Functionality Tests"},
+        {"file": "tests/workflows/test_product_to_invoice_workflow.py", "name": "Product to Invoice Workflow Test"}
     ]
     
     # Run all tests
