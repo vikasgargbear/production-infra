@@ -773,6 +773,88 @@ COMMENT ON VIEW inventory.movement_summary IS
 'Simple movement summary. For detailed audit trail, query transaction tables directly (invoice_items, purchase_order_items, etc.)';
 
 -- =============================================
+-- SECTION 11: QUANTITY TRACKING ENHANCEMENT (2025-08-07)
+-- =============================================
+-- Add base_quantity and free_quantity tracking to invoice_items and order_items
+-- This allows separate tracking of billable vs free/promotional items
+
+-- 11.1 Add columns to invoice_items
+ALTER TABLE sales.invoice_items 
+ADD COLUMN IF NOT EXISTS base_quantity NUMERIC(15,3),
+ADD COLUMN IF NOT EXISTS free_quantity NUMERIC(15,3) DEFAULT 0;
+
+-- 11.2 Add documentation comments
+COMMENT ON COLUMN sales.invoice_items.quantity IS 'Total quantity delivered (base + free) - used for inventory deduction';
+COMMENT ON COLUMN sales.invoice_items.base_quantity IS 'Billable/paid quantity - used for revenue calculation';
+COMMENT ON COLUMN sales.invoice_items.free_quantity IS 'Free/promotional quantity given - used for tracking and analytics';
+
+-- 11.3 Backfill existing data
+UPDATE sales.invoice_items 
+SET base_quantity = quantity,
+    free_quantity = 0
+WHERE base_quantity IS NULL;
+
+-- 11.4 Create performance index
+CREATE INDEX IF NOT EXISTS idx_invoice_items_free_quantity 
+ON sales.invoice_items(free_quantity) 
+WHERE free_quantity > 0;
+
+-- 11.5 Create reporting view
+CREATE OR REPLACE VIEW sales.v_invoice_items_with_quantities AS
+SELECT 
+    ii.*,
+    ii.base_quantity * ii.unit_price as billable_amount,
+    ii.free_quantity * ii.unit_price as free_value,
+    CASE 
+        WHEN ii.base_quantity > 0 
+        THEN (ii.free_quantity::NUMERIC / ii.base_quantity::NUMERIC * 100)::NUMERIC(5,2)
+        ELSE 0 
+    END as free_percentage
+FROM sales.invoice_items ii;
+
+-- 11.6 Add to order_items table
+ALTER TABLE sales.order_items 
+ADD COLUMN IF NOT EXISTS base_quantity NUMERIC(15,3),
+ADD COLUMN IF NOT EXISTS free_quantity NUMERIC(15,3) DEFAULT 0;
+
+-- Backfill order_items
+UPDATE sales.order_items 
+SET base_quantity = quantity,
+    free_quantity = 0
+WHERE base_quantity IS NULL;
+
+-- 11.7 Create validation function
+CREATE OR REPLACE FUNCTION sales.validate_quantity_integrity()
+RETURNS TRIGGER AS $$
+BEGIN
+    -- If base_quantity not provided, default to quantity
+    IF NEW.base_quantity IS NULL THEN
+        NEW.base_quantity := NEW.quantity;
+    END IF;
+    
+    -- If free_quantity not provided, default to 0
+    IF NEW.free_quantity IS NULL THEN
+        NEW.free_quantity := 0;
+    END IF;
+    
+    -- Ensure total quantity equals base + free
+    IF NEW.quantity != (NEW.base_quantity + NEW.free_quantity) THEN
+        -- Auto-adjust quantity to match
+        NEW.quantity := NEW.base_quantity + NEW.free_quantity;
+    END IF;
+    
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+-- 11.8 Create trigger
+DROP TRIGGER IF EXISTS trg_validate_invoice_items_quantity ON sales.invoice_items;
+CREATE TRIGGER trg_validate_invoice_items_quantity
+BEFORE INSERT OR UPDATE ON sales.invoice_items
+FOR EACH ROW
+EXECUTE FUNCTION sales.validate_quantity_integrity();
+
+-- =============================================
 -- FINAL VALIDATION
 -- =============================================
 DO $$
@@ -791,5 +873,6 @@ BEGIN
     RAISE NOTICE '8. API test fixes: Fixed schema mismatches for orders and invoice tables';
     RAISE NOTICE '9. Pack config cleanup: Removed redundant table, added pack columns to products';
     RAISE NOTICE '10. Inventory movements cleanup: Dropped redundant table, created summary view';
+    RAISE NOTICE '11. Quantity tracking: Added base_quantity and free_quantity to invoice/order items';
     RAISE NOTICE '========================================';
 END $$;
