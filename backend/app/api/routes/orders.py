@@ -167,14 +167,22 @@ async def create_order(
             item_data["sgst_amount"] = tax_amount / 2
             item_data["igst_amount"] = 0
             
+            # Get product name
+            product_result = db.execute(text("""
+                SELECT product_name FROM inventory.products 
+                WHERE product_id = :product_id
+            """), {"product_id": item_data["product_id"]}).fetchone()
+            
+            item_data["product_name"] = product_result.product_name if product_result else f"Product {item_data['product_id']}"
+            
             db.execute(text("""
                 INSERT INTO sales.order_items (
-                    order_id, product_id, batch_id, quantity,
+                    order_id, product_id, product_name, batch_id, quantity,
                     unit_price, discount_percent, discount_amount,
                     line_total, cgst_rate, sgst_rate, igst_rate,
                     cgst_amount, sgst_amount, igst_amount
                 ) VALUES (
-                    :order_id, :product_id, :batch_id, :quantity,
+                    :order_id, :product_id, :product_name, :batch_id, :quantity,
                     :unit_price, :discount_percent, :discount_amount,
                     :line_total, :cgst_rate, :sgst_rate, :igst_rate,
                     :cgst_amount, :sgst_amount, :igst_amount

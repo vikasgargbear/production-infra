@@ -16,7 +16,7 @@ const ItemsTable = ({
   showActions = true,
   showTotals = true,
   currencySymbol = '₹',
-  columns = ['product', 'quantity', 'mrp', 'rate', 'discount', 'free', 'total'],
+  columns = ['product', 'quantity', 'mrp', 'rate', 'discount', 'free', 'tax', 'total'],
   customColumns = {},
   className = '',
   title = 'Items'
@@ -37,7 +37,8 @@ const ItemsTable = ({
     const taxableAmount = subtotal - discountAmount;
     const taxAmount = (taxableAmount * tax) / 100;
     
-    return item.final_amount || (taxableAmount + taxAmount);
+    // Always calculate, don't use pre-calculated final_amount
+    return taxableAmount + taxAmount;
   };
 
   const columnConfig = {

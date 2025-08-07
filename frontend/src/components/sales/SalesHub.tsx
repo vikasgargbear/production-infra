@@ -3,7 +3,7 @@ import {
   FileText, Package, ShoppingCart, Truck, TrendingUp, List
 } from 'lucide-react';
 import { ModuleHub } from '../global';
-import InvoiceFlowBalanced from './InvoiceFlowBalanced';
+import InvoiceFlow from './InvoiceFlow';
 import InvoiceListMinimal from './InvoiceListMinimal';
 import SalesOrderFlow from './SalesOrderFlow';
 import ModularChallanCreatorV5 from '../challan/ModularChallanCreatorV5';
@@ -32,7 +32,7 @@ const SalesHub: React.FC<SalesHubProps> = ({ open = true, onClose }) => {
       description: 'GST Invoice',
       icon: FileText,
       color: 'blue',
-      component: InvoiceFlowBalanced
+      component: InvoiceFlow
     },
     {
       id: 'challan',

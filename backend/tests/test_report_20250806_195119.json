@@ -1,0 +1,410 @@
+{
+  "timestamp": "2025-08-06T19:51:19.978570",
+  "total_tests": 50,
+  "passed_tests": 17,
+  "failed_tests": 33,
+  "success_rate": 34.0,
+  "total_duration": 172.43779873847961,
+  "results": [
+    {
+      "name": "Invoice API Tests",
+      "file": "test_01_invoice_api.py",
+      "passed": true,
+      "duration": 10.496943235397339,
+      "output": "",
+      "error": "INFO:__main__:\u2705 Schema validation passed\nINFO:__main__:Request: {\n  \"customer_id\": 35,\n  \"payment_terms\": \"cash\",\n  \"delivery_priority\": \"normal\",\n  \"items\": [\n    {\n      \"product_id\": 47,\n      \"quantity\": 2,\n      \"unit_price\": 100.0,\n      \"discount_percent\": 10\n    }\n  ]\n}\nINFO:__main__:Response Status: 200\nINFO:__main__:Response Body: {\"success\":true,\"invoice_id\":94,\"invoice_number\":\"INV-20250818\",\"order_id\":54,\"order_number\":\"ORD-20250818\",\"items_created\":1,\"total_amount\":201.6}\nINFO:__main__:\u2705 Created invoice: INV-20250818 (ID: 94)\nINFO:__main__:\u2705 Invoice totals trigger working correctly - ID: 94\nINFO:__main__:\u2705 Created GST invoice: INV-20250819\nINFO:__main__:\u2705 Validation test passed: Missing customer_id\nINFO:__main__:\u2705 Validation test passed: Invalid item - missing product_id\nINFO:__main__:\u2705 Validation test passed: Invalid payment_terms\nINFO:__main__:\u2705 Invoice list retrieval tests passed\nINFO:__main__:\u2705 Mismatch detection test completed (check backend logs)\nINFO:__main__:\n==================================================\nINFO:__main__:Test Results: 7 passed, 0 failed\nINFO:__main__:==================================================\n"
+    },
+    {
+      "name": "Products API Tests",
+      "file": "test_02_products_api.py",
+      "passed": true,
+      "duration": 6.864295959472656,
+      "output": "",
+      "error": "INFO:__main__:Search query: 'paracetamol' - Status: 200\nINFO:__main__:\u2705 GST field found: gst_rate\nINFO:__main__:Search query: '3004' - Status: 200\nINFO:__main__:\u2705 GST field found: gst_rate\nINFO:__main__:Search query: '' - Status: 200\nINFO:__main__:\u2705 GST field found: gst_rate\nINFO:__main__:\u2705 Product search tests passed\nINFO:__main__:\u2705 Product details retrieved from /products/50\nWARNING:__main__:\u26a0\ufe0f Batch retrieval returned 404\nINFO:__main__:\u2705 Product schema validation passed\nWARNING:__main__:\u26a0\ufe0f Category endpoint not found\nINFO:__main__:\u2705 Correct 404 for non-existent product\nINFO:__main__:\n==================================================\nINFO:__main__:Product API Test Results: 8 passed, 0 failed\nINFO:__main__:==================================================\n"
+    },
+    {
+      "name": "Customers API Tests",
+      "file": "test_03_customers_api.py",
+      "passed": true,
+      "duration": 10.922970056533813,
+      "output": "",
+      "error": "INFO:__main__:Search query: 'medical' - Status: 200\nINFO:__main__:\u2705 GST field found: gstin\nINFO:__main__:Search query: '27AAPFC' - Status: 200\nINFO:__main__:Search query: '' - Status: 200\nINFO:__main__:\u2705 GST field found: gstin\nINFO:__main__:\u2705 Customer search tests passed\nINFO:__main__:\u2705 Customer details retrieved from /customers/13\nINFO:__main__:\u2705 Credit fields found: ['credit_limit', 'credit_days', 'outstanding_amount']\nINFO:__main__:\u2705 Credit info retrieved from /customers/13/outstanding\nINFO:__main__:\u2705 Credit information available\nINFO:__main__:\u2705 Transaction data retrieved from /invoices?customer_id=13\nINFO:__main__:\u2705 GST validation working correctly\nINFO:__main__:\u2705 Correct 404 for non-existent customer\nWARNING:__main__:\u26a0\ufe0f Outstanding report endpoint not found\nINFO:__main__:\u2705 Bulk retrieval successful: 23 customers\nINFO:__main__:\u2705 Pagination info available: Total 23\nWARNING:__main__:\u26a0\ufe0f Inconsistent phone field names: {'phone', 'alternate_phone'}\nINFO:__main__:\u2705 Consistent GST field: {'gstin'}\nINFO:__main__:\n==================================================\nINFO:__main__:Customer API Test Results: 9 passed, 0 failed\nINFO:__main__:==================================================\n"
+    },
+    {
+      "name": "Orders API Tests",
+      "file": "test_04_orders_api.py",
+      "passed": false,
+      "duration": 7.322670936584473,
+      "output": "",
+      "error": "INFO:__main__:Using customer ID: 13\nINFO:__main__:Using product ID: 8\nINFO:__main__:Create order response: 404\nERROR:__main__:\u274c test_01_create_order_minimal failed: Failed: {\"detail\":\"Failed to create order: (psycopg2.errors.UndefinedColumn) column \\\"cgst_rate\\\" of relation \\\"order_items\\\" does not exist\\nLINE 5:                     line_total, cgst_rate, sgst_rate, igst_r...\\n                                        ^\\n\\n[SQL: \\n                INSERT INTO sales.order_items (\\n                    order_id, product_id, batch_id, quantity,\\n                    unit_price, discount_percent, discount_amount,\\n                    line_total, cgst_rate, sgst_rate, igst_rate,\\n                    cgst_amount, sgst_amount, igst_amount\\n                ) VALUES (\\n                    %(order_id)s, %(product_id)s, %(batch_id)s, %(quantity)s,\\n                    %(unit_price)s, %(discount_percent)s, %(discount_amount)s,\\n                    %(line_total)s, %(cgst_rate)s, %(sgst_rate)s, %(igst_rate)s,\\n                    %(cgst_amount)s, %(sgst_amount)s, %(igst_amount)s\\n                )\\n            ]\\n[parameters: {'order_id': 59, 'product_id': 8, 'batch_id': None, 'quantity': 5, 'unit_price': Decimal('150.0'), 'discount_percent': Decimal('0.00'), 'discount_amount': Decimal('0.00'), 'line_total': Decimal('840.00'), 'cgst_rate': Decimal('6.0'), 'sgst_rate': Decimal('6.0'), 'igst_rate': 0, 'cgst_amount': Decimal('45.0'), 'sgst_amount': Decimal('45.0'), 'igst_amount': 0}]\\n(Background on this error at: https://sqlalche.me/e/20/f405)\"}\nWARNING:__main__:\u26a0\ufe0f No orders found - skipping detail test\nWARNING:__main__:\u26a0\ufe0f No order ID - skipping status update test\nWARNING:__main__:\u26a0\ufe0f No order ID - skipping conversion test\nERROR:__main__:\u274c test_05_order_list_with_filters failed: Failed to get orders: {\"detail\":\"Failed to list orders: 1 validation error for OrderResponse\\npayment_terms\\n  Input should be a valid string [type=string_type, input_value=None, input_type=NoneType]\\n    For further information visit https://errors.pydantic.dev/2.5/v/string_type\"}\nWARNING:__main__:\u26a0\ufe0f No order ID - skipping items test\nWARNING:__main__:\u26a0\ufe0f No order ID - skipping fulfillment test\nINFO:__main__:\u2705 Validation passed: Missing customer\nINFO:__main__:\u2705 Validation passed: Empty items\nINFO:__main__:\u2705 Validation passed: Invalid order type\nINFO:__main__:\n==================================================\nINFO:__main__:Order API Test Results: 7 passed, 2 failed\nINFO:__main__:==================================================\n"
+    },
+    {
+      "name": "Inventory API Tests",
+      "file": "test_05_inventory_api.py",
+      "passed": true,
+      "duration": 9.0674409866333,
+      "output": "",
+      "error": "INFO:__main__:Using product ID: 8\nINFO:__main__:\u2705 Batch expiry tracking available\nINFO:__main__:\u2705 Retrieved 38 batches\nWARNING:__main__:\u26a0\ufe0f Availability check returned 404\nWARNING:__main__:\u26a0\ufe0f Location endpoint not found\nWARNING:__main__:\u26a0\ufe0f No location ID - skipping location stock test\nINFO:__main__:\u2705 Stock movement created: ID None\nWARNING:__main__:\u26a0\ufe0f No movements found\nWARNING:__main__:\u26a0\ufe0f Expiry tracking endpoint not found\nWARNING:__main__:\u26a0\ufe0f Stock valuation endpoint not found\nWARNING:__main__:\u26a0\ufe0f Batch allocation endpoint not found or failed\nINFO:__main__:\n==================================================\nINFO:__main__:Inventory API Test Results: 10 passed, 0 failed\nINFO:__main__:==================================================\n"
+    },
+    {
+      "name": "Purchase API Tests",
+      "file": "test_06_purchase_api.py",
+      "passed": false,
+      "duration": 5.633924961090088,
+      "output": "",
+      "error": "INFO:__main__:Using supplier ID: None\nINFO:__main__:Using product ID: 8\nERROR:__main__:\u274c test_01_create_purchase_order failed: 'list' object has no attribute 'get'\nWARNING:__main__:\u26a0\ufe0f PO list endpoint returned 404\nWARNING:__main__:\u26a0\ufe0f No PO ID - skipping detail test\nWARNING:__main__:\u26a0\ufe0f No PO ID - skipping GRN test\nINFO:__main__:\u2705 Retrieved 1 suppliers\nWARNING:__main__:\u26a0\ufe0f No GRN ID - skipping return test\nWARNING:__main__:\u26a0\ufe0f No PO ID - skipping status test\nWARNING:__main__:\u26a0\ufe0f Purchase analytics not found\nWARNING:__main__:\u26a0\ufe0f No supplier ID - skipping outstanding test\nWARNING:__main__:\u26a0\ufe0f Expected validation error, got 404\nINFO:__main__:\n==================================================\nINFO:__main__:Purchase API Test Results: 9 passed, 1 failed\nINFO:__main__:==================================================\n"
+    },
+    {
+      "name": "Financial API Tests",
+      "file": "test_07_financial_api.py",
+      "passed": true,
+      "duration": 8.059699058532715,
+      "output": "",
+      "error": "INFO:__main__:Using customer ID: 13\nINFO:__main__:Using invoice ID: 98\nWARNING:__main__:\u26a0\ufe0f Payment history endpoint not found\nWARNING:__main__:\u26a0\ufe0f Customer ledger endpoint not found\nWARNING:__main__:\u26a0\ufe0f Outstanding aging endpoint not found\nWARNING:__main__:\u26a0\ufe0f Bank reconciliation endpoint not found\nWARNING:__main__:\u26a0\ufe0f Payment modes endpoint not found\nWARNING:__main__:\u26a0\ufe0f Financial summary endpoint not found\nWARNING:__main__:\u26a0\ufe0f Credit note creation failed or not found\nWARNING:__main__:\u26a0\ufe0f No payment ID - skipping allocation test\nWARNING:__main__:\u26a0\ufe0f Expected validation error, got 404\nINFO:__main__:\n==================================================\nINFO:__main__:Financial API Test Results: 10 passed, 0 failed\nINFO:__main__:==================================================\n"
+    },
+    {
+      "name": "Delivery API Tests",
+      "file": "test_08_delivery_api.py",
+      "passed": true,
+      "duration": 5.896763801574707,
+      "output": "",
+      "error": "INFO:__main__:Using customer ID: 13\nINFO:__main__:Using invoice ID: 98\nWARNING:__main__:\u26a0\ufe0f Challan list endpoint returned 404\nWARNING:__main__:\u26a0\ufe0f No challan ID - skipping detail test\nWARNING:__main__:\u26a0\ufe0f No challan ID - skipping e-way bill test\nWARNING:__main__:\u26a0\ufe0f No challan ID - skipping status update\nWARNING:__main__:\u26a0\ufe0f No challan ID - skipping POD test\nWARNING:__main__:\u26a0\ufe0f No challan ID - skipping tracking test\nWARNING:__main__:\u26a0\ufe0f Pending deliveries endpoint not found\nWARNING:__main__:\u26a0\ufe0f Delivery return failed or not found\nWARNING:__main__:\u26a0\ufe0f Delivery analytics endpoint not found\nINFO:__main__:\n==================================================\nINFO:__main__:Delivery API Test Results: 10 passed, 0 failed\nINFO:__main__:==================================================\n"
+    },
+    {
+      "name": "Compliance API Tests (New)",
+      "file": "test_09_compliance_api.py",
+      "passed": true,
+      "duration": 5.046406984329224,
+      "output": "",
+      "error": "WARNING:__main__:\u26a0\ufe0f Drug license API not implemented: 422\nWARNING:__main__:\u26a0\ufe0f Expiring licenses endpoint not found\nWARNING:__main__:\u26a0\ufe0f No license ID - skipping renewal test\nWARNING:__main__:\u26a0\ufe0f Compliance checklist not implemented\nINFO:__main__:\u2705 Compliance audit recorded: ID 2\nWARNING:__main__:\u26a0\ufe0f Compliance status endpoint not found\nWARNING:__main__:\u26a0\ufe0f Document management not implemented\nWARNING:__main__:\u26a0\ufe0f Inspector visit recording not implemented\nINFO:__main__:\u2705 Found 3 compliance alerts\nWARNING:__main__:\u26a0\ufe0f Pharmacist registration not implemented\nINFO:__main__:\n==================================================\nINFO:__main__:Compliance API Test Results: 10 passed, 0 failed\nINFO:__main__:==================================================\nWARNING:__main__:\n\u26a0\ufe0f CRITICAL: Compliance APIs are NOT IMPLEMENTED!\nWARNING:__main__:This is a major regulatory risk for pharmaceutical operations.\nWARNING:__main__:These APIs must be implemented before production use.\n"
+    },
+    {
+      "name": "Prescription API Tests",
+      "file": "test_10_prescription_api.py",
+      "passed": true,
+      "duration": 4.339287042617798,
+      "output": "",
+      "error": "WARNING:__main__:\u26a0\ufe0f Prescription API not implemented: 404\nWARNING:__main__:\u26a0\ufe0f Prescription validation not implemented\nWARNING:__main__:\u26a0\ufe0f Prescription requirement check not implemented\nWARNING:__main__:\u26a0\ufe0f No prescription ID - skipping dispensing test\nWARNING:__main__:\u26a0\ufe0f Prescription audit trail not implemented\nWARNING:__main__:\u26a0\ufe0f Doctor verification not implemented\nWARNING:__main__:\u26a0\ufe0f Schedule drug report not implemented\nWARNING:__main__:\u26a0\ufe0f No prescription ID - skipping expiry test\nWARNING:__main__:\u26a0\ufe0f Controlled substance register not implemented\nWARNING:__main__:\u26a0\ufe0f Prescription statistics not implemented\nINFO:__main__:\n==================================================\nINFO:__main__:Prescription API Test Results: 10 passed, 0 failed\nINFO:__main__:==================================================\nWARNING:__main__:\n\u26a0\ufe0f CRITICAL: Prescription Management APIs are NOT IMPLEMENTED!\nWARNING:__main__:Schedule H/H1/X drugs cannot be sold without prescription tracking.\nWARNING:__main__:This is a MANDATORY requirement for pharmaceutical operations.\n"
+    },
+    {
+      "name": "Batch Recall API Tests",
+      "file": "test_11_batch_recall_api.py",
+      "passed": true,
+      "duration": 3.5900371074676514,
+      "output": "",
+      "error": "WARNING:__main__:\u26a0\ufe0f No batch ID - skipping affected customers test\nWARNING:__main__:\u26a0\ufe0f No recall ID - skipping notification test\nWARNING:__main__:\u26a0\ufe0f No recall ID - skipping progress tracking\nWARNING:__main__:\u26a0\ufe0f No recall ID - skipping return recording\nWARNING:__main__:\u26a0\ufe0f No recall ID - skipping completion test\nWARNING:__main__:\u26a0\ufe0f Recall history not implemented\nWARNING:__main__:\u26a0\ufe0f No recall ID - skipping regulatory reporting\nWARNING:__main__:\u26a0\ufe0f Batch quarantine not implemented\nWARNING:__main__:\u26a0\ufe0f Recall effectiveness analysis not implemented\nINFO:__main__:\n==================================================\nINFO:__main__:Batch Recall API Test Results: 10 passed, 0 failed\nINFO:__main__:==================================================\nWARNING:__main__:\n\u26a0\ufe0f CRITICAL: Batch Recall APIs are NOT IMPLEMENTED!\nWARNING:__main__:This is an FDA/regulatory requirement for pharmaceutical operations.\nWARNING:__main__:Without recall capability, the business cannot handle product safety issues.\n"
+    },
+    {
+      "name": "Cold Chain API Tests",
+      "file": "test_12_cold_chain_api.py",
+      "passed": true,
+      "duration": 6.035767078399658,
+      "output": "",
+      "error": "WARNING:__main__:\u26a0\ufe0f Temperature logging not implemented\nWARNING:__main__:\u26a0\ufe0f Temperature violations endpoint not implemented\nWARNING:__main__:\u26a0\ufe0f Product temperature requirements not implemented\nWARNING:__main__:\u26a0\ufe0f Alert configuration not implemented\nWARNING:__main__:\u26a0\ufe0f Batch temperature history not implemented\nWARNING:__main__:\u26a0\ufe0f Compliance reporting not implemented\nWARNING:__main__:\u26a0\ufe0f Device calibration tracking not implemented\nWARNING:__main__:\u26a0\ufe0f Temperature mapping not implemented\nWARNING:__main__:\u26a0\ufe0f SOP compliance tracking not implemented\nINFO:__main__:\n==================================================\nINFO:__main__:Cold Chain API Test Results: 10 passed, 0 failed\nINFO:__main__:==================================================\nWARNING:__main__:\n\u26a0\ufe0f CRITICAL: Cold Chain Management APIs are NOT IMPLEMENTED!\nWARNING:__main__:Temperature-sensitive products require continuous monitoring.\nWARNING:__main__:This is essential for product quality and regulatory compliance.\n"
+    },
+    {
+      "name": "Stock Movements API Tests",
+      "file": "test_13_stock_movements_api.py",
+      "passed": true,
+      "duration": 6.275027275085449,
+      "output": "",
+      "error": "INFO:__main__:\u2705 Retrieved 0 stock movements\nINFO:__main__:\u2705 Retrieved 0 movement reasons\nWARNING:__main__:\u26a0\ufe0f Stock receive failed: 400 - {\"detail\":\"Missing required field: product_id\"}\nWARNING:__main__:\u26a0\ufe0f Stock issue failed: 400 - {\"detail\":\"Missing required field: product_id\"}\nWARNING:__main__:\u26a0\ufe0f Stock transfer failed: 400\nWARNING:__main__:\u26a0\ufe0f No product ID - skipping batch test\nWARNING:__main__:\u26a0\ufe0f Near-expiry endpoint not found\nWARNING:__main__:\u26a0\ufe0f Low stock endpoint not found\nWARNING:__main__:\u26a0\ufe0f No product ID - skipping history test\nWARNING:__main__:\u26a0\ufe0f Stock movement summary endpoint not found\nINFO:__main__:\n==================================================\nINFO:__main__:Stock Movements API Test Results: 10 passed, 0 failed\nINFO:__main__:==================================================\n"
+    },
+    {
+      "name": "Stock Adjustments API Tests",
+      "file": "test_14_stock_adjustments_api.py",
+      "passed": true,
+      "duration": 9.550210952758789,
+      "output": "",
+      "error": "WARNING:__main__:\u26a0\ufe0f Stock adjustments endpoint returned 500\nWARNING:__main__:\u26a0\ufe0f Adjustment reasons endpoint not found\nWARNING:__main__:\u26a0\ufe0f Positive adjustment failed: 500\nWARNING:__main__:\u26a0\ufe0f Negative adjustment failed: 500\nWARNING:__main__:\u26a0\ufe0f Bulk adjustments not supported\nWARNING:__main__:\u26a0\ufe0f No adjustment ID - skipping detail test\nWARNING:__main__:\u26a0\ufe0f Pending approvals endpoint not found\nWARNING:__main__:\u26a0\ufe0f No adjustment ID - skipping approval test\nWARNING:__main__:\u26a0\ufe0f Adjustment report endpoint not found\nINFO:__main__:\u26a0\ufe0f Validation endpoint returned 500\nINFO:__main__:\n==================================================\nINFO:__main__:Stock Adjustments API Test Results: 10 passed, 0 failed\nINFO:__main__:==================================================\n"
+    },
+    {
+      "name": "Stock Receive API Tests",
+      "file": "test_15_stock_receive_api.py",
+      "passed": true,
+      "duration": 5.700520992279053,
+      "output": "",
+      "error": "INFO:__main__:\u2705 Retrieved 0 pending purchase orders\nWARNING:__main__:\u26a0\ufe0f GRN creation failed: 502\nWARNING:__main__:\u26a0\ufe0f Direct stock receive failed: 404\nWARNING:__main__:\u26a0\ufe0f GRN list endpoint not found\nWARNING:__main__:\u26a0\ufe0f No GRN ID - skipping detail test\nWARNING:__main__:\u26a0\ufe0f Partial receipt not supported\nWARNING:__main__:\u26a0\ufe0f No GRN ID - skipping QC test\nWARNING:__main__:\u26a0\ufe0f No GRN ID - skipping put-away test\nWARNING:__main__:\u26a0\ufe0f Return receipt not implemented separately\nWARNING:__main__:\u26a0\ufe0f No GRN ID - skipping print test\nINFO:__main__:\n==================================================\nINFO:__main__:Stock Receive API Test Results: 10 passed, 0 failed\nINFO:__main__:==================================================\n"
+    },
+    {
+      "name": "Sales Returns API Tests",
+      "file": "test_16_sales_returns_api.py",
+      "passed": true,
+      "duration": 6.3920578956604,
+      "output": "",
+      "error": "INFO:__main__:Using invoice ID: 98\nWARNING:__main__:\u26a0\ufe0f Sales returns endpoint returned 500\nWARNING:__main__:\u26a0\ufe0f Sales return creation failed: 500\nWARNING:__main__:\u26a0\ufe0f Return reasons endpoint not found\nWARNING:__main__:\u26a0\ufe0f No return ID - skipping approval test\nWARNING:__main__:\u26a0\ufe0f No return ID - skipping credit note test\nWARNING:__main__:\u26a0\ufe0f Inventory return not implemented\nWARNING:__main__:\u26a0\ufe0f Return analytics endpoint not found\nWARNING:__main__:\u26a0\ufe0f Customer return history not available\nWARNING:__main__:\u26a0\ufe0f No return ID - skipping refund test\nWARNING:__main__:\u26a0\ufe0f No return ID - skipping print test\nINFO:__main__:\n==================================================\nINFO:__main__:Sales Returns API Test Results: 10 passed, 0 failed\nINFO:__main__:==================================================\n"
+    },
+    {
+      "name": "Purchase Returns API Tests",
+      "file": "test_17_purchase_returns_api.py",
+      "passed": true,
+      "duration": 3.318826913833618,
+      "output": "",
+      "error": "INFO:__main__:\u2705 Retrieved 0 purchase returns\nINFO:__main__:\u2705 Purchase return created: ID None\nWARNING:__main__:\u26a0\ufe0f Purchase return reasons endpoint not found\nWARNING:__main__:\u26a0\ufe0f No return ID - skipping quality inspection\nWARNING:__main__:\u26a0\ufe0f No return ID - skipping supplier approval\nWARNING:__main__:\u26a0\ufe0f No return ID - skipping debit note test\nWARNING:__main__:\u26a0\ufe0f No return ID - skipping shipment tracking\nWARNING:__main__:\u26a0\ufe0f No return ID - skipping acknowledgment\nWARNING:__main__:\u26a0\ufe0f Purchase return analytics endpoint not found\nWARNING:__main__:\u26a0\ufe0f No return ID - skipping settlement tracking\nINFO:__main__:\n==================================================\nINFO:__main__:Purchase Returns API Test Results: 10 passed, 0 failed\nINFO:__main__:==================================================\n"
+    },
+    {
+      "name": "Party Ledger API Tests",
+      "file": "test_18_party_ledger_api.py",
+      "passed": true,
+      "duration": 10.895877122879028,
+      "output": "",
+      "error": "INFO:__main__:Using customer ID: 13\nWARNING:__main__:\u26a0\ufe0f Party ledger endpoint returned 404\nWARNING:__main__:\u26a0\ufe0f Ledger entry creation failed: 404\nWARNING:__main__:\u26a0\ufe0f Outstanding summary endpoint not found\nWARNING:__main__:\u26a0\ufe0f Aging analysis endpoint not found\nWARNING:__main__:\u26a0\ufe0f Statement generation not available\nWARNING:__main__:\u26a0\ufe0f Payment allocation not implemented\nWARNING:__main__:\u26a0\ufe0f Credit limit check not available\nWARNING:__main__:\u26a0\ufe0f Ledger export not available\nWARNING:__main__:\u26a0\ufe0f Reconciliation report not available\nWARNING:__main__:\u26a0\ufe0f Interest calculation not implemented\nINFO:__main__:\n==================================================\nINFO:__main__:Party Ledger API Test Results: 10 passed, 0 failed\nINFO:__main__:==================================================\n"
+    },
+    {
+      "name": "Credit/Debit Notes API Tests",
+      "file": "test_19_credit_debit_notes_api.py",
+      "passed": true,
+      "duration": 8.934133052825928,
+      "output": "",
+      "error": "INFO:__main__:Using customer ID: 13\nWARNING:__main__:\u26a0\ufe0f Credit notes endpoint returned 404\nWARNING:__main__:\u26a0\ufe0f Credit note creation failed: 404\nWARNING:__main__:\u26a0\ufe0f Debit notes endpoint returned 404\nWARNING:__main__:\u26a0\ufe0f Debit note creation failed: 404\nWARNING:__main__:\u26a0\ufe0f No credit note ID - skipping approval test\nWARNING:__main__:\u26a0\ufe0f No credit note ID - skipping cancellation test\nWARNING:__main__:\u26a0\ufe0f Credit note search not available\nWARNING:__main__:\u26a0\ufe0f Credit note analytics not available\nINFO:__main__:\n==================================================\nINFO:__main__:Credit/Debit Notes API Test Results: 10 passed, 0 failed\nINFO:__main__:==================================================\n"
+    },
+    {
+      "name": "Tax Entries API Tests",
+      "file": "test_20_tax_entries_api.py",
+      "passed": false,
+      "duration": 0,
+      "output": "",
+      "error": "Test file not found"
+    },
+    {
+      "name": "Collection Center API Tests",
+      "file": "test_21_collection_center_api.py",
+      "passed": false,
+      "duration": 0,
+      "output": "",
+      "error": "Test file not found"
+    },
+    {
+      "name": "Collection Center Simple API Tests",
+      "file": "test_22_collection_center_simple_api.py",
+      "passed": false,
+      "duration": 0,
+      "output": "",
+      "error": "Test file not found"
+    },
+    {
+      "name": "Dashboard API Tests",
+      "file": "test_23_dashboard_api.py",
+      "passed": false,
+      "duration": 0,
+      "output": "",
+      "error": "Test file not found"
+    },
+    {
+      "name": "Pharma Invoice Parser API Tests",
+      "file": "test_24_pharma_invoice_parser_api.py",
+      "passed": false,
+      "duration": 0,
+      "output": "",
+      "error": "Test file not found"
+    },
+    {
+      "name": "Users API Tests",
+      "file": "test_25_users_api.py",
+      "passed": false,
+      "duration": 0,
+      "output": "",
+      "error": "Test file not found"
+    },
+    {
+      "name": "Organization Users API Tests",
+      "file": "test_26_org_users_api.py",
+      "passed": false,
+      "duration": 0,
+      "output": "",
+      "error": "Test file not found"
+    },
+    {
+      "name": "Authentication API Tests",
+      "file": "test_27_auth_api.py",
+      "passed": false,
+      "duration": 0,
+      "output": "",
+      "error": "Test file not found"
+    },
+    {
+      "name": "Inventory Batches API Tests",
+      "file": "test_28_inventory_batches_api.py",
+      "passed": false,
+      "duration": 0,
+      "output": "",
+      "error": "Test file not found"
+    },
+    {
+      "name": "Stock Write-off API Tests",
+      "file": "test_29_stock_writeoff_api.py",
+      "passed": false,
+      "duration": 0,
+      "output": "",
+      "error": "Test file not found"
+    },
+    {
+      "name": "Purchase Enhanced API Tests",
+      "file": "test_30_purchase_enhanced_api.py",
+      "passed": false,
+      "duration": 0,
+      "output": "",
+      "error": "Test file not found"
+    },
+    {
+      "name": "Purchase Upload API Tests",
+      "file": "test_31_purchase_upload_api.py",
+      "passed": false,
+      "duration": 0,
+      "output": "",
+      "error": "Test file not found"
+    },
+    {
+      "name": "Enterprise Orders API Tests",
+      "file": "test_32_enterprise_orders_api.py",
+      "passed": false,
+      "duration": 0,
+      "output": "",
+      "error": "Test file not found"
+    },
+    {
+      "name": "Enterprise Delivery API Tests",
+      "file": "test_33_enterprise_delivery_api.py",
+      "passed": false,
+      "duration": 0,
+      "output": "",
+      "error": "Test file not found"
+    },
+    {
+      "name": "Challan to Invoice API Tests",
+      "file": "test_34_challan_to_invoice_api.py",
+      "passed": false,
+      "duration": 0,
+      "output": "",
+      "error": "Test file not found"
+    },
+    {
+      "name": "Direct Invoice API Tests",
+      "file": "test_35_direct_invoice_api.py",
+      "passed": false,
+      "duration": 0,
+      "output": "",
+      "error": "Test file not found"
+    },
+    {
+      "name": "Smart Invoice API Tests",
+      "file": "test_36_smart_invoice_api.py",
+      "passed": false,
+      "duration": 0,
+      "output": "",
+      "error": "Test file not found"
+    },
+    {
+      "name": "Quick Sale API Tests",
+      "file": "test_37_quick_sale_api.py",
+      "passed": false,
+      "duration": 0,
+      "output": "",
+      "error": "Test file not found"
+    },
+    {
+      "name": "Order Items API Tests",
+      "file": "test_38_order_items_api.py",
+      "passed": false,
+      "duration": 0,
+      "output": "",
+      "error": "Test file not found"
+    },
+    {
+      "name": "Sales API Tests",
+      "file": "test_39_sales_api.py",
+      "passed": false,
+      "duration": 0,
+      "output": "",
+      "error": "Test file not found"
+    },
+    {
+      "name": "Sales Orders API Tests",
+      "file": "test_40_sales_orders_api.py",
+      "passed": false,
+      "duration": 0,
+      "output": "",
+      "error": "Test file not found"
+    },
+    {
+      "name": "Billing API Tests",
+      "file": "test_41_billing_api.py",
+      "passed": false,
+      "duration": 0,
+      "output": "",
+      "error": "Test file not found"
+    },
+    {
+      "name": "Suppliers API Tests",
+      "file": "test_42_suppliers_api.py",
+      "passed": false,
+      "duration": 0,
+      "output": "",
+      "error": "Test file not found"
+    },
+    {
+      "name": "Organization Settings API Tests",
+      "file": "test_43_organization_settings_api.py",
+      "passed": false,
+      "duration": 0,
+      "output": "",
+      "error": "Test file not found"
+    },
+    {
+      "name": "Product Module Tests",
+      "file": "tests/modules/test_products.py",
+      "passed": false,
+      "duration": 0,
+      "output": "",
+      "error": "Test file not found"
+    },
+    {
+      "name": "Batch Module Tests",
+      "file": "tests/modules/test_batches.py",
+      "passed": false,
+      "duration": 0,
+      "output": "",
+      "error": "Test file not found"
+    },
+    {
+      "name": "Customer Module Tests",
+      "file": "tests/modules/test_customers.py",
+      "passed": false,
+      "duration": 0,
+      "output": "",
+      "error": "Test file not found"
+    },
+    {
+      "name": "Supplier Module Tests",
+      "file": "tests/modules/test_suppliers.py",
+      "passed": false,
+      "duration": 0,
+      "output": "",
+      "error": "Test file not found"
+    },
+    {
+      "name": "Invoice Module Tests",
+      "file": "tests/modules/test_invoices.py",
+      "passed": false,
+      "duration": 0,
+      "output": "",
+      "error": "Test file not found"
+    },
+    {
+      "name": "Search Functionality Tests",
+      "file": "tests/api/test_search_functionality.py",
+      "passed": false,
+      "duration": 0,
+      "output": "",
+      "error": "Test file not found"
+    },
+    {
+      "name": "Product to Invoice Workflow Test",
+      "file": "tests/workflows/test_product_to_invoice_workflow.py",
+      "passed": false,
+      "duration": 0,
+      "output": "",
+      "error": "Test file not found"
+    }
+  ]
+}

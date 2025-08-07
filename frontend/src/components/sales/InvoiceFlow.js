@@ -184,7 +184,7 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
     const totalAfterDiscount = totalWithCharges - (invoice.discount_amount || 0);
     
     const roundOff = Math.round(totalAfterDiscount) - totalAfterDiscount;
-    const net = totalAfterDiscount + roundOff;
+    const net = Math.round(totalAfterDiscount); // This is simpler and ensures whole number
     
     console.log('calculateTotals - final amount:', net);
 
@@ -971,7 +971,7 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
         <div className="border-t border-gray-200 bg-white px-6 py-4">
           <div className="flex justify-between items-center">
             <div className="text-sm text-gray-600">
-              Total Amount: <span className="text-2xl font-bold text-gray-900">₹{invoice.net_amount.toFixed(2)}</span>
+              Total Amount: <span className="text-2xl font-bold text-gray-900">₹{invoice.net_amount.toFixed(0)}</span>
             </div>
             
             <div className="flex items-center gap-3">
