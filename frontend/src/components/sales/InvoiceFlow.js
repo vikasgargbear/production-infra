@@ -15,6 +15,7 @@ import { ProductSearchSimple, ItemsTable, ModuleHeader, CustomerSearch, ProductC
 import InvoiceSuccessModal from './InvoiceSuccessModal';
 import InvoiceSummaryTop from './components/InvoiceSummaryTop';
 import testBackendConnection from '../../utils/testBackendConnection';
+import debugInvoice from '../../utils/debugInvoice';
 import Toast from '../common/Toast';
 // import BillSummary from './components/BillSummary';
 import InvoicePreview from '../invoice/components/InvoicePreview';
@@ -467,44 +468,140 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
       // Try direct invoice API (as per test file format)
       let response;
       try {
-        // Use the simpler format that matches the test
+        // Build complete invoice data with all user inputs
         const invoiceData = {
-          customer_id: parseInt(invoice.customer_id) || 36, // Default to customer 36
+          // Customer info
+          customer_id: parseInt(invoice.customer_id),
+          customer_name: selectedCustomer?.customer_name || invoice.customer_name,
+          customer_phone: selectedCustomer?.phone || selectedCustomer?.primary_phone,
+          customer_gstin: selectedCustomer?.gstin,
+          billing_address: invoice.billing_address || selectedCustomer?.address,
+          
+          // Invoice details
+          invoice_date: invoice.invoice_date || new Date().toISOString().split('T')[0],
+          invoice_type: 'tax_invoice',
           payment_terms: invoice.payment_mode === 'Cash' ? 'cash' : 'credit',
           delivery_priority: 'normal',
-          items: invoice.items.map(item => {
+          
+          // Financial totals (send all for verification)
+          subtotal_amount: invoice.gross_amount || 0,
+          discount_amount: invoice.discount_amount || 0,
+          taxable_amount: invoice.taxable_amount || 0,
+          cgst_amount: invoice.cgst_amount || 0,
+          sgst_amount: invoice.sgst_amount || 0,
+          igst_amount: invoice.igst_amount || 0,
+          tax_amount: invoice.tax_amount || 0,
+          round_off: invoice.round_off || 0,
+          final_amount: invoice.net_amount || 0,
+          
+          // Items with complete details
+          items: invoice.items.map((item, index) => {
             const quantity = parseFloat(item.quantity) || 1;
             const unitPrice = parseFloat(item.rate || item.sale_price || 0);
             const discountPercent = parseFloat(item.discount_percent || 0);
-            const lineTotal = quantity * unitPrice * (1 - discountPercent / 100);
+            const discountAmount = (quantity * unitPrice * discountPercent) / 100;
+            const lineTotal = (quantity * unitPrice) - discountAmount;
+            const gstPercent = parseFloat(item.gst_percent || item.tax_rate || item.gst || 12);
+            const taxAmount = (lineTotal * gstPercent) / 100;
             
             return {
-              product_id: parseInt(item.product_id) || 47, // Default to product 47
+              // Product identification
+              product_id: parseInt(item.product_id),
+              product_name: item.product_name || item.name,
+              product_code: item.product_code,
+              hsn_code: item.hsn_code,
+              
+              // Batch info
+              batch_id: item.batch_id,
+              batch_number: item.batch_number || item.batch_no,
+              expiry_date: item.expiry_date,
+              
+              // Quantities and pricing
               quantity: quantity,
+              free_quantity: parseFloat(item.free_quantity || item.free || 0),
               unit_price: unitPrice,
-              line_total: lineTotal,
+              mrp: parseFloat(item.mrp || 0),
+              
+              // Discounts
               discount_percent: discountPercent,
-              gst_percent: parseFloat(item.gst_percent || item.tax_rate || 12)
+              discount_amount: discountAmount,
+              
+              // Tax
+              gst_percent: gstPercent,
+              cgst_amount: item.cgst_amount || (taxAmount / 2),
+              sgst_amount: item.sgst_amount || (taxAmount / 2),
+              igst_amount: item.igst_amount || 0,
+              
+              // Totals
+              line_total: lineTotal,
+              total_amount: lineTotal + taxAmount
             };
-          })
+          }),
+          
+          // Additional info
+          notes: invoice.notes,
+          reference_no: invoice.reference_no
         };
         
-        console.log('Sending invoice to backend:', invoiceData);
+        console.log('Sending invoice to backend:', JSON.stringify(invoiceData, null, 2));
+        console.log('API endpoint:', `${apiClient.defaults.baseURL}/invoices/`);
+        
         response = await apiClient.post('/invoices/', invoiceData);
         console.log('Invoice created successfully:', response.data);
       } catch (error) {
-        console.error('Invoice creation failed:', error);
-        // Still show success to user even if backend fails
+        console.error('Invoice creation failed - Full details:');
+        console.error('Error response:', error.response?.data);
+        console.error('Error status:', error.response?.status);
+        console.error('Error headers:', error.response?.headers);
+        
+        // Parse the specific error
+        let errorDetails = 'Unknown error';
+        if (error.response?.data?.detail) {
+          errorDetails = error.response.data.detail;
+          
+          // Check for specific database errors
+          if (errorDetails.includes('not present in table')) {
+            const match = errorDetails.match(/Key \(([^)]+)\)=\(([^)]+)\)/);
+            if (match) {
+              errorDetails = `${match[1]} ${match[2]} doesn't exist in database`;
+            }
+          } else if (errorDetails.includes('null value in column')) {
+            const match = errorDetails.match(/null value in column "([^"]+)"/);
+            if (match) {
+              errorDetails = `Required field missing: ${match[1]}`;
+            }
+          }
+        }
+        
+        // Show error to user
+        setMessage(`❌ Backend error: ${errorDetails}`);
+        setMessageType('error');
+        
+        // Still save locally and show success
         const fallbackInvoiceNumber = 'INV-' + new Date().getTime();
-        setCreatedInvoiceData({
-          invoiceNumber: fallbackInvoiceNumber,
-          invoiceId: null,
-          customerName: selectedCustomer?.customer_name || invoice.customer_name,
-          totalAmount: invoice.net_amount
-        });
-        setShowSuccessModal(true);
-        setMessage(`✅ Invoice ${fallbackInvoiceNumber} saved locally!`);
-        setMessageType('success');
+        
+        // Store in localStorage for debugging
+        localStorage.setItem('lastFailedInvoice', JSON.stringify({
+          invoiceData,
+          error: errorDetails,
+          timestamp: new Date().toISOString()
+        }));
+        
+        console.log('Saved failed invoice data to localStorage for debugging');
+        
+        // Show modal anyway with local save message
+        setTimeout(() => {
+          setCreatedInvoiceData({
+            invoiceNumber: fallbackInvoiceNumber,
+            invoiceId: null,
+            customerName: selectedCustomer?.customer_name || invoice.customer_name,
+            totalAmount: invoice.net_amount
+          });
+          setShowSuccessModal(true);
+          setMessage(`⚠️ Invoice ${fallbackInvoiceNumber} saved locally (backend issue)`);
+          setMessageType('warning');
+        }, 3000);
+        
         setSaving(false);
         return;
       }

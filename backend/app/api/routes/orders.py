@@ -275,7 +275,9 @@ async def list_orders(
         if order_rows:
             order_ids = [row.order_id for row in order_rows]
             items_result = db.execute(text("""
-                SELECT oi.*, p.product_name, p.product_code
+                SELECT oi.*, p.product_name, p.product_code,
+                       COALESCE(oi.tax_percent, 0) as tax_percent,
+                       COALESCE(oi.tax_amount, 0) as tax_amount
                 FROM sales.order_items oi
                 JOIN inventory.products p ON oi.product_id = p.product_id
                 WHERE oi.order_id = ANY(:order_ids)
@@ -337,7 +339,9 @@ async def get_order(
         # Get order items
         items_result = db.execute(text("""
             SELECT oi.*, p.product_name, p.product_code,
-                   b.batch_number, b.expiry_date
+                   b.batch_number, b.expiry_date,
+                   COALESCE(oi.tax_percent, 0) as tax_percent,
+                   COALESCE(oi.tax_amount, 0) as tax_amount
             FROM sales.order_items oi
             JOIN inventory.products p ON oi.product_id = p.product_id
             LEFT JOIN inventory.batches b ON oi.batch_id = b.batch_id
