@@ -110,9 +110,9 @@ async def create_payment(
             'notes': payment.notes
         }
         
-        # Insert into payments table
+        # Insert into financial.payments table
         insert_query = """
-            INSERT INTO payments (
+            INSERT INTO financial.payments (
                 org_id, payment_number, payment_date, customer_id, supplier_id,
                 payment_type, amount, payment_mode, reference_number, bank_name,
                 payment_status, cleared_date, branch_id, created_by, approved_by, notes
@@ -222,6 +222,73 @@ async def cancel_payment(
         db.rollback()
         logger.error(f"Error cancelling payment: {str(e)}")
         raise HTTPException(status_code=500, detail="Failed to cancel payment")
+
+@router.post("/customer-receipt", response_model=dict)
+async def create_customer_receipt(
+    receipt_data: dict,
+    db: Session = Depends(get_db)
+):
+    """
+    Create a customer payment receipt
+    
+    Simple endpoint for recording customer payments
+    """
+    try:
+        # Generate receipt number
+        receipt_number = f"RCP-{date.today().strftime('%Y%m%d')}-{int(date.today().timestamp())}"
+        
+        # Insert payment
+        result = db.execute(text("""
+            INSERT INTO financial.payments (
+                org_id, payment_number, payment_date, customer_id,
+                payment_type, amount, payment_mode, reference_number,
+                bank_name, payment_status, notes
+            ) VALUES (
+                :org_id, :receipt_number, :payment_date, :customer_id,
+                'customer_receipt', :amount, :payment_mode, :reference_number,
+                :bank_name, 'completed', :notes
+            ) RETURNING payment_id, payment_number, amount
+        """), {
+            "org_id": DEFAULT_ORG_ID,
+            "receipt_number": receipt_number,
+            "payment_date": receipt_data.get("payment_date", date.today()),
+            "customer_id": receipt_data.get("customer_id"),
+            "amount": receipt_data.get("amount"),
+            "payment_mode": receipt_data.get("payment_mode", "cash"),
+            "reference_number": receipt_data.get("reference_number"),
+            "bank_name": receipt_data.get("bank_name"),
+            "notes": receipt_data.get("notes")
+        })
+        
+        payment = result.fetchone()
+        
+        # Update customer outstanding if exists
+        db.execute(text("""
+            UPDATE parties.customers
+            SET outstanding_balance = outstanding_balance - :amount,
+                last_payment_date = :payment_date,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE customer_id = :customer_id
+        """), {
+            "amount": receipt_data.get("amount"),
+            "payment_date": receipt_data.get("payment_date", date.today()),
+            "customer_id": receipt_data.get("customer_id")
+        })
+        
+        db.commit()
+        
+        return {
+            "success": True,
+            "payment_id": payment.payment_id,
+            "receipt_number": payment.payment_number,
+            "amount": float(payment.amount),
+            "message": "Payment receipt created successfully"
+        }
+        
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Error creating customer receipt: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to create receipt: {str(e)}")
 
 @router.get("/outstanding")
 async def get_outstanding_invoices(

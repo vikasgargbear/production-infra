@@ -496,11 +496,14 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
           
           // Items with complete details
           items: invoice.items.map((item, index) => {
-            const quantity = parseFloat(item.quantity) || 1;
+            const baseQuantity = parseFloat(item.quantity) || 1;
+            const freeQuantity = parseFloat(item.free_quantity || item.free || 0);
+            const totalQuantity = baseQuantity + freeQuantity; // Total quantity for inventory
             const unitPrice = parseFloat(item.rate || item.sale_price || 0);
             const discountPercent = parseFloat(item.discount_percent || 0);
-            const discountAmount = (quantity * unitPrice * discountPercent) / 100;
-            const lineTotal = (quantity * unitPrice) - discountAmount;
+            // Calculate on base quantity only (free items don't contribute to revenue)
+            const discountAmount = (baseQuantity * unitPrice * discountPercent) / 100;
+            const lineTotal = (baseQuantity * unitPrice) - discountAmount;
             const gstPercent = parseFloat(item.gst_percent || item.tax_rate || item.gst || 12);
             const taxAmount = (lineTotal * gstPercent) / 100;
             
@@ -516,9 +519,10 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
               batch_number: item.batch_number || item.batch_no,
               expiry_date: item.expiry_date,
               
-              // Quantities and pricing
-              quantity: quantity,
-              free_quantity: parseFloat(item.free_quantity || item.free || 0),
+              // Send ALL quantity data - let backend handle storage
+              quantity: totalQuantity,  // Total quantity for inventory deduction
+              base_quantity: baseQuantity,  // Billable quantity for revenue
+              free_quantity: freeQuantity,  // Free quantity for tracking/analytics
               unit_price: unitPrice,
               mrp: parseFloat(item.mrp || 0),
               
@@ -545,6 +549,10 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
         
         console.log('Sending invoice to backend:', JSON.stringify(invoiceData, null, 2));
         console.log('API endpoint:', `${apiClient.defaults.baseURL}/invoices/`);
+        console.log('Quantity fields sent:');
+        console.log('  - quantity: total (base + free) for inventory deduction');
+        console.log('  - base_quantity: billable qty for revenue calculation');
+        console.log('  - free_quantity: free items for tracking/analytics');
         
         response = await apiClient.post('/invoices/', invoiceData);
         console.log('Invoice created successfully:', response.data);

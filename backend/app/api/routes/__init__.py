@@ -25,7 +25,6 @@ from .credit_debit_notes import router as credit_debit_notes_router
 from .sales import router as sales_router
 from .enterprise_orders import router as enterprise_orders_router
 from .collection_center_simple import router as collection_center_router
-from .purchase_orders import router as purchase_orders_router
 
 __all__ = [
     "customers_router", 
@@ -38,7 +37,6 @@ __all__ = [
     "users_router", 
     "suppliers_router",
     "purchases_router",
-    "purchase_orders_router",
     "delivery_challan_router",
     "dashboard_router",
     "stock_adjustments_router",
