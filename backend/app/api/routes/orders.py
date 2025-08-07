@@ -148,22 +148,36 @@ async def create_order(
             item_data = item.dict()
             item_data["order_id"] = order_id
             
-            # Add selling_price (same as unit_price for now)
-            item_data["selling_price"] = item_data.get("selling_price", item_data["unit_price"])
-            # Add total_price (same as line_total)
-            item_data["total_price"] = item_data.get("line_total", 
-                item_data["quantity"] * item_data["unit_price"] - 
-                item_data.get("discount_amount", 0) + item_data.get("tax_amount", 0))
+            # Calculate line_total if not provided
+            if "line_total" not in item_data:
+                item_data["line_total"] = (
+                    item_data["quantity"] * item_data["unit_price"] - 
+                    item_data.get("discount_amount", 0) + item_data.get("tax_amount", 0)
+                )
+            
+            # Map tax_percent to rate columns
+            tax_percent = item_data.get("tax_percent", 0)
+            item_data["cgst_rate"] = tax_percent / 2
+            item_data["sgst_rate"] = tax_percent / 2
+            item_data["igst_rate"] = 0  # For now, assume intra-state
+            
+            # Calculate tax amounts
+            tax_amount = item_data.get("tax_amount", 0)
+            item_data["cgst_amount"] = tax_amount / 2
+            item_data["sgst_amount"] = tax_amount / 2
+            item_data["igst_amount"] = 0
             
             db.execute(text("""
                 INSERT INTO sales.order_items (
                     order_id, product_id, batch_id, quantity,
-                    unit_price, selling_price, discount_percent, discount_amount,
-                    tax_percent, tax_amount, line_total, total_price
+                    unit_price, discount_percent, discount_amount,
+                    line_total, cgst_rate, sgst_rate, igst_rate,
+                    cgst_amount, sgst_amount, igst_amount
                 ) VALUES (
                     :order_id, :product_id, :batch_id, :quantity,
-                    :unit_price, :selling_price, :discount_percent, :discount_amount,
-                    :tax_percent, :tax_amount, :line_total, :total_price
+                    :unit_price, :discount_percent, :discount_amount,
+                    :line_total, :cgst_rate, :sgst_rate, :igst_rate,
+                    :cgst_amount, :sgst_amount, :igst_amount
                 )
             """), item_data)
         

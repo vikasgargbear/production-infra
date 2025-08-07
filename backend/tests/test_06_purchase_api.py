@@ -47,7 +47,8 @@ class TestPurchaseAPI:
                 data = response.json()
                 suppliers = data.get("suppliers", data) if isinstance(data, dict) else data
                 if suppliers and len(suppliers) > 0:
-                    cls.test_supplier_id = suppliers[0].get("supplier_id")
+                    supplier = suppliers[0]
+                    cls.test_supplier_id = supplier.get("supplier_id") if isinstance(supplier, dict) else supplier["supplier_id"]
                     logger.info(f"Using supplier ID: {cls.test_supplier_id}")
             else:
                 cls.test_supplier_id = 1  # Default

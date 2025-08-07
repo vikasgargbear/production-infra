@@ -4,7 +4,7 @@ import {
   Settings, AlertCircle, Receipt, Home
 } from 'lucide-react';
 import { ModuleHub } from '../global';
-import GSTMinimal from './GSTMinimal';
+import GSTBalanced from './GSTBalanced';
 import GSTFilingClean from './GSTFilingClean';
 import GSTReports from './GSTReports';
 import GSTFiling from './GSTFiling';
@@ -34,7 +34,7 @@ const GSTHub: React.FC<GSTHubProps> = ({ open = true, onClose }) => {
       description: 'Tax summary & compliance status',
       icon: Home,
       color: 'blue',
-      component: GSTMinimal
+      component: GSTBalanced
     },
     {
       id: 'gst-filing',
