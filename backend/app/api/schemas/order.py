@@ -73,7 +73,7 @@ class OrderBase(BaseModel):
     
     # Order details
     order_type: str = Field(default="sales", pattern=r"^(sales|return|replacement)$")
-    payment_terms: str = Field(default="credit", pattern=r"^(cash|credit|advance)$")
+    payment_terms: Optional[str] = Field(default="credit", pattern=r"^(cash|credit|advance)$")
     notes: Optional[str] = Field(None, max_length=500)
     
     # Discount and charges
