@@ -5,10 +5,10 @@
 
 export interface Customer {
   // Primary fields
-  customer_id: number;
-  customer_code: string;
+  customer_id: number | string; // Can be either number or string from API
+  customer_code?: string; // Made optional as it might not always be present
   customer_name: string;
-  customer_type: 'b2b' | 'b2c' | 'pharmacy' | 'hospital' | 'clinic' | 'distributor' | 'other';
+  customer_type?: 'b2b' | 'b2c' | 'pharmacy' | 'hospital' | 'clinic' | 'distributor' | 'other' | string; // Made optional and flexible
   
   // Contact information - simplified flat structure for MVP
   phone?: string;
@@ -53,10 +53,10 @@ export interface Customer {
   fssai_number?: string;
   
   // Credit management
-  credit_limit: number;
+  credit_limit?: number; // Made optional as it might not be set initially
   current_outstanding?: number; // Backend field name
   outstanding_balance?: number; // Frontend uses this, backend uses current_outstanding
-  credit_days: number;
+  credit_days?: number; // Made optional
   payment_terms?: string;
   
   // Computed fields
@@ -68,12 +68,12 @@ export interface Customer {
   discount_percentage?: number;
   
   // Status and metadata
-  status: 'active' | 'inactive' | 'blocked';
+  status?: 'active' | 'inactive' | 'blocked'; // Made optional with default as 'active'
   notes?: string;
   total_business?: number;
   last_transaction_date?: Date | string;
-  created_at: Date | string;
-  updated_at: Date | string;
+  created_at?: Date | string; // Made optional
+  updated_at?: Date | string; // Made optional
 }
 
 export interface CustomerCreateInput {

@@ -1,9 +1,11 @@
 import React from 'react';
 import { 
   Calculator, FileText, BarChart3, RefreshCw, 
-  Settings, AlertCircle, Receipt
+  Settings, AlertCircle, Receipt, Home
 } from 'lucide-react';
 import { ModuleHub } from '../global';
+import GSTDashboard from './GSTDashboard';
+import GSTFilingV2 from './GSTFilingV2';
 import GSTReports from './GSTReports';
 import GSTFiling from './GSTFiling';
 import GSTReconciliation from './GSTReconciliation';
@@ -26,22 +28,31 @@ interface GSTModule {
 const GSTHub: React.FC<GSTHubProps> = ({ open = true, onClose }) => {
   const gstModules: GSTModule[] = [
     {
-      id: 'gst-reports',
-      label: 'Reports',
-      fullLabel: 'GST Reports',
-      description: 'GSTR-1, 3B, HSN Summary',
-      icon: BarChart3,
+      id: 'gst-dashboard',
+      label: 'Dashboard',
+      fullLabel: 'GST Overview',
+      description: 'Tax summary & compliance status',
+      icon: Home,
       color: 'blue',
-      component: GSTReports
+      component: GSTDashboard
     },
     {
       id: 'gst-filing',
       label: 'Filing',
       fullLabel: 'GST Filing',
-      description: 'Monthly returns & filing',
+      description: 'File returns easily',
       icon: FileText,
       color: 'green',
-      component: GSTFiling
+      component: GSTFilingV2
+    },
+    {
+      id: 'gst-reports',
+      label: 'Reports',
+      fullLabel: 'GST Reports',
+      description: 'GSTR-1, 3B, HSN Summary',
+      icon: BarChart3,
+      color: 'purple',
+      component: GSTReports
     },
     {
       id: 'gst-reconciliation',
@@ -80,7 +91,7 @@ const GSTHub: React.FC<GSTHubProps> = ({ open = true, onClose }) => {
       subtitle="Tax management & compliance"
       icon={Receipt}
       modules={gstModules}
-      defaultModule="gst-reports"
+      defaultModule="gst-dashboard"
     />
   );
 };

@@ -56,6 +56,11 @@
     "scripts",
     "acceptance-tests",
     "webpack",
-    "jest"
+    "jest",
+    "src/archive/**/*",
+    "src/**/archive/**/*",
+    "**/*.test.js",
+    "**/*.test.ts",
+    "**/*.test.tsx"
   ]
 }

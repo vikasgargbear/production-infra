@@ -7,8 +7,8 @@ export { default as Button } from './Button';
 export { default as SearchBar } from './SearchBar';
 
 // Display Components
-export { default as DataTable } from './display/DataTable';
-export { default as StatusBadge } from './display/StatusBadge';
+export { DataTable } from './display/DataTable';
+export { StatusBadge } from './display/StatusBadge';
 export { default as SummaryCard, InvoiceSummary, PaymentSummary, OrderSummary } from './display/SummaryCard';
 export { default as ItemsTable } from './display/ItemsTable';
 export { default as Card, CardSection } from './Card';

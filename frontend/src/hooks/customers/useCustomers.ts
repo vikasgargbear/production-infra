@@ -6,32 +6,7 @@
 import { useQuery, useMutation, useQueryClient, UseQueryOptions, UseMutationOptions } from 'react-query';
 import { customerAPI } from '../../services/api/apiClientExports';
 import { useCallback } from 'react';
-
-// Simplified types for our working API
-interface Customer {
-  customer_id: string;
-  customer_name: string;
-  primary_phone?: string;
-  primary_email?: string;
-  customer_type?: string;
-  status?: string;
-  balance_amount?: number;
-}
-
-interface CustomerCreateInput {
-  customer_name: string;
-  primary_phone?: string;
-  primary_email?: string;
-  customer_type?: string;
-  address?: {
-    address_line1?: string;
-    address_line2?: string;
-    city?: string;
-    state?: string;
-    pincode?: string;
-    country?: string;
-  };
-}
+import { Customer, CustomerCreateInput, CustomerSearchParams } from '../../types/models/customer';
 
 interface ApiResponse<T> {
   success: boolean;

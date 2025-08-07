@@ -62,7 +62,7 @@ const CurrencyInput: React.FC<CurrencyInputProps> = ({
 
   // Format number for display
   const formatCurrency = (num: number | null | undefined): string => {
-    if (num === null || num === undefined || num === '') return '';
+    if (num === null || num === undefined) return '';
     
     const formatter = new Intl.NumberFormat(config.locale, {
       minimumFractionDigits: 2,

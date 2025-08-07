@@ -25,7 +25,7 @@ from .api.routes import (
 )
 
 # Import additional routers not in __init__.py
-from .api.routes import stock_receive, enterprise_delivery_challan, inventory_batches, create_user
+from .api.routes import stock_receive, enterprise_delivery_challan, inventory_batches, create_user, delivery_challan
 # Import new APIs
 from .api.routes import master_settings, schemes_discounts, loyalty_points, compliance
 # All temporary endpoints removed - using main endpoints only
@@ -109,7 +109,7 @@ api.include_router(users_router, tags=["Users"])
 api.include_router(suppliers_router, tags=["Suppliers"])
 api.include_router(purchases_router, tags=["Purchases"])
 # Include both - they have different functionality
-api.include_router(delivery_challan_router, tags=["Delivery Challan"])
+api.include_router(delivery_challan.router, tags=["Delivery Challan"])
 api.include_router(stock_adjustments_router, tags=["Stock Adjustments"])
 api.include_router(tax_entries_router, tags=["Tax Entries"])
 api.include_router(purchase_upload_router, tags=["Purchase Upload"])

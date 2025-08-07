@@ -3,7 +3,7 @@
  * Handles all sales-related API calls (invoices, direct sales)
  */
 
-import { apiClient } from '../apiClient';
+import apiClient from '../apiClient';
 import { API_CONFIG } from '../../../config/api.config';
 import { salesDataTransformer } from '../utils/salesDataTransformer';
 

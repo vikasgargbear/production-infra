@@ -1,9 +1,11 @@
 import React from 'react';
 import { 
-  FileText, Package, ShoppingCart, Truck, TrendingUp
+  FileText, Package, ShoppingCart, Truck, TrendingUp, Home, List
 } from 'lucide-react';
 import { ModuleHub } from '../global';
+import SalesDashboard from './SalesDashboard';
 import InvoiceFlow from './InvoiceFlow';
+import InvoiceListV2 from './InvoiceListV2';
 import SalesOrderFlow from './SalesOrderFlow';
 import ModularChallanCreatorV5 from '../challan/ModularChallanCreatorV5';
 
@@ -25,13 +27,31 @@ interface SalesModule {
 const SalesHub: React.FC<SalesHubProps> = ({ open = true, onClose }) => {
   const salesModules: SalesModule[] = [
     {
+      id: 'dashboard',
+      label: 'Dashboard',
+      fullLabel: 'Sales Overview',
+      description: 'Analytics & insights',
+      icon: Home,
+      color: 'blue',
+      component: SalesDashboard
+    },
+    {
       id: 'invoice',
-      label: 'Invoice',
-      fullLabel: 'Sales Invoice',
+      label: 'New Invoice',
+      fullLabel: 'Create Invoice',
       description: 'GST Invoice',
       icon: FileText,
-      color: 'blue',
+      color: 'green',
       component: InvoiceFlow
+    },
+    {
+      id: 'invoice-list',
+      label: 'All Invoices',
+      fullLabel: 'Invoice List',
+      description: 'Manage invoices',
+      icon: List,
+      color: 'purple',
+      component: InvoiceListV2
     },
     {
       id: 'challan',
@@ -61,7 +81,7 @@ const SalesHub: React.FC<SalesHubProps> = ({ open = true, onClose }) => {
       subtitle="Manage your sales operations"
       icon={TrendingUp}
       modules={salesModules}
-      defaultModule="invoice"
+      defaultModule="dashboard"
     />
   );
 };

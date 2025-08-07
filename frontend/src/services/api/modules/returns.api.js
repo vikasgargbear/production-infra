@@ -3,7 +3,7 @@
  * Handles all return-related API calls
  */
 
-import { apiClient } from '../apiClient';
+import apiClient from '../apiClient';
 import { API_CONFIG } from '../../../config/api.config';
 import { returnsDataTransformer } from '../utils/returnsDataTransformer';
 

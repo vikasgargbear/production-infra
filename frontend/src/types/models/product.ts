@@ -9,7 +9,7 @@ import { z } from 'zod';
  * Product base information
  */
 export interface Product {
-  product_id: number;
+  product_id: number | string; // Can be either number or string from API
   product_name: string;
   product_code?: string;
   manufacturer: string;

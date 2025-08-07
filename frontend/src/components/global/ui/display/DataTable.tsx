@@ -12,10 +12,10 @@ import {
   Download,
   RefreshCw,
 } from 'lucide-react';
-import { Button } from '../Button';
-import { Input } from '../forms/Input';
-import { Select } from '../forms/Select';
-import { Checkbox } from '../forms/Checkbox';
+import Button from '../Button';
+import Input from '../forms/Input';
+import Select from '../forms/Select';
+import Checkbox from '../forms/Checkbox';
 
 export interface Column<T> {
   key: keyof T | string;
@@ -285,7 +285,8 @@ export function DataTable<T extends Record<string, any>>({
               <Button
                 variant="outline"
                 size="sm"
-                leftIcon={<RefreshCw className="w-4 h-4" />}
+                icon={<RefreshCw className="w-4 h-4" />}
+                iconPosition="left"
                 onClick={onRefresh}
               >
                 Refresh
@@ -295,7 +296,8 @@ export function DataTable<T extends Record<string, any>>({
               <Button
                 variant="outline"
                 size="sm"
-                leftIcon={<Download className="w-4 h-4" />}
+                icon={<Download className="w-4 h-4" />}
+                iconPosition="left"
                 onClick={onExport}
               >
                 Export
@@ -401,7 +403,6 @@ export function DataTable<T extends Record<string, any>>({
           <div className="flex items-center gap-2">
             <span className="text-sm text-gray-700">Show</span>
             <Select
-              selectSize="sm"
               value={String(pageSize)}
               onChange={(value) => onPageSizeChange?.(Number(value))}
               options={pageSizeOptions.map(size => ({

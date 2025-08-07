@@ -6,34 +6,7 @@
 import { useQuery, useMutation, useQueryClient, UseQueryOptions, UseMutationOptions } from 'react-query';
 import { productAPI } from '../../services/api/apiClientExports';
 import { useCallback } from 'react';
-
-// Simplified types for our working API
-interface Product {
-  product_id: string;
-  product_name: string;
-  manufacturer?: string;
-  category?: string;
-  unit?: string;
-  mrp?: number;
-  sale_price?: number;
-  purchase_price?: number;
-  stock_quantity?: number;
-  reorder_level?: number;
-  is_narcotic?: boolean;
-  status?: string;
-}
-
-interface ProductCreateInput {
-  product_name: string;
-  manufacturer?: string;
-  category?: string;
-  unit?: string;
-  mrp?: number;
-  sale_price?: number;
-  purchase_price?: number;
-  reorder_level?: number;
-  is_narcotic?: boolean;
-}
+import { Product, ProductCreateInput } from '../../types/models/product';
 
 interface ApiResponse<T> {
   success: boolean;
