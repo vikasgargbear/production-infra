@@ -316,7 +316,7 @@ class InventoryService:
             SELECT 
                 b.batch_id, b.product_id, p.product_name, p.product_code,
                 b.batch_number, b.expiry_date, b.quantity_available,
-                b.quantity_available * b.cost_price as stock_value,
+                b.quantity_available * b.cost_per_unit as stock_value,
                 b.expiry_date - CURRENT_DATE as days_to_expiry
             FROM inventory.batches b
             JOIN inventory.products p ON b.product_id = p.product_id
@@ -359,13 +359,13 @@ class InventoryService:
                 COALESCE(SUM(CASE 
                     WHEN b.expiry_date > :as_of_date AND b.expiry_date <= :as_of_date + INTERVAL '90 days' 
                     THEN b.quantity_available ELSE 0 END), 0) as near_expiry_quantity,
-                COALESCE(SUM(b.quantity_available * b.cost_price), 0) as total_value,
+                COALESCE(SUM(b.quantity_available * b.cost_per_unit), 0) as total_value,
                 COALESCE(SUM(CASE 
                     WHEN b.expiry_date <= :as_of_date 
-                    THEN b.quantity_available * b.cost_price ELSE 0 END), 0) as expired_value,
+                    THEN b.quantity_available * b.cost_per_unit ELSE 0 END), 0) as expired_value,
                 COALESCE(SUM(CASE 
                     WHEN b.expiry_date > :as_of_date AND b.expiry_date <= :as_of_date + INTERVAL '90 days' 
-                    THEN b.quantity_available * b.cost_price ELSE 0 END), 0) as near_expiry_value
+                    THEN b.quantity_available * b.cost_per_unit ELSE 0 END), 0) as near_expiry_value
             FROM inventory.batches b
             WHERE b.org_id = :org_id
                 AND b.quantity_available > 0
@@ -383,7 +383,7 @@ class InventoryService:
                 p.category_id,
                 COUNT(DISTINCT b.product_id) as products,
                 COALESCE(SUM(b.quantity_available), 0) as quantity,
-                COALESCE(SUM(b.quantity_available * b.cost_price), 0) as value
+                COALESCE(SUM(b.quantity_available * b.cost_per_unit), 0) as value
             FROM inventory.batches b
             JOIN inventory.products p ON b.product_id = p.product_id
             WHERE b.org_id = :org_id
@@ -408,7 +408,7 @@ class InventoryService:
             SELECT 
                 COUNT(DISTINCT b.product_id) as total_products,
                 COUNT(*) as total_batches,
-                COALESCE(SUM(b.quantity_available * b.cost_price), 0) as total_stock_value
+                COALESCE(SUM(b.quantity_available * b.cost_per_unit), 0) as total_stock_value
             FROM inventory.batches b
             WHERE b.org_id = :org_id AND b.quantity_available > 0
         """), {"org_id": org_id}).fetchone()

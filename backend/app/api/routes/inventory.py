@@ -160,7 +160,6 @@ async def list_current_stock(
         query = """
             SELECT 
                 p.product_id, p.product_code, p.product_name, p.category_id,
-                p.minimum_stock_level, p.reorder_level,
                 COALESCE(b.total_quantity, 0) as total_quantity,
                 COALESCE(b.available_quantity, 0) as available_quantity,
                 COALESCE(b.allocated_quantity, 0) as allocated_quantity,
@@ -194,10 +193,7 @@ async def list_current_stock(
             params["category"] = category
         
         if low_stock_only:
-            query += """ AND (
-                (p.minimum_stock_level IS NOT NULL AND COALESCE(b.total_quantity, 0) < p.minimum_stock_level)
-                OR COALESCE(b.total_quantity, 0) = 0
-            )"""
+            query += " AND COALESCE(b.total_quantity, 0) <= 10"  # Low stock threshold
         
         # Get count
         count_query = f"SELECT COUNT(*) FROM ({query}) t"
@@ -212,14 +208,8 @@ async def list_current_stock(
         stocks = []
         for row in result:
             stock = dict(row._mapping)
-            stock["is_below_minimum"] = bool(
-                stock.get("minimum_stock_level") and 
-                stock["total_quantity"] < stock["minimum_stock_level"]
-            )
-            stock["is_below_reorder"] = bool(
-                stock.get("reorder_level") and 
-                stock["total_quantity"] <= stock["reorder_level"]
-            )
+            stock["is_below_minimum"] = stock["total_quantity"] < 10  # Default threshold
+            stock["is_below_reorder"] = stock["total_quantity"] <= 20  # Default threshold
             stocks.append(CurrentStock(**stock))
         
         return {

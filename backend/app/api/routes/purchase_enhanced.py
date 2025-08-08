@@ -175,7 +175,7 @@ def create_purchase_with_items(purchase_data: dict, db: Session = Depends(get_db
             {
                 "org_id": DEFAULT_ORG_ID,
                 "purchase_number": purchase_number,
-                "purchase_date": purchase_data.get("purchase_date", datetime.now().date()),
+                "po_date": purchase_data.get("purchase_date", datetime.now().date()),
                 "supplier_id": purchase_data.get("supplier_id"),
                 "supplier_name": supplier_name,
                 "subtotal": Decimal(str(purchase_data.get("subtotal_amount", 0))),
@@ -360,14 +360,14 @@ def receive_purchase_items(
     try:
         # Get purchase details
         purchase = db.execute(
-            text("SELECT * FROM purchases WHERE purchase_id = :id"),
+            text("SELECT * FROM procurement.purchase_orders WHERE po_id = :id"),
             {"id": purchase_id}
         ).first()
         
         if not purchase:
             raise HTTPException(status_code=404, detail="Purchase not found")
         
-        if purchase.purchase_status == "received":
+        if purchase.po_status == "received":
             raise HTTPException(status_code=400, detail="Purchase already received")
         
         received_items = receive_data.get("items", [])
@@ -454,7 +454,7 @@ def receive_purchase_items(
                     "batch_id": batch_id,
                     "qty_in": received_qty,
                     "purchase_id": purchase_id,
-                    "purchase_number": purchase.purchase_number
+                    "purchase_number": purchase.po_number
                 }
             )
             
@@ -474,14 +474,14 @@ def receive_purchase_items(
         # Update purchase status
         db.execute(
             text("""
-                UPDATE purchases 
-                SET purchase_status = 'received',
+                UPDATE procurement.purchase_orders 
+                SET po_status = 'received',
                     grn_number = :grn_number,
                     grn_date = CURRENT_DATE
-                WHERE purchase_id = :purchase_id
+                WHERE po_id = :purchase_id
             """),
             {
-                "grn_number": f"GRN-{purchase.purchase_number}",
+                "grn_number": f"GRN-{purchase.po_number}",
                 "purchase_id": purchase_id
             }
         )
@@ -491,7 +491,7 @@ def receive_purchase_items(
         return {
             "message": "Purchase items received successfully",
             "batches_created": batches_created,
-            "grn_number": f"GRN-{purchase.purchase_number}"
+            "grn_number": f"GRN-{purchase.po_number}"
         }
         
     except HTTPException:
@@ -515,14 +515,14 @@ def receive_purchase_items_fixed(
     try:
         # Get purchase
         purchase = db.execute(
-            text("SELECT * FROM purchases WHERE purchase_id = :id"),
+            text("SELECT * FROM procurement.purchase_orders WHERE po_id = :id"),
             {"id": purchase_id}
         ).first()
         
         if not purchase:
             raise HTTPException(status_code=404, detail="Purchase not found")
         
-        if purchase.purchase_status == "received":
+        if purchase.po_status == "received":
             raise HTTPException(status_code=400, detail="Purchase already received")
         
         # Update purchase items
@@ -561,15 +561,15 @@ def receive_purchase_items_fixed(
             )
         
         # Update purchase status - trigger will create batches
-        grn_number = f"GRN-{purchase.purchase_number}"
+        grn_number = f"GRN-{purchase.po_number}"
         
         db.execute(
             text("""
-                UPDATE purchases 
-                SET purchase_status = 'received',
+                UPDATE procurement.purchase_orders 
+                SET po_status = 'received',
                     grn_number = :grn_number,
                     grn_date = CURRENT_DATE
-                WHERE purchase_id = :purchase_id
+                WHERE po_id = :purchase_id
             """),
             {"grn_number": grn_number, "purchase_id": purchase_id}
         )
@@ -611,10 +611,10 @@ def get_pending_receipts(
                 s.supplier_name,
                 COUNT(pi.po_item_id) as total_items,
                 COUNT(CASE WHEN pi.received_quantity > 0 THEN 1 END) as received_items
-            FROM purchases p
+            FROM procurement.purchase_orders p
             JOIN suppliers s ON p.supplier_id = s.supplier_id
-            LEFT JOIN purchase_items pi ON p.purchase_id = pi.po_id
-            WHERE p.purchase_status IN ('draft', 'approved', 'partial')
+            LEFT JOIN purchase_items pi ON p.po_id = pi.po_id
+            WHERE p.po_status IN ('draft', 'approved', 'partial')
         """
         params = {}
         
@@ -622,7 +622,7 @@ def get_pending_receipts(
             query += " AND p.supplier_id = :supplier_id"
             params["supplier_id"] = supplier_id
         
-        query += " GROUP BY p.purchase_id, s.supplier_name ORDER BY p.purchase_date DESC"
+        query += " GROUP BY p.po_id, s.supplier_name ORDER BY p.po_date DESC"
         
         result = db.execute(text(query), params)
         return [dict(row._mapping) for row in result]
