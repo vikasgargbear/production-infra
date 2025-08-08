@@ -147,44 +147,43 @@ class PaymentService:
                           from_date: Optional[date] = None,
                           to_date: Optional[date] = None) -> Dict[str, Any]:
         """Get payment summary for organization"""
-        params = {"org_id": org_id}
+        params = {"org_id": str(org_id)}
         date_filter = ""
         
         if from_date:
-            date_filter += " AND ip.payment_date >= :from_date"
+            date_filter += " AND p.payment_date >= :from_date"
             params["from_date"] = from_date
         if to_date:
-            date_filter += " AND ip.payment_date <= :to_date"
+            date_filter += " AND p.payment_date <= :to_date"
             params["to_date"] = to_date
         
-        # Get payment statistics
+        # Get payment statistics from financial.payments table
         result = db.execute(text(f"""
             SELECT 
-                COUNT(DISTINCT ip.payment_id) as total_payments,
-                COUNT(DISTINCT i.invoice_id) as invoices_paid,
-                COALESCE(SUM(ip.payment_amount), 0) as total_collected,
-                COUNT(DISTINCT CASE WHEN ip.payment_mode = 'cash' THEN ip.payment_id END) as cash_payments,
-                COUNT(DISTINCT CASE WHEN ip.payment_mode = 'cheque' THEN ip.payment_id END) as cheque_payments,
-                COUNT(DISTINCT CASE WHEN ip.payment_mode = 'online' THEN ip.payment_id END) as online_payments,
-                COALESCE(SUM(CASE WHEN ip.payment_mode = 'cash' THEN ip.payment_amount ELSE 0 END), 0) as cash_amount,
-                COALESCE(SUM(CASE WHEN ip.payment_mode = 'cheque' THEN ip.payment_amount ELSE 0 END), 0) as cheque_amount,
-                COALESCE(SUM(CASE WHEN ip.payment_mode = 'online' THEN ip.payment_amount ELSE 0 END), 0) as online_amount
-            FROM invoice_payments ip
-            JOIN sales.invoices i ON ip.invoice_id = i.invoice_id
-            JOIN sales.orders o ON i.order_id = o.order_id
-            WHERE o.org_id = :org_id {date_filter}
+                COUNT(DISTINCT p.payment_id) as total_payments,
+                COUNT(DISTINCT p.customer_id) as customers_paid,
+                COALESCE(SUM(p.amount), 0) as total_collected,
+                COUNT(DISTINCT CASE WHEN p.payment_mode = 'cash' THEN p.payment_id END) as cash_payments,
+                COUNT(DISTINCT CASE WHEN p.payment_mode = 'cheque' THEN p.payment_id END) as cheque_payments,
+                COUNT(DISTINCT CASE WHEN p.payment_mode IN ('online', 'upi', 'neft', 'rtgs') THEN p.payment_id END) as online_payments,
+                COALESCE(SUM(CASE WHEN p.payment_mode = 'cash' THEN p.amount ELSE 0 END), 0) as cash_amount,
+                COALESCE(SUM(CASE WHEN p.payment_mode = 'cheque' THEN p.amount ELSE 0 END), 0) as cheque_amount,
+                COALESCE(SUM(CASE WHEN p.payment_mode IN ('online', 'upi', 'neft', 'rtgs') THEN p.amount ELSE 0 END), 0) as online_amount
+            FROM financial.payments p
+            WHERE p.org_id = :org_id 
+                AND p.payment_status = 'completed'
+                AND p.party_type = 'customer' {date_filter}
         """), params).fetchone()
         
         # Get pending payments
         pending_result = db.execute(text(f"""
             SELECT 
                 COUNT(DISTINCT i.invoice_id) as pending_invoices,
-                COALESCE(SUM(i.final_amount - 0), 0) as pending_amount
+                COALESCE(SUM(i.final_amount - COALESCE(i.paid_amount, 0)), 0) as pending_amount
             FROM sales.invoices i
-            JOIN sales.orders o ON i.order_id = o.order_id
-            WHERE o.org_id = :org_id 
+            WHERE i.org_id = :org_id 
                 AND i.payment_status IN ('unpaid', 'partial')
-        """), {"org_id": org_id}).fetchone()
+        """), {"org_id": str(org_id)}).fetchone()
         
         return {
             "total_payments": result.total_payments,

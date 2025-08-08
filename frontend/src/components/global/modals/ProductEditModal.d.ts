@@ -22,7 +22,7 @@ interface Product {
 interface ProductEditModalProps {
   isOpen: boolean;
   onClose: () => void;
-  product?: Product | null | undefined;
+  product?: any;
   onSave?: (product: Product) => void;
   mode?: 'edit' | 'create' | 'view';
 }

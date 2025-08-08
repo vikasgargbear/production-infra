@@ -162,7 +162,7 @@ def create_purchase_with_items(purchase_data: dict, db: Session = Depends(get_db
                     org_id, po_number, po_date,
                     supplier_id, supplier_name,
                     subtotal_amount, discount_amount, tax_amount, 
-                    other_charges_amount, total_amount, po_status,
+                    other_charges, total_amount, po_status,
                     payment_status, payment_terms, notes, created_by, branch_id
                 ) VALUES (
                     :org_id, -- Default org

@@ -142,7 +142,7 @@ const PartyStatement: React.FC<PartyStatementProps> = ({
 
   // Print handler
   const handlePrint = useReactToPrint({
-    content: () => printRef.current,
+    contentRef: printRef,
     documentTitle: `Statement-${statementData?.party_info.name}-${format(new Date(), 'yyyy-MM-dd')}`
   });
 

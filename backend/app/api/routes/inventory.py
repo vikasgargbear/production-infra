@@ -21,7 +21,7 @@ from ..services.inventory_service import InventoryService
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/inventory", tags=["inventory"])
+router = APIRouter(tags=["inventory"])
 
 @router.post("/batches", response_model=BatchResponse)
 async def create_batch(

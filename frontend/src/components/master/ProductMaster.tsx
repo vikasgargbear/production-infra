@@ -81,7 +81,7 @@ const ProductMaster: React.FC<ProductMasterProps> = ({ open, onClose }) => {
       // setCategories(response.data || []);
       
       // For now, extract unique categories from products
-      const uniqueCategories = [...new Set(products.map(p => p.category).filter(Boolean))];
+      const uniqueCategories = [...new Set(products.map(p => p.category).filter(Boolean))] as string[];
       setCategories(['All', ...uniqueCategories]);
     } catch (err) {
       console.error('Error loading categories:', err);

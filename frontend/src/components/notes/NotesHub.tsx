@@ -53,19 +53,15 @@ const NotesHub: React.FC<NotesHubProps> = ({ open = true, onClose }) => {
 
       {/* Sidebar */}
       <ModuleSidebar 
-        modules={notesModules}
+        modules={notesModules as any}
         activeModule={activeModule}
         onModuleChange={setActiveModule}
+        onClose={onClose || (() => {})}
       />
       
       {/* Main Content */}
       <div className="flex-1">
-        <CreditDebitNote 
-          open={true}
-          onClose={onClose || (() => {})}
-          initialNoteType={activeModule === 'credit-note' ? 'credit' : 'debit'}
-          key={activeModule}
-        />
+        <CreditDebitNote />
       </div>
     </div>
   );

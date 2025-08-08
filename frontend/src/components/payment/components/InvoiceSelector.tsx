@@ -2,14 +2,12 @@ import React, { useState } from 'react';
 import { FileText, DollarSign, Check, AlertCircle } from 'lucide-react';
 import { usePayment } from '../../../contexts/PaymentContext';
 import { 
-  Card, 
-  Badge,
+  Card,
   StatusBadge
 } from '../../global';
 import { 
   SectionHeader,
-  FormInput,
-  EmptyState
+  FormInput
 } from '../../common';
 
 interface Invoice {
@@ -107,11 +105,15 @@ const InvoiceSelectorV2: React.FC = () => {
   if (!outstandingInvoices || outstandingInvoices.length === 0) {
     return (
       <Card>
-        <EmptyState
-          iconType="fileText"
-          title="No outstanding invoices"
-          description="This customer has no pending invoices"
-        />
+        <div className="text-center py-8">
+          <div className="text-gray-400 mb-4">
+            <svg className="w-12 h-12 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+            </svg>
+          </div>
+          <h3 className="text-lg font-medium text-gray-900 mb-1">No outstanding invoices</h3>
+          <p className="text-gray-500">This customer has no pending invoices</p>
+        </div>
       </Card>
     );
   }
@@ -123,13 +125,14 @@ const InvoiceSelectorV2: React.FC = () => {
         subtitle="Allocate payment to invoices (optional)"
         actions={
           <div className="flex items-center space-x-2">
-            <Badge variant="danger" dot>
+            <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-red-100 text-red-800">
+              <span className="w-2 h-2 mr-2 bg-red-400 rounded-full"></span>
               Total Outstanding: ₹{totalOutstanding.toFixed(2)}
-            </Badge>
+            </span>
             {payment.amount && (
-              <Badge variant="primary">
+              <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
                 Payment: ₹{parseFloat(payment.amount).toFixed(2)}
-              </Badge>
+              </span>
             )}
           </div>
         }

@@ -4,8 +4,10 @@
  */
 
 // Main Components
-export { default as CreditDebitNote } from './CreditDebitNote';
-export { default as NotesHub } from './NotesHub';
+import CreditDebitNote from './CreditDebitNote';
+import NotesHub from './NotesHub';
+
+export { CreditDebitNote, NotesHub };
 // TODO: Implement these components
 // export { default as CreditNoteEntry } from './components/CreditNoteEntry';
 // export { default as DebitNoteEntry } from './components/DebitNoteEntry';
@@ -122,7 +124,7 @@ interface NotesModule {
   utils: NotesUtils;
 }
 
-const NotesModule: NotesModule = {
+const NotesModuleExport: NotesModule = {
   CreditDebitNote,
   NotesHub,
   components: {
@@ -147,4 +149,4 @@ const NotesModule: NotesModule = {
   }
 };
 
-export default NotesModule;
+export default NotesModuleExport;

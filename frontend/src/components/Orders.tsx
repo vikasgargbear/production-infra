@@ -208,10 +208,10 @@ const Orders: React.FC = () => {
 
       if (editingOrder) {
         // Use API service instead of direct axios calls
-        await api.orders.update(editingOrder.order_id, orderData);
+        await api.put(`/orders/${editingOrder.order_id}`, orderData);
       } else {
         // Use API service instead of direct axios calls
-        await api.orders.create(orderData);
+        await api.post('/orders', orderData);
       }
 
       // Reset form and close modal
@@ -240,7 +240,7 @@ const Orders: React.FC = () => {
       try {
         setLoading(true);
         // Use the centralized API service instead of ordersApi
-        await api.orders.delete(orderId);
+        await api.delete(`/orders/${orderId}`);
         console.log('Order deleted successfully');
         await fetchData(); // Refresh the orders list
       } catch (err) {
