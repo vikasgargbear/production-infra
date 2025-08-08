@@ -22,7 +22,7 @@ def get_dashboard_stats(db: Session = Depends(get_db)):
         # Get basic counts
         stats_query = """
             SELECT 
-                (SELECT COUNT(*) FROM master.products WHERE is_active = true) as total_products,
+                (SELECT COUNT(*) FROM inventory.products WHERE is_active = true) as total_products,
                 (SELECT COUNT(*) FROM parties.customers) as total_customers,
                 (SELECT COUNT(*) FROM sales.orders WHERE order_date >= CURRENT_DATE - INTERVAL '30 days') as orders_this_month,
                 (SELECT COUNT(*) FROM parties.suppliers) as total_suppliers,
@@ -39,13 +39,13 @@ def get_dashboard_stats(db: Session = Depends(get_db)):
             SELECT COUNT(*) as low_stock_products
             FROM (
                 SELECT p.product_id, 
-                       COALESCE(SUM(lws.quantity_on_hand), 0) as total_stock,
+                       COALESCE(SUM(b.quantity_available), 0) as total_stock,
                        p.minimum_stock_level
-                FROM master.products p
-                LEFT JOIN inventory.location_wise_stock lws ON p.product_id = lws.product_id AND lws.quantity_on_hand > 0
+                FROM inventory.products p
+                LEFT JOIN inventory.batches b ON p.product_id = b.product_id AND b.quantity_available > 0
                 WHERE p.is_active = true
                 GROUP BY p.product_id, p.minimum_stock_level
-                HAVING COALESCE(SUM(lws.quantity_on_hand), 0) <= COALESCE(p.minimum_stock_level, 0)
+                HAVING COALESCE(SUM(b.quantity_available), 0) <= COALESCE(p.minimum_stock_level, 0)
             ) as low_stock
         """
         
@@ -164,16 +164,16 @@ def get_top_products(
             SELECT 
                 p.product_id,
                 p.product_name,
-                p.manufacturer,
+                p.brand_name,
                 SUM(oi.quantity) as total_quantity_sold,
                 SUM(oi.quantity * oi.unit_price) as total_revenue,
                 COUNT(DISTINCT oi.order_id) as order_count
             FROM sales.order_items oi
-            JOIN master.products p ON oi.product_id = p.product_id
+            JOIN inventory.products p ON oi.product_id = p.product_id
             JOIN sales.orders o ON oi.order_id = o.order_id
             WHERE o.order_date >= CURRENT_DATE - INTERVAL '30 days'
             AND o.order_status IN ('confirmed', 'delivered')
-            GROUP BY p.product_id, p.product_name, p.manufacturer
+            GROUP BY p.product_id, p.product_name, p.brand_name
             ORDER BY total_quantity_sold DESC
             LIMIT :limit
         """
@@ -196,15 +196,15 @@ def get_inventory_alerts(db: Session = Depends(get_db)):
             SELECT 
                 p.product_id,
                 p.product_name,
-                p.manufacturer,
-                COALESCE(SUM(lws.quantity_on_hand), 0) as current_stock,
+                p.brand_name,
+                COALESCE(SUM(b.quantity_available), 0) as current_stock,
                 p.minimum_stock_level,
                 'low_stock' as alert_type
-            FROM master.products p
-            LEFT JOIN inventory.location_wise_stock lws ON p.product_id = lws.product_id AND lws.quantity_on_hand > 0
+            FROM inventory.products p
+            LEFT JOIN inventory.batches b ON p.product_id = b.product_id AND b.quantity_available > 0
             WHERE p.is_active = true
-            GROUP BY p.product_id, p.product_name, p.manufacturer, p.minimum_stock_level
-            HAVING COALESCE(SUM(lws.quantity_on_hand), 0) <= COALESCE(p.minimum_stock_level, 0)
+            GROUP BY p.product_id, p.product_name, p.brand_name, p.minimum_stock_level
+            HAVING COALESCE(SUM(b.quantity_available), 0) <= COALESCE(p.minimum_stock_level, 0)
             AND p.minimum_stock_level > 0
             ORDER BY current_stock ASC
             LIMIT 20
@@ -216,15 +216,15 @@ def get_inventory_alerts(db: Session = Depends(get_db)):
                 b.batch_id,
                 p.product_id,
                 p.product_name,
-                p.manufacturer,
+                p.brand_name,
                 b.batch_number,
                 b.expiry_date,
-                b.quantity_on_hand as quantity_available,
+                b.quantity_available as quantity_available,
                 'expiring_soon' as alert_type
             FROM inventory.batches b
-            JOIN master.products p ON b.product_id = p.product_id
+            JOIN inventory.products p ON b.product_id = p.product_id
             WHERE b.expiry_date <= CURRENT_DATE + INTERVAL '30 days'
-            AND b.quantity_on_hand > 0
+            AND b.quantity_available > 0
             ORDER BY b.expiry_date ASC
             LIMIT 20
         """
@@ -357,13 +357,13 @@ def get_inventory_summary(
             SELECT 
                 COUNT(DISTINCT p.product_id) as total_products,
                 COUNT(DISTINCT b.batch_id) as total_batches,
-                COALESCE(SUM(lws.quantity_on_hand), 0) as total_quantity,
-                COALESCE(SUM(lws.quantity_on_hand * p.purchase_price), 0) as total_value,
+                COALESCE(SUM(b.quantity_available), 0) as total_quantity,
+                COALESCE(SUM(b.quantity_available * p.purchase_price), 0) as total_value,
                 COUNT(CASE WHEN b.expiry_date <= CURRENT_DATE + INTERVAL '30 days' THEN 1 END) as expiring_soon_count,
-                COUNT(CASE WHEN COALESCE(lws.quantity_on_hand, 0) <= COALESCE(p.minimum_stock_level, 0) THEN 1 END) as low_stock_count
-            FROM master.products p
+                COUNT(CASE WHEN COALESCE(b.quantity_available, 0) <= COALESCE(p.minimum_stock_level, 0) THEN 1 END) as low_stock_count
+            FROM inventory.products p
             LEFT JOIN inventory.batches b ON p.product_id = b.product_id
-            LEFT JOIN inventory.location_wise_stock lws ON p.product_id = lws.product_id
+            LEFT JOIN inventory.batches b ON p.product_id = b.product_id
             WHERE p.is_active = true
         """
         
@@ -402,15 +402,15 @@ def get_expiry_alerts(
                 b.batch_id,
                 p.product_id,
                 p.product_name,
-                p.manufacturer,
+                p.brand_name,
                 b.batch_number,
                 b.expiry_date,
-                b.quantity_on_hand,
+                b.quantity_available,
                 (b.expiry_date - CURRENT_DATE) as days_to_expire
             FROM inventory.batches b
-            JOIN master.products p ON b.product_id = p.product_id
+            JOIN inventory.products p ON b.product_id = p.product_id
             WHERE b.expiry_date <= CURRENT_DATE + INTERVAL '90 days'
-            AND b.quantity_on_hand > 0
+            AND b.quantity_available > 0
             ORDER BY b.expiry_date ASC
             LIMIT 50
         """
@@ -434,16 +434,16 @@ def get_low_stock_alerts(
             SELECT 
                 p.product_id,
                 p.product_name,
-                p.manufacturer,
-                COALESCE(SUM(lws.quantity_on_hand), 0) as current_stock,
+                p.brand_name,
+                COALESCE(SUM(b.quantity_available), 0) as current_stock,
                 p.minimum_stock_level,
-                (p.minimum_stock_level - COALESCE(SUM(lws.quantity_on_hand), 0)) as stock_deficit
-            FROM master.products p
-            LEFT JOIN inventory.location_wise_stock lws ON p.product_id = lws.product_id
+                (p.minimum_stock_level - COALESCE(SUM(b.quantity_available), 0)) as stock_deficit
+            FROM inventory.products p
+            LEFT JOIN inventory.batches b ON p.product_id = b.product_id
             WHERE p.is_active = true
             AND p.minimum_stock_level > 0
-            GROUP BY p.product_id, p.product_name, p.manufacturer, p.minimum_stock_level
-            HAVING COALESCE(SUM(lws.quantity_on_hand), 0) <= p.minimum_stock_level
+            GROUP BY p.product_id, p.product_name, p.brand_name, p.minimum_stock_level
+            HAVING COALESCE(SUM(b.quantity_available), 0) <= p.minimum_stock_level
             ORDER BY stock_deficit DESC
             LIMIT 50
         """
