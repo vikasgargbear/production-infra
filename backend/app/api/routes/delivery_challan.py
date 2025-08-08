@@ -39,8 +39,7 @@ def get_delivery_challans(
                 dc.challan_status,
                 dc.total_amount,
                 dc.vehicle_number,
-                dc.transporter_name,
-                dc.e_way_bill_number
+                dc.transporter_name
             FROM sales.delivery_challans dc
             LEFT JOIN parties.customers c ON dc.customer_id = c.customer_id
             WHERE 1=1

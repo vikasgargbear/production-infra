@@ -116,9 +116,9 @@ const Orders: React.FC = () => {
     try {
       setLoading(true);
       const [ordersResponse, customersResponse, productsResponse] = await Promise.all([
-        api.orders.getAll(),
-        api.customers.getAll(),
-        api.products.getAll()
+        api.get('/orders'),
+        api.get('/customers'),
+        api.get('/products')
       ]);
       
       setOrders(ordersResponse.data || []);

@@ -160,14 +160,14 @@ def create_purchase_with_items(purchase_data: dict, db: Session = Depends(get_db
             text("""
                 INSERT INTO procurement.purchase_orders (
                     org_id, po_number, po_date,
-                    supplier_id, supplier_name, supplier_invoice_number, supplier_invoice_date,
+                    supplier_id, supplier_name,
                     subtotal_amount, discount_amount, tax_amount, 
                     other_charges_amount, total_amount, po_status,
                     payment_status, payment_terms, notes, created_by, branch_id
                 ) VALUES (
                     :org_id, -- Default org
                     :purchase_number, :purchase_date,
-                    :supplier_id, :supplier_name, :invoice_number, :invoice_date,
+                    :supplier_id, :supplier_name,
                     :subtotal, :discount, :tax, :other_charges, :total,
                     :status, :payment_status, :payment_mode, :notes, :created_by, 1
                 ) RETURNING po_id
@@ -178,8 +178,6 @@ def create_purchase_with_items(purchase_data: dict, db: Session = Depends(get_db
                 "purchase_date": purchase_data.get("purchase_date", datetime.now().date()),
                 "supplier_id": purchase_data.get("supplier_id"),
                 "supplier_name": supplier_name,
-                "invoice_number": purchase_data.get("supplier_invoice_number"),
-                "invoice_date": purchase_data.get("supplier_invoice_date"),
                 "subtotal": Decimal(str(purchase_data.get("subtotal_amount", 0))),
                 "discount": Decimal(str(purchase_data.get("discount_amount", 0))),
                 "tax": Decimal(str(purchase_data.get("tax_amount", 0))),

@@ -9,11 +9,12 @@ export { default as ModularPaymentEntryV2 } from './ModularPaymentEntryV2';
 export { default as ModularPaymentEntryV3 } from './ModularPaymentEntryV3';
 
 // Sub Components
-export { default as PartySelector } from './components/PartySelector';
+// export { default as PartySelector } from './components/PartySelector'; // TODO: Implement
 export { default as PaymentDetails } from './components/PaymentDetails';
-export { default as PaymentModeSelector } from './components/PaymentModeSelector';
+// export { default as PaymentModeSelector } from './components/PaymentModeSelector'; // TODO: Implement
 export { default as PaymentSummary } from './components/PaymentSummary';
-export { default as InvoiceAllocation } from './components/InvoiceAllocation';
+export { default as InvoiceSelector } from './components/InvoiceSelector';
+// export { default as InvoiceAllocation } from './components/InvoiceAllocation'; // TODO: Implement
 
 // Payment Constants
 export const PAYMENT_MODES = {
@@ -66,11 +67,12 @@ export { paymentDataTransformer } from '../../services/api/utils/paymentDataTran
 
 // Main component interfaces
 interface PaymentComponents {
-  PartySelector: React.ComponentType<any>;
+  // PartySelector: React.ComponentType<any>; // TODO: Implement
   PaymentDetails: React.ComponentType<any>;
-  PaymentModeSelector: React.ComponentType<any>;
+  // PaymentModeSelector: React.ComponentType<any>; // TODO: Implement
   PaymentSummary: React.ComponentType<any>;
-  InvoiceAllocation: React.ComponentType<any>;
+  InvoiceSelector: React.ComponentType<any>;
+  // InvoiceAllocation: React.ComponentType<any>; // TODO: Implement
 }
 
 interface PaymentConstants {
@@ -99,11 +101,12 @@ const PaymentModule: PaymentModule = {
   ModularPaymentEntryV2,
   ModularPaymentEntryV3,
   components: {
-    PartySelector,
+    // PartySelector, // TODO: Implement
     PaymentDetails,
-    PaymentModeSelector,
+    // PaymentModeSelector, // TODO: Implement
     PaymentSummary,
-    InvoiceAllocation
+    InvoiceSelector
+    // InvoiceAllocation // TODO: Implement
   },
   constants: {
     PAYMENT_MODES,

@@ -36,7 +36,7 @@ const PartyMaster: React.FC<PartyMasterProps> = ({ open, onClose }) => {
   const [searchTerm, setSearchTerm] = useState<string>('');
   const [filterType, setFilterType] = useState<string>('all');
   const [showAddModal, setShowAddModal] = useState<boolean>(false);
-  const [editingParty, setEditingParty] = useState<Party | null>(null);
+  const [editingParty, setEditingParty] = useState<Party | null | undefined>(null);
   const [selectedParties, setSelectedParties] = useState<string[]>([]);
   const [parties, setParties] = useState<Party[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);

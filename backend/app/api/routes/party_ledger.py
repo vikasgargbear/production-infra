@@ -60,7 +60,7 @@ async def get_party_balance(
                         return_amount as credit_amount
                     FROM sales.sales_returns
                     WHERE customer_id = :party_id
-                    AND return_status = 'approved'
+                    AND approval_status = 'approved'
                 )
                 SELECT 
                     COALESCE(SUM(debit_amount - credit_amount), 0) as balance,
@@ -186,7 +186,7 @@ async def get_party_statement(
                         'cash' as payment_mode
                     FROM sales.sales_returns
                     WHERE customer_id = :party_id
-                    AND return_status = 'approved'
+                    AND approval_status = 'approved'
                 )
                 SELECT * FROM ledger_entries
             """

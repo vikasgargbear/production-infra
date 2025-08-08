@@ -6,15 +6,16 @@
 // Main Components
 export { default as CreditDebitNote } from './CreditDebitNote';
 export { default as NotesHub } from './NotesHub';
-export { default as CreditNoteEntry } from './components/CreditNoteEntry';
-export { default as DebitNoteEntry } from './components/DebitNoteEntry';
+// TODO: Implement these components
+// export { default as CreditNoteEntry } from './components/CreditNoteEntry';
+// export { default as DebitNoteEntry } from './components/DebitNoteEntry';
 
-// Sub Components
-export { default as NoteTypeSelector } from './components/NoteTypeSelector';
-export { default as NoteDetails } from './components/NoteDetails';
-export { default as NoteItemsTable } from './components/NoteItemsTable';
-export { default as NoteAdjustment } from './components/NoteAdjustment';
-export { default as NoteSummary } from './components/NoteSummary';
+// Sub Components - TODO: Implement these
+// export { default as NoteTypeSelector } from './components/NoteTypeSelector';
+// export { default as NoteDetails } from './components/NoteDetails';
+// export { default as NoteItemsTable } from './components/NoteItemsTable';
+// export { default as NoteAdjustment } from './components/NoteAdjustment';
+// export { default as NoteSummary } from './components/NoteSummary';
 
 // Note Constants
 export const NOTE_TYPES = {
@@ -90,13 +91,14 @@ export { notesDataTransformer } from '../../services/api/utils/notesDataTransfor
 
 // Component interfaces
 interface NotesComponents {
-  CreditNoteEntry: React.ComponentType<any>;
-  DebitNoteEntry: React.ComponentType<any>;
-  NoteTypeSelector: React.ComponentType<any>;
-  NoteDetails: React.ComponentType<any>;
-  NoteItemsTable: React.ComponentType<any>;
-  NoteAdjustment: React.ComponentType<any>;
-  NoteSummary: React.ComponentType<any>;
+  // TODO: Implement these components
+  // CreditNoteEntry: React.ComponentType<any>;
+  // DebitNoteEntry: React.ComponentType<any>;
+  // NoteTypeSelector: React.ComponentType<any>;
+  // NoteDetails: React.ComponentType<any>;
+  // NoteItemsTable: React.ComponentType<any>;
+  // NoteAdjustment: React.ComponentType<any>;
+  // NoteSummary: React.ComponentType<any>;
 }
 
 interface NotesConstants {
@@ -124,13 +126,14 @@ const NotesModule: NotesModule = {
   CreditDebitNote,
   NotesHub,
   components: {
-    CreditNoteEntry,
-    DebitNoteEntry,
-    NoteTypeSelector,
-    NoteDetails,
-    NoteItemsTable,
-    NoteAdjustment,
-    NoteSummary
+    // TODO: Implement these components
+    // CreditNoteEntry,
+    // DebitNoteEntry,
+    // NoteTypeSelector,
+    // NoteDetails,
+    // NoteItemsTable,
+    // NoteAdjustment,
+    // NoteSummary
   },
   constants: {
     NOTE_TYPES,
