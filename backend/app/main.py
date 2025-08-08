@@ -108,6 +108,7 @@ api.include_router(order_items_router, tags=["Order Items"])
 api.include_router(users_router, tags=["Users"])
 api.include_router(suppliers_router, tags=["Suppliers"])
 api.include_router(purchases_router, tags=["Purchases"])
+api.include_router(dashboard_router, tags=["Dashboard API"])
 # Include both - they have different functionality
 api.include_router(delivery_challan.router, tags=["Delivery Challan"])
 api.include_router(stock_adjustments_router, tags=["Stock Adjustments"])
