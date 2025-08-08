@@ -291,6 +291,12 @@ def delete_purchase_item(purchase_id: int, item_id: int, db: Session = Depends(g
         
         db.commit()
         return {"message": "Purchase item deleted successfully"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Error deleting purchase item: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to delete purchase item: {str(e)}")
 
 @router.get("/analytics/summary")
 def get_purchase_analytics(
