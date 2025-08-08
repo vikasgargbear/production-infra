@@ -34,18 +34,17 @@ def get_dashboard_stats(db: Session = Depends(get_db)):
         result = db.execute(text(stats_query))
         stats = dict(result.first()._mapping)
         
-        # Get low stock alerts
+        # Get low stock alerts (using a threshold of 10 units as default)
         low_stock_query = """
             SELECT COUNT(*) as low_stock_products
             FROM (
                 SELECT p.product_id, 
-                       COALESCE(SUM(b.quantity_available), 0) as total_stock,
-                       p.minimum_stock_level
+                       COALESCE(SUM(b.quantity_available), 0) as total_stock
                 FROM inventory.products p
                 LEFT JOIN inventory.batches b ON p.product_id = b.product_id AND b.quantity_available > 0
                 WHERE p.is_active = true
-                GROUP BY p.product_id, p.minimum_stock_level
-                HAVING COALESCE(SUM(b.quantity_available), 0) <= COALESCE(p.minimum_stock_level, 0)
+                GROUP BY p.product_id
+                HAVING COALESCE(SUM(b.quantity_available), 0) <= 10
             ) as low_stock
         """
         
@@ -198,14 +197,13 @@ def get_inventory_alerts(db: Session = Depends(get_db)):
                 p.product_name,
                 p.brand_name,
                 COALESCE(SUM(b.quantity_available), 0) as current_stock,
-                p.minimum_stock_level,
+                10 as minimum_stock_level,
                 'low_stock' as alert_type
             FROM inventory.products p
             LEFT JOIN inventory.batches b ON p.product_id = b.product_id AND b.quantity_available > 0
             WHERE p.is_active = true
-            GROUP BY p.product_id, p.product_name, p.brand_name, p.minimum_stock_level
-            HAVING COALESCE(SUM(b.quantity_available), 0) <= COALESCE(p.minimum_stock_level, 0)
-            AND p.minimum_stock_level > 0
+            GROUP BY p.product_id, p.product_name, p.brand_name
+            HAVING COALESCE(SUM(b.quantity_available), 0) <= 10
             ORDER BY current_stock ASC
             LIMIT 20
         """
@@ -256,7 +254,7 @@ def get_customer_analytics(
             SELECT 
                 c.customer_id,
                 c.customer_name,
-                c.customer_phone,
+                c.primary_phone,
                 COUNT(o.order_id) as total_orders,
                 COALESCE(SUM(o.final_amount), 0) as total_spent,
                 AVG(o.final_amount) as avg_order_value,
@@ -265,7 +263,7 @@ def get_customer_analytics(
             LEFT JOIN sales.orders o ON c.customer_id = o.customer_id 
                 AND o.order_date >= CURRENT_DATE - INTERVAL '30 days'
                 AND o.order_status IN ('confirmed', 'delivered')
-            GROUP BY c.customer_id, c.customer_name, c.customer_phone
+            GROUP BY c.customer_id, c.customer_name, c.primary_phone
             HAVING COUNT(o.order_id) > 0
             ORDER BY total_spent DESC
             LIMIT :limit
@@ -358,9 +356,9 @@ def get_inventory_summary(
                 COUNT(DISTINCT p.product_id) as total_products,
                 COUNT(DISTINCT b.batch_id) as total_batches,
                 COALESCE(SUM(b.quantity_available), 0) as total_quantity,
-                COALESCE(SUM(b.quantity_available * p.purchase_price), 0) as total_value,
+                COALESCE(SUM(b.quantity_available * COALESCE(b.cost_per_unit, 0)), 0) as total_value,
                 COUNT(CASE WHEN b.expiry_date <= CURRENT_DATE + INTERVAL '30 days' THEN 1 END) as expiring_soon_count,
-                COUNT(CASE WHEN COALESCE(b.quantity_available, 0) <= COALESCE(p.minimum_stock_level, 0) THEN 1 END) as low_stock_count
+                COUNT(CASE WHEN COALESCE(b.quantity_available, 0) <= 10 THEN 1 END) as low_stock_count
             FROM inventory.products p
             LEFT JOIN inventory.batches b ON p.product_id = b.product_id
             LEFT JOIN inventory.batches b ON p.product_id = b.product_id
@@ -436,14 +434,13 @@ def get_low_stock_alerts(
                 p.product_name,
                 p.brand_name,
                 COALESCE(SUM(b.quantity_available), 0) as current_stock,
-                p.minimum_stock_level,
-                (p.minimum_stock_level - COALESCE(SUM(b.quantity_available), 0)) as stock_deficit
+                10 as minimum_stock_level,
+                (10 - COALESCE(SUM(b.quantity_available), 0)) as stock_deficit
             FROM inventory.products p
             LEFT JOIN inventory.batches b ON p.product_id = b.product_id
             WHERE p.is_active = true
-            AND p.minimum_stock_level > 0
-            GROUP BY p.product_id, p.product_name, p.brand_name, p.minimum_stock_level
-            HAVING COALESCE(SUM(b.quantity_available), 0) <= p.minimum_stock_level
+            GROUP BY p.product_id, p.product_name, p.brand_name
+            HAVING COALESCE(SUM(b.quantity_available), 0) <= 10
             ORDER BY stock_deficit DESC
             LIMIT 50
         """
