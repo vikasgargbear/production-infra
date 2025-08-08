@@ -39,15 +39,15 @@ def create_direct_purchase_entry(purchase_data: dict, db: Session = Depends(get_
                 org_id, branch_id, po_number, po_date, po_type,
                 supplier_id, supplier_name,
                 subtotal_amount, tax_amount, total_amount,
-                po_status, grn_status,
+                po_status, receipt_status,
                 created_at
             ) VALUES (
                 :org_id, 1, :po_number, :po_date, 'regular',
                 :supplier_id, :supplier_name,
                 :subtotal, :tax, :total,
-                'completed', 'completed',
+                'completed', 'received',
                 CURRENT_TIMESTAMP
-            ) RETURNING po_id
+            ) RETURNING purchase_order_id
         """), {
             "org_id": DEFAULT_ORG_ID,
             "po_number": po_number,
@@ -59,7 +59,8 @@ def create_direct_purchase_entry(purchase_data: dict, db: Session = Depends(get_
             "total": purchase_data.get("total_amount", 0)
         })
         
-        po = po_result.fetchone()
+        po_row = po_result.fetchone()
+        po_id = po_row.purchase_order_id
         
         # Process items and create batches
         items = purchase_data.get("items", [])
@@ -67,16 +68,16 @@ def create_direct_purchase_entry(purchase_data: dict, db: Session = Depends(get_
             # Create PO item
             item_result = db.execute(text("""
                 INSERT INTO procurement.purchase_order_items (
-                    po_id, product_id, product_name,
+                    purchase_order_id, product_id, product_name,
                     ordered_quantity, unit_price, line_total,
                     tax_percentage, tax_amount, final_amount
                 ) VALUES (
-                    :po_id, :product_id, :product_name,
+                    :purchase_order_id, :product_id, :product_name,
                     :quantity, :unit_price, :line_total,
                     :tax_percent, :tax_amount, :final_amount
                 ) RETURNING po_item_id
             """), {
-                "po_id": po.po_id,
+                "purchase_order_id": po_id,
                 "product_id": item.get("product_id"),
                 "product_name": item.get("product_name"),
                 "quantity": item.get("quantity", 0),
@@ -124,7 +125,7 @@ def create_direct_purchase_entry(purchase_data: dict, db: Session = Depends(get_
         
         return {
             "success": True,
-            "po_id": po.po_id,
+            "po_id": po_id,
             "po_number": po_number,
             "message": f"Purchase {po_number} created with {len(items)} items and batches"
         }
@@ -169,7 +170,7 @@ def create_purchase_with_items(purchase_data: dict, db: Session = Depends(get_db
                     :supplier_id, :supplier_name,
                     :subtotal, :discount, :tax, :other_charges, :total,
                     :status, :payment_mode, :notes, :created_by, 1
-                ) RETURNING po_id
+                ) RETURNING purchase_order_id
             """),
             {
                 "org_id": DEFAULT_ORG_ID,
@@ -218,19 +219,19 @@ def create_purchase_with_items(purchase_data: dict, db: Session = Depends(get_db
             db.execute(
                 text("""
                     INSERT INTO procurement.purchase_order_items (
-                        po_id, product_id, product_name,
+                        purchase_order_id, product_id, product_name,
                         ordered_quantity, unit_price, free_quantity,
                         discount_percentage, discount_amount,
                         line_total, gst_percentage, tax_amount, final_amount
                     ) VALUES (
-                        :po_id, :product_id, :product_name,
+                        :purchase_order_id, :product_id, :product_name,
                         :ordered_qty, :unit_price, :free_qty,
                         :disc_percent, :disc_amount,
                         :line_total, :gst_percent, :tax_amount, :final_amount
                     )
                 """),
                 {
-                    "po_id": purchase_id,
+                    "purchase_order_id": purchase_id,
                     "product_id": item.get("product_id"),
                     "product_name": item.get("product_name"),
                     "ordered_qty": quantity,
@@ -358,7 +359,7 @@ def receive_purchase_items(
     try:
         # Get purchase details
         purchase = db.execute(
-            text("SELECT * FROM procurement.purchase_orders WHERE po_id = :id"),
+            text("SELECT * FROM procurement.purchase_orders WHERE purchase_order_id = :id"),
             {"id": purchase_id}
         ).first()
         
@@ -476,7 +477,7 @@ def receive_purchase_items(
                 SET po_status = 'received',
                     grn_number = :grn_number,
                     grn_date = CURRENT_DATE
-                WHERE po_id = :purchase_id
+                WHERE purchase_order_id = :purchase_id
             """),
             {
                 "grn_number": f"GRN-{purchase.po_number}",
@@ -513,7 +514,7 @@ def receive_purchase_items_fixed(
     try:
         # Get purchase
         purchase = db.execute(
-            text("SELECT * FROM procurement.purchase_orders WHERE po_id = :id"),
+            text("SELECT * FROM procurement.purchase_orders WHERE purchase_order_id = :id"),
             {"id": purchase_id}
         ).first()
         
@@ -567,7 +568,7 @@ def receive_purchase_items_fixed(
                 SET po_status = 'received',
                     grn_number = :grn_number,
                     grn_date = CURRENT_DATE
-                WHERE po_id = :purchase_id
+                WHERE purchase_order_id = :purchase_id
             """),
             {"grn_number": grn_number, "purchase_id": purchase_id}
         )
@@ -611,7 +612,7 @@ def get_pending_receipts(
                 COUNT(CASE WHEN pi.received_quantity > 0 THEN 1 END) as received_items
             FROM procurement.purchase_orders p
             JOIN parties.suppliers s ON p.supplier_id = s.supplier_id
-            LEFT JOIN procurement.purchase_order_items pi ON p.po_id = pi.po_id
+            LEFT JOIN procurement.purchase_order_items pi ON p.purchase_order_id = pi.purchase_order_id
             WHERE p.po_status IN ('draft', 'approved', 'partial')
         """
         params = {}

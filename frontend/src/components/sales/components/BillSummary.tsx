@@ -114,7 +114,7 @@ const BillSummary: React.FC = () => {
           <h4 className="text-xs font-medium text-gray-700 mb-2">Tax Breakdown</h4>
           <div className="space-y-1">
             {Array.from(new Set(salesData.items.map((item: SalesItem) => item.tax_rate || 0)))
-              .filter((rate): rate is number => rate > 0)
+              .filter((rate): rate is number => typeof rate === 'number' && rate > 0)
               .map((rate: number) => {
                 const taxAmount = salesData.items
                   .filter((item: SalesItem) => (item.tax_rate || 0) === rate)

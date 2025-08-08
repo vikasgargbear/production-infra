@@ -114,9 +114,12 @@ function TestIntegrationInner() {
         <div className="bg-white p-4 rounded-lg shadow">
           <h2 className="text-lg font-semibold mb-4">Customer Search (api.search_customers)</h2>
           <CustomerSearch
-            onSelect={(customer) => {
+            value={selectedCustomer}
+            onChange={(customer) => {
               setSelectedCustomer(customer);
-              addResult(`✅ Customer selected: ${customer.customer_name} (ID: ${customer.customer_id})`);
+              if (customer) {
+                addResult(`✅ Customer selected: ${customer.customer_name} (ID: ${customer.customer_id})`);
+              }
             }}
             placeholder="Type at least 2 characters..."
           />
@@ -136,12 +139,18 @@ function TestIntegrationInner() {
         <div className="bg-white p-4 rounded-lg shadow">
           <h2 className="text-lg font-semibold mb-4">Product Search (api.search_products)</h2>
           <ProductSearch
-            onSelect={(product, batch) => {
+            value={selectedProduct}
+            onChange={(product) => {
               setSelectedProduct(product);
-              addResult(`✅ Product selected: ${product.product_name} (ID: ${product.product_id})${batch ? ` with batch ${batch.batch_number}` : ''}`);
+              if (product) {
+                addResult(`✅ Product selected: ${product.product_name} (ID: ${product.product_id})`);
+              }
+            }}
+            onBatchSelect={(product, batch) => {
+              setSelectedProduct(product);
+              addResult(`✅ Product selected: ${product.product_name} (ID: ${product.product_id}) with batch ${batch.batch_number}`);
             }}
             placeholder="Type at least 2 characters..."
-            showStock={true}
           />
           {selectedProduct && (
             <div className="mt-4 p-3 bg-gray-50 rounded text-sm">

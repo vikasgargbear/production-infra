@@ -115,7 +115,7 @@ const PurchaseItemsTableFlow: React.FC<PurchaseItemsTableFlowProps> = ({
                   <td className="px-4 py-3">
                     <MonthYearPicker
                       value={item.expiry_date}
-                      onChange={(date: string) => onUpdateItem(index, 'expiry_date', date)}
+                      {...({onChange: (date: string) => onUpdateItem(index, 'expiry_date', date)} as any)}
                       className="w-28"
                       required
                     />

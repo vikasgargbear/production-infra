@@ -96,7 +96,7 @@ export function useCreateProduct(
  */
 export function useProductBatches(
   productId: string,
-  options?: UseQueryOptions<any, unknown, any>
+  options?: any
 ) {
   return useQuery(
     productKeys.batches(productId),

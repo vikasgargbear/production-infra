@@ -131,13 +131,8 @@ const SalesDashboard: React.FC<SalesDashboardProps> = () => {
     }).format(amount);
   };
 
-  const getStatusColor = (status: string) => {
-    switch (status.toLowerCase()) {
-      case 'paid': return 'success';
-      case 'pending': return 'warning'; 
-      case 'overdue': return 'error';
-      default: return 'default';
-    }
+  const getStatusColor = (status: string): 'solid' | 'light' | 'outline' => {
+    return 'light'; // Always use light variant for status badges
   };
 
   return (

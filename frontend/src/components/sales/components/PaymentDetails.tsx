@@ -148,7 +148,7 @@ const PaymentDetails: React.FC<PaymentDetailsProps> = ({
             <div className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50">
               <StatusBadge
                 status={paymentData.payment_status || 'pending'}
-                variant={paymentStatuses.find(s => s.value === paymentData.payment_status)?.variant || 'default'}
+                variant={'light'}
                 label={paymentStatuses.find(s => s.value === paymentData.payment_status)?.label || 'Pending'}
               />
             </div>
@@ -187,7 +187,7 @@ const PaymentDetails: React.FC<PaymentDetailsProps> = ({
             ) : (
               <CurrencyInput
                 value={paymentData.amount_paid || 0}
-                onChange={(value) => handleChange('amount_paid', value)}
+                onChange={(value) => handleChange('amount_paid', value ?? 0)}
                 max={totalAmount}
                 size="sm"
                 className="text-green-700 font-medium"

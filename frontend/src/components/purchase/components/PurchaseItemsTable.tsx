@@ -254,10 +254,10 @@ const PurchaseItemsTable: React.FC<PurchaseItemsTableProps> = () => {
                   <td className="px-2 py-2">
                     <MonthYearPicker
                       value={item.expiry_date ? item.expiry_date.substring(0, 7) : ''}
-                      onChange={(date: string) => handleItemFieldChange(item.id, 'expiry_date', date ? `${date}-01` : '')}
+                      {...({onChange: (date: string) => handleItemFieldChange(item.id, 'expiry_date', date ? `${date}-01` : '')} as any)}
                       placeholder="MM/YYYY"
                       className="w-full"
-                      minDate={new Date()}
+                      minDate={null}
                     />
                   </td>
                   

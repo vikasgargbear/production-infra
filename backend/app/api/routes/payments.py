@@ -90,37 +90,48 @@ async def create_payment(
         if not payment.payment_number:
             payment.payment_number = f"PAY-{payment.payment_date.strftime('%Y%m%d')}-{payment.customer_id or payment.supplier_id or 'ADV'}-{int(datetime.now().timestamp())}"
         
+        # Map payment_mode to payment_method_id (temporary mapping)
+        payment_method_map = {
+            'cash': 1,
+            'cheque': 2,
+            'upi': 3,
+            'bank_transfer': 4,
+            'credit_adjustment': 5
+        }
+        payment_method_id = payment_method_map.get(payment.payment_mode, 1)
+        
         # Prepare payment data for database using CORRECT column names
         payment_data = {
-            'org_id': payment.org_id,  # FIXED: Using org_id not organization_id
+            'org_id': payment.org_id,
             'payment_number': payment.payment_number,
             'payment_date': payment.payment_date,
-            'customer_id': payment.customer_id,
-            'supplier_id': payment.supplier_id,
+            'party_type': 'customer' if payment.customer_id else 'supplier',
+            'party_id': payment.customer_id or payment.supplier_id,
+            'party_name': f"Customer {payment.customer_id}" if payment.customer_id else f"Supplier {payment.supplier_id}",
             'payment_type': payment.payment_type,
-            'amount': payment.amount,
-            'payment_mode': payment.payment_mode,
+            'payment_amount': payment.amount,
+            'payment_method_id': payment_method_id,
             'reference_number': payment.reference_number,
-            'bank_name': payment.bank_name,
+            'deposited_at_bank': payment.bank_name,
             'payment_status': payment.payment_status,
-            'cleared_date': payment.cleared_date,
-            'branch_id': payment.branch_id,
-            'created_by': payment.created_by,
+            'clearance_date': payment.cleared_date,
+            'branch_id': payment.branch_id or 1,  # Default branch
+            'created_by': payment.created_by or 1,  # Default user
             'approved_by': payment.approved_by,
-            'notes': payment.notes
+            'narration': payment.notes
         }
         
         # Insert into financial.payments table
         insert_query = """
             INSERT INTO financial.payments (
-                org_id, payment_number, payment_date, customer_id, supplier_id,
-                payment_type, amount, payment_mode, reference_number, bank_name,
-                payment_status, cleared_date, branch_id, created_by, approved_by, notes
+                org_id, payment_number, payment_date, party_type, party_id, party_name,
+                payment_type, payment_amount, payment_method_id, reference_number, deposited_at_bank,
+                payment_status, clearance_date, branch_id, created_by, approved_by, narration
             ) VALUES (
-                :org_id, :payment_number, :payment_date, :customer_id, :supplier_id,
-                :payment_type, :amount, :payment_mode, :reference_number, :bank_name,
-                :payment_status, :cleared_date, :branch_id, :created_by, :approved_by, :notes
-            ) RETURNING payment_id, payment_number, amount, payment_status
+                :org_id, :payment_number, :payment_date, :party_type, :party_id, :party_name,
+                :payment_type, :payment_amount, :payment_method_id, :reference_number, :deposited_at_bank,
+                :payment_status, :clearance_date, :branch_id, :created_by, :approved_by, :narration
+            ) RETURNING payment_id, payment_number, payment_amount, payment_status
         """
         
         result = db.execute(text(insert_query), payment_data).fetchone()
@@ -131,7 +142,7 @@ async def create_payment(
             "data": {
                 "payment_id": result.payment_id,
                 "payment_number": result.payment_number,
-                "amount": float(result.amount),
+                "amount": float(result.payment_amount),
                 "status": result.payment_status
             }
         }

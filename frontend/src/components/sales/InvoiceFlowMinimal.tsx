@@ -1,6 +1,28 @@
 import React, { useState, useEffect } from 'react';
 import { Search, X, Plus, Minus, ArrowRight, Check } from 'lucide-react';
-import { Customer, Product } from '../../types/models';
+// import { Customer, Product } from '../../types/models';
+
+interface Customer {
+  id?: string | number;
+  customer_id?: string | number;
+  name?: string;
+  customer_name?: string;
+  phone?: string;
+  email?: string;
+  address?: string;
+  [key: string]: any;
+}
+
+interface Product {
+  id?: string | number;
+  product_id?: string | number;
+  name?: string;
+  product_name?: string;
+  price?: number;
+  sale_price?: number;
+  mrp?: number;
+  [key: string]: any;
+}
 
 interface InvoiceFlowMinimalProps {
   open?: boolean;

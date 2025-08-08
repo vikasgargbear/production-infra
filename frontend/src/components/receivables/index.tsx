@@ -1,5 +1,6 @@
 // Receivables Module - Re-export from Ledger
 // The main collection functionality is in the ledger module
+import CollectionCenterComponent from '../ledger/CollectionCenter';
 export { default as CollectionCenter } from '../ledger/CollectionCenter';
 
 /**
@@ -41,7 +42,7 @@ export type RiskLevel = typeof RISK_LEVELS[keyof typeof RISK_LEVELS];
 
 // Default export
 export default {
-  CollectionCenter,
+  CollectionCenter: CollectionCenterComponent,
   constants: {
     COLLECTION_STATUS,
     RISK_LEVELS

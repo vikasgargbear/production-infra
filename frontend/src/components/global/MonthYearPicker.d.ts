@@ -5,7 +5,8 @@ interface MonthYearPickerProps {
   onChange?: (date: string) => void;
   placeholder?: string;
   className?: string;
-  minDate?: Date | null | undefined;
+  minDate?: Date | null;
+  maxDate?: Date | null;
   required?: boolean;
 }
 

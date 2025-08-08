@@ -161,14 +161,14 @@ class PaymentService:
         result = db.execute(text(f"""
             SELECT 
                 COUNT(DISTINCT p.payment_id) as total_payments,
-                COUNT(DISTINCT p.customer_id) as customers_paid,
-                COALESCE(SUM(p.amount), 0) as total_collected,
-                COUNT(DISTINCT CASE WHEN p.payment_mode = 'cash' THEN p.payment_id END) as cash_payments,
-                COUNT(DISTINCT CASE WHEN p.payment_mode = 'cheque' THEN p.payment_id END) as cheque_payments,
-                COUNT(DISTINCT CASE WHEN p.payment_mode IN ('online', 'upi', 'neft', 'rtgs') THEN p.payment_id END) as online_payments,
-                COALESCE(SUM(CASE WHEN p.payment_mode = 'cash' THEN p.amount ELSE 0 END), 0) as cash_amount,
-                COALESCE(SUM(CASE WHEN p.payment_mode = 'cheque' THEN p.amount ELSE 0 END), 0) as cheque_amount,
-                COALESCE(SUM(CASE WHEN p.payment_mode IN ('online', 'upi', 'neft', 'rtgs') THEN p.amount ELSE 0 END), 0) as online_amount
+                COUNT(DISTINCT p.party_id) as customers_paid,
+                COALESCE(SUM(p.payment_amount), 0) as total_collected,
+                COUNT(DISTINCT CASE WHEN p.payment_method_id = 1 THEN p.payment_id END) as cash_payments,
+                COUNT(DISTINCT CASE WHEN p.payment_method_id = 2 THEN p.payment_id END) as cheque_payments,
+                COUNT(DISTINCT CASE WHEN p.payment_method_id >= 3 THEN p.payment_id END) as online_payments,
+                COALESCE(SUM(CASE WHEN p.payment_method_id = 1 THEN p.payment_amount ELSE 0 END), 0) as cash_amount,
+                COALESCE(SUM(CASE WHEN p.payment_method_id = 2 THEN p.payment_amount ELSE 0 END), 0) as cheque_amount,
+                COALESCE(SUM(CASE WHEN p.payment_method_id >= 3 THEN p.payment_amount ELSE 0 END), 0) as online_amount
             FROM financial.payments p
             WHERE p.org_id = :org_id 
                 AND p.payment_status = 'completed'
