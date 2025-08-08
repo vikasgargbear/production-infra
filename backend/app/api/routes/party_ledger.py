@@ -48,7 +48,7 @@ async def get_party_balance(
                         0 as debit_amount,
                         payment_amount as credit_amount
                     FROM financial.payments
-                    WHERE customer_id = :party_id
+                    WHERE party_id = :party_id AND party_type = 'customer'
                     AND payment_status = 'completed'
                     
                     UNION ALL
@@ -168,7 +168,7 @@ async def get_party_statement(
                         amount as credit,
                         payment_mode
                     FROM financial.payments
-                    WHERE customer_id = :party_id
+                    WHERE party_id = :party_id AND party_type = 'customer'
                     AND payment_status = 'completed'
                     
                     UNION ALL

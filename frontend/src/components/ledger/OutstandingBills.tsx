@@ -503,7 +503,7 @@ const OutstandingBills: React.FC<OutstandingBillsProps> = ({
         <DataTable
           columns={columns}
           data={filteredBills}
-          keyField="bill_number"
+          keyField="id"
           loading={isLoading}
           emptyMessage="No outstanding bills found"
         />

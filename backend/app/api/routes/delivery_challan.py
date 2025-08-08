@@ -36,7 +36,6 @@ def get_delivery_challans(
                 dc.challan_type,
                 dc.customer_id,
                 c.customer_name,
-                dc.delivery_address,
                 dc.challan_status,
                 dc.total_amount,
                 dc.vehicle_number,

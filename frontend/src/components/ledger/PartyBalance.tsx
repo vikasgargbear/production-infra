@@ -475,7 +475,7 @@ const PartyBalance: React.FC<PartyBalanceProps> = ({
         <DataTable
           columns={columns}
           data={filteredParties}
-          keyField="party_name"
+          keyField="party_id"
           loading={isLoading}
           emptyMessage="No parties found"
         />
