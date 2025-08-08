@@ -26,9 +26,9 @@ def get_dashboard_stats(db: Session = Depends(get_db)):
                 (SELECT COUNT(*) FROM parties.customers) as total_customers,
                 (SELECT COUNT(*) FROM sales.orders WHERE order_date >= CURRENT_DATE - INTERVAL '30 days') as orders_this_month,
                 (SELECT COUNT(*) FROM parties.suppliers) as total_suppliers,
-                (SELECT COALESCE(SUM(total_amount), 0) FROM sales.orders WHERE order_date >= CURRENT_DATE - INTERVAL '30 days') as revenue_this_month,
-                (SELECT COUNT(*) FROM inventory.batches WHERE quantity_on_hand > 0) as active_batches,
-                (SELECT COUNT(*) FROM inventory.batches WHERE expiry_date <= CURRENT_DATE + INTERVAL '30 days' AND quantity_on_hand > 0) as expiring_soon
+                (SELECT COALESCE(SUM(final_amount), 0) FROM sales.orders WHERE order_date >= CURRENT_DATE - INTERVAL '30 days') as revenue_this_month,
+                (SELECT COUNT(*) FROM inventory.batches WHERE quantity_available > 0) as active_batches,
+                (SELECT COUNT(*) FROM inventory.batches WHERE expiry_date <= CURRENT_DATE + INTERVAL '30 days' AND quantity_available > 0) as expiring_soon
         """
         
         result = db.execute(text(stats_query))
@@ -72,7 +72,7 @@ def get_recent_orders(
                 o.customer_id,
                 c.customer_name,
                 o.order_date,
-                o.total_amount,
+                o.final_amount,
                 o.order_status,
                 o.delivery_status
             FROM sales.orders o
@@ -105,7 +105,7 @@ def get_revenue_data(
                 SELECT 
                     DATE(order_date) as period,
                     COUNT(*) as order_count,
-                    COALESCE(SUM(total_amount), 0) as revenue
+                    COALESCE(SUM(final_amount), 0) as revenue
                 FROM sales.orders 
                 WHERE order_date >= CURRENT_DATE - INTERVAL '30 days'
                 AND order_status IN ('confirmed', 'delivered')
@@ -118,7 +118,7 @@ def get_revenue_data(
                 SELECT 
                     DATE_TRUNC('week', order_date) as period,
                     COUNT(*) as order_count,
-                    COALESCE(SUM(total_amount), 0) as revenue
+                    COALESCE(SUM(final_amount), 0) as revenue
                 FROM sales.orders 
                 WHERE order_date >= CURRENT_DATE - INTERVAL '12 weeks'
                 AND order_status IN ('confirmed', 'delivered')
@@ -130,7 +130,7 @@ def get_revenue_data(
                 SELECT 
                     DATE_TRUNC('month', order_date) as period,
                     COUNT(*) as order_count,
-                    COALESCE(SUM(total_amount), 0) as revenue
+                    COALESCE(SUM(final_amount), 0) as revenue
                 FROM sales.orders 
                 WHERE order_date >= CURRENT_DATE - INTERVAL '12 months'
                 AND order_status IN ('confirmed', 'delivered')
@@ -258,8 +258,8 @@ def get_customer_analytics(
                 c.customer_name,
                 c.customer_phone,
                 COUNT(o.order_id) as total_orders,
-                COALESCE(SUM(o.total_amount), 0) as total_spent,
-                AVG(o.total_amount) as avg_order_value,
+                COALESCE(SUM(o.final_amount), 0) as total_spent,
+                AVG(o.final_amount) as avg_order_value,
                 MAX(o.order_date) as last_order_date
             FROM parties.customers c
             LEFT JOIN sales.orders o ON c.customer_id = o.customer_id 
@@ -296,13 +296,13 @@ def get_financial_summary(
             
         query = """
             SELECT 
-                COALESCE(SUM(CASE WHEN order_status IN ('confirmed', 'delivered') THEN total_amount END), 0) as total_revenue,
-                COALESCE(SUM(CASE WHEN order_status = 'pending' THEN total_amount END), 0) as pending_orders_value,
-                COALESCE(SUM(CASE WHEN order_status = 'cancelled' THEN total_amount END), 0) as cancelled_orders_value,
+                COALESCE(SUM(CASE WHEN order_status IN ('confirmed', 'delivered') THEN final_amount END), 0) as total_revenue,
+                COALESCE(SUM(CASE WHEN order_status = 'pending' THEN final_amount END), 0) as pending_orders_value,
+                COALESCE(SUM(CASE WHEN order_status = 'cancelled' THEN final_amount END), 0) as cancelled_orders_value,
                 COUNT(CASE WHEN order_status IN ('confirmed', 'delivered') THEN 1 END) as successful_orders,
                 COUNT(CASE WHEN order_status = 'pending' THEN 1 END) as pending_orders,
                 COUNT(CASE WHEN order_status = 'cancelled' THEN 1 END) as cancelled_orders,
-                AVG(CASE WHEN order_status IN ('confirmed', 'delivered') THEN total_amount END) as avg_order_value
+                AVG(CASE WHEN order_status IN ('confirmed', 'delivered') THEN final_amount END) as avg_order_value
             FROM sales.orders
             WHERE order_date >= :start_date AND order_date <= :end_date
         """
@@ -467,7 +467,7 @@ def get_pending_payments(
             SELECT 
                 'customer_receivables' as payment_type,
                 COUNT(*) as count,
-                COALESCE(SUM(outstanding_balance), 0) as total_amount
+                COALESCE(SUM(outstanding_balance), 0) as final_amount
             FROM parties.customers 
             WHERE outstanding_balance > 0
             
@@ -476,7 +476,7 @@ def get_pending_payments(
             SELECT 
                 'supplier_payables' as payment_type,
                 COUNT(*) as count,
-                COALESCE(SUM(outstanding_balance), 0) as total_amount
+                COALESCE(SUM(outstanding_balance), 0) as final_amount
             FROM parties.suppliers 
             WHERE outstanding_balance > 0
             
@@ -485,7 +485,7 @@ def get_pending_payments(
             SELECT 
                 'pending_invoices' as payment_type,
                 COUNT(*) as count,
-                COALESCE(SUM(balance_amount), 0) as total_amount
+                COALESCE(SUM(balance_amount), 0) as final_amount
             FROM sales.invoices 
             WHERE payment_status != 'paid' AND balance_amount > 0
         """
@@ -494,8 +494,8 @@ def get_pending_payments(
         pending_payments = [dict(row._mapping) for row in result]
         
         # Calculate totals
-        total_receivables = sum(row['total_amount'] for row in pending_payments if row['payment_type'] == 'customer_receivables')
-        total_payables = sum(row['total_amount'] for row in pending_payments if row['payment_type'] == 'supplier_payables')
+        total_receivables = sum(row['final_amount'] for row in pending_payments if row['payment_type'] == 'customer_receivables')
+        total_payables = sum(row['final_amount'] for row in pending_payments if row['payment_type'] == 'supplier_payables')
         
         return {
             "pending_payments": pending_payments,
@@ -524,7 +524,7 @@ def get_recent_activities(
                 o.order_number as reference_number,
                 'Order ' || o.order_status as activity_description,
                 c.customer_name as party_name,
-                o.total_amount,
+                o.final_amount,
                 o.created_at as activity_date
             FROM sales.orders o
             LEFT JOIN parties.customers c ON o.customer_id = c.customer_id
@@ -538,7 +538,7 @@ def get_recent_activities(
                 p.payment_number as reference_number,
                 'Payment ' || p.payment_status as activity_description,
                 p.party_name,
-                p.payment_amount as total_amount,
+                p.payment_amount as final_amount,
                 p.created_at as activity_date
             FROM financial.payments p
             WHERE p.created_at >= CURRENT_DATE - INTERVAL '7 days'
