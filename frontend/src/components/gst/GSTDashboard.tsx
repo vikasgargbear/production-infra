@@ -236,7 +236,7 @@ const GSTDashboard: React.FC<GSTDashboardProps> = () => {
                     <span className="text-sm text-green-600">Filed on {dashboardData.compliance.gstr1.date}</span>
                   </div>
                 </div>
-                <StatusBadge status="Filed" variant="success" />
+                <StatusBadge status="success" label="Filed" variant="light" />
               </div>
             </div>
 
@@ -251,7 +251,7 @@ const GSTDashboard: React.FC<GSTDashboardProps> = () => {
                     <span className="text-sm text-amber-600">Due by {dashboardData.compliance.gstr3b.dueDate}</span>
                   </div>
                 </div>
-                <StatusBadge status="Pending" variant="warning" />
+                <StatusBadge status="warning" label="Pending" variant="light" />
               </div>
             </div>
 
@@ -266,7 +266,7 @@ const GSTDashboard: React.FC<GSTDashboardProps> = () => {
                     <span className="text-sm text-blue-600">Available from {dashboardData.compliance.gstr2b.date}</span>
                   </div>
                 </div>
-                <StatusBadge status="Ready" variant="info" />
+                <StatusBadge status="info" label="Ready" variant="light" />
               </div>
             </div>
           </div>
@@ -326,8 +326,8 @@ const GSTDashboard: React.FC<GSTDashboardProps> = () => {
                     <p className="text-xs text-gray-500">{activity.action} • {activity.date}</p>
                   </div>
                   <StatusBadge 
-                    status={activity.status === 'success' ? 'Success' : activity.status === 'draft' ? 'Draft' : 'Pending'}
-                    variant={activity.status === 'success' ? 'success' : activity.status === 'draft' ? 'warning' : 'default'}
+                    status={activity.status === 'success' ? 'success' : activity.status === 'draft' ? 'draft' : 'pending'}
+                    variant={activity.status === 'success' ? 'solid' : activity.status === 'draft' ? 'light' : 'outline'}
                   />
                 </div>
               ))}

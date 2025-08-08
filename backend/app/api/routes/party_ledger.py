@@ -38,7 +38,7 @@ async def get_party_balance(
                         0 as credit_amount
                     FROM sales.invoices
                     WHERE customer_id = :party_id
-                    AND status != 'cancelled'
+                    AND invoice_status != 'cancelled'
                     
                     UNION ALL
                     
@@ -78,7 +78,7 @@ async def get_party_balance(
                         total_amount as credit_amount
                     FROM purchases
                     WHERE supplier_id = :party_id
-                    AND status != 'cancelled'
+                    AND invoice_status != 'cancelled'
                     
                     UNION ALL
                     
@@ -152,7 +152,7 @@ async def get_party_statement(
                         'cash' as payment_mode
                     FROM sales.invoices
                     WHERE customer_id = :party_id
-                    AND status != 'cancelled'
+                    AND invoice_status != 'cancelled'
                     
                     UNION ALL
                     
@@ -210,7 +210,7 @@ async def get_party_statement(
                         'cash' as payment_mode
                     FROM purchases
                     WHERE supplier_id = :party_id
-                    AND status != 'cancelled'
+                    AND invoice_status != 'cancelled'
                     
                     UNION ALL
                     
@@ -346,7 +346,7 @@ async def get_outstanding_bills(
                     AND p.reference_number = i.invoice_number
                     AND p.payment_status = 'completed'
                 WHERE i.customer_id = :party_id
-                AND i.status != 'cancelled'
+                AND i.invoice_status != 'cancelled'
                 GROUP BY i.invoice_id
                 HAVING i.final_amount - COALESCE(SUM(p.amount), 0) > 0
             """
@@ -377,7 +377,7 @@ async def get_outstanding_bills(
                     AND pay.reference_number = p.purchase_number
                     AND pay.payment_status = 'completed'
                 WHERE p.supplier_id = :party_id
-                AND p.status != 'cancelled'
+                AND p.purchase_status != 'cancelled'
                 GROUP BY p.purchase_id
                 HAVING p.total_amount - COALESCE(SUM(pay.amount), 0) > 0
             """

@@ -61,7 +61,7 @@ async def get_inventory_movements(
             query += " AND sm.reason ILIKE :reason"
             params["reason"] = f"%{reason}%"
             
-        query += " ORDER BY sm.movement_date DESC, sm.created_at DESC LIMIT :limit OFFSET :skip"
+        query += " ORDER BY sm.movement_date DESC LIMIT :limit OFFSET :skip"
         
         movements = db.execute(text(query), params).fetchall()
         

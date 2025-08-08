@@ -4,7 +4,7 @@ import {
   Calendar, ChevronRight, Save, Send, Eye, Edit,
   RefreshCw, X, Info, Calculator
 } from 'lucide-react';
-import { Card, Button, DatePicker, StatusBadge, DataTable, Modal } from '../global';
+import { Card, Button, DatePicker, StatusBadge, DataTable } from '../global';
 
 interface GSTFilingProps {
   open?: boolean;
@@ -65,10 +65,10 @@ const ReturnCard: React.FC<{
   };
 
   const statusVariants = {
-    draft: 'default' as const,
-    ready: 'info' as const,
-    filed: 'success' as const,
-    overdue: 'error' as const,
+    draft: 'light' as const,
+    ready: 'light' as const,
+    filed: 'solid' as const,
+    overdue: 'solid' as const,
   };
 
   return (
