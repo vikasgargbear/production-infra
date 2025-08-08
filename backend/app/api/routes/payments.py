@@ -3,7 +3,7 @@ Payment management endpoints
 Handles invoice payments, tracking, and reconciliation
 """
 from typing import Optional, List
-from datetime import date
+from datetime import date, datetime
 from decimal import Decimal
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session

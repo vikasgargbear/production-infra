@@ -250,24 +250,12 @@ const InvoiceListV2: React.FC<InvoiceListProps> = () => {
     }).format(amount);
   };
 
-  const getStatusVariant = (status: string) => {
-    switch (status) {
-      case 'Paid': return 'success';
-      case 'Sent': return 'info';
-      case 'Overdue': return 'error';
-      case 'Draft': return 'warning';
-      case 'Cancelled': return 'default';
-      default: return 'default';
-    }
+  const getStatusVariant = (status: string): 'solid' | 'light' | 'outline' => {
+    return 'light'; // Using light variant for all statuses
   };
 
-  const getPaymentStatusVariant = (status: string) => {
-    switch (status) {
-      case 'Paid': return 'success';
-      case 'Partial': return 'warning';
-      case 'Pending': return 'default';
-      default: return 'default';
-    }
+  const getPaymentStatusVariant = (status: string): 'solid' | 'light' | 'outline' => {
+    return 'light'; // Using light variant for all statuses
   };
 
   const columns = [
