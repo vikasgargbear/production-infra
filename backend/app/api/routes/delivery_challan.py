@@ -27,41 +27,44 @@ def get_delivery_challans(
 ):
     """Get delivery challans with optional filtering"""
     try:
-        # Since we don't have a dedicated challan table, we'll use orders with delivery info
+        # Query the actual delivery_challans table
         query = """
             SELECT 
-                o.order_id as challan_id,
-                o.customer_id,
+                dc.challan_id,
+                dc.challan_number,
+                dc.challan_date,
+                dc.challan_type,
+                dc.customer_id,
                 c.customer_name,
-                o.order_date as challan_date,
-                o.total_amount,
-                o.delivery_status,
-                o.delivery_address,
-                o.delivery_date,
-                'challan' as document_type
-            FROM sales.orders o
-            LEFT JOIN parties.customers c ON o.customer_id = c.customer_id
-            WHERE o.order_status IN ('confirmed', 'delivered', 'shipped')
+                dc.delivery_address,
+                dc.challan_status,
+                dc.total_amount,
+                dc.vehicle_number,
+                dc.transporter_name,
+                dc.e_way_bill_number
+            FROM sales.delivery_challans dc
+            LEFT JOIN parties.customers c ON dc.customer_id = c.customer_id
+            WHERE 1=1
         """
         params = {}
         
         if customer_id:
-            query += " AND o.customer_id = :customer_id"
+            query += " AND dc.customer_id = :customer_id"
             params["customer_id"] = customer_id
             
         if status:
-            query += " AND o.delivery_status = :status"
+            query += " AND dc.challan_status = :status"
             params["status"] = status
             
         if start_date:
-            query += " AND o.order_date >= :start_date"
+            query += " AND dc.challan_date >= :start_date"
             params["start_date"] = start_date
             
         if end_date:
-            query += " AND o.order_date <= :end_date"
+            query += " AND dc.challan_date <= :end_date"
             params["end_date"] = end_date
             
-        query += " ORDER BY o.order_date DESC LIMIT :limit OFFSET :skip"
+        query += " ORDER BY dc.challan_date DESC LIMIT :limit OFFSET :skip"
         params.update({"limit": limit, "skip": skip})
         
         result = db.execute(text(query), params)

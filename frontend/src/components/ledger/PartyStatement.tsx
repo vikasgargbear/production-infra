@@ -142,9 +142,8 @@ const PartyStatement: React.FC<PartyStatementProps> = ({
 
   // Print handler
   const handlePrint = useReactToPrint({
-    content: () => printRef.current,
-    documentTitle: `Statement-${statementData?.party_info.name}-${format(new Date(), 'yyyy-MM-dd')}`,
-    pageStyle: '@page { size: A4; margin: 10mm; }'
+    contentRef: printRef,
+    documentTitle: `Statement-${statementData?.party_info.name}-${format(new Date(), 'yyyy-MM-dd')}`
   });
 
   // Export handlers

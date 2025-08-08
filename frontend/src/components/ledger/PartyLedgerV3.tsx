@@ -240,19 +240,7 @@ const PartyLedgerV3: React.FC<PartyLedgerV3Props> = ({
   const columns = [
     {
       key: 'select',
-      header: (
-        <input
-          type="checkbox"
-          checked={selectedTransactions.length === filteredEntries.length}
-          onChange={(e) => {
-            if (e.target.checked) {
-              setSelectedTransactions(filteredEntries.map((entry: LedgerEntry) => entry.id));
-            } else {
-              setSelectedTransactions([]);
-            }
-          }}
-        />
-      ),
+      header: '',
       render: (entry: LedgerEntry) => (
         <input
           type="checkbox"
@@ -437,12 +425,13 @@ const PartyLedgerV3: React.FC<PartyLedgerV3Props> = ({
           </label>
           {partyType === 'customer' ? (
             <CustomerSearch
-              onSelect={setSelectedParty}
+              value={selectedParty}
+              onChange={setSelectedParty}
               placeholder="Search customer by name, phone or ID"
             />
           ) : (
             <SupplierSearch
-              onSelect={setSelectedParty}
+              onSupplierSelect={setSelectedParty}
               placeholder="Search supplier by name or ID"
             />
           )}
@@ -502,8 +491,8 @@ const PartyLedgerV3: React.FC<PartyLedgerV3Props> = ({
           
           {/* Aging Analysis */}
           <AgingAnalysis
-            partyId={selectedParty?.id || initialPartyId}
-            partyType={partyType}
+            open={showAgingAnalysis}
+            onClose={() => setShowAgingAnalysis(false)}
           />
         </div>
       )}
