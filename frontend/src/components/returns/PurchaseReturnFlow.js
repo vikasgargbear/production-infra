@@ -9,7 +9,7 @@ import {
 } from '../global';
 import { returnsApi, purchasesApi, suppliersApi } from '../../services/api';
 import PurchaseInvoiceSelector from './components/PurchaseInvoiceSelector';
-import ReturnItemsTable from './components/ReturnItemsTable';
+// ReturnItemsTable moved to archive - use ItemsTable from global instead
 import ReturnSummary from './components/ReturnSummary';
 import DebitNotePreview from './components/DebitNotePreview';
 
@@ -547,7 +547,8 @@ const PurchaseReturnFlow = ({ onClose }) => {
                       </button>
                     </div>
                   </div>
-                  <ReturnItemsTable
+                  <ItemsTable
+                    module="returns"
                     items={returnData.items}
                     onUpdateItem={updateReturnItem}
                     reasons={PURCHASE_RETURN_REASONS}

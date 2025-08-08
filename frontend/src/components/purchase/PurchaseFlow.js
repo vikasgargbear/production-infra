@@ -8,9 +8,11 @@ import { purchasesApi, suppliersApi, productsApi } from '../../services/api';
 import { searchCache } from '../../utils/searchCache';
 import { ProductCreationModal, MonthYearPicker } from '../global';
 import { ViewHistoryButton } from '../global';
-import PurchaseItemsTableFlow from './components/PurchaseItemsTableFlow';
+// PurchaseItemsTableFlow moved to archive - use ItemsTable from global instead
+import { ItemsTable } from '../global';
 import PurchaseSummaryTop from './components/PurchaseSummaryTop';
-import AddNewSupplierModal from '../modals/AddNewSupplierModal';
+// AddNewSupplierModal moved to archive - use SupplierCreationModal from global instead
+import { SupplierCreationModal } from '../global';
 
 // Default org ID for development
 const DEFAULT_ORG_ID = 'ad808530-1ddb-4377-ab20-67bef145d80d';
@@ -434,7 +436,8 @@ const PurchaseFlow = ({ onClose }) => {
             />
 
             {/* Items Table */}
-            <PurchaseItemsTableFlow
+            <ItemsTable
+              module="purchase"
               items={purchase.items}
               onUpdateItem={handleUpdateItem}
               onRemoveItem={handleRemoveItem}
@@ -486,7 +489,7 @@ const PurchaseFlow = ({ onClose }) => {
 
         {/* Modals */}
         {showSupplierModal && (
-          <AddNewSupplierModal
+          <SupplierCreationModal
             open={showSupplierModal}
             onClose={() => setShowSupplierModal(false)}
             onSupplierCreated={(supplier) => {

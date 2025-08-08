@@ -9,7 +9,7 @@ export { default as PurchaseErrorBoundary } from './PurchaseErrorBoundary';
 // Sub-components
 export { default as SupplierSelector } from './components/SupplierSelector';
 export { default as PurchaseHeader } from './components/PurchaseHeader';
-export { default as PurchaseItemsTable } from './components/PurchaseItemsTable';
+// PurchaseItemsTable moved to archive - use ItemsTable from global instead
 export { default as PurchaseSummary } from './components/PurchaseSummary';
 export { default as ItemRow } from './components/ItemRow';
 export { default as ProductSearch } from './components/ProductSearch';

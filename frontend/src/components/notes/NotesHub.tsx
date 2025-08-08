@@ -1,9 +1,9 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { 
-  PlusCircle, MinusCircle, X
+  FileEdit, PlusCircle, MinusCircle
 } from 'lucide-react';
-import CreditDebitNote from './CreditDebitNote';
-import { ModuleSidebar } from '../common';
+import { ModuleHub } from '../global';
+import CreditDebitNoteSimple from './CreditDebitNoteSimple';
 
 interface NotesHubProps {
   open?: boolean;
@@ -13,57 +13,45 @@ interface NotesHubProps {
 interface NotesModule {
   id: string;
   label: string;
+  fullLabel: string;
   description: string;
   icon: React.ComponentType<{ className?: string }>;
-  gradient: string;
+  color: string;
+  component: React.ComponentType<any>;
 }
 
 const NotesHub: React.FC<NotesHubProps> = ({ open = true, onClose }) => {
-  const [activeModule, setActiveModule] = useState<string>('credit-note');
-
-  if (!open) return null;
-
   const notesModules: NotesModule[] = [
     {
       id: 'credit-note',
       label: 'Credit Note',
-      description: 'Issue credit',
+      fullLabel: 'Create Credit Note',
+      description: 'Issue credit to customers',
       icon: PlusCircle,
-      gradient: 'from-green-500 to-green-600'
+      color: 'green',
+      component: () => <CreditDebitNoteSimple noteType="credit" onClose={onClose} />
     },
     {
       id: 'debit-note',
       label: 'Debit Note',
-      description: 'Issue debit',
+      fullLabel: 'Create Debit Note',
+      description: 'Issue debit to suppliers',
       icon: MinusCircle,
-      gradient: 'from-orange-500 to-orange-600'
+      color: 'orange',
+      component: () => <CreditDebitNoteSimple noteType="debit" onClose={onClose} />
     }
   ];
 
   return (
-    <div className="fixed inset-0 bg-gray-50 z-50 flex">
-      {/* Top Right Close Button */}
-      <button
-        onClick={onClose || (() => {})}
-        className="absolute top-4 right-4 z-10 p-2 bg-white rounded-lg shadow-md hover:shadow-lg transition-shadow"
-        title="Close (Esc)"
-      >
-        <X className="w-6 h-6 text-gray-600" />
-      </button>
-
-      {/* Sidebar */}
-      <ModuleSidebar 
-        modules={notesModules as any}
-        activeModule={activeModule}
-        onModuleChange={setActiveModule}
-        onClose={onClose || (() => {})}
-      />
-      
-      {/* Main Content */}
-      <div className="flex-1">
-        <CreditDebitNote />
-      </div>
-    </div>
+    <ModuleHub
+      open={open}
+      onClose={onClose || (() => {})}
+      title="Credit/Debit Notes"
+      subtitle="Financial adjustments and corrections"
+      icon={FileEdit}
+      modules={notesModules}
+      defaultModule="credit-note"
+    />
   );
 };
 

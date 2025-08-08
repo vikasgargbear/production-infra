@@ -163,7 +163,7 @@ def get_top_products(
             SELECT 
                 p.product_id,
                 p.product_name,
-                p.brand_name,
+                p.brand,
                 SUM(oi.quantity) as total_quantity_sold,
                 SUM(oi.quantity * oi.unit_price) as total_revenue,
                 COUNT(DISTINCT oi.order_id) as order_count
@@ -172,7 +172,7 @@ def get_top_products(
             JOIN sales.orders o ON oi.order_id = o.order_id
             WHERE o.order_date >= CURRENT_DATE - INTERVAL '30 days'
             AND o.order_status IN ('confirmed', 'delivered')
-            GROUP BY p.product_id, p.product_name, p.brand_name
+            GROUP BY p.product_id, p.product_name, p.brand
             ORDER BY total_quantity_sold DESC
             LIMIT :limit
         """
@@ -195,14 +195,14 @@ def get_inventory_alerts(db: Session = Depends(get_db)):
             SELECT 
                 p.product_id,
                 p.product_name,
-                p.brand_name,
+                p.brand,
                 COALESCE(SUM(b.quantity_available), 0) as current_stock,
                 10 as minimum_stock_level,
                 'low_stock' as alert_type
             FROM inventory.products p
             LEFT JOIN inventory.batches b ON p.product_id = b.product_id AND b.quantity_available > 0
             WHERE p.is_active = true
-            GROUP BY p.product_id, p.product_name, p.brand_name
+            GROUP BY p.product_id, p.product_name, p.brand
             HAVING COALESCE(SUM(b.quantity_available), 0) <= 10
             ORDER BY current_stock ASC
             LIMIT 20
@@ -214,7 +214,7 @@ def get_inventory_alerts(db: Session = Depends(get_db)):
                 b.batch_id,
                 p.product_id,
                 p.product_name,
-                p.brand_name,
+                p.brand,
                 b.batch_number,
                 b.expiry_date,
                 b.quantity_available as quantity_available,
@@ -361,7 +361,6 @@ def get_inventory_summary(
                 COUNT(CASE WHEN COALESCE(b.quantity_available, 0) <= 10 THEN 1 END) as low_stock_count
             FROM inventory.products p
             LEFT JOIN inventory.batches b ON p.product_id = b.product_id
-            LEFT JOIN inventory.batches b ON p.product_id = b.product_id
             WHERE p.is_active = true
         """
         
@@ -400,7 +399,7 @@ def get_expiry_alerts(
                 b.batch_id,
                 p.product_id,
                 p.product_name,
-                p.brand_name,
+                p.brand,
                 b.batch_number,
                 b.expiry_date,
                 b.quantity_available,
@@ -432,14 +431,14 @@ def get_low_stock_alerts(
             SELECT 
                 p.product_id,
                 p.product_name,
-                p.brand_name,
+                p.brand,
                 COALESCE(SUM(b.quantity_available), 0) as current_stock,
                 10 as minimum_stock_level,
                 (10 - COALESCE(SUM(b.quantity_available), 0)) as stock_deficit
             FROM inventory.products p
             LEFT JOIN inventory.batches b ON p.product_id = b.product_id
             WHERE p.is_active = true
-            GROUP BY p.product_id, p.product_name, p.brand_name
+            GROUP BY p.product_id, p.product_name, p.brand
             HAVING COALESCE(SUM(b.quantity_available), 0) <= 10
             ORDER BY stock_deficit DESC
             LIMIT 50
@@ -464,18 +463,18 @@ def get_pending_payments(
             SELECT 
                 'customer_receivables' as payment_type,
                 COUNT(*) as count,
-                COALESCE(SUM(outstanding_balance), 0) as final_amount
+                COALESCE(SUM(current_outstanding), 0) as final_amount
             FROM parties.customers 
-            WHERE outstanding_balance > 0
+            WHERE current_outstanding > 0
             
             UNION ALL
             
             SELECT 
                 'supplier_payables' as payment_type,
                 COUNT(*) as count,
-                COALESCE(SUM(outstanding_balance), 0) as final_amount
+                COALESCE(SUM(current_outstanding), 0) as final_amount
             FROM parties.suppliers 
-            WHERE outstanding_balance > 0
+            WHERE current_outstanding > 0
             
             UNION ALL
             

@@ -8,7 +8,7 @@ import {
   DatePicker, Select, NumberInput, NotesSection, useToast, InvoiceSearch
 } from '../global';
 import { returnsApi, invoicesApi, customersApi } from '../../services/api';
-import ReturnItemsTable from './components/ReturnItemsTable';
+// ReturnItemsTable moved to archive - use ItemsTable from global instead
 import ReturnSummary from './components/ReturnSummary';
 import CreditNotePreview from './components/CreditNotePreview';
 
@@ -594,7 +594,8 @@ const SalesReturnFlow = ({ onClose }) => {
                       </button>
                     </div>
                   </div>
-                  <ReturnItemsTable
+                  <ItemsTable
+                    module="returns"
                     items={returnData.items}
                     onUpdateItem={updateReturnItem}
                     customer={selectedCustomer}

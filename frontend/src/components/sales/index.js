@@ -14,7 +14,7 @@ export { default as SalesHub } from './SalesHub';
 // Sub Components
 export { default as BillSummary } from './components/BillSummary';
 export { default as PaymentDetails } from './components/PaymentDetails';
-export { default as SalesCustomerSelection } from './components/SalesCustomerSelection';
+// SalesCustomerSelection moved to archive - use CustomerSearch from global instead
 export { default as SalesHeader } from './components/SalesHeader';
 export { default as SalesTypeSelector } from './components/SalesTypeSelector';
 export { default as TransportDetails } from './components/TransportDetails';

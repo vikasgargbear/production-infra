@@ -4,7 +4,7 @@ import { usePurchase } from '../../contexts/PurchaseContext';
 import PurchaseErrorBoundary from './PurchaseErrorBoundary';
 import SupplierSelector from './components/SupplierSelector';
 import PurchaseHeader from './components/PurchaseHeader';
-import PurchaseItemsTable from './components/PurchaseItemsTable';
+// PurchaseItemsTable moved to archive - use ItemsTable from global instead
 import PurchaseSummary from './components/PurchaseSummary';
 import PharmaItemsTable from '../global/PharmaItemsTable';
 import GSTCalculator from '../global/calculators/GSTCalculator';
@@ -584,7 +584,7 @@ const PurchaseEntryContent = ({ onClose, initialShowPDFUpload = false }) => {
             <PurchaseHeader />
             
             {/* Items Table */}
-            <PurchaseItemsTable />
+            <ItemsTable module="purchase" />
           </div>
         </div>
         

@@ -15,7 +15,8 @@ import {
   NumberInput,
   useToast
 } from '../global';
-import AddNewSupplierModal from '../modals/AddNewSupplierModal';
+// AddNewSupplierModal moved to archive - use SupplierCreationModal from global instead
+import { SupplierCreationModal } from '../global';
 import { purchasesApi } from '../../services/api';
 
 const ModernGRNFlow = ({ onClose, purchaseOrderId = null }) => {
@@ -460,7 +461,7 @@ const ModernGRNFlow = ({ onClose, purchaseOrderId = null }) => {
 
         {/* Modals */}
         {showSupplierModal && (
-          <AddNewSupplierModal
+          <SupplierCreationModal
             isOpen={showSupplierModal}
             onClose={() => setShowSupplierModal(false)}
             onSupplierCreated={(supplier) => {

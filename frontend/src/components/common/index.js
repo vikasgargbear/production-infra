@@ -6,7 +6,7 @@
 // Core Components
 export { default as EmptyState } from './EmptyState';
 export { default as LoadingState, SkeletonLoader } from './LoadingState';
-export { default as CompactCustomerSelector } from './CompactCustomerSelector';
+// CompactCustomerSelector moved to archive - use CustomerSearch from global instead
 
 // Form Components
 export { default as FormInput, FormGroup, FormRow, FormSection } from './FormInput';
