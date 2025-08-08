@@ -211,7 +211,7 @@ const GSTFilingV2: React.FC<GSTFilingProps> = () => {
                   dueDate={ret.dueDate}
                   status={ret.status}
                   onAction={() => handleReturnSelect(ret.id)}
-                  actionLabel={ret.status === 'filed' ? 'View Return' : 'Prepare Return'}
+                  actionLabel={(ret.status as string) === 'filed' ? 'View Return' : 'Prepare Return'}
                 />
               ))}
             </div>

@@ -44,7 +44,7 @@ const ReturnsHub: React.FC<ReturnsHubProps> = ({ open = true, onClose }) => {
   return (
     <ModuleHub
       open={open}
-      onClose={onClose}
+      onClose={onClose || (() => {})}
       title="Returns Management"
       subtitle="Process sales and purchase returns"
       icon={RotateCcw}

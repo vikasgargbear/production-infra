@@ -46,7 +46,7 @@ async def get_party_balance(
                     SELECT 
                         payment_date as transaction_date,
                         0 as debit_amount,
-                        amount as credit_amount
+                        payment_amount as credit_amount
                     FROM financial.payments
                     WHERE customer_id = :party_id
                     AND payment_status = 'completed'
@@ -58,7 +58,7 @@ async def get_party_balance(
                         return_date as transaction_date,
                         0 as debit_amount,
                         return_amount as credit_amount
-                    FROM returns
+                    FROM sales.sales_returns
                     WHERE customer_id = :party_id
                     AND return_status = 'approved'
                 )
@@ -73,10 +73,10 @@ async def get_party_balance(
                 WITH ledger AS (
                     -- Purchases (Credit)
                     SELECT 
-                        purchase_date as transaction_date,
+                        order_date as transaction_date,
                         0 as debit_amount,
                         total_amount as credit_amount
-                    FROM purchases
+                    FROM procurement.purchase_orders
                     WHERE supplier_id = :party_id
                     AND invoice_status != 'cancelled'
                     
@@ -184,7 +184,7 @@ async def get_party_statement(
                         0 as debit,
                         return_amount as credit,
                         'cash' as payment_mode
-                    FROM returns
+                    FROM sales.sales_returns
                     WHERE customer_id = :party_id
                     AND return_status = 'approved'
                 )
@@ -208,7 +208,7 @@ async def get_party_statement(
                         0 as debit,
                         total_amount as credit,
                         'cash' as payment_mode
-                    FROM purchases
+                    FROM procurement.purchase_orders
                     WHERE supplier_id = :party_id
                     AND invoice_status != 'cancelled'
                     

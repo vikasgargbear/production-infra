@@ -176,7 +176,7 @@ const MasterHub: React.FC<MasterHubProps> = ({ open = true, onClose }) => {
     <>
       <ModuleHub
         open={open}
-        onClose={onClose}
+        onClose={onClose || (() => {})}
         title="Master Settings"
         subtitle="Configure your platform"
         icon={Settings2}

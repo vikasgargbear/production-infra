@@ -66,7 +66,7 @@ const SalesHub: React.FC<SalesHubProps> = ({ open = true, onClose }) => {
   return (
     <ModuleHub
       open={open}
-      onClose={onClose}
+      onClose={onClose || (() => {})}
       title="Sales Hub"
       subtitle="Manage your sales operations"
       icon={TrendingUp}

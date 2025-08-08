@@ -44,7 +44,7 @@ const NotesHub: React.FC<NotesHubProps> = ({ open = true, onClose }) => {
     <div className="fixed inset-0 bg-gray-50 z-50 flex">
       {/* Top Right Close Button */}
       <button
-        onClick={onClose}
+        onClick={onClose || (() => {})}
         className="absolute top-4 right-4 z-10 p-2 bg-white rounded-lg shadow-md hover:shadow-lg transition-shadow"
         title="Close (Esc)"
       >
@@ -62,7 +62,7 @@ const NotesHub: React.FC<NotesHubProps> = ({ open = true, onClose }) => {
       <div className="flex-1">
         <CreditDebitNote 
           open={true}
-          onClose={onClose}
+          onClose={onClose || (() => {})}
           initialNoteType={activeModule === 'credit-note' ? 'credit' : 'debit'}
           key={activeModule}
         />

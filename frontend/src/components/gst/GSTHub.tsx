@@ -86,7 +86,7 @@ const GSTHub: React.FC<GSTHubProps> = ({ open = true, onClose }) => {
   return (
     <ModuleHub
       open={open}
-      onClose={onClose}
+      onClose={onClose || (() => {})}
       title="GST Hub"
       subtitle="Tax management & compliance"
       icon={Receipt}

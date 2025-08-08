@@ -97,7 +97,7 @@ const StockHub: React.FC<StockHubProps> = ({ open = true, onClose }) => {
   return (
     <ModuleHub
       open={open}
-      onClose={onClose}
+      onClose={onClose || (() => {})}
       title="Stock Hub"
       subtitle="Manage inventory & warehouse"
       icon={Archive}

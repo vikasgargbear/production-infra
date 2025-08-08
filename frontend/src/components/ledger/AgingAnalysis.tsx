@@ -287,14 +287,14 @@ const AgingAnalysis: React.FC<AgingAnalysisProps> = ({ open = true, onClose }) =
       field: 'average_days_overdue',
       render: (row: AgingParty) => {
         const avgDays = row.average_days_overdue || 0;
-        const riskLevel = avgDays <= 30 ? 'Low' : avgDays <= 60 ? 'Medium' : 'High';
-        const riskColor = avgDays <= 30 ? 'green' : avgDays <= 60 ? 'yellow' : 'red';
+        const riskLevel = avgDays <= 30 ? 'success' : avgDays <= 60 ? 'warning' : 'error';
+        const riskLabel = avgDays <= 30 ? 'Low' : avgDays <= 60 ? 'Medium' : 'High';
         
         return (
           <div className="text-center">
             <StatusBadge
               status={riskLevel}
-              color={riskColor}
+              label={riskLabel}
             />
             <div className="text-sm text-gray-500 mt-1">
               Avg: {Math.round(avgDays)} days

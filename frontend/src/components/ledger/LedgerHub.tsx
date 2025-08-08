@@ -89,7 +89,7 @@ const LedgerHub: React.FC<LedgerHubProps> = ({ open = true, onClose }) => {
   return (
     <ModuleHub
       open={open}
-      onClose={onClose}
+      onClose={onClose || (() => {})}
       title="Party Ledger"
       subtitle="Manage customer & supplier accounts"
       icon={Archive}
