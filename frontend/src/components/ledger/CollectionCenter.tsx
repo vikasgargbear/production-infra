@@ -238,19 +238,7 @@ const CollectionCenter: React.FC<CollectionCenterProps> = ({
   const columns = [
     {
       key: 'select',
-      label: (
-        <input
-          type="checkbox"
-          checked={selectedItems.length === filteredCollections.length && filteredCollections.length > 0}
-          onChange={(e) => {
-            if (e.target.checked) {
-              setSelectedItems(filteredCollections.map((item: CollectionItem) => item.customer_id));
-            } else {
-              setSelectedItems([]);
-            }
-          }}
-        />
-      ),
+      header: '',
       render: (item: CollectionItem) => (
         <input
           type="checkbox"
@@ -268,7 +256,7 @@ const CollectionCenter: React.FC<CollectionCenterProps> = ({
     },
     {
       key: 'customer',
-      label: 'Customer Details',
+      header: 'Customer Details',
       render: (item: CollectionItem) => (
         <div>
           <button
@@ -292,7 +280,7 @@ const CollectionCenter: React.FC<CollectionCenterProps> = ({
     },
     {
       key: 'outstanding',
-      label: 'Outstanding Details',
+      header: 'Outstanding Details',
       render: (item: CollectionItem) => (
         <div className="text-right">
           <div className="font-semibold">
@@ -309,23 +297,21 @@ const CollectionCenter: React.FC<CollectionCenterProps> = ({
     },
     {
       key: 'priority',
-      label: 'Priority',
+      header: 'Priority',
       render: (item: CollectionItem) => (
         <StatusBadge
-          status={item.priority}
-          color={getPriorityColor(item.priority)}
+          status={item.priority === 'critical' ? 'error' : item.priority === 'high' ? 'warning' : item.priority === 'medium' ? 'info' : 'success'}
           label={item.priority.toUpperCase()}
         />
       )
     },
     {
       key: 'status',
-      label: 'Collection Status',
+      header: 'Collection Status',
       render: (item: CollectionItem) => (
         <div>
           <StatusBadge
-            status={item.collection_status}
-            color={getStatusColor(item.collection_status)}
+            status={item.collection_status === 'partial' ? 'success' : item.collection_status === 'promised' ? 'info' : item.collection_status === 'contacted' ? 'warning' : item.collection_status === 'dispute' || item.collection_status === 'legal' ? 'error' : 'pending'}
             label={item.collection_status.toUpperCase()}
           />
           {item.promise_date && (
@@ -338,7 +324,7 @@ const CollectionCenter: React.FC<CollectionCenterProps> = ({
     },
     {
       key: 'contact',
-      label: 'Last Contact',
+      header: 'Last Contact',
       render: (item: CollectionItem) => (
         <div>
           {item.last_contact_date ? (
@@ -358,7 +344,7 @@ const CollectionCenter: React.FC<CollectionCenterProps> = ({
     },
     {
       key: 'assigned',
-      label: 'Assigned To',
+      header: 'Assigned To',
       render: (item: CollectionItem) => (
         <div>
           {item.assigned_to ? (
@@ -374,7 +360,7 @@ const CollectionCenter: React.FC<CollectionCenterProps> = ({
     },
     {
       key: 'followup',
-      label: 'Next Follow-up',
+      header: 'Next Follow-up',
       render: (item: CollectionItem) => {
         if (!item.next_follow_up) return '-';
         
@@ -398,7 +384,7 @@ const CollectionCenter: React.FC<CollectionCenterProps> = ({
     },
     {
       key: 'actions',
-      label: 'Actions',
+      header: 'Actions',
       render: (item: CollectionItem) => (
         <div className="flex gap-1">
           <button
@@ -644,6 +630,7 @@ const CollectionCenter: React.FC<CollectionCenterProps> = ({
         <DataTable
           columns={columns}
           data={filteredCollections}
+          keyField="bill_number"
           loading={isLoading}
           emptyMessage="No collection items found"
         />

@@ -158,21 +158,22 @@ def create_purchase_with_items(purchase_data: dict, db: Session = Depends(get_db
         # Create purchase header
         result = db.execute(
             text("""
-                INSERT INTO purchases (
-                    org_id, purchase_number, purchase_date,
+                INSERT INTO procurement.purchase_orders (
+                    org_id, po_number, po_date,
                     supplier_id, supplier_name, supplier_invoice_number, supplier_invoice_date,
                     subtotal_amount, discount_amount, tax_amount, 
-                    other_charges, final_amount, purchase_status,
-                    payment_status, payment_mode, notes, created_by
+                    other_charges_amount, total_amount, po_status,
+                    payment_status, payment_terms, notes, created_by, branch_id
                 ) VALUES (
-                    DEFAULT_ORG_ID, -- Default org
+                    :org_id, -- Default org
                     :purchase_number, :purchase_date,
                     :supplier_id, :supplier_name, :invoice_number, :invoice_date,
                     :subtotal, :discount, :tax, :other_charges, :total,
-                    :status, :payment_status, :payment_mode, :notes, :created_by
-                ) RETURNING purchase_id
+                    :status, :payment_status, :payment_mode, :notes, :created_by, 1
+                ) RETURNING po_id
             """),
             {
+                "org_id": DEFAULT_ORG_ID,
                 "purchase_number": purchase_number,
                 "purchase_date": purchase_data.get("purchase_date", datetime.now().date()),
                 "supplier_id": purchase_data.get("supplier_id"),

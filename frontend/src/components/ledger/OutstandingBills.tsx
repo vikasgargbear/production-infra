@@ -184,19 +184,7 @@ const OutstandingBills: React.FC<OutstandingBillsProps> = ({
   const columns = [
     {
       key: 'select',
-      label: (
-        <input
-          type="checkbox"
-          checked={selectedBills.length === filteredBills.length && filteredBills.length > 0}
-          onChange={(e) => {
-            if (e.target.checked) {
-              setSelectedBills(filteredBills.map((bill: OutstandingBill) => bill.id));
-            } else {
-              setSelectedBills([]);
-            }
-          }}
-        />
-      ),
+      header: '',
       render: (bill: OutstandingBill) => (
         <input
           type="checkbox"
@@ -214,7 +202,7 @@ const OutstandingBills: React.FC<OutstandingBillsProps> = ({
     },
     {
       key: 'bill',
-      label: 'Bill Details',
+      header: 'Bill Details',
       render: (bill: OutstandingBill) => (
         <div>
           <button
@@ -231,7 +219,7 @@ const OutstandingBills: React.FC<OutstandingBillsProps> = ({
     },
     {
       key: 'party',
-      label: partyType === 'customer' ? 'Customer' : 'Supplier',
+      header: partyType === 'customer' ? 'Customer' : 'Supplier',
       render: (bill: OutstandingBill) => (
         <div>
           <div className="font-medium">{bill.party_name}</div>
@@ -244,7 +232,7 @@ const OutstandingBills: React.FC<OutstandingBillsProps> = ({
     },
     {
       key: 'amounts',
-      label: 'Amount Details',
+      header: 'Amount Details',
       render: (bill: OutstandingBill) => (
         <div className="text-right">
           <div className="text-sm text-gray-500">
@@ -261,7 +249,7 @@ const OutstandingBills: React.FC<OutstandingBillsProps> = ({
     },
     {
       key: 'due_date',
-      label: 'Due Date',
+      header: 'Due Date',
       render: (bill: OutstandingBill) => (
         <div>
           <div className={bill.days_overdue > 0 ? 'text-red-600 font-medium' : ''}>
@@ -278,24 +266,22 @@ const OutstandingBills: React.FC<OutstandingBillsProps> = ({
     },
     {
       key: 'aging',
-      label: 'Aging',
+      header: 'Aging',
       render: (bill: OutstandingBill) => (
         <StatusBadge
-          status={bill.aging_bucket}
-          color={getAgingColor(bill.aging_bucket)}
+          status={bill.aging_bucket === 'current' ? 'success' : bill.aging_bucket === '1-30' ? 'info' : bill.aging_bucket === '31-60' ? 'warning' : 'error'}
           label={bill.aging_bucket === 'over_90' ? 'Over 90 days' : bill.aging_bucket}
         />
       )
     },
     {
       key: 'collection',
-      label: 'Collection Status',
+      header: 'Collection Status',
       render: (bill: OutstandingBill) => (
         <div>
           {bill.collection_status && (
             <StatusBadge
-              status={bill.collection_status}
-              color={getCollectionStatusColor(bill.collection_status)}
+              status={bill.collection_status === 'normal' ? 'success' : bill.collection_status === 'follow_up' ? 'warning' : bill.collection_status === 'critical' ? 'error' : 'error'}
               label={bill.collection_status.replace('_', ' ').toUpperCase()}
             />
           )}
@@ -309,7 +295,7 @@ const OutstandingBills: React.FC<OutstandingBillsProps> = ({
     },
     {
       key: 'actions',
-      label: 'Actions',
+      header: 'Actions',
       render: (bill: OutstandingBill) => (
         <div className="flex gap-2">
           <button
@@ -416,12 +402,13 @@ const OutstandingBills: React.FC<OutstandingBillsProps> = ({
               </label>
               {partyType === 'customer' ? (
                 <CustomerSearch
-                  onSelect={setSelectedParty}
+                  value={selectedParty}
+                  onChange={setSelectedParty}
                   placeholder="Search customer"
                 />
               ) : (
                 <SupplierSearch
-                  onSelect={setSelectedParty}
+                  onSupplierSelect={setSelectedParty}
                   placeholder="Search supplier"
                 />
               )}
@@ -516,6 +503,7 @@ const OutstandingBills: React.FC<OutstandingBillsProps> = ({
         <DataTable
           columns={columns}
           data={filteredBills}
+          keyField="bill_number"
           loading={isLoading}
           emptyMessage="No outstanding bills found"
         />

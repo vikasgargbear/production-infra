@@ -203,19 +203,19 @@ const PartyLedgerV3: React.FC<PartyLedgerV3Props> = ({
     }
   };
 
-  const handleExport = async (format: 'pdf' | 'excel', transactionIds?: string[]) => {
+  const handleExport = async (exportFormat: 'pdf' | 'excel', transactionIds?: string[]) => {
     try {
       const response = await partyLedgerAPI.exportEnhancedLedger({
         party_id: selectedParty?.id || initialPartyId,
         date_from: format(dateRange.from, 'yyyy-MM-dd'),
         date_to: format(dateRange.to, 'yyyy-MM-dd'),
         transaction_ids: transactionIds,
-        format,
+        format: exportFormat,
         include_summary: true,
         include_aging: showAgingAnalysis
       });
       
-      downloadFile(response.data, `ledger-${format}-${Date.now()}.${format}`);
+      downloadFile(response.data, `ledger-${exportFormat}-${Date.now()}.${exportFormat}`);
     } catch (error) {
       console.error('Export failed:', error);
     }
@@ -240,7 +240,7 @@ const PartyLedgerV3: React.FC<PartyLedgerV3Props> = ({
   const columns = [
     {
       key: 'select',
-      label: (
+      header: (
         <input
           type="checkbox"
           checked={selectedTransactions.length === filteredEntries.length}
@@ -270,7 +270,7 @@ const PartyLedgerV3: React.FC<PartyLedgerV3Props> = ({
     },
     {
       key: 'date',
-      label: 'Date',
+      header: 'Date',
       render: (entry: LedgerEntry) => (
         <div>
           <div className="font-medium">{format(parseISO(entry.date), 'dd/MM/yyyy')}</div>
@@ -284,7 +284,7 @@ const PartyLedgerV3: React.FC<PartyLedgerV3Props> = ({
     },
     {
       key: 'type',
-      label: 'Type',
+      header: 'Type',
       render: (entry: LedgerEntry) => {
         const typeConfig = {
           invoice: { color: 'blue', icon: FileText },
@@ -302,8 +302,7 @@ const PartyLedgerV3: React.FC<PartyLedgerV3Props> = ({
           <div className="flex items-center gap-2">
             <Icon className={`h-4 w-4 text-${config.color}-600`} />
             <StatusBadge
-              status={entry.transaction_type}
-              color={config.color}
+              status={entry.transaction_type === 'payment' ? 'success' : entry.transaction_type === 'invoice' ? 'info' : entry.transaction_type === 'credit_note' ? 'warning' : 'error'}
               label={entry.transaction_type.replace('_', ' ').toUpperCase()}
             />
           </div>
@@ -312,7 +311,7 @@ const PartyLedgerV3: React.FC<PartyLedgerV3Props> = ({
     },
     {
       key: 'reference',
-      label: 'Reference',
+      header: 'Reference',
       render: (entry: LedgerEntry) => (
         <button
           onClick={() => onTransactionClick?.(entry)}
@@ -324,7 +323,7 @@ const PartyLedgerV3: React.FC<PartyLedgerV3Props> = ({
     },
     {
       key: 'description',
-      label: 'Description',
+      header: 'Description',
       render: (entry: LedgerEntry) => (
         <div>
           <div>{entry.description}</div>
@@ -345,19 +344,19 @@ const PartyLedgerV3: React.FC<PartyLedgerV3Props> = ({
     },
     {
       key: 'debit',
-      label: 'Debit',
+      header: 'Debit',
       align: 'right' as const,
       render: (entry: LedgerEntry) => entry.debit ? formatCurrency(entry.debit) : '-'
     },
     {
       key: 'credit',
-      label: 'Credit',
+      header: 'Credit',
       align: 'right' as const,
       render: (entry: LedgerEntry) => entry.credit ? formatCurrency(entry.credit) : '-'
     },
     {
       key: 'balance',
-      label: 'Balance',
+      header: 'Balance',
       align: 'right' as const,
       render: (entry: LedgerEntry) => (
         <div className={`font-semibold ${entry.balance < 0 ? 'text-red-600' : 'text-green-600'}`}>
@@ -370,7 +369,7 @@ const PartyLedgerV3: React.FC<PartyLedgerV3Props> = ({
     },
     {
       key: 'status',
-      label: 'Status',
+      header: 'Status',
       render: (entry: LedgerEntry) => (
         <div className="flex items-center gap-1">
           {entry.is_reconciled ? (
@@ -485,6 +484,7 @@ const PartyLedgerV3: React.FC<PartyLedgerV3Props> = ({
             <DataTable
               columns={columns}
               data={filteredEntries}
+              keyField="id"
               loading={loadingLedger}
               emptyMessage="No transactions found"
             />

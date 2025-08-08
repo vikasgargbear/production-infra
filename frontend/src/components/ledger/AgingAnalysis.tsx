@@ -6,7 +6,41 @@ import {
 } from 'lucide-react';
 import { ledgerApi } from '../../services/api/modules/ledger.api';
 import { formatCurrency, formatDate } from '../../utils/formatters';
-import { DataTable, StatusBadge, Select, SummaryCard } from '../global';
+import { DataTable, StatusBadge, Select } from '../global';
+
+// Local SummaryCard component for aging analysis
+const SummaryCard: React.FC<{
+  title: string;
+  value: string | number;
+  subtitle?: string;
+  icon: React.ElementType;
+  color: 'blue' | 'green' | 'amber' | 'red' | 'purple';
+}> = ({ title, value, subtitle, icon: Icon, color }) => {
+  const colorClasses: Record<string, string> = {
+    blue: 'bg-blue-50 text-blue-600 border-blue-200',
+    green: 'bg-green-50 text-green-600 border-green-200',
+    amber: 'bg-amber-50 text-amber-600 border-amber-200',
+    red: 'bg-red-50 text-red-600 border-red-200',
+    purple: 'bg-purple-50 text-purple-600 border-purple-200',
+  };
+
+  return (
+    <div className={`p-6 rounded-xl border-2 ${colorClasses[color]} transition-all hover:shadow-md`}>
+      <div className="flex items-start justify-between">
+        <div className="flex-1">
+          <p className="text-sm font-medium opacity-80">{title}</p>
+          <p className="text-2xl font-bold mt-2">{value}</p>
+          {subtitle && (
+            <p className="text-xs mt-1 opacity-70">{subtitle}</p>
+          )}
+        </div>
+        <div className={`p-3 rounded-lg bg-white bg-opacity-50`}>
+          <Icon className="w-6 h-6" />
+        </div>
+      </div>
+    </div>
+  );
+};
 
 interface AgingAnalysisProps {
   open?: boolean;
@@ -245,6 +279,7 @@ const AgingAnalysis: React.FC<AgingAnalysisProps> = ({ open = true, onClose }) =
 
   const columns = [
     {
+      key: 'party_name',
       header: 'Party Details',
       field: 'party_name',
       render: (row: AgingParty) => (
@@ -260,6 +295,7 @@ const AgingAnalysis: React.FC<AgingAnalysisProps> = ({ open = true, onClose }) =
       )
     },
     {
+      key: 'total_outstanding',
       header: 'Total Outstanding',
       field: 'total_outstanding',
       render: (row: AgingParty) => (
@@ -274,6 +310,7 @@ const AgingAnalysis: React.FC<AgingAnalysisProps> = ({ open = true, onClose }) =
       )
     },
     {
+      key: 'aging_breakdown',
       header: 'Aging Breakdown',
       field: 'aging_breakdown',
       render: (row: AgingParty) => (
@@ -283,6 +320,7 @@ const AgingAnalysis: React.FC<AgingAnalysisProps> = ({ open = true, onClose }) =
       )
     },
     {
+      key: 'average_days_overdue',
       header: 'Risk Level',
       field: 'average_days_overdue',
       render: (row: AgingParty) => {
@@ -494,6 +532,7 @@ const AgingAnalysis: React.FC<AgingAnalysisProps> = ({ open = true, onClose }) =
               <DataTable
                 columns={columns}
                 data={filteredData}
+                keyField="party_name"
                 emptyMessage="No aging data found"
               />
             ) : (

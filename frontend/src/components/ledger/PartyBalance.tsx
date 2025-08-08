@@ -151,7 +151,7 @@ const PartyBalance: React.FC<PartyBalanceProps> = ({
   const columns = [
     {
       key: 'party',
-      label: 'Party Details',
+      header: 'Party Details',
       render: (party: PartyBalanceItem) => (
         <div 
           className="cursor-pointer hover:text-blue-600"
@@ -175,18 +175,17 @@ const PartyBalance: React.FC<PartyBalanceProps> = ({
     },
     {
       key: 'type',
-      label: 'Type',
+      header: 'Type',
       render: (party: PartyBalanceItem) => (
         <StatusBadge
-          status={party.party_type}
-          color={party.party_type === 'customer' ? 'blue' : 'green'}
+          status={party.party_type === 'customer' ? 'info' : 'success'}
           label={party.party_type.toUpperCase()}
         />
       )
     },
     {
       key: 'opening',
-      label: 'Opening Balance',
+      header: 'Opening Balance',
       align: 'right' as const,
       render: (party: PartyBalanceItem) => (
         <span className={party.opening_balance < 0 ? 'text-red-600' : ''}>
@@ -197,7 +196,7 @@ const PartyBalance: React.FC<PartyBalanceProps> = ({
     },
     {
       key: 'transactions',
-      label: 'Period Activity',
+      header: 'Period Activity',
       render: (party: PartyBalanceItem) => (
         <div className="text-right">
           <div className="text-sm">
@@ -211,7 +210,7 @@ const PartyBalance: React.FC<PartyBalanceProps> = ({
     },
     {
       key: 'closing',
-      label: 'Closing Balance',
+      header: 'Closing Balance',
       align: 'right' as const,
       render: (party: PartyBalanceItem) => (
         <div>
@@ -226,7 +225,7 @@ const PartyBalance: React.FC<PartyBalanceProps> = ({
     },
     {
       key: 'outstanding',
-      label: 'Outstanding',
+      header: 'Outstanding',
       render: (party: PartyBalanceItem) => (
         <div className="text-right">
           <div className="font-medium">
@@ -243,7 +242,7 @@ const PartyBalance: React.FC<PartyBalanceProps> = ({
     },
     {
       key: 'credit',
-      label: 'Credit Status',
+      header: 'Credit Status',
       render: (party: PartyBalanceItem) => (
         <div>
           {party.credit_limit ? (
@@ -277,20 +276,18 @@ const PartyBalance: React.FC<PartyBalanceProps> = ({
     },
     {
       key: 'risk',
-      label: 'Risk',
+      header: 'Risk',
       render: (party: PartyBalanceItem) => (
         <div className="flex items-center gap-2">
           {party.risk_level && (
             <StatusBadge
-              status={party.risk_level}
-              color={getRiskLevelColor(party.risk_level)}
+              status={party.risk_level === 'low' ? 'success' : party.risk_level === 'medium' ? 'warning' : 'error'}
               label={party.risk_level.toUpperCase()}
             />
           )}
           {party.status !== 'active' && (
             <StatusBadge
-              status={party.status}
-              color={party.status === 'blocked' ? 'red' : 'gray'}
+              status={party.status === 'blocked' ? 'error' : 'inactive'}
               label={party.status.toUpperCase()}
             />
           )}
@@ -299,7 +296,7 @@ const PartyBalance: React.FC<PartyBalanceProps> = ({
     },
     {
       key: 'action',
-      label: '',
+      header: '',
       render: (party: PartyBalanceItem) => (
         <button
           onClick={() => handlePartyClick(party)}
@@ -478,6 +475,7 @@ const PartyBalance: React.FC<PartyBalanceProps> = ({
         <DataTable
           columns={columns}
           data={filteredParties}
+          keyField="party_name"
           loading={isLoading}
           emptyMessage="No parties found"
         />

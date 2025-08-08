@@ -53,8 +53,8 @@ interface LedgerReportsProps {
 
 interface ReportFilters {
   dateRange: {
-    from: Date;
-    to: Date;
+    from: Date | null;
+    to: Date | null;
   };
   reportType: string;
   partyType: 'all' | 'customer' | 'supplier';
@@ -91,8 +91,8 @@ const LedgerReports: React.FC<LedgerReportsProps> = ({ embedded = false }) => {
   const { data: stats } = useQuery(
     ['ledger-stats', filters],
     () => ledgerApi.getDashboardStats({
-      date_from: format(filters.dateRange.from, 'yyyy-MM-dd'),
-      date_to: format(filters.dateRange.to, 'yyyy-MM-dd'),
+      date_from: filters.dateRange.from ? format(filters.dateRange.from, 'yyyy-MM-dd') : format(new Date(), 'yyyy-MM-dd'),
+      date_to: filters.dateRange.to ? format(filters.dateRange.to, 'yyyy-MM-dd') : format(new Date(), 'yyyy-MM-dd'),
       party_type: filters.partyType !== 'all' ? filters.partyType : undefined
     }),
     {
@@ -132,21 +132,21 @@ const LedgerReports: React.FC<LedgerReportsProps> = ({ embedded = false }) => {
     cash_flow_trend: 'neutral'
   };
 
-  const handleExport = async (format: 'pdf' | 'excel') => {
+  const handleExport = async (exportFormat: 'pdf' | 'excel') => {
     try {
       const response = await ledgerApi.exportReport({
         report_type: selectedReport,
         filters,
-        format
+        format: exportFormat
       });
       
       const blob = new Blob([response.data], {
-        type: format === 'pdf' ? 'application/pdf' : 'application/vnd.ms-excel'
+        type: exportFormat === 'pdf' ? 'application/pdf' : 'application/vnd.ms-excel'
       });
       const url = window.URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
-      link.download = `ledger-report-${selectedReport}-${format(new Date(), 'yyyy-MM-dd')}.${format}`;
+      link.download = `ledger-report-${selectedReport}-${format(new Date(), 'yyyy-MM-dd')}.${exportFormat}`;
       link.click();
     } catch (error) {
       console.error('Export failed:', error);
@@ -215,7 +215,7 @@ const LedgerReports: React.FC<LedgerReportsProps> = ({ embedded = false }) => {
                   cx="50%"
                   cy="50%"
                   labelLine={false}
-                  label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                  label={({ name, percent }) => `${name} ${((percent || 0) * 100).toFixed(0)}%`}
                   outerRadius={80}
                   fill="#8884d8"
                   dataKey="value"

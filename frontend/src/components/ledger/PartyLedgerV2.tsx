@@ -126,24 +126,24 @@ const PartyLedgerV2: React.FC<PartyLedgerV2Props> = ({
     setSelectedParty(party);
   };
 
-  const handleExport = async (format: 'pdf' | 'excel') => {
+  const handleExport = async (exportFormat: 'pdf' | 'excel') => {
     try {
       const response = await partyLedgerAPI.exportLedger({
         party_id: selectedParty?.id || initialPartyId,
         party_type: partyType,
         date_from: format(dateRange.from, 'yyyy-MM-dd'),
         date_to: format(dateRange.to, 'yyyy-MM-dd'),
-        format
+        format: exportFormat
       });
       
       // Handle file download
       const blob = new Blob([response.data], {
-        type: format === 'pdf' ? 'application/pdf' : 'application/vnd.ms-excel'
+        type: exportFormat === 'pdf' ? 'application/pdf' : 'application/vnd.ms-excel'
       });
       const url = window.URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
-      link.download = `ledger-${selectedParty?.name || 'party'}-${format(new Date(), 'yyyy-MM-dd')}.${format}`;
+      link.download = `ledger-${selectedParty?.name || 'party'}-${format(new Date(), 'yyyy-MM-dd')}.${exportFormat}`;
       link.click();
     } catch (error) {
       console.error('Export failed:', error);
@@ -153,12 +153,12 @@ const PartyLedgerV2: React.FC<PartyLedgerV2Props> = ({
   const columns = [
     {
       key: 'date',
-      label: 'Date',
+      header: 'Date',
       render: (entry: LedgerEntry) => format(parseISO(entry.date), 'dd/MM/yyyy')
     },
     {
       key: 'transaction_type',
-      label: 'Type',
+      header: 'Type',
       render: (entry: LedgerEntry) => (
         <span className={`px-2 py-1 rounded text-xs font-medium ${
           entry.transaction_type === 'invoice' ? 'bg-blue-100 text-blue-800' :
@@ -173,30 +173,30 @@ const PartyLedgerV2: React.FC<PartyLedgerV2Props> = ({
     },
     {
       key: 'reference_number',
-      label: 'Reference',
+      header: 'Reference',
       render: (entry: LedgerEntry) => (
         <span className="font-mono text-sm">{entry.reference_number}</span>
       )
     },
     {
       key: 'description',
-      label: 'Description'
+      header: 'Description'
     },
     {
       key: 'debit',
-      label: 'Debit',
+      header: 'Debit',
       align: 'right' as const,
       render: (entry: LedgerEntry) => entry.debit ? formatCurrency(entry.debit) : '-'
     },
     {
       key: 'credit',
-      label: 'Credit',
+      header: 'Credit',
       align: 'right' as const,
       render: (entry: LedgerEntry) => entry.credit ? formatCurrency(entry.credit) : '-'
     },
     {
       key: 'balance',
-      label: 'Balance',
+      header: 'Balance',
       align: 'right' as const,
       render: (entry: LedgerEntry) => (
         <span className={entry.balance < 0 ? 'text-red-600 font-semibold' : 'font-semibold'}>
@@ -225,12 +225,13 @@ const PartyLedgerV2: React.FC<PartyLedgerV2Props> = ({
           </label>
           {partyType === 'customer' ? (
             <CustomerSearch
-              onSelect={handlePartySelect}
+              value={selectedParty}
+              onChange={setSelectedParty}
               placeholder="Search customer by name, phone or ID"
             />
           ) : (
             <SupplierSearch
-              onSelect={handlePartySelect}
+              onSupplierSelect={handlePartySelect}
               placeholder="Search supplier by name or ID"
             />
           )}
@@ -313,12 +314,12 @@ const PartyLedgerV2: React.FC<PartyLedgerV2Props> = ({
               <div className="flex gap-2">
                 <DatePicker
                   value={dateRange.from}
-                  onChange={(date) => setDateRange(prev => ({ ...prev, from: date }))}
+                  onChange={(date) => setDateRange(prev => ({ ...prev, from: date || new Date() }))}
                   placeholder="From date"
                 />
                 <DatePicker
                   value={dateRange.to}
-                  onChange={(date) => setDateRange(prev => ({ ...prev, to: date }))}
+                  onChange={(date) => setDateRange(prev => ({ ...prev, to: date || new Date() }))}
                   placeholder="To date"
                 />
               </div>
@@ -390,6 +391,7 @@ const PartyLedgerV2: React.FC<PartyLedgerV2Props> = ({
           <DataTable
             columns={columns}
             data={filteredEntries}
+            keyField="id"
             loading={loadingLedger}
             emptyMessage="No transactions found for the selected period"
           />

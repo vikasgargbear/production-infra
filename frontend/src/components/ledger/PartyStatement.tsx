@@ -148,23 +148,23 @@ const PartyStatement: React.FC<PartyStatementProps> = ({
   });
 
   // Export handlers
-  const handleExport = async (format: 'pdf' | 'excel') => {
+  const handleExport = async (exportFormat: 'pdf' | 'excel') => {
     try {
       const response = await ledgerApi.exportStatement({
         party_id: selectedParty?.id || initialPartyId,
         date_from: format(dateRange.from, 'yyyy-MM-dd'),
         date_to: format(dateRange.to, 'yyyy-MM-dd'),
-        format,
+        format: exportFormat,
         include_letter_head: true
       });
       
       const blob = new Blob([response.data], {
-        type: format === 'pdf' ? 'application/pdf' : 'application/vnd.ms-excel'
+        type: exportFormat === 'pdf' ? 'application/pdf' : 'application/vnd.ms-excel'
       });
       const url = window.URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
-      link.download = `statement-${statementData?.party_info.name}-${format(new Date(), 'yyyy-MM-dd')}.${format}`;
+      link.download = `statement-${statementData?.party_info.name}-${format(new Date(), 'yyyy-MM-dd')}.${exportFormat}`;
       link.click();
     } catch (error) {
       console.error('Export failed:', error);
