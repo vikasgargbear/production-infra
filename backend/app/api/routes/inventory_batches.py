@@ -37,14 +37,14 @@ async def get_batches(
                     b.product_id,
                     p.product_name,
                     p.hsn_code,
-                    p.gst_percentage,
+                    p.gst_rate,
                     b.expiry_date,
                     b.manufacturing_date as mfg_date,
                     b.quantity_available,
                     b.quantity_reserved as quantity_allocated,
                     b.cost_per_unit as purchase_price,
-                    COALESCE(b.sale_price_per_unit, b.mrp_per_unit, 100) as sale_price,
-                    COALESCE(b.mrp_per_unit, b.sale_price_per_unit, 100) as mrp,
+                    COALESCE(b.selling_price, b.mrp, 100) as sale_price,
+                    COALESCE(b.mrp, b.selling_price, 100) as mrp,
                     -- b.is_active, -- TODO: Column may not exist in all deployments
                     b.created_at,
                     b.updated_at
@@ -73,8 +73,8 @@ async def get_batches(
                     p.product_name,
                     b.expiry_date,
                     b.quantity_available,
-                    COALESCE(b.sale_price_per_unit, b.mrp_per_unit, 100) as sale_price,
-                    COALESCE(b.mrp_per_unit, b.sale_price_per_unit, 100) as mrp
+                    COALESCE(b.selling_price, b.mrp, 100) as sale_price,
+                    COALESCE(b.mrp, b.selling_price, 100) as mrp
                 FROM inventory.batches b
                 LEFT JOIN inventory.products p ON b.product_id = p.product_id
                 WHERE b.org_id = :org_id
@@ -107,7 +107,7 @@ async def get_batches(
             # Get product details first
             product_result = db.execute(
                 text("""
-                    SELECT product_id, product_name, hsn_code, gst_percentage
+                    SELECT product_id, product_name, hsn_code, gst_rate
                     FROM inventory.products
                     WHERE product_id = :product_id AND org_id = :org_id
                 """),
@@ -123,7 +123,7 @@ async def get_batches(
                     "product_id": product_id,
                     "product_name": product.product_name,
                     "hsn_code": product.hsn_code,
-                    "gst_percentage": float(product.gst_percentage) if product.gst_percentage else 12,
+                    "gst_percentage": float(product.gst_rate) if product.gst_rate else 12,
                     "expiry_date": (date.today() + timedelta(days=365)).isoformat(),
                     "quantity_available": 1000,
                     "sale_price": 100,  # Default price
@@ -168,7 +168,7 @@ async def get_available_batches(
                 b.*,
                 p.product_name,
                 p.hsn_code,
-                p.gst_percentage
+                p.gst_rate
             FROM inventory.batches b
             LEFT JOIN inventory.products p ON b.product_id = p.product_id
             WHERE b.product_id = :product_id
@@ -251,14 +251,14 @@ async def create_batch(
                 org_id, product_id, batch_number, 
                 expiry_date, manufacturing_date,
                 initial_quantity, quantity_available,
-                cost_per_unit, sale_price_per_unit, mrp_per_unit,
+                cost_per_unit, selling_price, mrp,
                 supplier_id, purchase_invoice_no,
                 created_at, updated_at
             ) VALUES (
                 :org_id, :product_id, :batch_number,
                 :expiry_date, :manufacturing_date,
                 :initial_quantity, :quantity_available,
-                :cost_per_unit, :sale_price_per_unit, :mrp_per_unit,
+                :cost_per_unit, :selling_price, :mrp,
                 :supplier_id, :purchase_invoice_no,
                 CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
             )
@@ -274,8 +274,8 @@ async def create_batch(
             "initial_quantity": batch_data.get("initial_quantity", batch_data.get("quantity_received", 0)),
             "quantity_available": batch_data.get("quantity_available", batch_data.get("initial_quantity", 0)),
             "cost_per_unit": batch_data.get("cost_price", 0),
-            "sale_price_per_unit": batch_data.get("selling_price", 0),
-            "mrp_per_unit": batch_data.get("mrp", 0),
+            "selling_price": batch_data.get("selling_price", 0),
+            "mrp": batch_data.get("mrp", 0),
             "supplier_id": batch_data.get("supplier_id"),
             "purchase_invoice_no": batch_data.get("purchase_invoice_no")
         }

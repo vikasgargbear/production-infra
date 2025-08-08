@@ -248,12 +248,13 @@ const PartyStatement: React.FC<PartyStatementProps> = ({
           </label>
           {partyType === 'customer' ? (
             <CustomerSearch
-              onSelect={setSelectedParty}
+              value={selectedParty}
+              onChange={setSelectedParty}
               placeholder="Search customer by name, phone or ID"
             />
           ) : (
             <SupplierSearch
-              onSelect={setSelectedParty}
+              onSupplierSelect={setSelectedParty}
               placeholder="Search supplier by name or ID"
             />
           )}
@@ -321,12 +322,12 @@ const PartyStatement: React.FC<PartyStatementProps> = ({
             <div className="flex gap-2">
               <DatePicker
                 value={dateRange.from}
-                onChange={(date) => setDateRange(prev => ({ ...prev, from: date }))}
+                onChange={(date) => setDateRange(prev => ({ ...prev, from: date || new Date() }))}
                 placeholder="From date"
               />
               <DatePicker
                 value={dateRange.to}
-                onChange={(date) => setDateRange(prev => ({ ...prev, to: date }))}
+                onChange={(date) => setDateRange(prev => ({ ...prev, to: date || new Date() }))}
                 placeholder="To date"
               />
             </div>
