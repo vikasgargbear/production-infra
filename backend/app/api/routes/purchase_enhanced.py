@@ -612,8 +612,8 @@ def get_pending_receipts(
                 COUNT(pi.po_item_id) as total_items,
                 COUNT(CASE WHEN pi.received_quantity > 0 THEN 1 END) as received_items
             FROM procurement.purchase_orders p
-            JOIN suppliers s ON p.supplier_id = s.supplier_id
-            LEFT JOIN purchase_items pi ON p.po_id = pi.po_id
+            JOIN parties.suppliers s ON p.supplier_id = s.supplier_id
+            LEFT JOIN procurement.purchase_order_items pi ON p.po_id = pi.po_id
             WHERE p.po_status IN ('draft', 'approved', 'partial')
         """
         params = {}

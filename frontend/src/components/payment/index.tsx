@@ -4,16 +4,19 @@
  */
 
 // Main Components
-export { default as ModularPaymentEntry } from './ModularPaymentEntry';
-export { default as ModularPaymentEntryV2 } from './ModularPaymentEntryV2';
-export { default as ModularPaymentEntryV3 } from './ModularPaymentEntryV3';
+import ModularPaymentEntry from './ModularPaymentEntry';
+export { ModularPaymentEntry };
+// TODO: Implement these components
+// export { default as ModularPaymentEntryV2 } from './ModularPaymentEntryV2';
+// export { default as ModularPaymentEntryV3 } from './ModularPaymentEntryV3';
 
 // Sub Components
 // export { default as PartySelector } from './components/PartySelector'; // TODO: Implement
-export { default as PaymentDetails } from './components/PaymentDetails';
+import PaymentDetails from './components/PaymentDetails';
+import PaymentSummary from './components/PaymentSummary';
+import InvoiceSelector from './components/InvoiceSelector';
+export { PaymentDetails, PaymentSummary, InvoiceSelector };
 // export { default as PaymentModeSelector } from './components/PaymentModeSelector'; // TODO: Implement
-export { default as PaymentSummary } from './components/PaymentSummary';
-export { default as InvoiceSelector } from './components/InvoiceSelector';
 // export { default as InvoiceAllocation } from './components/InvoiceAllocation'; // TODO: Implement
 
 // Payment Constants
@@ -89,8 +92,8 @@ interface PaymentUtils {
 // Default export
 interface PaymentModule {
   ModularPaymentEntry: React.ComponentType<any>;
-  ModularPaymentEntryV2: React.ComponentType<any>;
-  ModularPaymentEntryV3: React.ComponentType<any>;
+  // ModularPaymentEntryV2: React.ComponentType<any>;
+  // ModularPaymentEntryV3: React.ComponentType<any>;
   components: PaymentComponents;
   constants: PaymentConstants;
   utils: PaymentUtils;
@@ -98,8 +101,8 @@ interface PaymentModule {
 
 const PaymentModule: PaymentModule = {
   ModularPaymentEntry,
-  ModularPaymentEntryV2,
-  ModularPaymentEntryV3,
+  // ModularPaymentEntryV2,
+  // ModularPaymentEntryV3,
   components: {
     // PartySelector, // TODO: Implement
     PaymentDetails,

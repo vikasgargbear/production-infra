@@ -258,7 +258,7 @@ class InventoryService:
             # Get movement details
             result = db.execute(text("""
                 SELECT im.*, p.product_name, p.product_code, b.batch_number
-                FROM inventory.inventory_movements im
+                FROM inventory.movement_summary im
                 JOIN inventory.products p ON im.product_id = p.product_id
                 LEFT JOIN inventory.batches b ON im.batch_id = b.batch_id
                 WHERE im.movement_id = :movement_id
@@ -434,8 +434,8 @@ class InventoryService:
         activity = db.execute(text("""
             SELECT 
                 COUNT(*) as todays_movements
-            FROM inventory.inventory_movements
-            WHERE org_id = :org_id AND DATE(created_at) = CURRENT_DATE
+            FROM inventory.movement_summary
+            WHERE org_id = :org_id AND DATE(movement_date) = CURRENT_DATE
         """), {"org_id": org_id}).fetchone()
         
         # Pending orders
@@ -451,10 +451,10 @@ class InventoryService:
                 p.product_id, p.product_code, p.product_name,
                 COALESCE(SUM(im.quantity_out), 0) as movement_quantity
             FROM inventory.products p
-            LEFT JOIN inventory_movements im ON p.product_id = im.product_id
+            LEFT JOIN inventory.movement_summary im ON p.product_id = im.product_id
                 AND im.org_id = :org_id
                 AND im.movement_type = 'sale'
-                AND im.created_at >= CURRENT_DATE - INTERVAL '30 days'
+                AND im.movement_date >= CURRENT_DATE - INTERVAL '30 days'
             WHERE p.org_id = :org_id
             GROUP BY p.product_id, p.product_code, p.product_name
             ORDER BY movement_quantity DESC

@@ -646,7 +646,7 @@ const EnterprisePaymentEntry: React.FC<EnterprisePaymentEntryProps> = ({ open, o
                     selectedInvoices={selectedInvoices as any}
                     onInvoiceSelect={handleInvoiceSelect}
                     onAmountChange={handleAmountChange}
-                    paymentMethod={allocationMethod}
+                    paymentMode={allocationMethod}
                     totalPayment={parseFloat(formData.totalAmount) || 0}
                     showSummary={allocationMethod === 'manual'}
                   />
