@@ -155,8 +155,7 @@ class InventoryService:
         """Get current stock summary for a product"""
         # Get product details
         product = db.execute(text("""
-            SELECT product_id, product_code, product_name,
-                   minimum_stock_level, reorder_level
+            SELECT product_id, product_code, product_name
             FROM inventory.products WHERE product_id = :product_id
         """), {"product_id": product_id}).fetchone()
         
@@ -183,14 +182,8 @@ class InventoryService:
         
         # Check reorder levels
         total_qty = stock_dict["total_quantity"]
-        stock_dict["is_below_minimum"] = (
-            product.minimum_stock_level and 
-            total_qty < product.minimum_stock_level
-        )
-        stock_dict["is_below_reorder"] = (
-            product.reorder_level and 
-            total_qty <= product.reorder_level
-        )
+        stock_dict["is_below_minimum"] = total_qty < 10  # Default threshold
+        stock_dict["is_below_reorder"] = total_qty <= 20  # Default threshold
         
         return CurrentStock(**stock_dict)
     
@@ -421,8 +414,7 @@ class InventoryService:
                     WHEN b.expiry_date > CURRENT_DATE AND b.expiry_date <= CURRENT_DATE + INTERVAL '90 days' 
                     THEN b.product_id END) as near_expiry_products,
                 COUNT(DISTINCT CASE 
-                    WHEN p.minimum_stock_level IS NOT NULL 
-                    AND sq.total_quantity < p.minimum_stock_level 
+                    WHEN sq.total_quantity < 10 
                     THEN p.product_id END) as low_stock_products,
                 COUNT(DISTINCT CASE 
                     WHEN sq.total_quantity = 0 

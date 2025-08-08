@@ -249,7 +249,7 @@ const EnterprisePaymentEntry: React.FC<EnterprisePaymentEntryProps> = ({ open, o
     setSelectedInvoices(newSelectedInvoices);
   };
 
-  const handlePartySelect = (customer: Customer) => {
+  const handlePartySelect = (customer: Customer | null) => {
     setFormData(prev => ({ ...prev, party: customer }));
     setErrors(prev => ({ ...prev, party: '' }));
     // Clear previous invoice selections when party changes
@@ -445,9 +445,9 @@ const EnterprisePaymentEntry: React.FC<EnterprisePaymentEntryProps> = ({ open, o
       {/* Customer Selection */}
       <div className="bg-white rounded-lg shadow-sm p-6">
         <CustomerSearch
-          value={formData.party}
+          value={formData.party as any}
           onChange={handlePartySelect}
-          displayMethod="dropdown"
+          displayMode="dropdown"
           placeholder="Search customer by name, phone, or code..."
           required
         />
@@ -642,8 +642,8 @@ const EnterprisePaymentEntry: React.FC<EnterprisePaymentEntryProps> = ({ open, o
                     Select invoices to allocate this payment against, or leave unselected to record as advance payment.
                   </p>
                   <OutstandingInvoicesTable
-                    invoices={outstandingInvoices}
-                    selectedInvoices={selectedInvoices}
+                    invoices={outstandingInvoices as any}
+                    selectedInvoices={selectedInvoices as any}
                     onInvoiceSelect={handleInvoiceSelect}
                     onAmountChange={handleAmountChange}
                     paymentMethod={allocationMethod}

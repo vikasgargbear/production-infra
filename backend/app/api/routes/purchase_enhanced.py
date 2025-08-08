@@ -166,7 +166,7 @@ def create_purchase_with_items(purchase_data: dict, db: Session = Depends(get_db
                     payment_status, payment_terms, notes, created_by, branch_id
                 ) VALUES (
                     :org_id, -- Default org
-                    :purchase_number, :purchase_date,
+                    :purchase_number, :po_date,
                     :supplier_id, :supplier_name,
                     :subtotal, :discount, :tax, :other_charges, :total,
                     :status, :payment_status, :payment_mode, :notes, :created_by, 1

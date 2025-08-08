@@ -88,7 +88,7 @@ async def create_payment(
     try:
         # Generate payment number if not provided
         if not payment.payment_number:
-            payment.payment_number = f"PAY-{payment.payment_date.strftime('%Y%m%d')}-{payment.customer_id or payment.supplier_id or 'ADV'}-{int(date.today().timestamp())}"
+            payment.payment_number = f"PAY-{payment.payment_date.strftime('%Y%m%d')}-{payment.customer_id or payment.supplier_id or 'ADV'}-{int(datetime.now().timestamp())}"
         
         # Prepare payment data for database using CORRECT column names
         payment_data = {
@@ -235,7 +235,7 @@ async def create_customer_receipt(
     """
     try:
         # Generate receipt number
-        receipt_number = f"RCP-{date.today().strftime('%Y%m%d')}-{int(date.today().timestamp())}"
+        receipt_number = f"RCP-{date.today().strftime('%Y%m%d')}-{int(datetime.now().timestamp())}"
         
         # Insert payment
         result = db.execute(text("""
