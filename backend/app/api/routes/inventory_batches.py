@@ -15,7 +15,7 @@ from ...core.config import DEFAULT_ORG_ID
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/inventory/batches", tags=["inventory-batches"])
+router = APIRouter(tags=["inventory-batches"])
 
 @router.get("/")
 async def get_batches(

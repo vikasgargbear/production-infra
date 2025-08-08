@@ -123,7 +123,7 @@ api.include_router(enterprise_orders_router, tags=["Enterprise Orders"])
 api.include_router(collection_center_router, tags=["Collection Center"])
 api.include_router(stock_receive.router, tags=["Stock Receive"])
 api.include_router(enterprise_delivery_challan.router, tags=["Enterprise Delivery Challan"])
-api.include_router(inventory_batches.router, tags=["Inventory Batches"])
+api.include_router(inventory_batches.router, prefix="/inventory/batches", tags=["Inventory Batches"])
 api.include_router(create_user.router, tags=["Setup"])
 
 # Register new APIs
