@@ -19,7 +19,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/stock-movements", tags=["stock-movements"])
 
 @router.get("/")
-async def get_inventory_movements(
+def get_inventory_movements(
     skip: int = Query(0, ge=0),
     limit: int = Query(20, ge=1, le=100),
     movement_type: Optional[str] = Query(None, description="receive/issue"),
@@ -80,7 +80,7 @@ async def get_inventory_movements(
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/reasons")
-async def get_movement_reasons():
+def get_movement_reasons():
     """
     Get predefined reasons for stock movements
     """
@@ -106,7 +106,7 @@ async def get_movement_reasons():
     }
 
 @router.post("/receive")
-async def create_stock_receive(
+def create_stock_receive(
     receive_data: dict,
     db: Session = Depends(get_db)
 ):
@@ -241,7 +241,7 @@ async def create_stock_receive(
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/issue")
-async def create_stock_issue(
+def create_stock_issue(
     issue_data: dict,
     db: Session = Depends(get_db)
 ):
@@ -358,7 +358,7 @@ async def create_stock_issue(
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/transfer")
-async def create_stock_transfer(
+def create_stock_transfer(
     transfer_data: dict,
     db: Session = Depends(get_db)
 ):
@@ -387,7 +387,7 @@ async def create_stock_transfer(
             "notes": f"Transfer to {transfer_data['destination_location']}"
         }
         
-        issue_result = await create_stock_issue(issue_data, db)
+        issue_result = create_stock_issue(issue_data, db)
         
         # Create receive at destination
         receive_data = {
@@ -401,7 +401,7 @@ async def create_stock_transfer(
             "notes": f"Transfer from {transfer_data['source_location']}"
         }
         
-        receive_result = await create_stock_receive(receive_data, db)
+        receive_result = create_stock_receive(receive_data, db)
         
         return {
             "status": "success",
@@ -417,7 +417,7 @@ async def create_stock_transfer(
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/product/{product_id}/batches")
-async def get_product_batches(
+def get_product_batches(
     product_id: str,
     db: Session = Depends(get_db)
 ):
@@ -458,7 +458,7 @@ async def get_product_batches(
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/near-expiry")
-async def get_near_expiry_stock(
+def get_near_expiry_stock(
     days: int = Query(90, description="Days to expiry"),
     db: Session = Depends(get_db)
 ):
@@ -500,7 +500,7 @@ async def get_near_expiry_stock(
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/low-stock")
-async def get_low_stock_items(
+def get_low_stock_items(
     db: Session = Depends(get_db)
 ):
     """

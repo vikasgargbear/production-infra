@@ -103,6 +103,16 @@ def create_purchase(purchase_data: dict, db: Session = Depends(get_db)):
     try:
         items = purchase_data.pop('items', [])
         
+        # Ensure required fields have defaults
+        if 'created_by' not in purchase_data or purchase_data['created_by'] is None:
+            purchase_data['created_by'] = 1
+        if 'po_status' not in purchase_data:
+            purchase_data['po_status'] = 'draft'
+        if 'org_id' not in purchase_data:
+            purchase_data['org_id'] = 'ad808530-1ddb-4377-ab20-67bef145d80d'  # DEFAULT_ORG_ID
+        if 'branch_id' not in purchase_data:
+            purchase_data['branch_id'] = 1
+        
         # Insert purchase order
         po_query = text("""
             INSERT INTO procurement.purchase_orders (
