@@ -36,7 +36,7 @@ tests = [
     # Payments API
     ("GET", "/payments/summary", "Payments Summary"),
     ("GET", "/payments/outstanding", "Payments Outstanding"),
-    ("POST", "/payments", "Payment Create", {
+    ("POST", "/payments/", "Payment Create", {
         "customer_id": 13,
         "payment_type": "advance_payment",
         "amount": 100,

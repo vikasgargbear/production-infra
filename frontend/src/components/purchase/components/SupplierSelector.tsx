@@ -64,12 +64,8 @@ const SupplierSelector: React.FC<SupplierSelectorProps> = () => {
         </div>
       ) : (
         <SupplierSearch
-          value={null}
-          onChange={handleSelectSupplier}
-          onCreateNew={handleCreateSupplier}
+          onSupplierSelect={handleSelectSupplier}
           placeholder="Search suppliers by name, phone, or GSTIN..."
-          error={errors.supplier}
-          className="w-full"
         />
       )}
       
@@ -77,7 +73,9 @@ const SupplierSelector: React.FC<SupplierSelectorProps> = () => {
       <SupplierCreationModal
         isOpen={showCreateModal}
         onClose={() => setShowCreateModal(false)}
-        onSuccess={handleSupplierCreated}
+        onSupplierCreated={handleSupplierCreated}
+        initialData={{}}
+        title="Create New Supplier"
       />
     </div>
   );

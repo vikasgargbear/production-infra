@@ -6,7 +6,7 @@ import { ProductCreationModal, MonthYearPicker, PurchaseProductSearch } from '..
 import { validateItem } from '../../../utils/purchaseValidation';
 
 interface ProductWithBatch {
-  product_id?: string;
+  product_id?: string | number;
   id?: string;
   product_name?: string;
   name?: string;

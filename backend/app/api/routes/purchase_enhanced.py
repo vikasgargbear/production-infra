@@ -39,13 +39,13 @@ def create_direct_purchase_entry(purchase_data: dict, db: Session = Depends(get_
                 org_id, branch_id, po_number, po_date, po_type,
                 supplier_id, supplier_name,
                 subtotal_amount, tax_amount, total_amount,
-                po_status, grn_status, payment_status,
+                po_status, grn_status,
                 created_at
             ) VALUES (
                 :org_id, 1, :po_number, :po_date, 'regular',
                 :supplier_id, :supplier_name,
                 :subtotal, :tax, :total,
-                'completed', 'completed', :payment_status,
+                'completed', 'completed',
                 CURRENT_TIMESTAMP
             ) RETURNING po_id
         """), {
@@ -56,8 +56,7 @@ def create_direct_purchase_entry(purchase_data: dict, db: Session = Depends(get_
             "supplier_name": purchase_data.get("supplier_name", "Direct Purchase"),
             "subtotal": purchase_data.get("subtotal_amount", 0),
             "tax": purchase_data.get("tax_amount", 0),
-            "total": purchase_data.get("total_amount", 0),
-            "payment_status": purchase_data.get("payment_status", "paid")
+            "total": purchase_data.get("total_amount", 0)
         })
         
         po = po_result.fetchone()
@@ -163,13 +162,13 @@ def create_purchase_with_items(purchase_data: dict, db: Session = Depends(get_db
                     supplier_id, supplier_name,
                     subtotal_amount, discount_amount, tax_amount, 
                     other_charges, total_amount, po_status,
-                    payment_status, payment_terms, notes, created_by, branch_id
+                    payment_terms, notes, created_by, branch_id
                 ) VALUES (
                     :org_id, -- Default org
                     :purchase_number, :po_date,
                     :supplier_id, :supplier_name,
                     :subtotal, :discount, :tax, :other_charges, :total,
-                    :status, :payment_status, :payment_mode, :notes, :created_by, 1
+                    :status, :payment_mode, :notes, :created_by, 1
                 ) RETURNING po_id
             """),
             {
@@ -184,7 +183,6 @@ def create_purchase_with_items(purchase_data: dict, db: Session = Depends(get_db
                 "other_charges": Decimal(str(purchase_data.get("other_charges", 0))),
                 "total": Decimal(str(purchase_data.get("final_amount", 0))),
                 "status": purchase_data.get("purchase_status", "draft"),
-                "payment_status": purchase_data.get("payment_status", "pending"),
                 "payment_mode": purchase_data.get("payment_mode", "cash"),
                 "notes": purchase_data.get("notes"),
                 "created_by": purchase_data.get("created_by")

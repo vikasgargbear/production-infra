@@ -449,7 +449,7 @@ class InventoryService:
         fast_moving = db.execute(text("""
             SELECT 
                 p.product_id, p.product_code, p.product_name,
-                COALESCE(SUM(im.quantity_out), 0) as movement_quantity
+                COALESCE(SUM(im.quantity), 0) as movement_quantity
             FROM inventory.products p
             LEFT JOIN inventory.movement_summary im ON p.product_id = im.product_id
                 AND im.org_id = :org_id
