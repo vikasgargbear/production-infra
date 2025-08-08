@@ -79,7 +79,7 @@ async def list_batches(
         query = """
             SELECT b.*, p.product_name, p.product_code,
                    b.expiry_date - CURRENT_DATE as days_to_expiry,
-                   b.quantity_available * b.cost_price as stock_value
+                   b.quantity_available * b.cost_per_unit as stock_value
             FROM inventory.batches b
             JOIN inventory.products p ON b.product_id = p.product_id
             WHERE b.org_id = :org_id
@@ -176,9 +176,9 @@ async def list_current_stock(
                     COUNT(*) as total_batches,
                     SUM(quantity_available) as total_quantity,
                     SUM(quantity_available) as available_quantity,
-                    SUM(COALESCE(quantity_sold, 0)) as allocated_quantity,
-                    SUM(quantity_available * cost_price) as total_value,
-                    AVG(cost_price) as average_cost,
+                    SUM(COALESCE(quantity_reserved, 0)) as allocated_quantity,
+                    SUM(quantity_available * cost_per_unit) as total_value,
+                    AVG(cost_per_unit) as average_cost,
                     COUNT(CASE WHEN expiry_date <= CURRENT_DATE THEN 1 END) as expired_batches,
                     COUNT(CASE WHEN expiry_date > CURRENT_DATE AND expiry_date <= CURRENT_DATE + INTERVAL '90 days' THEN 1 END) as near_expiry_batches
                 FROM inventory.batches

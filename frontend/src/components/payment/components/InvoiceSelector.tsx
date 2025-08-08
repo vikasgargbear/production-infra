@@ -6,8 +6,7 @@ import {
   StatusBadge
 } from '../../global';
 import { 
-  SectionHeader,
-  FormInput
+  SectionHeader
 } from '../../common';
 
 interface Invoice {
@@ -228,14 +227,12 @@ const InvoiceSelectorV2: React.FC = () => {
                     />
                   </td>
                   <td className="py-4 px-4">
-                    <FormInput
+                    <input
                       type="number"
                       value={allocated || ''}
                       onChange={(e) => handleAllocationChange(invoice.invoice_no, e.target.value)}
                       placeholder="0.00"
-                      size="sm"
-                      className="w-24"
-                      inputClassName="text-right"
+                      className="w-24 px-2 py-1 text-sm text-right border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
                       min="0"
                       max={invoice.amount_due}
                       step="0.01"

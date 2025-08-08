@@ -219,48 +219,31 @@ def create_purchase_with_items(purchase_data: dict, db: Session = Depends(get_db
             
             db.execute(
                 text("""
-                    INSERT INTO purchase_items (
-                        purchase_id, product_id, product_name,
-                        ordered_quantity, received_quantity, free_quantity,
-                        purchase_uom, base_quantity,
-                        cost_price, selling_price, mrp,
-                        discount_percent, discount_amount,
-                        tax_percent, tax_amount, total_price,
-                        batch_number, manufacturing_date, expiry_date,
-                        item_status, notes
+                    INSERT INTO procurement.purchase_order_items (
+                        po_id, product_id, product_name,
+                        ordered_quantity, unit_price, free_quantity,
+                        discount_percentage, discount_amount,
+                        line_total, gst_percentage, tax_amount, final_amount
                     ) VALUES (
-                        :purchase_id, :product_id, :product_name,
-                        :ordered_qty, :received_qty, :free_qty,
-                        :uom, :base_qty,
-                        :cost_price, :selling_price, :mrp,
+                        :po_id, :product_id, :product_name,
+                        :ordered_qty, :unit_price, :free_qty,
                         :disc_percent, :disc_amount,
-                        :tax_percent, :tax_amount, :total,
-                        :batch_number, :mfg_date, :exp_date,
-                        :status, :notes
+                        :line_total, :gst_percent, :tax_amount, :final_amount
                     )
                 """),
                 {
-                    "purchase_id": purchase_id,
+                    "po_id": purchase_id,
                     "product_id": item.get("product_id"),
                     "product_name": item.get("product_name"),
                     "ordered_qty": quantity,
-                    "received_qty": item.get("received_quantity", 0),
+                    "unit_price": cost_price,
                     "free_qty": item.get("free_quantity", 0),
-                    "uom": item.get("purchase_uom", "NOS"),
-                    "base_qty": item.get("base_quantity", quantity),
-                    "cost_price": cost_price,
-                    "selling_price": Decimal(str(item.get("selling_price", item.get("mrp", 0)))),
-                    "mrp": Decimal(str(item.get("mrp", 0))),
                     "disc_percent": discount_percent,
                     "disc_amount": discount_amount,
-                    "tax_percent": tax_percent,
+                    "line_total": taxable_amount,
+                    "gst_percent": tax_percent,
                     "tax_amount": tax_amount,
-                    "total": total_price,
-                    "batch_number": batch_number,
-                    "mfg_date": item.get("manufacturing_date"),
-                    "exp_date": item.get("expiry_date"),
-                    "status": item.get("item_status", "pending"),
-                    "notes": item.get("notes")
+                    "final_amount": total_price
                 }
             )
             items_created += 1
@@ -291,10 +274,10 @@ def get_purchase_items(purchase_id: int, db: Session = Depends(get_db)):
                     p.hsn_code,
                     p.category_id,
                     p.brand_name
-                FROM purchase_items pi
+                FROM procurement.purchase_order_items pi
                 LEFT JOIN inventory.products p ON pi.product_id = p.product_id
-                WHERE pi.purchase_id = :purchase_id
-                ORDER BY pi.purchase_item_id
+                WHERE pi.po_id = :purchase_id
+                ORDER BY pi.po_item_id
             """),
             {"purchase_id": purchase_id}
         ).fetchall()
@@ -317,10 +300,10 @@ def update_purchase_item(
         # Verify item belongs to purchase
         check = db.execute(
             text("""
-                SELECT purchase_item_id 
-                FROM purchase_items 
-                WHERE purchase_item_id = :item_id 
-                AND purchase_id = :purchase_id
+                SELECT po_item_id 
+                FROM procurement.purchase_order_items 
+                WHERE po_item_id = :item_id 
+                AND po_id = :purchase_id
             """),
             {"item_id": item_id, "purchase_id": purchase_id}
         ).first()
@@ -346,9 +329,9 @@ def update_purchase_item(
         if updates:
             db.execute(
                 text(f"""
-                    UPDATE purchase_items 
+                    UPDATE procurement.purchase_order_items 
                     SET {', '.join(updates)}, updated_at = CURRENT_TIMESTAMP
-                    WHERE purchase_item_id = :item_id
+                    WHERE po_item_id = :item_id
                 """),
                 params
             )
@@ -391,7 +374,7 @@ def receive_purchase_items(
         batches_created = 0
         
         for item in received_items:
-            item_id = item.get("purchase_item_id")
+            item_id = item.get("po_item_id")
             received_qty = item.get("received_quantity", 0)
             
             if received_qty <= 0:
@@ -400,9 +383,9 @@ def receive_purchase_items(
             # Get purchase item details
             pi = db.execute(
                 text("""
-                    SELECT * FROM purchase_items 
-                    WHERE purchase_item_id = :item_id 
-                    AND purchase_id = :purchase_id
+                    SELECT * FROM procurement.purchase_order_items 
+                    WHERE po_item_id = :item_id 
+                    AND po_id = :purchase_id
                 """),
                 {"item_id": item_id, "purchase_id": purchase_id}
             ).first()
@@ -478,10 +461,10 @@ def receive_purchase_items(
             # Update purchase item
             db.execute(
                 text("""
-                    UPDATE purchase_items 
+                    UPDATE procurement.purchase_order_items 
                     SET received_quantity = :received_qty,
                         item_status = 'received'
-                    WHERE purchase_item_id = :item_id
+                    WHERE po_item_id = :item_id
                 """),
                 {"received_qty": received_qty, "item_id": item_id}
             )
@@ -544,7 +527,7 @@ def receive_purchase_items_fixed(
         
         # Update purchase items
         for item in receive_data.get("items", []):
-            item_id = item.get("purchase_item_id")
+            item_id = item.get("po_item_id")
             received_qty = item.get("received_quantity", 0)
             
             if received_qty <= 0:
@@ -568,11 +551,11 @@ def receive_purchase_items_fixed(
             
             db.execute(
                 text(f"""
-                    UPDATE purchase_items 
+                    UPDATE procurement.purchase_order_items 
                     SET {', '.join(update_fields)},
                         item_status = 'received'
-                    WHERE purchase_item_id = :item_id 
-                    AND purchase_id = :purchase_id
+                    WHERE po_item_id = :item_id 
+                    AND po_id = :purchase_id
                 """),
                 params
             )
@@ -626,11 +609,11 @@ def get_pending_receipts(
             SELECT 
                 p.*,
                 s.supplier_name,
-                COUNT(pi.purchase_item_id) as total_items,
+                COUNT(pi.po_item_id) as total_items,
                 COUNT(CASE WHEN pi.received_quantity > 0 THEN 1 END) as received_items
             FROM purchases p
             JOIN suppliers s ON p.supplier_id = s.supplier_id
-            LEFT JOIN purchase_items pi ON p.purchase_id = pi.purchase_id
+            LEFT JOIN purchase_items pi ON p.purchase_id = pi.po_id
             WHERE p.purchase_status IN ('draft', 'approved', 'partial')
         """
         params = {}

@@ -6,13 +6,8 @@ import {
 import { usePayment } from '../../../contexts/PaymentContext';
 import { 
   Card, 
-  Badge, 
   StatusBadge
 } from '../../global';
-import { 
-  SummaryDisplay,
-  SectionHeader
-} from '../../common';
 
 interface PaymentModeLabel {
   label: string;
@@ -81,7 +76,7 @@ const PaymentSummaryV2: React.FC = () => {
 
       {/* Customer Information */}
       <Card>
-        <SectionHeader title="Customer Information" />
+        <h3 className="text-lg font-medium text-gray-900 mb-4">Customer Information</h3>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <div className="flex items-start space-x-3">
             <User className="w-5 h-5 text-gray-400 mt-0.5" />
@@ -102,7 +97,7 @@ const PaymentSummaryV2: React.FC = () => {
 
       {/* Payment Information */}
       <Card>
-        <SectionHeader title="Payment Details" />
+        <h3 className="text-lg font-medium text-gray-900 mb-4">Payment Details</h3>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
           <div className="flex items-start space-x-3">
             <Calendar className="w-5 h-5 text-gray-400 mt-0.5" />
@@ -115,9 +110,9 @@ const PaymentSummaryV2: React.FC = () => {
             <CreditCard className="w-5 h-5 text-gray-400 mt-0.5" />
             <div>
               <p className="text-sm text-gray-600">Payment Mode</p>
-              <Badge variant="primary">
+              <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
                 {paymentModeLabels[payment.payment_mode]?.icon} {paymentModeLabels[payment.payment_mode]?.label}
-              </Badge>
+              </span>
             </div>
           </div>
           <div className="flex items-start space-x-3">
@@ -139,18 +134,18 @@ const PaymentSummaryV2: React.FC = () => {
         </div>
 
         {/* Amount Summary */}
-        <SummaryDisplay
-          items={[
-            { label: 'Payment Amount', value: parseFloat(payment.amount || '0'), isTotal: true }
-          ]}
-          className="bg-amber-50 border border-amber-200"
-        />
+        <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
+          <div className="flex justify-between items-center">
+            <span className="text-lg font-medium text-gray-900">Payment Amount</span>
+            <span className="text-2xl font-bold text-amber-900">₹{parseFloat(payment.amount || '0').toFixed(2)}</span>
+          </div>
+        </div>
       </Card>
 
       {/* Invoice Allocation (if any) */}
       {selectedInvoices.length > 0 && (
         <Card>
-          <SectionHeader title="Invoice Allocation" />
+          <h3 className="text-lg font-medium text-gray-900 mb-4">Invoice Allocation</h3>
           <div className="space-y-3">
             {selectedInvoices.map((invoice: SelectedInvoice, index: number) => (
               <div key={index} className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
@@ -170,19 +165,21 @@ const PaymentSummaryV2: React.FC = () => {
             ))}
             
             {/* Allocation Summary */}
-            <div className="mt-4 pt-4 border-t border-gray-200">
-              <SummaryDisplay
-                items={[
-                  { label: 'Total Payment', value: parseFloat(payment.amount || '0') },
-                  { label: 'Allocated Amount', value: allocatedAmount },
-                  { 
-                    label: 'Unallocated Amount', 
-                    value: unallocatedAmount, 
-                    isTotal: true,
-                    className: unallocatedAmount > 0 ? 'text-amber-600' : ''
-                  }
-                ]}
-              />
+            <div className="mt-4 pt-4 border-t border-gray-200 space-y-2">
+              <div className="flex justify-between text-sm">
+                <span className="text-gray-600">Total Payment</span>
+                <span className="font-medium">₹{parseFloat(payment.amount || '0').toFixed(2)}</span>
+              </div>
+              <div className="flex justify-between text-sm">
+                <span className="text-gray-600">Allocated Amount</span>
+                <span className="font-medium">₹{allocatedAmount.toFixed(2)}</span>
+              </div>
+              <div className="flex justify-between pt-2 border-t">
+                <span className="font-medium text-gray-900">Unallocated Amount</span>
+                <span className={`font-bold ${unallocatedAmount > 0 ? 'text-amber-600' : 'text-gray-900'}`}>
+                  ₹{unallocatedAmount.toFixed(2)}
+                </span>
+              </div>
             </div>
           </div>
         </Card>
@@ -191,7 +188,7 @@ const PaymentSummaryV2: React.FC = () => {
       {/* Remarks */}
       {payment.remarks && (
         <Card>
-          <SectionHeader title="Remarks" />
+          <h3 className="text-lg font-medium text-gray-900 mb-4">Remarks</h3>
           <p className="text-gray-700">{payment.remarks}</p>
         </Card>
       )}

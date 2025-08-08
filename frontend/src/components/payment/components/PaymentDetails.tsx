@@ -2,11 +2,9 @@ import React, { useEffect } from 'react';
 import { DollarSign, CreditCard, Hash, FileText, MessageSquare } from 'lucide-react';
 import { usePayment } from '../../../contexts/PaymentContext';
 import { 
-  Card, 
-  Badge
+  Card
 } from '../../global';
 import { 
-  FormInput, 
   FormRow
 } from '../../common';
 
@@ -85,18 +83,29 @@ const PaymentDetailsV3: React.FC = () => {
       <div className="space-y-4">
         <FormRow>
           {/* Payment Amount */}
-          <FormInput
-            label="Amount"
-            type="number"
-            value={payment.amount}
-            onChange={(e) => handleFieldChange('amount', e.target.value)}
-            error={errors.amount}
-            required
-            icon={<DollarSign className="w-4 h-4" />}
-            placeholder="0.00"
-            min="0"
-            step="0.01"
-          />
+          <div className="space-y-2">
+            <label className="block text-sm font-medium text-gray-700">
+              Amount <span className="text-red-500">*</span>
+            </label>
+            <div className="relative">
+              <DollarSign className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
+              <input
+                type="number"
+                value={payment.amount}
+                onChange={(e) => handleFieldChange('amount', e.target.value)}
+                className={`w-full pl-10 pr-3 py-2.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors ${
+                  errors.amount ? 'border-red-500' : 'border-gray-300'
+                }`}
+                placeholder="0.00"
+                min="0"
+                step="0.01"
+                required
+              />
+              {errors.amount && (
+                <p className="mt-1 text-sm text-red-600">{errors.amount}</p>
+              )}
+            </div>
+          </div>
 
           {/* Payment Mode */}
           <div className="space-y-2">
@@ -128,21 +137,32 @@ const PaymentDetailsV3: React.FC = () => {
 
         <FormRow>
           {/* Reference Number */}
-          <FormInput
-            label={`Reference Number${isReferenceRequired ? ' *' : ''}`}
-            type="text"
-            value={payment.reference_number}
-            onChange={(e) => handleFieldChange('reference_number', e.target.value)}
-            error={errors.reference_number}
-            required={isReferenceRequired}
-            icon={<Hash className="w-4 h-4" />}
-            placeholder={
-              payment.payment_mode === 'UPI' ? 'UPI ID' :
-              payment.payment_mode === 'BANK_TRANSFER' ? 'Transaction ID' :
-              payment.payment_mode === 'CHEQUE' ? 'Cheque No.' :
-              'Reference'
-            }
-          />
+          <div className="space-y-2">
+            <label className="block text-sm font-medium text-gray-700">
+              Reference Number{isReferenceRequired && <span className="text-red-500"> *</span>}
+            </label>
+            <div className="relative">
+              <Hash className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
+              <input
+                type="text"
+                value={payment.reference_number}
+                onChange={(e) => handleFieldChange('reference_number', e.target.value)}
+                className={`w-full pl-10 pr-3 py-2.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors ${
+                  errors.reference_number ? 'border-red-500' : 'border-gray-300'
+                }`}
+                placeholder={
+                  payment.payment_mode === 'UPI' ? 'UPI ID' :
+                  payment.payment_mode === 'BANK_TRANSFER' ? 'Transaction ID' :
+                  payment.payment_mode === 'CHEQUE' ? 'Cheque No.' :
+                  'Reference'
+                }
+                required={isReferenceRequired}
+              />
+              {errors.reference_number && (
+                <p className="mt-1 text-sm text-red-600">{errors.reference_number}</p>
+              )}
+            </div>
+          </div>
 
           {/* Payment Type */}
           <div className="space-y-2">
@@ -173,22 +193,24 @@ const PaymentDetailsV3: React.FC = () => {
         </FormRow>
 
         {/* Remarks - Optional */}
-        <FormInput
-          label="Remarks"
-          type="textarea"
-          value={payment.remarks}
-          onChange={(e) => handleFieldChange('remarks', e.target.value)}
-          placeholder="Add notes (optional)"
-          rows={2}
-        />
+        <div className="space-y-2">
+          <label className="block text-sm font-medium text-gray-700">Remarks</label>
+          <textarea
+            value={payment.remarks}
+            onChange={(e) => handleFieldChange('remarks', e.target.value)}
+            className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors"
+            placeholder="Add notes (optional)"
+            rows={2}
+          />
+        </div>
 
         {/* Quick Summary */}
         {payment.amount && payment.payment_mode && (
           <div className="mt-4 p-3 bg-amber-50 border border-amber-200 rounded-lg flex items-center justify-between">
             <div className="flex items-center space-x-4">
-              <Badge variant="warning">
+              <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-amber-100 text-amber-800">
                 {paymentModes.find((m: PaymentMode) => m.value === payment.payment_mode)?.label}
-              </Badge>
+              </span>
               <span className="text-sm text-gray-600">
                 {paymentTypes.find((t: PaymentType) => t.value === payment.payment_type)?.label || 'Payment'}
               </span>
