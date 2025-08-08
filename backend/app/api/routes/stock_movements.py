@@ -34,39 +34,39 @@ async def get_inventory_movements(
     """
     try:
         query = """
-            SELECT sm.*, p.product_name, p.hsn_code
-            FROM inventory.movement_summary sm
-            LEFT JOIN inventory.products p ON sm.product_id = p.product_id
+            SELECT im.*, p.product_name, p.hsn_code
+            FROM inventory.inventory_movements im
+            LEFT JOIN master.products p ON im.product_id = p.product_id
             WHERE 1=1
         """
         params = {"skip": skip, "limit": limit}
         
         if movement_type:
-            query += " AND sm.movement_type = :movement_type"
+            query += " AND im.movement_type = :movement_type"
             params["movement_type"] = movement_type
             
         if product_id:
-            query += " AND sm.product_id = :product_id"
+            query += " AND im.product_id = :product_id"
             params["product_id"] = product_id
             
         if from_date:
-            query += " AND sm.movement_date >= :from_date"
+            query += " AND im.movement_date >= :from_date"
             params["from_date"] = from_date
             
         if to_date:
-            query += " AND sm.movement_date <= :to_date"
+            query += " AND im.movement_date <= :to_date"
             params["to_date"] = to_date
             
         if reason:
-            query += " AND sm.reason ILIKE :reason"
+            query += " AND im.notes ILIKE :reason"
             params["reason"] = f"%{reason}%"
             
-        query += " ORDER BY sm.movement_date DESC LIMIT :limit OFFSET :skip"
+        query += " ORDER BY im.movement_date DESC LIMIT :limit OFFSET :skip"
         
         movements = db.execute(text(query), params).fetchall()
         
         # Get total count
-        count_query = query.replace("SELECT sm.*, p.product_name, p.hsn_code", "SELECT COUNT(*)")
+        count_query = query.replace("SELECT im.*, p.product_name, p.hsn_code", "SELECT COUNT(*)")
         count_query = count_query.split("ORDER BY")[0]
         total = db.execute(text(count_query), params).scalar()
         
@@ -128,7 +128,7 @@ async def create_stock_receive(
         
         # Get product details
         product = db.execute(
-            text("SELECT * FROM inventory.products WHERE product_id = :product_id"),
+            text("SELECT * FROM master.products WHERE product_id = :product_id"),
             {"product_id": receive_data["product_id"]}
         ).first()
         
@@ -139,119 +139,89 @@ async def create_stock_receive(
         db.execute(
             text("""
                 INSERT INTO inventory.inventory_movements (
-                    movement_id, org_id, movement_number, movement_type,
-                    movement_date, product_id, batch_number, expiry_date,
-                    quantity, unit, reason, source_location,
+                    org_id, movement_type, movement_date, movement_direction,
+                    product_id, batch_id, location_id, quantity,
+                    unit_cost, total_cost, reference_type, reference_number,
                     notes, created_by
                 ) VALUES (
-                    :movement_id, :org_id, :movement_number, 'receive',
-                    :movement_date, :product_id, :batch_number, :expiry_date,
-                    :quantity, :unit, :reason, :source,
+                    :org_id, 'adjustment', :movement_date, 'in',
+                    :product_id, :batch_id, :location_id, :quantity,
+                    :unit_cost, :total_cost, 'manual_receive', :movement_number,
                     :notes, :created_by
                 )
             """),
             {
-                "movement_id": movement_id,
                 "org_id": DEFAULT_ORG_ID,
-                "movement_number": movement_number,
                 "movement_date": receive_data["movement_date"],
                 "product_id": receive_data["product_id"],
-                "batch_number": receive_data.get("batch_number", "DEFAULT"),
-                "expiry_date": receive_data.get("expiry_date"),
+                "batch_id": receive_data.get("batch_id"),
+                "location_id": receive_data.get("location_id", 1),
                 "quantity": receive_data["quantity"],
-                "unit": receive_data.get("unit", "strip"),
-                "reason": receive_data["reason"],
-                "source": receive_data.get("source_location", ""),
-                "notes": receive_data.get("notes", ""),
-                "created_by": receive_data.get("created_by", "system")
+                "unit_cost": receive_data.get("unit_cost", 0),
+                "total_cost": Decimal(str(receive_data.get("unit_cost", 0))) * Decimal(str(receive_data["quantity"])),
+                "movement_number": movement_number,
+                "notes": f"{receive_data['reason']}: {receive_data.get('notes', '')}",
+                "created_by": receive_data.get("created_by", 1)
             }
         )
         
-        # Update or create inventory entry
-        inventory = db.execute(
+        # Update location-wise stock
+        stock = db.execute(
             text("""
-                SELECT * FROM inventory 
+                SELECT * FROM inventory.location_wise_stock 
                 WHERE org_id = :org_id 
                 AND product_id = :product_id 
-                AND batch_number = :batch
+                AND location_id = :location_id
+                AND COALESCE(batch_id, 0) = COALESCE(:batch_id, 0)
             """),
             {
                 "org_id": DEFAULT_ORG_ID,
                 "product_id": receive_data["product_id"],
-                "batch": receive_data.get("batch_number", "DEFAULT")
+                "location_id": receive_data.get("location_id", 1),
+                "batch_id": receive_data.get("batch_id")
             }
         ).first()
         
-        if inventory:
-            # Update existing inventory
+        if stock:
+            # Update existing stock
             db.execute(
                 text("""
-                    UPDATE inventory 
-                    SET current_stock = current_stock + :quantity,
-                        last_updated = CURRENT_TIMESTAMP
-                    WHERE inventory_id = :inventory_id
+                    UPDATE inventory.location_wise_stock 
+                    SET quantity_on_hand = quantity_on_hand + :quantity,
+                        last_movement_date = :movement_date,
+                        updated_at = CURRENT_TIMESTAMP
+                    WHERE stock_id = :stock_id
                 """),
                 {
                     "quantity": receive_data["quantity"],
-                    "inventory_id": inventory.inventory_id
+                    "movement_date": receive_data["movement_date"],
+                    "stock_id": stock.stock_id
                 }
             )
         else:
-            # Create new inventory entry
+            # Create new stock entry
             db.execute(
                 text("""
-                    INSERT INTO inventory (
-                        inventory_id, org_id, product_id,
-                        batch_number, expiry_date, current_stock,
-                        purchase_price, selling_price, mrp
+                    INSERT INTO inventory.location_wise_stock (
+                        org_id, location_id, product_id, batch_id,
+                        quantity_on_hand, quantity_available,
+                        quantity_reserved, last_movement_date
                     ) VALUES (
-                        :inv_id, :org_id, :product_id,
-                        :batch, :expiry, :stock,
-                        :purchase_price, :selling_price, :mrp
+                        :org_id, :location_id, :product_id, :batch_id,
+                        :quantity, :quantity, 0, :movement_date
                     )
                 """),
                 {
-                    "inv_id": str(uuid.uuid4()),
                     "org_id": DEFAULT_ORG_ID,
+                    "location_id": receive_data.get("location_id", 1),
                     "product_id": receive_data["product_id"],
-                    "batch": receive_data.get("batch_number", "DEFAULT"),
-                    "expiry": receive_data.get("expiry_date"),
-                    "stock": receive_data["quantity"],
-                    "purchase_price": product.purchase_price,
-                    "selling_price": product.sale_price,
-                    "mrp": product.mrp
+                    "batch_id": receive_data.get("batch_id"),
+                    "quantity": receive_data["quantity"],
+                    "movement_date": receive_data["movement_date"]
                 }
             )
             
-        # Create stock ledger entry
-        db.execute(
-            text("""
-                INSERT INTO stock_ledger (
-                    ledger_id, org_id, product_id, transaction_date,
-                    transaction_type, reference_type, reference_id,
-                    batch_number, quantity_in, quantity_out,
-                    balance_quantity, notes
-                ) VALUES (
-                    :ledger_id, :org_id, :product_id, :date,
-                    'stock_receive', 'stock_movement', :movement_id,
-                    :batch, :qty_in, 0,
-                    (SELECT COALESCE(SUM(current_stock), 0) + :qty_in 
-                     FROM inventory 
-                     WHERE product_id = :product_id),
-                    :notes
-                )
-            """),
-            {
-                "ledger_id": str(uuid.uuid4()),
-                "org_id": DEFAULT_ORG_ID,
-                "product_id": receive_data["product_id"],
-                "date": receive_data["movement_date"],
-                "movement_id": movement_id,
-                "batch": receive_data.get("batch_number", "DEFAULT"),
-                "qty_in": receive_data["quantity"],
-                "notes": f"Stock Receive - {receive_data['reason']}"
-            }
-        )
+        # No need for separate ledger entry as inventory_movements serves as the ledger
         
         db.commit()
         
@@ -292,108 +262,83 @@ async def create_stock_issue(
         movement_number = f"SI-{datetime.now().strftime('%Y%m%d-%H%M%S')}"
         
         # Check available stock
-        batch_number = issue_data.get("batch_number", "DEFAULT")
-        batch = db.execute(
+        batch_id = issue_data.get("batch_id")
+        stock = db.execute(
             text("""
-                SELECT * FROM inventory.batches 
+                SELECT * FROM inventory.location_wise_stock 
                 WHERE org_id = :org_id 
                 AND product_id = :product_id 
-                AND batch_number = :batch
+                AND location_id = :location_id
+                AND COALESCE(batch_id, 0) = COALESCE(:batch_id, 0)
             """),
             {
                 "org_id": DEFAULT_ORG_ID,
                 "product_id": issue_data["product_id"],
-                "batch": batch_number
+                "location_id": issue_data.get("location_id", 1),
+                "batch_id": batch_id
             }
         ).first()
         
-        if not batch:
+        if not stock:
             raise HTTPException(
                 status_code=400, 
-                detail=f"No stock found for product with batch {batch_number}"
+                detail=f"No stock found for product at this location"
             )
             
-        if batch.quantity_available < issue_data["quantity"]:
+        if stock.quantity_available < issue_data["quantity"]:
             raise HTTPException(
                 status_code=400,
-                detail=f"Insufficient stock. Available: {batch.quantity_available}"
+                detail=f"Insufficient stock. Available: {stock.quantity_available}"
             )
             
         # Create movement record
         db.execute(
             text("""
                 INSERT INTO inventory.inventory_movements (
-                    movement_id, org_id, movement_number, movement_type,
-                    movement_date, product_id, batch_number, expiry_date,
-                    quantity, unit, reason, destination_location,
+                    org_id, movement_type, movement_date, movement_direction,
+                    product_id, batch_id, location_id, quantity,
+                    unit_cost, total_cost, reference_type, reference_number,
                     notes, created_by
                 ) VALUES (
-                    :movement_id, :org_id, :movement_number, 'issue',
-                    :movement_date, :product_id, :batch_number, :expiry_date,
-                    :quantity, :unit, :reason, :destination,
+                    :org_id, 'adjustment', :movement_date, 'out',
+                    :product_id, :batch_id, :location_id, :quantity,
+                    :unit_cost, :total_cost, 'manual_issue', :movement_number,
                     :notes, :created_by
                 )
             """),
             {
-                "movement_id": movement_id,
                 "org_id": DEFAULT_ORG_ID,
-                "movement_number": movement_number,
                 "movement_date": issue_data["movement_date"],
                 "product_id": issue_data["product_id"],
-                "batch_number": batch_number,
-                "expiry_date": batch.expiry_date,
+                "batch_id": batch_id,
+                "location_id": issue_data.get("location_id", 1),
                 "quantity": issue_data["quantity"],
-                "unit": issue_data.get("unit", "strip"),
-                "reason": issue_data["reason"],
-                "destination": issue_data.get("destination_location", ""),
-                "notes": issue_data.get("notes", ""),
-                "created_by": issue_data.get("created_by", "system")
+                "unit_cost": issue_data.get("unit_cost", 0),
+                "total_cost": Decimal(str(issue_data.get("unit_cost", 0))) * Decimal(str(issue_data["quantity"])),
+                "movement_number": movement_number,
+                "notes": f"{issue_data['reason']}: {issue_data.get('notes', '')}",
+                "created_by": issue_data.get("created_by", 1)
             }
         )
         
-        # Update batch quantity
+        # Update location-wise stock
         db.execute(
             text("""
-                UPDATE inventory.batches 
-                SET quantity_available = quantity_available - :quantity,
+                UPDATE inventory.location_wise_stock 
+                SET quantity_on_hand = quantity_on_hand - :quantity,
+                    quantity_available = quantity_available - :quantity,
+                    last_movement_date = :movement_date,
                     updated_at = CURRENT_TIMESTAMP
-                WHERE batch_id = :batch_id
+                WHERE stock_id = :stock_id
             """),
             {
                 "quantity": issue_data["quantity"],
-                "batch_id": batch.batch_id
+                "movement_date": issue_data["movement_date"],
+                "stock_id": stock.stock_id
             }
         )
         
-        # Create stock ledger entry
-        db.execute(
-            text("""
-                INSERT INTO stock_ledger (
-                    ledger_id, org_id, product_id, transaction_date,
-                    transaction_type, reference_type, reference_id,
-                    batch_number, quantity_in, quantity_out,
-                    balance_quantity, notes
-                ) VALUES (
-                    :ledger_id, :org_id, :product_id, :date,
-                    'stock_issue', 'stock_movement', :movement_id,
-                    :batch, 0, :qty_out,
-                    (SELECT COALESCE(SUM(current_stock), 0) - :qty_out 
-                     FROM inventory 
-                     WHERE product_id = :product_id),
-                    :notes
-                )
-            """),
-            {
-                "ledger_id": str(uuid.uuid4()),
-                "org_id": DEFAULT_ORG_ID,
-                "product_id": issue_data["product_id"],
-                "date": issue_data["movement_date"],
-                "movement_id": movement_id,
-                "batch": batch_number,
-                "qty_out": issue_data["quantity"],
-                "notes": f"Stock Issue - {issue_data['reason']}"
-            }
-        )
+        # No need for separate ledger entry as inventory_movements serves as the ledger
         
         db.commit()
         

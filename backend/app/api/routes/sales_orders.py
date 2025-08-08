@@ -44,7 +44,7 @@ async def create_sales_order(
         
         # Validate customer exists
         customer = db.execute(text("""
-            SELECT customer_id, customer_name, primary_phone as primary_phone as phone, discount_percent 
+            SELECT customer_id, customer_name, primary_phone, discount_percent 
             FROM parties.customers 
             WHERE customer_id = :id AND org_id = :org_id
         """), {"id": order.customer_id, "org_id": org_id}).fetchone()
@@ -58,7 +58,7 @@ async def create_sales_order(
         items_dict = [item.dict() for item in order.items]
         for item in items_dict:
             product = db.execute(text("""
-                SELECT product_id, product_name FROM inventory.products 
+                SELECT product_id, product_name FROM master.products 
                 WHERE product_id = :id AND org_id = :org_id
             """), {"id": item["product_id"], "org_id": org_id}).fetchone()
             
@@ -80,19 +80,16 @@ async def create_sales_order(
         order_data = order.dict(exclude={"items"})
         order_data.update({
             "order_number": order_number,
-            "order_status": "pending",  # Sales orders start as pending
-            "order_type": "sales",  # Must match schema pattern
+            "order_status": "draft",  # Match schema values
+            "order_type": "regular",  # Match schema pattern
             "customer_name": customer.customer_name,
             "customer_phone": customer.primary_phone,
             "subtotal_amount": totals["subtotal"],
             "discount_amount": totals["discount"],
             "tax_amount": totals["tax"],
-            "round_off_amount": Decimal("0"),
-            "final_amount": totals["total"],
-            "paid_amount": Decimal("0"),
-            "balance_amount": totals["total"],
-            "payment_mode": "credit",
-            "payment_status": "pending",
+            "total_amount": totals["total"],
+            "fulfillment_status": "pending",
+            "payment_status": "unpaid",
             "created_at": datetime.now(),
             "updated_at": datetime.now()
         })
@@ -106,19 +103,17 @@ async def create_sales_order(
         # Insert sales order
         result = db.execute(text("""
             INSERT INTO sales.orders (
-                org_id, order_number, customer_id, customer_name, customer_phone,
-                order_date, delivery_date, order_type, payment_terms, order_status,
-                subtotal_amount, discount_amount, tax_amount, round_off_amount, final_amount,
-                paid_amount, balance_amount, payment_mode, payment_status,
-                notes, created_at, updated_at
+                org_id, order_number, order_date, customer_id, customer_name, customer_phone,
+                order_type, delivery_date, payment_terms, subtotal_amount, discount_amount,
+                tax_amount, total_amount, order_status, fulfillment_status, payment_status,
+                notes, created_by, created_at, updated_at
             ) VALUES (
-                :org_id, :order_number, :customer_id, :customer_name, :customer_phone,
-                :order_date, :delivery_date, :order_type, :payment_terms, :order_status,
-                :subtotal_amount, :discount_amount, :tax_amount, :round_off_amount, :final_amount,
-                :paid_amount, :balance_amount, :payment_mode, :payment_status,
-                :notes, :created_at, :updated_at
+                :org_id, :order_number, :order_date, :customer_id, :customer_name, :customer_phone,
+                :order_type, :delivery_date, :payment_terms, :subtotal_amount, :discount_amount,
+                :tax_amount, :total_amount, :order_status, :fulfillment_status, :payment_status,
+                :notes, :created_by, :created_at, :updated_at
             ) RETURNING order_id
-        """), order_data)
+        """), {**order_data, "created_by": 1})
         
         order_id = result.scalar()
         
@@ -134,23 +129,30 @@ async def create_sales_order(
             taxable_amount = (quantity * unit_price) - discount_amount
             tax_amount = (taxable_amount * item_data.get("tax_percent", 0)) / 100
             
+            # Calculate GST components
+            gst_rate = item_data.get("tax_percent", 18) / 2  # Split into CGST/SGST
+            cgst_amount = (taxable_amount * gst_rate) / 100
+            sgst_amount = (taxable_amount * gst_rate) / 100
+            
             item_data.update({
-                "selling_price": unit_price,
+                "product_name": f"Product {item_data['product_id']}",
                 "discount_amount": discount_amount,
-                "tax_amount": tax_amount,
-                "line_total": taxable_amount + tax_amount,
-                "total_price": taxable_amount + tax_amount
+                "line_total": taxable_amount,
+                "cgst_rate": gst_rate,
+                "sgst_rate": gst_rate,
+                "cgst_amount": cgst_amount,
+                "sgst_amount": sgst_amount
             })
             
             db.execute(text("""
                 INSERT INTO sales.order_items (
-                    order_id, product_id, batch_id, quantity,
-                    unit_price, selling_price, discount_percent, discount_amount,
-                    tax_percent, tax_amount, line_total, total_price
+                    order_id, product_id, product_name, quantity,
+                    unit_price, discount_percent, discount_amount, line_total,
+                    cgst_rate, sgst_rate, cgst_amount, sgst_amount
                 ) VALUES (
-                    :order_id, :product_id, :batch_id, :quantity,
-                    :unit_price, :selling_price, :discount_percent, :discount_amount,
-                    :tax_percent, :tax_amount, :line_total, :total_price
+                    :order_id, :product_id, :product_name, :quantity,
+                    :unit_price, :discount_percent, :discount_amount, :line_total,
+                    :cgst_rate, :sgst_rate, :cgst_amount, :sgst_amount
                 )
             """), item_data)
         
@@ -185,14 +187,14 @@ async def list_sales_orders(
     try:
         # Build query - only get sales orders
         query = """
-            SELECT o.*, c.customer_name, c.customer_code, c.primary_primary_phone as customer_phone
+            SELECT o.*, c.customer_name, c.customer_code, c.primary_phone as customer_phone
             FROM sales.orders o
             JOIN parties.customers c ON o.customer_id = c.customer_id
-            WHERE o.org_id = :org_id AND o.order_type = 'sales'
+            WHERE o.org_id = :org_id AND o.order_type = 'regular'
         """
         count_query = """
             SELECT COUNT(*) FROM sales.orders o
-            WHERE o.org_id = :org_id AND o.order_type = 'sales'
+            WHERE o.org_id = :org_id AND o.order_type = 'regular'
         """
         
         params = {"org_id": DEFAULT_ORG_ID}

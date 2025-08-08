@@ -32,25 +32,27 @@ def get_purchases(
 ):
     """Get purchases with optional filtering"""
     try:
-        # TODO: purchase_order_items table may not exist - verify schema
-        # For now, removing joins that cause errors
         query = """
-            SELECT p.*, s.supplier_name
+            SELECT DISTINCT p.*, s.supplier_name
             FROM procurement.purchase_orders p
             LEFT JOIN parties.suppliers s ON p.supplier_id = s.supplier_id
-            WHERE 1=1
         """
+        
+        if product_id:
+            query += """
+            INNER JOIN procurement.purchase_order_items poi ON p.po_id = poi.po_id
+            """
+        
+        query += " WHERE 1=1"
         params = {}
         
         if supplier_id:
             query += " AND p.supplier_id = :supplier_id"
             params["supplier_id"] = supplier_id
             
-        # TODO: product_id filter won't work without purchase_order_items join
         if product_id:
-            # This filter won't work until we fix the joins above
-            pass  # query += " AND pi.product_id = :product_id"
-            # params["product_id"] = product_id
+            query += " AND poi.product_id = :product_id"
+            params["product_id"] = product_id
             
         if start_date:
             query += " AND p.po_date >= :start_date"
@@ -60,8 +62,6 @@ def get_purchases(
             query += " AND p.po_date <= :end_date"
             params["end_date"] = end_date
             
-        # TODO: GROUP BY was needed for aggregation functions that are now removed
-        # Remove GROUP BY since we're not aggregating anymore
         query += " ORDER BY p.po_date DESC LIMIT :limit OFFSET :skip"
         params.update({"limit": limit, "skip": skip})
         
@@ -99,16 +99,53 @@ def get_purchase(purchase_id: int, db: Session = Depends(get_db)):
 
 @router.post("/")
 def create_purchase(purchase_data: dict, db: Session = Depends(get_db)):
-    """Create a new purchase record"""
-    # TODO: Purchase model needs to be verified against actual table structure
+    """Create a new purchase order"""
     try:
-        # Temporarily disabled - Purchase model may not match database schema
-        raise HTTPException(status_code=501, detail="Purchase creation temporarily disabled - schema verification needed")
-        # purchase = Purchase(**purchase_data)
-        # db.add(purchase)
-        # db.commit()
-        # db.refresh(purchase)
-        # return purchase
+        items = purchase_data.pop('items', [])
+        
+        # Insert purchase order
+        po_query = text("""
+            INSERT INTO procurement.purchase_orders (
+                org_id, branch_id, po_number, po_date, po_type,
+                supplier_id, supplier_name, supplier_contact, supplier_gst,
+                delivery_date, payment_terms, payment_days,
+                subtotal_amount, discount_percent, discount_amount,
+                freight_amount, other_charges, tax_amount, total_amount,
+                po_status, created_by
+            ) VALUES (
+                :org_id, :branch_id, :po_number, :po_date, :po_type,
+                :supplier_id, :supplier_name, :supplier_contact, :supplier_gst,
+                :delivery_date, :payment_terms, :payment_days,
+                :subtotal_amount, :discount_percent, :discount_amount,
+                :freight_amount, :other_charges, :tax_amount, :total_amount,
+                :po_status, :created_by
+            ) RETURNING *
+        """)
+        
+        result = db.execute(po_query, purchase_data)
+        po = dict(result.first()._mapping)
+        
+        # Insert purchase order items
+        if items:
+            for item in items:
+                item['po_id'] = po['po_id']
+                item_query = text("""
+                    INSERT INTO procurement.purchase_order_items (
+                        po_id, product_id, product_name, product_code,
+                        ordered_quantity, unit_price, discount_percentage,
+                        discount_amount, line_total, tax_percentage, tax_amount,
+                        total_amount
+                    ) VALUES (
+                        :po_id, :product_id, :product_name, :product_code,
+                        :ordered_quantity, :unit_price, :discount_percentage,
+                        :discount_amount, :line_total, :tax_percentage, :tax_amount,
+                        :total_amount
+                    )
+                """)
+                db.execute(item_query, item)
+        
+        db.commit()
+        return po
     except Exception as e:
         db.rollback()
         logger.error(f"Error creating purchase: {str(e)}")
@@ -116,18 +153,43 @@ def create_purchase(purchase_data: dict, db: Session = Depends(get_db)):
 
 @router.put("/{purchase_id}")
 def update_purchase(purchase_id: int, purchase_data: dict, db: Session = Depends(get_db)):
-    """Update a purchase record"""
+    """Update a purchase order"""
     try:
-        purchase = db.query(Purchase).filter(Purchase.purchase_id == purchase_id).first()
-        if not purchase:
-            raise HTTPException(status_code=404, detail="Purchase not found")
+        # Check if PO exists
+        check_query = text("SELECT po_id FROM procurement.purchase_orders WHERE po_id = :po_id")
+        result = db.execute(check_query, {"po_id": purchase_id})
+        if not result.first():
+            raise HTTPException(status_code=404, detail="Purchase order not found")
         
-        for key, value in purchase_data.items():
-            setattr(purchase, key, value)
+        # Build update query dynamically
+        update_fields = []
+        params = {"po_id": purchase_id}
         
-        db.commit()
-        db.refresh(purchase)
-        return purchase
+        allowed_fields = [
+            'po_date', 'po_type', 'supplier_id', 'supplier_name', 'delivery_date',
+            'payment_terms', 'payment_days', 'subtotal_amount', 'discount_percent',
+            'discount_amount', 'freight_amount', 'other_charges', 'tax_amount',
+            'total_amount', 'po_status', 'approval_status', 'special_instructions'
+        ]
+        
+        for field in allowed_fields:
+            if field in purchase_data:
+                update_fields.append(f"{field} = :{field}")
+                params[field] = purchase_data[field]
+        
+        if update_fields:
+            update_query = text(f"""
+                UPDATE procurement.purchase_orders
+                SET {', '.join(update_fields)}, updated_at = CURRENT_TIMESTAMP
+                WHERE po_id = :po_id
+                RETURNING *
+            """)
+            
+            result = db.execute(update_query, params)
+            db.commit()
+            return dict(result.first()._mapping)
+        
+        return {"message": "No fields to update"}
     except HTTPException:
         raise
     except Exception as e:
@@ -137,21 +199,98 @@ def update_purchase(purchase_id: int, purchase_data: dict, db: Session = Depends
 
 @router.delete("/{purchase_id}")
 def delete_purchase(purchase_id: int, db: Session = Depends(get_db)):
-    """Delete a purchase record"""
+    """Delete a purchase order"""
     try:
-        purchase = db.query(Purchase).filter(Purchase.purchase_id == purchase_id).first()
-        if not purchase:
-            raise HTTPException(status_code=404, detail="Purchase not found")
+        # Check if PO exists
+        check_query = text("SELECT po_id FROM procurement.purchase_orders WHERE po_id = :po_id")
+        result = db.execute(check_query, {"po_id": purchase_id})
+        if not result.first():
+            raise HTTPException(status_code=404, detail="Purchase order not found")
         
-        db.delete(purchase)
+        # Delete PO items first (foreign key constraint)
+        delete_items = text("DELETE FROM procurement.purchase_order_items WHERE po_id = :po_id")
+        db.execute(delete_items, {"po_id": purchase_id})
+        
+        # Delete PO
+        delete_po = text("DELETE FROM procurement.purchase_orders WHERE po_id = :po_id")
+        db.execute(delete_po, {"po_id": purchase_id})
+        
         db.commit()
-        return {"message": "Purchase deleted successfully"}
+        return {"message": "Purchase order deleted successfully"}
     except HTTPException:
         raise
     except Exception as e:
         db.rollback()
         logger.error(f"Error deleting purchase {purchase_id}: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to delete purchase: {str(e)}")
+
+@router.get("/{purchase_id}/items")
+def get_purchase_items(purchase_id: int, db: Session = Depends(get_db)):
+    """Get items for a specific purchase order"""
+    try:
+        query = text("""
+            SELECT poi.*, p.product_name as product_display_name, p.manufacturer
+            FROM procurement.purchase_order_items poi
+            LEFT JOIN master.products p ON poi.product_id = p.product_id
+            WHERE poi.po_id = :po_id
+            ORDER BY poi.po_item_id
+        """)
+        
+        result = db.execute(query, {"po_id": purchase_id})
+        items = [dict(row._mapping) for row in result]
+        
+        return items
+    except Exception as e:
+        logger.error(f"Error fetching purchase items: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to get purchase items: {str(e)}")
+
+@router.post("/{purchase_id}/items")
+def add_purchase_item(purchase_id: int, item_data: dict, db: Session = Depends(get_db)):
+    """Add an item to a purchase order"""
+    try:
+        item_data['po_id'] = purchase_id
+        
+        query = text("""
+            INSERT INTO procurement.purchase_order_items (
+                po_id, product_id, product_name, product_code,
+                ordered_quantity, unit_price, discount_percentage,
+                discount_amount, line_total, tax_percentage, tax_amount,
+                total_amount
+            ) VALUES (
+                :po_id, :product_id, :product_name, :product_code,
+                :ordered_quantity, :unit_price, :discount_percentage,
+                :discount_amount, :line_total, :tax_percentage, :tax_amount,
+                :total_amount
+            ) RETURNING *
+        """)
+        
+        result = db.execute(query, item_data)
+        db.commit()
+        
+        return dict(result.first()._mapping)
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Error adding purchase item: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to add purchase item: {str(e)}")
+
+@router.delete("/{purchase_id}/items/{item_id}")
+def delete_purchase_item(purchase_id: int, item_id: int, db: Session = Depends(get_db)):
+    """Delete an item from a purchase order"""
+    try:
+        query = text("""
+            DELETE FROM procurement.purchase_order_items 
+            WHERE po_id = :po_id AND po_item_id = :item_id
+            RETURNING po_item_id
+        """)
+        
+        result = db.execute(query, {"po_id": purchase_id, "item_id": item_id})
+        deleted = result.first()
+        
+        if not deleted:
+            raise HTTPException(status_code=404, detail="Purchase item not found")
+        
+        db.commit()
+        return {"message": "Purchase item deleted successfully"}
 
 @router.get("/analytics/summary")
 def get_purchase_analytics(

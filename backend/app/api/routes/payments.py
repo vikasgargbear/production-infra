@@ -90,47 +90,50 @@ async def create_payment(
         if not payment.payment_number:
             payment.payment_number = f"PAY-{payment.payment_date.strftime('%Y%m%d')}-{payment.customer_id or payment.supplier_id or 'ADV'}-{int(datetime.now().timestamp())}"
         
-        # Map payment_mode to payment_method_id (temporary mapping)
-        payment_method_map = {
-            'cash': 1,
-            'cheque': 2,
-            'upi': 3,
-            'bank_transfer': 4,
-            'credit_adjustment': 5
-        }
-        payment_method_id = payment_method_map.get(payment.payment_mode, 1)
+        # Get party name if needed
+        party_name = None
+        if payment.customer_id:
+            party_result = db.execute(
+                text("SELECT customer_name FROM parties.customers WHERE customer_id = :id"),
+                {"id": payment.customer_id}
+            ).first()
+            party_name = party_result.customer_name if party_result else f"Customer {payment.customer_id}"
+        elif payment.supplier_id:
+            party_result = db.execute(
+                text("SELECT supplier_name FROM parties.suppliers WHERE supplier_id = :id"),
+                {"id": payment.supplier_id}
+            ).first()
+            party_name = party_result.supplier_name if party_result else f"Supplier {payment.supplier_id}"
         
-        # Prepare payment data for database using CORRECT column names
+        # Prepare payment data for database using CORRECT column names from schema
         payment_data = {
             'org_id': payment.org_id,
+            'branch_id': payment.branch_id or 1,
             'payment_number': payment.payment_number,
             'payment_date': payment.payment_date,
+            'payment_type': 'payment' if payment.supplier_id else 'receipt',
+            'payment_mode': payment.payment_mode,
             'party_type': 'customer' if payment.customer_id else 'supplier',
             'party_id': payment.customer_id or payment.supplier_id,
-            'party_name': f"Customer {payment.customer_id}" if payment.customer_id else f"Supplier {payment.supplier_id}",
-            'payment_type': payment.payment_type,
+            'party_name': party_name,
             'payment_amount': payment.amount,
-            'payment_method_id': payment_method_id,
-            'reference_number': payment.reference_number,
-            'deposited_at_bank': payment.bank_name,
-            'payment_status': payment.payment_status,
-            'clearance_date': payment.cleared_date,
-            'branch_id': payment.branch_id or 1,  # Default branch
-            'created_by': payment.created_by or 1,  # Default user
-            'approved_by': payment.approved_by,
-            'narration': payment.notes
+            'payment_status': 'cleared' if payment.payment_mode == 'cash' else 'pending',
+            'clearance_date': payment.cleared_date if payment.cleared_date else (payment.payment_date if payment.payment_mode == 'cash' else None),
+            'bank_reference': payment.reference_number,
+            'notes': payment.notes,
+            'created_by': payment.created_by or 1
         }
         
         # Insert into financial.payments table
         insert_query = """
             INSERT INTO financial.payments (
-                org_id, payment_number, payment_date, party_type, party_id, party_name,
-                payment_type, payment_amount, payment_method_id, reference_number, deposited_at_bank,
-                payment_status, clearance_date, branch_id, created_by, approved_by, narration
+                org_id, branch_id, payment_number, payment_date, payment_type, payment_mode,
+                party_type, party_id, party_name, payment_amount, payment_status,
+                clearance_date, bank_reference, notes, created_by
             ) VALUES (
-                :org_id, :payment_number, :payment_date, :party_type, :party_id, :party_name,
-                :payment_type, :payment_amount, :payment_method_id, :reference_number, :deposited_at_bank,
-                :payment_status, :clearance_date, :branch_id, :created_by, :approved_by, :narration
+                :org_id, :branch_id, :payment_number, :payment_date, :payment_type, :payment_mode,
+                :party_type, :party_id, :party_name, :payment_amount, :payment_status,
+                :clearance_date, :bank_reference, :notes, :created_by
             ) RETURNING payment_id, payment_number, payment_amount, payment_status
         """
         
@@ -248,26 +251,33 @@ async def create_customer_receipt(
         # Generate receipt number
         receipt_number = f"RCP-{date.today().strftime('%Y%m%d')}-{int(datetime.now().timestamp())}"
         
+        # Get customer name
+        customer_result = db.execute(
+            text("SELECT customer_name FROM parties.customers WHERE customer_id = :id"),
+            {"id": receipt_data.get("customer_id")}
+        ).first()
+        customer_name = customer_result.customer_name if customer_result else f"Customer {receipt_data.get('customer_id')}"
+        
         # Insert payment
         result = db.execute(text("""
             INSERT INTO financial.payments (
-                org_id, payment_number, payment_date, customer_id,
-                payment_type, amount, payment_mode, reference_number,
-                bank_name, payment_status, notes
+                org_id, payment_number, payment_date, payment_type, payment_mode,
+                party_type, party_id, party_name, payment_amount,
+                bank_reference, payment_status, notes
             ) VALUES (
-                :org_id, :receipt_number, :payment_date, :customer_id,
-                'customer_receipt', :amount, :payment_mode, :reference_number,
-                :bank_name, 'completed', :notes
-            ) RETURNING payment_id, payment_number, amount
+                :org_id, :receipt_number, :payment_date, 'receipt', :payment_mode,
+                'customer', :customer_id, :customer_name, :amount,
+                :reference_number, 'cleared', :notes
+            ) RETURNING payment_id, payment_number, payment_amount
         """), {
             "org_id": DEFAULT_ORG_ID,
             "receipt_number": receipt_number,
             "payment_date": receipt_data.get("payment_date", date.today()),
             "customer_id": receipt_data.get("customer_id"),
+            "customer_name": customer_name,
             "amount": receipt_data.get("amount"),
             "payment_mode": receipt_data.get("payment_mode", "cash"),
             "reference_number": receipt_data.get("reference_number"),
-            "bank_name": receipt_data.get("bank_name"),
             "notes": receipt_data.get("notes")
         })
         
@@ -292,7 +302,7 @@ async def create_customer_receipt(
             "success": True,
             "payment_id": payment.payment_id,
             "receipt_number": payment.payment_number,
-            "amount": float(payment.amount),
+            "amount": float(payment.payment_amount),
             "message": "Payment receipt created successfully"
         }
         
