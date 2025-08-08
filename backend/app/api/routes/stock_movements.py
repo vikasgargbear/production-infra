@@ -35,7 +35,7 @@ async def get_inventory_movements(
     try:
         query = """
             SELECT sm.*, p.product_name, p.hsn_code
-            FROM inventory.inventory_movements sm
+            FROM inventory.movement_summary sm
             LEFT JOIN inventory.products p ON sm.product_id = p.product_id
             WHERE 1=1
         """

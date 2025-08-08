@@ -34,7 +34,7 @@ async def get_party_balance(
                     -- Invoices (Debit)
                     SELECT 
                         invoice_date as transaction_date,
-                        total_amount as debit_amount,
+                        final_amount as debit_amount,
                         0 as credit_amount
                     FROM sales.invoices
                     WHERE customer_id = :party_id
@@ -47,7 +47,7 @@ async def get_party_balance(
                         payment_date as transaction_date,
                         0 as debit_amount,
                         amount as credit_amount
-                    FROM payments
+                    FROM financial.payments
                     WHERE customer_id = :party_id
                     AND payment_status = 'completed'
                     
@@ -87,7 +87,7 @@ async def get_party_balance(
                         payment_date as transaction_date,
                         amount as debit_amount,
                         0 as credit_amount
-                    FROM payments
+                    FROM financial.payments
                     WHERE supplier_id = :party_id
                     AND payment_status = 'completed'
                 )
@@ -167,7 +167,7 @@ async def get_party_statement(
                         0 as debit,
                         amount as credit,
                         payment_mode
-                    FROM payments
+                    FROM financial.payments
                     WHERE customer_id = :party_id
                     AND payment_status = 'completed'
                     
@@ -225,7 +225,7 @@ async def get_party_statement(
                         amount as debit,
                         0 as credit,
                         payment_mode
-                    FROM payments
+                    FROM financial.payments
                     WHERE supplier_id = :party_id
                     AND payment_status = 'completed'
                 )

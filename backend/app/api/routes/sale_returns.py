@@ -33,9 +33,10 @@ async def get_sale_returns(
     try:
         query = """
             SELECT sr.*, c.customer_name as party_name,
-                   sr.invoice_number as original_invoice_number
+                   i.invoice_number as original_invoice_number
             FROM sales.sales_returns sr
             LEFT JOIN parties.customers c ON sr.customer_id = c.customer_id
+            LEFT JOIN sales.invoices i ON sr.invoice_id = i.invoice_id
             WHERE 1=1
         """
         params = {"skip": skip, "limit": limit}

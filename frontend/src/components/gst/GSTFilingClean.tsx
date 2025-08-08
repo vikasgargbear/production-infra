@@ -56,6 +56,18 @@ const GSTFilingClean: React.FC<GSTFilingProps> = () => {
   const [selectedReturn, setSelectedReturn] = useState('');
   const [filing, setFiling] = useState(false);
 
+  // Effect for filing step - must be at top level
+  React.useEffect(() => {
+    if (step === 'filing') {
+      setFiling(true);
+      const timer = setTimeout(() => {
+        setFiling(false);
+        setStep('done');
+      }, 3000);
+      return () => clearTimeout(timer);
+    }
+  }, [step]);
+
   // Step 1: Select return type
   if (step === 'select') {
     return (
@@ -133,15 +145,6 @@ const GSTFilingClean: React.FC<GSTFilingProps> = () => {
 
   // Step 3: Filing in progress
   if (step === 'filing') {
-    React.useEffect(() => {
-      setFiling(true);
-      const timer = setTimeout(() => {
-        setFiling(false);
-        setStep('done');
-      }, 3000);
-      return () => clearTimeout(timer);
-    }, []);
-
     return (
       <div className="min-h-screen bg-gray-50 py-12">
         <StepCard title="Filing Return">

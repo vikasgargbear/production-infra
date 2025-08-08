@@ -467,9 +467,10 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
 
       // Try direct invoice API (as per test file format)
       let response;
+      let invoiceData; // Declare outside try block for catch block access
       try {
         // Build complete invoice data with all user inputs
-        const invoiceData = {
+        invoiceData = {
           // Customer info
           customer_id: parseInt(invoice.customer_id),
           customer_name: selectedCustomer?.customer_name || invoice.customer_name,

@@ -81,7 +81,9 @@ The `sales` schema manages the complete sales process from orders to invoices, i
 | `product_code` | TEXT | - | Product code (snapshot) | Reference convenience |
 | `batch_id` | INTEGER | - | Specific batch allocation | Batch tracking |
 | `batch_number` | TEXT | - | Batch number (snapshot) | Batch reference |
-| `quantity` | NUMERIC(15,3) | ✓ | Ordered quantity | Quantity tracking |
+| `quantity` | NUMERIC(15,3) | ✓ | Total ordered quantity | Quantity tracking |
+| `base_quantity` | NUMERIC(15,3) | - | Billable/paid quantity | Revenue calculation |
+| `free_quantity` | NUMERIC(15,3) | - | Free/promotional quantity | Promotional tracking |
 | `delivered_quantity` | NUMERIC(15,3) | - | Delivered quantity | Fulfillment tracking |
 | `unit_price` | NUMERIC(15,4) | ✓ | Unit selling price | Price calculations |
 | `discount_percent` | NUMERIC(5,2) | - | Line item discount % | Discount calculations |
@@ -205,7 +207,9 @@ The `sales` schema manages the complete sales process from orders to invoices, i
 | `product_code` | TEXT | - | Product code (snapshot) | Reference convenience |
 | `hsn_code` | TEXT | - | HSN code (snapshot) | Tax compliance |
 | `batch_allocation` | JSONB | - | Batch allocation details | Batch tracking |
-| `quantity` | NUMERIC(15,3) | ✓ | Invoiced quantity | Quantity tracking |
+| `quantity` | NUMERIC(15,3) | ✓ | Total quantity (base + free) | Inventory deduction |
+| `base_quantity` | NUMERIC(15,3) | ✓ | Billable/paid quantity | Revenue calculation |
+| `free_quantity` | NUMERIC(15,3) | - | Free/promotional quantity | Promotional tracking |
 | `unit_price` | NUMERIC(15,4) | ✓ | Unit selling price | Price calculations |
 | `discount_percent` | NUMERIC(5,2) | - | Line item discount % | Discount calculations |
 | `discount_amount` | NUMERIC(15,2) | - | Line item discount amount | Discount tracking |

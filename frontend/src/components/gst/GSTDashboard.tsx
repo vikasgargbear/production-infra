@@ -18,9 +18,9 @@ const SummaryCard: React.FC<{
   subtitle?: string;
   trend?: number;
   icon: React.ElementType;
-  color: string;
+  color: 'blue' | 'green' | 'amber' | 'red' | 'purple';
 }> = ({ title, value, subtitle, trend, icon: Icon, color }) => {
-  const colorClasses = {
+  const colorClasses: Record<string, string> = {
     blue: 'bg-blue-50 text-blue-600 border-blue-200',
     green: 'bg-green-50 text-green-600 border-green-200',
     amber: 'bg-amber-50 text-amber-600 border-amber-200',

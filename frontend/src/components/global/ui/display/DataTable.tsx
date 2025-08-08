@@ -127,7 +127,9 @@ export function DataTable<T extends Record<string, any>>({
   
   // Use external or local state for selection
   const effectiveSelectedRows = onSelectionChange ? selectedRows : localSelectedRows;
-  const setEffectiveSelectedRows = onSelectionChange || setLocalSelectedRows;
+  const setEffectiveSelectedRows = onSelectionChange 
+    ? onSelectionChange 
+    : setLocalSelectedRows;
   
   // Calculate pagination
   const totalPages = Math.ceil((totalItems || data.length) / pageSize);
@@ -404,7 +406,7 @@ export function DataTable<T extends Record<string, any>>({
             <span className="text-sm text-gray-700">Show</span>
             <Select
               value={String(pageSize)}
-              onChange={(value) => onPageSizeChange?.(Number(value))}
+              onChange={(value: any) => onPageSizeChange?.(Number(value))}
               options={pageSizeOptions.map(size => ({
                 value: String(size),
                 label: String(size),
