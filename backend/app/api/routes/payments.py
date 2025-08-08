@@ -17,7 +17,7 @@ from ..services.payment_service import PaymentService
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/payments", tags=["payments"])
+router = APIRouter(tags=["payments"])
 
 class PaymentCreate(BaseModel):
     """Schema for recording a payment"""
