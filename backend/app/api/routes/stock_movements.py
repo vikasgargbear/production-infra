@@ -68,7 +68,7 @@ def get_inventory_movements(
                 p.product_name,
                 p.hsn_code,
                 poi.ordered_quantity as quantity,
-                po.order_date as movement_date,
+                po.po_date as movement_date,
                 po.po_number as reference_number,
                 'purchase_order' as reference_type,
                 po.purchase_order_id as reference_id,
@@ -96,7 +96,7 @@ def get_inventory_movements(
         if filters:
             filter_clause = " AND " + " AND ".join(filters)
             sales_query += filter_clause.replace("product_id", "oi.product_id").replace("movement_date", "o.order_date")
-            purchase_query += filter_clause.replace("product_id", "poi.product_id").replace("movement_date", "po.order_date")
+            purchase_query += filter_clause.replace("product_id", "poi.product_id").replace("movement_date", "po.po_date")
         
         # Combine queries
         if not movement_type or movement_type == 'issue':
