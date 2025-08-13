@@ -108,11 +108,33 @@ def create_purchase(purchase_data: dict, db: Session = Depends(get_db)):
             purchase_data['created_by'] = 2  # Use existing admin user
         if 'po_status' not in purchase_data:
             purchase_data['po_status'] = 'draft'
+        if 'po_type' not in purchase_data:
+            purchase_data['po_type'] = 'regular'
         if 'org_id' not in purchase_data:
             purchase_data['org_id'] = 'ad808530-1ddb-4377-ab20-67bef145d80d'  # DEFAULT_ORG_ID
         if 'branch_id' not in purchase_data:
             purchase_data['branch_id'] = 1
         
+        # Add defaults for missing fields
+        if 'supplier_contact' not in purchase_data:
+            purchase_data['supplier_contact'] = None
+        if 'supplier_gst' not in purchase_data:
+            purchase_data['supplier_gst'] = None
+        if 'delivery_date' not in purchase_data:
+            purchase_data['delivery_date'] = None
+        if 'payment_terms' not in purchase_data:
+            purchase_data['payment_terms'] = None
+        if 'payment_days' not in purchase_data:
+            purchase_data['payment_days'] = None
+        if 'discount_percent' not in purchase_data:
+            purchase_data['discount_percent'] = 0
+        if 'discount_amount' not in purchase_data:
+            purchase_data['discount_amount'] = 0
+        if 'freight_amount' not in purchase_data:
+            purchase_data['freight_amount'] = 0
+        if 'other_charges' not in purchase_data:
+            purchase_data['other_charges'] = 0
+            
         # Insert purchase order
         po_query = text("""
             INSERT INTO procurement.purchase_orders (

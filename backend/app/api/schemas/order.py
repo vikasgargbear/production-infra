@@ -72,7 +72,7 @@ class OrderBase(BaseModel):
     shipping_phone: Optional[str] = Field(None, pattern=r"^[0-9]{10}$")
     
     # Order details
-    order_type: str = Field(default="sales", pattern=r"^(sales|return|replacement)$")
+    order_type: str = Field(default="sales", pattern=r"^(sales|return|replacement|regular)$")
     payment_terms: Optional[str] = Field(default="credit", pattern=r"^(cash|credit|advance)$")
     notes: Optional[str] = Field(None, max_length=500)
     
