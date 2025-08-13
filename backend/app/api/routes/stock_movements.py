@@ -67,7 +67,7 @@ def get_inventory_movements(
                 poi.product_id,
                 p.product_name,
                 p.hsn_code,
-                poi.quantity,
+                poi.ordered_quantity as quantity,
                 po.order_date as movement_date,
                 po.po_number as reference_number,
                 'purchase_order' as reference_type,

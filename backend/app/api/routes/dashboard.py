@@ -481,9 +481,10 @@ def get_pending_payments(
             SELECT 
                 'pending_invoices' as payment_type,
                 COUNT(*) as count,
-                COALESCE(SUM(balance_amount), 0) as final_amount
+                COALESCE(SUM(final_amount - COALESCE(paid_amount, 0)), 0) as final_amount
             FROM sales.invoices 
-            WHERE payment_status != 'paid' AND balance_amount > 0
+            WHERE (payment_status != 'paid' OR payment_status IS NULL) 
+            AND final_amount > COALESCE(paid_amount, 0)
         """
         
         result = db.execute(text(query))
