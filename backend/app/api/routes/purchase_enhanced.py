@@ -155,6 +155,46 @@ def create_purchase_with_items(purchase_data: dict, db: Session = Depends(get_db
             if supplier_result:
                 supplier_name = supplier_result.supplier_name
         
+        # Get or create system user if created_by not provided
+        created_by = purchase_data.get("created_by")
+        if not created_by:
+            # Try to get system user
+            user_result = db.execute(
+                text("""
+                    SELECT user_id FROM master.org_users 
+                    WHERE org_id = :org_id AND username = 'system'
+                    LIMIT 1
+                """),
+                {"org_id": DEFAULT_ORG_ID}
+            ).first()
+            
+            if user_result:
+                created_by = user_result.user_id
+            else:
+                # Create system user
+                try:
+                    create_user = db.execute(
+                        text("""
+                            INSERT INTO master.org_users (
+                                org_id, employee_code, username, email, password_hash,
+                                first_name, last_name, roles, is_active
+                            ) VALUES (
+                                :org_id, 'SYSTEM', 'system', 'system@api.local', 'no-login',
+                                'System', 'API', ARRAY['api_user'], true
+                            ) RETURNING user_id
+                        """),
+                        {"org_id": DEFAULT_ORG_ID}
+                    ).first()
+                    created_by = create_user.user_id if create_user else None
+                except:
+                    pass
+        
+        if not created_by:
+            raise HTTPException(
+                status_code=400,
+                detail="Unable to determine user for this operation. Please provide created_by field."
+            )
+        
         # Create purchase header
         result = db.execute(
             text("""
@@ -186,7 +226,7 @@ def create_purchase_with_items(purchase_data: dict, db: Session = Depends(get_db
                 "status": purchase_data.get("purchase_status", "draft"),
                 "payment_mode": purchase_data.get("payment_mode", "cash"),
                 "notes": purchase_data.get("notes"),
-                "created_by": purchase_data.get("created_by", 1)  # Default to user ID 1
+                "created_by": created_by
             }
         )
         

@@ -71,11 +71,11 @@ def get_inventory_movements(
                 po.order_date as movement_date,
                 po.po_number as reference_number,
                 'purchase_order' as reference_type,
-                po.po_id as reference_id,
+                po.purchase_order_id as reference_id,
                 s.supplier_name as party_name,
                 'Purchase from supplier' as notes
             FROM procurement.purchase_order_items poi
-            JOIN procurement.purchase_orders po ON poi.po_id = po.po_id
+            JOIN procurement.purchase_orders po ON poi.purchase_order_id = po.purchase_order_id
             JOIN inventory.products p ON poi.product_id = p.product_id
             LEFT JOIN parties.suppliers s ON po.supplier_id = s.supplier_id
             WHERE po.po_status != 'cancelled'

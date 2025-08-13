@@ -105,6 +105,40 @@ async def create_payment(
             ).first()
             party_name = party_result.supplier_name if party_result else f"Supplier {payment.supplier_id}"
         
+        # Get or create system user for API operations
+        if not payment.created_by:
+            # Try to get or create a system user
+            user_result = db.execute(
+                text("""
+                    SELECT user_id FROM master.org_users 
+                    WHERE org_id = :org_id AND username = 'system'
+                    LIMIT 1
+                """),
+                {"org_id": payment.org_id}
+            ).first()
+            
+            if user_result:
+                payment.created_by = user_result.user_id
+            else:
+                # Create system user
+                try:
+                    create_user = db.execute(
+                        text("""
+                            INSERT INTO master.org_users (
+                                org_id, employee_code, username, email, password_hash,
+                                first_name, last_name, roles, is_active
+                            ) VALUES (
+                                :org_id, 'SYSTEM', 'system', 'system@api.local', 'no-login',
+                                'System', 'API', ARRAY['api_user'], true
+                            ) RETURNING user_id
+                        """),
+                        {"org_id": payment.org_id}
+                    ).first()
+                    payment.created_by = create_user.user_id if create_user else None
+                except:
+                    # If user creation fails, we need to handle it
+                    pass
+        
         # Get or create payment method ID for the payment mode
         payment_method_id = 1  # Default to cash
         if payment.payment_mode:
@@ -136,6 +170,13 @@ async def create_payment(
                 ).first()
                 payment_method_id = create_method.payment_method_id if create_method else 1
         
+        # Validate we have a created_by user
+        if not payment.created_by:
+            raise HTTPException(
+                status_code=400,
+                detail="Unable to determine user for this operation. Please provide created_by field or ensure system user exists."
+            )
+        
         # Prepare payment data for database using CORRECT column names from schema
         payment_data = {
             'org_id': payment.org_id,
@@ -152,7 +193,7 @@ async def create_payment(
             'clearance_date': payment.cleared_date if payment.cleared_date else (payment.payment_date if payment.payment_mode == 'cash' else None),
             'reference_number': payment.reference_number,
             'narration': payment.notes,
-            'created_by': payment.created_by or 1
+            'created_by': payment.created_by  # Should be set by now from system user logic
         }
         
         # Insert into financial.payments table
