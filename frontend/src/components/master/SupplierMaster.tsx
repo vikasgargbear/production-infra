@@ -46,7 +46,6 @@ const SupplierMaster: React.FC = () => {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [selectedSupplier, setSelectedSupplier] = useState<Supplier | null>(null);
   const [filterStatus, setFilterStatus] = useState<'all' | 'active' | 'inactive'>('all');
-  const [filterCategory, setFilterCategory] = useState<string>('all');
   const [showDetails, setShowDetails] = useState(false);
 
   useEffect(() => {
@@ -78,11 +77,7 @@ const SupplierMaster: React.FC = () => {
       (filterStatus === 'active' && supplier.is_active !== false) ||
       (filterStatus === 'inactive' && supplier.is_active === false);
     
-    const matchesCategory = 
-      filterCategory === 'all' || 
-      supplier.supplier_category === filterCategory;
-    
-    return matchesSearch && matchesStatus && matchesCategory;
+    return matchesSearch && matchesStatus;
   });
 
   const getLicenseStatus = (expiryDate?: string) => {
@@ -131,14 +126,12 @@ const SupplierMaster: React.FC = () => {
     return colors[rating as keyof typeof colors] || 'bg-gray-100 text-gray-600 border-gray-200';
   };
 
-  // Statistics Cards
+  // Statistics Cards - Only essential metrics
   const stats = {
     total: suppliers.length,
     active: suppliers.filter(s => s.is_active !== false).length,
     withLicense: suppliers.filter(s => s.drug_license_number).length,
-    withBankDetails: suppliers.filter(s => s.bank_name && s.account_number).length,
-    preferredSuppliers: suppliers.filter(s => s.supplier_category === 'preferred').length,
-    avgQualityRating: suppliers.reduce((sum, s) => sum + (s.quality_rating || 0), 0) / suppliers.length || 0
+    withBankDetails: suppliers.filter(s => s.bank_name && s.account_number).length
   };
 
   return (
@@ -184,80 +177,28 @@ const SupplierMaster: React.FC = () => {
         </div>
       </div>
 
-      {/* Statistics Cards */}
-      <div className="px-6 py-4">
-        <div className="grid grid-cols-1 md:grid-cols-6 gap-4">
-          <Card className="p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-xs text-gray-600">Total Suppliers</p>
-                <p className="text-2xl font-bold text-gray-900">{stats.total}</p>
-              </div>
-              <div className="w-10 h-10 bg-purple-100 rounded-lg flex items-center justify-center">
-                <Truck className="w-5 h-5 text-purple-600" />
-              </div>
-            </div>
-          </Card>
+      {/* Statistics Cards - Simplified */}
+      <div className="px-6 py-3">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+          <div className="bg-white rounded-lg border border-gray-200 px-4 py-3">
+            <p className="text-xs text-gray-500">Total</p>
+            <p className="text-xl font-semibold text-gray-900">{stats.total}</p>
+          </div>
           
-          <Card className="p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-xs text-gray-600">Active</p>
-                <p className="text-2xl font-bold text-green-600">{stats.active}</p>
-              </div>
-              <div className="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center">
-                <CheckCircle className="w-5 h-5 text-green-600" />
-              </div>
-            </div>
-          </Card>
+          <div className="bg-white rounded-lg border border-gray-200 px-4 py-3">
+            <p className="text-xs text-gray-500">Active</p>
+            <p className="text-xl font-semibold text-green-600">{stats.active}</p>
+          </div>
           
-          <Card className="p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-xs text-gray-600">Licensed</p>
-                <p className="text-2xl font-bold text-blue-600">{stats.withLicense}</p>
-              </div>
-              <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
-                <Shield className="w-5 h-5 text-blue-600" />
-              </div>
-            </div>
-          </Card>
+          <div className="bg-white rounded-lg border border-gray-200 px-4 py-3">
+            <p className="text-xs text-gray-500">Licensed</p>
+            <p className="text-xl font-semibold text-blue-600">{stats.withLicense}</p>
+          </div>
           
-          <Card className="p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-xs text-gray-600">Bank Verified</p>
-                <p className="text-2xl font-bold text-teal-600">{stats.withBankDetails}</p>
-              </div>
-              <div className="w-10 h-10 bg-teal-100 rounded-lg flex items-center justify-center">
-                <Banknote className="w-5 h-5 text-teal-600" />
-              </div>
-            </div>
-          </Card>
-          
-          <Card className="p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-xs text-gray-600">Preferred</p>
-                <p className="text-2xl font-bold text-indigo-600">{stats.preferredSuppliers}</p>
-              </div>
-              <div className="w-10 h-10 bg-indigo-100 rounded-lg flex items-center justify-center">
-                <Award className="w-5 h-5 text-indigo-600" />
-              </div>
-            </div>
-          </Card>
-          
-          <Card className="p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-xs text-gray-600">Avg Quality</p>
-                <div className="mt-1">{getRatingStars(stats.avgQualityRating)}</div>
-              </div>
-              <div className="w-10 h-10 bg-yellow-100 rounded-lg flex items-center justify-center">
-                <Star className="w-5 h-5 text-yellow-600" />
-              </div>
-            </div>
-          </Card>
+          <div className="bg-white rounded-lg border border-gray-200 px-4 py-3">
+            <p className="text-xs text-gray-500">Bank Verified</p>
+            <p className="text-xl font-semibold text-teal-600">{stats.withBankDetails}</p>
+          </div>
         </div>
       </div>
 
@@ -295,18 +236,6 @@ const SupplierMaster: React.FC = () => {
                 </button>
               ))}
             </div>
-            
-            {/* Category Filter */}
-            <select
-              className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500"
-              value={filterCategory}
-              onChange={(e) => setFilterCategory(e.target.value)}
-            >
-              <option value="all">All Categories</option>
-              <option value="preferred">Preferred</option>
-              <option value="regular">Regular</option>
-              <option value="new">New</option>
-            </select>
           </div>
         </Card>
       </div>
@@ -371,16 +300,11 @@ const SupplierMaster: React.FC = () => {
                       <tr key={supplier.supplier_id} className="hover:bg-gray-50 transition-colors">
                         <td className="px-6 py-4">
                           <div>
-                            <div className="flex items-center">
-                              <p className="text-sm font-medium text-gray-900">
-                                {supplier.supplier_name}
-                              </p>
-                              {supplier.supplier_category === 'preferred' && (
-                                <Award className="w-4 h-4 text-indigo-600 ml-2" />
-                              )}
-                            </div>
+                            <p className="text-sm font-medium text-gray-900">
+                              {supplier.supplier_name}
+                            </p>
                             <p className="text-xs text-gray-500 mt-1">
-                              {supplier.supplier_type} • {supplier.city}
+                              {supplier.city || supplier.state || 'Location not specified'}
                             </p>
                             {supplier.gst_number && (
                               <p className="text-xs text-gray-500">GST: {supplier.gst_number}</p>

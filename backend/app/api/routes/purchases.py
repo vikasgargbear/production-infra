@@ -103,6 +103,22 @@ def create_purchase(purchase_data: dict, db: Session = Depends(get_db)):
     try:
         items = purchase_data.pop('items', [])
         
+        # If supplier_id provided, fetch supplier details from parties.suppliers
+        if 'supplier_id' in purchase_data and purchase_data['supplier_id']:
+            supplier_result = db.execute(
+                text("""
+                    SELECT supplier_name, gst_number, primary_phone, payment_days
+                    FROM parties.suppliers
+                    WHERE supplier_id = :supplier_id
+                """),
+                {"supplier_id": purchase_data['supplier_id']}
+            ).first()
+            
+            if supplier_result:
+                # Use supplier details from database if not provided
+                if 'supplier_name' not in purchase_data or not purchase_data['supplier_name']:
+                    purchase_data['supplier_name'] = supplier_result.supplier_name
+        
         # Ensure required fields have defaults
         if 'created_by' not in purchase_data or purchase_data['created_by'] is None:
             purchase_data['created_by'] = 2  # Use existing admin user
@@ -116,13 +132,8 @@ def create_purchase(purchase_data: dict, db: Session = Depends(get_db)):
             purchase_data['branch_id'] = 1
         
         # Add defaults for missing fields
-        # Note: supplier_contact and supplier_gst columns don't exist in the actual database
-        if 'delivery_date' not in purchase_data:
-            purchase_data['delivery_date'] = None
-        if 'payment_terms' not in purchase_data:
-            purchase_data['payment_terms'] = None
-        if 'payment_days' not in purchase_data:
-            purchase_data['payment_days'] = None
+        # Note: These columns don't exist in the actual database:
+        # supplier_contact, supplier_gst, delivery_date, payment_terms, payment_days
         if 'discount_percent' not in purchase_data:
             purchase_data['discount_percent'] = 0
         if 'discount_amount' not in purchase_data:
@@ -132,19 +143,17 @@ def create_purchase(purchase_data: dict, db: Session = Depends(get_db)):
         if 'other_charges' not in purchase_data:
             purchase_data['other_charges'] = 0
             
-        # Insert purchase order (without supplier_contact and supplier_gst which don't exist)
+        # Insert purchase order (only with columns that actually exist in the database)
         po_query = text("""
             INSERT INTO procurement.purchase_orders (
                 org_id, branch_id, po_number, po_date, po_type,
                 supplier_id, supplier_name,
-                delivery_date, payment_terms, payment_days,
                 subtotal_amount, discount_percent, discount_amount,
                 freight_amount, other_charges, tax_amount, total_amount,
                 po_status, created_by
             ) VALUES (
                 :org_id, :branch_id, :po_number, :po_date, :po_type,
                 :supplier_id, :supplier_name,
-                :delivery_date, :payment_terms, :payment_days,
                 :subtotal_amount, :discount_percent, :discount_amount,
                 :freight_amount, :other_charges, :tax_amount, :total_amount,
                 :po_status, :created_by

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, User, Phone, Mail, MapPin, Building, FileText } from 'lucide-react';
+import { X, User, Phone, Mail, MapPin, Building, FileText, Shield, Calendar, CreditCard, MessageCircle, AlertCircle } from 'lucide-react';
 import { customerAPI } from '../../../services/api';
 import DataTransformer from '../../../services/dataTransformer';
 import { APP_CONFIG } from '../../../config/app.config';
@@ -9,12 +9,15 @@ const CustomerCreationModal = ({ show, onClose, onCustomerCreated }) => {
     customer_name: '',
     primary_phone: '',
     primary_email: '',
-    customer_type: 'retail',
+    whatsapp_number: '',  // NEW: Critical for communication
+    customer_type: 'pharmacy',
     gst_number: '',
     pan_number: '',
     drug_license_number: '',
+    drug_license_validity: '',  // NEW: Critical for compliance
     credit_limit: 5000,
     credit_days: 0,
+    credit_rating: 'B',  // NEW: Critical for credit management
     address: {
       address_line1: '',
       address_line2: '',
@@ -53,12 +56,15 @@ const CustomerCreationModal = ({ show, onClose, onCustomerCreated }) => {
           customer_name: '',
           primary_phone: '',
           primary_email: '',
-          customer_type: 'retail',
+          whatsapp_number: '',
+          customer_type: 'pharmacy',
           gst_number: '',
           pan_number: '',
           drug_license_number: '',
+          drug_license_validity: '',
           credit_limit: 5000,
           credit_days: 0,
+          credit_rating: 'B',
           address: {
             address_line1: '',
             address_line2: '',
@@ -158,7 +164,23 @@ const CustomerCreationModal = ({ show, onClose, onCustomerCreated }) => {
                   </div>
                 </div>
                 
-                <div className="md:col-span-2">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    WhatsApp Number
+                  </label>
+                  <div className="relative">
+                    <MessageCircle className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-green-500" />
+                    <input
+                      type="text"
+                      value={newCustomer.whatsapp_number}
+                      onChange={(e) => setNewCustomer({ ...newCustomer, whatsapp_number: e.target.value })}
+                      className="w-full pl-10 pr-3 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                      placeholder="WhatsApp number"
+                    />
+                  </div>
+                </div>
+                
+                <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
                     Email Address
                   </label>
@@ -298,10 +320,51 @@ const CustomerCreationModal = ({ show, onClose, onCustomerCreated }) => {
               </div>
             </div>
             
-            {/* Business Information */}
+            {/* Compliance Information - CRITICAL */}
             <div className="space-y-4">
-              <h4 className="text-sm font-semibold text-gray-900 uppercase tracking-wider">Business Information</h4>
+              <h4 className="text-sm font-semibold text-gray-900 uppercase tracking-wider flex items-center">
+                <Shield className="w-4 h-4 text-red-500 mr-2" />
+                Compliance Information (Required for Pharmacy/Hospital)
+              </h4>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Drug License Number *
+                  </label>
+                  <div className="relative">
+                    <Shield className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
+                    <input
+                      type="text"
+                      value={newCustomer.drug_license_number}
+                      onChange={(e) => setNewCustomer({ ...newCustomer, drug_license_number: e.target.value })}
+                      className="w-full pl-10 pr-3 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                      placeholder="e.g., DL-MH-12345"
+                    />
+                  </div>
+                </div>
+                
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    License Validity Date *
+                  </label>
+                  <div className="relative">
+                    <Calendar className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
+                    <input
+                      type="date"
+                      value={newCustomer.drug_license_validity}
+                      onChange={(e) => setNewCustomer({ ...newCustomer, drug_license_validity: e.target.value })}
+                      className="w-full pl-10 pr-3 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                      min={new Date().toISOString().split('T')[0]}
+                    />
+                  </div>
+                  {newCustomer.drug_license_validity && new Date(newCustomer.drug_license_validity) < new Date(Date.now() + 30 * 24 * 60 * 60 * 1000) && (
+                    <p className="text-xs text-amber-600 mt-1 flex items-center">
+                      <AlertCircle className="w-3 h-3 mr-1" />
+                      License expiring soon
+                    </p>
+                  )}
+                </div>
+                
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
                     GST Number
@@ -311,27 +374,88 @@ const CustomerCreationModal = ({ show, onClose, onCustomerCreated }) => {
                     <input
                       type="text"
                       value={newCustomer.gst_number}
-                      onChange={(e) => setNewCustomer({ ...newCustomer, gst_number: e.target.value })}
+                      onChange={(e) => setNewCustomer({ ...newCustomer, gst_number: e.target.value.toUpperCase() })}
                       className="w-full pl-10 pr-3 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
-                      placeholder="Enter GST number"
+                      placeholder="e.g., 27ABCDE1234F1Z5"
+                      maxLength="15"
                     />
                   </div>
                 </div>
-                
+
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Drug License Number
+                    PAN Number
                   </label>
                   <div className="relative">
                     <FileText className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
                     <input
                       type="text"
-                      value={newCustomer.drug_license_number}
-                      onChange={(e) => setNewCustomer({ ...newCustomer, drug_license_number: e.target.value })}
+                      value={newCustomer.pan_number}
+                      onChange={(e) => setNewCustomer({ ...newCustomer, pan_number: e.target.value.toUpperCase() })}
                       className="w-full pl-10 pr-3 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
-                      placeholder="Enter drug license number"
+                      placeholder="e.g., ABCDE1234F"
+                      maxLength="10"
                     />
                   </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Credit Management - CRITICAL */}
+            <div className="space-y-4">
+              <h4 className="text-sm font-semibold text-gray-900 uppercase tracking-wider flex items-center">
+                <CreditCard className="w-4 h-4 text-blue-500 mr-2" />
+                Credit Management
+              </h4>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Credit Rating *
+                  </label>
+                  <select
+                    value={newCustomer.credit_rating}
+                    onChange={(e) => setNewCustomer({ ...newCustomer, credit_rating: e.target.value })}
+                    className="w-full px-3 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                  >
+                    <option value="A">A - Excellent (Low Risk)</option>
+                    <option value="B">B - Good (Medium Risk)</option>
+                    <option value="C">C - Fair (High Risk)</option>
+                    <option value="D">D - Poor (Cash Only)</option>
+                  </select>
+                </div>
+                
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Credit Limit (₹)
+                  </label>
+                  <input
+                    type="number"
+                    value={newCustomer.credit_limit}
+                    onChange={(e) => setNewCustomer({ ...newCustomer, credit_limit: parseInt(e.target.value) || 0 })}
+                    className="w-full px-3 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                    placeholder="Enter credit limit"
+                    min="0"
+                    disabled={newCustomer.credit_rating === 'D'}
+                  />
+                  {newCustomer.credit_rating === 'D' && (
+                    <p className="text-xs text-red-600 mt-1">D-rated customers must pay cash</p>
+                  )}
+                </div>
+                
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Credit Days
+                  </label>
+                  <input
+                    type="number"
+                    value={newCustomer.credit_days}
+                    onChange={(e) => setNewCustomer({ ...newCustomer, credit_days: parseInt(e.target.value) || 0 })}
+                    className="w-full px-3 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                    placeholder="Payment terms in days"
+                    min="0"
+                    max="90"
+                    disabled={newCustomer.credit_rating === 'D'}
+                  />
                 </div>
               </div>
             </div>

@@ -75,11 +75,7 @@ const CustomerMaster: React.FC = () => {
       (filterStatus === 'active' && customer.is_active !== false) ||
       (filterStatus === 'inactive' && customer.is_active === false);
     
-    const matchesCategory = 
-      filterCategory === 'all' || 
-      customer.customer_category === filterCategory;
-    
-    return matchesSearch && matchesStatus && matchesCategory;
+    return matchesSearch && matchesStatus;
   });
 
   const getLicenseStatus = (expiryDate?: string) => {
@@ -104,22 +100,11 @@ const CustomerMaster: React.FC = () => {
     return colors[rating as keyof typeof colors] || 'bg-gray-100 text-gray-600 border-gray-200';
   };
 
-  const getLoyaltyTierIcon = (tier?: string) => {
-    const icons = {
-      'platinum': '💎',
-      'gold': '🏆',
-      'silver': '🥈',
-      'bronze': '🥉'
-    };
-    return icons[tier as keyof typeof icons] || '';
-  };
-
-  // Statistics Cards
+  // Statistics Cards - Only essential metrics
   const stats = {
     total: customers.length,
     active: customers.filter(c => c.is_active !== false).length,
     withLicense: customers.filter(c => c.drug_license_number).length,
-    vipCustomers: customers.filter(c => c.customer_category === 'vip').length,
     totalOutstanding: customers.reduce((sum, c) => sum + (c.current_outstanding || 0), 0)
   };
 
@@ -166,70 +151,30 @@ const CustomerMaster: React.FC = () => {
         </div>
       </div>
 
-      {/* Statistics Cards */}
-      <div className="px-6 py-4">
-        <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
-          <Card className="p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-xs text-gray-600">Total Customers</p>
-                <p className="text-2xl font-bold text-gray-900">{stats.total}</p>
-              </div>
-              <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
-                <Users className="w-5 h-5 text-blue-600" />
-              </div>
-            </div>
-          </Card>
+      {/* Statistics Cards - Simplified */}
+      <div className="px-6 py-3">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+          <div className="bg-white rounded-lg border border-gray-200 px-4 py-3">
+            <p className="text-xs text-gray-500">Total</p>
+            <p className="text-xl font-semibold text-gray-900">{stats.total}</p>
+          </div>
           
-          <Card className="p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-xs text-gray-600">Active</p>
-                <p className="text-2xl font-bold text-green-600">{stats.active}</p>
-              </div>
-              <div className="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center">
-                <CheckCircle className="w-5 h-5 text-green-600" />
-              </div>
-            </div>
-          </Card>
+          <div className="bg-white rounded-lg border border-gray-200 px-4 py-3">
+            <p className="text-xs text-gray-500">Active</p>
+            <p className="text-xl font-semibold text-green-600">{stats.active}</p>
+          </div>
           
-          <Card className="p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-xs text-gray-600">Licensed</p>
-                <p className="text-2xl font-bold text-blue-600">{stats.withLicense}</p>
-              </div>
-              <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
-                <Shield className="w-5 h-5 text-blue-600" />
-              </div>
-            </div>
-          </Card>
+          <div className="bg-white rounded-lg border border-gray-200 px-4 py-3">
+            <p className="text-xs text-gray-500">Licensed</p>
+            <p className="text-xl font-semibold text-blue-600">{stats.withLicense}</p>
+          </div>
           
-          <Card className="p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-xs text-gray-600">VIP Customers</p>
-                <p className="text-2xl font-bold text-purple-600">{stats.vipCustomers}</p>
-              </div>
-              <div className="w-10 h-10 bg-purple-100 rounded-lg flex items-center justify-center">
-                <Star className="w-5 h-5 text-purple-600" />
-              </div>
-            </div>
-          </Card>
-          
-          <Card className="p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-xs text-gray-600">Total Outstanding</p>
-                <p className="text-2xl font-bold text-orange-600">
-                  ₹{(stats.totalOutstanding / 100000).toFixed(1)}L
-                </p>
-              </div>
-              <div className="w-10 h-10 bg-orange-100 rounded-lg flex items-center justify-center">
-                <CreditCard className="w-5 h-5 text-orange-600" />
-              </div>
-            </div>
-          </Card>
+          <div className="bg-white rounded-lg border border-gray-200 px-4 py-3">
+            <p className="text-xs text-gray-500">Outstanding</p>
+            <p className="text-xl font-semibold text-orange-600">
+              ₹{(stats.totalOutstanding / 100000).toFixed(1)}L
+            </p>
+          </div>
         </div>
       </div>
 
@@ -267,18 +212,6 @@ const CustomerMaster: React.FC = () => {
                 </button>
               ))}
             </div>
-            
-            {/* Category Filter */}
-            <select
-              className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-              value={filterCategory}
-              onChange={(e) => setFilterCategory(e.target.value)}
-            >
-              <option value="all">All Categories</option>
-              <option value="vip">VIP</option>
-              <option value="regular">Regular</option>
-              <option value="new">New</option>
-            </select>
           </div>
         </Card>
       </div>
@@ -343,16 +276,11 @@ const CustomerMaster: React.FC = () => {
                       <tr key={customer.customer_id} className="hover:bg-gray-50 transition-colors">
                         <td className="px-6 py-4">
                           <div>
-                            <div className="flex items-center">
-                              <p className="text-sm font-medium text-gray-900">
-                                {customer.customer_name}
-                              </p>
-                              {customer.loyalty_tier && (
-                                <span className="ml-2">{getLoyaltyTierIcon(customer.loyalty_tier)}</span>
-                              )}
-                            </div>
+                            <p className="text-sm font-medium text-gray-900">
+                              {customer.customer_name}
+                            </p>
                             <p className="text-xs text-gray-500 mt-1">
-                              {customer.customer_type} • {customer.city}
+                              {customer.city || customer.state || 'Location not specified'}
                             </p>
                             {customer.gst_number && (
                               <p className="text-xs text-gray-500">GST: {customer.gst_number}</p>

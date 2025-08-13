@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, Building2, Phone, Mail, MapPin, CreditCard, FileText, Save } from 'lucide-react';
+import { X, Building2, Phone, Mail, MapPin, CreditCard, FileText, Save, Shield, Calendar, Banknote, MessageCircle, AlertCircle } from 'lucide-react';
 import { supplierAPI } from '../../../services/api';
 import { searchCache } from '../../../utils/searchCache';
 import { useToast } from '../ui';
@@ -45,6 +45,7 @@ const SupplierCreationModal = ({
     supplier_code: '',
     contact_person: '',
     phone: '',
+    whatsapp_number: '',  // NEW: Critical for communication
     alternate_phone: '',
     email: '',
     website: '',
@@ -57,16 +58,23 @@ const SupplierCreationModal = ({
     pincode: '',
     country: 'India',
     
-    // Tax & Compliance
+    // Tax & Compliance - CRITICAL
     gstin: '',
     pan_number: '',
     drug_license_no: '',
+    drug_license_validity: '',  // NEW: Critical for compliance
     
-    // Commercial Terms
+    // Banking Details - CRITICAL
     payment_terms: '30',
     bank_name: '',
     bank_account_no: '',
     bank_ifsc_code: '',
+    account_holder_name: '',  // NEW: Required for payments
+    
+    // Performance Ratings - NEW
+    quality_rating: 4,
+    delivery_rating: 4,
+    compliance_rating: 'good',
     
     // Additional Info
     supplier_type: 'pharmaceutical',
