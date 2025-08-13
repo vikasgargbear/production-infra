@@ -163,49 +163,51 @@ class PaymentService:
                 COUNT(DISTINCT p.payment_id) as total_payments,
                 COUNT(DISTINCT p.party_id) as customers_paid,
                 COALESCE(SUM(p.payment_amount), 0) as total_collected,
-                COUNT(DISTINCT CASE WHEN p.payment_method_id = 1 THEN p.payment_id END) as cash_payments,
-                COUNT(DISTINCT CASE WHEN p.payment_method_id = 2 THEN p.payment_id END) as cheque_payments,
-                COUNT(DISTINCT CASE WHEN p.payment_method_id >= 3 THEN p.payment_id END) as online_payments,
-                COALESCE(SUM(CASE WHEN p.payment_method_id = 1 THEN p.payment_amount ELSE 0 END), 0) as cash_amount,
-                COALESCE(SUM(CASE WHEN p.payment_method_id = 2 THEN p.payment_amount ELSE 0 END), 0) as cheque_amount,
-                COALESCE(SUM(CASE WHEN p.payment_method_id >= 3 THEN p.payment_amount ELSE 0 END), 0) as online_amount
+                COUNT(DISTINCT CASE WHEN pm.method_type = 'cash' THEN p.payment_id END) as cash_payments,
+                COUNT(DISTINCT CASE WHEN pm.method_type = 'cheque' THEN p.payment_id END) as cheque_payments,
+                COUNT(DISTINCT CASE WHEN pm.method_type IN ('upi', 'bank_transfer', 'card', 'online') THEN p.payment_id END) as online_payments,
+                COALESCE(SUM(CASE WHEN pm.method_type = 'cash' THEN p.payment_amount ELSE 0 END), 0) as cash_amount,
+                COALESCE(SUM(CASE WHEN pm.method_type = 'cheque' THEN p.payment_amount ELSE 0 END), 0) as cheque_amount,
+                COALESCE(SUM(CASE WHEN pm.method_type IN ('upi', 'bank_transfer', 'card', 'online') THEN p.payment_amount ELSE 0 END), 0) as online_amount
             FROM financial.payments p
+            LEFT JOIN financial.payment_methods pm ON p.payment_method_id = pm.payment_method_id
             WHERE p.org_id = :org_id 
-                AND p.payment_status = 'completed'
+                AND p.payment_status IN ('cleared', 'processed', 'approved')
                 AND p.party_type = 'customer' {date_filter}
         """), params).fetchone()
         
-        # Get pending payments
+        # Get pending payments from invoices
         pending_result = db.execute(text(f"""
             SELECT 
                 COUNT(DISTINCT i.invoice_id) as pending_invoices,
                 COALESCE(SUM(i.final_amount - COALESCE(i.paid_amount, 0)), 0) as pending_amount
             FROM sales.invoices i
             WHERE i.org_id = :org_id 
-                AND i.payment_status IN ('unpaid', 'partial')
+                AND (i.payment_status IN ('unpaid', 'partial') OR i.payment_status IS NULL)
+                AND i.final_amount > COALESCE(i.paid_amount, 0)
         """), {"org_id": str(org_id)}).fetchone()
         
         return {
-            "total_payments": result.total_payments,
-            "invoices_paid": result.invoices_paid,
-            "total_collected": result.total_collected,
+            "total_payments": result.total_payments or 0,
+            "invoices_paid": result.customers_paid or 0,
+            "total_collected": float(result.total_collected or 0),
             "payment_modes": {
                 "cash": {
-                    "count": result.cash_payments,
-                    "amount": result.cash_amount
+                    "count": result.cash_payments or 0,
+                    "amount": float(result.cash_amount or 0)
                 },
                 "cheque": {
-                    "count": result.cheque_payments,
-                    "amount": result.cheque_amount
+                    "count": result.cheque_payments or 0,
+                    "amount": float(result.cheque_amount or 0)
                 },
                 "online": {
-                    "count": result.online_payments,
-                    "amount": result.online_amount
+                    "count": result.online_payments or 0,
+                    "amount": float(result.online_amount or 0)
                 }
             },
             "pending": {
-                "invoices": pending_result.pending_invoices,
-                "amount": pending_result.pending_amount
+                "invoices": pending_result.pending_invoices if pending_result else 0,
+                "amount": float(pending_result.pending_amount if pending_result else 0)
             }
         }
     

@@ -105,6 +105,37 @@ async def create_payment(
             ).first()
             party_name = party_result.supplier_name if party_result else f"Supplier {payment.supplier_id}"
         
+        # Get or create payment method ID for the payment mode
+        payment_method_id = 1  # Default to cash
+        if payment.payment_mode:
+            method_result = db.execute(
+                text("""
+                    SELECT payment_method_id FROM financial.payment_methods 
+                    WHERE org_id = :org_id AND method_type = :method_type
+                    LIMIT 1
+                """),
+                {"org_id": payment.org_id, "method_type": payment.payment_mode}
+            ).first()
+            
+            if method_result:
+                payment_method_id = method_result.payment_method_id
+            else:
+                # Create payment method if it doesn't exist
+                create_method = db.execute(
+                    text("""
+                        INSERT INTO financial.payment_methods (org_id, method_code, method_name, method_type)
+                        VALUES (:org_id, :code, :name, :type)
+                        RETURNING payment_method_id
+                    """),
+                    {
+                        "org_id": payment.org_id,
+                        "code": payment.payment_mode.upper(),
+                        "name": payment.payment_mode.title(),
+                        "type": payment.payment_mode
+                    }
+                ).first()
+                payment_method_id = create_method.payment_method_id if create_method else 1
+        
         # Prepare payment data for database using CORRECT column names from schema
         payment_data = {
             'org_id': payment.org_id,
@@ -112,28 +143,28 @@ async def create_payment(
             'payment_number': payment.payment_number,
             'payment_date': payment.payment_date,
             'payment_type': 'payment' if payment.supplier_id else 'receipt',
-            'payment_mode': payment.payment_mode,
+            'payment_method_id': payment_method_id,
             'party_type': 'customer' if payment.customer_id else 'supplier',
             'party_id': payment.customer_id or payment.supplier_id,
             'party_name': party_name,
             'payment_amount': payment.amount,
             'payment_status': 'cleared' if payment.payment_mode == 'cash' else 'pending',
             'clearance_date': payment.cleared_date if payment.cleared_date else (payment.payment_date if payment.payment_mode == 'cash' else None),
-            'bank_reference': payment.reference_number,
-            'notes': payment.notes,
+            'reference_number': payment.reference_number,
+            'narration': payment.notes,
             'created_by': payment.created_by or 1
         }
         
         # Insert into financial.payments table
         insert_query = """
             INSERT INTO financial.payments (
-                org_id, branch_id, payment_number, payment_date, payment_type, payment_mode,
+                org_id, branch_id, payment_number, payment_date, payment_type, payment_method_id,
                 party_type, party_id, party_name, payment_amount, payment_status,
-                clearance_date, bank_reference, notes, created_by
+                clearance_date, reference_number, narration, created_by
             ) VALUES (
-                :org_id, :branch_id, :payment_number, :payment_date, :payment_type, :payment_mode,
+                :org_id, :branch_id, :payment_number, :payment_date, :payment_type, :payment_method_id,
                 :party_type, :party_id, :party_name, :payment_amount, :payment_status,
-                :clearance_date, :bank_reference, :notes, :created_by
+                :clearance_date, :reference_number, :narration, :created_by
             ) RETURNING payment_id, payment_number, payment_amount, payment_status
         """
         

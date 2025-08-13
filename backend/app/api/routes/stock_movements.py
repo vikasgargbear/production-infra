@@ -30,48 +30,104 @@ def get_inventory_movements(
     db: Session = Depends(get_db)
 ):
     """
-    Get list of stock movements with optional filters
+    Get list of stock movements from actual transaction tables
     """
     try:
-        query = """
-            SELECT im.*, p.product_name, p.hsn_code
-            FROM inventory.inventory_movements im
-            LEFT JOIN master.products p ON im.product_id = p.product_id
-            WHERE 1=1
-        """
+        # Build union query from actual transaction tables
+        queries = []
         params = {"skip": skip, "limit": limit}
         
-        if movement_type:
-            query += " AND im.movement_type = :movement_type"
-            params["movement_type"] = movement_type
-            
+        # Sales movements (outgoing)
+        sales_query = """
+            SELECT 
+                'sale' as movement_type,
+                'out' as movement_direction,
+                oi.product_id,
+                p.product_name,
+                p.hsn_code,
+                oi.quantity,
+                o.order_date as movement_date,
+                o.order_number as reference_number,
+                'sales_order' as reference_type,
+                o.order_id as reference_id,
+                c.customer_name as party_name,
+                'Sale to customer' as notes
+            FROM sales.order_items oi
+            JOIN sales.orders o ON oi.order_id = o.order_id
+            JOIN inventory.products p ON oi.product_id = p.product_id
+            LEFT JOIN parties.customers c ON o.customer_id = c.customer_id
+            WHERE o.order_status != 'cancelled'
+        """
+        
+        # Purchase movements (incoming)
+        purchase_query = """
+            SELECT 
+                'purchase' as movement_type,
+                'in' as movement_direction,
+                poi.product_id,
+                p.product_name,
+                p.hsn_code,
+                poi.quantity,
+                po.order_date as movement_date,
+                po.po_number as reference_number,
+                'purchase_order' as reference_type,
+                po.po_id as reference_id,
+                s.supplier_name as party_name,
+                'Purchase from supplier' as notes
+            FROM procurement.purchase_order_items poi
+            JOIN procurement.purchase_orders po ON poi.po_id = po.po_id
+            JOIN inventory.products p ON poi.product_id = p.product_id
+            LEFT JOIN parties.suppliers s ON po.supplier_id = s.supplier_id
+            WHERE po.po_status != 'cancelled'
+        """
+        
+        # Add filters
+        filters = []
         if product_id:
-            query += " AND im.product_id = :product_id"
+            filters.append("product_id = :product_id")
             params["product_id"] = product_id
-            
         if from_date:
-            query += " AND im.movement_date >= :from_date"
+            filters.append("movement_date >= :from_date")
             params["from_date"] = from_date
-            
         if to_date:
-            query += " AND im.movement_date <= :to_date"
+            filters.append("movement_date <= :to_date")
             params["to_date"] = to_date
             
-        if reason:
-            query += " AND im.notes ILIKE :reason"
-            params["reason"] = f"%{reason}%"
-            
-        query += " ORDER BY im.movement_date DESC LIMIT :limit OFFSET :skip"
+        if filters:
+            filter_clause = " AND " + " AND ".join(filters)
+            sales_query += filter_clause.replace("product_id", "oi.product_id").replace("movement_date", "o.order_date")
+            purchase_query += filter_clause.replace("product_id", "poi.product_id").replace("movement_date", "po.order_date")
         
-        movements = db.execute(text(query), params).fetchall()
+        # Combine queries
+        if not movement_type or movement_type == 'issue':
+            queries.append(sales_query)
+        if not movement_type or movement_type == 'receive':
+            queries.append(purchase_query)
+            
+        if not queries:
+            return {"total": 0, "movements": []}
+            
+        combined_query = " UNION ALL ".join(queries)
+        final_query = f"""
+            SELECT * FROM (
+                {combined_query}
+            ) movements
+            ORDER BY movement_date DESC
+            LIMIT :limit OFFSET :skip
+        """
+        
+        movements = db.execute(text(final_query), params).fetchall()
         
         # Get total count
-        count_query = query.replace("SELECT im.*, p.product_name, p.hsn_code", "SELECT COUNT(*)")
-        count_query = count_query.split("ORDER BY")[0]
+        count_query = f"""
+            SELECT COUNT(*) FROM (
+                {combined_query}
+            ) movements
+        """
         total = db.execute(text(count_query), params).scalar()
         
         return {
-            "total": total,
+            "total": total or 0,
             "movements": [dict(m._mapping) for m in movements]
         }
         
@@ -135,35 +191,9 @@ def create_stock_receive(
         if not product:
             raise HTTPException(status_code=404, detail="Product not found")
             
-        # Create movement record
-        db.execute(
-            text("""
-                INSERT INTO inventory.inventory_movements (
-                    org_id, movement_type, movement_date, movement_direction,
-                    product_id, batch_id, location_id, quantity,
-                    unit_cost, total_cost, reference_type, reference_number,
-                    notes, created_by
-                ) VALUES (
-                    :org_id, 'adjustment', :movement_date, 'in',
-                    :product_id, :batch_id, :location_id, :quantity,
-                    :unit_cost, :total_cost, 'manual_receive', :movement_number,
-                    :notes, :created_by
-                )
-            """),
-            {
-                "org_id": DEFAULT_ORG_ID,
-                "movement_date": receive_data["movement_date"],
-                "product_id": receive_data["product_id"],
-                "batch_id": receive_data.get("batch_id"),
-                "location_id": receive_data.get("location_id", 1),
-                "quantity": receive_data["quantity"],
-                "unit_cost": receive_data.get("unit_cost", 0),
-                "total_cost": Decimal(str(receive_data.get("unit_cost", 0))) * Decimal(str(receive_data["quantity"])),
-                "movement_number": movement_number,
-                "notes": f"{receive_data['reason']}: {receive_data.get('notes', '')}",
-                "created_by": receive_data.get("created_by", 1)
-            }
-        )
+        # Skip creating movement record since inventory_movements table was deleted
+        # Just log the movement details
+        logger.info(f"Stock receive: {movement_number} for product {receive_data['product_id']} qty {receive_data['quantity']}")
         
         # Update location-wise stock
         stock = db.execute(
@@ -291,35 +321,9 @@ def create_stock_issue(
                 detail=f"Insufficient stock. Available: {stock.quantity_available}"
             )
             
-        # Create movement record
-        db.execute(
-            text("""
-                INSERT INTO inventory.inventory_movements (
-                    org_id, movement_type, movement_date, movement_direction,
-                    product_id, batch_id, location_id, quantity,
-                    unit_cost, total_cost, reference_type, reference_number,
-                    notes, created_by
-                ) VALUES (
-                    :org_id, 'adjustment', :movement_date, 'out',
-                    :product_id, :batch_id, :location_id, :quantity,
-                    :unit_cost, :total_cost, 'manual_issue', :movement_number,
-                    :notes, :created_by
-                )
-            """),
-            {
-                "org_id": DEFAULT_ORG_ID,
-                "movement_date": issue_data["movement_date"],
-                "product_id": issue_data["product_id"],
-                "batch_id": batch_id,
-                "location_id": issue_data.get("location_id", 1),
-                "quantity": issue_data["quantity"],
-                "unit_cost": issue_data.get("unit_cost", 0),
-                "total_cost": Decimal(str(issue_data.get("unit_cost", 0))) * Decimal(str(issue_data["quantity"])),
-                "movement_number": movement_number,
-                "notes": f"{issue_data['reason']}: {issue_data.get('notes', '')}",
-                "created_by": issue_data.get("created_by", 1)
-            }
-        )
+        # Skip creating movement record since inventory_movements table was deleted  
+        # Just log the movement details
+        logger.info(f"Stock issue: {movement_number} for product {issue_data['product_id']} qty {issue_data['quantity']}")
         
         # Update location-wise stock
         db.execute(

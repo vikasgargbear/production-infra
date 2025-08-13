@@ -186,7 +186,7 @@ def create_purchase_with_items(purchase_data: dict, db: Session = Depends(get_db
                 "status": purchase_data.get("purchase_status", "draft"),
                 "payment_mode": purchase_data.get("payment_mode", "cash"),
                 "notes": purchase_data.get("notes"),
-                "created_by": purchase_data.get("created_by")
+                "created_by": purchase_data.get("created_by", 1)  # Default to user ID 1
             }
         )
         
