@@ -131,53 +131,74 @@ def create_purchase(purchase_data: dict, db: Session = Depends(get_db)):
         if 'branch_id' not in purchase_data:
             purchase_data['branch_id'] = 1
         
-        # Add defaults for missing fields
-        # Note: These columns don't exist in the actual database:
-        # supplier_contact, supplier_gst, delivery_date, payment_terms, payment_days
-        if 'discount_percent' not in purchase_data:
-            purchase_data['discount_percent'] = 0
+        # Add defaults for fields that DO exist in the actual table
         if 'discount_amount' not in purchase_data:
             purchase_data['discount_amount'] = 0
-        if 'freight_amount' not in purchase_data:
-            purchase_data['freight_amount'] = 0
+        if 'taxable_amount' not in purchase_data:
+            # Calculate taxable amount if not provided
+            subtotal = purchase_data.get('subtotal_amount', 0)
+            discount = purchase_data.get('discount_amount', 0)
+            purchase_data['taxable_amount'] = subtotal - discount
         if 'other_charges' not in purchase_data:
             purchase_data['other_charges'] = 0
+        if 'round_off_amount' not in purchase_data:
+            purchase_data['round_off_amount'] = 0
             
-        # Insert purchase order (only with columns that actually exist in the database)
+        # Insert purchase order using ACTUAL column names from the table
         po_query = text("""
             INSERT INTO procurement.purchase_orders (
                 org_id, branch_id, po_number, po_date, po_type,
                 supplier_id, supplier_name,
-                subtotal_amount, discount_percent, discount_amount,
-                freight_amount, other_charges, tax_amount, total_amount,
+                subtotal_amount, discount_amount, taxable_amount,
+                tax_amount, other_charges, round_off_amount, total_amount,
                 po_status, created_by
             ) VALUES (
                 :org_id, :branch_id, :po_number, :po_date, :po_type,
                 :supplier_id, :supplier_name,
-                :subtotal_amount, :discount_percent, :discount_amount,
-                :freight_amount, :other_charges, :tax_amount, :total_amount,
+                :subtotal_amount, :discount_amount, :taxable_amount,
+                :tax_amount, :other_charges, :round_off_amount, :total_amount,
                 :po_status, :created_by
-            ) RETURNING *
+            ) RETURNING purchase_order_id as po_id, *
         """)
         
         result = db.execute(po_query, purchase_data)
         po = dict(result.first()._mapping)
         
-        # Insert purchase order items
+        # Insert purchase order items (using actual column names)
         if items:
             for item in items:
-                item['po_id'] = po['po_id']
+                item['purchase_order_id'] = po['po_id']  # Use the returned po_id
+                
+                # Ensure required fields have defaults
+                if 'uom' not in item:
+                    item['uom'] = 'unit'
+                if 'pack_type' not in item:
+                    item['pack_type'] = 'unit'
+                if 'discount_percent' not in item:
+                    item['discount_percent'] = 0
+                if 'discount_amount' not in item:
+                    item['discount_amount'] = 0
+                if 'tax_percent' not in item:
+                    item['tax_percent'] = 0
+                if 'tax_amount' not in item:
+                    item['tax_amount'] = 0
+                if 'line_total' not in item:
+                    # Calculate line total
+                    qty = item.get('ordered_quantity', 0)
+                    price = item.get('unit_price', 0)
+                    item['line_total'] = qty * price - item.get('discount_amount', 0) + item.get('tax_amount', 0)
+                
                 item_query = text("""
                     INSERT INTO procurement.purchase_order_items (
-                        po_id, product_id, product_name, product_code,
-                        ordered_quantity, unit_price, discount_percentage,
-                        discount_amount, line_total, tax_percentage, tax_amount,
-                        total_amount
+                        purchase_order_id, product_id, product_name,
+                        ordered_quantity, uom, pack_type, unit_price, 
+                        discount_percent, discount_amount, 
+                        tax_percent, tax_amount, line_total
                     ) VALUES (
-                        :po_id, :product_id, :product_name, :product_code,
-                        :ordered_quantity, :unit_price, :discount_percentage,
-                        :discount_amount, :line_total, :tax_percentage, :tax_amount,
-                        :total_amount
+                        :purchase_order_id, :product_id, :product_name,
+                        :ordered_quantity, :uom, :pack_type, :unit_price,
+                        :discount_percent, :discount_amount,
+                        :tax_percent, :tax_amount, :line_total
                     )
                 """)
                 db.execute(item_query, item)
