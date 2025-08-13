@@ -3,12 +3,13 @@ import {
   Settings2, Building, Package, Users, 
   Calculator, UserCheck, Bell, Cog,
   Plug, Database, Receipt, Settings,
-  Ruler, Warehouse, Package2
+  Ruler, Warehouse, Package2, Truck
 } from 'lucide-react';
 import { ModuleHub } from '../global';
 import CompanyProfile from './CompanyProfile';
 import ProductMaster from './ProductMaster';
-import PartyMaster from './PartyMaster';
+import CustomerMaster from './CustomerMaster';
+import SupplierMaster from './SupplierMaster';
 import FeatureSettings from './FeatureSettings';
 import UserManagement from './UserManagement';
 import TaxMaster from './TaxMaster';
@@ -90,13 +91,22 @@ const MasterHub: React.FC<MasterHubProps> = ({ open = true, onClose }) => {
       component: ProductMaster
     },
     {
-      id: 'party-master',
-      label: 'Parties',
-      fullLabel: 'Party Master',
-      description: 'Customers & suppliers',
+      id: 'customer-master',
+      label: 'Customers',
+      fullLabel: 'Customer Master',
+      description: 'Manage customer database',
       icon: Users,
-      color: 'teal',
-      component: PartyMaster
+      color: 'blue',
+      component: CustomerMaster
+    },
+    {
+      id: 'supplier-master',
+      label: 'Suppliers',
+      fullLabel: 'Supplier Master',
+      description: 'Manage supplier network',
+      icon: Truck,
+      color: 'purple',
+      component: SupplierMaster
     },
     {
       id: 'tax-master',
