@@ -105,7 +105,7 @@ def create_purchase(purchase_data: dict, db: Session = Depends(get_db)):
         
         # Ensure required fields have defaults
         if 'created_by' not in purchase_data or purchase_data['created_by'] is None:
-            purchase_data['created_by'] = 1
+            purchase_data['created_by'] = 2  # Use existing admin user
         if 'po_status' not in purchase_data:
             purchase_data['po_status'] = 'draft'
         if 'org_id' not in purchase_data:

@@ -111,7 +111,8 @@ async def create_payment(
             user_result = db.execute(
                 text("""
                     SELECT user_id FROM master.org_users 
-                    WHERE org_id = :org_id AND username = 'system'
+                    WHERE org_id = :org_id AND is_active = true
+                    ORDER BY user_id
                     LIMIT 1
                 """),
                 {"org_id": payment.org_id}
