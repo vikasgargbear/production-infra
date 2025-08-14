@@ -20,8 +20,8 @@ export interface APIConfig {
 }
 
 export const API_CONFIG: APIConfig = {
-  // Base URL configuration - use HTTPS directly (Railway forces HTTPS anyway)
-  BASE_URL: process.env.REACT_APP_API_BASE_URL || 'https://pharma-backend-production-0c09.up.railway.app',
+  // Base URL configuration - use HTTP to avoid CORS preflight redirect issues
+  BASE_URL: process.env.REACT_APP_API_BASE_URL || 'http://pharma-backend-production-0c09.up.railway.app',
   
   // API Version - consolidated, no version numbers
   API_VERSION: '/api',

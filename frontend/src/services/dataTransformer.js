@@ -276,6 +276,29 @@ class DataTransformer {
       org_id: productData.org_id
     };
   }
+
+  /**
+   * Prepare supplier data for API submission
+   */
+  static prepareSupplierForAPI(supplierData) {
+    return {
+      name: supplierData.supplier_name || supplierData.name,
+      code: supplierData.supplier_code || null,
+      contact_person: supplierData.contact_person || null,
+      phone: supplierData.phone || supplierData.primary_phone || null,
+      email: supplierData.email || supplierData.primary_email || null,
+      address: supplierData.address || null,
+      city: supplierData.city || null,
+      state: supplierData.state || null,
+      pincode: supplierData.pincode || null,
+      gst_number: supplierData.gst_number || supplierData.gstin || null,
+      pan_number: supplierData.pan_number || null,
+      // Additional supplier-specific fields
+      payment_terms: supplierData.payment_terms || null,
+      credit_days: parseInt(supplierData.credit_days || 0),
+      org_id: supplierData.org_id
+    };
+  }
 }
 
 export default DataTransformer;
