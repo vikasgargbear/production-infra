@@ -146,9 +146,7 @@ app.include_router(api)
 # Include test routes for debugging
 app.include_router(test_db.router)
 
-# TEMPORARY: Migration routes - REMOVE AFTER USE
-from .api.routes.migration import router as migration_router
-app.include_router(migration_router, prefix="/migration", tags=["Migration"])
+# Migration routes removed after successful deployment
 
 # Debug endpoints moved to archive - uncomment if needed for debugging
 # from .api.routes import debug_invoice, database_fix, table_inspector, create_fixed_triggers
