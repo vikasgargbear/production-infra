@@ -855,6 +855,33 @@ FOR EACH ROW
 EXECUTE FUNCTION sales.validate_quantity_integrity();
 
 -- =============================================
+-- SECTION 12: SUPPLIER TABLE ENHANCEMENTS (2025-08-14)
+-- =============================================
+-- Add missing website field to suppliers table for complete supplier information
+
+-- 12.1 Add website column to suppliers table
+DO $$
+BEGIN
+    -- Add website column if not exists
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_schema = 'parties' 
+        AND table_name = 'suppliers' 
+        AND column_name = 'website'
+    ) THEN
+        ALTER TABLE parties.suppliers 
+        ADD COLUMN website TEXT;
+        
+        RAISE NOTICE '✅ Added website column to suppliers table';
+    ELSE
+        RAISE NOTICE '✓ Website column already exists in suppliers table';
+    END IF;
+END $$;
+
+-- 12.2 Add comment to document the website column
+COMMENT ON COLUMN parties.suppliers.website IS 'Supplier website URL for reference and communication';
+
+-- =============================================
 -- FINAL VALIDATION
 -- =============================================
 DO $$
@@ -874,5 +901,6 @@ BEGIN
     RAISE NOTICE '9. Pack config cleanup: Removed redundant table, added pack columns to products';
     RAISE NOTICE '10. Inventory movements cleanup: Dropped redundant table, created summary view';
     RAISE NOTICE '11. Quantity tracking: Added base_quantity and free_quantity to invoice/order items';
+    RAISE NOTICE '12. Supplier enhancements: Added website column to suppliers table';
     RAISE NOTICE '========================================';
 END $$;

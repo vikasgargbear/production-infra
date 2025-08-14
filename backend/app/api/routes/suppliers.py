@@ -121,7 +121,7 @@ def create_supplier(supplier_data: SupplierCreate, db: Session = Depends(get_db)
             ) VALUES (
                 :org_id, :supplier_code, :supplier_name, :supplier_type,
                 :gst_number, :pan_number, :drug_license_number, :drug_license_validity,
-                :phone, :alternate_phone, :email, :contact_person,
+                :phone, :secondary_phone, :email, :contact_person,
                 :website, :bank_name, :account_number, :ifsc_code, :account_holder_name,
                 :payment_days, :is_active,
                 CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
@@ -136,7 +136,7 @@ def create_supplier(supplier_data: SupplierCreate, db: Session = Depends(get_db)
             "drug_license_number": supplier_data.drug_license_number,
             "drug_license_validity": supplier_data.drug_license_validity,
             "phone": supplier_data.phone or "N/A",  # Database requires non-null phone
-            "alternate_phone": supplier_data.alternate_phone,
+            "secondary_phone": supplier_data.secondary_phone,
             "email": supplier_data.email,
             "contact_person": supplier_data.contact_person,
             "website": supplier_data.website,

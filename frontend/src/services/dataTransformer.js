@@ -322,7 +322,7 @@ class DataTransformer {
       supplier_type: supplierData.supplier_type || 'distributor',
       contact_person: supplierData.contact_person || null,
       phone: supplierData.phone || supplierData.primary_phone || null,
-      alternate_phone: supplierData.alternate_phone || null,
+      secondary_phone: supplierData.alternate_phone || null,
       email: supplierData.email || supplierData.primary_email || null,
       website: supplierData.website || null,
       address: supplierData.address_line1 || supplierData.address || null,
