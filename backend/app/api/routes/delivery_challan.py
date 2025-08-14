@@ -147,6 +147,7 @@ def create_delivery_challan(challan_data: dict, db: Session = Depends(get_db)):
         # For now, this creates an order with delivery status
         order_data = {
             "org_id": "ad808530-1ddb-4377-ab20-67bef145d80d",
+            "branch_id": 1,  # Default branch
             "customer_id": challan_data.get("customer_id"),
             "order_date": challan_data.get("order_date", datetime.utcnow()),
             "order_type": challan_data.get("order_type", "delivery"),
@@ -158,8 +159,8 @@ def create_delivery_challan(challan_data: dict, db: Session = Depends(get_db)):
         
         result = db.execute(
             text("""
-                INSERT INTO sales.orders (org_id, customer_id, order_date, order_type, subtotal_amount, final_amount, order_status, notes)
-                VALUES (:org_id, :customer_id, :order_date, :order_type, :subtotal_amount, :final_amount, :order_status, :notes)
+                INSERT INTO sales.orders (org_id, branch_id, customer_id, order_date, order_type, subtotal_amount, final_amount, order_status, notes)
+                VALUES (:org_id, :branch_id, :customer_id, :order_date, :order_type, :subtotal_amount, :final_amount, :order_status, :notes)
                 RETURNING order_id
             """),
             order_data
