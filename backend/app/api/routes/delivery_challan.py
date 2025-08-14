@@ -153,14 +153,13 @@ def create_delivery_challan(challan_data: dict, db: Session = Depends(get_db)):
             "subtotal_amount": total_amount,
             "final_amount": total_amount,
             "order_status": "confirmed",
-            "delivery_address": challan_data.get("delivery_address"),
             "notes": challan_data.get("notes")
         }
         
         result = db.execute(
             text("""
-                INSERT INTO sales.orders (org_id, customer_id, order_date, order_type, subtotal_amount, final_amount, order_status, delivery_address, notes)
-                VALUES (:org_id, :customer_id, :order_date, :order_type, :subtotal_amount, :final_amount, :order_status, :delivery_address, :notes)
+                INSERT INTO sales.orders (org_id, customer_id, order_date, order_type, subtotal_amount, final_amount, order_status, notes)
+                VALUES (:org_id, :customer_id, :order_date, :order_type, :subtotal_amount, :final_amount, :order_status, :notes)
                 RETURNING order_id
             """),
             order_data
