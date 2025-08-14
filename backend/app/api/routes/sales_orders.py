@@ -58,7 +58,7 @@ async def create_sales_order(
         items_dict = [item.dict() for item in order.items]
         for item in items_dict:
             product = db.execute(text("""
-                SELECT product_id, product_name FROM master.products 
+                SELECT product_id, product_name FROM inventory.products 
                 WHERE product_id = :id AND org_id = :org_id
             """), {"id": item["product_id"], "org_id": org_id}).fetchone()
             

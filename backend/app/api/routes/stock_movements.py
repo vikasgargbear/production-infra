@@ -184,7 +184,7 @@ def create_stock_receive(
         
         # Get product details
         product = db.execute(
-            text("SELECT * FROM master.products WHERE product_id = :product_id"),
+            text("SELECT * FROM inventory.products WHERE product_id = :product_id"),
             {"product_id": receive_data["product_id"]}
         ).first()
         

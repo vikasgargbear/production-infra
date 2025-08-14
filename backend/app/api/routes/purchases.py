@@ -290,7 +290,7 @@ def get_purchase_items(purchase_id: int, db: Session = Depends(get_db)):
         query = text("""
             SELECT poi.*, p.product_name as product_display_name, p.manufacturer
             FROM procurement.purchase_order_items poi
-            LEFT JOIN master.products p ON poi.product_id = p.product_id
+            LEFT JOIN inventory.products p ON poi.product_id = p.product_id
             WHERE poi.po_id = :po_id
             ORDER BY poi.po_item_id
         """)
