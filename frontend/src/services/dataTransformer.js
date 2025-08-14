@@ -51,6 +51,41 @@ class DataTransformer {
   }
 
   /**
+   * Transform supplier data for different contexts
+   */
+  static transformSupplier(supplier, context = 'default') {
+    const base = {
+      supplier_id: String(supplier.id || supplier.supplier_id || ''),
+      name: supplier.name || supplier.supplier_name || '',
+      code: supplier.code || supplier.supplier_code || '',
+      contact_person: supplier.contact_person || '',
+      phone: supplier.phone || supplier.primary_phone || '',
+      email: supplier.email || supplier.primary_email || '',
+      address: supplier.address || '',
+      city: supplier.city || '',
+      state: supplier.state || '',
+      pincode: supplier.pincode || '',
+      gst_number: supplier.gst_number || supplier.gstin || '',
+      pan_number: supplier.pan_number || '',
+      payment_terms: supplier.payment_terms || '',
+      credit_days: parseInt(supplier.credit_days || 0),
+      is_active: supplier.is_active !== false
+    };
+
+    switch (context) {
+      case 'search':
+        return {
+          ...base,
+          display_name: `${base.name} - ${base.city || 'No City'}`,
+          search_text: `${base.name} ${base.phone} ${base.city} ${base.gst_number}`.toLowerCase()
+        };
+      
+      default:
+        return base;
+    }
+  }
+
+  /**
    * Transform customer data for different contexts
    */
   static transformCustomer(customer, context = 'default') {
