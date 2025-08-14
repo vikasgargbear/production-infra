@@ -113,14 +113,16 @@ def create_supplier(supplier_data: SupplierCreate, db: Session = Depends(get_db)
         result = db.execute(text("""
             INSERT INTO parties.suppliers (
                 org_id, supplier_code, supplier_name, supplier_type,
-                gst_number, pan_number, 
+                gst_number, pan_number, drug_license_number, drug_license_validity,
                 primary_phone, primary_email, contact_person_name,
+                bank_name, account_number, ifsc_code, account_holder_name,
                 payment_days, is_active,
                 created_at, updated_at
             ) VALUES (
                 :org_id, :supplier_code, :supplier_name, :supplier_type,
-                :gst_number, :pan_number,
+                :gst_number, :pan_number, :drug_license_number, :drug_license_validity,
                 :phone, :email, :contact_person,
+                :bank_name, :account_number, :ifsc_code, :account_holder_name,
                 :payment_days, :is_active,
                 CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
             ) RETURNING supplier_id, created_at
@@ -128,13 +130,19 @@ def create_supplier(supplier_data: SupplierCreate, db: Session = Depends(get_db)
             "org_id": DEFAULT_ORG_ID,
             "supplier_code": supplier_code,
             "supplier_name": supplier_data.name,
-            "supplier_type": "distributor",  # Default type
+            "supplier_type": supplier_data.supplier_type or "distributor",
             "gst_number": supplier_data.gst_number,
             "pan_number": supplier_data.pan_number,
+            "drug_license_number": supplier_data.drug_license_number,
+            "drug_license_validity": supplier_data.drug_license_validity,
             "phone": supplier_data.phone or "N/A",  # Database requires non-null phone
             "email": supplier_data.email,
             "contact_person": supplier_data.contact_person,
-            "payment_days": 30,  # Default payment terms
+            "bank_name": supplier_data.bank_name,
+            "account_number": supplier_data.account_number,
+            "ifsc_code": supplier_data.ifsc_code,
+            "account_holder_name": supplier_data.account_holder_name,
+            "payment_days": supplier_data.payment_days or 30,
             "is_active": True
         })
         

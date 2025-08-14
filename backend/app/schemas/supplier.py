@@ -10,8 +10,11 @@ class SupplierBase(BaseModel):
     """Base supplier schema"""
     name: str
     code: Optional[str] = None
+    supplier_type: Optional[str] = None
     gst_number: Optional[str] = None
     pan_number: Optional[str] = None
+    drug_license_number: Optional[str] = None
+    drug_license_validity: Optional[str] = None
     address: Optional[str] = None
     city: Optional[str] = None
     state: Optional[str] = None
@@ -19,6 +22,11 @@ class SupplierBase(BaseModel):
     phone: Optional[str] = None
     email: Optional[str] = None
     contact_person: Optional[str] = None
+    bank_name: Optional[str] = None
+    account_number: Optional[str] = None
+    ifsc_code: Optional[str] = None
+    account_holder_name: Optional[str] = None
+    payment_days: Optional[int] = None
 
 class SupplierCreate(SupplierBase):
     """Schema for creating supplier"""
