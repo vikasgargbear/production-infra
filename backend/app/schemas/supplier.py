@@ -20,8 +20,10 @@ class SupplierBase(BaseModel):
     state: Optional[str] = None
     pincode: Optional[str] = None
     phone: Optional[str] = None
+    alternate_phone: Optional[str] = None
     email: Optional[str] = None
     contact_person: Optional[str] = None
+    website: Optional[str] = None
     bank_name: Optional[str] = None
     account_number: Optional[str] = None
     ifsc_code: Optional[str] = None

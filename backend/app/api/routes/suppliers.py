@@ -114,15 +114,15 @@ def create_supplier(supplier_data: SupplierCreate, db: Session = Depends(get_db)
             INSERT INTO parties.suppliers (
                 org_id, supplier_code, supplier_name, supplier_type,
                 gst_number, pan_number, drug_license_number, drug_license_validity,
-                primary_phone, primary_email, contact_person_name,
-                bank_name, account_number, ifsc_code, account_holder_name,
+                primary_phone, secondary_phone, primary_email, contact_person_name,
+                website, bank_name, account_number, ifsc_code, account_holder_name,
                 payment_days, is_active,
                 created_at, updated_at
             ) VALUES (
                 :org_id, :supplier_code, :supplier_name, :supplier_type,
                 :gst_number, :pan_number, :drug_license_number, :drug_license_validity,
-                :phone, :email, :contact_person,
-                :bank_name, :account_number, :ifsc_code, :account_holder_name,
+                :phone, :alternate_phone, :email, :contact_person,
+                :website, :bank_name, :account_number, :ifsc_code, :account_holder_name,
                 :payment_days, :is_active,
                 CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
             ) RETURNING supplier_id, created_at
@@ -136,8 +136,10 @@ def create_supplier(supplier_data: SupplierCreate, db: Session = Depends(get_db)
             "drug_license_number": supplier_data.drug_license_number,
             "drug_license_validity": supplier_data.drug_license_validity,
             "phone": supplier_data.phone or "N/A",  # Database requires non-null phone
+            "alternate_phone": supplier_data.alternate_phone,
             "email": supplier_data.email,
             "contact_person": supplier_data.contact_person,
+            "website": supplier_data.website,
             "bank_name": supplier_data.bank_name,
             "account_number": supplier_data.account_number,
             "ifsc_code": supplier_data.ifsc_code,
