@@ -1,28 +1,32 @@
 # Frontend to Backend API Input Documentation
 
 **Purpose:** Document EXACTLY what data the frontend is currently collecting and sending to backend  
-**Status:** After adding critical missing fields  
+**Status:** UPDATED after implementing critical missing fields  
 **Date:** 2025-08-13  
-**Note:** This shows ACTUAL implementation, not wishlist
+**Note:** This shows ACTUAL implementation after latest updates
 
 ---
 
 ## 📊 SUMMARY OF CURRENT STATE
 
-### ✅ What's Currently Captured
+### ✅ What's Currently Captured (IMPLEMENTED)
 - Basic customer/supplier information
 - Contact details including WhatsApp
 - Drug license with validity dates
 - Banking details for suppliers
 - Credit ratings and limits
 - GST/PAN numbers
+- **Product Schedule Types** - ✅ IMPLEMENTED in ProductCreationModal
+- **Narcotic Register** - ✅ IMPLEMENTED with PrescriptionModal
+- **Place of Supply** - ✅ IMPLEMENTED in InvoiceFlow
+- Storage conditions for products
+- Generic names and composition
 
-### ❌ Still Missing (Critical)
-- **Narcotic Register** - No frontend implementation yet
-- **Product Schedule Types** - Not in product creation
-- **Place of Supply** - Not in invoice creation
+### ❌ Still Missing
 - **E-invoice fields** - Not implemented
-- **Territory/Route/Salesperson** - No dropdowns or selection
+- **Territory/Route/Salesperson** - No dropdowns (fields exist but no UI)
+- **Expected delivery date** - Not in purchase orders
+- **Payment clearance tracking** - Not in payment entry
 
 ---
 
@@ -135,7 +139,7 @@
 
 ## 3. PRODUCT API INPUTS
 
-### Current Implementation in `ProductCreationModal.js`
+### ✅ UPDATED Implementation in `ProductCreationModal.js`
 
 ```json
 {
@@ -155,14 +159,20 @@
   "min_stock": 10,
   "max_stock": 1000,
   
-  // ❌ MISSING (Critical for Pharma)
-  "schedule_type": null,           // NOT IMPLEMENTED - H/H1/X/G/J
-  "is_narcotic": null,             // NOT IMPLEMENTED
-  "prescription_required": null,   // NOT IMPLEMENTED
-  "manufacturing_date": null,      // NOT IMPLEMENTED
-  "storage_condition": null,       // NOT IMPLEMENTED
-  "generic_name": null,
-  "composition": null
+  // ✅ PHARMACEUTICAL COMPLIANCE (NOW IMPLEMENTED)
+  "schedule_type": "H|H1|X|G|J|''",     // ✅ IMPLEMENTED - Drug schedule
+  "is_narcotic": true/false,            // ✅ IMPLEMENTED - Auto-set for X
+  "prescription_required": true/false,  // ✅ IMPLEMENTED - Auto-set for H/H1/X
+  "storage_condition": "room_temp|cool|refrigerated|frozen", // ✅ IMPLEMENTED
+  "generic_name": "string",             // ✅ IMPLEMENTED
+  "composition": "string",              // ✅ IMPLEMENTED
+  "manufacturing_date": "date",         // Already exists as mfg_date
+  
+  // Still uses existing fields
+  "salt_composition": "string",
+  "batch_number": "string",
+  "mfg_date": "YYYY-MM",
+  "expiry_date": "YYYY-MM"
 }
 ```
 
@@ -170,7 +180,7 @@
 
 ## 4. INVOICE API INPUTS
 
-### Current Implementation in `InvoiceFlow.js`
+### ✅ UPDATED Implementation in `InvoiceFlow.js`
 
 ```json
 {
@@ -179,6 +189,13 @@
   "invoice_date": "2024-01-15",
   "due_date": "2024-02-14",
   "payment_terms": "credit",
+  
+  // ✅ GST COMPLIANCE (NOW IMPLEMENTED)
+  "place_of_supply": "Maharashtra",     // ✅ IMPLEMENTED - Auto-set from customer
+  "sales_person_id": null,              // Field exists but no UI dropdown yet
+  "billing_address": "string",          // ✅ CAPTURED from customer
+  "shipping_address": "string",         // ✅ CAPTURED from customer
+  "gst_type": "CGST/SGST|IGST",        // ✅ Auto-determined
   
   // ITEMS (✅ Implemented)
   "items": [
@@ -194,14 +211,20 @@
     }
   ],
   
-  // ❌ MISSING (GST Compliance)
-  "place_of_supply": null,         // NOT IMPLEMENTED - Required for GST
-  "sales_person_id": null,         // NOT IMPLEMENTED
-  "billing_address": null,         // NOT CAPTURED separately
-  "shipping_address": null,        // NOT CAPTURED separately
-  
-  // ❌ MISSING (Narcotic Compliance)
-  "narcotic_records": null,        // NO PRESCRIPTION CAPTURE
+  // ✅ NARCOTIC COMPLIANCE (Component exists)
+  // When Schedule X product is added, PrescriptionModal will capture:
+  "narcotic_records": [
+    {
+      "prescription_number": "RX-2024-001",
+      "prescription_date": "2024-01-15",
+      "doctor_name": "Dr. Kumar",
+      "doctor_registration": "MCI/12345",
+      "patient_name": "John Doe",
+      "patient_age": 35,
+      "patient_gender": "M",
+      "quantity_dispensed": 30
+    }
+  ],
   
   // ❌ MISSING (E-Invoice)
   "e_invoice_number": null,        // NOT IMPLEMENTED
@@ -269,28 +292,57 @@
 
 ## 7. NARCOTIC REGISTER API INPUTS
 
-### ❌ NOT IMPLEMENTED AT ALL
+### ✅ NOW IMPLEMENTED in `NarcoticRegister.tsx`
 
-No frontend component exists for narcotic register. This is a **CRITICAL LEGAL REQUIREMENT**.
+Complete narcotic register component with prescription modal for Schedule X drugs.
 
-Required fields that need implementation:
 ```json
 {
-  "entry_type": "sale|purchase",
+  // REGISTER ENTRY
+  "entry_type": "sale|purchase|adjustment",
+  "entry_date": "2024-01-15T10:30:00",
   "product_id": 101,
-  "schedule_type": "X",
+  "product_name": "Alprazolam 0.5mg",
+  "batch_number": "ALP2024001",
+  "schedule_type": "X|H1",
+  
+  // ✅ PRESCRIPTION DETAILS (Required for sales)
   "prescription_number": "RX-2024-001",
   "prescription_date": "2024-01-15",
-  "doctor_name": "Dr. Kumar",
-  "doctor_registration": "MCI/12345",
+  "doctor_name": "Dr. Rajesh Kumar",
+  "doctor_registration": "MCI/12345/2020",
+  "doctor_phone": "+91-9876543210",
+  
+  // ✅ PATIENT INFORMATION
   "patient_name": "John Doe",
   "patient_age": 35,
-  "patient_gender": "M",
-  "quantity_dispensed": 30,
+  "patient_gender": "M|F|O",
+  "patient_address": "123 Main St, Mumbai",
+  "patient_phone": "+91-9876543211",
+  
+  // ✅ QUANTITY TRACKING
   "opening_balance": 1000,
-  "closing_balance": 970
+  "quantity_received": null,      // For purchases
+  "quantity_dispensed": 30,       // For sales
+  "closing_balance": 970,
+  
+  // REFERENCES
+  "invoice_number": "INV-2024-0001",
+  "grn_number": null,              // For purchases
+  "created_by": "Admin User",
+  "verified_by": "Supervisor",
+  "verification_date": "2024-01-15T11:00:00"
 }
 ```
+
+**Features Implemented:**
+- Complete narcotic register table view
+- Prescription modal with full validation
+- 30-day prescription validity check
+- Doctor registration verification fields
+- Patient demographics capture
+- Balance tracking for each transaction
+- Export functionality for regulatory compliance
 
 ---
 

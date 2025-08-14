@@ -68,6 +68,8 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
     customer_details: prefilledData?.customer_details || null,
     billing_address: prefilledData?.billing_address || '',
     shipping_address: prefilledData?.shipping_address || '',
+    place_of_supply: prefilledData?.place_of_supply || '',  // NEW: Critical for GST
+    sales_person_id: prefilledData?.sales_person_id || '',  // NEW: For tracking
     items: prefilledData?.items || [],
     payment_mode: '',
     payment_status: 'Pending',
@@ -258,7 +260,8 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
     setSelectedCustomer(customer);
     if (customer) {
       const companyState = localStorage.getItem('companyState') || 'Gujarat';
-      const isInterstate = customer.state && customer.state.toLowerCase() !== companyState.toLowerCase();
+      const customerState = customer.state || '';
+      const isInterstate = customerState && customerState.toLowerCase() !== companyState.toLowerCase();
       
       setInvoice(prev => ({
         ...prev,
@@ -267,6 +270,7 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
         customer_details: customer,
         billing_address: `${customer.address}, ${customer.city}, ${customer.state}`,
         shipping_address: `${customer.address}, ${customer.city}, ${customer.state}`,
+        place_of_supply: customerState || companyState,  // NEW: Set place of supply for GST
         gst_type: isInterstate ? 'IGST' : 'CGST/SGST'
       }));
       

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, Package, Pill, Building2, Hash, Percent, IndianRupee } from 'lucide-react';
+import { X, Package, Pill, Building2, Hash, Percent, IndianRupee, Shield, AlertTriangle, Thermometer, FileText } from 'lucide-react';
 import { productAPI, productsApi } from '../../../services/api';
 import PackTypeSelector from '../PackTypeSelector';
 import MonthYearPicker from '../MonthYearPicker';
@@ -26,7 +26,14 @@ const ProductCreationModal = ({
     expiry_date: '',
     quantity_available: '',  // No default - user must enter
     cost_price: '',  // No default - user must enter
-    salt_composition: ''
+    salt_composition: '',
+    // NEW CRITICAL PHARMACEUTICAL FIELDS
+    schedule_type: '',  // H, H1, X, G, J, or empty for OTC
+    is_narcotic: false,  // Auto-set based on schedule_type
+    prescription_required: false,  // Auto-set based on schedule_type
+    storage_condition: 'room_temp',  // room_temp, cool, refrigerated, frozen
+    generic_name: '',
+    composition: ''
   });
   
   const [packConfig, setPackConfig] = useState({
@@ -66,6 +73,19 @@ const ProductCreationModal = ({
       ...newProduct,
       mfg_date: date,
       expiry_date: calculateExpiryDate(date)
+    });
+  };
+
+  // Handle schedule type change and auto-set related fields
+  const handleScheduleTypeChange = (scheduleType) => {
+    const isNarcotic = scheduleType === 'X';
+    const prescriptionRequired = ['H', 'H1', 'X'].includes(scheduleType);
+    
+    setNewProduct({
+      ...newProduct,
+      schedule_type: scheduleType,
+      is_narcotic: isNarcotic,
+      prescription_required: prescriptionRequired
     });
   };
 
@@ -221,7 +241,14 @@ const ProductCreationModal = ({
           expiry_date: '',
           quantity_available: '',
           cost_price: '',
-          salt_composition: ''
+          salt_composition: '',
+          // Reset pharmaceutical fields
+          schedule_type: '',
+          is_narcotic: false,
+          prescription_required: false,
+          storage_condition: 'room_temp',
+          generic_name: '',
+          composition: ''
         });
         
         setPackConfig({
@@ -390,6 +417,103 @@ const ProductCreationModal = ({
                 onChange={setPackConfig}
                 compact={true}
               />
+            </div>
+
+            {/* Pharmaceutical Compliance - CRITICAL */}
+            <div className="space-y-4">
+              <h4 className="text-sm font-semibold text-gray-900 uppercase tracking-wider flex items-center">
+                <Shield className="w-4 h-4 text-red-500 mr-2" />
+                Pharmaceutical Compliance
+              </h4>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Drug Schedule Type *
+                  </label>
+                  <div className="relative">
+                    <Shield className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
+                    <select
+                      value={newProduct.schedule_type}
+                      onChange={(e) => handleScheduleTypeChange(e.target.value)}
+                      className="w-full pl-10 pr-3 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all"
+                    >
+                      <option value="">OTC (Over The Counter)</option>
+                      <option value="H">Schedule H (Prescription Drug)</option>
+                      <option value="H1">Schedule H1 (Prescription with Warning)</option>
+                      <option value="X">Schedule X (Narcotic/Psychotropic)</option>
+                      <option value="G">Schedule G (Hormonal Preparations)</option>
+                      <option value="J">Schedule J (Specific Diseases)</option>
+                    </select>
+                  </div>
+                  {newProduct.schedule_type === 'X' && (
+                    <p className="text-xs text-red-600 mt-1 flex items-center">
+                      <AlertTriangle className="w-3 h-3 mr-1" />
+                      Requires narcotic register entry
+                    </p>
+                  )}
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Storage Condition *
+                  </label>
+                  <div className="relative">
+                    <Thermometer className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
+                    <select
+                      value={newProduct.storage_condition}
+                      onChange={(e) => setNewProduct({ ...newProduct, storage_condition: e.target.value })}
+                      className="w-full pl-10 pr-3 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all"
+                    >
+                      <option value="room_temp">Room Temperature (15-30°C)</option>
+                      <option value="cool">Cool & Dry (8-15°C)</option>
+                      <option value="refrigerated">Refrigerated (2-8°C)</option>
+                      <option value="frozen">Frozen (-20°C)</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Generic Name
+                  </label>
+                  <div className="relative">
+                    <FileText className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
+                    <input
+                      type="text"
+                      value={newProduct.generic_name}
+                      onChange={(e) => setNewProduct({ ...newProduct, generic_name: e.target.value })}
+                      className="w-full pl-10 pr-3 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all"
+                      placeholder="e.g., Paracetamol"
+                    />
+                  </div>
+                </div>
+
+                <div className="md:col-span-3">
+                  <div className="flex items-center space-x-6">
+                    <label className="flex items-center">
+                      <input
+                        type="checkbox"
+                        checked={newProduct.prescription_required}
+                        onChange={(e) => setNewProduct({ ...newProduct, prescription_required: e.target.checked })}
+                        className="rounded border-gray-300 text-green-600 focus:ring-green-500"
+                        disabled={['H', 'H1', 'X'].includes(newProduct.schedule_type)}
+                      />
+                      <span className="ml-2 text-sm text-gray-700">Prescription Required</span>
+                    </label>
+
+                    <label className="flex items-center">
+                      <input
+                        type="checkbox"
+                        checked={newProduct.is_narcotic}
+                        onChange={(e) => setNewProduct({ ...newProduct, is_narcotic: e.target.checked })}
+                        className="rounded border-gray-300 text-red-600 focus:ring-red-500"
+                        disabled={newProduct.schedule_type === 'X'}
+                      />
+                      <span className="ml-2 text-sm text-gray-700">Narcotic/Psychotropic Drug</span>
+                    </label>
+                  </div>
+                </div>
+              </div>
             </div>
 
             {/* Pricing Information */}

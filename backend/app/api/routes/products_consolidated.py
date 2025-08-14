@@ -63,7 +63,7 @@ async def get_products(
                 product_status, launch_date, discontinuation_date,
                 search_keywords, tags, product_images, documents,
                 is_active, is_saleable, is_purchasable,
-                created_at, updated_at, created_by, current_mrp
+                created_at, updated_at, created_by
             FROM inventory.products
             WHERE 1=1
         """
