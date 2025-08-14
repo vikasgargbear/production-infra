@@ -465,6 +465,68 @@ async def get_customer_outstanding(
         raise HTTPException(status_code=500, detail=f"Failed to get customer outstanding: {str(e)}")
 
 
+@router.delete("/{customer_id}")
+async def delete_customer(
+    customer_id: int,
+    db: Session = Depends(get_db)
+):
+    """
+    Delete a customer (soft delete)
+    
+    Note: This will mark the customer as inactive rather than deleting permanently.
+    Related transactions and history will be preserved.
+    """
+    try:
+        # Check if customer exists
+        customer = db.execute(text("""
+            SELECT customer_id, customer_name, is_active
+            FROM parties.customers 
+            WHERE customer_id = :customer_id AND org_id = :org_id
+        """), {"customer_id": customer_id, "org_id": DEFAULT_ORG_ID}).fetchone()
+        
+        if not customer:
+            raise HTTPException(status_code=404, detail="Customer not found")
+        
+        if not customer.is_active:
+            return {"message": "Customer is already inactive"}
+        
+        # Check for outstanding balance
+        outstanding = db.execute(text("""
+            SELECT COALESCE(SUM(final_amount - COALESCE(paid_amount, 0)), 0) as balance
+            FROM sales.invoices
+            WHERE customer_id = :customer_id
+            AND payment_status != 'paid'
+        """), {"customer_id": customer_id}).scalar()
+        
+        if outstanding and outstanding > 0:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Cannot delete customer with outstanding balance of {outstanding}"
+            )
+        
+        # Soft delete - mark as inactive
+        db.execute(text("""
+            UPDATE parties.customers
+            SET is_active = false,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE customer_id = :customer_id AND org_id = :org_id
+        """), {"customer_id": customer_id, "org_id": DEFAULT_ORG_ID})
+        
+        db.commit()
+        
+        return {
+            "message": f"Customer '{customer.customer_name}' has been deactivated",
+            "customer_id": customer_id
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Error deleting customer {customer_id}: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to delete customer: {str(e)}")
+
+
 @router.post("/{customer_id}/payment", response_model=PaymentResponse)
 async def record_customer_payment(
     customer_id: int,

@@ -22,11 +22,11 @@
 - Storage conditions for products
 - Generic names and composition
 
-### ❌ Still Missing
-- **E-invoice fields** - Not implemented
-- **Territory/Route/Salesperson** - No dropdowns (fields exist but no UI)
-- **Expected delivery date** - Not in purchase orders
-- **Payment clearance tracking** - Not in payment entry
+### ✅ Recently Implemented (2025-08-14)
+- **E-invoice fields** - ✅ IMPLEMENTED in InvoiceFlow.js
+- **Territory/Route/Salesperson** - ✅ IMPLEMENTED in CustomerCreationModal.js
+- **Expected delivery date** - ✅ IMPLEMENTED (field exists in purchase orders)
+- **Payment clearance tracking** - ✅ IMPLEMENTED in PaymentEntryModal.js
 
 ---
 
@@ -69,12 +69,18 @@
 }
 ```
 
-### ❌ NOT Captured Yet (But Needed)
+### ✅ NOW Captured (Recently Implemented)
 ```json
 {
-  "assigned_salesperson_id": null,  // No salesperson dropdown
-  "territory_id": null,              // No territory selection
-  "route_id": null,                  // No route management
+  "assigned_salesperson_id": 123,    // ✅ IMPLEMENTED - Salesperson dropdown
+  "territory_id": 456,               // ✅ IMPLEMENTED - Territory selection
+  "route_id": 789,                   // ✅ IMPLEMENTED - Route management (filtered by territory)
+}
+```
+
+### ❌ Still NOT Captured (Lower Priority)
+```json
+{
   "customer_code": null,             // Not auto-generated
   "fssai_number": null,              // Not in form
   "loyalty_tier": null,              // Removed as unnecessary

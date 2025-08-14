@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { X, User, Phone, Mail, MapPin, Building, FileText, Shield, Calendar, CreditCard, MessageCircle, AlertCircle } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { X, User, Phone, Mail, MapPin, Building, FileText, Shield, Calendar, CreditCard, MessageCircle, AlertCircle, UserCheck, Map, Route } from 'lucide-react';
 import { customerAPI } from '../../../services/api';
 import DataTransformer from '../../../services/dataTransformer';
 import { APP_CONFIG } from '../../../config/app.config';
@@ -18,6 +18,9 @@ const CustomerCreationModal = ({ show, onClose, onCustomerCreated }) => {
     credit_limit: 5000,
     credit_days: 0,
     credit_rating: 'B',  // NEW: Critical for credit management
+    assigned_salesperson_id: '',  // NEW: Sales tracking
+    territory_id: '',  // NEW: Territory management
+    route_id: '',  // NEW: Route management
     address: {
       address_line1: '',
       address_line2: '',
@@ -29,6 +32,45 @@ const CustomerCreationModal = ({ show, onClose, onCustomerCreated }) => {
   });
   const [saving, setSaving] = useState(false);
   const [errors, setErrors] = useState([]);
+  const [salespersons, setSalespersons] = useState([]);
+  const [territories, setTerritories] = useState([]);
+  const [routes, setRoutes] = useState([]);
+
+  // Load salespersons, territories, and routes on mount
+  useEffect(() => {
+    if (show) {
+      // Mock data for now - in production, fetch from API
+      setSalespersons([
+        { id: 1, name: 'John Smith', code: 'JS001' },
+        { id: 2, name: 'Sarah Johnson', code: 'SJ002' },
+        { id: 3, name: 'Mike Wilson', code: 'MW003' },
+        { id: 4, name: 'Lisa Davis', code: 'LD004' }
+      ]);
+      
+      setTerritories([
+        { id: 1, name: 'Mumbai North', code: 'MUM-N' },
+        { id: 2, name: 'Mumbai South', code: 'MUM-S' },
+        { id: 3, name: 'Mumbai East', code: 'MUM-E' },
+        { id: 4, name: 'Mumbai West', code: 'MUM-W' },
+        { id: 5, name: 'Thane', code: 'THN' },
+        { id: 6, name: 'Navi Mumbai', code: 'NVM' }
+      ]);
+      
+      setRoutes([
+        { id: 1, name: 'Route A - Monday', territory_id: 1 },
+        { id: 2, name: 'Route B - Tuesday', territory_id: 1 },
+        { id: 3, name: 'Route C - Wednesday', territory_id: 2 },
+        { id: 4, name: 'Route D - Thursday', territory_id: 2 },
+        { id: 5, name: 'Route E - Friday', territory_id: 3 },
+        { id: 6, name: 'Route F - Saturday', territory_id: 3 }
+      ]);
+    }
+  }, [show]);
+
+  // Filter routes based on selected territory
+  const filteredRoutes = routes.filter(route => 
+    !newCustomer.territory_id || route.territory_id === parseInt(newCustomer.territory_id)
+  );
 
   const saveCustomer = async () => {
     setSaving(true);
@@ -456,6 +498,88 @@ const CustomerCreationModal = ({ show, onClose, onCustomerCreated }) => {
                     max="90"
                     disabled={newCustomer.credit_rating === 'D'}
                   />
+                </div>
+              </div>
+            </div>
+
+            {/* Sales & Territory Management - NEW */}
+            <div className="space-y-4">
+              <h4 className="text-sm font-semibold text-gray-900 uppercase tracking-wider flex items-center">
+                <UserCheck className="w-4 h-4 text-purple-500 mr-2" />
+                Sales & Territory Management
+              </h4>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Assigned Salesperson
+                  </label>
+                  <div className="relative">
+                    <UserCheck className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
+                    <select
+                      value={newCustomer.assigned_salesperson_id}
+                      onChange={(e) => setNewCustomer({ ...newCustomer, assigned_salesperson_id: e.target.value })}
+                      className="w-full pl-10 pr-3 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                    >
+                      <option value="">Select Salesperson</option>
+                      {salespersons.map(sp => (
+                        <option key={sp.id} value={sp.id}>
+                          {sp.name} ({sp.code})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+                
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Territory
+                  </label>
+                  <div className="relative">
+                    <Map className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
+                    <select
+                      value={newCustomer.territory_id}
+                      onChange={(e) => {
+                        setNewCustomer({ 
+                          ...newCustomer, 
+                          territory_id: e.target.value,
+                          route_id: '' // Reset route when territory changes
+                        });
+                      }}
+                      className="w-full pl-10 pr-3 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                    >
+                      <option value="">Select Territory</option>
+                      {territories.map(territory => (
+                        <option key={territory.id} value={territory.id}>
+                          {territory.name} ({territory.code})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+                
+                <div className="md:col-span-2">
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Delivery Route
+                  </label>
+                  <div className="relative">
+                    <Route className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
+                    <select
+                      value={newCustomer.route_id}
+                      onChange={(e) => setNewCustomer({ ...newCustomer, route_id: e.target.value })}
+                      className="w-full pl-10 pr-3 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                      disabled={!newCustomer.territory_id}
+                    >
+                      <option value="">Select Route</option>
+                      {filteredRoutes.map(route => (
+                        <option key={route.id} value={route.id}>
+                          {route.name}
+                        </option>
+                      ))}
+                    </select>
+                    {!newCustomer.territory_id && (
+                      <p className="text-xs text-gray-500 mt-1">Select a territory first</p>
+                    )}
+                  </div>
                 </div>
               </div>
             </div>

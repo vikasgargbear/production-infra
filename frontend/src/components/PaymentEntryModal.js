@@ -42,6 +42,14 @@ const PaymentEntryModal = ({ open, onClose }) => {
     bank_name: '',
     transaction_id: '',
     
+    // NEW: Clearance tracking fields
+    clearance_date: '',
+    clearance_status: 'pending', // pending|cleared|returned|cancelled
+    bank_charges: 0,
+    tds_amount: 0,
+    bank_account_id: '',
+    unallocated_amount: 0,
+    
     // UI-specific fields
     paymentTime: new Date().toLocaleTimeString('en-US', { hour12: false }).slice(0, 5),
     chequeNo: '',
@@ -463,6 +471,73 @@ const PaymentEntryModal = ({ open, onClose }) => {
                     placeholder="Add any notes..."
                   />
                 </div>
+
+                {/* Payment Clearance Tracking - NEW */}
+                {(paymentMode === 'cheque' || paymentMode === 'rtgs_neft') && (
+                  <div className="space-y-4 p-4 bg-blue-50 rounded-lg">
+                    <h5 className="text-sm font-semibold text-blue-900">Payment Clearance Details</h5>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          Clearance Status
+                        </label>
+                        <select
+                          value={paymentData.clearance_status}
+                          onChange={(e) => setPaymentData(prev => ({ ...prev, clearance_status: e.target.value }))}
+                          className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
+                        >
+                          <option value="pending">Pending</option>
+                          <option value="cleared">Cleared</option>
+                          <option value="returned">Returned</option>
+                          <option value="cancelled">Cancelled</option>
+                        </select>
+                      </div>
+                      
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          Clearance Date
+                        </label>
+                        <input
+                          type="date"
+                          value={paymentData.clearance_date}
+                          onChange={(e) => setPaymentData(prev => ({ ...prev, clearance_date: e.target.value }))}
+                          className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
+                          disabled={paymentData.clearance_status === 'pending'}
+                        />
+                      </div>
+                      
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          Bank Charges (₹)
+                        </label>
+                        <input
+                          type="number"
+                          value={paymentData.bank_charges}
+                          onChange={(e) => setPaymentData(prev => ({ ...prev, bank_charges: parseFloat(e.target.value) || 0 }))}
+                          className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
+                          placeholder="0.00"
+                          min="0"
+                          step="0.01"
+                        />
+                      </div>
+                      
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          TDS Amount (₹)
+                        </label>
+                        <input
+                          type="number"
+                          value={paymentData.tds_amount}
+                          onChange={(e) => setPaymentData(prev => ({ ...prev, tds_amount: parseFloat(e.target.value) || 0 }))}
+                          className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
+                          placeholder="0.00"
+                          min="0"
+                          step="0.01"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                )}
 
                 {activeTab === 'simple' && (
                   <div>

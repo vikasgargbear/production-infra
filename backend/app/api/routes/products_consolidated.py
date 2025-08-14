@@ -33,7 +33,7 @@ def _format_composition(composition_value):
         return {"active": composition_value}
     return {}
 
-@router.get("/", response_model=List[Product])
+@router.get("/")
 async def get_products(
     limit: int = Query(10, ge=1, le=100, description="Number of products to return"),
     skip: int = Query(0, ge=0, description="Number of products to skip"),

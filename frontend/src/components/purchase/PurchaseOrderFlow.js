@@ -53,7 +53,8 @@ const PurchaseOrderFlow = ({ onClose, prefilledData = null }) => {
   const [purchaseOrder, setPurchaseOrder] = useState({
     po_no: '',
     po_date: new Date().toISOString().split('T')[0],
-    po_type: 'standard',
+    expected_delivery_date: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0], // NEW: 7 days from now
+    po_type: 'regular', // NEW: regular|urgent|scheduled
     status: 'draft',
     priority: 'normal',
     
@@ -63,6 +64,7 @@ const PurchaseOrderFlow = ({ onClose, prefilledData = null }) => {
     supplier_details: null,
     billing_address: '',
     shipping_address: '',
+    delivery_location_id: '', // NEW: For specific delivery location
     
     // Reference details
     reference_no: prefilledData?.reference_no || '',
@@ -105,6 +107,7 @@ const PurchaseOrderFlow = ({ onClose, prefilledData = null }) => {
 4. Invoice must mention MRP, batch no, expiry date, and HSN code
 5. Goods once accepted will not be returned except for quality issues`,
     
+    special_instructions: '', // NEW: Special delivery/handling instructions
     notes: '',
     
     // Items
@@ -591,10 +594,10 @@ ${localStorage.getItem('company_name') || 'AASO Pharmaceuticals'}
                       onChange={(e) => setPurchaseOrder(prev => ({ ...prev, po_type: e.target.value }))}
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
                     >
-                      <option value="standard">Standard PO</option>
+                      <option value="regular">Regular PO</option>
+                      <option value="urgent">Urgent PO</option>
+                      <option value="scheduled">Scheduled PO</option>
                       <option value="blanket">Blanket PO</option>
-                      <option value="contract">Contract PO</option>
-                      <option value="planned">Planned PO</option>
                     </select>
                   </div>
                 </div>

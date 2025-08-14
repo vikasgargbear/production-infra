@@ -189,8 +189,8 @@ async def create_order(
                 )
             """), item_data)
         
-        # Allocate inventory
-        OrderService.allocate_inventory(db, order_id, items_dict, org_id)
+        # Skip inventory allocation - only invoices should deduct inventory
+        # OrderService.allocate_inventory(db, order_id, items_dict, org_id)
         
         db.commit()
         
