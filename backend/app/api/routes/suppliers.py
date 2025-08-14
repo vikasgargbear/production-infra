@@ -115,14 +115,14 @@ def create_supplier(supplier_data: SupplierCreate, db: Session = Depends(get_db)
                 org_id, supplier_code, supplier_name, supplier_type,
                 gst_number, pan_number, drug_license_number, drug_license_validity,
                 primary_phone, secondary_phone, primary_email, contact_person_name,
-                bank_name, account_number, ifsc_code, account_holder_name,
+                website, bank_name, account_number, ifsc_code, account_holder_name,
                 payment_days, is_active,
                 created_at, updated_at
             ) VALUES (
                 :org_id, :supplier_code, :supplier_name, :supplier_type,
                 :gst_number, :pan_number, :drug_license_number, :drug_license_validity,
                 :phone, :secondary_phone, :email, :contact_person,
-                :bank_name, :account_number, :ifsc_code, :account_holder_name,
+                :website, :bank_name, :account_number, :ifsc_code, :account_holder_name,
                 :payment_days, :is_active,
                 CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
             ) RETURNING supplier_id, created_at
