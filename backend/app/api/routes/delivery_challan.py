@@ -136,21 +136,31 @@ def get_delivery_challan(challan_id: int, db: Session = Depends(get_db)):
 def create_delivery_challan(challan_data: dict, db: Session = Depends(get_db)):
     """Create a new delivery challan (actually creates an order)"""
     try:
+        # Calculate totals from items if provided
+        total_amount = 0
+        if "items" in challan_data:
+            for item in challan_data["items"]:
+                quantity = item.get("quantity", 0)
+                unit_price = item.get("unit_price", 0)
+                total_amount += quantity * unit_price
+        
         # For now, this creates an order with delivery status
         order_data = {
+            "org_id": "ad808530-1ddb-4377-ab20-67bef145d80d",
             "customer_id": challan_data.get("customer_id"),
-            "order_date": challan_data.get("challan_date", datetime.utcnow()),
-            "total_amount": challan_data.get("total_amount", 0),
+            "order_date": challan_data.get("order_date", datetime.utcnow()),
+            "order_type": challan_data.get("order_type", "delivery"),
+            "subtotal_amount": total_amount,
+            "final_amount": total_amount,
             "order_status": "confirmed",
-            "delivery_status": "pending",
             "delivery_address": challan_data.get("delivery_address"),
             "notes": challan_data.get("notes")
         }
         
         result = db.execute(
             text("""
-                INSERT INTO sales.orders (customer_id, order_date, total_amount, order_status, delivery_status, delivery_address, notes)
-                VALUES (:customer_id, :order_date, :total_amount, :order_status, :delivery_status, :delivery_address, :notes)
+                INSERT INTO sales.orders (org_id, customer_id, order_date, order_type, subtotal_amount, final_amount, order_status, delivery_address, notes)
+                VALUES (:org_id, :customer_id, :order_date, :order_type, :subtotal_amount, :final_amount, :order_status, :delivery_address, :notes)
                 RETURNING order_id
             """),
             order_data
