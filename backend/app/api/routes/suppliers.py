@@ -131,7 +131,7 @@ def create_supplier(supplier_data: SupplierCreate, db: Session = Depends(get_db)
             "supplier_type": "distributor",  # Default type
             "gst_number": supplier_data.gst_number,
             "pan_number": supplier_data.pan_number,
-            "phone": supplier_data.phone,
+            "phone": supplier_data.phone or "N/A",  # Database requires non-null phone
             "email": supplier_data.email,
             "contact_person": supplier_data.contact_person,
             "payment_days": 30,  # Default payment terms
