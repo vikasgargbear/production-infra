@@ -6,7 +6,8 @@
 import axios, { AxiosInstance, AxiosError } from 'axios';
 
 // Get API URL from environment or use default
-const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || 'http://localhost:8000';
+// Use HTTP to avoid CORS preflight redirect issues with Railway
+const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || 'http://pharma-backend-production-0c09.up.railway.app';
 // Create axios instance with default config
 const apiClient: AxiosInstance = axios.create({
   baseURL: `${API_BASE_URL}/api`,  // Consolidated API - no version

@@ -7,7 +7,8 @@
 import axios from 'axios';
 
 // Create our own apiClient instance to avoid circular dependency
-const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || 'http://localhost:8000';
+// Use HTTP to avoid CORS preflight redirect issues with Railway
+const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || 'http://pharma-backend-production-0c09.up.railway.app';
 const apiClient = axios.create({
   baseURL: `${API_BASE_URL}/api`,  // Consolidated API - no version numbers
   timeout: 30000,
