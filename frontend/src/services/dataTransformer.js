@@ -319,17 +319,26 @@ class DataTransformer {
     return {
       name: supplierData.supplier_name || supplierData.name,
       code: supplierData.supplier_code || null,
+      supplier_type: supplierData.supplier_type || 'distributor',
       contact_person: supplierData.contact_person || null,
       phone: supplierData.phone || supplierData.primary_phone || null,
       email: supplierData.email || supplierData.primary_email || null,
-      address: supplierData.address || null,
+      address: supplierData.address_line1 || supplierData.address || null,
       city: supplierData.city || null,
       state: supplierData.state || null,
       pincode: supplierData.pincode || null,
       gst_number: supplierData.gst_number || supplierData.gstin || null,
       pan_number: supplierData.pan_number || null,
-      // Additional supplier-specific fields
+      drug_license_number: supplierData.drug_license_no || null,
+      drug_license_validity: supplierData.drug_license_validity || null,
+      // Banking details
+      bank_name: supplierData.bank_name || null,
+      account_number: supplierData.bank_account_no || null,
+      ifsc_code: supplierData.bank_ifsc_code || null,
+      account_holder_name: supplierData.account_holder_name || null,
+      // Payment terms
       payment_terms: supplierData.payment_terms || null,
+      payment_days: parseInt(supplierData.payment_terms || 30),
       credit_days: parseInt(supplierData.credit_days || 0),
       org_id: supplierData.org_id
     };

@@ -77,7 +77,7 @@ const SupplierCreationModal = ({
     compliance_rating: 'good',
     
     // Additional Info
-    supplier_type: 'pharmaceutical',
+    supplier_type: 'distributor',
     notes: '',
     is_active: true,
     ...initialData
@@ -297,11 +297,10 @@ const SupplierCreationModal = ({
                     onChange={(e) => handleInputChange('supplier_type', e.target.value)}
                     className="w-full px-4 py-3 text-base border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                   >
-                    <option value="pharmaceutical">Pharmaceutical</option>
-                    <option value="fmcg">FMCG</option>
-                    <option value="cosmetic">Cosmetic</option>
-                    <option value="medical_device">Medical Device</option>
-                    <option value="other">Other</option>
+                    <option value="manufacturer">Manufacturer</option>
+                    <option value="distributor">Distributor</option>
+                    <option value="stockist">Stockist</option>
+                    <option value="importer">Importer</option>
                   </select>
                 </div>
               </div>
