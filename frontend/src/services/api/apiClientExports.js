@@ -222,7 +222,7 @@ export const purchasesAPI = {
 
 export const supplierAPI = {
   search: async (query, options = {}) => {
-    const response = await apiClient.get('/suppliers', {
+    const response = await apiClient.get('/suppliers/', {
       params: {
         q: query,
         limit: options.limit || 50,
@@ -233,7 +233,7 @@ export const supplierAPI = {
   },
 
   create: async (supplierData) => {
-    const response = await apiClient.post('/suppliers', supplierData);
+    const response = await apiClient.post('/suppliers/', supplierData);
     return response.data;
   },
 };
