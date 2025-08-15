@@ -4,7 +4,7 @@ import {
   Package, TrendingUp, TrendingDown,
   ChevronRight, Trash2, Upload, Download, FileText
 } from 'lucide-react';
-import { stockApi, productsApi } from '../../services/api';
+import { stockApi, productAPI } from '../../services/api';
 import { formatCurrency } from '../../utils/formatters';
 import { DataTable, ProductSearchSimple, Select, DatePicker, StatusBadge, ViewHistoryButton, ModuleHeader } from '../global';
 

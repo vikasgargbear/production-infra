@@ -19,7 +19,7 @@ import {
   DollarSign
 } from 'lucide-react';
 import { ledgerApi } from '../../services/api/modules/ledger.api';
-import { DataTable, StatusBadge, Select } from '../global';
+import { DataTable, StatusBadge, Select, ModuleHeader } from '../global';
 import { formatCurrency } from '../../utils/formatters';
 import { useNavigate } from 'react-router-dom';
 
@@ -27,6 +27,7 @@ interface PartyBalanceProps {
   partyType?: 'customer' | 'supplier' | 'all';
   embedded?: boolean;
   onPartyClick?: (party: PartyBalanceItem) => void;
+  onClose?: () => void;
 }
 
 interface PartyBalanceItem {
@@ -61,7 +62,8 @@ interface BalanceSummary {
 const PartyBalance: React.FC<PartyBalanceProps> = ({
   partyType = 'all',
   embedded = false,
-  onPartyClick
+  onPartyClick,
+  onClose
 }) => {
   const navigate = useNavigate();
   const [filters, setFilters] = useState({
@@ -309,13 +311,30 @@ const PartyBalance: React.FC<PartyBalanceProps> = ({
   ];
 
   return (
-    <div className={embedded ? '' : 'p-6'}>
-      {/* Header */}
+    <div className={embedded ? 'p-6' : 'h-full bg-blue-50'}>
       {!embedded && (
-        <div className="mb-6">
-          <h1 className="text-2xl font-bold text-gray-800">Party Balances</h1>
-          <p className="text-gray-600">Overview of all party account balances</p>
-        </div>
+        <div className="h-full flex flex-col">
+          <ModuleHeader
+            title="Party Balances"
+            subtitle="Overview of all party account balances"
+            icon={Users}
+            iconColor="text-green-600"
+            onClose={onClose}
+            historyType="ledger"
+            additionalActions={[
+              {
+                label: "Export",
+                icon: Download,
+                onClick: () => console.log('Export balances'),
+                variant: "default"
+              }
+            ]}
+          />
+          <div className="bg-blue-50 px-4 py-2 text-xs text-blue-700 border-b border-blue-200">
+            Keyboard shortcuts: <strong>Ctrl+F</strong> - Search | <strong>Ctrl+E</strong> - Export | <strong>Esc</strong> - Close
+          </div>
+          <div className="flex-1 overflow-y-auto">
+            <div className="max-w-6xl mx-auto px-6 py-6">
       )}
 
       {/* Summary Cards */}
@@ -480,6 +499,12 @@ const PartyBalance: React.FC<PartyBalanceProps> = ({
           emptyMessage="No parties found"
         />
       </div>
+      
+      {!embedded && (
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

@@ -180,8 +180,6 @@ const CurrentStock = ({ open = true, onClose }) => {
     }
     
     try {
-      console.log(`Fetching stock data page ${page}...`);
-      
       // Check if getAll method exists
       if (!productAPI || typeof productAPI.getAll !== 'function') {
         throw new Error('productAPI.getAll is not available. Available methods: ' + Object.keys(productAPI || {}));
@@ -192,7 +190,6 @@ const CurrentStock = ({ open = true, onClose }) => {
         limit: 20,
         skip: page * 20
       });
-      console.log('Products API response:', response);
       
       // Handle different response formats from productAPI.getAll()
       let products = [];
@@ -209,8 +206,6 @@ const CurrentStock = ({ open = true, onClose }) => {
         products = [];
       }
       
-      console.log(`Page ${page} - Raw products data:`, products.length, 'items');
-      
       // Set hasMore based on whether we got fewer items than requested
       setHasMore(products.length === 20);
       
@@ -218,8 +213,6 @@ const CurrentStock = ({ open = true, onClose }) => {
       const transformedData = products
         .filter(ProductDataValidator.validateProductData)
         .map(ProductDataValidator.transformProductToStockItem);
-      
-      console.log(`Processed page ${page}: ${products.length} raw → ${transformedData.length} valid items`);
       
       if (reset || page === 0) {
         setAllProducts(transformedData);
@@ -242,8 +235,6 @@ const CurrentStock = ({ open = true, onClose }) => {
   };
 
   const filterData = () => {
-    console.log('Filtering data. Stock data length:', stockData.length);
-    console.log('Filters - Search:', searchQuery, 'Category:', selectedCategory, 'Low Stock:', showLowStock, 'Expiring:', showExpiring);
     
     // First filter out any null/undefined items
     let filtered = stockData.filter(item => item && item.product_name);

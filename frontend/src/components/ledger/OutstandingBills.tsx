@@ -21,13 +21,14 @@ import {
 } from 'lucide-react';
 import { format, parseISO, differenceInDays } from 'date-fns';
 import { ledgerApi } from '../../services/api/modules/ledger.api';
-import { CustomerSearch, SupplierSearch, DataTable, StatusBadge } from '../global';
+import { CustomerSearch, SupplierSearch, DataTable, StatusBadge, ModuleHeader } from '../global';
 import { formatCurrency } from '../../utils/formatters';
 
 interface OutstandingBillsProps {
   partyType?: 'customer' | 'supplier';
   partyId?: string;
   embedded?: boolean;
+  onClose?: () => void;
   onBillClick?: (bill: OutstandingBill) => void;
   onPaymentClick?: (bill: OutstandingBill) => void;
 }
@@ -324,13 +325,30 @@ const OutstandingBills: React.FC<OutstandingBillsProps> = ({
   ];
 
   return (
-    <div className={embedded ? '' : 'p-6'}>
-      {/* Header */}
+    <div className={embedded ? 'p-6' : 'h-full bg-blue-50'}>
       {!embedded && (
-        <div className="mb-6">
-          <h1 className="text-2xl font-bold text-gray-800">Outstanding Bills</h1>
-          <p className="text-gray-600">Track and manage pending payments</p>
-        </div>
+        <div className="h-full flex flex-col">
+          <ModuleHeader
+            title="Outstanding Bills"
+            subtitle="Track and manage pending payments"
+            icon={AlertCircle}
+            iconColor="text-red-600"
+            onClose={onClose}
+            historyType="ledger"
+            additionalActions={[
+              {
+                label: "Export",
+                icon: Download,
+                onClick: () => console.log('Export outstanding'),
+                variant: "default"
+              }
+            ]}
+          />
+          <div className="bg-blue-50 px-4 py-2 text-xs text-blue-700 border-b border-blue-200">
+            Keyboard shortcuts: <strong>Ctrl+F</strong> - Search | <strong>Ctrl+E</strong> - Export | <strong>Esc</strong> - Close
+          </div>
+          <div className="flex-1 overflow-y-auto">
+            <div className="max-w-6xl mx-auto px-6 py-6">
       )}
 
       {/* Summary Cards */}
@@ -508,6 +526,12 @@ const OutstandingBills: React.FC<OutstandingBillsProps> = ({
           emptyMessage="No outstanding bills found"
         />
       </div>
+      
+      {!embedded && (
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

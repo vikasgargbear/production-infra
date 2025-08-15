@@ -28,7 +28,7 @@ import {
 } from 'lucide-react';
 import { format, parseISO, subMonths, differenceInDays } from 'date-fns';
 import { partyLedgerAPI } from '../../services/api';
-import { CustomerSearch, SupplierSearch, DatePicker, Select, DataTable, StatusBadge } from '../global';
+import { CustomerSearch, SupplierSearch, DatePicker, Select, DataTable, StatusBadge, ModuleHeader } from '../global';
 import { formatCurrency } from '../../utils/formatters';
 import AgingAnalysis from './AgingAnalysis';
 
@@ -37,6 +37,7 @@ interface PartyLedgerV3Props {
   partyId?: string;
   embedded?: boolean;
   onTransactionClick?: (transaction: LedgerEntry) => void;
+  onClose?: () => void;
 }
 
 interface LedgerEntry {
@@ -98,7 +99,8 @@ const PartyLedgerV3: React.FC<PartyLedgerV3Props> = ({
   partyType = 'customer',
   partyId: initialPartyId,
   embedded = false,
-  onTransactionClick
+  onTransactionClick,
+  onClose
 }) => {
   const [selectedParty, setSelectedParty] = useState<any>(null);
   const [dateRange, setDateRange] = useState({
@@ -374,47 +376,39 @@ const PartyLedgerV3: React.FC<PartyLedgerV3Props> = ({
   ];
 
   return (
-    <div className={embedded ? '' : 'p-6'}>
-      {/* Header */}
+    <div className={embedded ? 'p-6' : 'h-full bg-blue-50'}>
       {!embedded && (
-        <div className="mb-6 flex justify-between items-center">
-          <div>
-            <h1 className="text-2xl font-bold text-gray-800">Advanced Party Ledger</h1>
-            <p className="text-gray-600">Complete transaction history with analytics and reconciliation</p>
+        <div className="h-full flex flex-col">
+          <ModuleHeader
+            title="Party Ledger"
+            subtitle="Complete transaction history with analytics and reconciliation"
+            icon={FileText}
+            iconColor="text-blue-600"
+            onClose={onClose}
+            historyType="ledger"
+            additionalActions={[
+              {
+                label: 'Table',
+                onClick: () => setViewMode('table'),
+                variant: viewMode === 'table' ? 'primary' : 'default'
+              },
+              {
+                label: 'Summary',
+                onClick: () => setViewMode('summary'),
+                variant: viewMode === 'summary' ? 'primary' : 'default'
+              },
+              {
+                label: 'Analytics',
+                onClick: () => setViewMode('analytics'),
+                variant: viewMode === 'analytics' ? 'primary' : 'default'
+              }
+            ]}
+          />
+          <div className="bg-blue-50 px-4 py-2 text-xs text-blue-700 border-b border-blue-200">
+            Keyboard shortcuts: <strong>Ctrl+F</strong> - Search | <strong>Ctrl+E</strong> - Export | <strong>Esc</strong> - Close
           </div>
-          <div className="flex gap-2">
-            <button
-              onClick={() => setViewMode('table')}
-              className={`px-4 py-2 rounded-md ${
-                viewMode === 'table' 
-                  ? 'bg-blue-600 text-white' 
-                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-              }`}
-            >
-              Table View
-            </button>
-            <button
-              onClick={() => setViewMode('summary')}
-              className={`px-4 py-2 rounded-md ${
-                viewMode === 'summary' 
-                  ? 'bg-blue-600 text-white' 
-                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-              }`}
-            >
-              Summary
-            </button>
-            <button
-              onClick={() => setViewMode('analytics')}
-              className={`px-4 py-2 rounded-md ${
-                viewMode === 'analytics' 
-                  ? 'bg-blue-600 text-white' 
-                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-              }`}
-            >
-              Analytics
-            </button>
-          </div>
-        </div>
+          <div className="flex-1 overflow-y-auto">
+            <div className="max-w-6xl mx-auto px-6 py-6">
       )}
 
       {/* Party Selection */}
@@ -501,6 +495,12 @@ const PartyLedgerV3: React.FC<PartyLedgerV3Props> = ({
       {(selectedParty || initialPartyId) && viewMode === 'analytics' && analytics && (
         <div className="space-y-6">
           {/* Add analytics charts here */}
+        </div>
+      )}
+      
+      {!embedded && (
+            </div>
+          </div>
         </div>
       )}
     </div>
