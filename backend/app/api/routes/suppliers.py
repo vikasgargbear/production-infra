@@ -139,6 +139,7 @@ def create_supplier(supplier_data: SupplierCreate, db: Session = Depends(get_db)
             "secondary_phone": supplier_data.secondary_phone,
             "email": supplier_data.email,
             "contact_person": supplier_data.contact_person,
+            "website": supplier_data.website,
             "bank_name": supplier_data.bank_name,
             "account_number": supplier_data.account_number,
             "ifsc_code": supplier_data.ifsc_code,
@@ -148,10 +149,37 @@ def create_supplier(supplier_data: SupplierCreate, db: Session = Depends(get_db)
         })
         
         row = result.fetchone()
+        supplier_id = row.supplier_id
+        
+        # Create address record if address information provided
+        if any([supplier_data.address, supplier_data.city, supplier_data.state, supplier_data.pincode]):
+            db.execute(text("""
+                INSERT INTO master.addresses (
+                    org_id, entity_type, entity_id, address_type,
+                    address_line1, address_line2, city, state_name, pincode,
+                    country, is_default, is_active,
+                    created_at
+                ) VALUES (
+                    :org_id, 'supplier', :entity_id, 'registered',
+                    :address_line1, :address_line2, :city, :state_name, :pincode,
+                    :country, true, true,
+                    CURRENT_TIMESTAMP
+                )
+            """), {
+                "org_id": DEFAULT_ORG_ID,
+                "entity_id": supplier_id,
+                "address_line1": supplier_data.address or "",
+                "address_line2": getattr(supplier_data, 'address_line2', None),
+                "city": supplier_data.city,
+                "state_name": supplier_data.state,
+                "pincode": supplier_data.pincode,
+                "country": "India"
+            })
+        
         db.commit()
         
         return {
-            "id": row.supplier_id,
+            "id": supplier_id,
             "name": supplier_data.name,
             "code": supplier_code,
             "gst_number": supplier_data.gst_number,
