@@ -9,6 +9,107 @@ import { stockApi, productAPI, batchesApi } from '../../services/api';
 import { formatCurrency } from '../../utils/formatters';
 import { DataTable, ModuleHeader } from '../global';
 
+// Enterprise-grade data validation and transformation utilities
+const ProductDataValidator = {
+  /**
+   * Validates that a product object has all required fields for stock display
+   */
+  validateProductData(product) {
+    if (!product || typeof product !== 'object') {
+      console.error('Invalid product: not an object', product);
+      return false;
+    }
+    
+    if (!product.product_id || typeof product.product_id !== 'number') {
+      console.error('Invalid product: missing or invalid product_id', product);
+      return false;
+    }
+    
+    if (!product.product_name || typeof product.product_name !== 'string') {
+      console.error('Invalid product: missing or invalid product_name', product);
+      return false;
+    }
+    
+    return true;
+  },
+
+  /**
+   * Transforms a raw product object from API to standardized stock item format
+   * Uses actual API field names based on backend response
+   */
+  transformProductToStockItem(product) {
+    const currentStock = Number(product.current_stock || 0);
+    const reorderLevel = Number(product.reorder_level || 0);
+    const minStockLevel = Number(product.min_stock_quantity || 0);
+    const effectiveReorderLevel = reorderLevel || minStockLevel;
+    
+    return {
+      // Core identification
+      product_id: product.product_id,
+      product_name: product.product_name,
+      product_code: product.product_code || `PROD-${product.product_id}`,
+      generic_name: product.generic_name || '',
+      
+      // Classification
+      category: product.category_id || 'Uncategorized', 
+      manufacturer: product.manufacturer || '',
+      brand: product.brand || '',
+      product_type: product.product_type || 'standard',
+      product_class: product.product_class || 'medicine',
+      
+      // Regulatory & Compliance
+      hsn_code: product.hsn_code || '',
+      drug_schedule: product.drug_schedule || '',
+      prescription_required: Boolean(product.requires_prescription),
+      is_narcotic: Boolean(product.is_narcotic),
+      is_controlled_substance: Boolean(product.is_controlled_substance),
+      
+      // Stock & Inventory
+      current_stock: currentStock,
+      available_stock: currentStock, // Assuming available = current for now
+      reserved_stock: 0, // Would need separate API call for reservations
+      reorder_level: effectiveReorderLevel,
+      minimum_stock_level: minStockLevel,
+      maximum_stock_level: Number(product.max_stock_quantity || 0),
+      
+      // Pricing
+      mrp: Number(product.mrp || 0),
+      purchase_rate: Number(product.cost_price || 0),
+      selling_rate: Number(product.selling_price || 0),
+      stock_value: currentStock * Number(product.cost_price || 0),
+      
+      // Units & Measurements
+      unit: product.base_uom_id || 'Units',
+      pack_size: Number(product.pack_size || 1),
+      
+      // Tax Information
+      gst_percentage: Number(product.gst_percentage || 0),
+      cess_percentage: Number(product.cess_percentage || 0),
+      
+      // Status & Alerts
+      is_active: Boolean(product.is_active),
+      low_stock: currentStock <= effectiveReorderLevel && effectiveReorderLevel > 0,
+      out_of_stock: currentStock === 0,
+      stock_status: currentStock === 0 ? 'out_of_stock' : 
+                   (currentStock <= effectiveReorderLevel && effectiveReorderLevel > 0) ? 'low_stock' : 'normal',
+      expiry_alert: false, // Would be calculated from batches
+      
+      // Storage & Handling
+      storage_conditions: product.storage_conditions || '',
+      requires_cold_chain: Boolean(product.requires_cold_chain),
+      
+      // Metadata
+      created_at: product.created_at,
+      updated_at: product.updated_at,
+      last_updated: product.updated_at,
+      
+      // Related data
+      batches: product.batches || [],
+      batch_count: Number(product.batch_count || 0)
+    };
+  }
+};
+
 const CurrentStock = ({ open = true, onClose }) => {
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -113,49 +214,12 @@ const CurrentStock = ({ open = true, onClose }) => {
       // Set hasMore based on whether we got fewer items than requested
       setHasMore(products.length === 20);
       
-      // Transform product data using correct schema field names
+      // Enterprise-grade data validation and transformation
       const transformedData = products
-        .filter(product => product && product.product_id) // Filter out null/undefined products
-        .map(product => {
-          // Use correct schema field names from master.products table
-          const currentStock = Number(product.current_stock || 0);
-          const reorderLevel = Number(product.minimum_stock_level || 0); // correct field name
-          
-          return {
-            product_id: product.product_id,
-            product_name: product.product_name || 'Unknown Product',
-            product_code: product.product_code || `PROD-${product.product_id}`,
-            category: product.category_id || 'Uncategorized',
-            manufacturer: product.manufacturer,
-            brand_name: product.brand_name, // correct schema field name
-            hsn_code: product.hsn_code,
-            current_stock: currentStock,
-            available_stock: currentStock,
-            reserved_stock: 0,
-            minimum_stock_level: reorderLevel,
-            reorder_level: reorderLevel,
-            unit: product.base_unit || 'Units', // correct schema field name
-            mrp: Number(product.mrp || 0),
-            purchase_rate: Number(product.purchase_rate || 0), // correct schema field name
-            selling_rate: Number(product.standard_rate || product.selling_price || product.mrp || 0), // correct schema field name
-            stock_value: currentStock * Number(product.purchase_rate || product.standard_rate || 0),
-            gst_percentage: Number(product.gst_percentage || 0),
-            prescription_required: product.prescription_required, // correct schema field name
-            schedule_type: product.schedule_type, // correct schema field name
-            expiry_alert: false,
-            low_stock: currentStock <= reorderLevel && reorderLevel > 0,
-            out_of_stock: currentStock === 0,
-            stock_status: currentStock === 0 ? 'out_of_stock' : 
-                         (currentStock <= reorderLevel && reorderLevel > 0) ? 'low_stock' : 'normal',
-            is_active: product.is_active !== false,
-            batches: product.batches || [],
-            last_updated: product.updated_at,
-            storage_condition: product.storage_condition, // correct schema field name
-            product_type: product.product_type
-          };
-        });
+        .filter(ProductDataValidator.validateProductData)
+        .map(ProductDataValidator.transformProductToStockItem);
       
-      console.log('Transformed data sample:', transformedData[0]);
+      console.log(`Processed page ${page}: ${products.length} raw → ${transformedData.length} valid items`);
       
       if (reset || page === 0) {
         setAllProducts(transformedData);

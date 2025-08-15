@@ -6,7 +6,7 @@ import {
 } from 'lucide-react';
 import { stockApi, productsApi } from '../../services/api';
 import { formatCurrency } from '../../utils/formatters';
-import { DataTable, ProductSearchSimple, Select, DatePicker, StatusBadge, ViewHistoryButton } from '../global';
+import { DataTable, ProductSearchSimple, Select, DatePicker, StatusBadge, ViewHistoryButton, ModuleHeader } from '../global';
 
 const StockAdjustment = ({ open = true, onClose }) => {
   const [loading, setLoading] = useState(false);
@@ -256,62 +256,55 @@ Note: Use positive numbers for increase and negative for decrease. Reason codes:
   if (!open) return null;
 
   return (
-    <div className="flex flex-col h-full overflow-hidden">
-      {/* Header */}
-      <div className="bg-white shadow-sm border-b border-gray-200 flex-shrink-0">
-        <div className="px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between py-4">
-            <div>
-              <h1 className="text-2xl font-bold text-gray-900">Stock Adjustment</h1>
-              <p className="text-sm text-gray-600">Adjust inventory for corrections or losses</p>
+    <div className="h-full bg-blue-50">
+      <div className="h-full flex flex-col">
+        
+        {/* Header - Using Global ModuleHeader */}
+        <ModuleHeader
+          title="Stock Adjustment"
+          subtitle="Adjust inventory for corrections or losses"
+          icon={Package}
+          iconColor="text-orange-600"
+          onClose={onClose}
+          historyType="stock"
+          additionalActions={[
+            {
+              label: "Bulk Adjust",
+              icon: Upload,
+              onClick: () => {
+                setShowBulkUpload(!showBulkUpload);
+                setShowProductSearch(false);
+              },
+              variant: "secondary"
+            }
+          ]}
+        />
+
+        {/* Step Indicator */}
+        <div className="bg-blue-50 px-6 py-3 border-b border-blue-200">
+          <div className="flex items-center space-x-2">
+            <div className={`flex items-center px-3 py-1 rounded-full ${
+              step >= 1 ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-400'
+            }`}>
+              <span className="text-sm font-medium">1. Input</span>
             </div>
-            
-            <div className="flex items-center space-x-3">
-              <ViewHistoryButton
-                historyType="stock"
-                buttonText="History"
-                className="px-4 py-2 text-app-700 bg-white border border-app-300 rounded-lg hover:bg-app-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 transition-colors flex items-center"
-              />
-              <button
-                onClick={() => {
-                  setShowBulkUpload(!showBulkUpload);
-                  setShowProductSearch(false);
-                }}
-                className="flex items-center space-x-2 px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700"
-              >
-                <Upload className="w-4 h-4" />
-                <span>Bulk Adjust</span>
-              </button>
-              
-              {/* Step Indicator */}
-              <div className="flex items-center space-x-2">
-                <div className={`flex items-center px-3 py-1 rounded-full ${
-                  step >= 1 ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-400'
-                }`}>
-                  <span className="text-sm font-medium">1. Input</span>
-                </div>
-                <ChevronRight className="w-4 h-4 text-gray-400" />
-                <div className={`flex items-center px-3 py-1 rounded-full ${
-                  step >= 2 ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-400'
-                }`}>
-                  <span className="text-sm font-medium">2. Review</span>
-                </div>
-              </div>
-              
-              <button
-                onClick={onClose}
-                className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg"
-              >
-                <X className="w-5 h-5" />
-              </button>
+            <ChevronRight className="w-4 h-4 text-gray-400" />
+            <div className={`flex items-center px-3 py-1 rounded-full ${
+              step >= 2 ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-400'
+            }`}>
+              <span className="text-sm font-medium">2. Review</span>
             </div>
           </div>
         </div>
-      </div>
 
-      {/* Content */}
-      <div className="flex-1 overflow-y-auto bg-gray-50">
-        <div className="px-4 sm:px-6 lg:px-8 py-8">
+        {/* Keyboard Shortcuts Help */}
+        <div className="bg-blue-50 px-4 py-2 text-xs text-blue-700 border-b border-blue-200">
+          Keyboard shortcuts: <strong>Ctrl+U</strong> - Bulk Upload | <strong>Ctrl+A</strong> - Add Product | <strong>Esc</strong> - Close
+        </div>
+
+        {/* Content */}
+        <div className="flex-1 overflow-y-auto">
+          <div className="max-w-6xl mx-auto px-6 py-6">
           
           {/* Step 1: Input */}
           {step === 1 && (
@@ -677,6 +670,7 @@ Note: Use positive numbers for increase and negative for decrease. Reason codes:
               </div>
             </div>
           )}
+          </div>
         </div>
       </div>
     </div>
