@@ -13,6 +13,7 @@ from ...core.config import DEFAULT_ORG_ID
 from ...models import Supplier
 from ...core.crud_base import create_crud
 from ...schemas.supplier import SupplierCreate, SupplierUpdate, SupplierResponse, SupplierListResponse
+from ...core.state_utils import get_state_name_and_code
 from uuid import UUID
 
 logger = logging.getLogger(__name__)
@@ -153,21 +154,8 @@ def create_supplier(supplier_data: SupplierCreate, db: Session = Depends(get_db)
         
         # Create address record if address information provided
         if any([supplier_data.address, supplier_data.city, supplier_data.state, supplier_data.pincode]):
-            # GST state code mapping for Indian states
-            state_code_map = {
-                'ANDHRA PRADESH': '37', 'ARUNACHAL PRADESH': '12', 'ASSAM': '18', 'BIHAR': '10',
-                'CHHATTISGARH': '22', 'GOA': '30', 'GUJARAT': '24', 'HARYANA': '06', 'HIMACHAL PRADESH': '02',
-                'JHARKHAND': '20', 'KARNATAKA': '29', 'KERALA': '32', 'MADHYA PRADESH': '23', 'MAHARASHTRA': '27',
-                'MANIPUR': '14', 'MEGHALAYA': '17', 'MIZORAM': '15', 'NAGALAND': '13', 'ODISHA': '21',
-                'PUNJAB': '03', 'RAJASTHAN': '08', 'SIKKIM': '11', 'TAMIL NADU': '33', 'TELANGANA': '36',
-                'TRIPURA': '16', 'UTTAR PRADESH': '09', 'UTTARAKHAND': '05', 'WEST BENGAL': '19',
-                'ANDAMAN AND NICOBAR ISLANDS': '35', 'CHANDIGARH': '04', 'DADRA AND NAGAR HAVELI': '26',
-                'DAMAN AND DIU': '25', 'DELHI': '07', 'JAMMU AND KASHMIR': '01', 'LADAKH': '38',
-                'LAKSHADWEEP': '31', 'PUDUCHERRY': '34'
-            }
-            
-            state_name = supplier_data.state or ""
-            state_code = state_code_map.get(state_name.upper(), "00")  # Default to 00 if not found
+            # Automatically map state name to GST state code
+            state_name, state_code = get_state_name_and_code(supplier_data.state)
             
             db.execute(text("""
                 INSERT INTO master.addresses (
