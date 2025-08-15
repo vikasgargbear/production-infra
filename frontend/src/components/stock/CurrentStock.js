@@ -62,7 +62,6 @@ const CurrentStock = ({ open = true, onClose }) => {
       
       // Use products API which we know works and includes stock data
       const response = await productAPI.getAll({
-        include_stock: true,
         limit: 500 // Get more products for stock management
       });
       console.log('Products API response:', response);

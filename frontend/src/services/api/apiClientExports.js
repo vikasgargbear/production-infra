@@ -172,7 +172,6 @@ export const productAPI = {
           search: options.search || '',
           product_type: options.product_type || '',
           manufacturer: options.manufacturer || '',
-          include_stock: options.include_stock || true,
         },
       });
       
