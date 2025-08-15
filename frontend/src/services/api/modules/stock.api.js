@@ -219,9 +219,34 @@ export const stockApi = {
     return apiClient.get(`${ENDPOINTS.STOCK.BASE}/analytics/by-category`);
   },
 
-  // Current stock endpoints
+  // Current stock endpoints - Use products API which works reliably
   getCurrentStock: async (params = {}) => {
-    return apiClient.get(`${ENDPOINTS.STOCK.BASE}/current`, { params });
+    try {
+      // Use products endpoint which includes stock data and works reliably
+      const response = await apiClient.get(ENDPOINTS.PRODUCTS.BASE, { 
+        params: {
+          include_stock: true,
+          limit: params.limit || 500,
+          ...params
+        }
+      });
+      
+      // Transform response to expected format
+      if (response.data) {
+        return {
+          success: true,
+          data: {
+            products: response.data.products || response.data,
+            total: response.data.total || (response.data.products ? response.data.products.length : response.data.length)
+          }
+        };
+      }
+      
+      return response;
+    } catch (error) {
+      console.error('Error fetching current stock:', error);
+      throw error;
+    }
   },
 
   getStockByProduct: async (productId) => {
