@@ -4,7 +4,7 @@ import {
   Plus, Calendar, IndianRupee, FileText, MoreHorizontal,
   ChevronDown, X, Check, Clock, AlertCircle, RefreshCw
 } from 'lucide-react';
-import { Button, StatusBadge, DataTable, DatePicker } from '../global';
+import { Button, StatusBadge, DataTable, DatePicker, ModuleHeader } from '../global';
 
 interface InvoiceListProps {
   open?: boolean;
@@ -198,7 +198,7 @@ const BulkActionBar: React.FC<{
   );
 };
 
-const InvoiceListV2: React.FC<InvoiceListProps> = () => {
+const InvoiceListV2: React.FC<InvoiceListProps> = ({ onClose }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [showFilters, setShowFilters] = useState(false);
   const [selectedInvoices, setSelectedInvoices] = useState<string[]>([]);
@@ -351,78 +351,88 @@ const InvoiceListV2: React.FC<InvoiceListProps> = () => {
   ];
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <div className="bg-white border-b border-gray-200 sticky top-0 z-20">
-        <div className="px-6 py-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-2xl font-bold text-gray-900">Invoices</h1>
-              <p className="text-sm text-gray-500 mt-1">
-                Manage and track all your sales invoices
-              </p>
-            </div>
-            <div className="flex items-center space-x-3">
-              <Button variant="outline" size="sm">
-                <Download className="w-4 h-4 mr-2" />
-                Export All
-              </Button>
-              <Button variant="primary" size="sm">
-                <Plus className="w-4 h-4 mr-2" />
-                New Invoice
-              </Button>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div className="px-6 py-6 max-w-7xl mx-auto">
-        {/* Search and Filter Bar */}
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 mb-6">
-          <div className="flex items-center space-x-4">
-            <div className="flex-1 relative">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
-              <input
-                type="text"
-                placeholder="Search invoices..."
-                className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-              />
-            </div>
-            <Button
-              variant="outline"
-              onClick={() => setShowFilters(true)}
-              icon={<Filter className="w-4 h-4" />}
-              iconPosition="left"
-            >
-              Filters
-            </Button>
-            <Button variant="outline" size="sm">
-              <RefreshCw className="w-4 h-4" />
-            </Button>
-          </div>
-        </div>
-
-        {/* Bulk Actions */}
-        <BulkActionBar
-          selectedCount={selectedInvoices.length}
-          onMarkPaid={() => console.log('Mark as paid')}
-          onSendReminder={() => console.log('Send reminder')}
-          onExport={() => console.log('Export selected')}
-          onClear={() => setSelectedInvoices([])}
+    <div className="h-full bg-blue-50">
+      <div className="h-full flex flex-col">
+        
+        {/* Header - Using Global ModuleHeader */}
+        <ModuleHeader
+          title="Invoice History"
+          subtitle="Manage and track all your sales invoices"
+          icon={FileText}
+          iconColor="text-blue-600"
+          onClose={onClose}
+          historyType="invoice"
+          additionalActions={[
+            {
+              label: "Export All",
+              onClick: () => console.log('Export all'),
+              variant: "default"
+            },
+            {
+              label: "New Invoice",
+              onClick: () => console.log('New invoice'),
+              variant: "primary"
+            }
+          ]}
         />
 
-        {/* Invoice Table */}
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200">
-          <DataTable
-            data={invoices}
-            columns={columns}
-            keyField="id"
-            searchable={false}
-            paginated={true}
-            pageSize={25}
-          />
+        {/* Keyboard Shortcuts Help */}
+        <div className="bg-blue-50 px-4 py-2 text-xs text-blue-700 border-b border-blue-200">
+          Keyboard shortcuts: <strong>Ctrl+F</strong> - Search | <strong>Ctrl+N</strong> - New Invoice | <strong>Esc</strong> - Close
+        </div>
+
+        {/* Content */}
+        <div className="flex-1 overflow-y-auto">
+          <div className="max-w-6xl mx-auto px-6 py-6">
+            
+            {/* Search and Filter Bar */}
+            <div className="bg-white rounded-lg shadow-sm border border-blue-200 p-4 mb-6">
+              <div className="flex items-center space-x-4">
+                <div className="flex-1 relative">
+                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
+                  <input
+                    type="text"
+                    placeholder="Search invoices..."
+                    className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                  />
+                </div>
+                <Button
+                  variant="outline"
+                  onClick={() => setShowFilters(true)}
+                  icon={<Filter className="w-4 h-4" />}
+                  iconPosition="left"
+                >
+                  Filters
+                </Button>
+                <Button variant="outline" size="sm">
+                  <RefreshCw className="w-4 h-4" />
+                </Button>
+              </div>
+            </div>
+
+            {/* Bulk Actions */}
+            <BulkActionBar
+              selectedCount={selectedInvoices.length}
+              onMarkPaid={() => console.log('Mark as paid')}
+              onSendReminder={() => console.log('Send reminder')}
+              onExport={() => console.log('Export selected')}
+              onClear={() => setSelectedInvoices([])}
+            />
+
+            {/* Invoice Table */}
+            <div className="bg-white rounded-lg shadow-sm border border-blue-200">
+              <DataTable
+                data={invoices}
+                columns={columns}
+                keyField="id"
+                searchable={false}
+                paginated={true}
+                pageSize={25}
+              />
+            </div>
+          </div>
         </div>
       </div>
 

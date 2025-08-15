@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Search, Filter, ChevronRight, ShoppingBag, FileText, Package } from 'lucide-react';
 import { purchasesApi } from '../../services/api';
-import { DataTable, Column } from '../global/ui/display/DataTable';
+import { DataTable, Column, ModuleHeader } from '../global';
 
 interface PurchaseListHistoryProps {
   open?: boolean;
@@ -20,7 +20,7 @@ interface Purchase {
   created_at: string;
 }
 
-const PurchaseListHistory: React.FC<PurchaseListHistoryProps> = () => {
+const PurchaseListHistory: React.FC<PurchaseListHistoryProps> = ({ onClose }) => {
   const [purchases, setPurchases] = useState<Purchase[]>([]);
   const [filteredPurchases, setFilteredPurchases] = useState<Purchase[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
@@ -205,91 +205,102 @@ const PurchaseListHistory: React.FC<PurchaseListHistoryProps> = () => {
   ];
 
   return (
-    <div className="min-h-screen bg-app-50">
-      {/* Header */}
-      <div className="bg-white shadow-sm border-b border-app-200 px-8 py-6">
-        <div className="flex items-center gap-4">
-          <div className="w-12 h-12 bg-purchase-100 rounded-lg flex items-center justify-center">
-            <ShoppingBag className="w-6 h-6 text-purchase-600" />
-          </div>
-          <div>
-            <h1 className="text-3xl font-bold text-app-800">Purchase History</h1>
-            <p className="text-app-600 mt-1">View all purchase orders, invoices, and GRNs</p>
-          </div>
+    <div className="h-full bg-blue-50">
+      <div className="h-full flex flex-col">
+        
+        {/* Header - Using Global ModuleHeader */}
+        <ModuleHeader
+          title="Purchase History"
+          subtitle="View all purchase orders, invoices, and GRNs"
+          icon={ShoppingBag}
+          iconColor="text-green-600"
+          onClose={onClose}
+          historyType="purchase"
+        />
+
+        {/* Keyboard Shortcuts Help */}
+        <div className="bg-blue-50 px-4 py-2 text-xs text-blue-700 border-b border-blue-200">
+          Keyboard shortcuts: <strong>Ctrl+F</strong> - Search | <strong>Esc</strong> - Close
         </div>
-      </div>
 
-      {/* Filters */}
-      <div className="bg-white px-8 py-6 border-b border-app-200 shadow-sm">
-        <div className="flex items-center space-x-6">
-          {/* Search */}
-          <div className="flex-1 relative">
-            <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 text-app-400 w-5 h-5" />
-            <input
-              type="text"
-              placeholder="Search by invoice number or supplier..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-12 pr-4 py-2 border border-app-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 bg-white"
-            />
-          </div>
+        {/* Content */}
+        <div className="flex-1 overflow-y-auto">
+          <div className="max-w-6xl mx-auto px-6 py-6">
+            
+            {/* Filters */}
+            <div className="bg-white rounded-lg shadow-sm border border-blue-200 p-6 mb-6">
+              <div className="flex items-center space-x-6">
+                {/* Search */}
+                <div className="flex-1 relative">
+                  <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
+                  <input
+                    type="text"
+                    placeholder="Search by invoice number or supplier..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="w-full pl-12 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white"
+                  />
+                </div>
 
-          {/* Type Filter */}
-          <select
-            value={selectedType}
-            onChange={(e) => setSelectedType(e.target.value as any)}
-            className="px-3 py-2 border border-app-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 bg-white min-w-[140px]"
-          >
-            <option value="all">All Types</option>
-            <option value="purchase">Purchases</option>
-            <option value="purchase_order">Purchase Orders</option>
-            <option value="grn">GRNs</option>
-          </select>
+                {/* Type Filter */}
+                <select
+                  value={selectedType}
+                  onChange={(e) => setSelectedType(e.target.value as any)}
+                  className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white min-w-[140px]"
+                >
+                  <option value="all">All Types</option>
+                  <option value="purchase">Purchases</option>
+                  <option value="purchase_order">Purchase Orders</option>
+                  <option value="grn">GRNs</option>
+                </select>
 
-          {/* Status Filter */}
-          <select
-            value={selectedStatus}
-            onChange={(e) => setSelectedStatus(e.target.value as any)}
-            className="px-3 py-2 border border-app-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 bg-white min-w-[120px]"
-          >
-            <option value="all">All Status</option>
-            <option value="pending">Pending</option>
-            <option value="partial">Partial</option>
-            <option value="paid">Paid</option>
-          </select>
-        </div>
-      </div>
-
-      {/* Content */}
-      <div className="bg-white px-8 py-8 min-h-[calc(100vh-300px)]">
-        {error ? (
-          <div className="text-center py-12">
-            <div className="text-danger-600 mb-4">
-              <ShoppingBag className="w-12 h-12 mx-auto" />
+                {/* Status Filter */}
+                <select
+                  value={selectedStatus}
+                  onChange={(e) => setSelectedStatus(e.target.value as any)}
+                  className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white min-w-[120px]"
+                >
+                  <option value="all">All Status</option>
+                  <option value="pending">Pending</option>
+                  <option value="partial">Partial</option>
+                  <option value="paid">Paid</option>
+                </select>
+              </div>
             </div>
-            <p className="text-danger-600">{error}</p>
-            <button
-              onClick={loadPurchases}
-              className="mt-4 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors"
-            >
-              Retry
-            </button>
+
+            {/* Data Table */}
+            <div className="bg-white rounded-lg shadow-sm border border-blue-200">
+              {error ? (
+                <div className="text-center py-12">
+                  <div className="text-red-600 mb-4">
+                    <ShoppingBag className="w-12 h-12 mx-auto" />
+                  </div>
+                  <p className="text-red-600">{error}</p>
+                  <button
+                    onClick={loadPurchases}
+                    className="mt-4 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                  >
+                    Retry
+                  </button>
+                </div>
+              ) : (
+                <DataTable
+                  data={filteredPurchases}
+                  columns={columns}
+                  keyField="id"
+                  loading={loading}
+                  emptyMessage="No purchases found"
+                  emptyIcon={<ShoppingBag className="w-12 h-12 text-gray-400" />}
+                  hoverable={true}
+                  striped={true}
+                  paginated={true}
+                  pageSize={20}
+                  searchable={false}
+                />
+              )}
+            </div>
           </div>
-        ) : (
-          <DataTable
-            data={filteredPurchases}
-            columns={columns}
-            keyField="id"
-            loading={loading}
-            emptyMessage="No purchases found"
-            emptyIcon={<ShoppingBag className="w-12 h-12 text-app-400" />}
-            hoverable={true}
-            striped={true}
-            paginated={true}
-            pageSize={20}
-            searchable={false}
-          />
-        )}
+        </div>
       </div>
     </div>
   );

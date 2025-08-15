@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Search, Filter, ChevronRight, Package, ShoppingCart, RotateCcw } from 'lucide-react';
 import { returnsApi } from '../../services/api';
-import { DataTable, Column } from '../global/ui/display/DataTable';
+import { DataTable, Column, ModuleHeader } from '../global';
 
 interface ReturnsListHistoryProps {
   open?: boolean;
@@ -21,7 +21,7 @@ interface Return {
   reason: string;
 }
 
-const ReturnsListHistory: React.FC<ReturnsListHistoryProps> = () => {
+const ReturnsListHistory: React.FC<ReturnsListHistoryProps> = ({ onClose }) => {
   const [returns, setReturns] = useState<Return[]>([]);
   const [filteredReturns, setFilteredReturns] = useState<Return[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
@@ -201,90 +201,101 @@ const ReturnsListHistory: React.FC<ReturnsListHistoryProps> = () => {
   ];
 
   return (
-    <div className="min-h-screen bg-app-50">
-      {/* Header */}
-      <div className="bg-white shadow-sm border-b border-app-200 px-8 py-6">
-        <div className="flex items-center gap-4">
-          <div className="w-12 h-12 bg-danger-100 rounded-lg flex items-center justify-center">
-            <RotateCcw className="w-6 h-6 text-danger-600" />
-          </div>
-          <div>
-            <h1 className="text-3xl font-bold text-app-800">Returns History</h1>
-            <p className="text-app-600 mt-1">View all sales and purchase returns</p>
-          </div>
+    <div className="h-full bg-blue-50">
+      <div className="h-full flex flex-col">
+        
+        {/* Header - Using Global ModuleHeader */}
+        <ModuleHeader
+          title="Returns History"
+          subtitle="View all sales and purchase returns"
+          icon={RotateCcw}
+          iconColor="text-red-600"
+          onClose={onClose}
+          historyType="return"
+        />
+
+        {/* Keyboard Shortcuts Help */}
+        <div className="bg-blue-50 px-4 py-2 text-xs text-blue-700 border-b border-blue-200">
+          Keyboard shortcuts: <strong>Ctrl+F</strong> - Search | <strong>Esc</strong> - Close
         </div>
-      </div>
 
-      {/* Filters */}
-      <div className="bg-white px-8 py-6 border-b border-app-200 shadow-sm">
-        <div className="flex items-center space-x-6">
-          {/* Search */}
-          <div className="flex-1 relative">
-            <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 text-app-400 w-5 h-5" />
-            <input
-              type="text"
-              placeholder="Search returns by number, party, or document..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-12 pr-4 py-2 border border-app-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 bg-white"
-            />
-          </div>
+        {/* Content */}
+        <div className="flex-1 overflow-y-auto">
+          <div className="max-w-6xl mx-auto px-6 py-6">
+            
+            {/* Filters */}
+            <div className="bg-white rounded-lg shadow-sm border border-blue-200 p-6 mb-6">
+              <div className="flex items-center space-x-6">
+                {/* Search */}
+                <div className="flex-1 relative">
+                  <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
+                  <input
+                    type="text"
+                    placeholder="Search returns by number, party, or document..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="w-full pl-12 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white"
+                  />
+                </div>
 
-          {/* Type Filter */}
-          <select
-            value={selectedType}
-            onChange={(e) => setSelectedType(e.target.value as any)}
-            className="px-3 py-2 border border-app-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 bg-white min-w-[120px]"
-          >
-            <option value="all">All Types</option>
-            <option value="sales">Sales Returns</option>
-            <option value="purchase">Purchase Returns</option>
-          </select>
+                {/* Type Filter */}
+                <select
+                  value={selectedType}
+                  onChange={(e) => setSelectedType(e.target.value as any)}
+                  className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white min-w-[120px]"
+                >
+                  <option value="all">All Types</option>
+                  <option value="sales">Sales Returns</option>
+                  <option value="purchase">Purchase Returns</option>
+                </select>
 
-          {/* Status Filter */}
-          <select
-            value={selectedStatus}
-            onChange={(e) => setSelectedStatus(e.target.value as any)}
-            className="px-3 py-2 border border-app-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 bg-white min-w-[120px]"
-          >
-            <option value="all">All Status</option>
-            <option value="pending">Pending</option>
-            <option value="approved">Approved</option>
-            <option value="completed">Completed</option>
-          </select>
-        </div>
-      </div>
-
-      {/* Content */}
-      <div className="bg-white px-8 py-8 min-h-[calc(100vh-300px)]">
-        {error ? (
-          <div className="text-center py-12">
-            <div className="text-danger-600 mb-4">
-              <RotateCcw className="w-12 h-12 mx-auto" />
+                {/* Status Filter */}
+                <select
+                  value={selectedStatus}
+                  onChange={(e) => setSelectedStatus(e.target.value as any)}
+                  className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white min-w-[120px]"
+                >
+                  <option value="all">All Status</option>
+                  <option value="pending">Pending</option>
+                  <option value="approved">Approved</option>
+                  <option value="completed">Completed</option>
+                </select>
+              </div>
             </div>
-            <p className="text-danger-600">{error}</p>
-            <button
-              onClick={loadReturns}
-              className="mt-4 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors"
-            >
-              Retry
-            </button>
+
+            {/* Data Table */}
+            <div className="bg-white rounded-lg shadow-sm border border-blue-200">
+              {error ? (
+                <div className="text-center py-12">
+                  <div className="text-red-600 mb-4">
+                    <RotateCcw className="w-12 h-12 mx-auto" />
+                  </div>
+                  <p className="text-red-600">{error}</p>
+                  <button
+                    onClick={loadReturns}
+                    className="mt-4 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                  >
+                    Retry
+                  </button>
+                </div>
+              ) : (
+                <DataTable
+                  data={filteredReturns}
+                  columns={columns}
+                  keyField="id"
+                  loading={loading}
+                  emptyMessage="No returns found"
+                  emptyIcon={<RotateCcw className="w-12 h-12 text-gray-400" />}
+                  hoverable={true}
+                  striped={true}
+                  paginated={true}
+                  pageSize={20}
+                  searchable={false}
+                />
+              )}
+            </div>
           </div>
-        ) : (
-          <DataTable
-            data={filteredReturns}
-            columns={columns}
-            keyField="id"
-            loading={loading}
-            emptyMessage="No returns found"
-            emptyIcon={<RotateCcw className="w-12 h-12 text-app-400" />}
-            hoverable={true}
-            striped={true}
-            paginated={true}
-            pageSize={20}
-            searchable={false}
-          />
-        )}
+        </div>
       </div>
     </div>
   );

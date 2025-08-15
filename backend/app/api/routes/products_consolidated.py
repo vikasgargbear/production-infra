@@ -64,11 +64,11 @@ async def get_products(
                 p.search_keywords, p.tags, p.product_images, p.documents,
                 p.is_active, p.is_saleable, p.is_purchasable,
                 p.created_at, p.updated_at, p.created_by,
-                -- Stock and pricing data from batches
+                -- Stock and pricing data from batches (using correct column names)
                 COALESCE(SUM(b.quantity_available), 0) as current_stock,
-                COALESCE(AVG(b.selling_price), 0) as selling_price,
+                COALESCE(AVG(b.sale_price_per_unit), 0) as selling_price,
                 COALESCE(AVG(b.cost_per_unit), 0) as cost_price,
-                COALESCE(AVG(b.mrp), 0) as mrp,
+                COALESCE(AVG(b.mrp_per_unit), 0) as mrp,
                 COUNT(b.batch_id) as batch_count
             FROM inventory.products p
             LEFT JOIN inventory.batches b ON p.product_id = b.product_id 
