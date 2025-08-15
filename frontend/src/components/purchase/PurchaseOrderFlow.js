@@ -473,10 +473,10 @@ ${localStorage.getItem('company_name') || 'AASO Pharmaceuticals'}
   // Step 1: Create PO
   if (currentStep === 1) {
     return (
-      <div className="h-full bg-gray-50">
+      <div className="h-full bg-blue-50">
         <div className="h-full flex flex-col">
           {/* Header */}
-          <div className="flex justify-between items-center p-4 bg-white border-b border-gray-200">
+          <div className="flex justify-between items-center p-4 bg-white border-b border-blue-200">
             <div className="flex items-center gap-2">
               <FileText className="w-5 h-5 text-gray-600" />
               <h1 className="text-lg font-semibold text-gray-900">Create Purchase Order</h1>
@@ -490,7 +490,7 @@ ${localStorage.getItem('company_name') || 'AASO Pharmaceuticals'}
               />
               <button
                 onClick={() => setShowGSTCalculator(true)}
-                className="px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-lg transition-colors flex items-center gap-2"
+                className="px-4 py-2 text-blue-700 hover:bg-gray-100 rounded-lg transition-colors flex items-center gap-2"
                 title="GST Calculator (Ctrl+G)"
               >
                 <Calculator className="w-4 h-4" />
@@ -507,7 +507,7 @@ ${localStorage.getItem('company_name') || 'AASO Pharmaceuticals'}
           </div>
 
           {/* Quick Actions Bar */}
-          <div className="bg-gray-50 px-4 py-2 text-sm text-gray-700 border-b border-gray-200">
+          <div className="bg-blue-50 px-4 py-2 text-sm text-blue-700 border-b border-blue-200">
             Keyboard shortcuts: <strong>Ctrl+N</strong> - New Supplier | <strong>Ctrl+F</strong> - Find Product | <strong>Ctrl+S</strong> - Proceed to Review | <strong>Ctrl+G</strong> - GST Calculator | <strong>Esc</strong> - Close
           </div>
 
@@ -528,7 +528,7 @@ ${localStorage.getItem('company_name') || 'AASO Pharmaceuticals'}
               )}
 
               {/* PO Header */}
-              <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+              <div className="bg-white rounded-lg shadow-sm border border-blue-200 p-6">
                 <div className="flex justify-between items-start mb-6">
                   <div>
                     <h2 className="text-xl font-semibold text-gray-900">Purchase Order</h2>
@@ -544,7 +544,7 @@ ${localStorage.getItem('company_name') || 'AASO Pharmaceuticals'}
 
                 <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                    <label className="block text-sm font-medium text-blue-700 mb-1">
                       PO Date
                     </label>
                     <input
@@ -557,7 +557,7 @@ ${localStorage.getItem('company_name') || 'AASO Pharmaceuticals'}
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                    <label className="block text-sm font-medium text-blue-700 mb-1">
                       Expected Delivery
                     </label>
                     <input
@@ -570,7 +570,7 @@ ${localStorage.getItem('company_name') || 'AASO Pharmaceuticals'}
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                    <label className="block text-sm font-medium text-blue-700 mb-1">
                       Priority
                     </label>
                     <select
@@ -586,7 +586,7 @@ ${localStorage.getItem('company_name') || 'AASO Pharmaceuticals'}
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                    <label className="block text-sm font-medium text-blue-700 mb-1">
                       PO Type
                     </label>
                     <select
@@ -604,7 +604,7 @@ ${localStorage.getItem('company_name') || 'AASO Pharmaceuticals'}
               </div>
 
               {/* Supplier Selection */}
-              <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+              <div className="bg-white rounded-lg shadow-sm border border-blue-200 p-6">
                 <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
                   <Building2 className="w-5 h-5 mr-2 text-gray-600" />
                   Supplier Details
@@ -624,7 +624,7 @@ ${localStorage.getItem('company_name') || 'AASO Pharmaceuticals'}
                     </p>
                   </div>
                 ) : (
-                  <div className="bg-gray-50 rounded-lg p-4">
+                  <div className="bg-blue-50 rounded-lg p-4">
                     <div className="flex justify-between items-start">
                       <div>
                         <h4 className="font-semibold text-gray-900">{selectedSupplier.supplier_name}</h4>
@@ -632,15 +632,15 @@ ${localStorage.getItem('company_name') || 'AASO Pharmaceuticals'}
                         <div className="flex gap-4 mt-2 text-sm text-gray-600">
                           <div>
                             <span className="text-gray-500">Phone:</span>
-                            <span className="ml-2 text-gray-700">{selectedSupplier.phone}</span>
+                            <span className="ml-2 text-blue-700">{selectedSupplier.phone}</span>
                           </div>
                           <div>
                             <span className="text-gray-500">GSTIN:</span>
-                            <span className="ml-2 text-gray-700">{selectedSupplier.gst_number}</span>
+                            <span className="ml-2 text-blue-700">{selectedSupplier.gst_number}</span>
                           </div>
                           <div>
                             <span className="text-gray-500">DL No:</span>
-                            <span className="ml-2 text-gray-700">{selectedSupplier.drug_license_number}</span>
+                            <span className="ml-2 text-blue-700">{selectedSupplier.drug_license_number}</span>
                           </div>
                         </div>
                       </div>
@@ -666,7 +666,7 @@ ${localStorage.getItem('company_name') || 'AASO Pharmaceuticals'}
               </div>
 
               {/* Product Selection and Items */}
-              <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+              <div className="bg-white rounded-lg shadow-sm border border-blue-200 p-6">
                 <div className="flex justify-between items-center mb-4">
                   <h3 className="text-lg font-semibold text-gray-900 flex items-center">
                     <Package className="w-5 h-5 mr-2 text-gray-600" />
@@ -704,7 +704,7 @@ ${localStorage.getItem('company_name') || 'AASO Pharmaceuticals'}
                     isPurchaseOrder={true}
                   />
                 ) : (
-                  <div className="text-center py-12 bg-gray-50 rounded-lg">
+                  <div className="text-center py-12 bg-blue-50 rounded-lg">
                     <Package className="w-12 h-12 text-gray-400 mx-auto mb-3" />
                     <p className="text-gray-600">No items added yet</p>
                     <p className="text-sm text-gray-500 mt-1">
@@ -715,7 +715,7 @@ ${localStorage.getItem('company_name') || 'AASO Pharmaceuticals'}
 
                 {/* Summary */}
                 {purchaseOrder.items.length > 0 && (
-                  <div className="mt-6 bg-gray-50 rounded-lg p-4">
+                  <div className="mt-6 bg-blue-50 rounded-lg p-4">
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                       <div>
                         <div className="text-sm text-gray-600">Subtotal</div>
@@ -739,7 +739,7 @@ ${localStorage.getItem('company_name') || 'AASO Pharmaceuticals'}
               </div>
 
               {/* Pharmaceutical Requirements */}
-              <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+              <div className="bg-white rounded-lg shadow-sm border border-blue-200 p-6">
                 <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
                   <Shield className="w-5 h-5 mr-2 text-gray-600" />
                   Pharmaceutical Requirements
@@ -747,7 +747,7 @@ ${localStorage.getItem('company_name') || 'AASO Pharmaceuticals'}
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                    <label className="block text-sm font-medium text-blue-700 mb-1">
                       Temperature Conditions
                     </label>
                     <select
@@ -763,7 +763,7 @@ ${localStorage.getItem('company_name') || 'AASO Pharmaceuticals'}
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                    <label className="block text-sm font-medium text-blue-700 mb-1">
                       Quality Standards
                     </label>
                     <input
@@ -776,7 +776,7 @@ ${localStorage.getItem('company_name') || 'AASO Pharmaceuticals'}
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                    <label className="block text-sm font-medium text-blue-700 mb-1">
                       Buyer Drug License No.
                     </label>
                     <input
@@ -789,7 +789,7 @@ ${localStorage.getItem('company_name') || 'AASO Pharmaceuticals'}
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                    <label className="block text-sm font-medium text-blue-700 mb-1">
                       Return Policy
                     </label>
                     <input
@@ -804,7 +804,7 @@ ${localStorage.getItem('company_name') || 'AASO Pharmaceuticals'}
               </div>
 
               {/* Additional Charges */}
-              <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+              <div className="bg-white rounded-lg shadow-sm border border-blue-200 p-6">
                 <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
                   <DollarSign className="w-5 h-5 mr-2 text-gray-600" />
                   Additional Charges
@@ -812,7 +812,7 @@ ${localStorage.getItem('company_name') || 'AASO Pharmaceuticals'}
 
                 <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                    <label className="block text-sm font-medium text-blue-700 mb-1">
                       Discount Amount
                     </label>
                     <input
@@ -826,7 +826,7 @@ ${localStorage.getItem('company_name') || 'AASO Pharmaceuticals'}
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                    <label className="block text-sm font-medium text-blue-700 mb-1">
                       Freight Charges
                     </label>
                     <input
@@ -840,7 +840,7 @@ ${localStorage.getItem('company_name') || 'AASO Pharmaceuticals'}
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                    <label className="block text-sm font-medium text-blue-700 mb-1">
                       Insurance Charges
                     </label>
                     <input
@@ -854,7 +854,7 @@ ${localStorage.getItem('company_name') || 'AASO Pharmaceuticals'}
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                    <label className="block text-sm font-medium text-blue-700 mb-1">
                       Other Charges
                     </label>
                     <input
@@ -872,7 +872,7 @@ ${localStorage.getItem('company_name') || 'AASO Pharmaceuticals'}
           </div>
 
           {/* Footer */}
-          <div className="flex justify-between items-center p-4 border-t border-gray-200 bg-white">
+          <div className="flex justify-between items-center p-4 border-t border-blue-200 bg-white">
             <div className="text-lg font-semibold text-gray-900">
               Total Amount: ₹{purchaseOrder.total_amount.toFixed(2)}
             </div>
@@ -880,7 +880,7 @@ ${localStorage.getItem('company_name') || 'AASO Pharmaceuticals'}
             <div className="flex items-center gap-3">
               <button
                 onClick={onClose}
-                className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+                className="px-4 py-2 border border-gray-300 text-blue-700 rounded-lg hover:bg-blue-50 transition-colors"
               >
                 Cancel
               </button>
@@ -932,10 +932,10 @@ ${localStorage.getItem('company_name') || 'AASO Pharmaceuticals'}
 
   // Step 2: Review and Confirm
   return (
-    <div className="h-full bg-gray-50">
+    <div className="h-full bg-blue-50">
       <div className="h-full flex flex-col">
         {/* Header */}
-        <div className="flex justify-between items-center p-4 bg-white border-b border-gray-200">
+        <div className="flex justify-between items-center p-4 bg-white border-b border-blue-200">
           <div className="flex items-center gap-2">
             <FileText className="w-5 h-5 text-gray-600" />
             <h1 className="text-lg font-semibold text-gray-900">Purchase Order Review</h1>
@@ -945,14 +945,14 @@ ${localStorage.getItem('company_name') || 'AASO Pharmaceuticals'}
           <div className="flex items-center gap-3">
             <button
               onClick={() => setCurrentStep(1)}
-              className="px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-lg transition-colors flex items-center gap-2"
+              className="px-4 py-2 text-blue-700 hover:bg-gray-100 rounded-lg transition-colors flex items-center gap-2"
             >
               <ArrowLeft className="w-4 h-4" />
               Back to Edit
             </button>
             <button
               onClick={handlePrint}
-              className="px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-lg transition-colors flex items-center gap-2"
+              className="px-4 py-2 text-blue-700 hover:bg-gray-100 rounded-lg transition-colors flex items-center gap-2"
               title="Print PO (Ctrl+P)"
             >
               <Printer className="w-4 h-4" />
@@ -969,7 +969,7 @@ ${localStorage.getItem('company_name') || 'AASO Pharmaceuticals'}
         </div>
 
         {/* Quick Actions Bar */}
-        <div className="bg-gray-50 px-4 py-2 text-sm text-gray-700 border-b border-gray-200">
+        <div className="bg-blue-50 px-4 py-2 text-sm text-blue-700 border-b border-blue-200">
           Keyboard shortcuts: <strong>Ctrl+S</strong> - Save PO | <strong>Ctrl+P</strong> - Print | <strong>Ctrl+W</strong> - WhatsApp | <strong>Ctrl+M</strong> - Email | <strong>Esc</strong> - Close
         </div>
 
@@ -1000,8 +1000,8 @@ ${localStorage.getItem('company_name') || 'AASO Pharmaceuticals'}
 
             {/* Payment and Delivery Terms - Horizontal */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-              <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
-                <h4 className="text-sm font-semibold text-gray-700 mb-2 flex items-center">
+              <div className="bg-white rounded-lg shadow-sm border border-blue-200 p-4">
+                <h4 className="text-sm font-semibold text-blue-700 mb-2 flex items-center">
                   <CreditCard className="w-4 h-4 mr-2 text-gray-600" />
                   Payment Terms
                 </h4>
@@ -1018,8 +1018,8 @@ ${localStorage.getItem('company_name') || 'AASO Pharmaceuticals'}
                   <option value="60 days">60 days</option>
                 </select>
               </div>
-              <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
-                <h4 className="text-sm font-semibold text-gray-700 mb-2 flex items-center">
+              <div className="bg-white rounded-lg shadow-sm border border-blue-200 p-4">
+                <h4 className="text-sm font-semibold text-blue-700 mb-2 flex items-center">
                   <Truck className="w-4 h-4 mr-2 text-gray-600" />
                   Delivery Terms
                 </h4>
@@ -1041,7 +1041,7 @@ ${localStorage.getItem('company_name') || 'AASO Pharmaceuticals'}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
               {/* Left side - Terms & Conditions */}
               <div className="lg:col-span-1">
-                <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 sticky top-0">
+                <div className="bg-white rounded-lg shadow-sm border border-blue-200 p-6 sticky top-0">
                   <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
                     <FileText className="w-5 h-5 mr-2 text-gray-600" />
                     Terms & Conditions
@@ -1077,7 +1077,7 @@ ${localStorage.getItem('company_name') || 'AASO Pharmaceuticals'}
         </div>
 
         {/* Footer */}
-        <div className="flex justify-between items-center p-4 border-t border-gray-200 bg-white">
+        <div className="flex justify-between items-center p-4 border-t border-blue-200 bg-white">
           <div className="text-lg font-semibold text-gray-900">
             Total Amount: ₹{purchaseOrder.total_amount.toFixed(2)}
           </div>
@@ -1085,13 +1085,13 @@ ${localStorage.getItem('company_name') || 'AASO Pharmaceuticals'}
           <div className="flex items-center gap-3">
             <button
               onClick={() => setCurrentStep(1)}
-              className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+              className="px-4 py-2 border border-gray-300 text-blue-700 rounded-lg hover:bg-blue-50 transition-colors"
             >
               Back to Edit
             </button>
             <button
               onClick={handlePrint}
-              className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors flex items-center gap-2"
+              className="px-4 py-2 border border-gray-300 text-blue-700 rounded-lg hover:bg-blue-50 transition-colors flex items-center gap-2"
               title="Print PO (Ctrl+P)"
             >
               <Printer className="w-4 h-4" />

@@ -194,9 +194,9 @@ const PurchaseEntryContent = ({ onClose, initialShowPDFUpload = false }) => {
   // Review Step
   if (currentStep === 1.5) {
     return (
-      <div className="h-screen bg-gray-50 flex flex-col overflow-hidden">
+      <div className="h-screen bg-blue-50 flex flex-col overflow-hidden">
         {/* Header */}
-        <div className="bg-white border-b border-gray-200">
+        <div className="bg-white border-b border-blue-200">
           <div className="px-6 py-4">
             <div className="flex items-center justify-between">
               <div className="flex items-center space-x-4">
@@ -206,7 +206,7 @@ const PurchaseEntryContent = ({ onClose, initialShowPDFUpload = false }) => {
               <div className="flex items-center space-x-3">
                 <button
                   onClick={() => setCurrentStep(1)}
-                  className="px-4 py-2 text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-colors flex items-center"
+                  className="px-4 py-2 text-blue-700 bg-white border border-gray-300 rounded-md hover:bg-blue-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-colors flex items-center"
                 >
                   <ArrowLeft className="w-4 h-4 mr-2" />
                   Back to Edit
@@ -234,7 +234,7 @@ const PurchaseEntryContent = ({ onClose, initialShowPDFUpload = false }) => {
         </div>
         
         {/* Keyboard Shortcuts Help */}
-        <div className="bg-gray-50 px-4 py-2 text-xs text-gray-700 border-b border-gray-200">
+        <div className="bg-blue-50 px-4 py-2 text-xs text-blue-700 border-b border-blue-200">
           Keyboard shortcuts: <strong>Ctrl+S</strong> - Save Purchase | <strong>Ctrl+E</strong> - Back to Edit | <strong>Esc</strong> - Close
         </div>
         
@@ -245,7 +245,7 @@ const PurchaseEntryContent = ({ onClose, initialShowPDFUpload = false }) => {
             <PurchaseSummaryTop purchase={purchase} />
             
             {/* Delivery Details */}
-            <div className="bg-white rounded-lg border border-gray-200 p-6 mb-6">
+            <div className="bg-white rounded-lg border border-blue-200 p-6 mb-6">
               <h3 className="text-sm font-medium text-gray-500 uppercase tracking-wider mb-4">DELIVERY DETAILS</h3>
               <div className="grid grid-cols-2 gap-6">
                 <div>
@@ -280,7 +280,7 @@ const PurchaseEntryContent = ({ onClose, initialShowPDFUpload = false }) => {
             
             {/* Supplier Info */}
             <div className="grid grid-cols-2 gap-6 mb-6">
-              <div className="bg-white rounded-lg border border-gray-200 p-6">
+              <div className="bg-white rounded-lg border border-blue-200 p-6">
                 <h3 className="text-sm font-medium text-gray-500 uppercase tracking-wider mb-4">SUPPLIER DETAILS</h3>
                 <div className="space-y-3">
                   <div>
@@ -299,7 +299,7 @@ const PurchaseEntryContent = ({ onClose, initialShowPDFUpload = false }) => {
                 </div>
               </div>
               
-              <div className="bg-white rounded-lg border border-gray-200 p-6">
+              <div className="bg-white rounded-lg border border-blue-200 p-6">
                 <h3 className="text-sm font-medium text-gray-500 uppercase tracking-wider mb-4">PURCHASE INFO</h3>
                 <div className="space-y-3">
                   <div>
@@ -315,12 +315,12 @@ const PurchaseEntryContent = ({ onClose, initialShowPDFUpload = false }) => {
             </div>
             
             {/* Items Summary */}
-            <div className="bg-white rounded-lg border border-gray-200 p-6 mb-6">
+            <div className="bg-white rounded-lg border border-blue-200 p-6 mb-6">
               <h3 className="text-lg font-semibold text-gray-900 mb-4">Items Summary ({purchase.items.length} items)</h3>
               <div className="overflow-x-auto">
                 <table className="w-full">
-                  <thead className="bg-gray-50">
-                    <tr className="border-b border-gray-200">
+                  <thead className="bg-blue-50">
+                    <tr className="border-b border-blue-200">
                       <th className="text-left px-3 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">Product</th>
                       <th className="text-left px-3 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">HSN</th>
                       <th className="text-left px-3 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">Pack</th>
@@ -347,7 +347,7 @@ const PurchaseEntryContent = ({ onClose, initialShowPDFUpload = false }) => {
                       const lineTotal = taxableAmount + taxAmount;
                       
                       return (
-                        <tr key={item.id} className="hover:bg-gray-50">
+                        <tr key={item.id} className="hover:bg-blue-50">
                           <td className="px-3 py-3 text-sm text-gray-900">
                             <div className="font-medium">{item.product_name}</div>
                           </td>
@@ -377,7 +377,7 @@ const PurchaseEntryContent = ({ onClose, initialShowPDFUpload = false }) => {
             <div className="grid grid-cols-3 gap-6 mb-6">
               <div className="col-span-2">
                 {/* Notes */}
-                <div className="bg-white rounded-lg border border-gray-200 p-6">
+                <div className="bg-white rounded-lg border border-blue-200 p-6">
                   <h3 className="text-sm font-medium text-gray-500 uppercase tracking-wider mb-4">NOTES</h3>
                   <textarea
                     value={purchase.notes}
@@ -391,7 +391,7 @@ const PurchaseEntryContent = ({ onClose, initialShowPDFUpload = false }) => {
               
               <div className="col-span-1">
                 {/* Compact Financial Summary */}
-                <div className="bg-white rounded-lg border border-gray-200 p-6">
+                <div className="bg-white rounded-lg border border-blue-200 p-6">
                   <table className="w-full text-sm">
                     <tbody>
                       <tr className="border-b border-gray-100">
@@ -438,7 +438,7 @@ const PurchaseEntryContent = ({ onClose, initialShowPDFUpload = false }) => {
         </div>
         
         {/* Bottom Bar */}
-        <div className="bg-white border-t border-gray-200">
+        <div className="bg-white border-t border-blue-200">
           <div className="px-6 py-4">
             <div className="flex items-center justify-between">
               <div className="flex items-center space-x-4">
@@ -450,7 +450,7 @@ const PurchaseEntryContent = ({ onClose, initialShowPDFUpload = false }) => {
               <div className="flex items-center space-x-3">
                 <button
                   onClick={() => setCurrentStep(1)}
-                  className="px-6 py-2 text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-colors"
+                  className="px-6 py-2 text-blue-700 bg-white border border-gray-300 rounded-md hover:bg-blue-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-colors"
                 >
                   Back to Edit
                 </button>
@@ -482,7 +482,7 @@ const PurchaseEntryContent = ({ onClose, initialShowPDFUpload = false }) => {
   if (currentStep === 2) {
     // Success Step
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+      <div className="min-h-screen bg-blue-50 flex items-center justify-center">
         <div className="bg-white rounded-lg shadow-lg w-full max-w-md p-8 text-center">
           <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
             <CheckCircle className="w-8 h-8 text-green-600" />
@@ -502,7 +502,7 @@ const PurchaseEntryContent = ({ onClose, initialShowPDFUpload = false }) => {
             </button>
             <button
               onClick={onClose}
-              className="w-full px-4 py-2 bg-white text-gray-700 border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-colors"
+              className="w-full px-4 py-2 bg-white text-blue-700 border border-gray-300 rounded-md hover:bg-blue-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-colors"
             >
               Close
             </button>
@@ -513,9 +513,9 @@ const PurchaseEntryContent = ({ onClose, initialShowPDFUpload = false }) => {
   }
   
   return (
-    <div className="fixed inset-0 bg-gray-50 flex flex-col">
+    <div className="fixed inset-0 bg-blue-50 flex flex-col">
       {/* Header */}
-      <div className="bg-white border-b border-gray-200">
+      <div className="bg-white border-b border-blue-200">
         <div className="px-6 py-4">
           <div className="flex items-center justify-between">
             <div>
@@ -525,7 +525,7 @@ const PurchaseEntryContent = ({ onClose, initialShowPDFUpload = false }) => {
             <div className="flex items-center space-x-3">
               <button
                 onClick={togglePDFUpload}
-                className="px-4 py-2 text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-colors flex items-center"
+                className="px-4 py-2 text-blue-700 bg-white border border-gray-300 rounded-md hover:bg-blue-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-colors flex items-center"
               >
                 <Upload className="w-4 h-4 mr-2" />
                 Upload PDF
@@ -533,7 +533,7 @@ const PurchaseEntryContent = ({ onClose, initialShowPDFUpload = false }) => {
               
               <button
                 onClick={toggleGSTCalculator}
-                className="px-4 py-2 text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-colors flex items-center"
+                className="px-4 py-2 text-blue-700 bg-white border border-gray-300 rounded-md hover:bg-blue-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-colors flex items-center"
               >
                 <Calculator className="w-4 h-4 mr-2" />
                 GST Calculator
@@ -542,7 +542,7 @@ const PurchaseEntryContent = ({ onClose, initialShowPDFUpload = false }) => {
               <ViewHistoryButton
                 historyType="purchase"
                 buttonText="History"
-                className="px-4 py-2 text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-colors flex items-center"
+                className="px-4 py-2 text-blue-700 bg-white border border-gray-300 rounded-md hover:bg-blue-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-colors flex items-center"
               />
               
               <button
@@ -557,12 +557,12 @@ const PurchaseEntryContent = ({ onClose, initialShowPDFUpload = false }) => {
       </div>
       
       {/* Keyboard Shortcuts Help */}
-      <div className="bg-gray-50 px-4 py-2 text-xs text-gray-700 border-b border-gray-200">
+      <div className="bg-blue-50 px-4 py-2 text-xs text-blue-700 border-b border-blue-200">
         Keyboard shortcuts: <strong>Ctrl+N</strong> - Add Supplier | <strong>Ctrl+F</strong> - Search Products | <strong>Ctrl+U</strong> - Upload PDF | <strong>Ctrl+G</strong> - GST Calculator | <strong>Ctrl+S</strong> - Save | <strong>Esc</strong> - Close
       </div>
       
       {/* Content */}
-      <div className="flex-1 overflow-y-auto bg-gray-50">
+      <div className="flex-1 overflow-y-auto bg-blue-50">
           <div className="px-8 py-6">
             {/* Message Display */}
             {message && (
@@ -592,7 +592,7 @@ const PurchaseEntryContent = ({ onClose, initialShowPDFUpload = false }) => {
         </div>
         
         {/* Footer */}
-        <div className="px-8 py-4 border-t border-gray-200 bg-white">
+        <div className="px-8 py-4 border-t border-blue-200 bg-white">
           <div className="flex items-center justify-between">
             <div className="text-sm text-gray-600">
               Total Items: {purchase.items.length} | 
@@ -602,7 +602,7 @@ const PurchaseEntryContent = ({ onClose, initialShowPDFUpload = false }) => {
             <div className="flex items-center space-x-3">
               <button
                 onClick={resetPurchase}
-                className="px-4 py-2 text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-colors"
+                className="px-4 py-2 text-blue-700 bg-white border border-gray-300 rounded-md hover:bg-blue-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-colors"
               >
                 Reset
               </button>

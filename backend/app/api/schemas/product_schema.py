@@ -146,15 +146,15 @@ class Product(BaseModel):
     """Simple product model for API responses"""
     product_id: int
     name: str
-    brand: str
-    category: str
-    hsn_code: str
-    gst_rate: float
-    mrp: float
-    sale_rate: float
-    purchase_rate: float
-    current_stock: int
-    unit_of_measure: str
+    brand: Optional[str] = None
+    category: Optional[str] = None
+    hsn_code: Optional[str] = None
+    gst_rate: Optional[float] = None
+    mrp: Optional[float] = None
+    sale_rate: Optional[float] = None
+    purchase_rate: Optional[float] = None
+    current_stock: Optional[int] = 0
+    unit_of_measure: Optional[str] = None
     
     class Config:
         from_attributes = True

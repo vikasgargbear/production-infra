@@ -349,7 +349,7 @@ const SalesReturnFlow = ({ onClose }) => {
   // Step 1: Create Return
   if (currentStep === 1) {
     return (
-      <div className="h-full bg-gray-50">
+      <div className="h-full bg-blue-50">
         <div className="h-full flex flex-col">
           <ModuleHeader
             title="Sales Return"
@@ -366,7 +366,7 @@ const SalesReturnFlow = ({ onClose }) => {
           />
 
           {/* Quick Actions Bar */}
-          <div className="bg-gray-50 px-4 py-2 text-sm text-gray-700 border-b border-gray-200">
+          <div className="bg-blue-50 px-4 py-2 text-sm text-blue-700 border-b border-blue-200">
             Keyboard shortcuts: <strong>Ctrl+R</strong> - Search Customer | <strong>Ctrl+I</strong> - Search Invoice | <strong>Ctrl+S</strong> - Proceed | <strong>Esc</strong> - Close
           </div>
 
@@ -374,7 +374,7 @@ const SalesReturnFlow = ({ onClose }) => {
           <div className="flex-1 overflow-y-auto p-6">
             <div className="max-w-6xl mx-auto space-y-6">
               {/* Return Header */}
-              <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+              <div className="bg-white rounded-lg shadow-sm border border-blue-200 p-6">
                 <div className="flex justify-between items-start mb-6">
                   <div>
                     <h2 className="text-2xl font-bold text-gray-900">Sales Return</h2>
@@ -393,7 +393,7 @@ const SalesReturnFlow = ({ onClose }) => {
 
                 {/* Customer Selection */}
                 <div className="mb-6">
-                  <h3 className="text-sm font-medium text-gray-700 mb-2">Select Customer</h3>
+                  <h3 className="text-sm font-medium text-blue-700 mb-2">Select Customer</h3>
                   {!selectedCustomer ? (
                     <CustomerSearch
                       ref={customerSearchRef}
@@ -403,7 +403,7 @@ const SalesReturnFlow = ({ onClose }) => {
                       showCreateButton={true}
                     />
                   ) : (
-                    <div className="bg-gray-50 rounded-lg p-4 flex justify-between items-start">
+                    <div className="bg-blue-50 rounded-lg p-4 flex justify-between items-start">
                       <div>
                         <h4 className="font-semibold text-gray-900">{selectedCustomer.customer_name || selectedCustomer.name}</h4>
                         <p className="text-sm text-gray-600">{selectedCustomer.phone}</p>
@@ -432,7 +432,7 @@ const SalesReturnFlow = ({ onClose }) => {
                 {/* Invoice Selection */}
                 {selectedCustomer && (
                   <div>
-                    <h3 className="text-sm font-medium text-gray-700 mb-2">Select Invoice</h3>
+                    <h3 className="text-sm font-medium text-blue-700 mb-2">Select Invoice</h3>
                     {!selectedInvoice ? (
                       <InvoiceSearch
                         ref={invoiceSearchRef}
@@ -479,11 +479,11 @@ const SalesReturnFlow = ({ onClose }) => {
 
               {/* Return Reason - Moved Above Items */}
               {selectedInvoice && (
-                <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+                <div className="bg-white rounded-lg shadow-sm border border-blue-200 p-6">
                   <h3 className="text-lg font-semibold text-gray-900 mb-4">Return Details</h3>
                   
                   <div className="mb-6">
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                    <label className="block text-sm font-medium text-blue-700 mb-2">
                       Return Reason <span className="text-red-500">*</span>
                     </label>
                     <Select
@@ -504,7 +504,7 @@ const SalesReturnFlow = ({ onClose }) => {
                           onChange={(e) => setReturnData(prev => ({ ...prev, include_gst: e.target.checked }))}
                           className="w-4 h-4 text-blue-600 rounded focus:ring-blue-500"
                         />
-                        <span className="text-sm font-medium text-gray-700">
+                        <span className="text-sm font-medium text-blue-700">
                           Include GST in return amount (Customer sees total amount paid)
                         </span>
                       </label>
@@ -560,7 +560,7 @@ const SalesReturnFlow = ({ onClose }) => {
 
               {/* Return Items */}
               {selectedInvoice && returnData.items.length > 0 && (
-                <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+                <div className="bg-white rounded-lg shadow-sm border border-blue-200 p-6">
                   <div className="flex justify-between items-center mb-4">
                     <div>
                       <h3 className="text-lg font-semibold text-gray-900">Select Items to Return</h3>
@@ -577,7 +577,7 @@ const SalesReturnFlow = ({ onClose }) => {
                             updateReturnItem(item.id, 'return_quantity', item.max_returnable_qty);
                           });
                         }}
-                        className="px-3 py-1 text-sm border border-gray-300 rounded hover:bg-gray-50"
+                        className="px-3 py-1 text-sm border border-gray-300 rounded hover:bg-blue-50"
                       >
                         Select All
                       </button>
@@ -589,7 +589,7 @@ const SalesReturnFlow = ({ onClose }) => {
                             updateReturnItem(item.id, 'return_quantity', 0);
                           });
                         }}
-                        className="px-3 py-1 text-sm border border-gray-300 rounded hover:bg-gray-50"
+                        className="px-3 py-1 text-sm border border-gray-300 rounded hover:bg-blue-50"
                       >
                         Clear All
                       </button>
@@ -611,7 +611,7 @@ const SalesReturnFlow = ({ onClose }) => {
               <div className="flex justify-end gap-3">
                 <button
                   onClick={onClose}
-                  className="px-6 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50"
+                  className="px-6 py-2 border border-gray-300 text-blue-700 rounded-lg hover:bg-blue-50"
                 >
                   Cancel
                 </button>
@@ -633,7 +633,7 @@ const SalesReturnFlow = ({ onClose }) => {
 
   // Step 2: Review and Confirm
   return (
-    <div className="h-full bg-gray-50">
+    <div className="h-full bg-blue-50">
       <div className="h-full flex flex-col">
         <ModuleHeader
           title="Review Sales Return"
@@ -666,7 +666,7 @@ const SalesReturnFlow = ({ onClose }) => {
             />
             
             {/* Notes Section */}
-            <div className="mt-6 bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+            <div className="mt-6 bg-white rounded-lg shadow-sm border border-blue-200 p-6">
               <NotesSection
                 value={returnData.return_reason_notes}
                 onChange={(value) => setReturnData(prev => ({ 
@@ -682,7 +682,7 @@ const SalesReturnFlow = ({ onClose }) => {
         </div>
 
         {/* Footer */}
-        <div className="flex justify-between items-center p-4 border-t border-gray-200 bg-white">
+        <div className="flex justify-between items-center p-4 border-t border-blue-200 bg-white">
           <div className="text-lg font-semibold text-gray-900">
             Total Return Amount: ₹{returnData.total_amount.toFixed(2)}
           </div>
@@ -690,7 +690,7 @@ const SalesReturnFlow = ({ onClose }) => {
           <div className="flex items-center gap-3">
             <button
               onClick={() => setCurrentStep(1)}
-              className="px-6 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50"
+              className="px-6 py-2 border border-gray-300 text-blue-700 rounded-lg hover:bg-blue-50"
             >
               Back to Edit
             </button>

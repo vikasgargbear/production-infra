@@ -374,7 +374,7 @@ Expected Delivery: ${challan.expected_delivery_date}
   // Step 1: Create Challan (Everything on one page like Invoice)
   if (currentStep === 1) {
     return (
-      <div className="h-full bg-gray-50">
+      <div className="h-full bg-blue-50">
         <div className="h-full flex flex-col">
           
           {/* Header - Using Global ModuleHeader */}
@@ -394,7 +394,7 @@ Expected Delivery: ${challan.expected_delivery_date}
           />
 
           {/* Keyboard Shortcuts Help */}
-          <div className="bg-gray-50 px-4 py-2 text-xs text-gray-700 border-b border-gray-200">
+          <div className="bg-blue-50 px-4 py-2 text-xs text-blue-700 border-b border-blue-200">
             Keyboard shortcuts: <strong>Ctrl+N</strong> - Add Customer | <strong>Ctrl+I</strong> - Import | <strong>Ctrl+F</strong> - Search Products | <strong>Ctrl+S</strong> - Save | <strong>Esc</strong> - Close
           </div>
 
@@ -432,7 +432,7 @@ Expected Delivery: ${challan.expected_delivery_date}
                   <label className="block text-xs font-medium text-gray-600 mb-1">Import Data</label>
                   <button
                     onClick={() => setShowImportModal(true)}
-                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors flex items-center justify-center gap-2 h-[38px]"
+                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg hover:bg-blue-50 transition-colors flex items-center justify-center gap-2 h-[38px]"
                   >
                     <FileInput className="w-4 h-4 text-gray-400" />
                     <span>Import from Invoice</span>
@@ -442,7 +442,7 @@ Expected Delivery: ${challan.expected_delivery_date}
 
               {/* Customer Section */}
               <div className="mb-6">
-                <h3 className="text-xs font-semibold text-gray-700 uppercase tracking-wider mb-3">CUSTOMER</h3>
+                <h3 className="text-xs font-semibold text-blue-700 uppercase tracking-wider mb-3">CUSTOMER</h3>
                 <CustomerSearch
                   value={selectedCustomer}
                   onChange={handleCustomerSelect}
@@ -455,9 +455,9 @@ Expected Delivery: ${challan.expected_delivery_date}
 
               {/* Compact Address Section - Only show after customer selection */}
               {selectedCustomer && (
-                <div className="mb-4 p-3 bg-gray-50 rounded-lg border border-gray-200">
+                <div className="mb-4 p-3 bg-blue-50 rounded-lg border border-blue-200">
                   <div className="flex items-center justify-between mb-2">
-                    <h3 className="text-xs font-semibold text-gray-700 uppercase tracking-wider">DELIVERY ADDRESS</h3>
+                    <h3 className="text-xs font-semibold text-blue-700 uppercase tracking-wider">DELIVERY ADDRESS</h3>
                     <label className="flex items-center text-xs">
                       <input
                         type="checkbox"
@@ -532,7 +532,7 @@ Expected Delivery: ${challan.expected_delivery_date}
 
               {/* Products Section */}
               <div className="mb-6">
-                <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wider mb-3">PRODUCTS</h3>
+                <h3 className="text-sm font-semibold text-blue-700 uppercase tracking-wider mb-3">PRODUCTS</h3>
                 <ProductSearchSimple
                   onAddItem={handleProductSelect}
                   onCreateProduct={(productName) => {
@@ -563,7 +563,7 @@ Expected Delivery: ${challan.expected_delivery_date}
           </div>
 
           {/* Footer */}
-          <div className="border-t border-gray-200 bg-white px-6 py-4">
+          <div className="border-t border-blue-200 bg-white px-6 py-4">
             <div className="flex justify-between items-center">
               <div className="flex items-center gap-4 text-sm">
                 <span className="text-gray-600">Items: <strong>{challan.total_quantity}</strong></span>
@@ -576,7 +576,7 @@ Expected Delivery: ${challan.expected_delivery_date}
               <div className="flex items-center gap-3">
                 <button
                   onClick={onClose}
-                  className="px-6 py-2 text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+                  className="px-6 py-2 text-blue-700 hover:bg-gray-100 rounded-lg transition-colors"
                 >
                   Cancel
                 </button>
@@ -641,7 +641,7 @@ Expected Delivery: ${challan.expected_delivery_date}
 
   // Step 2: Review and Confirm
   return (
-    <div className="h-full bg-gray-50">
+    <div className="h-full bg-blue-50">
       <div className="h-full flex flex-col">
         
         {/* Header - Using Global ModuleHeader */}
@@ -663,7 +663,7 @@ Expected Delivery: ${challan.expected_delivery_date}
         />
 
         {/* Keyboard Shortcuts Help */}
-        <div className="bg-gray-50 px-4 py-2 text-xs text-gray-700 border-b border-gray-200">
+        <div className="bg-blue-50 px-4 py-2 text-xs text-blue-700 border-b border-blue-200">
           Keyboard shortcuts: <strong>Ctrl+S</strong> - Save Challan | <strong>Ctrl+P</strong> - Print | <strong>Esc</strong> - Back
         </div>
 
@@ -671,8 +671,8 @@ Expected Delivery: ${challan.expected_delivery_date}
         <div className="flex-1 overflow-y-auto">
           <div className="max-w-4xl mx-auto p-6">
             {/* Transport Details Section - Simplified */}
-            <div className="bg-white rounded-lg border border-gray-200 p-4 mb-6">
-              <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wider mb-3">TRANSPORT DETAILS</h3>
+            <div className="bg-white rounded-lg border border-blue-200 p-4 mb-6">
+              <h3 className="text-sm font-semibold text-blue-700 uppercase tracking-wider mb-3">TRANSPORT DETAILS</h3>
               
               <div className="grid grid-cols-4 gap-4">
                 <div>
@@ -741,7 +741,7 @@ Expected Delivery: ${challan.expected_delivery_date}
             />
             
             {/* Notes Section - Moved to bottom */}
-            <div className="bg-white rounded-lg border border-gray-200 p-4 mt-6">
+            <div className="bg-white rounded-lg border border-blue-200 p-4 mt-6">
               <NotesSection
                 value={challan.notes}
                 onChange={(value) => setChallan(prev => ({ ...prev, notes: value }))}
@@ -754,7 +754,7 @@ Expected Delivery: ${challan.expected_delivery_date}
         </div>
 
         {/* Footer */}
-        <div className="border-t border-gray-200 bg-white px-6 py-4">
+        <div className="border-t border-blue-200 bg-white px-6 py-4">
           <div className="flex justify-between items-center">
             <div className="text-lg">
               Total: <span className="font-bold text-gray-900">₹{challan.total_amount.toFixed(2)}</span>
@@ -763,7 +763,7 @@ Expected Delivery: ${challan.expected_delivery_date}
             <div className="flex items-center gap-3">
               <button
                 onClick={printChallan}
-                className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg transition-colors flex items-center gap-2"
+                className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-blue-700 rounded-lg transition-colors flex items-center gap-2"
               >
                 <Printer className="w-4 h-4" />
                 Print

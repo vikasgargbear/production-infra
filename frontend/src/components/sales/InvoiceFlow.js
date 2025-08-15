@@ -824,7 +824,7 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
   // Step 1: Input Form
   if (currentStep === 1) {
     return (
-      <div className="h-full bg-gray-50">
+      <div className="h-full bg-blue-50">
         <div className="h-full flex flex-col">
           
           {/* Header - Using Global ModuleHeader */}
@@ -845,13 +845,13 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
           />
 
           {/* Keyboard Shortcuts Help */}
-          <div className="bg-gray-50 px-4 py-2 text-xs text-gray-700 border-b border-gray-200">
+          <div className="bg-blue-50 px-4 py-2 text-xs text-blue-700 border-b border-blue-200">
             Keyboard shortcuts: <strong>Ctrl+N</strong> - Add Customer | <strong>Ctrl+F</strong> - Search Products | <strong>Ctrl+S</strong> - Save Draft | <strong>Esc</strong> - Close
           </div>
 
 
           {/* Content */}
-          <div className="flex-1 overflow-y-auto bg-gray-50">
+          <div className="flex-1 overflow-y-auto bg-blue-50">
             <div className="max-w-6xl mx-auto px-6 py-6">
             
             {/* Message Display */}
@@ -905,7 +905,7 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
                 <label className="block text-sm font-medium text-gray-600 mb-2 opacity-0">Import</label>
                 <button
                   onClick={() => setShowImportModal(true)}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors flex items-center justify-center gap-2"
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg hover:bg-blue-50 transition-colors flex items-center justify-center gap-2"
                 >
                   <FileInput className="w-4 h-4 text-gray-600" />
                   <span className="text-sm">Import from Order/Challan</span>
@@ -915,7 +915,7 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
 
             {/* Customer Section */}
             <div className="mb-6">
-              <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wider mb-3">CUSTOMER</h3>
+              <h3 className="text-sm font-semibold text-blue-700 uppercase tracking-wider mb-3">CUSTOMER</h3>
               <CustomerSearch
                 value={invoice?.customer_details || null}
                 onChange={handleCustomerSelect}
@@ -929,7 +929,7 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
 
             {/* Products Section */}
             <div className="mb-6">
-              <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wider mb-3">PRODUCTS</h3>
+              <h3 className="text-sm font-semibold text-blue-700 uppercase tracking-wider mb-3">PRODUCTS</h3>
               <ProductSearchSimple
                 onAddItem={handleAddItem}
                 onCreateProduct={() => setShowProductModal(true)}
@@ -940,7 +940,7 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
             {/* Invoice Items */}
             {invoice.items.length > 0 && (
               <div className="mb-6">
-                <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wider mb-3">INVOICE ITEMS</h3>
+                <h3 className="text-sm font-semibold text-blue-700 uppercase tracking-wider mb-3">INVOICE ITEMS</h3>
                 <ItemsTable
                   items={invoice.items}
                   onUpdateItem={handleUpdateItem}
@@ -957,7 +957,7 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
           </div>
 
           {/* Footer */}
-          <div className="border-t border-gray-200 bg-white px-6 py-4">
+          <div className="border-t border-blue-200 bg-white px-6 py-4">
             <div className="flex justify-between items-center">
               <div className="text-sm text-gray-600">
                 Total Items: {invoice.items.length}
@@ -966,7 +966,7 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
               <div className="flex items-center gap-3">
                 <button
                   onClick={onClose}
-                  className="px-6 py-2.5 text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+                  className="px-6 py-2.5 text-blue-700 hover:bg-gray-100 rounded-lg transition-colors"
                   tabIndex={100}
                 >
                   Reset
@@ -1035,7 +1035,7 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
 
   // Step 2: Review and Confirm
   return (
-    <div className="h-full bg-gray-50">
+    <div className="h-full bg-blue-50">
       <div className="h-full flex flex-col">
         
         {/* Header - Using Global ModuleHeader */}
@@ -1070,12 +1070,12 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
         />
 
         {/* Keyboard Shortcuts Help */}
-        <div className="bg-gray-50 px-4 py-2 text-xs text-gray-700 border-b border-gray-200">
+        <div className="bg-blue-50 px-4 py-2 text-xs text-blue-700 border-b border-blue-200">
           Keyboard shortcuts: <strong>Ctrl+S</strong> - Save Invoice | <strong>Ctrl+P</strong> - Print | <strong>Esc</strong> - Close
         </div>
 
         {/* Content - Invoice Preview */}
-        <div className="flex-1 overflow-y-auto bg-gray-50">
+        <div className="flex-1 overflow-y-auto bg-blue-50">
           <div className="max-w-6xl mx-auto px-6 py-6">
           {message && (
             <div className={`
@@ -1115,7 +1115,7 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
 
           {/* Notes */}
           <div className="max-w-6xl mx-auto mt-6 mb-6">
-            <div className="bg-white rounded-lg border border-gray-200 p-4">
+            <div className="bg-white rounded-lg border border-blue-200 p-4">
               <label className="block text-sm font-medium text-gray-600 mb-2">Notes</label>
               <textarea
                 value={invoice.notes}
@@ -1150,7 +1150,7 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
                 {invoice.e_invoice_applicable && (
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                      <label className="block text-sm font-medium text-blue-700 mb-1">
                         E-Invoice Number
                       </label>
                       <input
@@ -1164,7 +1164,7 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
                     </div>
                     
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                      <label className="block text-sm font-medium text-blue-700 mb-1">
                         IRN (Invoice Reference Number)
                       </label>
                       <input
@@ -1178,7 +1178,7 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
                     </div>
                     
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                      <label className="block text-sm font-medium text-blue-700 mb-1">
                         Acknowledgment Number
                       </label>
                       <input
@@ -1192,7 +1192,7 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
                     </div>
                     
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                      <label className="block text-sm font-medium text-blue-700 mb-1">
                         Acknowledgment Date
                       </label>
                       <input
@@ -1205,7 +1205,7 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
                     </div>
                     
                     <div className="md:col-span-2">
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                      <label className="block text-sm font-medium text-blue-700 mb-1">
                         QR Code Data
                       </label>
                       <textarea
@@ -1231,7 +1231,7 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
         </div>
 
         {/* Footer */}
-        <div className="border-t border-gray-200 bg-white px-6 py-4">
+        <div className="border-t border-blue-200 bg-white px-6 py-4">
           <div className="flex justify-between items-center">
             <div className="text-sm text-gray-600">
               Total Amount: <span className="text-2xl font-bold text-gray-900">₹{invoice.net_amount.toFixed(0)}</span>
@@ -1240,7 +1240,7 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
             <div className="flex items-center gap-3">
               <button
                 onClick={() => setCurrentStep(1)}
-                className="px-6 py-2.5 text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+                className="px-6 py-2.5 text-blue-700 hover:bg-gray-100 rounded-lg transition-colors"
               >
                 Back to Edit
               </button>
@@ -1248,7 +1248,7 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
                 onClick={handlePrint}
                 className="px-6 py-2.5 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors flex items-center gap-2 border border-gray-300"
               >
-                <Printer className="w-5 h-5 text-gray-700" />
+                <Printer className="w-5 h-5 text-blue-700" />
                 <span className="font-medium">Print</span>
               </button>
               <button

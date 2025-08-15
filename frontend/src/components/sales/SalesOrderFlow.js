@@ -584,7 +584,7 @@ Expected Delivery: ${order.expected_delivery_date}
   // Step 1: Create Order
   if (currentStep === 1) {
     return (
-      <div className="h-full bg-gray-50">
+      <div className="h-full bg-blue-50">
         <div className="h-full flex flex-col">
           
           {/* Header */}
@@ -603,12 +603,12 @@ Expected Delivery: ${order.expected_delivery_date}
           />
 
           {/* Keyboard Shortcuts Help */}
-          <div className="bg-gray-50 px-4 py-2 text-xs text-gray-700 border-b border-gray-200">
+          <div className="bg-blue-50 px-4 py-2 text-xs text-blue-700 border-b border-blue-200">
             Keyboard shortcuts: <strong>Ctrl+N</strong> - Add Customer | <strong>Ctrl+I</strong> - Import | <strong>Ctrl+F</strong> - Search Products | <strong>Ctrl+S</strong> - Save | <strong>Esc</strong> - Close
           </div>
 
           {/* Content */}
-          <div className="flex-1 overflow-y-auto bg-gray-50">
+          <div className="flex-1 overflow-y-auto bg-blue-50">
             <div className="max-w-6xl mx-auto px-6 py-6">
               
               {/* Message Display */}
@@ -651,7 +651,7 @@ Expected Delivery: ${order.expected_delivery_date}
                   <label className="block text-xs font-medium text-gray-600 mb-1">Import Data</label>
                   <button
                     onClick={() => setShowImportModal(true)}
-                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors flex items-center justify-center gap-2 h-[38px]"
+                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg hover:bg-blue-50 transition-colors flex items-center justify-center gap-2 h-[38px]"
                   >
                     <FileInput className="w-4 h-4 text-gray-400" />
                     <span>Import from Invoice/Challan</span>
@@ -661,7 +661,7 @@ Expected Delivery: ${order.expected_delivery_date}
 
               {/* Customer Section */}
               <div className="mb-6">
-                <h3 className="text-xs font-semibold text-gray-700 uppercase tracking-wider mb-3">CUSTOMER</h3>
+                <h3 className="text-xs font-semibold text-blue-700 uppercase tracking-wider mb-3">CUSTOMER</h3>
                 <CustomerSearch
                   value={selectedCustomer}
                   onChange={handleCustomerSelect}
@@ -676,7 +676,7 @@ Expected Delivery: ${order.expected_delivery_date}
 
               {/* Products Section */}
               <div className="mb-6">
-                <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wider mb-3">PRODUCTS</h3>
+                <h3 className="text-sm font-semibold text-blue-700 uppercase tracking-wider mb-3">PRODUCTS</h3>
                 <ProductSearchSimple
                   onAddItem={handleProductSelect}
                   onCreateProduct={(productName) => {
@@ -715,7 +715,7 @@ Expected Delivery: ${order.expected_delivery_date}
           </div>
 
           {/* Footer */}
-          <div className="border-t border-gray-200 bg-white px-6 py-4">
+          <div className="border-t border-blue-200 bg-white px-6 py-4">
             <div className="flex justify-between items-center">
               <div className="flex items-center gap-4 text-sm">
                 <span className="text-gray-600">Items: <strong>{order.total_quantity}</strong></span>
@@ -725,7 +725,7 @@ Expected Delivery: ${order.expected_delivery_date}
               <div className="flex items-center gap-3">
                 <button
                   onClick={onClose}
-                  className="px-6 py-2 text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+                  className="px-6 py-2 text-blue-700 hover:bg-gray-100 rounded-lg transition-colors"
                 >
                   Cancel
                 </button>
@@ -785,7 +785,7 @@ Expected Delivery: ${order.expected_delivery_date}
 
   // Step 2: Review and Confirm
   return (
-    <div className="h-full bg-gray-50">
+    <div className="h-full bg-blue-50">
       <div className="h-full flex flex-col">
         
         {/* Header */}
@@ -807,7 +807,7 @@ Expected Delivery: ${order.expected_delivery_date}
         />
 
         {/* Keyboard Shortcuts Help */}
-        <div className="bg-gray-50 px-4 py-2 text-xs text-gray-700 border-b border-gray-200">
+        <div className="bg-blue-50 px-4 py-2 text-xs text-blue-700 border-b border-blue-200">
           Keyboard shortcuts: <strong>Ctrl+S</strong> - Save Order | <strong>Ctrl+P</strong> - Print | <strong>Esc</strong> - Back
         </div>
 
@@ -893,7 +893,7 @@ Expected Delivery: ${order.expected_delivery_date}
             ` }} />
             
             {/* Order Preview */}
-            <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-8 print-container order-preview-container">
+            <div className="bg-white rounded-lg shadow-sm border border-blue-200 p-8 print-container order-preview-container">
               {/* Branding Header */}
               <div className="text-center mb-8 print-header">
                 <div className="flex items-center justify-center mb-4">
@@ -908,7 +908,7 @@ Expected Delivery: ${order.expected_delivery_date}
               </div>
 
               {/* Order Details Section */}
-              <div className="grid grid-cols-3 gap-4 mb-6 p-4 bg-gray-50 rounded-lg">
+              <div className="grid grid-cols-3 gap-4 mb-6 p-4 bg-blue-50 rounded-lg">
                 <div>
                   <p className="text-xs text-gray-600">Order Status</p>
                   <p className="text-sm font-semibold text-purple-600">CONFIRMED</p>
@@ -957,7 +957,7 @@ Expected Delivery: ${order.expected_delivery_date}
 
               <div className="grid grid-cols-2 gap-8 mb-8">
                 <div>
-                  <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wider mb-2">Bill To</h3>
+                  <h3 className="text-sm font-semibold text-blue-700 uppercase tracking-wider mb-2">Bill To</h3>
                   <p className="font-medium">{order.customer_name}</p>
                   <p className="text-sm text-gray-600">{order.billing_address}</p>
                   {selectedCustomer?.gstin && (
@@ -971,7 +971,7 @@ Expected Delivery: ${order.expected_delivery_date}
                   )}
                 </div>
                 <div>
-                  <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wider mb-2">Ship To</h3>
+                  <h3 className="text-sm font-semibold text-blue-700 uppercase tracking-wider mb-2">Ship To</h3>
                   <p className="text-sm text-gray-600">{order.shipping_address}</p>
                   {selectedCustomer?.shipping_phone && (
                     <p className="text-sm text-gray-600">Contact: {selectedCustomer.shipping_phone}</p>
@@ -980,21 +980,21 @@ Expected Delivery: ${order.expected_delivery_date}
               </div>
 
               <div className="mb-8">
-                <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wider mb-4">Order Items</h3>
+                <h3 className="text-sm font-semibold text-blue-700 uppercase tracking-wider mb-4">Order Items</h3>
                 <div className="overflow-x-auto">
-                  <table className="w-full border border-gray-200 print-table">
-                    <thead className="bg-gray-50">
+                  <table className="w-full border border-blue-200 print-table">
+                    <thead className="bg-blue-50">
                       <tr>
-                        <th className="text-left py-2 px-3 text-xs font-medium text-gray-700 border-b">Item Details</th>
-                        <th className="text-center py-2 px-3 text-xs font-medium text-gray-700 border-b">HSN</th>
-                        <th className="text-center py-2 px-3 text-xs font-medium text-gray-700 border-b">Pack/Unit</th>
-                        <th className="text-center py-2 px-3 text-xs font-medium text-gray-700 border-b">Qty</th>
-                        <th className="text-center py-2 px-3 text-xs font-medium text-gray-700 border-b">Free</th>
-                        <th className="text-right py-2 px-3 text-xs font-medium text-gray-700 border-b">MRP</th>
-                        <th className="text-right py-2 px-3 text-xs font-medium text-gray-700 border-b">Rate</th>
-                        <th className="text-right py-2 px-3 text-xs font-medium text-gray-700 border-b">Disc %</th>
-                        <th className="text-right py-2 px-3 text-xs font-medium text-gray-700 border-b">GST %</th>
-                        <th className="text-right py-2 px-3 text-xs font-medium text-gray-700 border-b">Amount</th>
+                        <th className="text-left py-2 px-3 text-xs font-medium text-blue-700 border-b">Item Details</th>
+                        <th className="text-center py-2 px-3 text-xs font-medium text-blue-700 border-b">HSN</th>
+                        <th className="text-center py-2 px-3 text-xs font-medium text-blue-700 border-b">Pack/Unit</th>
+                        <th className="text-center py-2 px-3 text-xs font-medium text-blue-700 border-b">Qty</th>
+                        <th className="text-center py-2 px-3 text-xs font-medium text-blue-700 border-b">Free</th>
+                        <th className="text-right py-2 px-3 text-xs font-medium text-blue-700 border-b">MRP</th>
+                        <th className="text-right py-2 px-3 text-xs font-medium text-blue-700 border-b">Rate</th>
+                        <th className="text-right py-2 px-3 text-xs font-medium text-blue-700 border-b">Disc %</th>
+                        <th className="text-right py-2 px-3 text-xs font-medium text-blue-700 border-b">GST %</th>
+                        <th className="text-right py-2 px-3 text-xs font-medium text-blue-700 border-b">Amount</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -1010,7 +1010,7 @@ Expected Delivery: ${order.expected_delivery_date}
                         const totalAmount = taxableAmount + gstAmount;
                         
                         return (
-                          <tr key={index} className="border-b hover:bg-gray-50">
+                          <tr key={index} className="border-b hover:bg-blue-50">
                             <td className="py-2 px-3">
                               <p className="text-sm font-medium">{item.product_name}</p>
                               <p className="text-xs text-gray-500">Batch: {item.batch_no || item.batch_number || 'N/A'}</p>
@@ -1038,8 +1038,8 @@ Expected Delivery: ${order.expected_delivery_date}
                 
                 {/* GST Breakdown and Summary */}
                 <div className="mt-4 grid grid-cols-2 gap-4 page-break-avoid">
-                  <div className="bg-gray-50 p-4 rounded-lg">
-                    <h4 className="text-sm font-semibold text-gray-700 mb-2">GST Breakdown</h4>
+                  <div className="bg-blue-50 p-4 rounded-lg">
+                    <h4 className="text-sm font-semibold text-blue-700 mb-2">GST Breakdown</h4>
                     <div className="space-y-1">
                       <div className="flex justify-between text-sm">
                         <span className="text-gray-600">CGST (9%)</span>
@@ -1050,14 +1050,14 @@ Expected Delivery: ${order.expected_delivery_date}
                         <span className="font-medium">₹{(order.sgst_amount || order.tax_amount/2 || 0).toFixed(2)}</span>
                       </div>
                       <div className="flex justify-between text-sm border-t pt-1">
-                        <span className="text-gray-700 font-medium">Total GST</span>
+                        <span className="text-blue-700 font-medium">Total GST</span>
                         <span className="font-semibold">₹{(order.tax_amount || 0).toFixed(2)}</span>
                       </div>
                     </div>
                   </div>
                   
                   <div className="bg-purple-50 p-4 rounded-lg">
-                    <h4 className="text-sm font-semibold text-gray-700 mb-2">Order Summary</h4>
+                    <h4 className="text-sm font-semibold text-blue-700 mb-2">Order Summary</h4>
                     <div className="space-y-1">
                       <div className="flex justify-between text-sm">
                         <span className="text-gray-600">Sub Total</span>
@@ -1074,7 +1074,7 @@ Expected Delivery: ${order.expected_delivery_date}
                         </div>
                       )}
                       <div className="flex justify-between text-sm border-t pt-1">
-                        <span className="text-gray-700 font-semibold">Grand Total</span>
+                        <span className="text-blue-700 font-semibold">Grand Total</span>
                         <span className="font-bold text-lg text-purple-600">₹{order.total_amount.toFixed(2)}</span>
                       </div>
                     </div>
@@ -1087,8 +1087,8 @@ Expected Delivery: ${order.expected_delivery_date}
                 </div>
                 
                 {/* Terms & Conditions */}
-                <div className="mt-6 p-4 bg-gray-50 rounded-lg">
-                  <h4 className="text-sm font-semibold text-gray-700 mb-2">Terms & Conditions</h4>
+                <div className="mt-6 p-4 bg-blue-50 rounded-lg">
+                  <h4 className="text-sm font-semibold text-blue-700 mb-2">Terms & Conditions</h4>
                   <ol className="text-xs text-gray-600 space-y-1 list-decimal list-inside">
                     <li>Goods once sold will not be taken back or exchanged</li>
                     <li>Interest @ 18% p.a. will be charged if payment is not made within the stipulated time</li>
@@ -1114,7 +1114,7 @@ Expected Delivery: ${order.expected_delivery_date}
               </div>
 
               {/* Footer Branding */}
-              <div className="mt-8 pt-6 border-t border-gray-200 text-center">
+              <div className="mt-8 pt-6 border-t border-blue-200 text-center">
                 <p className="text-sm text-gray-600">Thank you for your business!</p>
                 <p className="text-xs text-gray-500 mt-2">
                   AASO Pharma | Your trusted healthcare partner
@@ -1139,7 +1139,7 @@ Expected Delivery: ${order.expected_delivery_date}
         </div>
 
         {/* Footer */}
-        <div className="border-t border-gray-200 bg-white px-6 py-4 no-print">
+        <div className="border-t border-blue-200 bg-white px-6 py-4 no-print">
           <div className="flex justify-between items-center">
             <div className="text-lg">
               Total: <span className="font-bold text-gray-900">₹{order.total_amount.toFixed(2)}</span>
@@ -1148,7 +1148,7 @@ Expected Delivery: ${order.expected_delivery_date}
             <div className="flex items-center gap-3">
               <button
                 onClick={printOrder}
-                className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg transition-colors flex items-center gap-2"
+                className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-blue-700 rounded-lg transition-colors flex items-center gap-2"
               >
                 <Printer className="w-4 h-4" />
                 Print
@@ -1308,7 +1308,7 @@ const ImportFromDocumentModal = ({ isOpen, onClose, onImport }) => {
         <div className="flex-1 overflow-y-auto p-4">
           {/* Document Type */}
           <div className="mb-4">
-            <label className="block text-sm font-medium text-gray-700 mb-2">Document Type</label>
+            <label className="block text-sm font-medium text-blue-700 mb-2">Document Type</label>
             <div className="grid grid-cols-2 gap-2">
               <button
                 onClick={() => {
@@ -1343,7 +1343,7 @@ const ImportFromDocumentModal = ({ isOpen, onClose, onImport }) => {
 
           {/* Search */}
           <div className="mb-4">
-            <label className="block text-sm font-medium text-gray-700 mb-2">Search Document</label>
+            <label className="block text-sm font-medium text-blue-700 mb-2">Search Document</label>
             <div className="flex gap-2">
               <input
                 type="text"
@@ -1366,7 +1366,7 @@ const ImportFromDocumentModal = ({ isOpen, onClose, onImport }) => {
           {/* Results */}
           {searchResults.length > 0 && (
             <div className="space-y-2">
-              <h4 className="text-sm font-medium text-gray-700">
+              <h4 className="text-sm font-medium text-blue-700">
                 {searchQuery ? 'Search Results' : `Recent ${searchType === 'invoice' ? 'Invoices' : 'Challans'}`}
               </h4>
               <div className="max-h-64 overflow-y-auto">
@@ -1377,7 +1377,7 @@ const ImportFromDocumentModal = ({ isOpen, onClose, onImport }) => {
                     className={`p-3 border rounded-lg cursor-pointer ${
                       selectedDoc?.invoice_id === doc.invoice_id || selectedDoc?.challan_id === doc.challan_id
                         ? 'border-purple-500 bg-purple-50' 
-                        : 'border-gray-200 hover:border-gray-300'
+                        : 'border-blue-200 hover:border-gray-300'
                     }`}
                   >
                     <div className="flex justify-between items-start">
@@ -1411,7 +1411,7 @@ const ImportFromDocumentModal = ({ isOpen, onClose, onImport }) => {
         <div className="flex justify-end gap-2 p-4 border-t">
           <button
             onClick={onClose}
-            className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50"
+            className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-blue-50"
           >
             Cancel
           </button>

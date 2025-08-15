@@ -155,11 +155,11 @@ const GRNFlow = ({ onClose }) => {
   // Step 1: Input Form
   if (currentStep === 1) {
     return (
-      <div className="h-full bg-gray-50">
+      <div className="h-full bg-blue-50">
         <div className="h-full flex flex-col">
           
           {/* Header */}
-          <div className="flex items-center justify-between p-4 border-b border-gray-200">
+          <div className="flex items-center justify-between p-4 border-b border-blue-200">
             <div className="flex items-center gap-2">
               <Package className="w-5 h-5 text-gray-600" />
               <h1 className="text-lg font-semibold text-gray-900">New Goods Receipt Note - Step 1: Enter Details</h1>
@@ -178,7 +178,7 @@ const GRNFlow = ({ onClose }) => {
           </div>
 
           {/* Keyboard Shortcuts Help */}
-          <div className="bg-gray-50 px-4 py-2 text-xs text-gray-700 border-b border-gray-200">
+          <div className="bg-blue-50 px-4 py-2 text-xs text-blue-700 border-b border-blue-200">
             Keyboard shortcuts: <strong>Ctrl+S</strong> - Proceed | <strong>Esc</strong> - Close
           </div>
 
@@ -211,7 +211,7 @@ const GRNFlow = ({ onClose }) => {
                   <p className="text-sm text-gray-600 mb-4">{grn.grn_no}</p>
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">GRN Date</label>
+                      <label className="block text-sm font-medium text-blue-700 mb-1">GRN Date</label>
                       <input
                         type="date"
                         value={grn.grn_date}
@@ -221,7 +221,7 @@ const GRNFlow = ({ onClose }) => {
                       />
                     </div>
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">PO Reference</label>
+                      <label className="block text-sm font-medium text-blue-700 mb-1">PO Reference</label>
                       <input
                         type="text"
                         value={grn.po_reference}
@@ -232,7 +232,7 @@ const GRNFlow = ({ onClose }) => {
                       />
                     </div>
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Received By</label>
+                      <label className="block text-sm font-medium text-blue-700 mb-1">Received By</label>
                       <input
                         type="text"
                         value={grn.transport_details.received_by}
@@ -263,7 +263,7 @@ const GRNFlow = ({ onClose }) => {
               </h3>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Supplier Invoice No *</label>
+                  <label className="block text-sm font-medium text-blue-700 mb-1">Supplier Invoice No *</label>
                   <input
                     type="text"
                     value={grn.supplier_invoice_no}
@@ -274,7 +274,7 @@ const GRNFlow = ({ onClose }) => {
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Supplier Invoice Date</label>
+                  <label className="block text-sm font-medium text-blue-700 mb-1">Supplier Invoice Date</label>
                   <input
                     type="date"
                     value={grn.supplier_invoice_date}
@@ -308,7 +308,7 @@ const GRNFlow = ({ onClose }) => {
 
             {/* Transport & Receipt Details */}
             <div className="bg-white rounded-lg shadow-sm p-4 mt-4">
-              <h3 className="text-sm font-medium text-gray-700 mb-3 flex items-center">
+              <h3 className="text-sm font-medium text-blue-700 mb-3 flex items-center">
                 <Truck className="w-4 h-4 mr-2" />
                 Transport & Receipt Details
               </h3>
@@ -361,7 +361,7 @@ const GRNFlow = ({ onClose }) => {
           </div>
 
           {/* Footer */}
-          <div className="flex justify-between items-center p-4 border-t border-gray-200 bg-gray-50">
+          <div className="flex justify-between items-center p-4 border-t border-blue-200 bg-blue-50">
             <div className="flex items-center gap-4 text-sm">
               <span className="text-gray-600">Items: <strong>{grn.items.length}</strong></span>
               <span className="text-gray-600">Total: <strong>₹{grn.total_amount.toFixed(2)}</strong></span>
@@ -373,7 +373,7 @@ const GRNFlow = ({ onClose }) => {
             <div className="flex items-center gap-3">
               <button
                 onClick={onClose}
-                className="px-4 py-2 border border-gray-300 text-gray-700 rounded hover:bg-gray-50 transition-colors"
+                className="px-4 py-2 border border-gray-300 text-blue-700 rounded hover:bg-blue-50 transition-colors"
                 tabIndex={100}
               >
                 Cancel
@@ -397,11 +397,11 @@ const GRNFlow = ({ onClose }) => {
 
   // Step 2: Review and Confirm
   return (
-    <div className="h-full bg-gray-50">
+    <div className="h-full bg-blue-50">
       <div className="h-full flex flex-col">
         
         {/* Header */}
-        <div className="flex items-center justify-between p-4 border-b border-gray-200">
+        <div className="flex items-center justify-between p-4 border-b border-blue-200">
           <div className="flex items-center gap-2">
             <Package className="w-5 h-5 text-gray-600" />
             <h1 className="text-lg font-semibold text-gray-900">Goods Receipt Note - Step 2: Review & Confirm</h1>
@@ -410,14 +410,14 @@ const GRNFlow = ({ onClose }) => {
           <div className="flex items-center gap-3">
             <button
               onClick={() => setCurrentStep(1)}
-              className="px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-lg transition-colors flex items-center gap-2"
+              className="px-4 py-2 text-blue-700 hover:bg-gray-100 rounded-lg transition-colors flex items-center gap-2"
             >
               <ArrowLeft className="w-4 h-4" />
               Back to Edit
             </button>
             <button
               onClick={handlePrint}
-              className="px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-lg transition-colors flex items-center gap-2"
+              className="px-4 py-2 text-blue-700 hover:bg-gray-100 rounded-lg transition-colors flex items-center gap-2"
               title="Print (Ctrl+P)"
             >
               <Printer className="w-4 h-4" />
@@ -430,7 +430,7 @@ const GRNFlow = ({ onClose }) => {
         </div>
 
         {/* Keyboard Shortcuts Help */}
-        <div className="bg-gray-50 px-4 py-2 text-xs text-gray-700 border-b border-gray-200">
+        <div className="bg-blue-50 px-4 py-2 text-xs text-blue-700 border-b border-blue-200">
           Keyboard shortcuts: <strong>Ctrl+S</strong> - Save GRN | <strong>Ctrl+P</strong> - Print | <strong>Esc</strong> - Close
         </div>
 
@@ -463,7 +463,7 @@ const GRNFlow = ({ onClose }) => {
 
             <div className="border-2 border-dashed border-gray-300 rounded-lg p-12 text-center">
               <Package className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-              <h3 className="text-xl font-semibold text-gray-700 mb-2">GRN Preview</h3>
+              <h3 className="text-xl font-semibold text-blue-700 mb-2">GRN Preview</h3>
               <p className="text-gray-500 mb-4">Full preview functionality coming soon</p>
               <p className="text-sm text-gray-400">This will include supplier details, received items, transport details, and verification status</p>
             </div>
@@ -471,7 +471,7 @@ const GRNFlow = ({ onClose }) => {
         </div>
 
         {/* Footer */}
-        <div className="flex justify-between items-center p-4 border-t border-gray-200 bg-gray-50">
+        <div className="flex justify-between items-center p-4 border-t border-blue-200 bg-blue-50">
           <div className="text-lg font-semibold text-gray-900">
             Total Amount: ₹{grn.net_amount.toFixed(2)}
           </div>
@@ -479,7 +479,7 @@ const GRNFlow = ({ onClose }) => {
           <div className="flex items-center gap-3">
             <button
               onClick={() => setCurrentStep(1)}
-              className="px-4 py-2 border border-gray-300 text-gray-700 rounded hover:bg-gray-50 transition-colors"
+              className="px-4 py-2 border border-gray-300 text-blue-700 rounded hover:bg-blue-50 transition-colors"
             >
               Back to Edit
             </button>

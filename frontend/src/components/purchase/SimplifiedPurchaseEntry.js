@@ -188,7 +188,7 @@ const SimplifiedPurchaseContent = ({ onClose }) => {
   ];
 
   return (
-    <div className="h-full bg-gray-50">
+    <div className="h-full bg-blue-50">
       <div className="h-full flex flex-col">
         
         {/* Header - Using Global ModuleHeader like invoice */}
@@ -204,12 +204,12 @@ const SimplifiedPurchaseContent = ({ onClose }) => {
         />
 
         {/* Keyboard Shortcuts Help */}
-        <div className="bg-gray-50 px-4 py-2 text-xs text-gray-700 border-b border-gray-200">
+        <div className="bg-blue-50 px-4 py-2 text-xs text-blue-700 border-b border-blue-200">
           Keyboard shortcuts: <strong>Ctrl+S</strong> - Review & Save | <strong>Esc</strong> - Close
         </div>
 
         {/* Content */}
-        <div className="flex-1 overflow-y-auto bg-gray-50">
+        <div className="flex-1 overflow-y-auto bg-blue-50">
           <div className="max-w-6xl mx-auto px-6 py-6">
         {/* Invoice Details */}
         <ContentCard title="Invoice Details" subtitle={null} actions={null}>
@@ -260,7 +260,7 @@ const SimplifiedPurchaseContent = ({ onClose }) => {
         }>
           <div className="relative">
             {purchase.supplier_id ? (
-              <div className="p-3 bg-gray-50 rounded-md border border-gray-200">
+              <div className="p-3 bg-blue-50 rounded-md border border-blue-200">
                 <div className="flex justify-between items-center">
                   <div>
                     <p className="font-medium">{purchase.supplier_name}</p>
@@ -292,12 +292,12 @@ const SimplifiedPurchaseContent = ({ onClose }) => {
                   className="w-full px-4 py-3 border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500"
                 />
                 {showSupplierDropdown && supplierResults.length > 0 && (
-                  <div className="absolute z-10 w-full mt-1 bg-white border border-gray-200 rounded-md shadow-lg max-h-48 overflow-y-auto">
+                  <div className="absolute z-10 w-full mt-1 bg-white border border-blue-200 rounded-md shadow-lg max-h-48 overflow-y-auto">
                     {supplierResults.map(supplier => (
                       <div
                         key={supplier.supplier_id}
                         onClick={() => handleSupplierSelect(supplier)}
-                        className="px-4 py-3 hover:bg-gray-50 cursor-pointer border-b last:border-0"
+                        className="px-4 py-3 hover:bg-blue-50 cursor-pointer border-b last:border-0"
                       >
                         <p className="font-medium">{supplier.supplier_name}</p>
                         <p className="text-sm text-gray-600">{supplier.phone} • {supplier.city}</p>
@@ -334,9 +334,9 @@ const SimplifiedPurchaseContent = ({ onClose }) => {
         {/* Items Table */}
         {purchase.items.length > 0 && (
           <ContentCard title="Purchase Items" subtitle={null} actions={null}>
-            <div className="border border-gray-200 rounded-md overflow-hidden">
+            <div className="border border-blue-200 rounded-md overflow-hidden">
               <table className="w-full min-w-[1200px]">
-                <thead className="bg-gray-50 border-b border-gray-200">
+                <thead className="bg-blue-50 border-b border-blue-200">
                   <tr>
                     <th className="text-left py-3 px-6 text-xs font-medium text-gray-600 w-96">PRODUCT</th>
                     <th className="text-center py-3 px-4 text-xs font-medium text-gray-600">QTY</th>
@@ -372,12 +372,12 @@ const SimplifiedPurchaseContent = ({ onClose }) => {
                               className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500 text-sm"
                             />
                             {showProductDropdowns[item.id] && productResults[item.id]?.length > 0 && (
-                              <div className="absolute z-10 w-full mt-1 bg-white border border-gray-200 rounded-md shadow-lg max-h-48 overflow-y-auto">
+                              <div className="absolute z-10 w-full mt-1 bg-white border border-blue-200 rounded-md shadow-lg max-h-48 overflow-y-auto">
                                 {productResults[item.id].map(product => (
                                   <div
                                     key={product.product_id}
                                     onClick={() => handleProductSelect(item.id, product)}
-                                    className="px-3 py-2 hover:bg-gray-50 cursor-pointer border-b last:border-0"
+                                    className="px-3 py-2 hover:bg-blue-50 cursor-pointer border-b last:border-0"
                                   >
                                     <p className="text-sm font-medium">{product.product_name}</p>
                                     <p className="text-xs text-gray-600">MRP: ₹{product.mrp}</p>
@@ -460,7 +460,7 @@ const SimplifiedPurchaseContent = ({ onClose }) => {
             <div className="flex items-center gap-3">
               <button
                 onClick={onClose}
-                className="px-6 py-2.5 text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+                className="px-6 py-2.5 text-blue-700 hover:bg-gray-100 rounded-lg transition-colors"
               >
                 Cancel
               </button>
@@ -478,7 +478,7 @@ const SimplifiedPurchaseContent = ({ onClose }) => {
         </div>
 
         {/* Footer */}
-        <div className="border-t border-gray-200 bg-white px-6 py-4">
+        <div className="border-t border-blue-200 bg-white px-6 py-4">
           <div className="flex justify-between items-center">
             <div className="text-sm text-gray-600">
               Total Items: {purchase.items.length}
@@ -487,7 +487,7 @@ const SimplifiedPurchaseContent = ({ onClose }) => {
             <div className="flex items-center gap-3">
               <button
                 onClick={onClose}
-                className="px-6 py-2.5 text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+                className="px-6 py-2.5 text-blue-700 hover:bg-gray-100 rounded-lg transition-colors"
               >
                 Cancel
               </button>
@@ -518,7 +518,7 @@ const SimplifiedPurchaseContent = ({ onClose }) => {
           </div>
           
           {/* Review Content */}
-          <div className="flex-1 overflow-y-auto bg-gray-50 px-8 py-6">
+          <div className="flex-1 overflow-y-auto bg-blue-50 px-8 py-6">
             {/* Supplier Info */}
             <div className="bg-white rounded-md p-6 mb-6">
               <h3 className="text-lg font-semibold mb-4">Supplier Information</h3>
@@ -546,7 +546,7 @@ const SimplifiedPurchaseContent = ({ onClose }) => {
             <div className="bg-white rounded-md p-6 mb-6">
               <h3 className="text-lg font-semibold mb-4">Purchase Items ({purchase.items.length})</h3>
               <table className="w-full">
-                <thead className="bg-gray-50">
+                <thead className="bg-blue-50">
                   <tr>
                     <th className="text-left py-2 px-4 text-sm">Product</th>
                     <th className="text-center py-2 px-4 text-sm">Qty</th>
