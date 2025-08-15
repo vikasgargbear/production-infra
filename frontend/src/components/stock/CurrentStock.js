@@ -445,9 +445,9 @@ const CurrentStock = ({ open = true, onClose }) => {
   const columns = [
     {
       header: 'Product',
-      field: 'product_name',
+      key: 'product_name',
       sortable: true,
-      render: (row) => (
+      render: (value, row) => (
         <div>
           <div className="font-medium text-gray-900">{row.product_name}</div>
           <div className="text-sm text-gray-500">{row.product_code}</div>
@@ -456,9 +456,9 @@ const CurrentStock = ({ open = true, onClose }) => {
     },
     {
       header: 'Category',
-      field: 'category',
+      key: 'category',
       sortable: true,
-      render: (row) => (
+      render: (value, row) => (
         <div>
           <span className="px-2 py-1 text-xs font-medium bg-gray-100 text-gray-700 rounded">
             {row.category || 'Uncategorized'}
@@ -473,9 +473,9 @@ const CurrentStock = ({ open = true, onClose }) => {
     },
     {
       header: 'Current Stock',
-      field: 'current_stock',
+      key: 'current_stock',
       sortable: true,
-      render: (row) => {
+      render: (value, row) => {
         const status = getStockStatus(row);
         const StatusIcon = status.icon;
         const totalUnits = row.current_stock;
@@ -510,9 +510,9 @@ const CurrentStock = ({ open = true, onClose }) => {
     },
     {
       header: 'Reorder Level',
-      field: 'reorder_level',
+      key: 'reorder_level',
       sortable: true,
-      render: (row) => (
+      render: (value, row) => (
         <div className={row.low_stock ? 'text-orange-600 font-medium' : ''}>
           {row.reorder_level} {row.unit}
         </div>
@@ -520,14 +520,14 @@ const CurrentStock = ({ open = true, onClose }) => {
     },
     {
       header: 'Stock Value',
-      field: 'stock_value',
+      key: 'stock_value',
       sortable: true,
-      render: (row) => formatCurrency(row.stock_value)
+      render: (value, row) => formatCurrency(row.stock_value)
     },
     {
       header: 'Status',
-      field: 'status',
-      render: (row) => {
+      key: 'status',
+      render: (value, row) => {
         const status = getStockStatus(row);
         return (
           <div className="flex items-center space-x-2">
@@ -727,32 +727,36 @@ const CurrentStock = ({ open = true, onClose }) => {
             </div>
           ) : filteredData.length > 0 ? (
             <DataTable
-              columns={columns}
+              columns={[...columns, {
+                header: 'Actions',
+                key: 'actions',
+                render: (value, row) => (
+                  <div className="flex items-center space-x-2">
+                    <button
+                      onClick={() => handleEdit(row)}
+                      className="p-1 text-gray-600 hover:text-green-600 hover:bg-green-50 rounded"
+                      title="Edit Properties"
+                    >
+                      <Edit2 className="w-4 h-4" />
+                    </button>
+                    <button
+                      onClick={() => handleViewDetails(row)}
+                      className="p-1 text-gray-600 hover:text-blue-600 hover:bg-blue-50 rounded"
+                      title="View Details"
+                    >
+                      <Eye className="w-4 h-4" />
+                    </button>
+                    <button
+                      className="p-1 text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded"
+                      title="More Options"
+                    >
+                      <MoreVertical className="w-4 h-4" />
+                    </button>
+                  </div>
+                )
+              }]}
               data={filteredData}
-              actions={(row) => (
-                <div className="flex items-center space-x-2">
-                  <button
-                    onClick={() => handleEdit(row)}
-                    className="p-1 text-gray-600 hover:text-green-600 hover:bg-green-50 rounded"
-                    title="Edit Properties"
-                  >
-                    <Edit2 className="w-4 h-4" />
-                  </button>
-                  <button
-                    onClick={() => handleViewDetails(row)}
-                    className="p-1 text-gray-600 hover:text-blue-600 hover:bg-blue-50 rounded"
-                    title="View Details"
-                  >
-                    <Eye className="w-4 h-4" />
-                  </button>
-                  <button
-                    className="p-1 text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded"
-                    title="More Options"
-                  >
-                    <MoreVertical className="w-4 h-4" />
-                  </button>
-                </div>
-              )}
+              keyField="product_id"
             />
           ) : (
             <div className="text-center py-12">
