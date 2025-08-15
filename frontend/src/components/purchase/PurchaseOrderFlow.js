@@ -8,7 +8,7 @@ import {
 } from 'lucide-react';
 import { suppliersApi, productsApi, purchaseApi } from '../../services/api';
 import { searchCache } from '../../utils/searchCache';
-import { SupplierSearch, PurchaseProductSearch, PharmaItemsTable, NotesSection, ProductCreationModal, GSTCalculator, ViewHistoryButton } from '../global';
+import { SupplierSearch, PurchaseProductSearch, PharmaItemsTable, NotesSection, ProductCreationModal, GSTCalculator, ViewHistoryButton, ModuleHeader } from '../global';
 import PurchaseOrderPreview from './components/PurchaseOrderPreview';
 import SupplierCreationModal from '../global/modals/SupplierCreationModal';
 import ShareModal from '../common/ShareModal';
@@ -475,45 +475,33 @@ ${localStorage.getItem('company_name') || 'AASO Pharmaceuticals'}
     return (
       <div className="h-full bg-blue-50">
         <div className="h-full flex flex-col">
-          {/* Header */}
-          <div className="flex justify-between items-center p-4 bg-white border-b border-blue-200">
-            <div className="flex items-center gap-2">
-              <FileText className="w-5 h-5 text-gray-600" />
-              <h1 className="text-lg font-semibold text-gray-900">Create Purchase Order</h1>
-              <span className="text-sm text-gray-500">Step 1: Add Details</span>
-            </div>
-            
-            <div className="flex items-center gap-3">
-              <ViewHistoryButton
-                entityType="purchase_order"
-                entityName="Purchase Order"
-              />
-              <button
-                onClick={() => setShowGSTCalculator(true)}
-                className="px-4 py-2 text-blue-700 hover:bg-gray-100 rounded-lg transition-colors flex items-center gap-2"
-                title="GST Calculator (Ctrl+G)"
-              >
-                <Calculator className="w-4 h-4" />
-                GST Calculator
-              </button>
-              <button
-                onClick={onClose}
-                className="p-2 text-gray-500 hover:bg-gray-100 rounded-lg transition-colors"
-                title="Close (Esc)"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-          </div>
+          
+          {/* Header - Using Global ModuleHeader */}
+          <ModuleHeader
+            title="Purchase Order"
+            documentNumber={purchaseOrder.po_no}
+            status="draft"
+            icon={FileText}
+            iconColor="text-green-600"
+            onClose={onClose}
+            historyType="purchase_order"
+            additionalActions={[
+              {
+                label: "GST Calculator",
+                onClick: () => setShowGSTCalculator(true),
+                variant: "default"
+              }
+            ]}
+          />
 
-          {/* Quick Actions Bar */}
-          <div className="bg-blue-50 px-4 py-2 text-sm text-blue-700 border-b border-blue-200">
+          {/* Keyboard Shortcuts Help */}
+          <div className="bg-blue-50 px-4 py-2 text-xs text-blue-700 border-b border-blue-200">
             Keyboard shortcuts: <strong>Ctrl+N</strong> - New Supplier | <strong>Ctrl+F</strong> - Find Product | <strong>Ctrl+S</strong> - Proceed to Review | <strong>Ctrl+G</strong> - GST Calculator | <strong>Esc</strong> - Close
           </div>
 
           {/* Content */}
-          <div className="flex-1 overflow-y-auto p-6">
-            <div className="max-w-7xl mx-auto space-y-6">
+          <div className="flex-1 overflow-y-auto">
+            <div className="max-w-6xl mx-auto px-6 py-6 space-y-6">
               {message && (
                 <div className={`rounded-lg p-4 flex items-center gap-3 ${
                   messageType === 'error' ? 'bg-red-50 text-red-700' : 'bg-green-50 text-green-700'
@@ -527,20 +515,12 @@ ${localStorage.getItem('company_name') || 'AASO Pharmaceuticals'}
                 </div>
               )}
 
-              {/* PO Header */}
+              {/* PO Details */}
               <div className="bg-white rounded-lg shadow-sm border border-blue-200 p-6">
-                <div className="flex justify-between items-start mb-6">
-                  <div>
-                    <h2 className="text-xl font-semibold text-gray-900">Purchase Order</h2>
-                    <p className="text-sm text-gray-600 mt-1">PO No: {purchaseOrder.po_no}</p>
-                  </div>
-                  <div className="text-right">
-                    <div className="text-sm text-gray-500 mb-1">Company Details</div>
-                    <div className="font-semibold text-gray-900">{localStorage.getItem('company_name') || 'AASO Pharmaceuticals'}</div>
-                    <div className="text-sm text-gray-600">GSTIN: {localStorage.getItem('company_gstin') || '24XXXXX1234Z5'}</div>
-                    <div className="text-sm text-gray-600">DL No: {localStorage.getItem('buyer_drug_license') || '20B/21B-XXX'}</div>
-                  </div>
-                </div>
+                <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
+                  <Calendar className="w-5 h-5 mr-2 text-gray-600" />
+                  Order Details
+                </h3>
 
                 <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                   <div>
@@ -934,48 +914,38 @@ ${localStorage.getItem('company_name') || 'AASO Pharmaceuticals'}
   return (
     <div className="h-full bg-blue-50">
       <div className="h-full flex flex-col">
-        {/* Header */}
-        <div className="flex justify-between items-center p-4 bg-white border-b border-blue-200">
-          <div className="flex items-center gap-2">
-            <FileText className="w-5 h-5 text-gray-600" />
-            <h1 className="text-lg font-semibold text-gray-900">Purchase Order Review</h1>
-            <span className="text-sm text-gray-500">Step 2: Review & Confirm</span>
-          </div>
-          
-          <div className="flex items-center gap-3">
-            <button
-              onClick={() => setCurrentStep(1)}
-              className="px-4 py-2 text-blue-700 hover:bg-gray-100 rounded-lg transition-colors flex items-center gap-2"
-            >
-              <ArrowLeft className="w-4 h-4" />
-              Back to Edit
-            </button>
-            <button
-              onClick={handlePrint}
-              className="px-4 py-2 text-blue-700 hover:bg-gray-100 rounded-lg transition-colors flex items-center gap-2"
-              title="Print PO (Ctrl+P)"
-            >
-              <Printer className="w-4 h-4" />
-              Print
-            </button>
-            <button
-              onClick={onClose}
-              className="p-2 text-gray-500 hover:bg-gray-100 rounded-lg transition-colors"
-              title="Close (Esc)"
-            >
-              <X className="w-5 h-5" />
-            </button>
-          </div>
-        </div>
+        
+        {/* Header - Using Global ModuleHeader */}
+        <ModuleHeader
+          title="Review Purchase Order"
+          documentNumber={purchaseOrder.po_no}
+          status="draft"
+          icon={FileText}
+          iconColor="text-green-600"
+          onClose={onClose}
+          historyType="purchase_order"
+          additionalActions={[
+            {
+              label: "Edit",
+              onClick: () => setCurrentStep(1),
+              variant: "default"
+            },
+            {
+              label: "Print",
+              onClick: handlePrint,
+              variant: "default"
+            }
+          ]}
+        />
 
-        {/* Quick Actions Bar */}
-        <div className="bg-blue-50 px-4 py-2 text-sm text-blue-700 border-b border-blue-200">
+        {/* Keyboard Shortcuts Help */}
+        <div className="bg-blue-50 px-4 py-2 text-xs text-blue-700 border-b border-blue-200">
           Keyboard shortcuts: <strong>Ctrl+S</strong> - Save PO | <strong>Ctrl+P</strong> - Print | <strong>Ctrl+W</strong> - WhatsApp | <strong>Ctrl+M</strong> - Email | <strong>Esc</strong> - Close
         </div>
 
         {/* Content - PO Preview */}
         <div className="flex-1 overflow-y-auto">
-          <div className="max-w-7xl mx-auto p-6">
+          <div className="max-w-6xl mx-auto px-6 py-6">
             {message && (
               <div className={`rounded-lg p-4 flex items-center gap-3 mb-6 ${
                 messageType === 'error' ? 'bg-red-50 text-red-700' : 'bg-green-50 text-green-700'

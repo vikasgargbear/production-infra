@@ -51,20 +51,29 @@ async def get_products(
     try:
         query = """
             SELECT 
-                product_id, org_id, product_code, product_name, generic_name,
-                brand, manufacturer, category_id, product_type, product_class,
-                composition, strength, hsn_code, drug_schedule, 
-                requires_prescription, is_narcotic, is_controlled_substance,
-                barcode, manufacturer_code, pack_config, base_uom_id,
-                gst_percentage, cess_percentage, storage_conditions,
-                requires_cold_chain, maintain_batch, maintain_expiry,
-                allow_negative_stock, min_stock_quantity, reorder_level,
-                reorder_quantity, max_stock_quantity, critical_stock_level,
-                product_status, launch_date, discontinuation_date,
-                search_keywords, tags, product_images, documents,
-                is_active, is_saleable, is_purchasable,
-                created_at, updated_at, created_by
-            FROM inventory.products
+                p.product_id, p.org_id, p.product_code, p.product_name, p.generic_name,
+                p.brand, p.manufacturer, p.category_id, p.product_type, p.product_class,
+                p.composition, p.strength, p.hsn_code, p.drug_schedule, 
+                p.requires_prescription, p.is_narcotic, p.is_controlled_substance,
+                p.barcode, p.manufacturer_code, p.pack_config, p.base_uom_id,
+                p.gst_percentage, p.cess_percentage, p.storage_conditions,
+                p.requires_cold_chain, p.maintain_batch, p.maintain_expiry,
+                p.allow_negative_stock, p.min_stock_quantity, p.reorder_level,
+                p.reorder_quantity, p.max_stock_quantity, p.critical_stock_level,
+                p.product_status, p.launch_date, p.discontinuation_date,
+                p.search_keywords, p.tags, p.product_images, p.documents,
+                p.is_active, p.is_saleable, p.is_purchasable,
+                p.created_at, p.updated_at, p.created_by,
+                -- Stock and pricing data from batches
+                COALESCE(SUM(b.quantity_available), 0) as current_stock,
+                COALESCE(AVG(b.selling_price), 0) as selling_price,
+                COALESCE(AVG(b.cost_per_unit), 0) as cost_price,
+                COALESCE(AVG(b.mrp), 0) as mrp,
+                COUNT(b.batch_id) as batch_count
+            FROM inventory.products p
+            LEFT JOIN inventory.batches b ON p.product_id = b.product_id 
+                AND b.batch_status = 'active' 
+                AND b.quantity_available > 0
             WHERE 1=1
         """
         
@@ -91,7 +100,22 @@ async def get_products(
             query += " AND LOWER(manufacturer) LIKE LOWER(:manufacturer)"
             params["manufacturer"] = f"%{manufacturer}%"
         
-        query += " ORDER BY created_at DESC LIMIT :limit OFFSET :skip"
+        query += """ 
+            GROUP BY p.product_id, p.org_id, p.product_code, p.product_name, p.generic_name,
+                p.brand, p.manufacturer, p.category_id, p.product_type, p.product_class,
+                p.composition, p.strength, p.hsn_code, p.drug_schedule, 
+                p.requires_prescription, p.is_narcotic, p.is_controlled_substance,
+                p.barcode, p.manufacturer_code, p.pack_config, p.base_uom_id,
+                p.gst_percentage, p.cess_percentage, p.storage_conditions,
+                p.requires_cold_chain, p.maintain_batch, p.maintain_expiry,
+                p.allow_negative_stock, p.min_stock_quantity, p.reorder_level,
+                p.reorder_quantity, p.max_stock_quantity, p.critical_stock_level,
+                p.product_status, p.launch_date, p.discontinuation_date,
+                p.search_keywords, p.tags, p.product_images, p.documents,
+                p.is_active, p.is_saleable, p.is_purchasable,
+                p.created_at, p.updated_at, p.created_by
+            ORDER BY p.created_at DESC 
+            LIMIT :limit OFFSET :skip"""
         params.update({"limit": limit, "skip": skip})
         
         result = db.execute(text(query), params)
@@ -128,25 +152,30 @@ async def search_products(
             # Search with filter
             result = db.execute(text("""
                 SELECT 
-                    product_id,
-                    product_name as name,
-                    brand,
-                    manufacturer,
-                    hsn_code,
-                    gst_percentage as gst_rate,
-                    0 as mrp,
-                    0 as sale_rate,
-                    0 as purchase_rate,
-                    0 as current_stock,
-                    'PCS' as unit_of_measure,
-                    'General' as category
-                FROM inventory.products
-                WHERE org_id = :org_id
-                    AND (product_name ILIKE :search 
-                         OR brand ILIKE :search 
-                         OR manufacturer ILIKE :search
-                         OR hsn_code ILIKE :search)
-                    AND is_active = true
+                    p.product_id,
+                    p.product_name as name,
+                    p.brand,
+                    p.manufacturer,
+                    p.hsn_code,
+                    p.gst_percentage as gst_rate,
+                    COALESCE(AVG(b.mrp), 0) as mrp,
+                    COALESCE(AVG(b.selling_price), 0) as sale_rate,
+                    COALESCE(AVG(b.cost_per_unit), 0) as purchase_rate,
+                    COALESCE(SUM(b.quantity_available), 0) as current_stock,
+                    COALESCE(p.base_uom_id, 'PCS') as unit_of_measure,
+                    COALESCE(p.category_id, 'General') as category
+                FROM inventory.products p
+                LEFT JOIN inventory.batches b ON p.product_id = b.product_id 
+                    AND b.batch_status = 'active' 
+                    AND b.quantity_available > 0
+                WHERE p.org_id = :org_id
+                    AND (p.product_name ILIKE :search 
+                         OR p.brand ILIKE :search 
+                         OR p.manufacturer ILIKE :search
+                         OR p.hsn_code ILIKE :search)
+                    AND p.is_active = true
+                GROUP BY p.product_id, p.product_name, p.brand, p.manufacturer, 
+                         p.hsn_code, p.gst_percentage, p.base_uom_id, p.category_id
                 ORDER BY product_name
                 LIMIT :limit OFFSET :offset
             """), {

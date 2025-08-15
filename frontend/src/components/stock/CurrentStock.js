@@ -76,29 +76,45 @@ const CurrentStock = ({ open = true, onClose }) => {
         console.log('Sample product:', products[0]);
       }
       
-      // Transform product data to stock format
-      const transformedData = products.map(product => ({
-        product_id: product.product_id || product.id,
-        product_name: product.product_name || product.name,
-        product_code: product.product_code || product.sku || product.code,
-        category: product.category || product.product_category || 'Uncategorized',
-        current_stock: Number(product.current_stock || product.stock_quantity || 0),
-        available_stock: Number(product.available_stock || product.current_stock || 0),
-        reserved_stock: Number(product.reserved_stock || 0),
-        minimum_stock_level: Number(product.minimum_stock_level || product.reorder_level || 0),
-        unit: product.unit || product.uom || product.base_unit || 'Units',
-        mrp: Number(product.mrp || product.price || 0),
-        purchase_rate: Number(product.purchase_rate || 0),
-        selling_rate: Number(product.selling_rate || product.mrp || 0),
-        stock_value: Number(product.stock_value || ((product.current_stock || 0) * (product.purchase_rate || product.mrp || 0))),
-        expiry_alert: product.expiry_alert || false,
-        low_stock: (Number(product.current_stock || 0) <= Number(product.minimum_stock_level || 0)) && Number(product.minimum_stock_level || 0) > 0,
-        out_of_stock: Number(product.current_stock || 0) === 0,
-        stock_status: Number(product.current_stock || 0) === 0 ? 'out_of_stock' : 
-                     (Number(product.current_stock || 0) <= Number(product.minimum_stock_level || 0) && Number(product.minimum_stock_level || 0) > 0) ? 'low_stock' : 'normal',
-        batches: product.batches || [],
-        last_updated: product.last_updated || product.updated_at
-      }));
+      // Transform product data to stock format using correct schema field names
+      const transformedData = products.map(product => {
+        // Use actual schema field names from inventory.products table
+        const currentStock = Number(product.current_stock || 0);
+        const reorderLevel = Number(product.reorder_level || product.min_stock_quantity || 0);
+        
+        return {
+          product_id: product.product_id,
+          product_name: product.product_name,
+          product_code: product.product_code,
+          category: product.category_id || 'Uncategorized',
+          manufacturer: product.manufacturer,
+          brand: product.brand,
+          hsn_code: product.hsn_code,
+          current_stock: currentStock,
+          available_stock: currentStock, // Assuming available = current for now
+          reserved_stock: 0, // Will be calculated from reservations if needed
+          minimum_stock_level: reorderLevel,
+          reorder_level: reorderLevel,
+          unit: product.base_uom_id || 'Units',
+          mrp: Number(product.mrp || 0),
+          purchase_rate: Number(product.cost_price || 0),
+          selling_rate: Number(product.selling_price || product.mrp || 0),
+          stock_value: currentStock * Number(product.cost_price || product.selling_price || 0),
+          gst_percentage: Number(product.gst_percentage || 0),
+          expiry_alert: false, // Will be calculated from batches
+          low_stock: currentStock <= reorderLevel && reorderLevel > 0,
+          out_of_stock: currentStock === 0,
+          stock_status: currentStock === 0 ? 'out_of_stock' : 
+                       (currentStock <= reorderLevel && reorderLevel > 0) ? 'low_stock' : 'normal',
+          is_active: product.is_active !== false,
+          batches: product.batches || [],
+          last_updated: product.updated_at,
+          // Additional useful fields
+          drug_schedule: product.drug_schedule,
+          requires_prescription: product.requires_prescription,
+          storage_conditions: product.storage_conditions
+        };
+      });
       
       console.log('Transformed data sample:', transformedData[0]);
       setStockData(transformedData);
