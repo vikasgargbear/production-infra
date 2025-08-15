@@ -346,15 +346,6 @@ class DataTransformer {
       org_id: supplierData.org_id
     };
     
-    // Debug logging to see what fields are being sent
-    console.log('DataTransformer.prepareSupplierForAPI - Input:', supplierData);
-    console.log('DataTransformer.prepareSupplierForAPI - Output:', result);
-    console.log('Secondary phone field check:', {
-      alternate_phone: supplierData.alternate_phone,
-      secondary_phone: supplierData.secondary_phone,
-      result_secondary_phone: result.secondary_phone
-    });
-    
     return result;
   }
 }
