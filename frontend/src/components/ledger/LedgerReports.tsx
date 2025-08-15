@@ -27,7 +27,7 @@ import {
 } from 'lucide-react';
 import { format, startOfMonth, endOfMonth, subMonths } from 'date-fns';
 import { ledgerApi } from '../../services/api/modules/ledger.api';
-import { DatePicker, Select } from '../global';
+import { DatePicker, Select, ModuleHeader } from '../global';
 import { formatCurrency } from '../../utils/formatters';
 import {
   LineChart,
@@ -49,6 +49,7 @@ import {
 
 interface LedgerReportsProps {
   embedded?: boolean;
+  onClose?: () => void;
 }
 
 interface ReportFilters {
@@ -74,7 +75,7 @@ interface DashboardStats {
 
 const COLORS = ['#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#EC4899'];
 
-const LedgerReports: React.FC<LedgerReportsProps> = ({ embedded = false }) => {
+const LedgerReports: React.FC<LedgerReportsProps> = ({ embedded = false, onClose }) => {
   const [filters, setFilters] = useState<ReportFilters>({
     dateRange: {
       from: startOfMonth(subMonths(new Date(), 2)),
@@ -599,13 +600,36 @@ const LedgerReports: React.FC<LedgerReportsProps> = ({ embedded = false }) => {
   };
 
   return (
-    <div className={embedded ? '' : 'p-6'}>
-      {/* Header */}
+    <div className={embedded ? 'p-6' : 'h-full bg-blue-50'}>
       {!embedded && (
-        <div className="mb-6">
-          <h1 className="text-2xl font-bold text-gray-800">Ledger Reports</h1>
-          <p className="text-gray-600">Analytics and insights for your accounting data</p>
-        </div>
+        <div className="h-full flex flex-col">
+          <ModuleHeader
+            title="Ledger Reports"
+            subtitle="Analytics and insights for your accounting data"
+            icon={BarChart3}
+            iconColor="text-purple-600"
+            onClose={onClose}
+            historyType="ledger"
+            additionalActions={[
+              {
+                label: "Export PDF",
+                icon: Download,
+                onClick: () => handleExport('pdf'),
+                variant: "default"
+              },
+              {
+                label: "Export Excel",
+                icon: Download,
+                onClick: () => handleExport('excel'),
+                variant: "secondary"
+              }
+            ]}
+          />
+          <div className="bg-blue-50 px-4 py-2 text-xs text-blue-700 border-b border-blue-200">
+            Keyboard shortcuts: <strong>Ctrl+R</strong> - Refresh | <strong>Ctrl+E</strong> - Export | <strong>Esc</strong> - Close
+          </div>
+          <div className="flex-1 overflow-y-auto">
+            <div className="max-w-6xl mx-auto px-6 py-6">
       )}
 
       {/* Quick Stats */}
@@ -786,6 +810,12 @@ const LedgerReports: React.FC<LedgerReportsProps> = ({ embedded = false }) => {
           renderReport()
         )}
       </div>
+      
+      {!embedded && (
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

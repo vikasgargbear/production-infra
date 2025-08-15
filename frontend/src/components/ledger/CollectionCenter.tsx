@@ -28,12 +28,13 @@ import {
 } from 'lucide-react';
 import { format, parseISO, differenceInDays, addDays } from 'date-fns';
 import { ledgerApi } from '../../services/api/modules/ledger.api';
-import { DataTable, StatusBadge, Select, DatePicker } from '../global';
+import { DataTable, StatusBadge, Select, DatePicker, ModuleHeader } from '../global';
 import { formatCurrency } from '../../utils/formatters';
 
 interface CollectionCenterProps {
   embedded?: boolean;
   onCustomerClick?: (customer: CollectionItem) => void;
+  onClose?: () => void;
 }
 
 interface CollectionItem {
@@ -81,7 +82,8 @@ interface CollectionAgent {
 
 const CollectionCenter: React.FC<CollectionCenterProps> = ({
   embedded = false,
-  onCustomerClick
+  onCustomerClick,
+  onClose
 }) => {
   const [filters, setFilters] = useState({
     status: 'all',
@@ -426,13 +428,30 @@ const CollectionCenter: React.FC<CollectionCenterProps> = ({
   };
 
   return (
-    <div className={embedded ? '' : 'p-6'}>
-      {/* Header */}
+    <div className={embedded ? 'p-6' : 'h-full bg-blue-50'}>
       {!embedded && (
-        <div className="mb-6">
-          <h1 className="text-2xl font-bold text-gray-800">Collection Center</h1>
-          <p className="text-gray-600">Manage payment collections and follow-ups</p>
-        </div>
+        <div className="h-full flex flex-col">
+          <ModuleHeader
+            title="Collection Center"
+            subtitle="Manage payment collections and follow-ups"
+            icon={DollarSign}
+            iconColor="text-orange-600"
+            onClose={onClose}
+            historyType="ledger"
+            additionalActions={[
+              {
+                label: "Export",
+                icon: Download,
+                onClick: handleExportSelected,
+                variant: "default"
+              }
+            ]}
+          />
+          <div className="bg-blue-50 px-4 py-2 text-xs text-blue-700 border-b border-blue-200">
+            Keyboard shortcuts: <strong>Ctrl+F</strong> - Search | <strong>Ctrl+E</strong> - Export | <strong>Esc</strong> - Close
+          </div>
+          <div className="flex-1 overflow-y-auto">
+            <div className="max-w-6xl mx-auto px-6 py-6">
       )}
 
       {/* Stats Overview */}
@@ -635,6 +654,12 @@ const CollectionCenter: React.FC<CollectionCenterProps> = ({
           emptyMessage="No collection items found"
         />
       </div>
+      
+      {!embedded && (
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
