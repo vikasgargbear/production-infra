@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { History, Eye, Edit, Download, Printer, X } from 'lucide-react';
-import { ordersAPI, purchasesAPI, paymentAPI, challansAPI, invoiceAPI, salesOrdersAPI } from '../../../services/api';
+import { ordersAPI, purchasesAPI, paymentAPI, challansAPI, invoiceAPI, salesOrdersAPI, purchasesApi, returnsApi, stockApi } from '../../../services/api';
 
 const ViewHistoryButton = ({ 
   historyType = 'invoice', // 'invoice', 'challan', 'payment', 'purchase', 'order', 'sales-order'
@@ -19,6 +19,8 @@ const ViewHistoryButton = ({
       case 'challan': return 'Delivery Challan History';
       case 'payment': return 'Payment History';
       case 'purchase': return 'Purchase History';
+      case 'returns': return 'Returns History';
+      case 'stock': return 'Stock Movement History';
       case 'order': return 'Order History';
       case 'sales-order': return 'Sales Order History';
       default: return 'History';
@@ -109,18 +111,84 @@ const ViewHistoryButton = ({
           break;
 
         case 'purchase':
-          response = await purchasesAPI.search({ limit: 10 });
-          const purchaseResponse = response.data || response;
-          if (purchaseResponse.data && Array.isArray(purchaseResponse.data)) {
-            formattedItems = purchaseResponse.data.map(purchase => ({
-              id: purchase.purchase_id,
-              number: purchase.invoice_number || `BILL-${purchase.purchase_id}`,
+          try {
+            response = await purchasesApi.getAll({ limit: 20 });
+            const purchaseData = response.data?.purchases || response.data || [];
+            
+            formattedItems = purchaseData.map(purchase => ({
+              id: purchase.id,
+              number: purchase.invoice_no || `PUR-${purchase.id}`,
               date: purchase.invoice_date || purchase.created_at,
-              customerName: purchase.supplier_name || 'N/A',
-              amount: purchase.final_amount || purchase.total_amount || 0,
+              customerName: purchase.supplier_name || 'Unknown Supplier',
+              amount: purchase.total_amount || 0,
               status: purchase.payment_status || 'pending',
               rawData: purchase
             }));
+          } catch (error) {
+            console.error('Error loading purchase history:', error);
+            formattedItems = [];
+          }
+          break;
+          
+        case 'returns':
+          try {
+            const [salesReturns, purchaseReturns] = await Promise.all([
+              returnsApi.getSaleReturns(),
+              returnsApi.getPurchaseReturns()
+            ]);
+            
+            const salesData = salesReturns.data?.returns || [];
+            const purchaseData = purchaseReturns.data?.returns || [];
+            
+            const allReturns = [
+              ...salesData.map(ret => ({
+                id: ret.id,
+                number: ret.return_no || `SR-${ret.id}`,
+                date: ret.return_date,
+                customerName: ret.customer_name || 'N/A',
+                amount: ret.total_amount || 0,
+                status: ret.status || 'pending',
+                type: 'Sales Return',
+                rawData: ret
+              })),
+              ...purchaseData.map(ret => ({
+                id: ret.id,
+                number: ret.return_no || `PR-${ret.id}`,
+                date: ret.return_date,
+                customerName: ret.supplier_name || 'N/A',
+                amount: ret.total_amount || 0,
+                status: ret.status || 'pending',
+                type: 'Purchase Return',
+                rawData: ret
+              }))
+            ];
+            
+            formattedItems = allReturns.sort((a, b) => new Date(b.date) - new Date(a.date));
+          } catch (error) {
+            console.error('Error loading returns history:', error);
+            formattedItems = [];
+          }
+          break;
+          
+        case 'stock':
+          try {
+            response = await stockApi.getMovements({ limit: 20 });
+            const movementData = response.data?.movements || response.data || [];
+            
+            formattedItems = movementData.map(movement => ({
+              id: movement.id,
+              number: movement.movement_no || `STK-${movement.id}`,
+              date: movement.movement_date || movement.created_at,
+              customerName: movement.product_name || 'Unknown Product',
+              amount: 0, // Stock movements don't have amounts
+              status: movement.status || 'completed',
+              type: movement.movement_type || 'movement',
+              quantity: movement.quantity,
+              rawData: movement
+            }));
+          } catch (error) {
+            console.error('Error loading stock history:', error);
+            formattedItems = [];
           }
           break;
 

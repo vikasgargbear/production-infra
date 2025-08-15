@@ -42,6 +42,28 @@ export { default as NotesSection } from './forms/NotesSection';
 export { default as BaseModal } from '../common/BaseModal';
 export { default as ProductSearchInput } from '../common/ProductSearchInput';
 
+// Layout Components - NEW
+export { 
+  default as GlobalLayout,
+  ContentCard,
+  PageHeader, 
+  FormSection,
+  StatsGrid 
+} from './layout/GlobalLayout';
+
+// Document Flow Components - NEW
+export { 
+  default as GlobalDocumentFlow,
+  InvoiceFlow,
+  PurchaseFlow,
+  PurchaseOrderFlow,
+  GRNFlow,
+  ReturnFlow,
+  SalesReturnFlow,
+  SalesOrderFlow,
+  ChallanFlow
+} from './layout/GlobalDocumentFlow';
+
 // UI Components - NEW
 export * from './ui';
 export { 

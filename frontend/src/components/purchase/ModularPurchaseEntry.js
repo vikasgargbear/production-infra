@@ -13,7 +13,10 @@ import {
   ItemsTable, 
   SupplierSearch, 
   SupplierCreationModal,
-  Button
+  Button,
+  GlobalLayout,
+  ContentCard,
+  StatsGrid
 } from '../global';
 import PDFUploadModal from '../PDFUploadModal';
 import { purchasesApi } from '../../services/api';
@@ -231,7 +234,7 @@ const PurchaseEntryContent = ({ onClose, initialShowPDFUpload = false }) => {
         </div>
         
         {/* Keyboard Shortcuts Help */}
-        <div className="bg-indigo-50 px-4 py-2 text-xs text-indigo-700 border-b border-indigo-200">
+        <div className="bg-gray-50 px-4 py-2 text-xs text-gray-700 border-b border-gray-200">
           Keyboard shortcuts: <strong>Ctrl+S</strong> - Save Purchase | <strong>Ctrl+E</strong> - Back to Edit | <strong>Esc</strong> - Close
         </div>
         
@@ -554,7 +557,7 @@ const PurchaseEntryContent = ({ onClose, initialShowPDFUpload = false }) => {
       </div>
       
       {/* Keyboard Shortcuts Help */}
-      <div className="bg-indigo-50 px-4 py-2 text-xs text-indigo-700 border-b border-indigo-200">
+      <div className="bg-gray-50 px-4 py-2 text-xs text-gray-700 border-b border-gray-200">
         Keyboard shortcuts: <strong>Ctrl+N</strong> - Add Supplier | <strong>Ctrl+F</strong> - Search Products | <strong>Ctrl+U</strong> - Upload PDF | <strong>Ctrl+G</strong> - GST Calculator | <strong>Ctrl+S</strong> - Save | <strong>Esc</strong> - Close
       </div>
       

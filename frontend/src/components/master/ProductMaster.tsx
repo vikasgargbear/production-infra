@@ -5,6 +5,10 @@ import {
 } from 'lucide-react';
 import { productsApi } from '../../services/api';
 import { ProductEditModal } from '../global/modals';
+import { DataTable, Column } from '../global/ui/display/DataTable';
+import { GlobalLayout, ContentCard, StatsGrid } from '../global';
+import Button from '../global/ui/Button';
+import Input from '../global/ui/forms/Input';
 
 interface Product {
   id: string;
@@ -26,11 +30,10 @@ interface Product {
 }
 
 interface ProductMasterProps {
-  open: boolean;
-  onClose: () => void;
+  // Remove modal props - make it a full page component
 }
 
-const ProductMaster: React.FC<ProductMasterProps> = ({ open, onClose }) => {
+const ProductMaster: React.FC<ProductMasterProps> = () => {
   const [searchTerm, setSearchTerm] = useState<string>('');
   const [filterCategory, setFilterCategory] = useState<string>('all');
   const [showAddModal, setShowAddModal] = useState<boolean>(false);
@@ -44,10 +47,8 @@ const ProductMaster: React.FC<ProductMasterProps> = ({ open, onClose }) => {
   
   // Load products on component mount
   useEffect(() => {
-    if (open) {
-      loadProducts();
-    }
-  }, [open]);
+    loadProducts();
+  }, []);
   
   // Load categories after products are loaded
   useEffect(() => {
@@ -118,6 +119,11 @@ const ProductMaster: React.FC<ProductMasterProps> = ({ open, onClose }) => {
   
   // Filter products based on search and category
   const filteredProducts = products.filter((product: Product) => {
+    // Filter out null/undefined products first
+    if (!product || !product.product_name) {
+      return false;
+    }
+    
     const matchesSearch = searchTerm === '' || 
       product.product_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       product.generic_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -193,183 +199,239 @@ const ProductMaster: React.FC<ProductMasterProps> = ({ open, onClose }) => {
     }
   };
 
-  if (!open) return null;
-
-  return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-white rounded-lg shadow-xl w-full max-w-7xl mx-4 h-[90vh] flex flex-col">
-        {/* Header */}
-        <div className="bg-white border-b border-gray-200 px-6 py-4 rounded-t-lg">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-3">
-              <Package className="w-6 h-6 text-gray-700" />
-              <h1 className="text-2xl font-bold text-gray-900">Product Master</h1>
-            </div>
-            <div className="flex items-center space-x-2">
-              <button
-                onClick={() => setShowAddModal(true)}
-                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center space-x-2"
-              >
-                <Plus className="w-4 h-4" />
-                <span>Add Product</span>
-              </button>
-              <button
-                onClick={onClose}
-                className="px-4 py-2 bg-gray-500 text-white rounded-lg hover:bg-gray-600"
-              >
-                Close
-              </button>
-            </div>
-          </div>
-        </div>
-
-        {/* Success/Error Messages */}
-        {successMessage && (
-          <div className="mx-6 mt-4 p-3 bg-green-50 border border-green-200 rounded-lg flex items-center space-x-2">
-            <Check className="w-5 h-5 text-green-600" />
-            <span className="text-green-800">{successMessage}</span>
-          </div>
-        )}
-
-        {error && (
-          <div className="mx-6 mt-4 p-3 bg-red-50 border border-red-200 rounded-lg flex items-center space-x-2">
-            <AlertCircle className="w-5 h-5 text-red-600" />
-            <span className="text-red-800">{error}</span>
-          </div>
-        )}
-
-        {/* Filters */}
-        <div className="px-6 py-4 border-b border-gray-200">
-          <div className="flex items-center space-x-4">
-            <div className="flex-1 relative">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
-              <input
-                type="text"
-                placeholder="Search products by name, code, HSN..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              />
-            </div>
-            <select
-              value={filterCategory}
-              onChange={(e) => setFilterCategory(e.target.value)}
-              className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-            >
-              <option value="all">All Categories</option>
-              {categories.map(category => (
-                <option key={category} value={category}>{category}</option>
-              ))}
-            </select>
-            {selectedProducts.length > 0 && (
-              <button
-                onClick={handleBulkDelete}
-                className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 flex items-center space-x-2"
-              >
-                <Trash2 className="w-4 h-4" />
-                <span>Delete ({selectedProducts.length})</span>
-              </button>
+  // Define columns for DataTable
+  const columns: Column<Product>[] = [
+    {
+      key: 'product_name',
+      header: 'Product',
+      render: (_, product) => {
+        if (!product) return <div>N/A</div>;
+        return (
+          <div>
+            <div className="font-medium text-app-800">{product.product_name || 'N/A'}</div>
+            {product.generic_name && (
+              <div className="text-sm text-app-500">{product.generic_name}</div>
             )}
           </div>
+        );
+      },
+    },
+    {
+      key: 'product_code',
+      header: 'Code/HSN',
+      render: (_, product) => {
+        if (!product) return <div>N/A</div>;
+        return (
+          <div>
+            <div className="text-app-800">{product.product_code || 'N/A'}</div>
+            <div className="text-sm text-app-500">HSN: {product.hsn_code || 'N/A'}</div>
+          </div>
+        );
+      },
+    },
+    {
+      key: 'category',
+      header: 'Category',
+    },
+    {
+      key: 'pack_size',
+      header: 'Pack Size',
+    },
+    {
+      key: 'mrp',
+      header: 'MRP',
+      align: 'right' as const,
+      render: (value) => value ? `₹${value.toFixed(2)}` : '-',
+    },
+    {
+      key: 'cost_price',
+      header: 'Cost',
+      align: 'right' as const,
+      render: (value) => value ? `₹${value.toFixed(2)}` : '-',
+    },
+    {
+      key: 'is_active',
+      header: 'Status',
+      align: 'center' as const,
+      render: (value) => (
+        <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
+          value ? 'bg-success-100 text-success-800' : 'bg-danger-100 text-danger-800'
+        }`}>
+          {value ? 'Active' : 'Inactive'}
+        </span>
+      ),
+    },
+    {
+      key: 'actions',
+      header: 'Actions',
+      align: 'center' as const,
+      sortable: false,
+      render: (_, product) => (
+        <div className="flex items-center justify-center space-x-2">
+          <button
+            onClick={() => handleEditProduct(product)}
+            className="text-primary-600 hover:text-primary-700 p-1 rounded transition-colors"
+            disabled={!product}
+          >
+            <Edit2 className="w-4 h-4" />
+          </button>
+          <button
+            onClick={() => handleDeleteProduct(product?.id)}
+            className="text-danger-600 hover:text-danger-700 p-1 rounded transition-colors"
+            disabled={!product?.id}
+          >
+            <Trash2 className="w-4 h-4" />
+          </button>
         </div>
+      ),
+    },
+  ];
 
-        {/* Content */}
-        <div className="flex-1 overflow-hidden">
-          {isLoading ? (
-            <div className="flex-1 flex items-center justify-center">
-              <div className="text-center">
-                <Loader2 className="w-8 h-8 animate-spin text-blue-600 mx-auto mb-4" />
-                <p className="text-gray-600">Loading products...</p>
-              </div>
-            </div>
-          ) : (
-            <div className="h-full overflow-auto">
-              <table className="w-full">
-                <thead className="bg-gray-50 sticky top-0">
-                  <tr>
-                    <th className="px-6 py-3 text-left">
-                      <input
-                        type="checkbox"
-                        checked={selectedProducts.length === filteredProducts.length && filteredProducts.length > 0}
-                        onChange={toggleAllSelection}
-                        className="rounded border-gray-300"
-                      />
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Product</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Code/HSN</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Category</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Pack Size</th>
-                    <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">MRP</th>
-                    <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Cost</th>
-                    <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-                    <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
-                  </tr>
-                </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
-                  {filteredProducts.map((product) => (
-                    <tr key={product.id} className="hover:bg-gray-50">
-                      <td className="px-6 py-4">
-                        <input
-                          type="checkbox"
-                          checked={selectedProducts.includes(product.id)}
-                          onChange={() => toggleProductSelection(product.id)}
-                          className="rounded border-gray-300"
-                        />
-                      </td>
-                      <td className="px-6 py-4">
-                        <div>
-                          <div className="text-sm font-medium text-gray-900">{product.product_name}</div>
-                          {product.generic_name && (
-                            <div className="text-sm text-gray-500">{product.generic_name}</div>
-                          )}
-                        </div>
-                      </td>
-                      <td className="px-6 py-4">
-                        <div className="text-sm text-gray-900">{product.product_code}</div>
-                        <div className="text-sm text-gray-500">HSN: {product.hsn_code}</div>
-                      </td>
-                      <td className="px-6 py-4 text-sm text-gray-900">{product.category}</td>
-                      <td className="px-6 py-4 text-sm text-gray-900">{product.pack_size}</td>
-                      <td className="px-6 py-4 text-sm text-right text-gray-900">₹{product.mrp?.toFixed(2)}</td>
-                      <td className="px-6 py-4 text-sm text-right text-gray-900">₹{product.cost_price?.toFixed(2)}</td>
-                      <td className="px-6 py-4 text-center">
-                        <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
-                          product.is_active ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
-                        }`}>
-                          {product.is_active ? 'Active' : 'Inactive'}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4 text-center">
-                        <div className="flex items-center justify-center space-x-2">
-                          <button
-                            onClick={() => handleEditProduct(product)}
-                            className="text-blue-600 hover:text-blue-700"
-                          >
-                            <Edit2 className="w-4 h-4" />
-                          </button>
-                          <button
-                            onClick={() => handleDeleteProduct(product.id)}
-                            className="text-red-600 hover:text-red-700"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+  const headerActions = (
+    <>
+      <Button
+        variant="secondary"
+        size="sm"
+        onClick={() => {/* Import logic */}}
+      >
+        <Upload className="w-4 h-4 mr-2" />
+        Import
+      </Button>
+      <Button
+        variant="secondary"
+        size="sm"
+        onClick={() => {/* Export logic */}}
+      >
+        <Download className="w-4 h-4 mr-2" />
+        Export
+      </Button>
+      <Button
+        variant="primary"
+        onClick={() => setShowAddModal(true)}
+      >
+        <Plus className="w-4 h-4 mr-2" />
+        Add Product
+      </Button>
+    </>
+  );
 
-              {filteredProducts.length === 0 && !isLoading && (
-                <div className="text-center py-12">
-                  <Package className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-                  <p className="text-gray-600">No products found</p>
-                </div>
-              )}
-            </div>
-          )}
+  // Statistics for StatsGrid
+  const statsData = [
+    {
+      label: 'Total Products',
+      value: products.length,
+      icon: Package,
+      iconBg: 'bg-blue-100',
+      iconColor: 'text-blue-600'
+    },
+    {
+      label: 'Active',
+      value: products.filter(p => p.is_active !== false).length,
+      icon: Check,
+      iconBg: 'bg-green-100',
+      iconColor: 'text-green-600'
+    },
+    {
+      label: 'Categories',
+      value: categories.length,
+      icon: Package,
+      iconBg: 'bg-purple-100',
+      iconColor: 'text-purple-600'
+    },
+    {
+      label: 'Low Stock',
+      value: 0, // TODO: Calculate from inventory
+      icon: AlertCircle,
+      iconBg: 'bg-red-100',
+      iconColor: 'text-red-600'
+    }
+  ];
+
+  return (
+    <GlobalLayout
+      title="Product Master"
+      subtitle="Manage your product catalog"
+      icon={Package}
+      headerActions={headerActions}
+    >
+      {/* Statistics */}
+      <StatsGrid stats={statsData} />
+
+      {/* Success/Error Messages */}
+      {successMessage && (
+        <ContentCard title="" subtitle={null} actions={null} className="border-l-4 border-l-green-500 bg-green-50">
+          <div className="flex items-center space-x-3">
+            <Check className="w-5 h-5 text-green-600" />
+            <span className="text-green-800 font-medium">{successMessage}</span>
+          </div>
+        </ContentCard>
+      )}
+
+      {error && (
+        <ContentCard title="" subtitle={null} actions={null} className="border-l-4 border-l-red-500 bg-red-50">
+          <div className="flex items-center space-x-3">
+            <AlertCircle className="w-5 h-5 text-red-600" />
+            <span className="text-red-800 font-medium">{error}</span>
+          </div>
+        </ContentCard>
+      )}
+
+      {/* Filters */}
+      <ContentCard title="Search & Filter" subtitle={null} actions={
+        selectedProducts.length > 0 ? (
+          <Button
+            variant="danger"
+            size="sm"
+            onClick={handleBulkDelete}
+          >
+            <Trash2 className="w-4 h-4 mr-2" />
+            Delete ({selectedProducts.length})
+          </Button>
+        ) : null
+      }>
+        <div className="flex items-center space-x-6">
+          <div className="flex-1 relative">
+            <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 text-app-400 w-5 h-5" />
+            <input
+              type="text"
+              placeholder="Search products by name, code, HSN..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="w-full pl-12 pr-4 py-2 border border-app-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 bg-white"
+            />
+          </div>
+          <select
+            value={filterCategory}
+            onChange={(e) => setFilterCategory(e.target.value)}
+            className="px-3 py-2 border border-app-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 bg-white min-w-[180px]"
+          >
+            <option value="all">All Categories</option>
+            {categories.map(category => (
+              <option key={category} value={category}>{category}</option>
+            ))}
+          </select>
         </div>
-      </div>
+      </ContentCard>
+
+      {/* Product List */}
+      <ContentCard title="Product List" subtitle={null} actions={null} className="overflow-hidden">
+        <DataTable
+          data={filteredProducts}
+          columns={columns}
+          keyField="id"
+          loading={isLoading}
+          emptyMessage="No products found"
+          emptyIcon={<Package className="w-12 h-12 text-app-400" />}
+          selectable={true}
+          selectedRows={filteredProducts.filter(p => selectedProducts.includes(p.id))}
+          onSelectionChange={(selected) => setSelectedProducts(selected.map(p => p.id))}
+          hoverable={true}
+          striped={true}
+          paginated={true}
+          pageSize={20}
+          searchable={false}
+        />
+      </ContentCard>
 
       {/* Product Edit/Add Modal */}
       {(showAddModal || editingProduct) && (
@@ -383,7 +445,7 @@ const ProductMaster: React.FC<ProductMasterProps> = ({ open, onClose }) => {
           product={editingProduct}
         />
       )}
-    </div>
+    </GlobalLayout>
   );
 };
 

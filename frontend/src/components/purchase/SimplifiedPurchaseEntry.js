@@ -1,15 +1,16 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { X, Plus, Trash2, FileText } from 'lucide-react';
 import { PurchaseProvider, usePurchase } from '../../contexts/PurchaseContext';
 import PurchaseErrorBoundary from './PurchaseErrorBoundary';
 import { purchasesApi } from '../../services/api';
 import { PURCHASE_CONFIG } from '../../config/purchase.config';
 import { validatePurchaseForm } from '../../utils/purchaseValidation';
-import { ProductCreationModal, MonthYearPicker, SupplierCreationModal } from '../global';
+import { ProductCreationModal, MonthYearPicker, SupplierCreationModal, ViewHistoryButton, GlobalLayout, ContentCard, ModuleHeader } from '../global';
 import PDFUploadModal from '../PDFUploadModal';
 import PurchaseSummary from './components/PurchaseSummary';
 import { searchCache } from '../../utils/searchCache';
 import { debounce } from '../../utils/debounce';
+import documentNumberService from '../../services/documentNumberService';
 
 // Inner component that uses the context
 const SimplifiedPurchaseContent = ({ onClose }) => {
@@ -39,6 +40,26 @@ const SimplifiedPurchaseContent = ({ onClose }) => {
   const [productSearches, setProductSearches] = useState({});
   const [productResults, setProductResults] = useState({});
   const [showProductDropdowns, setShowProductDropdowns] = useState({});
+  
+  // Generate purchase number on mount - like invoice module
+  useEffect(() => {
+    const generateAndSetPurchaseNumber = async () => {
+      try {
+        const purchaseNumber = await documentNumberService.generatePurchaseNumber();
+        setPurchaseField('invoice_number', purchaseNumber);
+      } catch (error) {
+        console.warn('Failed to generate purchase number:', error);
+        // Fallback to timestamp-based number
+        const fallbackNumber = `PUR-${Date.now().toString().slice(-8)}`;
+        setPurchaseField('invoice_number', fallbackNumber);
+      }
+    };
+    
+    // Only generate if no invoice number exists
+    if (!purchase.invoice_number || purchase.invoice_number === '') {
+      generateAndSetPurchaseNumber();
+    }
+  }, []);
   
   // Debounced supplier search
   const searchSuppliers = debounce((query) => {
@@ -151,90 +172,92 @@ const SimplifiedPurchaseContent = ({ onClose }) => {
     return `₹${(amount || 0).toFixed(2)}`;
   };
   
+  // Header actions for ModuleHeader - matching invoice pattern
+  const headerActions = [
+    {
+      label: "Upload PDF",
+      onClick: togglePDFUpload,
+      variant: "default"
+    },
+    {
+      label: "Review & Save",
+      onClick: () => setShowReview(true),
+      disabled: purchase.items.length === 0 || !purchase.supplier_id || !purchase.invoice_number,
+      variant: "primary"
+    }
+  ];
+
   return (
-    <div className="flex-1 bg-gray-50 flex flex-col overflow-hidden">
-      {/* Header */}
-      <div className="bg-white border-b px-8 py-4 flex-shrink-0">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <FileText className="w-5 h-5 text-gray-600" />
-            <h1 className="text-xl font-semibold">Create Purchase Entry</h1>
-            <span className="text-gray-500">{purchase.invoice_number || 'New Entry'}</span>
-          </div>
-          <div className="flex items-center gap-3">
-            <button
-              onClick={togglePDFUpload}
-              className="px-4 py-2 text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-colors"
-            >
-              Upload PDF
-            </button>
-            <button
-              onClick={() => setShowReview(true)}
-              disabled={purchase.items.length === 0 || !purchase.supplier_id || !purchase.invoice_number}
-              className="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
-            >
-              Review Purchase
-            </button>
-            <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-md transition-colors">
-              <X className="w-5 h-5 text-gray-500" />
-            </button>
-          </div>
+    <div className="h-full bg-gray-50">
+      <div className="h-full flex flex-col">
+        
+        {/* Header - Using Global ModuleHeader like invoice */}
+        <ModuleHeader
+          title="Purchase Entry"
+          documentNumber={purchase.invoice_number || 'Generating...'}
+          status="draft"
+          icon={FileText}
+          iconColor="text-green-600"
+          onClose={onClose}
+          historyType="purchase"
+          additionalActions={headerActions}
+        />
+
+        {/* Keyboard Shortcuts Help */}
+        <div className="bg-gray-50 px-4 py-2 text-xs text-gray-700 border-b border-gray-200">
+          Keyboard shortcuts: <strong>Ctrl+S</strong> - Review & Save | <strong>Esc</strong> - Close
         </div>
-      </div>
-      
-      {/* Main Content */}
-      <div className="flex-1 overflow-y-auto">
-        <div className="px-8 py-6">
-          {/* Invoice Details */}
-          <div className="bg-white rounded-md p-8 mb-6">
-            <h3 className="text-sm font-medium text-gray-700 mb-4">INVOICE DETAILS</h3>
-            <div className="grid grid-cols-4 gap-8">
-          <div>
-            <label className="text-sm text-gray-600 mb-1 block">Invoice Number</label>
-            <input
-              type="text"
-              value={purchase.invoice_number}
-              onChange={(e) => setPurchaseField('invoice_number', e.target.value)}
-              placeholder="INV-000000"
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-            />
-          </div>
-          <div>
-            <label className="text-sm text-gray-600 mb-1 block">Invoice Date</label>
-            <input
-              type="date"
-              value={purchase.invoice_date}
-              onChange={(e) => setPurchaseField('invoice_date', e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-            />
-          </div>
-          <div>
-            <label className="text-sm text-gray-600 mb-1 block">Payment Mode</label>
-            <select
-              value={purchase.payment_mode}
-              onChange={(e) => setPurchaseField('payment_mode', e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-            >
-              {PURCHASE_CONFIG.PAYMENT_MODES.map(mode => (
-                <option key={mode.value} value={mode.value}>{mode.label}</option>
-              ))}
-            </select>
-          </div>
+
+        {/* Content */}
+        <div className="flex-1 overflow-y-auto bg-gray-50">
+          <div className="max-w-6xl mx-auto px-6 py-6">
+        {/* Invoice Details */}
+        <ContentCard title="Invoice Details" subtitle={null} actions={null}>
+          <div className="grid grid-cols-4 gap-8">
+            <div>
+              <label className="text-sm text-gray-600 mb-1 block">Invoice Number</label>
+              <input
+                type="text"
+                value={purchase.invoice_number}
+                onChange={(e) => setPurchaseField('invoice_number', e.target.value)}
+                placeholder="INV-000000"
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+              />
+            </div>
+            <div>
+              <label className="text-sm text-gray-600 mb-1 block">Invoice Date</label>
+              <input
+                type="date"
+                value={purchase.invoice_date}
+                onChange={(e) => setPurchaseField('invoice_date', e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+              />
+            </div>
+            <div>
+              <label className="text-sm text-gray-600 mb-1 block">Payment Mode</label>
+              <select
+                value={purchase.payment_mode}
+                onChange={(e) => setPurchaseField('payment_mode', e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+              >
+                {PURCHASE_CONFIG.PAYMENT_MODES.map(mode => (
+                  <option key={mode.value} value={mode.value}>{mode.label}</option>
+                ))}
+              </select>
             </div>
           </div>
-          
-          {/* Supplier Section */}
-          <div className="bg-white rounded-md p-6 mb-6">
-          <div className="flex items-center justify-between mb-2">
-            <h3 className="text-sm font-medium text-gray-700">SUPPLIER</h3>
-            <button
-              onClick={() => setShowAddSupplier(true)}
-              className="text-sm text-indigo-600 hover:text-indigo-700 flex items-center gap-1"
-            >
-              <Plus className="w-4 h-4" />
-              New
-            </button>
-          </div>
+        </ContentCard>
+            
+        {/* Supplier Section */}
+        <ContentCard title="Supplier" subtitle={null} actions={
+          <button
+            onClick={() => setShowAddSupplier(true)}
+            className="text-sm text-indigo-600 hover:text-indigo-700 flex items-center gap-1"
+          >
+            <Plus className="w-4 h-4" />
+            New
+          </button>
+        }>
           <div className="relative">
             {purchase.supplier_id ? (
               <div className="p-3 bg-gray-50 rounded-md border border-gray-200">
@@ -285,21 +308,18 @@ const SimplifiedPurchaseContent = ({ onClose }) => {
               </>
             )}
           </div>
-          </div>
-          
-          {/* Products Section */}
-          <div className="bg-white rounded-md p-6 mb-6">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-sm font-medium text-gray-700">PRODUCTS</h3>
-            <button
-              onClick={() => setShowAddProduct(true)}
-              className="text-sm text-indigo-600 hover:text-indigo-700 flex items-center gap-1"
-            >
-              <Plus className="w-4 h-4" />
-              Add New Product
-            </button>
-          </div>
-          
+        </ContentCard>
+            
+        {/* Products Section */}
+        <ContentCard title="Products" subtitle={null} actions={
+          <button
+            onClick={() => setShowAddProduct(true)}
+            className="text-sm text-indigo-600 hover:text-indigo-700 flex items-center gap-1"
+          >
+            <Plus className="w-4 h-4" />
+            Add New Product
+          </button>
+        }>
           {/* Product Search */}
           <div className="relative mb-4">
             <input
@@ -309,13 +329,12 @@ const SimplifiedPurchaseContent = ({ onClose }) => {
               onFocus={handleAddItem}
             />
           </div>
-          </div>
-          
-          {/* Items Table */}
-          {purchase.items.length > 0 && (
-            <div className="bg-white rounded-md p-6">
-              <h3 className="text-sm font-medium text-gray-700 mb-4">PURCHASE ITEMS</h3>
-              <div className="border border-gray-200 rounded-md overflow-hidden">
+        </ContentCard>
+
+        {/* Items Table */}
+        {purchase.items.length > 0 && (
+          <ContentCard title="Purchase Items" subtitle={null} actions={null}>
+            <div className="border border-gray-200 rounded-md overflow-hidden">
               <table className="w-full min-w-[1200px]">
                 <thead className="bg-gray-50 border-b border-gray-200">
                   <tr>
@@ -427,30 +446,64 @@ const SimplifiedPurchaseContent = ({ onClose }) => {
                   ))}
                 </tbody>
               </table>
-              </div>
             </div>
-          )}
+          </ContentCard>
+        )}
         
-        </div>
-      </div>
-      
-      {/* Footer with Total */}
-      <div className="bg-white border-t px-8 py-4 flex-shrink-0">
-        <div className="flex items-center justify-between">
-          <div>
-            <p className="text-sm text-gray-600">TOTAL AMOUNT</p>
-            <p className="text-3xl font-bold text-gray-900">{formatCurrency(purchase.final_amount)}</p>
+        {/* Footer with Total */}
+        <ContentCard title={null} subtitle={null} actions={null} className="mt-6">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm text-gray-600">TOTAL AMOUNT</p>
+              <p className="text-3xl font-bold text-gray-900">{formatCurrency(purchase.final_amount)}</p>
+            </div>
+            <div className="flex items-center gap-3">
+              <button
+                onClick={onClose}
+                className="px-6 py-2.5 text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => setShowReview(true)}
+                disabled={purchase.items.length === 0 || !purchase.supplier_id || !purchase.invoice_number}
+                className="px-8 py-3 bg-green-600 text-white rounded-md hover:bg-green-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors text-lg font-medium"
+              >
+                Continue →
+              </button>
+            </div>
           </div>
-          <button
-            onClick={() => setShowReview(true)}
-            disabled={purchase.items.length === 0 || !purchase.supplier_id || !purchase.invoice_number}
-            className="px-8 py-3 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors text-lg font-medium"
-          >
-            Continue →
-          </button>
+        </ContentCard>
+          </div>
         </div>
+
+        {/* Footer */}
+        <div className="border-t border-gray-200 bg-white px-6 py-4">
+          <div className="flex justify-between items-center">
+            <div className="text-sm text-gray-600">
+              Total Items: {purchase.items.length}
+            </div>
+            
+            <div className="flex items-center gap-3">
+              <button
+                onClick={onClose}
+                className="px-6 py-2.5 text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => setShowReview(true)}
+                disabled={purchase.items.length === 0 || !purchase.supplier_id || !purchase.invoice_number}
+                className="px-8 py-2.5 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed flex items-center gap-2"
+              >
+                Continue →
+              </button>
+            </div>
+          </div>
+        </div>
+
       </div>
-      
+        
       {/* Review Modal - Full Screen */}
       {showReview && (
         <div className="fixed inset-0 bg-white z-50 flex flex-col">
@@ -633,9 +686,11 @@ const SimplifiedPurchaseEntry = ({ open, onClose }) => {
   if (!open) return null;
   
   return (
-    <PurchaseErrorBoundary onClose={onClose}>
-      <SimplifiedPurchaseContent onClose={onClose} />
-    </PurchaseErrorBoundary>
+    <PurchaseProvider>
+      <PurchaseErrorBoundary onClose={onClose}>
+        <SimplifiedPurchaseContent onClose={onClose} />
+      </PurchaseErrorBoundary>
+    </PurchaseProvider>
   );
 };
 

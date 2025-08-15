@@ -309,7 +309,31 @@ export const classes = {
   gridResponsive: 'grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6',
   
   // Keyboard shortcuts
-  keyboardShortcut: 'text-xs text-gray-400 font-mono'
+  keyboardShortcut: 'text-xs text-gray-400 font-mono',
+
+  // Layout patterns for consistency (NEW)
+  layout: {
+    // Main page containers (like Sales module)
+    pageContainer: 'h-full bg-gray-50',
+    pageInner: 'h-full flex flex-col',
+    
+    // Content areas with proper spacing
+    contentArea: 'flex-1 overflow-y-auto bg-gray-50',
+    contentInner: 'max-w-6xl mx-auto px-6 py-6', // KEY: This creates the spacing like Sales
+    
+    // Header sections
+    pageHeader: 'bg-white border-b border-gray-200 shadow-sm',
+    headerInner: 'max-w-6xl mx-auto px-6 py-4',
+    
+    // Spacing variations
+    compact: 'max-w-5xl mx-auto px-4 py-4',
+    spacious: 'max-w-7xl mx-auto px-8 py-8',
+    
+    // Common spacing
+    sectionSpacing: 'space-y-6',
+    cardSpacing: 'space-y-4', 
+    gridSpacing: 'gap-6'
+  }
 };
 
 export default theme;

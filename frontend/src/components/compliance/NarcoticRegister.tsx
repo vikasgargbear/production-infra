@@ -4,7 +4,7 @@ import {
   Phone, Hash, Package, Plus, Search, Download,
   CheckCircle, X, Clock, Pill, UserCheck
 } from 'lucide-react';
-import { Card, Button, Badge, Modal } from '../global';
+import { Card, Button, Badge, BaseModal } from '../global';
 import { theme, classes } from '../../config/theme.config';
 
 interface NarcoticEntry {
@@ -73,7 +73,7 @@ const PrescriptionModal: React.FC<PrescriptionModalProps> = ({
   const [errors, setErrors] = useState<string[]>([]);
 
   const validatePrescription = () => {
-    const validationErrors = [];
+    const validationErrors: string[] = [];
     
     if (!prescription.prescription_number) validationErrors.push('Prescription number is required');
     if (!prescription.prescription_date) validationErrors.push('Prescription date is required');
@@ -108,7 +108,15 @@ const PrescriptionModal: React.FC<PrescriptionModalProps> = ({
   if (!isOpen) return null;
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title="Narcotic Drug Prescription Details" size="lg">
+    <BaseModal 
+      open={isOpen} 
+      onClose={onClose} 
+      title="Narcotic Drug Prescription Details" 
+      subtitle="Schedule X Drug - Legal Compliance"
+      icon={Shield}
+      iconColor="red"
+      footerActions={null}
+    >
       <div className="p-6">
         {/* Warning Banner */}
         <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-6">
@@ -329,7 +337,7 @@ const PrescriptionModal: React.FC<PrescriptionModalProps> = ({
           </Button>
         </div>
       </div>
-    </Modal>
+    </BaseModal>
   );
 };
 

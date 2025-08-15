@@ -115,13 +115,14 @@ const CurrentStock = ({ open = true, onClose }) => {
     console.log('Filtering data. Stock data length:', stockData.length);
     console.log('Filters - Search:', searchQuery, 'Category:', selectedCategory, 'Low Stock:', showLowStock, 'Expiring:', showExpiring);
     
-    let filtered = [...stockData];
+    // First filter out any null/undefined items
+    let filtered = stockData.filter(item => item && item.product_name);
 
     // Search filter
     if (searchQuery) {
       filtered = filtered.filter(item =>
-        item.product_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        item.product_code.toLowerCase().includes(searchQuery.toLowerCase())
+        (item.product_name && item.product_name.toLowerCase().includes(searchQuery.toLowerCase())) ||
+        (item.product_code && item.product_code.toLowerCase().includes(searchQuery.toLowerCase()))
       );
     }
 

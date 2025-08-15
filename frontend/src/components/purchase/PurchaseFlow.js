@@ -6,13 +6,9 @@ import {
 } from 'lucide-react';
 import { purchasesApi, suppliersApi, productsApi } from '../../services/api';
 import { searchCache } from '../../utils/searchCache';
-import { ProductCreationModal, MonthYearPicker } from '../global';
-import { ViewHistoryButton } from '../global';
-// PurchaseItemsTableFlow moved to archive - use ItemsTable from global instead
-import { ItemsTable } from '../global';
+import { ProductCreationModal, MonthYearPicker, ViewHistoryButton, ItemsTable, SupplierCreationModal, PurchaseFlow as GlobalPurchaseFlow, ContentCard } from '../global';
 import PurchaseSummaryTop from './components/PurchaseSummaryTop';
-// AddNewSupplierModal moved to archive - use SupplierCreationModal from global instead
-import { SupplierCreationModal } from '../global';
+import documentNumberService from '../../services/documentNumberService';
 
 // Default org ID for development
 const DEFAULT_ORG_ID = 'ad808530-1ddb-4377-ab20-67bef145d80d';
@@ -29,15 +25,9 @@ const PurchaseFlow = ({ onClose }) => {
   const supplierSearchRef = useRef(null);
   const firstInputRef = useRef(null);
 
-  // Generate purchase number
-  const generatePurchaseNumber = () => {
-    const timestamp = new Date().getTime();
-    return `PUR-${timestamp}`;
-  };
-
   // Purchase data state
   const [purchase, setPurchase] = useState({
-    purchase_no: generatePurchaseNumber(),
+    purchase_no: 'PUR-TEMP',
     invoice_number: '',
     invoice_date: new Date().toISOString().split('T')[0],
     supplier_id: '',
@@ -59,6 +49,22 @@ const PurchaseFlow = ({ onClose }) => {
   });
 
   const [selectedSupplier, setSelectedSupplier] = useState(null);
+
+  // Generate purchase number on mount
+  useEffect(() => {
+    const generateAndSetPurchaseNumber = async () => {
+      try {
+        const purchaseNumber = await documentNumberService.generatePurchaseNumber();
+        setPurchase(prev => ({ ...prev, purchase_no: purchaseNumber }));
+      } catch (error) {
+        console.warn('Failed to generate purchase number:', error);
+        const fallbackNumber = `PUR-${Date.now().toString().slice(-8)}`;
+        setPurchase(prev => ({ ...prev, purchase_no: fallbackNumber }));
+      }
+    };
+    
+    generateAndSetPurchaseNumber();
+  }, []);
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -333,136 +339,116 @@ const PurchaseFlow = ({ onClose }) => {
 
   // Step 1: Input Form
   if (currentStep === 1) {
+    const headerActions = [
+      {
+        label: "Proceed to Review",
+        onClick: handleProceedToReview,
+        disabled: !selectedSupplier || purchase.items.length === 0,
+        variant: "primary"
+      }
+    ];
+
     return (
-      <div className="h-full bg-gray-50">
-        <div className="h-full flex flex-col">
-          
-          {/* Header */}
-          <div className="bg-white border-b border-gray-200">
-            <div className="flex items-center justify-between px-6 py-4">
-              <div className="flex items-start gap-3">
-                <Package className="w-5 h-5 text-gray-600 mt-1" />
-                <div>
-                  <h1 className="text-xl font-semibold text-gray-900">Purchase Entry</h1>
-                  <p className="text-sm text-gray-500 mt-1">Step 1: Enter purchase details</p>
-                </div>
-              </div>
-              
-              <div className="flex items-center gap-3">
-                <ViewHistoryButton type="purchase" />
-                <button 
-                  onClick={onClose} 
-                  className="p-2 hover:bg-gray-100 rounded-lg"
-                  title="Close (Esc)"
-                >
-                  <X className="w-5 h-5 text-gray-500" />
-                </button>
-              </div>
-            </div>
-          </div>
-
-          {/* Keyboard Shortcuts */}
-          <div className="bg-blue-50 px-4 py-2 text-xs text-blue-700 border-b border-blue-200">
-            Keyboard shortcuts: <strong>Ctrl+S</strong> - Proceed | <strong>Esc</strong> - Close
-          </div>
-
-          {/* Content */}
-          <div className="flex-1 overflow-y-auto p-4">
+      <GlobalPurchaseFlow
+        documentNumber={purchase.purchase_no}
+        onNumberGenerated={(number) => setPurchase(prev => ({ ...prev, purchase_no: number }))}
+        onClose={onClose}
+        additionalActions={headerActions}
+      >
             
-            {/* Message Display */}
-            {message && (
-              <div className={`
-                mb-4 p-3 rounded flex items-start text-sm
-                ${messageType === 'success' ? 'bg-green-100 text-green-800' : 
-                  messageType === 'error' ? 'bg-red-100 text-red-800' : 
-                  'bg-blue-100 text-blue-800'
-                }
-              `}>
-                {messageType === 'success' && <CheckCircle className="w-4 h-4 mr-2 flex-shrink-0 mt-0.5" />}
-                {messageType === 'error' && <AlertCircle className="w-4 h-4 mr-2 flex-shrink-0 mt-0.5" />}
-                <div className="flex-1">{message}</div>
-                <button onClick={clearMessage} className="ml-2 hover:opacity-70">
-                  <X className="w-4 h-4" />
-                </button>
-              </div>
-            )}
+        {/* Message Display */}
+        {message && (
+          <div className={`
+            mb-4 p-3 rounded flex items-start text-sm
+            ${messageType === 'success' ? 'bg-green-100 text-green-800' : 
+              messageType === 'error' ? 'bg-red-100 text-red-800' : 
+              'bg-blue-100 text-blue-800'
+            }
+          `}>
+            {messageType === 'success' && <CheckCircle className="w-4 h-4 mr-2 flex-shrink-0 mt-0.5" />}
+            {messageType === 'error' && <AlertCircle className="w-4 h-4 mr-2 flex-shrink-0 mt-0.5" />}
+            <div className="flex-1">{message}</div>
+            <button onClick={clearMessage} className="ml-2 hover:opacity-70">
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        )}
 
-            {/* Purchase Header */}
-            <div className="bg-white rounded-lg shadow-sm p-6 mb-6">
-              <div className="grid grid-cols-3 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Supplier Invoice No *</label>
-                  <input
-                    type="text"
-                    value={purchase.invoice_number}
-                    onChange={(e) => setPurchase(prev => ({ ...prev, invoice_number: e.target.value }))}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                    placeholder="SUP-INV-001"
-                    ref={firstInputRef}
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Invoice Date *</label>
-                  <input
-                    type="date"
-                    value={purchase.invoice_date}
-                    onChange={(e) => setPurchase(prev => ({ ...prev, invoice_date: e.target.value }))}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Purchase No</label>
-                  <input
-                    type="text"
-                    value={purchase.purchase_no}
-                    readOnly
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50"
-                  />
-                </div>
-              </div>
+        {/* Purchase Header */}
+        <ContentCard title="Invoice Details" subtitle={null} actions={null}>
+          <div className="grid grid-cols-3 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Supplier Invoice No *</label>
+              <input
+                type="text"
+                value={purchase.invoice_number}
+                onChange={(e) => setPurchase(prev => ({ ...prev, invoice_number: e.target.value }))}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                placeholder="SUP-INV-001"
+                ref={firstInputRef}
+              />
             </div>
-
-            {/* Supplier Selection */}
-            <SupplierSearchWrapper
-              onSupplierSelect={handleSupplierSelect}
-              onCreateSupplier={() => setShowSupplierModal(true)}
-              ref={supplierSearchRef}
-            />
-
-            {/* Product Search */}
-            <ProductSearchWrapper
-              onAddItem={handleAddItem}
-              onCreateProduct={() => setShowProductModal(true)}
-            />
-
-            {/* Items Table */}
-            <ItemsTable
-              module="purchase"
-              items={purchase.items}
-              onUpdateItem={handleUpdateItem}
-              onRemoveItem={handleRemoveItem}
-            />
-
-            {/* Notes */}
-            <div className="bg-white rounded-lg shadow-sm p-4 mt-4">
-              <label className="block text-sm font-medium text-gray-700 mb-2">Notes</label>
-              <textarea
-                value={purchase.notes}
-                onChange={(e) => setPurchase(prev => ({ ...prev, notes: e.target.value }))}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 resize-none"
-                rows={3}
-                placeholder="Add any notes..."
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Invoice Date *</label>
+              <input
+                type="date"
+                value={purchase.invoice_date}
+                onChange={(e) => setPurchase(prev => ({ ...prev, invoice_date: e.target.value }))}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Purchase No</label>
+              <input
+                type="text"
+                value={purchase.purchase_no}
+                readOnly
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50"
               />
             </div>
           </div>
+        </ContentCard>
 
-          {/* Footer */}
-          <div className="flex justify-between items-center p-4 border-t border-gray-200 bg-gray-50">
+        {/* Supplier Selection */}
+        <SupplierSearchWrapper
+          onSupplierSelect={handleSupplierSelect}
+          onCreateSupplier={() => setShowSupplierModal(true)}
+          ref={supplierSearchRef}
+        />
+
+        {/* Product Search */}
+        <ProductSearchWrapper
+          onAddItem={handleAddItem}
+          onCreateProduct={() => setShowProductModal(true)}
+        />
+
+        {/* Items Table */}
+        <ItemsTable
+          module="purchase"
+          items={purchase.items}
+          onUpdateItem={handleUpdateItem}
+          onRemoveItem={handleRemoveItem}
+        />
+
+        {/* Notes */}
+        <ContentCard title="Notes" subtitle={null} actions={null}>
+          <textarea
+            value={purchase.notes}
+            onChange={(e) => setPurchase(prev => ({ ...prev, notes: e.target.value }))}
+            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 resize-none"
+            rows={3}
+            placeholder="Add any notes..."
+          />
+        </ContentCard>
+
+        {/* Footer Summary */}
+        <ContentCard title={null} subtitle={null} actions={null} className="mt-6">
+          <div className="flex items-center justify-between">
             <div className="flex items-center gap-4 text-sm">
               <span className="text-gray-600">Items: <strong>{purchase.items.length}</strong></span>
               <span className="text-gray-600">Total: <strong>₹{purchase.gross_amount.toFixed(2)}</strong></span>
               <span className="text-gray-600">Tax: <strong>₹{purchase.tax_amount.toFixed(2)}</strong></span>
-              <span className="text-lg font-semibold text-blue-600">
+              <span className="text-lg font-semibold text-green-600">
                 Net: ₹{purchase.net_amount.toFixed(2)}
               </span>
             </div>
@@ -477,7 +463,7 @@ const PurchaseFlow = ({ onClose }) => {
               <button
                 onClick={handleProceedToReview}
                 disabled={!selectedSupplier || purchase.items.length === 0}
-                className="px-6 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed flex items-center gap-2"
+                className="px-6 py-2 bg-green-600 text-white rounded hover:bg-green-700 transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed flex items-center gap-2"
                 title="Proceed to Review (Ctrl+S)"
               >
                 Proceed to Review
@@ -485,8 +471,8 @@ const PurchaseFlow = ({ onClose }) => {
               </button>
             </div>
           </div>
-        </div>
-
+        </ContentCard>
+        
         {/* Modals */}
         {showSupplierModal && (
           <SupplierCreationModal
@@ -512,7 +498,7 @@ const PurchaseFlow = ({ onClose }) => {
             }}
           />
         )}
-      </div>
+      </GlobalPurchaseFlow>
     );
   }
 

@@ -6,7 +6,7 @@ import {
   Shield, Clock, User, X, ChevronRight, FileText,
   AlertCircle, MessageCircle, Banknote, Award
 } from 'lucide-react';
-import { Card, Button, Badge, DataTable, Modal } from '../global';
+import { Card, Button, Badge, DataTable, BaseModal, GlobalLayout, ContentCard, StatsGrid } from '../global';
 import { theme, classes } from '../../config/theme.config';
 import { suppliersApi } from '../../services/api';
 import SupplierCreationModal from '../global/modals/SupplierCreationModal';
@@ -134,115 +134,114 @@ const SupplierMaster: React.FC = () => {
     withBankDetails: suppliers.filter(s => s.bank_name && s.account_number).length
   };
 
-  return (
-    <div className="h-full bg-gray-50">
-      {/* Header */}
-      <div className="bg-white border-b border-gray-200 px-6 py-4">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center space-x-3">
-            <div className="w-10 h-10 bg-gradient-to-br from-purple-500 to-purple-600 rounded-xl flex items-center justify-center">
-              <Truck className="w-5 h-5 text-white" />
-            </div>
-            <div>
-              <h1 className="text-xl font-bold text-gray-900">Supplier Master</h1>
-              <p className="text-sm text-gray-500">Manage your supplier network</p>
-            </div>
-          </div>
-          
-          <div className="flex items-center gap-3">
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={() => {/* Import logic */}}
-            >
-              <Upload className="w-4 h-4 mr-2" />
-              Import
-            </Button>
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={() => {/* Export logic */}}
-            >
-              <Download className="w-4 h-4 mr-2" />
-              Export
-            </Button>
-            <Button
-              variant="primary"
-              onClick={() => setShowCreateModal(true)}
-            >
-              <Plus className="w-4 h-4 mr-2" />
-              Add Supplier
-            </Button>
-          </div>
-        </div>
-      </div>
+  // Prepare stats data for StatsGrid
+  const statsData = [
+    {
+      label: 'Total Suppliers',
+      value: stats.total,
+      icon: Truck,
+      iconBg: 'bg-purple-100',
+      iconColor: 'text-purple-600'
+    },
+    {
+      label: 'Active',
+      value: stats.active,
+      icon: CheckCircle,
+      iconBg: 'bg-green-100', 
+      iconColor: 'text-green-600'
+    },
+    {
+      label: 'Licensed',
+      value: stats.withLicense,
+      icon: Shield,
+      iconBg: 'bg-blue-100',
+      iconColor: 'text-blue-600'
+    },
+    {
+      label: 'Bank Verified',
+      value: stats.withBankDetails,
+      icon: Banknote,
+      iconBg: 'bg-teal-100',
+      iconColor: 'text-teal-600'
+    }
+  ];
 
-      {/* Statistics Cards - Simplified */}
-      <div className="px-6 py-3">
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
-          <div className="bg-white rounded-lg border border-gray-200 px-4 py-3">
-            <p className="text-xs text-gray-500">Total</p>
-            <p className="text-xl font-semibold text-gray-900">{stats.total}</p>
-          </div>
-          
-          <div className="bg-white rounded-lg border border-gray-200 px-4 py-3">
-            <p className="text-xs text-gray-500">Active</p>
-            <p className="text-xl font-semibold text-green-600">{stats.active}</p>
-          </div>
-          
-          <div className="bg-white rounded-lg border border-gray-200 px-4 py-3">
-            <p className="text-xs text-gray-500">Licensed</p>
-            <p className="text-xl font-semibold text-blue-600">{stats.withLicense}</p>
-          </div>
-          
-          <div className="bg-white rounded-lg border border-gray-200 px-4 py-3">
-            <p className="text-xs text-gray-500">Bank Verified</p>
-            <p className="text-xl font-semibold text-teal-600">{stats.withBankDetails}</p>
-          </div>
-        </div>
-      </div>
+  const headerActions = (
+    <>
+      <Button
+        variant="secondary"
+        size="sm"
+        onClick={() => {/* Import logic */}}
+      >
+        <Upload className="w-4 h-4 mr-2" />
+        Import
+      </Button>
+      <Button
+        variant="secondary"
+        size="sm"
+        onClick={() => {/* Export logic */}}
+      >
+        <Download className="w-4 h-4 mr-2" />
+        Export
+      </Button>
+      <Button
+        variant="primary"
+        onClick={() => setShowCreateModal(true)}
+      >
+        <Plus className="w-4 h-4 mr-2" />
+        Add Supplier
+      </Button>
+    </>
+  );
+
+  return (
+    <GlobalLayout
+      title="Supplier Master"
+      subtitle="Manage your supplier network"
+      icon={Truck}
+      headerActions={headerActions}
+    >
+      {/* Statistics */}
+      <StatsGrid stats={statsData} />
 
       {/* Filters and Search */}
-      <div className="px-6 pb-4">
-        <Card className="p-4">
-          <div className="flex flex-col md:flex-row gap-4">
-            {/* Search */}
-            <div className="flex-1">
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
-                <input
-                  type="text"
-                  placeholder="Search by name, phone, GST, bank..."
-                  className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                />
-              </div>
-            </div>
-            
-            {/* Status Filter */}
-            <div className="flex gap-2">
-              {['all', 'active', 'inactive'].map((status) => (
-                <button
-                  key={status}
-                  onClick={() => setFilterStatus(status as any)}
-                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                    filterStatus === status
-                      ? 'bg-purple-600 text-white'
-                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                  }`}
-                >
-                  {status.charAt(0).toUpperCase() + status.slice(1)}
-                </button>
-              ))}
+      <ContentCard title="Search & Filter" subtitle={null} actions={null}>
+        <div className="flex flex-col md:flex-row gap-4">
+          {/* Search */}
+          <div className="flex-1">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-app-400" />
+              <input
+                type="text"
+                placeholder="Search by name, phone, GST, bank..."
+                className="w-full pl-10 pr-4 py-2 border border-app-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+              />
             </div>
           </div>
-        </Card>
-      </div>
+          
+          {/* Status Filter */}
+          <div className="flex gap-2">
+            {['all', 'active', 'inactive'].map((status) => (
+              <button
+                key={status}
+                onClick={() => setFilterStatus(status as any)}
+                className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                  filterStatus === status
+                    ? 'bg-primary-600 text-white'
+                    : 'bg-app-100 text-app-700 hover:bg-app-200'
+                }`}
+              >
+                {status.charAt(0).toUpperCase() + status.slice(1)}
+              </button>
+            ))}
+          </div>
+        </div>
+      </ContentCard>
 
       {/* Supplier List */}
-      <div className="px-6 pb-6">
-        <Card className="overflow-hidden">
+      <ContentCard title="Supplier List" subtitle={null} actions={null} className="overflow-hidden">
           {loading ? (
             <div className="p-8 text-center">
               <div className="inline-flex items-center text-gray-600">
@@ -442,13 +441,12 @@ const SupplierMaster: React.FC = () => {
               </table>
             </div>
           )}
-        </Card>
-      </div>
+      </ContentCard>
 
       {/* Create/Edit Modal */}
       {showCreateModal && (
         <SupplierCreationModal
-          show={showCreateModal}
+          isOpen={showCreateModal}
           onClose={() => {
             setShowCreateModal(false);
             setSelectedSupplier(null);
@@ -458,17 +456,20 @@ const SupplierMaster: React.FC = () => {
             setShowCreateModal(false);
             setSelectedSupplier(null);
           }}
-          existingSupplier={selectedSupplier}
+          initialData={selectedSupplier || {}}
+          title={selectedSupplier ? 'Edit Supplier' : 'Add New Supplier'}
         />
       )}
 
       {/* Supplier Details Modal */}
       {showDetails && selectedSupplier && (
-        <Modal
-          isOpen={showDetails}
+        <BaseModal
+          open={showDetails}
           onClose={() => setShowDetails(false)}
           title="Supplier Details"
-          size="lg"
+          subtitle={selectedSupplier.supplier_name}
+          icon={Truck}
+          footerActions={null}
         >
           <div className="p-6">
             {/* Supplier details content */}
@@ -546,9 +547,9 @@ const SupplierMaster: React.FC = () => {
               </div>
             </div>
           </div>
-        </Modal>
+        </BaseModal>
       )}
-    </div>
+    </GlobalLayout>
   );
 };
 

@@ -5,7 +5,7 @@ import {
 } from 'lucide-react';
 import { 
   CustomerSearch, ProductSearchSimple, ItemsTable, ModuleHeader,
-  DatePicker, Select, NumberInput, NotesSection, useToast, InvoiceSearch
+  DatePicker, Select, NumberInput, NotesSection, useToast, InvoiceSearch, ViewHistoryButton
 } from '../global';
 import { returnsApi, invoicesApi, customersApi } from '../../services/api';
 // ReturnItemsTable moved to archive - use ItemsTable from global instead
@@ -28,6 +28,7 @@ const SalesReturnFlow = ({ onClose }) => {
   const [currentStep, setCurrentStep] = useState(1);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
+  const historyButtonRef = useRef(null);
   const toast = useToast();
 
   // Refs for keyboard navigation
@@ -358,20 +359,20 @@ const SalesReturnFlow = ({ onClose }) => {
               {
                 label: 'History',
                 icon: History,
-                onClick: () => {},
+                onClick: () => historyButtonRef.current?.click(),
                 shortcut: 'Ctrl+H'
               }
             ]}
           />
 
           {/* Quick Actions Bar */}
-          <div className="bg-red-50 px-4 py-2 text-sm text-red-700 border-b border-red-200">
+          <div className="bg-gray-50 px-4 py-2 text-sm text-gray-700 border-b border-gray-200">
             Keyboard shortcuts: <strong>Ctrl+R</strong> - Search Customer | <strong>Ctrl+I</strong> - Search Invoice | <strong>Ctrl+S</strong> - Proceed | <strong>Esc</strong> - Close
           </div>
 
           {/* Content */}
           <div className="flex-1 overflow-y-auto p-6">
-            <div className="max-w-7xl mx-auto space-y-6">
+            <div className="max-w-6xl mx-auto space-y-6">
               {/* Return Header */}
               <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
                 <div className="flex justify-between items-start mb-6">
@@ -655,7 +656,7 @@ const SalesReturnFlow = ({ onClose }) => {
 
         {/* Content */}
         <div className="flex-1 overflow-y-auto">
-          <div className="max-w-7xl mx-auto p-6">
+          <div className="max-w-6xl mx-auto p-6">
             <CreditNotePreview
               returnData={returnData}
               customer={selectedCustomer}
@@ -712,6 +713,15 @@ const SalesReturnFlow = ({ onClose }) => {
             </button>
           </div>
         </div>
+      </div>
+      
+      {/* Hidden History Button - Triggered by ModuleHeader action */}
+      <div style={{ display: 'none' }}>
+        <ViewHistoryButton
+          ref={historyButtonRef}
+          historyType="returns"
+          buttonText=""
+        />
       </div>
     </div>
   );

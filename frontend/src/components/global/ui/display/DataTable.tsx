@@ -247,19 +247,21 @@ export function DataTable<T extends Record<string, any>>({
   
   // Table classes
   const tableClasses = [
-    'min-w-full divide-y divide-gray-200',
-    bordered && 'border border-gray-200',
+    'min-w-full divide-y divide-app-200',
+    bordered && 'border border-app-200',
     className,
   ].filter(Boolean).join(' ');
   
   const thClasses = [
-    'px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider',
-    compact && 'px-4 py-2',
+    'px-6 py-4 text-xs font-medium text-app-500 uppercase tracking-wider',
+    'bg-app-50 border-b border-app-200',
+    compact && 'px-4 py-3',
   ].filter(Boolean).join(' ');
   
   const tdClasses = [
-    'px-6 py-4 whitespace-nowrap text-sm text-gray-900',
-    compact && 'px-4 py-2',
+    'px-6 py-4 whitespace-nowrap text-sm text-app-700',
+    'border-b border-app-100',
+    compact && 'px-4 py-3',
   ].filter(Boolean).join(' ');
   
   return (
@@ -312,7 +314,7 @@ export function DataTable<T extends Record<string, any>>({
       {/* Table */}
       <div className="overflow-x-auto">
         <table className={tableClasses}>
-          <thead className={`bg-gray-50 ${headerClassName}`}>
+          <thead className={`${headerClassName}`}>
             <tr>
               {selectable && (
                 <th scope="col" className={`${thClasses} w-12`}>
@@ -342,11 +344,11 @@ export function DataTable<T extends Record<string, any>>({
             </tr>
           </thead>
           
-          <tbody className={`bg-white divide-y divide-gray-200 ${bodyClassName}`}>
+          <tbody className={`bg-white divide-y divide-app-100 ${bodyClassName}`}>
             {loading ? (
               <tr>
                 <td colSpan={columns.length + (selectable ? 1 : 0)} className="text-center py-8">
-                  <div className="inline-flex items-center gap-2 text-gray-500">
+                  <div className="inline-flex items-center gap-2 text-app-500">
                     <RefreshCw className="w-5 h-5 animate-spin" />
                     Loading...
                   </div>
@@ -355,7 +357,7 @@ export function DataTable<T extends Record<string, any>>({
             ) : paginatedData.length === 0 ? (
               <tr>
                 <td colSpan={columns.length + (selectable ? 1 : 0)} className="text-center py-8">
-                  <div className="text-gray-500">
+                  <div className="text-app-500">
                     {emptyIcon && <div className="mb-2 flex justify-center">{emptyIcon}</div>}
                     {emptyMessage}
                   </div>
@@ -366,9 +368,9 @@ export function DataTable<T extends Record<string, any>>({
                 <tr
                   key={String(row[keyField])}
                   className={[
-                    striped && index % 2 === 1 && 'bg-gray-50',
-                    hoverable && 'hover:bg-gray-100',
-                    'transition-colors',
+                    striped && index % 2 === 1 && 'bg-app-50',
+                    hoverable && 'hover:bg-app-100',
+                    'transition-colors duration-200',
                   ].filter(Boolean).join(' ')}
                 >
                   {selectable && (

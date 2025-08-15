@@ -603,7 +603,7 @@ Expected Delivery: ${order.expected_delivery_date}
           />
 
           {/* Keyboard Shortcuts Help */}
-          <div className="bg-blue-50 px-4 py-2 text-xs text-blue-700 border-b border-blue-200">
+          <div className="bg-gray-50 px-4 py-2 text-xs text-gray-700 border-b border-gray-200">
             Keyboard shortcuts: <strong>Ctrl+N</strong> - Add Customer | <strong>Ctrl+I</strong> - Import | <strong>Ctrl+F</strong> - Search Products | <strong>Ctrl+S</strong> - Save | <strong>Esc</strong> - Close
           </div>
 
@@ -807,7 +807,7 @@ Expected Delivery: ${order.expected_delivery_date}
         />
 
         {/* Keyboard Shortcuts Help */}
-        <div className="bg-blue-50 px-4 py-2 text-xs text-blue-700 border-b border-blue-200">
+        <div className="bg-gray-50 px-4 py-2 text-xs text-gray-700 border-b border-gray-200">
           Keyboard shortcuts: <strong>Ctrl+S</strong> - Save Order | <strong>Ctrl+P</strong> - Print | <strong>Esc</strong> - Back
         </div>
 

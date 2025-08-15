@@ -6,7 +6,7 @@ import {
 } from 'lucide-react';
 import { stockApi, productsApi } from '../../services/api';
 import { formatCurrency } from '../../utils/formatters';
-import { DataTable, ProductSearchSimple, Select, DatePicker, StatusBadge } from '../global';
+import { DataTable, ProductSearchSimple, Select, DatePicker, StatusBadge, ViewHistoryButton } from '../global';
 
 const StockAdjustment = ({ open = true, onClose }) => {
   const [loading, setLoading] = useState(false);
@@ -267,6 +267,11 @@ Note: Use positive numbers for increase and negative for decrease. Reason codes:
             </div>
             
             <div className="flex items-center space-x-3">
+              <ViewHistoryButton
+                historyType="stock"
+                buttonText="History"
+                className="px-4 py-2 text-app-700 bg-white border border-app-300 rounded-lg hover:bg-app-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 transition-colors flex items-center"
+              />
               <button
                 onClick={() => {
                   setShowBulkUpload(!showBulkUpload);

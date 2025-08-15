@@ -507,7 +507,7 @@ ${localStorage.getItem('company_name') || 'AASO Pharmaceuticals'}
           </div>
 
           {/* Quick Actions Bar */}
-          <div className="bg-blue-50 px-4 py-2 text-sm text-blue-700 border-b border-blue-200">
+          <div className="bg-gray-50 px-4 py-2 text-sm text-gray-700 border-b border-gray-200">
             Keyboard shortcuts: <strong>Ctrl+N</strong> - New Supplier | <strong>Ctrl+F</strong> - Find Product | <strong>Ctrl+S</strong> - Proceed to Review | <strong>Ctrl+G</strong> - GST Calculator | <strong>Esc</strong> - Close
           </div>
 
@@ -969,7 +969,7 @@ ${localStorage.getItem('company_name') || 'AASO Pharmaceuticals'}
         </div>
 
         {/* Quick Actions Bar */}
-        <div className="bg-blue-50 px-4 py-2 text-sm text-blue-700 border-b border-blue-200">
+        <div className="bg-gray-50 px-4 py-2 text-sm text-gray-700 border-b border-gray-200">
           Keyboard shortcuts: <strong>Ctrl+S</strong> - Save PO | <strong>Ctrl+P</strong> - Print | <strong>Ctrl+W</strong> - WhatsApp | <strong>Ctrl+M</strong> - Email | <strong>Esc</strong> - Close
         </div>
 

@@ -1,11 +1,12 @@
 import React from 'react';
 import { 
-  ShoppingBag, FileText, Package, ShoppingCart
+  ShoppingBag, FileText, Package, ShoppingCart, List
 } from 'lucide-react';
 import { ModuleHub } from '../global';
 import SimplifiedPurchaseEntry from './SimplifiedPurchaseEntry';
 import PurchaseOrderFlow from './PurchaseOrderFlow';
 import GRNFlow from './GRNFlow';
+import PurchaseListHistory from './PurchaseListHistory';
 import { PurchaseProvider } from '../../contexts/PurchaseContext';
 
 interface PurchaseHubProps {
@@ -51,6 +52,15 @@ const PurchaseHub: React.FC<PurchaseHubProps> = ({ open = true, onClose }) => {
       icon: Package,
       color: 'green',
       component: GRNFlow
+    },
+    {
+      id: 'purchase-history',
+      label: 'All Purchases',
+      fullLabel: 'Purchase History',
+      description: 'View purchase history',
+      icon: List,
+      color: 'gray',
+      component: PurchaseListHistory
     }
   ];
 

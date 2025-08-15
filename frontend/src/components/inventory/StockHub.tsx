@@ -1,7 +1,7 @@
 import React from 'react';
 import { 
   Package, ArrowDownToLine, ArrowUpFromLine, 
-  BarChart3, AlertTriangle, ArrowRightLeft, Archive
+  BarChart3, AlertTriangle, ArrowRightLeft, Archive, List
 } from 'lucide-react';
 import { ModuleHub } from '../global';
 import StockMovement from '../stock/StockMovement';
@@ -11,6 +11,7 @@ import BatchTracking from '../stock/BatchTracking';
 import StockAdjustment from '../stock/StockAdjustment';
 import StockReport from '../stock/StockReport';
 import LowStockAlert from '../stock/LowStockAlert';
+import StockListHistory from './StockListHistory';
 
 interface StockHubProps {
   open?: boolean;
@@ -91,6 +92,15 @@ const StockHub: React.FC<StockHubProps> = ({ open = true, onClose }) => {
       icon: BarChart3,
       color: 'purple',
       component: StockReport
+    },
+    {
+      id: 'stock-history',
+      label: 'All Movements',
+      fullLabel: 'Stock Movement History',
+      description: 'View movement history',
+      icon: List,
+      color: 'gray',
+      component: StockListHistory
     }
   ];
 
