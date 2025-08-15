@@ -161,6 +161,39 @@ export const productAPI = {
   },
 
   /**
+   * Get all products with stock data
+   */
+  getAll: async (options = {}) => {
+    try {
+      const response = await apiClient.get('/products/', {
+        params: {
+          limit: options.limit || 100,
+          skip: options.offset || options.skip || 0,
+          search: options.search || '',
+          product_type: options.product_type || '',
+          manufacturer: options.manufacturer || '',
+          include_stock: options.include_stock || true,
+        },
+      });
+      
+      // Return in expected format
+      return {
+        success: true,
+        data: response.data || [],
+        total: response.data?.length || 0
+      };
+    } catch (error) {
+      console.error('Error fetching products:', error);
+      return {
+        success: false,
+        data: [],
+        total: 0,
+        error: error.message
+      };
+    }
+  },
+
+  /**
    * Get product batches
    */
   getBatches: async (productId) => {

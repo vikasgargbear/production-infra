@@ -46,17 +46,17 @@ const SimplifiedPurchaseContent = ({ onClose }) => {
     const generateAndSetPurchaseNumber = async () => {
       try {
         const purchaseNumber = await documentNumberService.generatePurchaseNumber();
-        setPurchaseField('invoice_number', purchaseNumber);
+        setPurchaseField('purchase_number', purchaseNumber);
       } catch (error) {
         console.warn('Failed to generate purchase number:', error);
         // Fallback to timestamp-based number
         const fallbackNumber = `PUR-${Date.now().toString().slice(-8)}`;
-        setPurchaseField('invoice_number', fallbackNumber);
+        setPurchaseField('purchase_number', fallbackNumber);
       }
     };
     
-    // Only generate if no invoice number exists
-    if (!purchase.invoice_number || purchase.invoice_number === '') {
+    // Only generate if no purchase number exists
+    if (!purchase.purchase_number || purchase.purchase_number === '') {
       generateAndSetPurchaseNumber();
     }
   }, []);
@@ -117,7 +117,8 @@ const SimplifiedPurchaseContent = ({ onClose }) => {
     
     try {
       const validationResult = validatePurchaseForm({
-        invoiceNumber: purchase.invoice_number,
+        purchaseNumber: purchase.purchase_number,
+        supplierInvoiceNumber: purchase.supplier_invoice_number,
         selectedSupplier: purchase.supplier_id,
         invoiceDate: purchase.invoice_date,
         items: purchase.items,
@@ -133,7 +134,8 @@ const SimplifiedPurchaseContent = ({ onClose }) => {
       
       const purchaseData = {
         supplier_id: parseInt(purchase.supplier_id),
-        invoice_number: purchase.invoice_number,
+        purchase_number: purchase.purchase_number,
+        supplier_invoice_number: purchase.supplier_invoice_number,
         invoice_date: purchase.invoice_date,
         items: purchase.items.map(item => ({
           product_id: parseInt(item.product_id),
@@ -182,7 +184,7 @@ const SimplifiedPurchaseContent = ({ onClose }) => {
     {
       label: "Review & Save",
       onClick: () => setShowReview(true),
-      disabled: purchase.items.length === 0 || !purchase.supplier_id || !purchase.invoice_number,
+      disabled: purchase.items.length === 0 || !purchase.supplier_id || !purchase.supplier_invoice_number,
       variant: "primary"
     }
   ];
@@ -194,7 +196,7 @@ const SimplifiedPurchaseContent = ({ onClose }) => {
         {/* Header - Using Global ModuleHeader like invoice */}
         <ModuleHeader
           title="Purchase Entry"
-          documentNumber={purchase.invoice_number || 'Generating...'}
+          documentNumber={purchase.purchase_number || 'Generating...'}
           status="draft"
           icon={FileText}
           iconColor="text-green-600"
@@ -211,16 +213,16 @@ const SimplifiedPurchaseContent = ({ onClose }) => {
         {/* Content */}
         <div className="flex-1 overflow-y-auto bg-blue-50">
           <div className="max-w-6xl mx-auto px-6 py-6">
-        {/* Invoice Details */}
-        <ContentCard title="Invoice Details" subtitle={null} actions={null}>
+        {/* Supplier Invoice Details */}
+        <ContentCard title="Supplier Invoice Details" subtitle={null} actions={null}>
           <div className="grid grid-cols-4 gap-8">
             <div>
-              <label className="text-sm text-gray-600 mb-1 block">Invoice Number</label>
+              <label className="text-sm text-gray-600 mb-1 block">Supplier Invoice Number *</label>
               <input
                 type="text"
-                value={purchase.invoice_number}
-                onChange={(e) => setPurchaseField('invoice_number', e.target.value)}
-                placeholder="INV-000000"
+                value={purchase.supplier_invoice_number || ''}
+                onChange={(e) => setPurchaseField('supplier_invoice_number', e.target.value)}
+                placeholder="Supplier's invoice number"
                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
               />
             </div>
@@ -231,6 +233,16 @@ const SimplifiedPurchaseContent = ({ onClose }) => {
                 value={purchase.invoice_date}
                 onChange={(e) => setPurchaseField('invoice_date', e.target.value)}
                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+              />
+            </div>
+            <div>
+              <label className="text-sm text-gray-600 mb-1 block">Our Purchase Record</label>
+              <input
+                type="text"
+                value={purchase.purchase_number || ''}
+                readOnly
+                className="w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-100 text-gray-600 cursor-not-allowed"
+                placeholder="Auto-generated"
               />
             </div>
             <div>
@@ -466,7 +478,7 @@ const SimplifiedPurchaseContent = ({ onClose }) => {
               </button>
               <button
                 onClick={() => setShowReview(true)}
-                disabled={purchase.items.length === 0 || !purchase.supplier_id || !purchase.invoice_number}
+                disabled={purchase.items.length === 0 || !purchase.supplier_id || !purchase.supplier_invoice_number}
                 className="px-8 py-3 bg-green-600 text-white rounded-md hover:bg-green-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors text-lg font-medium"
               >
                 Continue →
@@ -493,7 +505,7 @@ const SimplifiedPurchaseContent = ({ onClose }) => {
               </button>
               <button
                 onClick={() => setShowReview(true)}
-                disabled={purchase.items.length === 0 || !purchase.supplier_id || !purchase.invoice_number}
+                disabled={purchase.items.length === 0 || !purchase.supplier_id || !purchase.supplier_invoice_number}
                 className="px-8 py-2.5 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed flex items-center gap-2"
               >
                 Continue →
@@ -528,8 +540,8 @@ const SimplifiedPurchaseContent = ({ onClose }) => {
                   <p className="font-medium">{purchase.supplier_name}</p>
                 </div>
                 <div>
-                  <p className="text-sm text-gray-600">Invoice Number</p>
-                  <p className="font-medium">{purchase.invoice_number}</p>
+                  <p className="text-sm text-gray-600">Supplier Invoice Number</p>
+                  <p className="font-medium">{purchase.supplier_invoice_number}</p>
                 </div>
                 <div>
                   <p className="text-sm text-gray-600">Invoice Date</p>

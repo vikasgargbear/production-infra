@@ -5,7 +5,7 @@ import {
   TrendingUp, TrendingDown, ArrowUpDown, Edit2, X,
   HelpCircle
 } from 'lucide-react';
-import { stockApi, productsApi, batchesApi } from '../../services/api';
+import { stockApi, productAPI, batchesApi } from '../../services/api';
 import { formatCurrency } from '../../utils/formatters';
 import { DataTable } from '../global';
 
@@ -53,22 +53,33 @@ const CurrentStock = ({ open = true, onClose }) => {
     setLoading(true);
     try {
       console.log('Fetching current stock data...');
+      console.log('ProductAPI methods available:', Object.keys(productAPI || {}));
+      
+      // Check if getAll method exists
+      if (!productAPI || typeof productAPI.getAll !== 'function') {
+        throw new Error('productAPI.getAll is not available. Available methods: ' + Object.keys(productAPI || {}));
+      }
       
       // Use products API which we know works and includes stock data
-      const response = await productsApi.getAll({
+      const response = await productAPI.getAll({
         include_stock: true,
         limit: 500 // Get more products for stock management
       });
       console.log('Products API response:', response);
       
-      // Handle different response formats
+      // Handle different response formats from productAPI.getAll()
       let products = [];
-      if (response?.data?.products) {
+      if (response?.success && response?.data) {
+        products = response.data;
+      } else if (response?.data?.products) {
         products = response.data.products;
       } else if (response?.data && Array.isArray(response.data)) {
         products = response.data;
       } else if (Array.isArray(response)) {
         products = response;
+      } else {
+        console.warn('Unexpected API response format:', response);
+        products = [];
       }
       
       console.log('Raw products data:', products.length, 'items');

@@ -353,16 +353,12 @@ const SalesReturnFlow = ({ onClose }) => {
         <div className="h-full flex flex-col">
           <ModuleHeader
             title="Sales Return"
-            subtitle="Process customer returns"
+            documentNumber={returnData.return_no}
+            status="draft"
+            icon={RotateCcw}
+            iconColor="text-red-600"
             onClose={onClose}
-            actions={[
-              {
-                label: 'History',
-                icon: History,
-                onClick: () => historyButtonRef.current?.click(),
-                shortcut: 'Ctrl+H'
-              }
-            ]}
+            historyType="return"
           />
 
           {/* Quick Actions Bar */}
@@ -373,13 +369,9 @@ const SalesReturnFlow = ({ onClose }) => {
           {/* Content */}
           <div className="flex-1 overflow-y-auto p-6">
             <div className="max-w-6xl mx-auto space-y-6">
-              {/* Return Header */}
+              {/* Return Date */}
               <div className="bg-white rounded-lg shadow-sm border border-blue-200 p-6">
-                <div className="flex justify-between items-start mb-6">
-                  <div>
-                    <h2 className="text-2xl font-bold text-gray-900">Sales Return</h2>
-                    <p className="text-lg text-gray-600 mt-2">Return No: <span className="font-semibold">{returnData.return_no}</span></p>
-                  </div>
+                <div className="flex justify-end">
                   <div className="w-64">
                     <DatePicker
                       value={returnData.return_date}
