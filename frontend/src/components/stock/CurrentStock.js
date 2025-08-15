@@ -7,7 +7,7 @@ import {
 } from 'lucide-react';
 import { stockApi, productAPI, batchesApi } from '../../services/api';
 import { formatCurrency } from '../../utils/formatters';
-import { DataTable } from '../global';
+import { DataTable, ModuleHeader } from '../global';
 
 const CurrentStock = ({ open = true, onClose }) => {
   const [loading, setLoading] = useState(true);
@@ -62,7 +62,7 @@ const CurrentStock = ({ open = true, onClose }) => {
       
       // Use products API which we know works and includes stock data
       const response = await productAPI.getAll({
-        limit: 500 // Get more products for stock management
+        limit: 100 // Backend max limit is 100
       });
       console.log('Products API response:', response);
       
@@ -444,68 +444,56 @@ const CurrentStock = ({ open = true, onClose }) => {
   if (!open) return null;
 
   return (
-    <div className="flex flex-col h-full overflow-hidden">
-      {/* Header */}
-      <div className="bg-white shadow-sm border-b border-gray-200 flex-shrink-0">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between py-4">
-            <div>
-              <h1 className="text-2xl font-bold text-gray-900">Current Stock</h1>
-              <p className="text-sm text-gray-600">Monitor and manage inventory levels</p>
-            </div>
-            <div className="flex items-center space-x-3">
-              <button
-                onClick={() => setShowLowStock(!showLowStock)}
-                className={`flex items-center space-x-2 px-4 py-2 border rounded-lg transition-colors ${
-                  showLowStock
-                    ? 'bg-orange-50 border-orange-300 text-orange-700'
-                    : 'bg-white border-gray-300 hover:bg-gray-50'
-                }`}
-              >
-                <AlertTriangle className="w-4 h-4" />
-                <span>Low Stock</span>
-              </button>
-              <button
-                onClick={() => setShowExpiring(!showExpiring)}
-                className={`flex items-center space-x-2 px-4 py-2 border rounded-lg transition-colors ${
-                  showExpiring
-                    ? 'bg-orange-50 border-orange-300 text-orange-700'
-                    : 'bg-white border-gray-300 hover:bg-gray-50'
-                }`}
-              >
-                <Clock className="w-4 h-4" />
-                <span>Expiring</span>
-              </button>
-              <button 
-                onClick={handleExport}
-                className="flex items-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-              >
-                <Download className="w-4 h-4" />
-                <span>Export</span>
-              </button>
-              <button
-                onClick={() => setShowHelpModal(true)}
-                className="p-2 text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-lg"
-                title="Help"
-              >
-                <HelpCircle className="w-5 h-5" />
-              </button>
-              <button
-                onClick={onClose}
-                className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
+    <div className="h-full bg-blue-50">
+      <div className="h-full flex flex-col">
+        
+        {/* Header - Using Global ModuleHeader */}
+        <ModuleHeader
+          title="Current Stock"
+          subtitle="Monitor and manage inventory levels"
+          icon={Package}
+          iconColor="text-blue-600"
+          onClose={onClose}
+          historyType="stock"
+          additionalActions={[
+            {
+              label: showLowStock ? "Hide Low Stock" : "Low Stock",
+              onClick: () => setShowLowStock(!showLowStock),
+              variant: showLowStock ? "primary" : "default",
+              icon: AlertTriangle
+            },
+            {
+              label: showExpiring ? "Hide Expiring" : "Expiring",
+              onClick: () => setShowExpiring(!showExpiring),
+              variant: showExpiring ? "primary" : "default",
+              icon: Clock
+            },
+            {
+              label: "Export",
+              onClick: handleExport,
+              variant: "default",
+              icon: Download
+            },
+            {
+              label: "Help",
+              onClick: () => setShowHelpModal(true),
+              variant: "default",
+              icon: HelpCircle
+            }
+          ]}
+        />
 
-      {/* Scrollable Content Area */}
-      <div className="flex-1 overflow-y-auto bg-gray-50">
-        {/* Search and Filters */}
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
+        {/* Keyboard Shortcuts Help */}
+        <div className="bg-blue-50 px-4 py-2 text-xs text-blue-700 border-b border-blue-200">
+          Keyboard shortcuts: <strong>Ctrl+F</strong> - Search | <strong>Ctrl+E</strong> - Export | <strong>Esc</strong> - Close
+        </div>
+
+        {/* Content */}
+        <div className="flex-1 overflow-y-auto">
+          <div className="max-w-6xl mx-auto px-6 py-6">
+            
+            {/* Search and Filters */}
+            <div className="bg-white rounded-lg shadow-sm border border-blue-200 p-4 mb-6">
           <div className="flex items-center space-x-4">
             <div className="flex-1 relative">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
@@ -514,13 +502,13 @@ const CurrentStock = ({ open = true, onClose }) => {
                 placeholder="Search products..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
               />
             </div>
             <select
               value={selectedCategory}
               onChange={(e) => setSelectedCategory(e.target.value)}
-              className="px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
             >
               <option value="all">All Categories</option>
               <option value="Tablets">Tablets</option>
@@ -543,7 +531,7 @@ const CurrentStock = ({ open = true, onClose }) => {
           
           {/* More Filters Panel */}
           {showMoreFilters && (
-            <div className="mt-4 p-4 bg-gray-50 rounded-lg border border-gray-200">
+            <div className="mt-4 p-4 bg-blue-50 rounded-lg border border-blue-200">
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -625,12 +613,10 @@ const CurrentStock = ({ open = true, onClose }) => {
               </div>
             </div>
           )}
-        </div>
-      </div>
+            </div>
 
-      {/* Stock Table */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-8">
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200">
+            {/* Stock Table */}
+            <div className="bg-white rounded-lg shadow-sm border border-blue-200">
           {loading ? (
             <div className="flex items-center justify-center h-64">
               <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
@@ -670,8 +656,9 @@ const CurrentStock = ({ open = true, onClose }) => {
               <p className="text-gray-600">No stock data found</p>
             </div>
           )}
+            </div>
+          </div>
         </div>
-      </div>
       </div>
 
       {/* Product Details Modal */}

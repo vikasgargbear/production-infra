@@ -167,7 +167,7 @@ export const productAPI = {
     try {
       const response = await apiClient.get('/products/', {
         params: {
-          limit: options.limit || 100,
+          limit: Math.min(options.limit || 100, 100), // Backend max limit is 100
           skip: options.offset || options.skip || 0,
           search: options.search || '',
           product_type: options.product_type || '',
