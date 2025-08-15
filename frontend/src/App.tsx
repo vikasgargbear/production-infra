@@ -1,4 +1,4 @@
-import React, { useState, Suspense, lazy } from 'react';
+import React, { useState, useEffect, Suspense, lazy } from 'react';
 import { QueryClientProvider } from 'react-query';
 import queryClient from './queryClient';
 // import Sidebar from './components/Sidebar';
@@ -16,6 +16,7 @@ import { LedgerHub } from './components/ledger';
 import NotesHub from './components/notes/NotesHub';
 import GSTHub from './components/gst/GSTHub';
 import MasterHub from './components/master/MasterHub';
+import testBackendConnection from './utils/testBackendConnection';
 // import ReceivablesCollectionCenter from './components/receivables/ReceivablesCollectionCenter';
 
 // Lazy load components for better performance and code splitting
@@ -124,6 +125,11 @@ const CompliancePlaceholder = React.memo(() => (
 function App(): JSX.Element {
   const [activeTab, setActiveTab] = useState<TabName>('home');
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(true); // Bypass login for development
+
+  // Test backend connection on app load
+  useEffect(() => {
+    testBackendConnection();
+  }, []);
 
   // Component renderer - removed useCallback to reduce input lag
   const renderActiveComponent = (): JSX.Element => {

@@ -357,11 +357,13 @@ const InvoiceListV2: React.FC<InvoiceListProps> = ({ onClose }) => {
         {/* Header - Using Global ModuleHeader */}
         <ModuleHeader
           title="Invoice History"
-          subtitle="Manage and track all your sales invoices"
+          documentNumber=""
+          status=""
           icon={FileText}
           iconColor="text-blue-600"
           onClose={onClose}
           historyType="invoice"
+          onSaveDraft={() => {}}
           additionalActions={[
             {
               label: "Export All",
@@ -373,7 +375,7 @@ const InvoiceListV2: React.FC<InvoiceListProps> = ({ onClose }) => {
               onClick: () => console.log('New invoice'),
               variant: "primary"
             }
-          ]}
+          ] as any}
         />
 
         {/* Keyboard Shortcuts Help */}

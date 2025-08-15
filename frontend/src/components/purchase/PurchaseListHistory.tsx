@@ -217,6 +217,7 @@ const PurchaseListHistory: React.FC<PurchaseListHistoryProps> = ({ onClose }) =>
           iconColor="text-green-600"
           onClose={onClose}
           historyType="purchase"
+          onSaveDraft={() => {}}
         />
 
         {/* Keyboard Shortcuts Help */}

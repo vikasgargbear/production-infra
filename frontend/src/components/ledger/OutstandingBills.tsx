@@ -337,6 +337,7 @@ const OutstandingBills: React.FC<OutstandingBillsProps> = ({
             iconColor="text-red-600"
             onClose={onClose}
             historyType="ledger"
+            onSaveDraft={() => {}}
             additionalActions={[
               {
                 label: "Export",
@@ -344,7 +345,7 @@ const OutstandingBills: React.FC<OutstandingBillsProps> = ({
                 onClick: () => console.log('Export outstanding'),
                 variant: "default"
               }
-            ]}
+            ] as any}
           />
           <div className="bg-blue-50 px-4 py-2 text-xs text-blue-700 border-b border-blue-200">
             Keyboard shortcuts: <strong>Ctrl+F</strong> - Search | <strong>Ctrl+E</strong> - Export | <strong>Esc</strong> - Close

@@ -207,11 +207,13 @@ const ReturnsListHistory: React.FC<ReturnsListHistoryProps> = ({ onClose }) => {
         {/* Header - Using Global ModuleHeader */}
         <ModuleHeader
           title="Returns History"
-          subtitle="View all sales and purchase returns"
+          documentNumber=""
+          status=""
           icon={RotateCcw}
           iconColor="text-red-600"
           onClose={onClose}
           historyType="return"
+          onSaveDraft={() => {}}
         />
 
         {/* Keyboard Shortcuts Help */}

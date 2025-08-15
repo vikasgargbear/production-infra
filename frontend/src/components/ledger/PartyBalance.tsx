@@ -322,6 +322,7 @@ const PartyBalance: React.FC<PartyBalanceProps> = ({
             iconColor="text-green-600"
             onClose={onClose}
             historyType="ledger"
+            onSaveDraft={() => {}}
             additionalActions={[
               {
                 label: "Export",
@@ -329,7 +330,7 @@ const PartyBalance: React.FC<PartyBalanceProps> = ({
                 onClick: () => console.log('Export balances'),
                 variant: "default"
               }
-            ]}
+            ] as any}
           />
           <div className="bg-blue-50 px-4 py-2 text-xs text-blue-700 border-b border-blue-200">
             Keyboard shortcuts: <strong>Ctrl+F</strong> - Search | <strong>Ctrl+E</strong> - Export | <strong>Esc</strong> - Close

@@ -18,6 +18,7 @@ import Toast from '../common/Toast';
 // import BillSummary from './components/BillSummary';
 import InvoicePreview from '../invoice/components/InvoicePreview';
 import ImportDocumentModal from './components/ImportDocumentModal';
+import testBackendConnection from '../../utils/testBackendConnection';
 
 // Default org ID for development
 const DEFAULT_ORG_ID = 'ad808530-1ddb-4377-ab20-67bef145d80d';
@@ -37,6 +38,11 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
   // Refs for keyboard navigation
   const customerSearchRef = useRef(null);
   const productSearchRef = useRef(null);
+  
+  // Test backend connection on mount
+  useEffect(() => {
+    testBackendConnection();
+  }, []);
   
   const firstInputRef = useRef(null);
 

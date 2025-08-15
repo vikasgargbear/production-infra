@@ -248,6 +248,7 @@ const StockListHistory: React.FC<StockListHistoryProps> = ({ onClose }) => {
           iconColor="text-blue-600"
           onClose={onClose}
           historyType="stock"
+          onSaveDraft={() => {}}
         />
 
         {/* Keyboard Shortcuts Help */}

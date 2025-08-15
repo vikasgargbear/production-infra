@@ -358,6 +358,7 @@ const AgingAnalysis: React.FC<AgingAnalysisProps> = ({ open = true, onClose, emb
             iconColor="text-orange-600"
             onClose={onClose}
             historyType="ledger"
+            onSaveDraft={() => {}}
             additionalActions={[
               {
                 label: "Export",
@@ -371,7 +372,7 @@ const AgingAnalysis: React.FC<AgingAnalysisProps> = ({ open = true, onClose, emb
                 onClick: loadAgingAnalysis,
                 variant: "secondary"
               }
-            ]}
+            ] as any}
           />
           <div className="bg-blue-50 px-4 py-2 text-xs text-blue-700 border-b border-blue-200">
             Keyboard shortcuts: <strong>Ctrl+F</strong> - Search | <strong>Ctrl+E</strong> - Export | <strong>Esc</strong> - Close

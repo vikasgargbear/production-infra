@@ -253,6 +253,7 @@ const PartyStatement: React.FC<PartyStatementProps> = ({
               iconColor="text-blue-600"
               onClose={onClose}
               historyType="ledger"
+              onSaveDraft={() => {}}
             />
             <div className="flex-1 overflow-y-auto">
               <div className="max-w-6xl mx-auto px-6 py-6">
@@ -294,6 +295,7 @@ const PartyStatement: React.FC<PartyStatementProps> = ({
             iconColor="text-blue-600"
             onClose={onClose}
             historyType="ledger"
+            onSaveDraft={() => {}}
             additionalActions={[
               {
                 label: "Print",
@@ -325,7 +327,7 @@ const PartyStatement: React.FC<PartyStatementProps> = ({
                 onClick: handleShare,
                 variant: "secondary"
               }
-            ]}
+            ] as any}
           />
           <div className="bg-blue-50 px-4 py-2 text-xs text-blue-700 border-b border-blue-200">
             Keyboard shortcuts: <strong>Ctrl+P</strong> - Print | <strong>Ctrl+E</strong> - Export | <strong>Esc</strong> - Close

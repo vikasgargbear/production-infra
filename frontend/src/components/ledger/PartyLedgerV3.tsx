@@ -381,11 +381,13 @@ const PartyLedgerV3: React.FC<PartyLedgerV3Props> = ({
         <div className="h-full flex flex-col">
           <ModuleHeader
             title="Party Ledger"
-            subtitle="Complete transaction history with analytics and reconciliation"
+            documentNumber=""
+            status=""
             icon={FileText}
             iconColor="text-blue-600"
             onClose={onClose}
             historyType="ledger"
+            onSaveDraft={() => {}}
             additionalActions={[
               {
                 label: 'Table',
@@ -402,7 +404,7 @@ const PartyLedgerV3: React.FC<PartyLedgerV3Props> = ({
                 onClick: () => setViewMode('analytics'),
                 variant: viewMode === 'analytics' ? 'primary' : 'default'
               }
-            ]}
+            ] as any}
           />
           <div className="bg-blue-50 px-4 py-2 text-xs text-blue-700 border-b border-blue-200">
             Keyboard shortcuts: <strong>Ctrl+F</strong> - Search | <strong>Ctrl+E</strong> - Export | <strong>Esc</strong> - Close
