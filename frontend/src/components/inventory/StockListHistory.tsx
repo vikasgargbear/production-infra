@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Search, Filter, ChevronRight, Package, ArrowUpFromLine, ArrowDownToLine, ArrowRightLeft } from 'lucide-react';
 import { stockApi } from '../../services/api';
-import { DataTable, Column } from '../global/ui/display/DataTable';
+import { DataTable, Column, ModuleHeader } from '../global';
 
 interface StockListHistoryProps {
   open?: boolean;
@@ -24,7 +24,7 @@ interface StockMovement {
   status: 'pending' | 'completed' | 'cancelled';
 }
 
-const StockListHistory: React.FC<StockListHistoryProps> = () => {
+const StockListHistory: React.FC<StockListHistoryProps> = ({ onClose }) => {
   const [movements, setMovements] = useState<StockMovement[]>([]);
   const [filteredMovements, setFilteredMovements] = useState<StockMovement[]>([]);
   const [searchQuery, setSearchQuery] = useState('');

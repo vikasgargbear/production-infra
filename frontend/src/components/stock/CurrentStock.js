@@ -84,18 +84,21 @@ const CurrentStock = ({ open = true, onClose }) => {
       console.log('Raw products data:', products.length, 'items');
       if (products.length > 0) {
         console.log('Sample product:', products[0]);
+        console.log('Products array:', products.slice(0, 3)); // Show first 3 products
       }
       
       // Transform product data to stock format using correct schema field names
-      const transformedData = products.map(product => {
-        // Use actual schema field names from inventory.products table
-        const currentStock = Number(product.current_stock || 0);
-        const reorderLevel = Number(product.reorder_level || product.min_stock_quantity || 0);
-        
-        return {
+      const transformedData = products
+        .filter(product => product && product.product_id) // Filter out null/undefined products
+        .map(product => {
+          // Use actual schema field names from inventory.products table
+          const currentStock = Number(product.current_stock || 0);
+          const reorderLevel = Number(product.reorder_level || product.min_stock_quantity || 0);
+          
+          return {
           product_id: product.product_id,
-          product_name: product.product_name,
-          product_code: product.product_code,
+          product_name: product.product_name || 'Unknown Product',
+          product_code: product.product_code || `PROD-${product.product_id}`,
           category: product.category_id || 'Uncategorized',
           manufacturer: product.manufacturer,
           brand: product.brand,
