@@ -316,16 +316,17 @@ class DataTransformer {
    * Prepare supplier data for API submission
    */
   static prepareSupplierForAPI(supplierData) {
-    return {
+    const result = {
       name: supplierData.supplier_name || supplierData.name,
       code: supplierData.supplier_code || null,
       supplier_type: supplierData.supplier_type || 'distributor',
       contact_person: supplierData.contact_person || null,
       phone: supplierData.phone || supplierData.primary_phone || null,
-      secondary_phone: supplierData.alternate_phone || null,
+      secondary_phone: supplierData.alternate_phone || supplierData.secondary_phone || null,
       email: supplierData.email || supplierData.primary_email || null,
       website: supplierData.website || null,
       address: supplierData.address_line1 || supplierData.address || null,
+      address_line2: supplierData.address_line2 || null,
       city: supplierData.city || null,
       state: supplierData.state || null,
       pincode: supplierData.pincode || null,
@@ -344,6 +345,17 @@ class DataTransformer {
       credit_days: parseInt(supplierData.credit_days || 0),
       org_id: supplierData.org_id
     };
+    
+    // Debug logging to see what fields are being sent
+    console.log('DataTransformer.prepareSupplierForAPI - Input:', supplierData);
+    console.log('DataTransformer.prepareSupplierForAPI - Output:', result);
+    console.log('Secondary phone field check:', {
+      alternate_phone: supplierData.alternate_phone,
+      secondary_phone: supplierData.secondary_phone,
+      result_secondary_phone: result.secondary_phone
+    });
+    
+    return result;
   }
 }
 
