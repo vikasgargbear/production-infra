@@ -16,6 +16,7 @@ class SupplierBase(BaseModel):
     drug_license_number: Optional[str] = None
     drug_license_validity: Optional[str] = None
     address: Optional[str] = None
+    address_line2: Optional[str] = None
     city: Optional[str] = None
     state: Optional[str] = None
     pincode: Optional[str] = None
