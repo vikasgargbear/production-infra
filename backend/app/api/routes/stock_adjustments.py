@@ -38,54 +38,51 @@ def get_stock_adjustments(
             "other": "stock_adjustment"
         }
         
+        # Simplified query using actual database schema
         query = """
             SELECT 
-                im.movement_id as adjustment_id,
-                im.movement_date as adjustment_date,
-                im.movement_type as adjustment_type,
-                im.product_id,
-                p.product_name,
-                p.brand_name,
-                im.batch_id,
-                b.batch_number,
-                b.expiry_date,
+                movement_id as adjustment_id,
+                movement_date as adjustment_date,
+                movement_type as adjustment_type,
+                product_id,
+                batch_id,
                 CASE 
-                    WHEN im.quantity_in > 0 THEN im.quantity_in
-                    ELSE -im.quantity_out
+                    WHEN quantity_in > 0 THEN quantity_in
+                    ELSE -quantity_out
                 END as quantity_adjusted,
-                im.notes as reason,
-                im.reference_number,
-                u.full_name as adjusted_by_name
-            FROM inventory.inventory_movements im
-            JOIN inventory.products p ON im.product_id = p.product_id
-            LEFT JOIN inventory.batches b ON im.batch_id = b.batch_id
-            LEFT JOIN org_users u ON im.performed_by = u.user_id
-            WHERE im.movement_type IN ('stock_damage', 'stock_expiry', 'stock_count', 'stock_adjustment')
+                notes as reason,
+                reference_number,
+                performed_by as adjusted_by,
+                created_at,
+                org_id
+            FROM inventory.inventory_movements
+            WHERE movement_type IN ('stock_damage', 'stock_expiry', 'stock_count', 'stock_adjustment')
+              AND org_id = :org_id
         """
-        params = {}
+        params = {"org_id": DEFAULT_ORG_ID}
         
         if product_id:
-            query += " AND im.product_id = :product_id"
+            query += " AND product_id = :product_id"
             params["product_id"] = product_id
             
         if batch_id:
-            query += " AND im.batch_id = :batch_id"
+            query += " AND batch_id = :batch_id"
             params["batch_id"] = batch_id
             
         if adjustment_type:
             movement_type = type_mapping.get(adjustment_type, 'stock_adjustment')
-            query += " AND im.movement_type = :movement_type"
+            query += " AND movement_type = :movement_type"
             params["movement_type"] = movement_type
             
         if start_date:
-            query += " AND im.movement_date >= :start_date"
+            query += " AND movement_date >= :start_date"
             params["start_date"] = start_date
             
         if end_date:
-            query += " AND im.movement_date <= :end_date"
+            query += " AND movement_date <= :end_date"
             params["end_date"] = end_date
             
-        query += " ORDER BY im.movement_date DESC LIMIT :limit OFFSET :skip"
+        query += " ORDER BY movement_date DESC LIMIT :limit OFFSET :skip"
         params.update({"limit": limit, "skip": skip})
         
         result = db.execute(text(query), params)

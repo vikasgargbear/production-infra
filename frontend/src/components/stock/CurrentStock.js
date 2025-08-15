@@ -54,93 +54,57 @@ const CurrentStock = ({ open = true, onClose }) => {
     try {
       console.log('Fetching current stock data...');
       
-      // Try multiple endpoints to get stock data
-      let response;
-      let data = [];
+      // Use products API which we know works and includes stock data
+      const response = await productsApi.getAll({
+        include_stock: true,
+        limit: 500 // Get more products for stock management
+      });
+      console.log('Products API response:', response);
       
-      // Try getCurrentStock endpoint which should now work without auth
-      try {
-        response = await stockApi.getCurrentStock({
-          include_batches: true,
-          include_valuation: true
-        });
-        console.log('getCurrentStock response:', response);
-        data = response?.data || [];
-      } catch (error) {
-        console.log('getCurrentStock failed:', error.message);
-        
-        // Fallback to products API if stock endpoint fails
-        try {
-          const productsResponse = await productsApi.getAll({
-            include_stock: true,
-            limit: 100
-          });
-          console.log('Products API response:', productsResponse);
-          
-          const products = productsResponse?.data || [];
-          console.log('Raw products data:', products[0]); // Debug first product
-          
-          if (Array.isArray(products) && products.length > 0) {
-            // Transform product data to stock format
-            data = products.map(product => ({
-              product_id: product.product_id,
-              product_name: product.product_name,
-              product_code: product.product_code || product.sku,
-              category: product.category,
-              current_stock: product.current_stock || product.stock_quantity || 0,
-              available_stock: product.available_stock || product.current_stock || 0,
-              reserved_stock: product.reserved_stock || 0,
-              reorder_level: product.reorder_level || product.minimum_stock_level || 0,
-              unit: product.unit || product.uom || 'Units',
-              mrp: product.mrp || product.price || 0,
-              stock_value: product.stock_value || ((product.current_stock || 0) * (product.mrp || 0)),
-              expiry_alert: false,
-              low_stock: (product.current_stock || 0) <= (product.reorder_level || 0),
-              batches: product.batches || []
-            }));
-          }
-        } catch (productsError) {
-          console.log('Products API also failed:', productsError.message);
-        }
+      // Handle different response formats
+      let products = [];
+      if (response?.data?.products) {
+        products = response.data.products;
+      } else if (response?.data && Array.isArray(response.data)) {
+        products = response.data;
+      } else if (Array.isArray(response)) {
+        products = response;
       }
       
-      if (Array.isArray(data) && data.length > 0) {
-        console.log('Received stock data:', data.length, 'items');
-        console.log('Sample data item:', data[0]);
-        
-        // Transform data if needed to match our component structure
-        const transformedData = data.map(item => ({
-          product_id: item.product_id || item.id,
-          product_name: item.product_name || item.name,
-          product_code: item.product_code || item.code || item.sku,
-          category: item.category || item.product_category || 'Uncategorized',
-          current_stock: item.current_stock || item.quantity || 0,
-          available_stock: item.available_stock || item.available_quantity || item.current_stock || 0,
-          reserved_stock: item.reserved_stock || item.reserved_quantity || 0,
-          reorder_level: item.reorder_level || item.min_stock || 0,
-          unit: item.unit || item.uom || 'Units',
-          mrp: item.mrp || item.price || 0,
-          stock_value: item.stock_value || (item.current_stock * (item.mrp || 0)),
-          expiry_alert: item.expiry_alert || false,
-          low_stock: item.low_stock || (item.current_stock <= item.reorder_level),
-          batches: item.batches || []
-        }));
-        
-        console.log('Transformed data sample:', transformedData[0]);
-        setStockData(transformedData);
-      } else {
-        console.log('No stock data received from any API');
-        setStockData([]);
+      console.log('Raw products data:', products.length, 'items');
+      if (products.length > 0) {
+        console.log('Sample product:', products[0]);
       }
+      
+      // Transform product data to stock format
+      const transformedData = products.map(product => ({
+        product_id: product.product_id || product.id,
+        product_name: product.product_name || product.name,
+        product_code: product.product_code || product.sku || product.code,
+        category: product.category || product.product_category || 'Uncategorized',
+        current_stock: Number(product.current_stock || product.stock_quantity || 0),
+        available_stock: Number(product.available_stock || product.current_stock || 0),
+        reserved_stock: Number(product.reserved_stock || 0),
+        minimum_stock_level: Number(product.minimum_stock_level || product.reorder_level || 0),
+        unit: product.unit || product.uom || product.base_unit || 'Units',
+        mrp: Number(product.mrp || product.price || 0),
+        purchase_rate: Number(product.purchase_rate || 0),
+        selling_rate: Number(product.selling_rate || product.mrp || 0),
+        stock_value: Number(product.stock_value || ((product.current_stock || 0) * (product.purchase_rate || product.mrp || 0))),
+        expiry_alert: product.expiry_alert || false,
+        low_stock: (Number(product.current_stock || 0) <= Number(product.minimum_stock_level || 0)) && Number(product.minimum_stock_level || 0) > 0,
+        out_of_stock: Number(product.current_stock || 0) === 0,
+        stock_status: Number(product.current_stock || 0) === 0 ? 'out_of_stock' : 
+                     (Number(product.current_stock || 0) <= Number(product.minimum_stock_level || 0) && Number(product.minimum_stock_level || 0) > 0) ? 'low_stock' : 'normal',
+        batches: product.batches || [],
+        last_updated: product.last_updated || product.updated_at
+      }));
+      
+      console.log('Transformed data sample:', transformedData[0]);
+      setStockData(transformedData);
+      
     } catch (error) {
       console.error('Error loading stock data:', error);
-      console.error('Error details:', error.response);
-      
-      // Show error message to user
-      if (error.response?.status !== 404) {
-        console.log(`Failed to load stock data: ${error.message || 'Unknown error'}`);
-      }
-      
       setStockData([]);
     } finally {
       setLoading(false);
