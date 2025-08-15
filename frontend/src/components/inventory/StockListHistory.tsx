@@ -242,7 +242,8 @@ const StockListHistory: React.FC<StockListHistoryProps> = ({ onClose }) => {
         {/* Header - Using Global ModuleHeader */}
         <ModuleHeader
           title="Stock Movement History"
-          subtitle="View all stock movements, transfers, and adjustments"
+          documentNumber=""
+          status=""
           icon={Package}
           iconColor="text-blue-600"
           onClose={onClose}

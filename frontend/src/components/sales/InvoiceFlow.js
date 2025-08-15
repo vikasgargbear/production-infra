@@ -14,8 +14,6 @@ import InvoiceApiService from '../../services/invoiceApiService';
 import { ProductSearchSimple, ItemsTable, ModuleHeader, CustomerSearch, ProductCreationModal, CustomerCreationModal, ViewHistoryButton, GSTCalculator } from '../global';
 import InvoiceSuccessModal from './InvoiceSuccessModal';
 import InvoiceSummaryTop from './components/InvoiceSummaryTop';
-import testBackendConnection from '../../utils/testBackendConnection';
-import debugInvoice from '../../utils/debugInvoice';
 import Toast from '../common/Toast';
 // import BillSummary from './components/BillSummary';
 import InvoicePreview from '../invoice/components/InvoicePreview';
@@ -40,10 +38,6 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
   const customerSearchRef = useRef(null);
   const productSearchRef = useRef(null);
   
-  // Test backend connection on mount
-  useEffect(() => {
-    testBackendConnection();
-  }, []);
   const firstInputRef = useRef(null);
 
   // Generate sequential invoice number

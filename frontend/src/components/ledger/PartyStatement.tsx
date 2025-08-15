@@ -26,7 +26,7 @@ import {
 } from 'lucide-react';
 import { format, parseISO, startOfMonth, endOfMonth, subMonths } from 'date-fns';
 import { ledgerApi } from '../../services/api/modules/ledger.api';
-import { CustomerSearch, SupplierSearch, DatePicker, Select } from '../global';
+import { CustomerSearch, SupplierSearch, DatePicker, Select, ModuleHeader } from '../global';
 import { formatCurrency } from '../../utils/formatters';
 import { useReactToPrint } from 'react-to-print';
 
@@ -35,6 +35,7 @@ interface PartyStatementProps {
   partyId?: string;
   embedded?: boolean;
   dateRange?: { from: Date; to: Date };
+  onClose?: () => void;
 }
 
 interface StatementData {
@@ -106,7 +107,8 @@ const PartyStatement: React.FC<PartyStatementProps> = ({
   partyType = 'customer',
   partyId: initialPartyId,
   embedded = false,
-  dateRange: initialDateRange
+  dateRange: initialDateRange,
+  onClose
 }) => {
   const printRef = useRef<HTMLDivElement>(null);
   const [selectedParty, setSelectedParty] = useState<any>(null);
@@ -240,77 +242,96 @@ const PartyStatement: React.FC<PartyStatementProps> = ({
 
   if (!statementData && !isLoading) {
     return (
-      <div className={embedded ? '' : 'p-6'}>
-        {/* Party Selection */}
-        <div className="mb-6 bg-white p-4 rounded-lg shadow">
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            Select {partyType === 'customer' ? 'Customer' : 'Supplier'}
-          </label>
-          {partyType === 'customer' ? (
-            <CustomerSearch
-              value={selectedParty}
-              onChange={setSelectedParty}
-              placeholder="Search customer by name, phone or ID"
+      <div className={embedded ? 'p-6' : 'h-full bg-blue-50'}>
+        {!embedded && (
+          <div className="h-full flex flex-col">
+            <ModuleHeader
+              title="Party Statement"
+              documentNumber=""
+              status=""
+              icon={FileText}
+              iconColor="text-blue-600"
+              onClose={onClose}
+              historyType="ledger"
             />
-          ) : (
-            <SupplierSearch
-              onSupplierSelect={setSelectedParty}
-              placeholder="Search supplier by name or ID"
-            />
-          )}
-        </div>
+            <div className="flex-1 overflow-y-auto">
+              <div className="max-w-6xl mx-auto px-6 py-6">
+                {/* Party Selection */}
+                <div className="mb-6 bg-white p-4 rounded-lg shadow">
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Select {partyType === 'customer' ? 'Customer' : 'Supplier'}
+                  </label>
+                  {partyType === 'customer' ? (
+                    <CustomerSearch
+                      value={selectedParty}
+                      onChange={setSelectedParty}
+                      placeholder="Search customer by name, phone or ID"
+                    />
+                  ) : (
+                    <SupplierSearch
+                      onSupplierSelect={setSelectedParty}
+                      placeholder="Search supplier by name or ID"
+                    />
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     );
   }
 
   return (
-    <div className={embedded ? '' : 'p-6'}>
-      {/* Header */}
+    <div className={embedded ? 'p-6' : 'h-full bg-blue-50'}>
       {!embedded && (
-        <div className="mb-6 flex justify-between items-center">
-          <div>
-            <h1 className="text-2xl font-bold text-gray-800">Party Statement</h1>
-            <p className="text-gray-600">Generate detailed account statements</p>
+        <div className="h-full flex flex-col">
+          <ModuleHeader
+            title="Party Statement"
+            documentNumber=""
+            status=""
+            icon={FileText}
+            iconColor="text-blue-600"
+            onClose={onClose}
+            historyType="ledger"
+            additionalActions={[
+              {
+                label: "Print",
+                icon: Printer,
+                onClick: handlePrint,
+                variant: "secondary"
+              },
+              {
+                label: "PDF",
+                icon: Download,
+                onClick: () => handleExport('pdf'),
+                variant: "default"
+              },
+              {
+                label: "Excel",
+                icon: Download,
+                onClick: () => handleExport('excel'),
+                variant: "secondary"
+              },
+              {
+                label: "Email",
+                icon: Mail,
+                onClick: handleEmail,
+                variant: "secondary"
+              },
+              {
+                label: "Share",
+                icon: Share2,
+                onClick: handleShare,
+                variant: "secondary"
+              }
+            ]}
+          />
+          <div className="bg-blue-50 px-4 py-2 text-xs text-blue-700 border-b border-blue-200">
+            Keyboard shortcuts: <strong>Ctrl+P</strong> - Print | <strong>Ctrl+E</strong> - Export | <strong>Esc</strong> - Close
           </div>
-          <div className="flex gap-2">
-            <button
-              onClick={handlePrint}
-              className="px-4 py-2 bg-gray-100 text-gray-700 rounded-md hover:bg-gray-200 flex items-center gap-2"
-            >
-              <Printer className="h-4 w-4" />
-              Print
-            </button>
-            <button
-              onClick={() => handleExport('pdf')}
-              className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 flex items-center gap-2"
-            >
-              <Download className="h-4 w-4" />
-              PDF
-            </button>
-            <button
-              onClick={() => handleExport('excel')}
-              className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 flex items-center gap-2"
-            >
-              <Download className="h-4 w-4" />
-              Excel
-            </button>
-            <button
-              onClick={handleEmail}
-              className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 flex items-center gap-2"
-            >
-              <Mail className="h-4 w-4" />
-              Email
-            </button>
-            <button
-              onClick={handleShare}
-              className="px-4 py-2 bg-purple-600 text-white rounded-md hover:bg-purple-700 flex items-center gap-2"
-            >
-              <Share2 className="h-4 w-4" />
-              Share
-            </button>
-          </div>
-        </div>
-      )}
+          <div className="flex-1 overflow-y-auto">
+            <div className="max-w-6xl mx-auto px-6 py-6">
 
       {/* Filters */}
       <div className="mb-6 bg-white p-4 rounded-lg shadow">
@@ -543,6 +564,10 @@ const PartyStatement: React.FC<PartyStatementProps> = ({
           <div className="p-8 text-center text-sm text-gray-500">
             <p>This is a computer generated statement and does not require signature.</p>
             <p>For any queries, please contact: {statementData.company_info.email}</p>
+          </div>
+        </div>
+      )}
+            </div>
           </div>
         </div>
       )}

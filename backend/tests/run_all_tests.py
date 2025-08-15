@@ -135,14 +135,24 @@ def main():
         {"file": "test_42_suppliers_api.py", "name": "Suppliers API Tests"},
         {"file": "test_43_organization_settings_api.py", "name": "Organization Settings API Tests"},
         
-        # Original Module Tests (Keep for regression)
-        {"file": "tests/modules/test_products.py", "name": "Product Module Tests"},
-        {"file": "tests/modules/test_batches.py", "name": "Batch Module Tests"},
-        {"file": "tests/modules/test_customers.py", "name": "Customer Module Tests"},
-        {"file": "tests/modules/test_suppliers.py", "name": "Supplier Module Tests"},
-        {"file": "tests/modules/test_invoices.py", "name": "Invoice Module Tests"},
-        {"file": "tests/api/test_search_functionality.py", "name": "Search Functionality Tests"},
-        {"file": "tests/workflows/test_product_to_invoice_workflow.py", "name": "Product to Invoice Workflow Test"}
+        # Schema and Validation Tests
+        {"file": "test_23_schema_validation.py", "name": "Schema Validation Tests"},
+        
+        # Integration Tests
+        {"file": "integration/test_complete_invoice_flow.py", "name": "Complete Invoice Flow Integration Test"},
+        {"file": "integration/test_invoice_workflow.py", "name": "Invoice Workflow Integration Test"},
+        
+        # Validation Tests  
+        {"file": "validation/test_invoice_calculations.py", "name": "Invoice Calculation Validation Tests"},
+        
+        # Module Tests (Regression)
+        {"file": "modules/test_products.py", "name": "Product Module Tests"},
+        {"file": "modules/test_batches.py", "name": "Batch Module Tests"},
+        {"file": "modules/test_customers.py", "name": "Customer Module Tests"},
+        {"file": "modules/test_suppliers.py", "name": "Supplier Module Tests"},
+        {"file": "modules/test_invoices.py", "name": "Invoice Module Tests"},
+        {"file": "api/test_search_functionality.py", "name": "Search Functionality Tests"},
+        {"file": "workflows/test_product_to_invoice_workflow.py", "name": "Product to Invoice Workflow Test"}
     ]
     
     # Run all tests

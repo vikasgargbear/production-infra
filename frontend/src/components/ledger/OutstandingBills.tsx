@@ -72,6 +72,7 @@ const OutstandingBills: React.FC<OutstandingBillsProps> = ({
   partyType = 'customer',
   partyId,
   embedded = false,
+  onClose,
   onBillClick,
   onPaymentClick
 }) => {
@@ -330,7 +331,8 @@ const OutstandingBills: React.FC<OutstandingBillsProps> = ({
         <div className="h-full flex flex-col">
           <ModuleHeader
             title="Outstanding Bills"
-            subtitle="Track and manage pending payments"
+            documentNumber=""
+            status=""
             icon={AlertCircle}
             iconColor="text-red-600"
             onClose={onClose}
@@ -349,7 +351,6 @@ const OutstandingBills: React.FC<OutstandingBillsProps> = ({
           </div>
           <div className="flex-1 overflow-y-auto">
             <div className="max-w-6xl mx-auto px-6 py-6">
-      )}
 
       {/* Summary Cards */}
       <div className="grid grid-cols-4 gap-4 mb-6">
@@ -526,8 +527,6 @@ const OutstandingBills: React.FC<OutstandingBillsProps> = ({
           emptyMessage="No outstanding bills found"
         />
       </div>
-      
-      {!embedded && (
             </div>
           </div>
         </div>

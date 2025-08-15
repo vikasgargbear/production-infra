@@ -605,7 +605,8 @@ const LedgerReports: React.FC<LedgerReportsProps> = ({ embedded = false, onClose
         <div className="h-full flex flex-col">
           <ModuleHeader
             title="Ledger Reports"
-            subtitle="Analytics and insights for your accounting data"
+            documentNumber=""
+            status=""
             icon={BarChart3}
             iconColor="text-purple-600"
             onClose={onClose}
@@ -630,7 +631,6 @@ const LedgerReports: React.FC<LedgerReportsProps> = ({ embedded = false, onClose
           </div>
           <div className="flex-1 overflow-y-auto">
             <div className="max-w-6xl mx-auto px-6 py-6">
-      )}
 
       {/* Quick Stats */}
       <div className="grid grid-cols-4 gap-4 mb-6">
@@ -810,8 +810,6 @@ const LedgerReports: React.FC<LedgerReportsProps> = ({ embedded = false, onClose
           renderReport()
         )}
       </div>
-      
-      {!embedded && (
             </div>
           </div>
         </div>

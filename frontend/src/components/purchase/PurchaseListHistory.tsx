@@ -211,7 +211,8 @@ const PurchaseListHistory: React.FC<PurchaseListHistoryProps> = ({ onClose }) =>
         {/* Header - Using Global ModuleHeader */}
         <ModuleHeader
           title="Purchase History"
-          subtitle="View all purchase orders, invoices, and GRNs"
+          documentNumber=""
+          status=""
           icon={ShoppingBag}
           iconColor="text-green-600"
           onClose={onClose}

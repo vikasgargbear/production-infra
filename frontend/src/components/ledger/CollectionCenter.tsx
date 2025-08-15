@@ -433,7 +433,8 @@ const CollectionCenter: React.FC<CollectionCenterProps> = ({
         <div className="h-full flex flex-col">
           <ModuleHeader
             title="Collection Center"
-            subtitle="Manage payment collections and follow-ups"
+            documentNumber=""
+            status=""
             icon={DollarSign}
             iconColor="text-orange-600"
             onClose={onClose}
@@ -452,7 +453,6 @@ const CollectionCenter: React.FC<CollectionCenterProps> = ({
           </div>
           <div className="flex-1 overflow-y-auto">
             <div className="max-w-6xl mx-auto px-6 py-6">
-      )}
 
       {/* Stats Overview */}
       <div className="grid grid-cols-4 gap-4 mb-6">
@@ -654,8 +654,6 @@ const CollectionCenter: React.FC<CollectionCenterProps> = ({
           emptyMessage="No collection items found"
         />
       </div>
-      
-      {!embedded && (
             </div>
           </div>
         </div>

@@ -316,7 +316,8 @@ const PartyBalance: React.FC<PartyBalanceProps> = ({
         <div className="h-full flex flex-col">
           <ModuleHeader
             title="Party Balances"
-            subtitle="Overview of all party account balances"
+            documentNumber=""
+            status=""
             icon={Users}
             iconColor="text-green-600"
             onClose={onClose}
@@ -335,7 +336,6 @@ const PartyBalance: React.FC<PartyBalanceProps> = ({
           </div>
           <div className="flex-1 overflow-y-auto">
             <div className="max-w-6xl mx-auto px-6 py-6">
-      )}
 
       {/* Summary Cards */}
       <div className="grid grid-cols-4 gap-4 mb-6">
@@ -499,8 +499,6 @@ const PartyBalance: React.FC<PartyBalanceProps> = ({
           emptyMessage="No parties found"
         />
       </div>
-      
-      {!embedded && (
             </div>
           </div>
         </div>

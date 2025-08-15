@@ -8,14 +8,20 @@ This document provides a comprehensive guide to the folder structure of the AASO
 ```
 production-infra/
 ├── backend/                 # FastAPI backend application
-├── frontend/               # React frontend application
+├── frontend/               # React TypeScript frontend application  
 ├── database/               # PostgreSQL database schema and migrations
 ├── infrastructure/         # DevOps and deployment configurations
 ├── config/                 # Environment-specific configurations
 ├── docs/                   # Project documentation
 ├── scripts/                # Utility and deployment scripts
 ├── tests/                  # End-to-end and integration tests
-└── docker-compose.yml      # Local development environment
+├── archive/                # Archived components and documentation
+├── Validations/            # Data validation scripts and tests
+├── CLAUDE.md              # Project-specific Claude instructions
+├── README.md              # Main project documentation
+├── CHANGELOG.md           # Project change history
+├── RAILWAY_DEPLOYMENT.md  # Railway deployment guide
+└── docker-compose.yml     # Local development environment
 ```
 
 ## Backend Structure (`/backend`)
@@ -24,12 +30,15 @@ production-infra/
 backend/
 ├── app/
 │   ├── api/
-│   │   ├── routes/         # REST API endpoints
-│   │   │   ├── customers_v2.py     # Customer CRUD operations
-│   │   │   ├── products.py         # Product management
+│   │   ├── routes/         # REST API endpoints (50+ route files)
+│   │   │   ├── customers.py        # Customer CRUD operations
+│   │   │   ├── products_consolidated.py # Product management
 │   │   │   ├── sales.py            # Sales operations
 │   │   │   ├── inventory.py        # Inventory management
-│   │   │   └── ...                 # Other domain routes
+│   │   │   ├── stock_adjustments.py # Stock adjustment APIs
+│   │   │   ├── invoices.py         # Invoice management
+│   │   │   ├── purchase_enhanced.py # Purchase operations
+│   │   │   └── ...                 # 40+ other domain routes
 │   │   ├── schemas/        # Pydantic models for validation
 │   │   │   ├── customer_schema.py  # Customer DTOs
 │   │   │   ├── product_schema.py   # Product DTOs
@@ -73,41 +82,62 @@ backend/
 ```
 frontend/
 ├── src/
-│   ├── modules/           # Feature modules
-│   │   ├── sales/         # Sales module
+│   ├── components/        # Feature components organized by domain
+│   │   ├── sales/         # Sales components
 │   │   │   ├── SalesHub.tsx
-│   │   │   ├── components/
-│   │   │   └── services/
-│   │   ├── purchase/      # Purchase module
-│   │   ├── inventory/     # Inventory module
-│   │   └── ...
-│   ├── shared/            # Shared resources
-│   │   ├── components/    # Reusable UI components
+│   │   │   ├── InvoiceFlow.js
+│   │   │   └── components/
+│   │   ├── purchase/      # Purchase components  
+│   │   │   ├── PurchaseHub.tsx
+│   │   │   ├── ModularPurchaseEntry.js
+│   │   │   └── components/
+│   │   ├── stock/         # Stock management
+│   │   │   ├── CurrentStock.js
+│   │   │   ├── StockAdjustment.js
+│   │   │   └── ...
+│   │   ├── global/        # Global shared components
 │   │   │   ├── ui/        # Basic UI components
-│   │   │   │   ├── Button.tsx
-│   │   │   │   ├── Input.tsx
+│   │   │   │   ├── DataTable.tsx
+│   │   │   │   ├── Select.js
 │   │   │   │   └── ...
-│   │   │   └── business/  # Business components
-│   │   │       ├── CustomerSearch.tsx
-│   │   │       └── ProductSearch.tsx
-│   │   ├── hooks/         # Custom React hooks
-│   │   ├── types/         # TypeScript type definitions
-│   │   └── utils/         # Utility functions
-│   ├── services/          # API and external services
+│   │   │   ├── search/    # Search components
+│   │   │   │   ├── CustomerSearch.tsx
+│   │   │   │   ├── ProductSearch.tsx
+│   │   │   │   └── ProductSearchSimple.js
+│   │   │   └── modals/    # Global modals
+│   │   │       ├── PartyEditModal.js
+│   │   │       └── ProductEditModal.js
+│   │   ├── master/        # Master data management
+│   │   ├── gst/          # GST and compliance
+│   │   ├── ledger/       # Accounting ledgers
+│   │   └── ...           # Other domain components
+│   ├── archive/          # Archived components
+│   │   ├── old-components-2025/
+│   │   └── components-v2/
+│   ├── hooks/            # Custom React hooks
+│   │   ├── customers/
+│   │   ├── products/
+│   │   └── ...
+│   ├── services/         # API and external services
 │   │   └── api/
-│   │       └── apiClient.ts
-│   ├── config/            # Application configuration
-│   └── App.tsx           # Root component
-├── public/               # Static assets
-├── package.json          # Node dependencies
-└── Dockerfile           # Container definition
+│   │       ├── apiClient.ts
+│   │       ├── apiClientExports.js
+│   │       └── modules/
+│   ├── types/            # TypeScript type definitions
+│   ├── utils/            # Utility functions
+│   ├── config/           # Application configuration
+│   └── App.tsx          # Root component
+├── public/              # Static assets
+├── package.json         # Node dependencies
+└── Dockerfile          # Container definition
 ```
 
 ### Key Frontend Concepts:
-- **Modules**: Feature-based organization (sales, purchase, inventory)
-- **Shared Components**: Reusable UI elements
-- **Services**: API communication layer
-- **Type Safety**: TypeScript throughout
+- **Domain Components**: Feature-based organization (sales, purchase, inventory, stock)
+- **Global Components**: Reusable UI elements shared across modules
+- **Archive Structure**: Old components preserved for reference
+- **Services**: API communication layer with centralized exports
+- **Type Safety**: TypeScript throughout with proper type definitions
 
 ## Database Structure (`/database`)
 

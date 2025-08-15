@@ -6,7 +6,7 @@ import {
 } from 'lucide-react';
 import { ledgerApi } from '../../services/api/modules/ledger.api';
 import { formatCurrency, formatDate } from '../../utils/formatters';
-import { DataTable, StatusBadge, Select } from '../global';
+import { DataTable, StatusBadge, Select, ModuleHeader } from '../global';
 
 // Local SummaryCard component for aging analysis
 const SummaryCard: React.FC<{
@@ -45,6 +45,7 @@ const SummaryCard: React.FC<{
 interface AgingAnalysisProps {
   open?: boolean;
   onClose: () => void;
+  embedded?: boolean;
 }
 
 interface AgingParty {
@@ -84,7 +85,7 @@ interface AgingBucket {
   color: string;
 }
 
-const AgingAnalysis: React.FC<AgingAnalysisProps> = ({ open = true, onClose }) => {
+const AgingAnalysis: React.FC<AgingAnalysisProps> = ({ open = true, onClose, embedded = false }) => {
   const [loading, setLoading] = useState<boolean>(true);
   const [agingData, setAgingData] = useState<AgingParty[]>([]);
   const [filteredData, setFilteredData] = useState<AgingParty[]>([]);
@@ -346,47 +347,37 @@ const AgingAnalysis: React.FC<AgingAnalysisProps> = ({ open = true, onClose }) =
   if (!open) return null;
 
   return (
-    <div className="flex flex-col h-full overflow-hidden">
-      {/* Header */}
-      <div className="bg-white shadow-sm border-b border-gray-200 flex-shrink-0">
-        <div className="px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between py-4">
-            <div>
-              <h1 className="text-2xl font-bold text-gray-900">Aging Analysis</h1>
-              <p className="text-sm text-gray-600">Detailed overdue analysis by aging buckets</p>
-            </div>
-            
-            <div className="flex items-center space-x-3">
-              <button
-                onClick={handleExportAnalysis}
-                className="flex items-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-              >
-                <Download className="w-4 h-4" />
-                <span>Export Excel</span>
-              </button>
-              
-              <button
-                onClick={loadAgingAnalysis}
-                className="p-2 text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-lg"
-                title="Refresh"
-              >
-                <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
-              </button>
-              
-              <button
-                onClick={onClose}
-                className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
+    <div className={embedded ? 'p-6' : 'h-full bg-blue-50'}>
+      {!embedded && (
+        <div className="h-full flex flex-col">
+          <ModuleHeader
+            title="Aging Analysis"
+            documentNumber=""
+            status=""
+            icon={Clock}
+            iconColor="text-orange-600"
+            onClose={onClose}
+            historyType="ledger"
+            additionalActions={[
+              {
+                label: "Export",
+                icon: Download,
+                onClick: handleExportAnalysis,
+                variant: "default"
+              },
+              {
+                label: "Refresh",
+                icon: RefreshCw,
+                onClick: loadAgingAnalysis,
+                variant: "secondary"
+              }
+            ]}
+          />
+          <div className="bg-blue-50 px-4 py-2 text-xs text-blue-700 border-b border-blue-200">
+            Keyboard shortcuts: <strong>Ctrl+F</strong> - Search | <strong>Ctrl+E</strong> - Export | <strong>Esc</strong> - Close
           </div>
-        </div>
-      </div>
-
-      {/* Content */}
-      <div className="flex-1 overflow-y-auto bg-gray-50">
-        <div className="px-4 sm:px-6 lg:px-8 py-6">
+          <div className="flex-1 overflow-y-auto">
+            <div className="max-w-6xl mx-auto px-6 py-6">
           
           {/* Summary Cards */}
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
@@ -547,8 +538,10 @@ const AgingAnalysis: React.FC<AgingAnalysisProps> = ({ open = true, onClose }) =
               </div>
             )}
           </div>
+            </div>
+          </div>
         </div>
-      </div>
+      )}
     </div>
   );
 };
