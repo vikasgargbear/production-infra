@@ -5,7 +5,7 @@ import {
 } from 'lucide-react';
 import { stockApi } from '../../services/api';
 import { formatCurrency } from '../../utils/formatters';
-import { DataTable, StatusBadge, Select } from '../global';
+import { DataTable, StatusBadge, Select, ModuleHeader } from '../global';
 
 const LowStockAlert = ({ open = true, onClose }) => {
   const [loading, setLoading] = useState(true);
@@ -359,44 +359,41 @@ const LowStockAlert = ({ open = true, onClose }) => {
   if (!open) return null;
 
   return (
-    <div className="flex flex-col h-full overflow-hidden">
-      {/* Header */}
-      <div className="bg-white shadow-sm border-b border-gray-200 flex-shrink-0">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between py-4">
-            <div>
-              <h1 className="text-2xl font-bold text-gray-900">Stock Alerts</h1>
-              <p className="text-sm text-gray-600">Monitor low stock and reorder management</p>
-            </div>
-            <div className="flex items-center space-x-3">
-              <button
-                onClick={() => setShowSettings(!showSettings)}
-                className="p-2 text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-lg"
-                title="Alert Settings"
-              >
-                <Settings className="w-5 h-5" />
-              </button>
-              <button 
-                onClick={handleCreateBulkPO}
-                className="flex items-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-              >
-                <ShoppingCart className="w-4 h-4" />
-                <span>Create Bulk PO</span>
-              </button>
-              <button
-                onClick={onClose}
-                className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
+    <div className="h-full bg-blue-50">
+      <div className="h-full flex flex-col">
+        
+        {/* Header - Using Global ModuleHeader */}
+        <ModuleHeader
+          title="Stock Alerts"
+          subtitle="Monitor low stock and reorder management"
+          icon={AlertTriangle}
+          iconColor="text-orange-600"
+          onClose={onClose}
+          historyType="stock"
+          additionalActions={[
+            {
+              label: "Settings",
+              icon: Settings,
+              onClick: () => setShowSettings(!showSettings),
+              variant: "ghost"
+            },
+            {
+              label: "Create Bulk PO",
+              icon: ShoppingCart,
+              onClick: handleCreateBulkPO,
+              variant: "primary"
+            }
+          ]}
+        />
 
-      {/* Content */}
-      <div className="flex-1 overflow-y-auto bg-gray-50">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+        {/* Keyboard Shortcuts Help */}
+        <div className="bg-blue-50 px-4 py-2 text-xs text-blue-700 border-b border-blue-200">
+          Keyboard shortcuts: <strong>Ctrl+B</strong> - Bulk PO | <strong>Ctrl+S</strong> - Settings | <strong>Esc</strong> - Close
+        </div>
+
+        {/* Content */}
+        <div className="flex-1 overflow-y-auto">
+          <div className="max-w-6xl mx-auto px-6 py-6">
           {/* Alert Settings */}
           {showSettings && (
             <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-6">
@@ -579,6 +576,7 @@ const LowStockAlert = ({ open = true, onClose }) => {
                 </p>
               </div>
             )}
+          </div>
           </div>
         </div>
       </div>

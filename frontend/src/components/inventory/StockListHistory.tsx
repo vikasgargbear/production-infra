@@ -236,92 +236,102 @@ const StockListHistory: React.FC<StockListHistoryProps> = ({ onClose }) => {
   ];
 
   return (
-    <div className="min-h-screen bg-app-50">
-      {/* Header */}
-      <div className="bg-white shadow-sm border-b border-app-200 px-8 py-6">
-        <div className="flex items-center gap-4">
-          <div className="w-12 h-12 bg-primary-100 rounded-lg flex items-center justify-center">
-            <Package className="w-6 h-6 text-primary-600" />
-          </div>
-          <div>
-            <h1 className="text-3xl font-bold text-app-800">Stock Movement History</h1>
-            <p className="text-app-600 mt-1">View all stock movements, transfers, and adjustments</p>
-          </div>
+    <div className="h-full bg-blue-50">
+      <div className="h-full flex flex-col">
+        
+        {/* Header - Using Global ModuleHeader */}
+        <ModuleHeader
+          title="Stock Movement History"
+          subtitle="View all stock movements, transfers, and adjustments"
+          icon={Package}
+          iconColor="text-blue-600"
+          onClose={onClose}
+          historyType="stock"
+        />
+
+        {/* Keyboard Shortcuts Help */}
+        <div className="bg-blue-50 px-4 py-2 text-xs text-blue-700 border-b border-blue-200">
+          Keyboard shortcuts: <strong>Ctrl+F</strong> - Search | <strong>Esc</strong> - Close
         </div>
-      </div>
 
-      {/* Filters */}
-      <div className="bg-white px-8 py-6 border-b border-app-200 shadow-sm">
-        <div className="flex items-center space-x-6">
-          {/* Search */}
-          <div className="flex-1 relative">
-            <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 text-app-400 w-5 h-5" />
-            <input
-              type="text"
-              placeholder="Search by movement number, product, reference, or batch..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-12 pr-4 py-2 border border-app-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 bg-white"
-            />
-          </div>
+        {/* Content */}
+        <div className="flex-1 overflow-y-auto">
+          <div className="max-w-6xl mx-auto px-6 py-6">
+          {/* Filters */}
+          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 mb-6">
+            <div className="flex items-center space-x-6">
+              {/* Search */}
+              <div className="flex-1 relative">
+                <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
+                <input
+                  type="text"
+                  placeholder="Search by movement number, product, reference, or batch..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="w-full pl-12 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white"
+                />
+              </div>
 
-          {/* Type Filter */}
-          <select
-            value={selectedType}
-            onChange={(e) => setSelectedType(e.target.value as any)}
-            className="px-3 py-2 border border-app-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 bg-white min-w-[130px]"
-          >
-            <option value="all">All Types</option>
-            <option value="receive">Stock In</option>
-            <option value="issue">Stock Out</option>
-            <option value="transfer">Transfer</option>
-            <option value="adjustment">Adjustment</option>
-          </select>
+              {/* Type Filter */}
+              <select
+                value={selectedType}
+                onChange={(e) => setSelectedType(e.target.value as any)}
+                className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white min-w-[130px]"
+              >
+                <option value="all">All Types</option>
+                <option value="receive">Stock In</option>
+                <option value="issue">Stock Out</option>
+                <option value="transfer">Transfer</option>
+                <option value="adjustment">Adjustment</option>
+              </select>
 
-          {/* Status Filter */}
-          <select
-            value={selectedStatus}
-            onChange={(e) => setSelectedStatus(e.target.value as any)}
-            className="px-3 py-2 border border-app-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 bg-white min-w-[120px]"
-          >
-            <option value="all">All Status</option>
-            <option value="pending">Pending</option>
-            <option value="completed">Completed</option>
-            <option value="cancelled">Cancelled</option>
-          </select>
-        </div>
-      </div>
-
-      {/* Content */}
-      <div className="bg-white px-8 py-8 min-h-[calc(100vh-300px)]">
-        {error ? (
-          <div className="text-center py-12">
-            <div className="text-danger-600 mb-4">
-              <Package className="w-12 h-12 mx-auto" />
+              {/* Status Filter */}
+              <select
+                value={selectedStatus}
+                onChange={(e) => setSelectedStatus(e.target.value as any)}
+                className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white min-w-[120px]"
+              >
+                <option value="all">All Status</option>
+                <option value="pending">Pending</option>
+                <option value="completed">Completed</option>
+                <option value="cancelled">Cancelled</option>
+              </select>
             </div>
-            <p className="text-danger-600">{error}</p>
-            <button
-              onClick={loadStockMovements}
-              className="mt-4 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors"
-            >
-              Retry
-            </button>
           </div>
-        ) : (
-          <DataTable
-            data={filteredMovements}
-            columns={columns}
-            keyField="id"
-            loading={loading}
-            emptyMessage="No stock movements found"
-            emptyIcon={<Package className="w-12 h-12 text-app-400" />}
-            hoverable={true}
-            striped={true}
-            paginated={true}
-            pageSize={20}
-            searchable={false}
-          />
-        )}
+
+          {/* Data Table */}
+          <div className="bg-white rounded-lg shadow-sm border border-gray-200">
+            {error ? (
+              <div className="text-center py-12">
+                <div className="text-red-600 mb-4">
+                  <Package className="w-12 h-12 mx-auto" />
+                </div>
+                <p className="text-red-600">{error}</p>
+                <button
+                  onClick={loadStockMovements}
+                  className="mt-4 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                >
+                  Retry
+                </button>
+              </div>
+            ) : (
+              <DataTable
+                data={filteredMovements}
+                columns={columns}
+                keyField="id"
+                loading={loading}
+                emptyMessage="No stock movements found"
+                emptyIcon={<Package className="w-12 h-12 text-gray-400" />}
+                hoverable={true}
+                striped={true}
+                paginated={true}
+                pageSize={20}
+                searchable={false}
+              />
+            )}
+          </div>
+          </div>
+        </div>
       </div>
     </div>
   );

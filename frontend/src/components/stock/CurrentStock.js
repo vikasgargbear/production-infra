@@ -11,6 +11,7 @@ import { DataTable, ModuleHeader } from '../global';
 
 const CurrentStock = ({ open = true, onClose }) => {
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [stockData, setStockData] = useState([]);
   const [filteredData, setFilteredData] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
@@ -25,6 +26,9 @@ const CurrentStock = ({ open = true, onClose }) => {
   const [editingProduct, setEditingProduct] = useState(null);
   const [showMoreFilters, setShowMoreFilters] = useState(false);
   const [showHelpModal, setShowHelpModal] = useState(false);
+  const [currentPage, setCurrentPage] = useState(0);
+  const [hasMore, setHasMore] = useState(true);
+  const [allProducts, setAllProducts] = useState([]);
   const [moreFilters, setMoreFilters] = useState({
     stockStatus: 'all',
     expiryPeriod: 'all',
@@ -42,27 +46,50 @@ const CurrentStock = ({ open = true, onClose }) => {
   });
 
   useEffect(() => {
-    loadStockData();
+    loadStockData(0, true);
   }, []);
 
   useEffect(() => {
     filterData();
   }, [stockData, searchQuery, selectedCategory, selectedLocation, showLowStock, showExpiring, moreFilters]);
 
-  const loadStockData = async () => {
-    setLoading(true);
+  const loadMoreData = () => {
+    if (!loadingMore && hasMore) {
+      const nextPage = Math.floor(allProducts.length / 20);
+      setCurrentPage(nextPage);
+      loadStockData(nextPage, false);
+    }
+  };
+
+  // Infinite scroll handler
+  const handleScroll = (e) => {
+    const { scrollTop, scrollHeight, clientHeight } = e.target;
+    const bottom = scrollHeight - scrollTop <= clientHeight + 100; // Trigger 100px before bottom
+    
+    if (bottom && !loadingMore && hasMore) {
+      loadMoreData();
+    }
+  };
+
+  const loadStockData = async (page = 0, reset = true) => {
+    if (page === 0) {
+      setLoading(true);
+    } else {
+      setLoadingMore(true);
+    }
+    
     try {
-      console.log('Fetching current stock data...');
-      console.log('ProductAPI methods available:', Object.keys(productAPI || {}));
+      console.log(`Fetching stock data page ${page}...`);
       
       // Check if getAll method exists
       if (!productAPI || typeof productAPI.getAll !== 'function') {
         throw new Error('productAPI.getAll is not available. Available methods: ' + Object.keys(productAPI || {}));
       }
       
-      // Use products API which we know works and includes stock data
+      // Use products API with pagination - load 20 items per page
       const response = await productAPI.getAll({
-        limit: 100 // Backend max limit is 100
+        limit: 20,
+        skip: page * 20
       });
       console.log('Products API response:', response);
       
@@ -81,62 +108,72 @@ const CurrentStock = ({ open = true, onClose }) => {
         products = [];
       }
       
-      console.log('Raw products data:', products.length, 'items');
-      if (products.length > 0) {
-        console.log('Sample product:', products[0]);
-        console.log('Products array:', products.slice(0, 3)); // Show first 3 products
-      }
+      console.log(`Page ${page} - Raw products data:`, products.length, 'items');
       
-      // Transform product data to stock format using correct schema field names
+      // Set hasMore based on whether we got fewer items than requested
+      setHasMore(products.length === 20);
+      
+      // Transform product data using correct schema field names
       const transformedData = products
         .filter(product => product && product.product_id) // Filter out null/undefined products
         .map(product => {
-          // Use actual schema field names from inventory.products table
+          // Use correct schema field names from master.products table
           const currentStock = Number(product.current_stock || 0);
-          const reorderLevel = Number(product.reorder_level || product.min_stock_quantity || 0);
+          const reorderLevel = Number(product.minimum_stock_level || 0); // correct field name
           
           return {
-          product_id: product.product_id,
-          product_name: product.product_name || 'Unknown Product',
-          product_code: product.product_code || `PROD-${product.product_id}`,
-          category: product.category_id || 'Uncategorized',
-          manufacturer: product.manufacturer,
-          brand: product.brand,
-          hsn_code: product.hsn_code,
-          current_stock: currentStock,
-          available_stock: currentStock, // Assuming available = current for now
-          reserved_stock: 0, // Will be calculated from reservations if needed
-          minimum_stock_level: reorderLevel,
-          reorder_level: reorderLevel,
-          unit: product.base_uom_id || 'Units',
-          mrp: Number(product.mrp || 0),
-          purchase_rate: Number(product.cost_price || 0),
-          selling_rate: Number(product.selling_price || product.mrp || 0),
-          stock_value: currentStock * Number(product.cost_price || product.selling_price || 0),
-          gst_percentage: Number(product.gst_percentage || 0),
-          expiry_alert: false, // Will be calculated from batches
-          low_stock: currentStock <= reorderLevel && reorderLevel > 0,
-          out_of_stock: currentStock === 0,
-          stock_status: currentStock === 0 ? 'out_of_stock' : 
-                       (currentStock <= reorderLevel && reorderLevel > 0) ? 'low_stock' : 'normal',
-          is_active: product.is_active !== false,
-          batches: product.batches || [],
-          last_updated: product.updated_at,
-          // Additional useful fields
-          drug_schedule: product.drug_schedule,
-          requires_prescription: product.requires_prescription,
-          storage_conditions: product.storage_conditions
-        };
-      });
+            product_id: product.product_id,
+            product_name: product.product_name || 'Unknown Product',
+            product_code: product.product_code || `PROD-${product.product_id}`,
+            category: product.category_id || 'Uncategorized',
+            manufacturer: product.manufacturer,
+            brand_name: product.brand_name, // correct schema field name
+            hsn_code: product.hsn_code,
+            current_stock: currentStock,
+            available_stock: currentStock,
+            reserved_stock: 0,
+            minimum_stock_level: reorderLevel,
+            reorder_level: reorderLevel,
+            unit: product.base_unit || 'Units', // correct schema field name
+            mrp: Number(product.mrp || 0),
+            purchase_rate: Number(product.purchase_rate || 0), // correct schema field name
+            selling_rate: Number(product.standard_rate || product.selling_price || product.mrp || 0), // correct schema field name
+            stock_value: currentStock * Number(product.purchase_rate || product.standard_rate || 0),
+            gst_percentage: Number(product.gst_percentage || 0),
+            prescription_required: product.prescription_required, // correct schema field name
+            schedule_type: product.schedule_type, // correct schema field name
+            expiry_alert: false,
+            low_stock: currentStock <= reorderLevel && reorderLevel > 0,
+            out_of_stock: currentStock === 0,
+            stock_status: currentStock === 0 ? 'out_of_stock' : 
+                         (currentStock <= reorderLevel && reorderLevel > 0) ? 'low_stock' : 'normal',
+            is_active: product.is_active !== false,
+            batches: product.batches || [],
+            last_updated: product.updated_at,
+            storage_condition: product.storage_condition, // correct schema field name
+            product_type: product.product_type
+          };
+        });
       
       console.log('Transformed data sample:', transformedData[0]);
-      setStockData(transformedData);
+      
+      if (reset || page === 0) {
+        setAllProducts(transformedData);
+        setStockData(transformedData);
+      } else {
+        setAllProducts(prev => [...prev, ...transformedData]);
+        setStockData(prev => [...prev, ...transformedData]);
+      }
       
     } catch (error) {
       console.error('Error loading stock data:', error);
-      setStockData([]);
+      if (page === 0) {
+        setStockData([]);
+        setAllProducts([]);
+      }
     } finally {
       setLoading(false);
+      setLoadingMore(false);
     }
   };
 
@@ -492,7 +529,7 @@ const CurrentStock = ({ open = true, onClose }) => {
         </div>
 
         {/* Content */}
-        <div className="flex-1 overflow-y-auto">
+        <div className="flex-1 overflow-y-auto" onScroll={handleScroll}>
           <div className="max-w-6xl mx-auto px-6 py-6">
             
             {/* Search and Filters */}
@@ -657,6 +694,21 @@ const CurrentStock = ({ open = true, onClose }) => {
             <div className="text-center py-12">
               <Package className="w-12 h-12 text-gray-400 mx-auto mb-3" />
               <p className="text-gray-600">No stock data found</p>
+            </div>
+          )}
+          
+          {/* Load More Indicator */}
+          {loadingMore && (
+            <div className="flex items-center justify-center py-4">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+              <span className="ml-2 text-blue-600">Loading more products...</span>
+            </div>
+          )}
+          
+          {/* No More Data Indicator */}
+          {!hasMore && allProducts.length > 0 && (
+            <div className="text-center py-4 text-gray-500 text-sm">
+              No more products to load ({allProducts.length} total)
             </div>
           )}
             </div>
