@@ -1,7 +1,7 @@
 import React from 'react';
 import { 
   CheckCircle, Calendar, CreditCard, Hash, FileText, 
-  User, DollarSign, Receipt, Building
+  User, DollarSign, Receipt, Building, MessageSquare
 } from 'lucide-react';
 import { usePayment } from '../../../contexts/PaymentContext';
 import { 
@@ -30,7 +30,7 @@ interface SelectedInvoice {
 }
 
 const PaymentSummaryV2: React.FC = () => {
-  const { payment, selectedCustomer, selectedInvoices } = usePayment();
+  const { payment, selectedCustomer, selectedInvoices, setPaymentField } = usePayment();
 
   const paymentModeLabels: PaymentModeLabels = {
     CASH: { label: 'Cash', icon: '💵' },
@@ -185,13 +185,24 @@ const PaymentSummaryV2: React.FC = () => {
         </Card>
       )}
 
-      {/* Remarks */}
-      {payment.remarks && (
-        <Card>
-          <h3 className="text-lg font-medium text-gray-900 mb-4">Remarks</h3>
-          <p className="text-gray-700">{payment.remarks}</p>
-        </Card>
-      )}
+      {/* Remarks - Editable */}
+      <Card>
+        <div className="flex items-center space-x-2 mb-4">
+          <MessageSquare className="w-5 h-5 text-gray-400" />
+          <h3 className="text-lg font-medium text-gray-900">Remarks</h3>
+          <span className="text-sm text-gray-500">(Optional)</span>
+        </div>
+        <textarea
+          value={payment.remarks || ''}
+          onChange={(e) => setPaymentField('remarks', e.target.value)}
+          className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors resize-none"
+          placeholder="Add any notes or remarks for this payment..."
+          rows={3}
+        />
+        <p className="mt-2 text-xs text-gray-500">
+          These remarks will be included in the payment receipt and records.
+        </p>
+      </Card>
 
       {/* Receipt Footer */}
       <Card className="bg-gray-50 border-gray-300">

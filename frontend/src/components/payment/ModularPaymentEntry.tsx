@@ -1,6 +1,6 @@
 import React from 'react';
 import { 
-  CreditCard, Calendar, Calculator, CheckCircle, Printer, ArrowLeft, 
+  CreditCard, Calculator, CheckCircle, Printer, ArrowLeft, 
   X, Save, History, Plus
 } from 'lucide-react';
 import { PaymentProvider, usePayment } from '../../contexts/PaymentContext';
@@ -11,7 +11,7 @@ import PaymentDetails from './components/PaymentDetails';
 import PaymentSummary from './components/PaymentSummary';
 
 // Import global components
-import { CustomerSearch, ProductSearch, GSTCalculator, ProductCreationModal, CustomerCreationModal, ProceedToReviewComponent, ViewHistoryButton } from '../global';
+import { CustomerSearch, ProductSearch, GSTCalculator, ProductCreationModal, CustomerCreationModal, ProceedToReviewComponent, ViewHistoryButton, ModuleHeader } from '../global';
 
 interface PaymentEntryContentProps {
   onClose: () => void;
@@ -239,58 +239,40 @@ const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) =>
   }
 
   return (
-    <div className="h-full bg-gray-50">
+    <div className="h-full bg-green-50">
       <div className="h-full flex flex-col">
-        {/* Header - Match Invoice Style */}
-        <div className="bg-white border-b border-gray-200">
-          <div className="flex items-center justify-between px-6 py-4">
-            <div className="flex items-center gap-3">
-              <CreditCard className="w-5 h-5 text-gray-600" />
-              <h1 className="text-xl font-semibold text-gray-900">
-                {currentStep === 2 ? 'Payment Receipt' : 'New Payment Entry'}
-              </h1>
-              <div className="px-3 py-1 bg-gradient-to-r from-amber-50 to-yellow-50 border border-amber-200 rounded-lg">
-                <span className="text-sm font-medium text-amber-700">
-                  {currentStep === 1 ? 'Enter Details' : 'Review & Confirm'}
-                </span>
-              </div>
-            </div>
-            
-            <div className="flex items-center gap-3">
-              <button
-                onClick={() => setShowGSTCalculator(true)}
-                className="text-gray-600 hover:text-gray-800 transition-colors text-sm flex items-center gap-1"
-              >
-                <Calculator className="w-4 h-4" />
-                GST Calculator
-              </button>
-              <button
-                onClick={() => {/* Open history */}}
-                className="text-gray-600 hover:text-gray-800 transition-colors text-sm"
-              >
-                View History
-              </button>
-              <button
-                onClick={goToSummary}
-                disabled={!selectedCustomer || !payment.amount || currentStep === 2}
-                className="px-5 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed text-sm font-medium"
-              >
-                {currentStep === 2 ? 'Processing...' : 'Review Payment'}
-              </button>
-              <button 
-                onClick={onClose} 
-                className="p-1.5 hover:bg-gray-100 rounded-lg ml-2"
-                title="Close (Esc)"
-              >
-                <X className="w-5 h-5 text-gray-400 hover:text-gray-600" />
-              </button>
-            </div>
-          </div>
+        {/* Header - Using Global ModuleHeader */}
+        <ModuleHeader
+          title="Payment Entry"
+          documentNumber={payment.receipt_no || 'RCT-TEMP'}
+          status={currentStep === 1 ? 'draft' : 'review'}
+          icon={CreditCard}
+          iconColor="text-green-600"
+          onClose={onClose}
+          historyType="payment"
+          showSaveDraft={currentStep === 1}
+          onSaveDraft={() => {
+            console.log('Save draft clicked');
+            // TODO: Implement save draft
+          }}
+          additionalActions={[
+            {
+              label: "GST Calculator",
+              onClick: () => setShowGSTCalculator(true),
+              icon: Calculator,
+              variant: "default"
+            }
+          ] as any}
+        />
+
+        {/* Keyboard Shortcuts Help */}
+        <div className="bg-green-50 px-4 py-2 text-xs text-green-700 border-b border-green-200">
+          Keyboard shortcuts: <strong>Ctrl+N</strong> - Add Customer | <strong>Ctrl+G</strong> - GST Calculator | <strong>Ctrl+S</strong> - Save | <strong>Esc</strong> - Close
         </div>
 
         {/* Content */}
-        <div className="flex-1 overflow-y-auto bg-gray-50">
-          <div className="max-w-6xl mx-auto px-6 py-8">
+        <div className="flex-1 overflow-y-auto bg-green-50">
+          <div className="max-w-6xl mx-auto px-6 py-6">
           {/* Message Display */}
           {message && (
             <div className={`mb-4 px-4 py-3 rounded-lg flex items-start text-sm ${
@@ -308,20 +290,9 @@ const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) =>
 
             {currentStep === 1 ? (
               <>
-                {/* Date Section */}
-                <div className="grid grid-cols-3 gap-4 mb-8">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-600 mb-2">Payment Date</label>
-                    <div className="relative">
-                      <Calendar className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
-                      <input
-                        type="date"
-                        value={payment.payment_date || new Date().toISOString().split('T')[0]}
-                        onChange={(e) => setPaymentField('payment_date', e.target.value)}
-                        className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                      />
-                    </div>
-                  </div>
+                {/* Payment Details - Moved to Top */}
+                <div className="mb-8">
+                  <PaymentDetails />
                 </div>
 
                 {/* Customer Section */}
@@ -335,12 +306,6 @@ const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) =>
                     placeholder="Search customer by name, phone, or code..."
                     required
                   />
-                </div>
-                
-                {/* Payment Details */}
-                <div className="mb-8">
-                  <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wider mb-4">PAYMENT DETAILS</h3>
-                  <PaymentDetails />
                 </div>
                 
                 {/* Outstanding Invoices - Only show if customer selected */}

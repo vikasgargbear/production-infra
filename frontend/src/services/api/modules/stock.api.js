@@ -378,20 +378,40 @@ export const stockApi = {
     return apiClient.get('/stock-writeoff/itc-reversal-summary', { params });
   },
 
-  // Update product properties
+  // Update product properties via batch-level updates
   updateProductProperties: async (productId, data) => {
-    // Backend expects query parameters, not body
-    const params = new URLSearchParams();
+    // Since pack configuration and categories are now stored at batch level,
+    // we need to update the batches directly for proper data persistence
     
-    if (data.category) params.append('category', data.category);
-    if (data.pack_type) params.append('pack_type', data.pack_type);
-    if (data.pack_size) params.append('pack_size', data.pack_size);
-    if (data.minimum_stock_level) params.append('minimum_stock_level', data.minimum_stock_level);
-    if (data.pack_unit_quantity) params.append('pack_unit_quantity', data.pack_unit_quantity);
-    if (data.sub_unit_quantity) params.append('sub_unit_quantity', data.sub_unit_quantity);
-    if (data.purchase_unit) params.append('purchase_unit', data.purchase_unit);
-    if (data.sale_unit) params.append('sale_unit', data.sale_unit);
+    const updateData = {};
     
-    return apiClient.patch(`${ENDPOINTS.STOCK.BASE}/products/${productId}?${params.toString()}`);
+    // Handle category updates - now stored in batches table
+    if (data.category) {
+      updateData.category_name = data.category;
+      // TODO: Also map to category_id if needed for reporting
+    }
+    
+    // Stock levels - still at product level
+    if (data.minimum_stock_level) {
+      // Update product-level reorder settings
+      await apiClient.put(`/products/${productId}`, {
+        reorder_level: parseFloat(data.minimum_stock_level)
+      });
+    }
+    
+    // Pack configuration - now stored at batch level
+    if (data.pack_type) updateData.pack_type = data.pack_type;
+    if (data.pack_size) updateData.pack_size = parseInt(data.pack_size) || 1;
+    if (data.pack_unit_quantity) updateData.units_per_pack = parseInt(data.pack_unit_quantity);
+    if (data.sub_unit_quantity) updateData.tablets_per_strip = parseInt(data.sub_unit_quantity);
+    if (data.purchase_unit) updateData.pack_uom = data.purchase_unit;
+    if (data.sale_unit) updateData.base_uom = data.sale_unit;
+    
+    // If we have batch-level updates, apply them to all active batches for this product
+    if (Object.keys(updateData).length > 0) {
+      return apiClient.put(`/batches/product/${productId}`, updateData);
+    }
+    
+    return { success: true, message: 'No updates required' };
   }
 };

@@ -31,8 +31,8 @@ class DocumentNumberService {
   async generatePurchaseNumber() {
     try {
       const response = await apiClient.get('/purchases/generate-number');
-      if (response?.data?.purchase_number) {
-        return response.data.purchase_number;
+      if (response?.data?.po_number) {
+        return response.data.po_number;
       }
     } catch (error) {
       console.warn('Backend purchase number generation failed:', error);
@@ -41,7 +41,7 @@ class DocumentNumberService {
     // Fallback to client-side generation
     const timestamp = Date.now();
     const year = new Date().getFullYear();
-    return `PUR-${year}-${timestamp.toString().slice(-6)}`;
+    return `PO-${year}-${timestamp.toString().slice(-6)}`;
   }
 
   /**

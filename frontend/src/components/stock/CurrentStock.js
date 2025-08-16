@@ -50,8 +50,8 @@ const ProductDataValidator = {
       product_code: product.product_code || `PROD-${product.product_id}`,
       generic_name: product.generic_name || '',
       
-      // Classification
-      category: product.category_id || 'Uncategorized', 
+      // Category - now read from batch-level data
+      category: product.category_name || product.category || 'General', 
       manufacturer: product.manufacturer || '',
       brand: product.brand || '',
       product_type: product.product_type || 'standard',
@@ -78,9 +78,14 @@ const ProductDataValidator = {
       selling_rate: Number(product.selling_price || 0),
       stock_value: currentStock * Number(product.cost_price || 0),
       
-      // Units & Measurements
-      unit: product.base_uom_id || 'Units',
-      pack_size: Number(product.pack_size || 1),
+      // Units & Measurements - Now from batch-level data
+      unit: product.base_uom || product.base_uom_id || 'Units',
+      pack_size: Number(product.pack_size || product.pack_config?.pack_size || 1),
+      pack_type: product.pack_type || product.pack_unit || product.pack_config?.pack_type || '',
+      pack_unit_quantity: Number(product.units_per_pack || product.pack_config?.pack_unit_quantity || 1),
+      sub_unit_quantity: Number(product.tablets_per_strip || product.packs_per_box || product.pack_config?.sub_unit_quantity || 1),
+      purchase_unit: product.pack_uom || product.box_unit || product.pack_config?.purchase_unit || '',
+      sale_unit: product.base_uom || product.pack_config?.sale_unit || product.unit || 'Units',
       
       // Tax Information
       gst_percentage: Number(product.gst_percentage || 0),
@@ -210,9 +215,11 @@ const CurrentStock = ({ open = true, onClose }) => {
       setHasMore(products.length === 20);
       
       // Enterprise-grade data validation and transformation
-      const transformedData = products
-        .filter(ProductDataValidator.validateProductData)
-        .map(ProductDataValidator.transformProductToStockItem);
+      console.log('Raw products from API:', products.length);
+      const validProducts = products.filter(ProductDataValidator.validateProductData);
+      console.log('Valid products after validation:', validProducts.length);
+      const transformedData = validProducts.map(ProductDataValidator.transformProductToStockItem);
+      console.log('Transformed data items:', transformedData.length);
       
       if (reset || page === 0) {
         setAllProducts(transformedData);
@@ -236,8 +243,22 @@ const CurrentStock = ({ open = true, onClose }) => {
 
   const filterData = () => {
     
-    // First filter out any null/undefined items
-    let filtered = stockData.filter(item => item && item.product_name);
+    // First filter out any null/undefined items with comprehensive validation
+    let filtered = stockData.filter(item => {
+      if (!item || typeof item !== 'object') {
+        console.warn('Filtering out invalid item (not object):', item);
+        return false;
+      }
+      if (!item.product_name || typeof item.product_name !== 'string') {
+        console.warn('Filtering out item with invalid product_name:', item);
+        return false;
+      }
+      if (!item.product_id) {
+        console.warn('Filtering out item with missing product_id:', item);
+        return false;
+      }
+      return true;
+    });
 
     // Search filter
     if (searchQuery) {
@@ -309,8 +330,13 @@ const CurrentStock = ({ open = true, onClose }) => {
       );
     }
 
-    // Sort
+    // Sort with safety checks
     filtered.sort((a, b) => {
+      if (!a || !b) {
+        console.warn('Undefined items in sort:', { a, b });
+        return 0;
+      }
+      
       const aValue = a[sortConfig.key];
       const bValue = b[sortConfig.key];
       
@@ -321,8 +347,11 @@ const CurrentStock = ({ open = true, onClose }) => {
       }
     });
 
-    console.log('Filtered data length:', filtered.length);
-    setFilteredData(filtered);
+    // Final safety check before setting data
+    const safeFiltered = filtered.filter(item => item && item.product_name);
+    
+    console.log('Filtered data length:', safeFiltered.length);
+    setFilteredData(safeFiltered);
   };
 
   const handleSort = (key) => {
@@ -419,7 +448,9 @@ const CurrentStock = ({ open = true, onClose }) => {
 
   const handleSaveEdit = async () => {
     try {
-      const response = await stockApi.updateProductProperties(editingProduct.product_id, editForm);
+      // Exclude category from the update for now - requires proper category management
+      const { category, ...updateData } = editForm;
+      const response = await stockApi.updateProductProperties(editingProduct.product_id, updateData);
       console.log('Product updated:', response);
       
       // Reload stock data to show updated values
@@ -438,38 +469,56 @@ const CurrentStock = ({ open = true, onClose }) => {
       header: 'Product',
       key: 'product_name',
       sortable: true,
-      render: (value, row) => (
-        <div>
-          <div className="font-medium text-gray-900">{row.product_name}</div>
-          <div className="text-sm text-gray-500">{row.product_code}</div>
-        </div>
-      )
+      render: (value, row) => {
+        if (!row || !row.product_name) {
+          console.error('Invalid row data in product column:', row);
+          return <div className="text-red-500">Invalid Product Data</div>;
+        }
+        return (
+          <div>
+            <div className="font-medium text-gray-900">{row.product_name}</div>
+            <div className="text-sm text-gray-500">{row.product_code || 'No Code'}</div>
+          </div>
+        );
+      }
     },
     {
       header: 'Category',
       key: 'category',
       sortable: true,
-      render: (value, row) => (
-        <div>
-          <span className="px-2 py-1 text-xs font-medium bg-gray-100 text-gray-700 rounded">
-            {row.category || 'Uncategorized'}
-          </span>
-          {(row.pack_type || row.pack_size) && (
-            <div className="text-xs text-gray-500 mt-1">
-              {row.pack_type} {row.pack_size && `- ${row.pack_size}`}
-            </div>
-          )}
-        </div>
-      )
+      render: (value, row) => {
+        if (!row) {
+          console.error('Invalid row data in category column:', row);
+          return <div className="text-red-500">Invalid Data</div>;
+        }
+        
+        return (
+          <div>
+            <span className="px-2 py-1 text-xs font-medium bg-gray-100 text-gray-700 rounded">
+              {row.category || 'Uncategorized'}
+            </span>
+            {(row.pack_type || row.pack_size) && (
+              <div className="text-xs text-gray-500 mt-1">
+                {row.pack_type} {row.pack_size && `- ${row.pack_size}`}
+              </div>
+            )}
+          </div>
+        );
+      }
     },
     {
       header: 'Current Stock',
       key: 'current_stock',
       sortable: true,
       render: (value, row) => {
+        if (!row || typeof row.current_stock === 'undefined') {
+          console.error('Invalid row data in stock column:', row);
+          return <div className="text-red-500">Invalid Stock Data</div>;
+        }
+        
         const status = getStockStatus(row);
         const StatusIcon = status.icon;
-        const totalUnits = row.current_stock;
+        const totalUnits = row.current_stock || 0;
         const packQty = row.pack_unit_quantity || 1;
         const subQty = row.sub_unit_quantity || 1;
         const boxes = Math.floor(totalUnits / (packQty * subQty));

@@ -75,11 +75,11 @@ const Home: React.FC<HomeProps> = ({ setActiveTab }) => {
 
   const financialActions: ActionItem[] = [
     {
-      id: 'payment-entry',
+      id: 'financial-hub',
       tab: 'payment',
-      title: 'Payment Entry',
-      subtitle: 'Manage payments and financial transactions',
-      icon: CreditCard,
+      title: 'Financial Hub',
+      subtitle: 'Complete financial management & accounting',
+      icon: Calculator,
       shortcut: 'Ctrl+M'
     },
     {

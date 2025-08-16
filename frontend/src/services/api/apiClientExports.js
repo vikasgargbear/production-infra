@@ -7,8 +7,8 @@
 import axios from 'axios';
 
 // Create our own apiClient instance to avoid circular dependency
-// Use HTTP to avoid CORS preflight redirect issues with Railway
-const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || 'http://pharma-backend-production-0c09.up.railway.app';
+// Use HTTPS for Railway production deployment
+const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || 'https://pharma-backend-production-0c09.up.railway.app';
 const apiClient = axios.create({
   baseURL: `${API_BASE_URL}/api`,  // Consolidated API - no version numbers
   timeout: 30000,
@@ -248,6 +248,42 @@ export const purchasesAPI = {
         offset: options.offset || 0,
       },
     });
+    return response.data;
+  },
+  
+  getAll: async (params = {}) => {
+    const response = await apiClient.get('/purchases', {
+      params: {
+        limit: params.limit || 100,
+        skip: params.skip || 0,
+        supplier_id: params.supplier_id,
+        product_id: params.product_id,
+        start_date: params.start_date,
+        end_date: params.end_date,
+        sort: params.sort,
+        order: params.order,
+      },
+    });
+    return { data: response.data };
+  },
+  
+  getById: async (id) => {
+    const response = await apiClient.get(`/purchases/${id}`);
+    return response.data;
+  },
+  
+  create: async (data) => {
+    const response = await apiClient.post('/purchases', data);
+    return response.data;
+  },
+  
+  update: async (id, data) => {
+    const response = await apiClient.put(`/purchases/${id}`, data);
+    return response.data;
+  },
+  
+  delete: async (id) => {
+    const response = await apiClient.delete(`/purchases/${id}`);
     return response.data;
   },
 };

@@ -1,13 +1,13 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
-import CompanySettings from '../CompanySettings';
+import MasterHub from '../master/MasterHub';
 
 const SettingsPage = () => {
   const navigate = useNavigate();
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <CompanySettings 
+      <MasterHub 
         open={true}
         onClose={() => navigate('/home')}
       />

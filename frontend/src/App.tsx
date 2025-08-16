@@ -7,7 +7,7 @@ import LoadingSpinner from './components/LoadingSpinner';
 import Home from './components/Home';
 import SalesHub from './components/sales/SalesHub';
 import PurchaseHub from './components/purchase/PurchaseHub';
-import EnterprisePaymentEntry from './components/payment/EnterprisePaymentEntry';
+import FinancialHub from './components/payment/FinancialHub';
 import CompanySettings from './components/CompanySettings';
 import { ToastProvider } from './components/global';
 import ReturnsHub from './components/returns/ReturnsHub';
@@ -141,7 +141,7 @@ function App(): JSX.Element {
       case 'purchase':
         return <PurchaseHub key="purchase" open={true} onClose={() => setActiveTab('home')} />;
       case 'payment':
-        return <EnterprisePaymentEntry key="payment" open={true} onClose={() => setActiveTab('home')} />;
+        return <FinancialHub key="payment" open={true} onClose={() => setActiveTab('home')} />;
       case 'dashboard':
         return <Dashboard key="dashboard" />;
       case 'products':

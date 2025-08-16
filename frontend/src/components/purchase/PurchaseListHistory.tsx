@@ -71,16 +71,16 @@ const PurchaseListHistory: React.FC<PurchaseListHistoryProps> = ({ onClose }) =>
         order: 'desc'
       });
 
-      // Transform data to match interface
+      // Transform data to match interface - using actual API field names
       const purchasesData: Purchase[] = (response.data?.purchases || response.data || []).map((purchase: any) => ({
-        id: purchase.id,
-        invoice_no: purchase.invoice_no || purchase.purchase_no || `PUR-${purchase.id}`,
+        id: purchase.purchase_order_id || purchase.id,
+        invoice_no: purchase.po_number || purchase.invoice_no || purchase.purchase_no || `PO-${purchase.purchase_order_id || purchase.id}`,
         supplier_name: purchase.supplier_name || purchase.supplier?.name || 'Unknown Supplier',
-        invoice_date: purchase.invoice_date || purchase.purchase_date || purchase.created_at,
+        invoice_date: purchase.po_date || purchase.invoice_date || purchase.purchase_date || purchase.created_at,
         total_amount: parseFloat(purchase.total_amount) || 0,
-        payment_status: purchase.payment_status || 'pending',
+        payment_status: purchase.po_status === 'paid' ? 'paid' : purchase.po_status === 'partial' ? 'partial' : 'pending',
         payment_amount: parseFloat(purchase.payment_amount) || 0,
-        purchase_type: purchase.purchase_type || purchase.is_purchase_order ? 'purchase_order' : 'purchase',
+        purchase_type: purchase.po_type === 'purchase_order' || purchase.is_purchase_order ? 'purchase_order' : 'purchase',
         created_at: purchase.created_at
       }));
 

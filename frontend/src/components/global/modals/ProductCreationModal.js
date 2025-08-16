@@ -135,12 +135,13 @@ const ProductCreationModal = ({
         hsn_code: newProduct.hsn_code,
         gst_percentage: parseFloat(newProduct.gst_percent),
         barcode: newProduct.barcode || null,
-        pack_config: {
-          base_uom: packConfig.base_unit || 'TABLET',
-          pack_size: packConfig.qty_per_strip,
-          pack_unit: packConfig.sale_unit || 'STRIP',
-          box_size: packConfig.use_boxes ? packConfig.strips_per_box : null
-        },
+        // Pack configuration - now sent as individual fields for batch creation
+        pack_type: packConfig.sale_unit || 'STRIP',
+        pack_size: packConfig.qty_per_strip || 1,
+        pack_uom: packConfig.sale_unit || 'STRIP', 
+        base_uom: packConfig.base_unit || 'TABLET',
+        units_per_pack: packConfig.qty_per_strip || 1,
+        strips_per_box: packConfig.use_boxes ? packConfig.strips_per_box : null,
         // IMPORTANT: Include pricing data that backend expects!
         mrp: parseFloat(newProduct.mrp) || 0,
         sale_price: parseFloat(newProduct.sale_price) || 0,
@@ -215,8 +216,9 @@ const ProductCreationModal = ({
           expiry_date: newProduct.expiry_date, // Keep MM/YY format for frontend
           available_quantity: parseInt(newProduct.quantity_available) || 0,
           quantity: 1,
-          // Include pack configuration for frontend use
-          pack_config: packConfig,
+          // Include pack configuration for frontend use (individual fields)
+          pack_type: packConfig.sale_unit || 'STRIP',
+          pack_size: packConfig.qty_per_strip || 1,
           base_unit: packConfig.base_unit,
           sale_unit: packConfig.sale_unit,
           qty_per_strip: packConfig.qty_per_strip,
