@@ -485,11 +485,11 @@ async def update_product(
         for frontend_field, db_field in field_mapping.items():
             if frontend_field in product:
                 if db_field == "pack_config":
-                    # Handle JSONB field
-                    update_fields.append(f"{db_field} = :{db_field}::jsonb")
+                    # Handle JSONB field - use text parameter and cast in SQL
+                    update_fields.append(f"{db_field} = %({db_field})s::jsonb")
                     params[db_field] = json.dumps(product[frontend_field])
                 else:
-                    update_fields.append(f"{db_field} = :{db_field}")
+                    update_fields.append(f"{db_field} = %({db_field})s")
                     params[db_field] = product[frontend_field]
         
         if not update_fields:
