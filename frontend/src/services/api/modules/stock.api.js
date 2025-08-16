@@ -378,40 +378,34 @@ export const stockApi = {
     return apiClient.get('/stock-writeoff/itc-reversal-summary', { params });
   },
 
-  // Update product properties via batch-level updates
+  // Update product properties 
   updateProductProperties: async (productId, data) => {
-    // Since pack configuration and categories are now stored at batch level,
-    // we need to update the batches directly for proper data persistence
+    // Use the standard product update endpoint which now handles both 
+    // product-level and batch-level fields automatically
     
     const updateData = {};
     
-    // Handle category updates - now stored in batches table
-    if (data.category) {
-      updateData.category_name = data.category;
-      // TODO: Also map to category_id if needed for reporting
-    }
-    
-    // Stock levels - still at product level
-    if (data.minimum_stock_level) {
-      // Update product-level reorder settings
-      await apiClient.put(`/products/${productId}`, {
-        reorder_level: parseFloat(data.minimum_stock_level)
-      });
-    }
-    
-    // Pack configuration - now stored at batch level
+    // Map frontend fields to backend fields
+    if (data.category) updateData.category = data.category;
     if (data.pack_type) updateData.pack_type = data.pack_type;
     if (data.pack_size) updateData.pack_size = parseInt(data.pack_size) || 1;
-    if (data.pack_unit_quantity) updateData.units_per_pack = parseInt(data.pack_unit_quantity);
-    if (data.sub_unit_quantity) updateData.tablets_per_strip = parseInt(data.sub_unit_quantity);
-    if (data.purchase_unit) updateData.pack_uom = data.purchase_unit;
-    if (data.sale_unit) updateData.base_uom = data.sale_unit;
+    if (data.pack_unit_quantity) updateData.pack_unit_quantity = parseInt(data.pack_unit_quantity);
+    if (data.sub_unit_quantity) updateData.sub_unit_quantity = parseInt(data.sub_unit_quantity);
+    if (data.purchase_unit) updateData.purchase_unit = data.purchase_unit;
+    if (data.sale_unit) updateData.sale_unit = data.sale_unit;
+    if (data.minimum_stock_level) updateData.min_stock_quantity = parseFloat(data.minimum_stock_level);
     
-    // If we have batch-level updates, apply them to all active batches for this product
-    if (Object.keys(updateData).length > 0) {
-      return apiClient.put(`/batches/product/${productId}`, updateData);
+    // Include any other product fields that might be passed
+    Object.keys(data).forEach(key => {
+      if (!updateData.hasOwnProperty(key)) {
+        updateData[key] = data[key];
+      }
+    });
+    
+    if (Object.keys(updateData).length === 0) {
+      return { success: true, message: 'No updates required' };
     }
     
-    return { success: true, message: 'No updates required' };
+    return apiClient.put(`/products/${productId}`, updateData);
   }
 };

@@ -542,6 +542,43 @@ async def update_product(
                 detail=f"Product {product_id} not found"
             )
         
+        # Handle batch-level fields that moved from products table
+        batch_fields = {}
+        batch_field_mapping = {
+            "category": "category_name",
+            "category_name": "category_name", 
+            "pack_type": "pack_type",
+            "pack_size": "pack_size",
+            "pack_unit_quantity": "units_per_pack",
+            "sub_unit_quantity": "tablets_per_strip", 
+            "purchase_unit": "pack_uom",
+            "sale_unit": "base_uom"
+        }
+        
+        for frontend_field, batch_field in batch_field_mapping.items():
+            if frontend_field in product:
+                batch_fields[batch_field] = product[frontend_field]
+        
+        # Update active batches if we have batch-level changes
+        if batch_fields:
+            batch_update_fields = []
+            batch_params = {"product_id": product_id, "org_id": DEFAULT_ORG_ID}
+            
+            for batch_field, value in batch_fields.items():
+                batch_update_fields.append(f"{batch_field} = :{batch_field}")
+                batch_params[batch_field] = value
+            
+            batch_query = f"""
+                UPDATE inventory.batches
+                SET {', '.join(batch_update_fields)}, updated_at = CURRENT_TIMESTAMP
+                WHERE product_id = :product_id 
+                  AND org_id = :org_id 
+                  AND batch_status = 'active'
+            """
+            
+            db.execute(text(batch_query), batch_params)
+            logger.info(f"Updated {len(batch_fields)} batch fields for product {product_id}")
+        
         db.commit()
         
         return {
