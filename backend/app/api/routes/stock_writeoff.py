@@ -54,7 +54,7 @@ async def get_expiry_report(
                 p.gst_percent,
                 COALESCE(i.current_stock, 0) as current_stock,
                 COALESCE(b.cost_price, p.purchase_price, 0) as cost_price,
-                p.mrp,
+                b.mrp_per_unit as mrp,
                 CASE 
                     WHEN b.expiry_date < :today THEN true
                     ELSE false

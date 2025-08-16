@@ -76,9 +76,8 @@ async def get_products(
                 p.brand, p.manufacturer, p.category_id, p.product_type, p.product_class,
                 p.composition, p.strength, p.hsn_code, p.drug_schedule, 
                 p.requires_prescription, p.is_narcotic, p.is_controlled_substance,
-                p.barcode, p.manufacturer_code, p.pack_config, p.base_uom_id,
-                p.gst_percentage, p.cess_percentage, p.storage_conditions,
-                p.requires_cold_chain, p.maintain_batch, p.maintain_expiry,
+                p.barcode, p.manufacturer_code,
+                p.gst_percentage, p.cess_percentage, p.maintain_batch, p.maintain_expiry,
                 p.allow_negative_stock, p.min_stock_quantity, p.reorder_level,
                 p.reorder_quantity, p.max_stock_quantity, p.critical_stock_level,
                 p.product_status, p.launch_date, p.discontinuation_date,
@@ -132,9 +131,8 @@ async def get_products(
                 p.brand, p.manufacturer, p.category_id, p.product_type, p.product_class,
                 p.composition, p.strength, p.hsn_code, p.drug_schedule, 
                 p.requires_prescription, p.is_narcotic, p.is_controlled_substance,
-                p.barcode, p.manufacturer_code, p.pack_config, p.base_uom_id,
-                p.gst_percentage, p.cess_percentage, p.storage_conditions,
-                p.requires_cold_chain, p.maintain_batch, p.maintain_expiry,
+                p.barcode, p.manufacturer_code,
+                p.gst_percentage, p.cess_percentage, p.maintain_batch, p.maintain_expiry,
                 p.allow_negative_stock, p.min_stock_quantity, p.reorder_level,
                 p.reorder_quantity, p.max_stock_quantity, p.critical_stock_level,
                 p.product_status, p.launch_date, p.discontinuation_date,
@@ -189,7 +187,7 @@ async def search_products(
                     COALESCE(AVG(b.selling_price), 0) as sale_rate,
                     COALESCE(AVG(b.cost_per_unit), 0) as purchase_rate,
                     COALESCE(SUM(b.quantity_available), 0) as current_stock,
-                    COALESCE(p.base_uom_id, 'PCS') as unit_of_measure,
+                    'PCS' as unit_of_measure,
                     COALESCE(p.category_id, 'General') as category
                 FROM inventory.products p
                 LEFT JOIN inventory.batches b ON p.product_id = b.product_id 
@@ -202,7 +200,7 @@ async def search_products(
                          OR p.hsn_code ILIKE :search)
                     AND p.is_active = true
                 GROUP BY p.product_id, p.product_name, p.brand, p.manufacturer, 
-                         p.hsn_code, p.gst_percentage, p.base_uom_id, p.category_id
+                         p.hsn_code, p.gst_percentage, p.category_id
                 ORDER BY product_name
                 LIMIT :limit OFFSET :offset
             """), {

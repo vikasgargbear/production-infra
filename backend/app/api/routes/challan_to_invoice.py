@@ -109,11 +109,12 @@ class ChallanToInvoiceService:
                     ci.unit_price,
                     p.hsn_code,
                     p.gst_percent,
-                    p.mrp,
+                    COALESCE(b.mrp_per_unit, 0) as mrp,
                     oi.discount_percent,
                     oi.discount_amount
                 FROM challan_items ci
                 JOIN inventory.products p ON ci.product_id = p.product_id
+                LEFT JOIN inventory.batches b ON ci.batch_id = b.batch_id
                 LEFT JOIN sales.order_items oi ON ci.order_item_id = oi.order_item_id
                 WHERE ci.challan_id = ANY(:challan_ids)
             """),
