@@ -9,7 +9,7 @@ import os
 # Import routers
 from .api.routes import (
     auth, customers, products_consolidated, sales, inventory, 
-    payments, dashboard, billing, api_wrapper, test_db
+    payments, dashboard, billing, api_wrapper
 )
 
 # Import additional routers that are actually available
@@ -145,8 +145,7 @@ api.include_router(api_wrapper.router, prefix="/pg", tags=["PostgreSQL Functions
 # Include the consolidated API
 app.include_router(api)
 
-# Include test routes for debugging
-app.include_router(test_db.router)
+# Test routes removed - using main endpoints only
 
 # Migration routes removed after successful deployment
 
