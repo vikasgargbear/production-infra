@@ -476,6 +476,12 @@ async def update_product(
             "max_stock_quantity": "max_stock_quantity",
             "storage_conditions": "storage_conditions",
             "requires_cold_chain": "requires_cold_chain",
+            # Individual pack columns (added in MASTER_DATABASE_FIXES.sql)
+            "pack_unit": "pack_unit",
+            "units_per_pack": "units_per_pack", 
+            "packs_per_box": "packs_per_box",
+            "box_unit": "box_unit",
+            # Keep pack_config for backward compatibility
             "pack_config": "pack_config",
             "is_active": "is_active",
             "is_saleable": "is_saleable",
