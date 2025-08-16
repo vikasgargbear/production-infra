@@ -256,45 +256,63 @@ async def get_current_stock(
     org_id = DEFAULT_ORG_ID
     
     try:
-        # Build query for stock data with unit conversion columns
+        # Build query for stock data with batch-level pack configuration
         query = """
+            WITH batch_summary AS (
+                SELECT 
+                    product_id,
+                    SUM(quantity_available) as total_stock,
+                    SUM(quantity_reserved) as total_reserved,
+                    SUM(quantity_available * cost_per_unit) as total_cost_value,
+                    SUM(quantity_available * COALESCE(sale_price_per_unit, 0)) as total_stock_value,
+                    AVG(mrp_per_unit) as avg_mrp,
+                    AVG(sale_price_per_unit) as avg_sale_price,
+                    -- Get pack config from most recent batch
+                    FIRST_VALUE(pack_type) OVER (PARTITION BY product_id ORDER BY batch_id DESC) as pack_type,
+                    FIRST_VALUE(pack_size) OVER (PARTITION BY product_id ORDER BY batch_id DESC) as pack_size,
+                    FIRST_VALUE(units_per_pack) OVER (PARTITION BY product_id ORDER BY batch_id DESC) as pack_unit_quantity,
+                    FIRST_VALUE(tablets_per_strip) OVER (PARTITION BY product_id ORDER BY batch_id DESC) as sub_unit_quantity,
+                    FIRST_VALUE(pack_uom) OVER (PARTITION BY product_id ORDER BY batch_id DESC) as purchase_unit,
+                    FIRST_VALUE(base_uom) OVER (PARTITION BY product_id ORDER BY batch_id DESC) as sale_unit,
+                    FIRST_VALUE(category_name) OVER (PARTITION BY product_id ORDER BY batch_id DESC) as category_name,
+                    ROW_NUMBER() OVER (PARTITION BY product_id ORDER BY batch_id DESC) as rn
+                FROM inventory.batches
+                WHERE org_id = :org_id AND batch_status = 'active' AND quality_status = 'approved'
+                GROUP BY product_id, batch_id, pack_type, pack_size, units_per_pack, tablets_per_strip, pack_uom, base_uom, category_name
+            )
             SELECT 
                 p.product_id as id,
                 p.product_code as code,
                 p.product_name as name,
                 p.category_id,
-                COALESCE(p.pack_type, '') as pack_type,
-                COALESCE(p.pack_size, '') as pack_size,
-                COALESCE(p.pack_unit_quantity, 1) as pack_unit_quantity,
-                COALESCE(p.sub_unit_quantity, 1) as sub_unit_quantity,
-                'Units' as unit,
-                COALESCE(p.purchase_unit, 'Box') as purchase_unit,
-                COALESCE(p.sale_unit, 'Strip') as sale_unit,
-                p.mrp,
-                p.sale_price as price,
-                p.minimum_stock_level as reorder_level,
-                p.minimum_stock_level as min_stock,
-                COALESCE(SUM(b.quantity_available), 0) as current_stock,
-                COALESCE(SUM(b.quantity_available), 0) as stock_quantity,
-                COALESCE(SUM(b.quantity_available), 0) as available_stock,
-                COALESCE(SUM(b.quantity_sold), 0) as reserved_stock,
-                COALESCE(SUM(b.quantity_available * b.cost_price), 0) as cost_value,
-                COALESCE(SUM(b.quantity_available * COALESCE(b.selling_price, p.sale_price)), 0) as stock_value
+                COALESCE(bs.pack_type, 'unit') as pack_type,
+                COALESCE(bs.pack_size, 1) as pack_size,
+                COALESCE(bs.pack_unit_quantity, 1) as pack_unit_quantity,
+                COALESCE(bs.sub_unit_quantity, 1) as sub_unit_quantity,
+                COALESCE(bs.sale_unit, 'Units') as unit,
+                COALESCE(bs.purchase_unit, 'Box') as purchase_unit,
+                COALESCE(bs.sale_unit, 'Strip') as sale_unit,
+                COALESCE(bs.category_name, 'General') as category,
+                COALESCE(bs.avg_mrp, p.mrp, 0) as mrp,
+                COALESCE(bs.avg_sale_price, p.sale_price, 0) as price,
+                p.min_stock_quantity as reorder_level,
+                p.min_stock_quantity as min_stock,
+                COALESCE(bs.total_stock, 0) as current_stock,
+                COALESCE(bs.total_stock, 0) as stock_quantity,
+                COALESCE(bs.total_stock, 0) as available_stock,
+                COALESCE(bs.total_reserved, 0) as reserved_stock,
+                COALESCE(bs.total_cost_value, 0) as cost_value,
+                COALESCE(bs.total_stock_value, 0) as stock_value
             FROM inventory.products p
-            LEFT JOIN inventory.batches b ON p.product_id = b.product_id 
-                AND b.org_id = :org_id 
-                AND b.batch_status = 'active'
-                AND b.quantity_available > 0
+            LEFT JOIN batch_summary bs ON p.product_id = bs.product_id AND bs.rn = 1
             WHERE p.org_id = :org_id
         """
         
         params = {"org_id": org_id}
         
         if category:
-            query += " AND p.category_id = :category"
+            query += " AND (p.category_id = :category OR bs.category_name = :category)"
             params["category"] = category
-            
-        query += " GROUP BY p.product_id, p.product_code, p.product_name, p.category_id, p.pack_type, p.pack_size, p.pack_unit_quantity, p.sub_unit_quantity, p.purchase_unit, p.sale_unit, p.mrp, p.sale_price, p.minimum_stock_level"
         
         if low_stock_only:
             query = f"SELECT * FROM ({query}) AS stock_data WHERE current_stock <= reorder_level"
@@ -378,37 +396,25 @@ async def update_product_properties(
         update_fields = []
         params = {"product_id": product_id, "org_id": org_id}
         
-        if category is not None:
-            update_fields.append("category = :category")
-            params["category"] = category
-            
-        if pack_type is not None:
-            update_fields.append("pack_type = :pack_type")
-            params["pack_type"] = pack_type
-            
-        if pack_size is not None:
-            update_fields.append("pack_size = :pack_size")
-            params["pack_size"] = pack_size
+        # Note: category, pack_type, pack_size are now stored in batches table
+        # These updates will be handled by the batch update endpoint
+        if category is not None or pack_type is not None or pack_size is not None:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Pack configuration and category updates should use /batches/product/{product_id} endpoint"
+            )
             
         if minimum_stock_level is not None:
             update_fields.append("minimum_stock_level = :minimum_stock_level")
             params["minimum_stock_level"] = minimum_stock_level
             
-        if pack_unit_quantity is not None:
-            update_fields.append("pack_unit_quantity = :pack_unit_quantity")
-            params["pack_unit_quantity"] = pack_unit_quantity
-            
-        if sub_unit_quantity is not None:
-            update_fields.append("sub_unit_quantity = :sub_unit_quantity")
-            params["sub_unit_quantity"] = sub_unit_quantity
-            
-        if purchase_unit is not None:
-            update_fields.append("purchase_unit = :purchase_unit")
-            params["purchase_unit"] = purchase_unit
-            
-        if sale_unit is not None:
-            update_fields.append("sale_unit = :sale_unit")
-            params["sale_unit"] = sale_unit
+        # Note: pack_unit_quantity, sub_unit_quantity, purchase_unit, sale_unit are now in batches table
+        if (pack_unit_quantity is not None or sub_unit_quantity is not None or 
+            purchase_unit is not None or sale_unit is not None):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Pack configuration updates should use /batches/product/{product_id} endpoint"
+            )
             
         if not update_fields:
             raise HTTPException(status_code=400, detail="No fields to update")
@@ -417,7 +423,7 @@ async def update_product_properties(
             UPDATE inventory.products 
             SET {', '.join(update_fields)}, updated_at = CURRENT_TIMESTAMP
             WHERE product_id = :product_id AND org_id = :org_id
-            RETURNING product_id, product_name, category, pack_type, pack_size, pack_unit_quantity, sub_unit_quantity, purchase_unit, sale_unit, minimum_stock_level
+            RETURNING product_id, product_name, min_stock_quantity as minimum_stock_level
         """
         
         result = db.execute(text(query), params)
