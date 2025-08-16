@@ -286,7 +286,7 @@ async def list_stock_movements(
                     NULL as batch_id,  -- grn_items uses batch_number, not batch_id
                     gi.received_quantity as quantity_in,
                     0 as quantity_out,
-                    g.received_date as movement_date,
+                    g.received_at::date as movement_date,
                     g.grn_number as reference_number,
                     g.org_id,
                     p.product_name,

@@ -326,7 +326,7 @@ def get_recent_movements(
                     NULL as batch_id,  -- grn_items uses batch_number, not batch_id
                     gi.received_quantity as quantity_in,
                     0 as quantity_out,
-                    g.received_date as movement_date,
+                    g.received_at::date as movement_date,
                     g.grn_number as reference_number,
                     'Goods Receipt' as notes,
                     g.created_by as performed_by
