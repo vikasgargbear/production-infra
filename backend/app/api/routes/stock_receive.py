@@ -35,6 +35,13 @@ class StockReceiveRequest(BaseModel):
     supplier_id: Optional[int] = None
     purchase_invoice_number: Optional[str] = None
     notes: Optional[str] = None
+    # Pack configuration at batch level
+    pack_type: Optional[str] = Field(None, description="Pack type (strip, box, bottle)")
+    pack_size: Optional[int] = Field(None, description="Pack size (10, 100, etc)")
+    pack_uom: Optional[str] = Field(None, description="Pack unit of measure")
+    base_uom: Optional[str] = Field(None, description="Base unit of measure")
+    units_per_pack: Optional[int] = Field(None, description="Units per pack")
+    category_name: Optional[str] = Field(None, description="Product category")
 
 class StockReceiveResponse(BaseModel):
     """Response after receiving stock"""
@@ -102,7 +109,7 @@ async def receive_stock(
         selling_price = stock_data.selling_price or product.sale_price or (product.mrp * Decimal("0.9"))
         mrp = stock_data.mrp or product.mrp
         
-        # Create batch
+        # Create batch with pack configuration and category
         result = db.execute(text("""
             INSERT INTO inventory.batches (
                 org_id, product_id, batch_number, expiry_date,
@@ -111,6 +118,8 @@ async def receive_stock(
                 cost_price, selling_price, mrp,
                 supplier_id, purchase_invoice_number,
                 batch_status, notes,
+                pack_type, pack_size, pack_uom, base_uom, units_per_pack,
+                category_name, quality_status,
                 created_at, updated_at
             ) VALUES (
                 :org_id, :product_id, :batch_number, :expiry_date,
@@ -118,6 +127,8 @@ async def receive_stock(
                 :cost_price, :selling_price, :mrp,
                 :supplier_id, :purchase_invoice_number,
                 'active', :notes,
+                :pack_type, :pack_size, :pack_uom, :base_uom, :units_per_pack,
+                :category_name, 'approved',
                 CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
             ) RETURNING batch_id
         """), {
@@ -131,7 +142,14 @@ async def receive_stock(
             "mrp": mrp,
             "supplier_id": stock_data.supplier_id,
             "purchase_invoice_number": stock_data.purchase_invoice_number,
-            "notes": stock_data.notes
+            "notes": stock_data.notes,
+            # Pack configuration
+            "pack_type": stock_data.pack_type or 'unit',
+            "pack_size": stock_data.pack_size or 1,
+            "pack_uom": stock_data.pack_uom or 'UNIT',
+            "base_uom": stock_data.base_uom or 'UNIT',
+            "units_per_pack": stock_data.units_per_pack or 1,
+            "category_name": stock_data.category_name or 'General'
         })
         
         batch_id = result.scalar()
