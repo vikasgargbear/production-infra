@@ -40,10 +40,10 @@ def get_stock_dashboard(db: Session = Depends(get_db)):
         result = db.execute(text(total_batches_query), {"org_id": DEFAULT_ORG_ID})
         dashboard_data["total_batches"] = result.scalar() or 0
         
-        # Get recent movements count (last 7 days)
+        # Get recent movements count (last 7 days) - using sales data from movement_summary view
         recent_movements_query = """
             SELECT COUNT(*) as recent_movements
-            FROM inventory.inventory_movements
+            FROM inventory.movement_summary
             WHERE org_id = :org_id 
               AND movement_date >= :week_ago
         """
@@ -297,20 +297,44 @@ def get_recent_movements(
 ):
     """Get recent stock movements"""
     try:
+        # Get recent movements from actual transaction tables since inventory_movements was dropped
         query = """
-            SELECT 
-                movement_id,
-                movement_type,
-                product_id,
-                batch_id,
-                quantity_in,
-                quantity_out,
-                movement_date,
-                reference_number,
-                notes,
-                performed_by
-            FROM inventory.inventory_movements
-            WHERE org_id = :org_id
+            WITH recent_movements AS (
+                -- Sales movements (outbound)
+                SELECT 
+                    ii.invoice_item_id as movement_id,
+                    'sale' as movement_type,
+                    ii.product_id,
+                    ii.batch_id,
+                    0 as quantity_in,
+                    ii.quantity as quantity_out,
+                    i.invoice_date as movement_date,
+                    i.invoice_number as reference_number,
+                    'Sales Invoice' as notes,
+                    i.created_by as performed_by
+                FROM sales.invoice_items ii
+                JOIN sales.invoices i ON ii.invoice_id = i.invoice_id
+                WHERE i.org_id = :org_id
+                
+                UNION ALL
+                
+                -- Purchase movements (inbound)
+                SELECT 
+                    gi.grn_item_id as movement_id,
+                    'purchase' as movement_type,
+                    gi.product_id,
+                    gi.batch_id,
+                    gi.quantity as quantity_in,
+                    0 as quantity_out,
+                    g.received_date as movement_date,
+                    g.grn_number as reference_number,
+                    'Goods Receipt' as notes,
+                    g.created_by as performed_by
+                FROM procurement.grn_items gi
+                JOIN procurement.goods_receipt_notes g ON gi.grn_id = g.grn_id
+                WHERE g.org_id = :org_id
+            )
+            SELECT * FROM recent_movements
             ORDER BY movement_date DESC, movement_id DESC
             LIMIT :limit
         """

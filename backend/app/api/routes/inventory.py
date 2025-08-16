@@ -253,29 +253,69 @@ async def list_stock_movements(
 ):
     """List stock movements with filters"""
     try:
+        # Build movement query from transaction tables since inventory_movements was dropped
         query = """
-            SELECT im.*, p.product_name, p.product_code, b.batch_number
-            FROM inventory.inventory_movements im
-            JOIN inventory.products p ON im.product_id = p.product_id
-            LEFT JOIN inventory.batches b ON im.batch_id = b.batch_id
-            WHERE im.org_id = :org_id
+            WITH movements AS (
+                -- Sales movements (outbound)
+                SELECT 
+                    ii.invoice_item_id as movement_id,
+                    'sale' as movement_type,
+                    ii.product_id,
+                    ii.batch_id,
+                    0 as quantity_in,
+                    ii.quantity as quantity_out,
+                    i.invoice_date as movement_date,
+                    i.invoice_number as reference_number,
+                    i.org_id,
+                    p.product_name,
+                    p.product_code,
+                    b.batch_number
+                FROM sales.invoice_items ii
+                JOIN sales.invoices i ON ii.invoice_id = i.invoice_id
+                JOIN inventory.products p ON ii.product_id = p.product_id
+                LEFT JOIN inventory.batches b ON ii.batch_id = b.batch_id
+                WHERE i.org_id = :org_id
+                
+                UNION ALL
+                
+                -- Purchase movements (inbound)
+                SELECT 
+                    gi.grn_item_id as movement_id,
+                    'purchase' as movement_type,
+                    gi.product_id,
+                    gi.batch_id,
+                    gi.quantity as quantity_in,
+                    0 as quantity_out,
+                    g.received_date as movement_date,
+                    g.grn_number as reference_number,
+                    g.org_id,
+                    p.product_name,
+                    p.product_code,
+                    b.batch_number
+                FROM procurement.grn_items gi
+                JOIN procurement.goods_receipt_notes g ON gi.grn_id = g.grn_id
+                JOIN inventory.products p ON gi.product_id = p.product_id
+                LEFT JOIN inventory.batches b ON gi.batch_id = b.batch_id
+                WHERE g.org_id = :org_id
+            )
+            SELECT * FROM movements WHERE 1=1
         """
         params = {"org_id": DEFAULT_ORG_ID}
         
         if product_id:
-            query += " AND im.product_id = :product_id"
+            query += " AND product_id = :product_id"
             params["product_id"] = product_id
         
         if movement_type:
-            query += " AND im.movement_type = :movement_type"
+            query += " AND movement_type = :movement_type"
             params["movement_type"] = movement_type
         
         if from_date:
-            query += " AND im.movement_date >= :from_date"
+            query += " AND movement_date >= :from_date"
             params["from_date"] = from_date
         
         if to_date:
-            query += " AND im.movement_date <= :to_date"
+            query += " AND movement_date <= :to_date"
             params["to_date"] = to_date
         
         # Get count
