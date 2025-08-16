@@ -464,22 +464,33 @@ async def update_product(
         
         field_mapping = {
             "product_name": "product_name",
-            "brand": "brand_name",
-            "brand_name": "brand_name",
+            "brand": "brand",
+            "brand_name": "brand",
             "manufacturer": "manufacturer",
+            "category_id": "category_id",
             "hsn_code": "hsn_code",
-            "gst_percentage": "gst_rate",
-            "gst_rate": "gst_rate",
-            "mrp": "mrp",
-            "sale_price": "sale_price",
-            "purchase_price": "purchase_price",
-            "is_active": "is_active"
+            "gst_percentage": "gst_percentage",
+            "gst_rate": "gst_percentage",
+            "reorder_level": "reorder_level",
+            "min_stock_quantity": "min_stock_quantity",
+            "max_stock_quantity": "max_stock_quantity",
+            "storage_conditions": "storage_conditions",
+            "requires_cold_chain": "requires_cold_chain",
+            "pack_config": "pack_config",
+            "is_active": "is_active",
+            "is_saleable": "is_saleable",
+            "is_purchasable": "is_purchasable"
         }
         
         for frontend_field, db_field in field_mapping.items():
             if frontend_field in product:
-                update_fields.append(f"{db_field} = :{db_field}")
-                params[db_field] = product[frontend_field]
+                if db_field == "pack_config":
+                    # Handle JSONB field
+                    update_fields.append(f"{db_field} = :{db_field}::jsonb")
+                    params[db_field] = json.dumps(product[frontend_field])
+                else:
+                    update_fields.append(f"{db_field} = :{db_field}")
+                    params[db_field] = product[frontend_field]
         
         if not update_fields:
             raise HTTPException(
