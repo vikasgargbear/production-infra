@@ -540,3 +540,78 @@ async def update_product(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to update product: {str(e)}"
         )
+
+@router.put("/batches/product/{product_id}")
+async def update_product_batches(
+    product_id: int,
+    batch_data: dict,
+    db: Session = Depends(get_db)
+):
+    """Update batch-level properties for all active batches of a product"""
+    try:
+        # Build update query dynamically for batches
+        update_fields = []
+        params = {"product_id": product_id, "org_id": DEFAULT_ORG_ID}
+        
+        batch_field_mapping = {
+            "category_name": "category_name",
+            "pack_type": "pack_type", 
+            "pack_size": "pack_size",
+            "units_per_pack": "units_per_pack",
+            "tablets_per_strip": "tablets_per_strip",
+            "pack_uom": "pack_uom",
+            "base_uom": "base_uom",
+            "storage_condition": "storage_condition",
+            "quality_status": "quality_status"
+        }
+        
+        for frontend_field, db_field in batch_field_mapping.items():
+            if frontend_field in batch_data:
+                update_fields.append(f"{db_field} = :{db_field}")
+                params[db_field] = batch_data[frontend_field]
+        
+        if not update_fields:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="No batch fields to update"
+            )
+        
+        update_fields.append("updated_at = CURRENT_TIMESTAMP")
+        
+        # Update all active batches for this product
+        query = f"""
+            UPDATE inventory.batches
+            SET {', '.join(update_fields)}
+            WHERE product_id = :product_id 
+            AND batch_status = 'active'
+            AND quality_status = 'approved'
+            RETURNING batch_id, batch_number, category_name, pack_type, pack_size
+        """
+        
+        result = db.execute(text(query), params)
+        updated_batches = result.fetchall()
+        
+        if not updated_batches:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"No active batches found for product {product_id}"
+            )
+        
+        db.commit()
+        
+        return {
+            "product_id": product_id,
+            "updated_batches": len(updated_batches),
+            "batch_details": [dict(batch._mapping) for batch in updated_batches],
+            "message": f"Updated {len(updated_batches)} batches successfully"
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Error updating product batches: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to update product batches: {str(e)}"
+        )
