@@ -329,7 +329,7 @@ def get_recent_movements(
                     g.received_at::date as movement_date,
                     g.grn_number as reference_number,
                     'Goods Receipt' as notes,
-                    g.created_by as performed_by
+                    g.received_by as performed_by
                 FROM procurement.grn_items gi
                 JOIN procurement.goods_receipt_notes g ON gi.grn_id = g.grn_id
                 WHERE g.org_id = :org_id
