@@ -20,6 +20,53 @@ router = APIRouter(prefix="/purchases", tags=["purchases"])
 # Create CRUD instance
 purchase_crud = create_crud(Purchase)
 
+@router.get("/generate-number")
+def generate_purchase_number(db: Session = Depends(get_db)):
+    """Generate next purchase number"""
+    try:
+        # Get current year
+        from datetime import datetime
+        current_year = datetime.now().year
+        
+        # Get the latest purchase number for this year
+        result = db.execute(
+            text("""
+                SELECT po_number 
+                FROM procurement.purchase_orders 
+                WHERE po_number LIKE :pattern
+                ORDER BY purchase_order_id DESC 
+                LIMIT 1
+            """),
+            {"pattern": f"PO-{current_year}-%"}
+        )
+        
+        latest = result.first()
+        
+        if latest and latest[0]:
+            # Extract sequence number and increment
+            parts = latest[0].split('-')
+            if len(parts) == 3:
+                try:
+                    sequence = int(parts[2]) + 1
+                except ValueError:
+                    sequence = 1
+            else:
+                sequence = 1
+        else:
+            sequence = 1
+        
+        # Generate new purchase number
+        new_number = f"PO-{current_year}-{sequence:04d}"
+        
+        return {"po_number": new_number}
+        
+    except Exception as e:
+        logger.error(f"Error generating purchase number: {str(e)}")
+        # Fallback number generation
+        import time
+        fallback_number = f"PO-{current_year}-{int(time.time()) % 10000:04d}"
+        return {"po_number": fallback_number}
+
 @router.get("/")
 def get_purchases(
     skip: int = 0,
@@ -40,7 +87,7 @@ def get_purchases(
         
         if product_id:
             query += """
-            INNER JOIN procurement.purchase_order_items poi ON p.po_id = poi.po_id
+            INNER JOIN procurement.purchase_order_items poi ON p.purchase_order_id = poi.purchase_order_id
             """
         
         query += " WHERE 1=1"
@@ -83,9 +130,9 @@ def get_purchase(purchase_id: int, db: Session = Depends(get_db)):
                 SELECT p.*, s.supplier_name
                 FROM procurement.purchase_orders p
                 LEFT JOIN parties.suppliers s ON p.supplier_id = s.supplier_id
-                WHERE p.po_id = :po_id
+                WHERE p.purchase_order_id = :purchase_order_id
             """),
-            {"po_id": purchase_id}
+            {"purchase_order_id": purchase_id}
         )
         purchase = result.first()
         if not purchase:
@@ -96,53 +143,6 @@ def get_purchase(purchase_id: int, db: Session = Depends(get_db)):
     except Exception as e:
         logger.error(f"Error fetching purchase {purchase_id}: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to get purchase: {str(e)}")
-
-@router.get("/generate-number")
-def generate_purchase_number(db: Session = Depends(get_db)):
-    """Generate next purchase number"""
-    try:
-        # Get current year
-        from datetime import datetime
-        current_year = datetime.now().year
-        
-        # Get the latest purchase number for this year
-        result = db.execute(
-            text("""
-                SELECT po_number 
-                FROM procurement.purchase_orders 
-                WHERE po_number LIKE :pattern
-                ORDER BY po_id DESC 
-                LIMIT 1
-            """),
-            {"pattern": f"PO-{current_year}-%"}
-        )
-        
-        latest = result.first()
-        
-        if latest and latest[0]:
-            # Extract sequence number and increment
-            parts = latest[0].split('-')
-            if len(parts) == 3:
-                try:
-                    sequence = int(parts[2]) + 1
-                except ValueError:
-                    sequence = 1
-            else:
-                sequence = 1
-        else:
-            sequence = 1
-        
-        # Generate new purchase number
-        new_number = f"PO-{current_year}-{sequence:04d}"
-        
-        return {"po_number": new_number}
-        
-    except Exception as e:
-        logger.error(f"Error generating purchase number: {str(e)}")
-        # Fallback number generation
-        import time
-        fallback_number = f"PO-{current_year}-{int(time.time()) % 10000:04d}"
-        return {"po_number": fallback_number}
 
 @router.post("/")
 def create_purchase(purchase_data: dict, db: Session = Depends(get_db)):
