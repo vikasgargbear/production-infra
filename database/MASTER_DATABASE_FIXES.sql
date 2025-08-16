@@ -882,6 +882,638 @@ END $$;
 COMMENT ON COLUMN parties.suppliers.website IS 'Supplier website URL for reference and communication';
 
 -- =============================================
+-- SECTION 13: BATCH PACK CONFIGURATION ENHANCEMENT (2025-08-16)
+-- =============================================
+-- Move all pack configuration from products table to batches table
+-- This ensures pack details are stored where they belong - with actual inventory
+
+-- 13.1 Add comprehensive pack configuration columns to batches table
+DO $$
+BEGIN
+    -- Pack Configuration Columns
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_schema = 'inventory' 
+        AND table_name = 'batches' 
+        AND column_name = 'pack_size'
+    ) THEN
+        ALTER TABLE inventory.batches 
+        ADD COLUMN pack_size INTEGER NOT NULL DEFAULT 1;
+        RAISE NOTICE '✅ Added pack_size column to batches table';
+    END IF;
+    
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_schema = 'inventory' 
+        AND table_name = 'batches' 
+        AND column_name = 'pack_type'
+    ) THEN
+        ALTER TABLE inventory.batches 
+        ADD COLUMN pack_type TEXT NOT NULL DEFAULT 'unit';
+        RAISE NOTICE '✅ Added pack_type column to batches table';
+    END IF;
+    
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_schema = 'inventory' 
+        AND table_name = 'batches' 
+        AND column_name = 'pack_uom'
+    ) THEN
+        ALTER TABLE inventory.batches 
+        ADD COLUMN pack_uom TEXT NOT NULL DEFAULT 'UNIT';
+        RAISE NOTICE '✅ Added pack_uom column to batches table';
+    END IF;
+    
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_schema = 'inventory' 
+        AND table_name = 'batches' 
+        AND column_name = 'base_uom'
+    ) THEN
+        ALTER TABLE inventory.batches 
+        ADD COLUMN base_uom TEXT NOT NULL DEFAULT 'UNIT';
+        RAISE NOTICE '✅ Added base_uom column to batches table';
+    END IF;
+    
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_schema = 'inventory' 
+        AND table_name = 'batches' 
+        AND column_name = 'units_per_pack'
+    ) THEN
+        ALTER TABLE inventory.batches 
+        ADD COLUMN units_per_pack INTEGER NOT NULL DEFAULT 1;
+        RAISE NOTICE '✅ Added units_per_pack column to batches table';
+    END IF;
+    
+    -- Optional: Secondary packaging for pharma
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_schema = 'inventory' 
+        AND table_name = 'batches' 
+        AND column_name = 'strips_per_box'
+    ) THEN
+        ALTER TABLE inventory.batches 
+        ADD COLUMN strips_per_box INTEGER NULL;
+        RAISE NOTICE '✅ Added strips_per_box column to batches table';
+    END IF;
+    
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_schema = 'inventory' 
+        AND table_name = 'batches' 
+        AND column_name = 'tablets_per_strip'
+    ) THEN
+        ALTER TABLE inventory.batches 
+        ADD COLUMN tablets_per_strip INTEGER NULL;
+        RAISE NOTICE '✅ Added tablets_per_strip column to batches table';
+    END IF;
+    
+    -- Storage & Quality Control
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_schema = 'inventory' 
+        AND table_name = 'batches' 
+        AND column_name = 'storage_condition'
+    ) THEN
+        ALTER TABLE inventory.batches 
+        ADD COLUMN storage_condition TEXT DEFAULT 'room_temp';
+        RAISE NOTICE '✅ Added storage_condition column to batches table';
+    END IF;
+    
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_schema = 'inventory' 
+        AND table_name = 'batches' 
+        AND column_name = 'storage_location'
+    ) THEN
+        ALTER TABLE inventory.batches 
+        ADD COLUMN storage_location TEXT;
+        RAISE NOTICE '✅ Added storage_location column to batches table';
+    END IF;
+    
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_schema = 'inventory' 
+        AND table_name = 'batches' 
+        AND column_name = 'quality_status'
+    ) THEN
+        ALTER TABLE inventory.batches 
+        ADD COLUMN quality_status TEXT DEFAULT 'approved';
+        RAISE NOTICE '✅ Added quality_status column to batches table';
+    END IF;
+    
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_schema = 'inventory' 
+        AND table_name = 'batches' 
+        AND column_name = 'quality_notes'
+    ) THEN
+        ALTER TABLE inventory.batches 
+        ADD COLUMN quality_notes TEXT;
+        RAISE NOTICE '✅ Added quality_notes column to batches table';
+    END IF;
+    
+    -- Enhanced Inventory Tracking
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_schema = 'inventory' 
+        AND table_name = 'batches' 
+        AND column_name = 'quantity_allocated'
+    ) THEN
+        ALTER TABLE inventory.batches 
+        ADD COLUMN quantity_allocated INTEGER DEFAULT 0;
+        RAISE NOTICE '✅ Added quantity_allocated column to batches table';
+    END IF;
+    
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_schema = 'inventory' 
+        AND table_name = 'batches' 
+        AND column_name = 'quantity_reserved'
+    ) THEN
+        ALTER TABLE inventory.batches 
+        ADD COLUMN quantity_reserved INTEGER DEFAULT 0;
+        RAISE NOTICE '✅ Added quantity_reserved column to batches table';
+    END IF;
+    
+    -- Enhanced Pricing (per pack, not per unit)
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_schema = 'inventory' 
+        AND table_name = 'batches' 
+        AND column_name = 'purchase_price'
+    ) THEN
+        ALTER TABLE inventory.batches 
+        ADD COLUMN purchase_price NUMERIC(10,2);
+        RAISE NOTICE '✅ Added purchase_price column to batches table';
+    END IF;
+    
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_schema = 'inventory' 
+        AND table_name = 'batches' 
+        AND column_name = 'sale_price'
+    ) THEN
+        ALTER TABLE inventory.batches 
+        ADD COLUMN sale_price NUMERIC(10,2);
+        RAISE NOTICE '✅ Added sale_price column to batches table';
+    END IF;
+END $$;
+
+-- 13.2 Remove redundant pack columns from products table
+DO $$
+BEGIN
+    -- Remove pack_size from products (now in batches)
+    IF EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_schema = 'inventory' 
+        AND table_name = 'products' 
+        AND column_name = 'pack_size'
+    ) THEN
+        ALTER TABLE inventory.products DROP COLUMN pack_size;
+        RAISE NOTICE '✅ Removed pack_size from products table';
+    END IF;
+    
+    -- Remove pack_type from products (now in batches)
+    IF EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_schema = 'inventory' 
+        AND table_name = 'products' 
+        AND column_name = 'pack_type'
+    ) THEN
+        ALTER TABLE inventory.products DROP COLUMN pack_type;
+        RAISE NOTICE '✅ Removed pack_type from products table';
+    END IF;
+    
+    -- Remove units_per_pack from products (now in batches)
+    IF EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_schema = 'inventory' 
+        AND table_name = 'products' 
+        AND column_name = 'units_per_pack'
+    ) THEN
+        ALTER TABLE inventory.products DROP COLUMN units_per_pack;
+        RAISE NOTICE '✅ Removed units_per_pack from products table';
+    END IF;
+END $$;
+
+-- 13.3 Clean up product_types table - remove pack-related fields
+DO $$
+BEGIN
+    -- Remove typical_pack_sizes (too generic, real packs are in batches)
+    IF EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_schema = 'inventory' 
+        AND table_name = 'product_types' 
+        AND column_name = 'typical_pack_sizes'
+    ) THEN
+        ALTER TABLE inventory.product_types DROP COLUMN typical_pack_sizes;
+        RAISE NOTICE '✅ Removed typical_pack_sizes from product_types table';
+    END IF;
+    
+    -- Remove default UOMs (determined by batch selection)
+    IF EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_schema = 'inventory' 
+        AND table_name = 'product_types' 
+        AND column_name = 'default_purchase_uom'
+    ) THEN
+        ALTER TABLE inventory.product_types DROP COLUMN default_purchase_uom;
+        RAISE NOTICE '✅ Removed default_purchase_uom from product_types table';
+    END IF;
+    
+    IF EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_schema = 'inventory' 
+        AND table_name = 'product_types' 
+        AND column_name = 'default_sale_uom'
+    ) THEN
+        ALTER TABLE inventory.product_types DROP COLUMN default_sale_uom;
+        RAISE NOTICE '✅ Removed default_sale_uom from product_types table';
+    END IF;
+    
+    IF EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_schema = 'inventory' 
+        AND table_name = 'product_types' 
+        AND column_name = 'default_display_uom'
+    ) THEN
+        ALTER TABLE inventory.product_types DROP COLUMN default_display_uom;
+        RAISE NOTICE '✅ Removed default_display_uom from product_types table';
+    END IF;
+END $$;
+
+-- 13.4 Add constraints and checks
+DO $$
+BEGIN
+    -- Business rule constraints
+    ALTER TABLE inventory.batches 
+    ADD CONSTRAINT IF NOT EXISTS chk_pack_size_positive 
+    CHECK (pack_size > 0);
+    
+    ALTER TABLE inventory.batches 
+    ADD CONSTRAINT IF NOT EXISTS chk_units_per_pack_positive 
+    CHECK (units_per_pack > 0);
+    
+    ALTER TABLE inventory.batches 
+    ADD CONSTRAINT IF NOT EXISTS chk_quantity_non_negative 
+    CHECK (quantity_available >= 0);
+    
+    ALTER TABLE inventory.batches 
+    ADD CONSTRAINT IF NOT EXISTS chk_allocated_reserved_valid 
+    CHECK (
+        quantity_allocated >= 0 AND 
+        quantity_reserved >= 0 AND 
+        (quantity_allocated + quantity_reserved) <= quantity_available
+    );
+    
+    -- Valid storage conditions
+    ALTER TABLE inventory.batches 
+    ADD CONSTRAINT IF NOT EXISTS chk_storage_condition_valid 
+    CHECK (storage_condition IN ('room_temp', 'cold_storage', 'freezer', 'controlled_temp'));
+    
+    -- Valid quality status
+    ALTER TABLE inventory.batches 
+    ADD CONSTRAINT IF NOT EXISTS chk_quality_status_valid 
+    CHECK (quality_status IN ('approved', 'quarantine', 'rejected', 'testing', 'recalled'));
+    
+    RAISE NOTICE '✅ Added business rule constraints to batches table';
+END $$;
+
+-- 13.5 Add documentation comments
+COMMENT ON COLUMN inventory.batches.pack_size IS 'Physical pack size (e.g., 10, 100, 500)';
+COMMENT ON COLUMN inventory.batches.pack_type IS 'Pack type (strip, box, bottle, vial, tube, sachet)';
+COMMENT ON COLUMN inventory.batches.pack_uom IS 'Pack unit of measure (STR, BOX, BTL, VL, TB, SAC)';
+COMMENT ON COLUMN inventory.batches.base_uom IS 'Base unit of measure (TAB, ML, GM, UNIT)';
+COMMENT ON COLUMN inventory.batches.units_per_pack IS 'Total base units in this pack (10 tablets per strip)';
+COMMENT ON COLUMN inventory.batches.strips_per_box IS 'Number of strips per box (for pharma hierarchy)';
+COMMENT ON COLUMN inventory.batches.tablets_per_strip IS 'Number of tablets per strip (for pharma)';
+COMMENT ON COLUMN inventory.batches.storage_condition IS 'Storage requirement (room_temp, cold_storage, freezer)';
+COMMENT ON COLUMN inventory.batches.quality_status IS 'Quality control status (approved, quarantine, rejected)';
+COMMENT ON COLUMN inventory.batches.quantity_allocated IS 'Quantity allocated to pending orders';
+COMMENT ON COLUMN inventory.batches.quantity_reserved IS 'Quantity reserved for specific purposes';
+COMMENT ON COLUMN inventory.batches.purchase_price IS 'Cost per pack (not per unit)';
+COMMENT ON COLUMN inventory.batches.sale_price IS 'Sale price per pack (not per unit)';
+
+-- 13.6 Create performance indexes for pack configuration queries
+CREATE INDEX IF NOT EXISTS idx_batches_pack_config 
+ON inventory.batches(product_id, pack_type, pack_size, quality_status) 
+WHERE quality_status = 'approved';
+
+CREATE INDEX IF NOT EXISTS idx_batches_storage 
+ON inventory.batches(storage_condition, storage_location) 
+WHERE quality_status = 'approved';
+
+CREATE INDEX IF NOT EXISTS idx_batches_available_stock 
+ON inventory.batches(product_id, quantity_available, expiry_date) 
+WHERE quantity_available > 0 AND quality_status = 'approved';
+
+-- 13.7 Create product search view with batch pack configurations
+CREATE OR REPLACE VIEW inventory.v_products_with_batches AS
+SELECT 
+    p.product_id,
+    p.product_name,
+    p.composition,
+    p.hsn_code,
+    pc.category_name,
+    pc.requires_prescription,
+    pc.default_gst_rate,
+    pt.type_name,
+    pt.base_uom as product_base_uom,
+    pt.is_liquid,
+    pt.requires_cold_storage,
+    
+    -- Batch pack info
+    b.batch_id,
+    b.batch_number,
+    b.expiry_date,
+    b.pack_size,
+    b.pack_type,
+    b.pack_uom,
+    b.base_uom as batch_base_uom,
+    b.units_per_pack,
+    b.strips_per_box,
+    b.tablets_per_strip,
+    
+    -- Inventory
+    b.quantity_available,
+    b.quantity_allocated,
+    b.quantity_reserved,
+    (b.quantity_available * b.units_per_pack) as total_units_available,
+    
+    -- Pricing (per pack)
+    b.mrp,
+    b.purchase_price,
+    b.sale_price,
+    
+    -- Storage & Quality
+    b.storage_condition,
+    b.storage_location,
+    b.quality_status,
+    
+    -- Calculated fields
+    CASE 
+        WHEN b.expiry_date <= CURRENT_DATE + INTERVAL '30 days' 
+        THEN 'expiring_soon' 
+        WHEN b.expiry_date <= CURRENT_DATE 
+        THEN 'expired'
+        ELSE 'good' 
+    END as stock_status,
+    
+    -- Pack description for display
+    CONCAT(b.pack_size, ' ', b.pack_type, ' (', b.units_per_pack, ' ', b.base_uom, ')') as pack_description
+    
+FROM inventory.products p
+LEFT JOIN inventory.product_categories pc ON p.category_id = pc.category_id
+LEFT JOIN inventory.product_types pt ON p.type_id = pt.type_id
+LEFT JOIN inventory.batches b ON p.product_id = b.product_id
+WHERE p.is_active = true
+ORDER BY p.product_name, b.expiry_date ASC;
+
+COMMENT ON VIEW inventory.v_products_with_batches IS 
+'Complete product view with batch pack configurations for invoice/order creation';
+
+-- =============================================
+-- SECTION 14: CATEGORY ENHANCEMENT (2025-08-16)
+-- =============================================
+-- Add category information to batches table for easier product updates
+
+-- 14.1 Add category columns to batches table
+DO $$
+BEGIN
+    -- Add category_name for direct string updates (like "Capsule", "Tablet")
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_schema = 'inventory' 
+        AND table_name = 'batches' 
+        AND column_name = 'category_name'
+    ) THEN
+        ALTER TABLE inventory.batches 
+        ADD COLUMN category_name TEXT;
+        RAISE NOTICE '✅ Added category_name column to batches table';
+    END IF;
+    
+    -- Add category_id for proper foreign key reference
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_schema = 'inventory' 
+        AND table_name = 'batches' 
+        AND column_name = 'category_id'
+    ) THEN
+        ALTER TABLE inventory.batches 
+        ADD COLUMN category_id INTEGER REFERENCES inventory.product_categories(category_id);
+        RAISE NOTICE '✅ Added category_id column to batches table';
+    END IF;
+    
+    -- Add product_type for classification (standard, kit, service)
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_schema = 'inventory' 
+        AND table_name = 'batches' 
+        AND column_name = 'product_type'
+    ) THEN
+        ALTER TABLE inventory.batches 
+        ADD COLUMN product_type TEXT DEFAULT 'standard';
+        RAISE NOTICE '✅ Added product_type column to batches table';
+    END IF;
+END $$;
+
+-- 14.2 Create default categories if they don't exist
+DO $$
+BEGIN
+    -- Insert common pharma categories
+    INSERT INTO inventory.product_categories (
+        org_id, category_code, category_name, category_level, category_type
+    ) VALUES 
+        ('ad808530-1ddb-4377-ab20-67bef145d80d', 'TABLET', 'Tablet', 1, 'standard'),
+        ('ad808530-1ddb-4377-ab20-67bef145d80d', 'CAPSULE', 'Capsule', 1, 'standard'),
+        ('ad808530-1ddb-4377-ab20-67bef145d80d', 'SYRUP', 'Syrup', 1, 'standard'),
+        ('ad808530-1ddb-4377-ab20-67bef145d80d', 'INJECTION', 'Injection', 1, 'standard'),
+        ('ad808530-1ddb-4377-ab20-67bef145d80d', 'OINTMENT', 'Ointment', 1, 'standard'),
+        ('ad808530-1ddb-4377-ab20-67bef145d80d', 'DROPS', 'Drops', 1, 'standard')
+    ON CONFLICT (org_id, category_code) DO NOTHING;
+    
+    RAISE NOTICE '✅ Created default product categories';
+END $$;
+
+-- 14.3 Populate category data from existing products
+UPDATE inventory.batches 
+SET 
+    category_id = p.category_id,
+    category_name = CASE 
+        WHEN pc.category_name IS NOT NULL THEN pc.category_name
+        ELSE 'General'
+    END,
+    product_type = p.product_type
+FROM inventory.products p
+LEFT JOIN inventory.product_categories pc ON p.category_id = pc.category_id
+WHERE inventory.batches.product_id = p.product_id
+AND inventory.batches.category_name IS NULL;
+
+-- 14.4 Add comments for category columns
+COMMENT ON COLUMN inventory.batches.category_name IS 'Product category name for easy updates (Tablet, Capsule, Syrup, etc.)';
+COMMENT ON COLUMN inventory.batches.category_id IS 'Foreign key to product_categories table';
+COMMENT ON COLUMN inventory.batches.product_type IS 'Product type classification (standard, kit, service, digital)';
+
+-- 14.5 Create index for category-based queries
+CREATE INDEX IF NOT EXISTS idx_batches_category 
+ON inventory.batches(category_name, category_id) 
+WHERE quality_status = 'approved';
+
+-- =============================================
+-- SECTION 15: COMPREHENSIVE SCHEMA CLEANUP (2025-08-16)
+-- =============================================
+-- Remove redundant and inconsistent columns across inventory tables
+-- Keep category/pack info in batches, pricing in batches, master data in products
+
+-- 15.1 Remove redundant pricing fields from products table
+DO $$
+BEGIN
+    -- Remove duplicate MRP fields (should only be in batches)
+    IF EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_schema = 'inventory' 
+        AND table_name = 'products' 
+        AND column_name = 'current_mrp'
+    ) THEN
+        ALTER TABLE inventory.products DROP COLUMN current_mrp;
+        RAISE NOTICE '✅ Removed current_mrp from products table';
+    END IF;
+    
+    IF EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_schema = 'inventory' 
+        AND table_name = 'products' 
+        AND column_name = 'mrp'
+    ) THEN
+        ALTER TABLE inventory.products DROP COLUMN mrp;
+        RAISE NOTICE '✅ Removed mrp from products table';
+    END IF;
+END $$;
+
+-- 15.2 Remove redundant pack-level pricing from batches table
+DO $$
+BEGIN
+    -- Remove pack-level pricing (calculate dynamically from base unit pricing)
+    IF EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_schema = 'inventory' 
+        AND table_name = 'batches' 
+        AND column_name = 'strip_mrp'
+    ) THEN
+        ALTER TABLE inventory.batches 
+        DROP COLUMN IF EXISTS strip_mrp,
+        DROP COLUMN IF EXISTS strip_ptr,
+        DROP COLUMN IF EXISTS strip_pts,
+        DROP COLUMN IF EXISTS box_mrp,
+        DROP COLUMN IF EXISTS box_ptr,
+        DROP COLUMN IF EXISTS box_pts,
+        DROP COLUMN IF EXISTS case_mrp,
+        DROP COLUMN IF EXISTS case_ptr,
+        DROP COLUMN IF EXISTS case_pts;
+        RAISE NOTICE '✅ Removed pack-level pricing from batches table';
+    END IF;
+    
+    -- Remove duplicate pricing fields
+    IF EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_schema = 'inventory' 
+        AND table_name = 'batches' 
+        AND column_name = 'trade_price_per_unit'
+    ) THEN
+        ALTER TABLE inventory.batches 
+        DROP COLUMN IF EXISTS trade_price_per_unit,
+        DROP COLUMN IF EXISTS purchase_price,
+        DROP COLUMN IF EXISTS sale_price;
+        RAISE NOTICE '✅ Removed duplicate pricing fields from batches table';
+    END IF;
+END $$;
+
+-- 15.3 Remove redundant pack configuration from products table
+DO $$
+BEGIN
+    -- Pack config now lives entirely in batches
+    IF EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_schema = 'inventory' 
+        AND table_name = 'products' 
+        AND column_name = 'pack_config'
+    ) THEN
+        ALTER TABLE inventory.products
+        DROP COLUMN IF EXISTS pack_config,
+        DROP COLUMN IF EXISTS packs_per_box,
+        DROP COLUMN IF EXISTS pack_unit,
+        DROP COLUMN IF EXISTS box_unit;
+        RAISE NOTICE '✅ Removed pack configuration from products table';
+    END IF;
+END $$;
+
+-- 15.4 Remove storage fields from products table (batch-specific)
+DO $$
+BEGIN
+    -- Storage specifics belong with actual inventory (batches)
+    IF EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_schema = 'inventory' 
+        AND table_name = 'products' 
+        AND column_name = 'storage_conditions'
+    ) THEN
+        ALTER TABLE inventory.products
+        DROP COLUMN IF EXISTS storage_conditions,
+        DROP COLUMN IF EXISTS requires_cold_chain;
+        RAISE NOTICE '✅ Removed storage fields from products table';
+    END IF;
+END $$;
+
+-- 15.5 Remove unused UOM reference from products
+DO $$
+BEGIN
+    -- UOM now handled in batches pack configuration
+    IF EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_schema = 'inventory' 
+        AND table_name = 'products' 
+        AND column_name = 'base_uom_id'
+    ) THEN
+        ALTER TABLE inventory.products
+        DROP COLUMN IF EXISTS base_uom_id;
+        RAISE NOTICE '✅ Removed base_uom_id from products table';
+    END IF;
+END $$;
+
+-- 15.6 Standardize quantity field types in batches
+DO $$
+BEGIN
+    -- Make all quantity fields consistent (NUMERIC(15,3))
+    IF EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_schema = 'inventory' 
+        AND table_name = 'batches' 
+        AND column_name = 'quantity_allocated'
+        AND data_type = 'integer'
+    ) THEN
+        ALTER TABLE inventory.batches 
+        ALTER COLUMN quantity_allocated TYPE NUMERIC(15,3);
+        RAISE NOTICE '✅ Standardized quantity_allocated to NUMERIC(15,3)';
+    END IF;
+END $$;
+
+-- 15.7 Add comments to document the clean separation
+COMMENT ON TABLE inventory.products IS 'Master product catalog - classification, regulatory, and policy data';
+COMMENT ON TABLE inventory.batches IS 'Actual inventory instances - quantities, pricing, pack config, storage';
+
+COMMENT ON COLUMN inventory.products.category_id IS 'Default category for this product (master data)';
+COMMENT ON COLUMN inventory.products.product_type IS 'Business classification: standard, kit, service, digital';
+COMMENT ON COLUMN inventory.products.product_class IS 'Industry classification: medicine, surgical, cosmetic, ayurvedic';
+
+COMMENT ON COLUMN inventory.batches.category_name IS 'Actual form of this batch (Tablet, Capsule, Syrup, etc.)';
+COMMENT ON COLUMN inventory.batches.category_id IS 'Category reference for reporting consistency';
+COMMENT ON COLUMN inventory.batches.cost_per_unit IS 'Purchase cost per base unit (only pricing source)';
+COMMENT ON COLUMN inventory.batches.mrp_per_unit IS 'MRP per base unit (only MRP source)';
+COMMENT ON COLUMN inventory.batches.sale_price_per_unit IS 'Selling price per base unit (only selling price source)';
+
+-- =============================================
 -- FINAL VALIDATION
 -- =============================================
 DO $$
@@ -902,5 +1534,8 @@ BEGIN
     RAISE NOTICE '10. Inventory movements cleanup: Dropped redundant table, created summary view';
     RAISE NOTICE '11. Quantity tracking: Added base_quantity and free_quantity to invoice/order items';
     RAISE NOTICE '12. Supplier enhancements: Added website column to suppliers table';
+    RAISE NOTICE '13. Batch pack configuration: Moved all pack details to batches table, removed redundancy';
+    RAISE NOTICE '14. Category enhancement: Added category columns to batches for easier updates';
+    RAISE NOTICE '15. Comprehensive schema cleanup: Removed all redundant columns across inventory tables';
     RAISE NOTICE '========================================';
 END $$;
