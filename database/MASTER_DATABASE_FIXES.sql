@@ -1609,15 +1609,30 @@ BEGIN
         END LOOP;
     END $check$;
     
-    -- Remove any other problematic triggers that might reference removed columns
-    -- Add a generic catch-all for sync_mrp_column if it exists elsewhere
+    -- Fix or remove problematic sync_mrp_column trigger
     IF EXISTS (
         SELECT 1 FROM information_schema.routines 
         WHERE routine_name = 'sync_mrp_column' 
         AND routine_type = 'FUNCTION'
     ) THEN
-        DROP FUNCTION IF EXISTS sync_mrp_column() CASCADE;
-        RAISE NOTICE '✅ Removed sync_mrp_column function that referenced removed current_mrp column';
+        -- Update the sync_mrp_column function to work with new schema
+        CREATE OR REPLACE FUNCTION sync_mrp_column()
+        RETURNS TRIGGER AS $sync_func$
+        BEGIN
+            -- Original purpose: sync MRP data when products are updated
+            -- New approach: Since MRP is now stored in batches table, we don't need to sync to products
+            -- We'll just log the change or do minimal validation
+            
+            -- For now, just return NEW without doing MRP sync since MRP is batch-level
+            -- If specific MRP sync is needed, it should be handled at batch level
+            
+            RETURN NEW;
+        END;
+        $sync_func$ LANGUAGE plpgsql;
+        
+        RAISE NOTICE '✅ Updated sync_mrp_column function to work with batch-based schema (MRP sync disabled)';
+    ELSE
+        RAISE NOTICE '⚠️ sync_mrp_column function not found - may not be installed';
     END IF;
     
     RAISE NOTICE '=== SECTION 16 COMPLETED: TRIGGERS FIXED ===';

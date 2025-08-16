@@ -303,20 +303,8 @@ const Home: React.FC<HomeProps> = ({ setActiveTab }) => {
               </div>
             </div>
             
-            {/* Development Tools and Notification Bell */}
+            {/* Notification Bell */}
             <div className="flex items-center gap-2">
-              {process.env.NODE_ENV === 'development' && (
-                <Button
-                  onClick={() => setActiveTab('components-test')}
-                  variant="primary"
-                  size="sm"
-                  className="bg-purple-600 hover:bg-purple-700"
-                >
-                  V2 Components Test
-                </Button>
-              )}
-              
-              {/* Notification Bell */}
               <div className="relative">
                 <button
                   onClick={() => setIsNotificationOpen(!isNotificationOpen)}

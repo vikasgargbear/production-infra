@@ -22,6 +22,15 @@ interface KeyboardShortcut {
   label: string;
 }
 
+// Generate sequential receipt number
+const generateReceiptNumber = async () => {
+  // TODO: Create payment API service similar to InvoiceApiService
+  // For now, generate a receipt number locally
+  const timestamp = Date.now();
+  const receiptNo = `RCT-${timestamp.toString().slice(-8)}`;
+  return receiptNo;
+};
+
 // Inner component that uses the context
 const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) => {
   const {
@@ -43,6 +52,15 @@ const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) =>
   } = usePayment();
 
   const [showGSTCalculator, setShowGSTCalculator] = React.useState<boolean>(false);
+
+  // Generate receipt number on component mount
+  React.useEffect(() => {
+    if (!payment.receipt_no || payment.receipt_no === 'RCT-TEMP') {
+      generateReceiptNumber().then(receiptNo => {
+        setPaymentField('receipt_no', receiptNo);
+      });
+    }
+  }, []); // Empty dependency array to run only once on mount
 
   // Keyboard shortcuts
   const shortcuts: KeyboardShortcut[] = currentStep === 1 ? [
@@ -244,7 +262,7 @@ const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) =>
         {/* Header - Using Global ModuleHeader */}
         <ModuleHeader
           title="Payment Entry"
-          documentNumber={payment.receipt_no || 'RCT-TEMP'}
+          documentNumber={payment.receipt_no || 'RCT-' + Date.now().toString().slice(-6)}
           status={currentStep === 1 ? 'draft' : 'review'}
           icon={CreditCard}
           iconColor="text-green-600"

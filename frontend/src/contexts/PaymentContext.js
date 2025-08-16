@@ -6,6 +6,7 @@ const initialState = {
     customer_id: '',
     customer_name: '',
     customer_details: null,
+    receipt_no: '',
     payment_date: new Date().toISOString().split('T')[0],
     amount: '',
     payment_mode: 'CASH',
