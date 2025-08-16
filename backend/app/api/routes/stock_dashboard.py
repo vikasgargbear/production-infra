@@ -323,8 +323,8 @@ def get_recent_movements(
                     gi.grn_item_id as movement_id,
                     'purchase' as movement_type,
                     gi.product_id,
-                    gi.batch_id,
-                    gi.quantity as quantity_in,
+                    NULL as batch_id,  -- grn_items uses batch_number, not batch_id
+                    gi.received_quantity as quantity_in,
                     0 as quantity_out,
                     g.received_date as movement_date,
                     g.grn_number as reference_number,

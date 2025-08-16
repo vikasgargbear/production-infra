@@ -283,19 +283,18 @@ async def list_stock_movements(
                     gi.grn_item_id as movement_id,
                     'purchase' as movement_type,
                     gi.product_id,
-                    gi.batch_id,
-                    gi.quantity as quantity_in,
+                    NULL as batch_id,  -- grn_items uses batch_number, not batch_id
+                    gi.received_quantity as quantity_in,
                     0 as quantity_out,
                     g.received_date as movement_date,
                     g.grn_number as reference_number,
                     g.org_id,
                     p.product_name,
                     p.product_code,
-                    b.batch_number
+                    gi.batch_number
                 FROM procurement.grn_items gi
                 JOIN procurement.goods_receipt_notes g ON gi.grn_id = g.grn_id
                 JOIN inventory.products p ON gi.product_id = p.product_id
-                LEFT JOIN inventory.batches b ON gi.batch_id = b.batch_id
                 WHERE g.org_id = :org_id
             )
             SELECT * FROM movements WHERE 1=1
