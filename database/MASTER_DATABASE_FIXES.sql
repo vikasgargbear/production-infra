@@ -1514,6 +1514,116 @@ COMMENT ON COLUMN inventory.batches.mrp_per_unit IS 'MRP per base unit (only MRP
 COMMENT ON COLUMN inventory.batches.sale_price_per_unit IS 'Selling price per base unit (only selling price source)';
 
 -- =============================================
+-- SECTION 16: FIX TRIGGERS AFTER SCHEMA CLEANUP
+-- =============================================
+-- Update or remove triggers that reference removed columns
+-- Run after Section 15 to ensure triggers work with new schema
+
+DO $$
+BEGIN
+    RAISE NOTICE '';
+    RAISE NOTICE '=== SECTION 16: FIXING TRIGGERS AFTER SCHEMA CLEANUP ===';
+    
+    -- Fix prevent_mrp_decrease trigger that references removed current_mrp column
+    IF EXISTS (
+        SELECT 1 FROM information_schema.routines 
+        WHERE routine_name = 'prevent_mrp_decrease' 
+        AND routine_type = 'FUNCTION'
+    ) THEN
+        -- Update the trigger function to work with new schema
+        CREATE OR REPLACE FUNCTION prevent_mrp_decrease()
+        RETURNS TRIGGER AS $func$
+        DECLARE
+            v_existing_mrp NUMERIC;
+            v_product_name TEXT;
+            v_last_purchase RECORD;
+            v_price_history JSONB;
+        BEGIN
+            -- Get product details and current highest MRP from batches
+            SELECT 
+                p.product_name,
+                COALESCE(MAX(b.mrp_per_unit), 0) as highest_mrp
+            INTO v_product_name, v_existing_mrp
+            FROM inventory.products p
+            LEFT JOIN inventory.batches b ON p.product_id = b.product_id 
+                AND b.batch_status = 'active' 
+                AND b.quantity_available > 0
+            WHERE p.product_id = NEW.product_id
+            GROUP BY p.product_name;
+            
+            -- For GRN items, check MRP
+            IF TG_TABLE_NAME = 'grn_items' THEN
+                -- Get last purchase MRP for this product (simplified version)
+                SELECT MAX(mrp) as highest_mrp
+                INTO v_last_purchase
+                FROM procurement.grn_items gi
+                JOIN procurement.goods_receipt_notes g ON gi.grn_id = g.grn_id
+                WHERE gi.product_id = NEW.product_id
+                AND gi.grn_item_id != COALESCE(NEW.grn_item_id, -1)
+                AND g.grn_status = 'approved';
+                
+                -- Check if MRP is decreasing significantly
+                IF v_last_purchase.highest_mrp IS NOT NULL AND 
+                   NEW.mrp < v_last_purchase.highest_mrp AND
+                   ((v_last_purchase.highest_mrp - NEW.mrp) / v_last_purchase.highest_mrp * 100) > 5 THEN
+                    
+                    RAISE NOTICE 'Significant MRP decrease detected for %: % to % (-%s%%)', 
+                        v_product_name, v_last_purchase.highest_mrp, NEW.mrp,
+                        ROUND((v_last_purchase.highest_mrp - NEW.mrp) / v_last_purchase.highest_mrp * 100, 1);
+                END IF;
+                
+                -- Note: Removed UPDATE to products.current_mrp since column no longer exists
+                -- MRP is now stored only in batches table
+                
+            -- For batches, validate MRP consistency  
+            ELSIF TG_TABLE_NAME = 'batches' THEN
+                -- Check against existing highest MRP in other batches
+                IF v_existing_mrp IS NOT NULL AND NEW.mrp_per_unit < v_existing_mrp THEN
+                    RAISE NOTICE 'Batch MRP % is less than existing highest MRP % for product %', 
+                        NEW.mrp_per_unit, v_existing_mrp, v_product_name;
+                END IF;
+            END IF;
+            
+            RETURN NEW;
+        END;
+        $func$ LANGUAGE plpgsql;
+        
+        RAISE NOTICE '✅ Updated prevent_mrp_decrease function to work with batch-based schema';
+    ELSE
+        RAISE NOTICE '⚠️ prevent_mrp_decrease function not found - may not be installed';
+    END IF;
+    
+    -- Check for any other functions that might reference removed columns
+    DO $check$
+    DECLARE
+        func_record RECORD;
+    BEGIN
+        FOR func_record IN 
+            SELECT routine_name, routine_definition
+            FROM information_schema.routines 
+            WHERE routine_type = 'FUNCTION'
+            AND routine_schema = 'public'
+            AND routine_definition ILIKE '%current_mrp%'
+        LOOP
+            RAISE NOTICE '⚠️ Function % still references current_mrp column', func_record.routine_name;
+        END LOOP;
+    END $check$;
+    
+    -- Remove any other problematic triggers that might reference removed columns
+    -- Add a generic catch-all for sync_mrp_column if it exists elsewhere
+    IF EXISTS (
+        SELECT 1 FROM information_schema.routines 
+        WHERE routine_name = 'sync_mrp_column' 
+        AND routine_type = 'FUNCTION'
+    ) THEN
+        DROP FUNCTION IF EXISTS sync_mrp_column() CASCADE;
+        RAISE NOTICE '✅ Removed sync_mrp_column function that referenced removed current_mrp column';
+    END IF;
+    
+    RAISE NOTICE '=== SECTION 16 COMPLETED: TRIGGERS FIXED ===';
+END $$;
+
+-- =============================================
 -- FINAL VALIDATION
 -- =============================================
 DO $$
@@ -1537,5 +1647,6 @@ BEGIN
     RAISE NOTICE '13. Batch pack configuration: Moved all pack details to batches table, removed redundancy';
     RAISE NOTICE '14. Category enhancement: Added category columns to batches for easier updates';
     RAISE NOTICE '15. Comprehensive schema cleanup: Removed all redundant columns across inventory tables';
+    RAISE NOTICE '16. Trigger fixes: Updated pricing triggers to work with new batch-based schema';
     RAISE NOTICE '========================================';
 END $$;

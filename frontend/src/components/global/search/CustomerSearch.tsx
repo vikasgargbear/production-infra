@@ -99,41 +99,51 @@ export const CustomerSearch = forwardRef<CustomerSearchRef, CustomerSearchProps>
     onChange(null);
   };
 
-  // Default customer info renderer
+  // Default customer info renderer - Compact version
   const defaultRenderCustomerInfo = (customer: Customer) => (
-    <div className="space-y-2">
-      <div>
+    <div className="flex items-center justify-between">
+      <div className="flex-1">
         <p className="font-medium text-gray-900">{customer.customer_name}</p>
-        {/* Customer code hidden for cleaner UI - available in search results */}
+        <div className="text-sm text-gray-600 space-y-0.5 mt-1">
+          {/* Mobile Number */}
+          {(customer.phone || customer.contact_info?.primary_phone) && (
+            <p className="flex items-center gap-1">
+              <Phone className="w-3 h-3" /> {customer.phone || customer.contact_info?.primary_phone}
+            </p>
+          )}
+          {/* Compact Address - City, State only */}
+          {(() => {
+            // Try to get city and state from multiple possible sources
+            const city = customer.billing_address?.city || 
+                        customer.address_info?.billing_city || 
+                        customer.city || '';
+            const state = customer.billing_address?.state || 
+                         customer.address_info?.billing_state || 
+                         customer.state || '';
+            
+            if (city || state) {
+              return (
+                <p className="flex items-center gap-1">
+                  <MapPin className="w-3 h-3" /> 
+                  {city}{state ? `, ${state}` : ''}
+                </p>
+              );
+            }
+            return null;
+          })()}
+        </div>
       </div>
       
-      <div className="text-sm text-gray-600 space-y-1">
-        {/* Handle phone - could be in contact_info or directly on customer */}
-        {(customer.phone || customer.contact_info?.primary_phone) && (
-          <p className="flex items-center gap-1">
-            <Phone className="w-3 h-3" /> {customer.phone || customer.contact_info?.primary_phone}
-          </p>
-        )}
-        {/* Handle email - could be in contact_info or directly on customer */}
-        {(customer.email || customer.contact_info?.email) && (
-          <p className="flex items-center gap-1">
-            <Mail className="w-3 h-3" /> {customer.email || customer.contact_info?.email}
-          </p>
-        )}
-        {/* Handle address - check both billing_address object and address_info */}
-        {(customer.billing_address || customer.address_info?.billing_address) && (
-          <p className="flex items-center gap-1">
-            <MapPin className="w-3 h-3" /> 
-            {customer.billing_address ? 
-              `${customer.billing_address.street || ''}${customer.billing_address.city ? `, ${customer.billing_address.city}` : ''}${customer.billing_address.state ? `, ${customer.billing_address.state}` : ''}` :
-              `${customer.address_info?.billing_address || ''}${customer.address_info?.billing_city ? `, ${customer.address_info.billing_city}` : ''}${customer.address_info?.billing_state ? `, ${customer.address_info.billing_state}` : ''}`
-            }
-          </p>
-        )}
-        {(customer.gstin || customer.gst_number) && (
-          <p className="flex items-center gap-1">
-            <Building className="w-3 h-3" /> GST: {customer.gstin || customer.gst_number}
-          </p>
+      {/* GST Status Badge */}
+      <div className="ml-3">
+        {(customer.gstin || customer.gst_number) ? (
+          <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-700">
+            ✓ GST Verified
+          </span>
+        ) : (
+          <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-600">
+            No GST
+          </span>
         )}
       </div>
     </div>
