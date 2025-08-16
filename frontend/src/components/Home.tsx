@@ -92,19 +92,11 @@ const Home: React.FC<HomeProps> = ({ setActiveTab }) => {
     },
     {
       id: 'credit-debit-note',
-      tab: 'credit-debit-note',
+      tab: 'payment',
       title: 'Credit/Debit Note',
       subtitle: 'Financial adjustments without returns',
       icon: FileEdit,
       shortcut: 'Ctrl+N'
-    },
-    {
-      id: 'receivables-collection',
-      tab: 'receivables-collection',
-      title: 'Receivables & Collection',
-      subtitle: 'Monitor outstanding receivables and collections',
-      icon: CreditCard,
-      shortcut: 'Ctrl+R'
     }
   ];
 
@@ -127,7 +119,7 @@ const Home: React.FC<HomeProps> = ({ setActiveTab }) => {
     },
     {
       id: 'gst',
-      tab: 'gst',
+      tab: 'payment',
       title: 'GST Management',
       subtitle: 'Tax reports, filing, and compliance',
       icon: Calculator,
@@ -177,11 +169,11 @@ const Home: React.FC<HomeProps> = ({ setActiveTab }) => {
             break;
           case 'n':
             e.preventDefault();
-            setActiveTab('credit-debit-note');
+            setActiveTab('payment');
             break;
           case 'g':
             e.preventDefault();
-            setActiveTab('gst');
+            setActiveTab('payment');
             break;
           case 'w':
             e.preventDefault();
@@ -201,9 +193,6 @@ const Home: React.FC<HomeProps> = ({ setActiveTab }) => {
             default:
               break;
           }
-        } else if (e.key.toLowerCase() === 'r') {
-          e.preventDefault();
-          setActiveTab('receivables-collection');
         }
       } else if (e.key === 'F8') {
         e.preventDefault();
