@@ -467,7 +467,7 @@ async def update_product(
             "brand": "brand",
             "brand_name": "brand",
             "manufacturer": "manufacturer",
-            "category_id": "category_id",
+            # Skip category_id - requires proper category management
             "hsn_code": "hsn_code",
             "gst_percentage": "gst_percentage",
             "gst_rate": "gst_percentage",
