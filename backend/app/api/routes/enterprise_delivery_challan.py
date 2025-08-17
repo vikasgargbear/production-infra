@@ -16,7 +16,7 @@ from ...core.config import DEFAULT_ORG_ID
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/enterprise-delivery-challan", tags=["enterprise-delivery-challan"])
+router = APIRouter(tags=["enterprise-delivery-challan"])
 
 # =============================================
 # PYDANTIC MODELS
@@ -133,22 +133,16 @@ class EnterpriseChallanService:
                 text("""
                     INSERT INTO sales.delivery_challans (
                         org_id, order_id, customer_id, challan_number,
-                        challan_date, dispatch_date,
-                        challan_status, vehicle_number, driver_name, driver_phone,
-                        transport_company, lr_number, freight_amount,
-                        delivery_address, delivery_city, delivery_state,
-                        delivery_pincode, delivery_contact_person,
-                        delivery_contact_phone, total_packages, total_weight,
-                        prepared_by
+                        challan_date, dispatch_date, challan_status,
+                        vehicle_number, transporter_name, lr_number, 
+                        freight_charges, total_quantity, total_amount,
+                        delivery_status, notes, created_by
                     ) VALUES (
                         :org_id, :order_id, :customer_id, :challan_number,
-                        :challan_date, :dispatch_date,
-                        :challan_status, :vehicle_number, :driver_name, :driver_phone,
-                        :transport_company, :lr_number, :freight_amount,
-                        :delivery_address, :delivery_city, :delivery_state,
-                        :delivery_pincode, :delivery_contact_person,
-                        :delivery_contact_phone, :total_packages, :total_weight,
-                        :prepared_by
+                        :challan_date, :dispatch_date, :challan_status,
+                        :vehicle_number, :transporter_name, :lr_number,
+                        :freight_charges, :total_quantity, :total_amount,
+                        :delivery_status, :notes, :created_by
                     )
                     RETURNING challan_id
                 """),
@@ -158,24 +152,17 @@ class EnterpriseChallanService:
                     "customer_id": request.customer_id,
                     "challan_number": challan_number,
                     "challan_date": date.today(),
-                    "dispatch_date": request.dispatch_date,
-                    # "expected_delivery_date": request.expected_delivery_date,  # TODO: Column doesn't exist
+                    "dispatch_date": request.dispatch_date or date.today(),
                     "challan_status": "draft",
                     "vehicle_number": request.vehicle_number,
-                    "driver_name": request.driver_name,
-                    "driver_phone": request.driver_phone,
-                    "transport_company": request.transport_company,
+                    "transporter_name": request.transport_company,
                     "lr_number": request.lr_number,
-                    "freight_amount": request.freight_amount,
-                    "delivery_address": request.delivery_address,
-                    "delivery_city": request.delivery_city,
-                    "delivery_state": request.delivery_state,
-                    "delivery_pincode": request.delivery_pincode,
-                    "delivery_contact_person": request.delivery_contact_person,
-                    "delivery_contact_phone": request.delivery_contact_phone,
-                    "total_packages": request.total_packages,
-                    "total_weight": request.total_weight,
-                    "prepared_by": None  # TODO: Get from session
+                    "freight_charges": request.freight_amount or 0,
+                    "total_quantity": len(request.items),  # Count of items for now
+                    "total_amount": sum(item.unit_price * item.dispatched_quantity for item in request.items),
+                    "delivery_status": "pending",
+                    "notes": f"Delivery to: {request.delivery_address}, {request.delivery_city}",
+                    "created_by": 1  # Default user for now
                 }
             )
             challan_id = challan_result.scalar()
@@ -315,12 +302,13 @@ async def list_delivery_challans(
                 cust.customer_name,
                 c.challan_status as status,
                 c.dispatch_date,
-                -- c.expected_delivery_date,  -- TODO: Column doesn't exist in database
-                c.delivery_address,
-                c.delivery_city,
+                c.transporter_name as delivery_company,
                 c.vehicle_number,
-                c.driver_name,
-                c.total_packages
+                c.lr_number,
+                c.total_quantity,
+                c.total_amount,
+                c.delivery_status,
+                c.notes
             FROM sales.delivery_challans c
             JOIN parties.customers cust ON c.customer_id = cust.customer_id
             WHERE c.org_id = :org_id

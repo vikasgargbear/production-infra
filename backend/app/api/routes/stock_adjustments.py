@@ -38,7 +38,7 @@ def get_stock_adjustments(
             "other": "stock_adjustment"
         }
         
-        # Simplified query using actual database schema
+        # Query using actual database schema
         query = """
             SELECT 
                 movement_id as adjustment_id,
@@ -47,12 +47,12 @@ def get_stock_adjustments(
                 product_id,
                 batch_id,
                 CASE 
-                    WHEN quantity_in > 0 THEN quantity_in
-                    ELSE -quantity_out
+                    WHEN movement_direction = 'in' THEN quantity
+                    ELSE -quantity
                 END as quantity_adjusted,
-                notes as reason,
+                reason,
                 reference_number,
-                performed_by as adjusted_by,
+                created_by as adjusted_by,
                 created_at,
                 org_id
             FROM inventory.inventory_movements
@@ -136,31 +136,29 @@ def create_stock_adjustment(adjustment_data: dict, db: Session = Depends(get_db)
         movement_id = db.execute(
             text("""
                 INSERT INTO inventory.inventory_movements (
-                    org_id, movement_date, movement_type,
-                    product_id, batch_id, 
-                    quantity_in, quantity_out,
+                    org_id, movement_date, movement_type, movement_direction,
+                    product_id, batch_id, quantity, location_id,
                     reference_type, reference_number,
-                    notes, performed_by
+                    reason, created_by
                 ) VALUES (
-                    :org_id
-                    :movement_date, :movement_type,
-                    :product_id, :batch_id,
-                    :quantity_in, :quantity_out,
+                    :org_id, :movement_date, :movement_type, :movement_direction,
+                    :product_id, :batch_id, :quantity, :location_id,
                     'adjustment', :reference_number,
-                    :notes, :performed_by
+                    :reason, :created_by
                 ) RETURNING movement_id
             """),
             {
                 "org_id": DEFAULT_ORG_ID,
                 "movement_date": adjustment_data.get("adjustment_date", datetime.utcnow()),
                 "movement_type": movement_type,
+                "movement_direction": "in" if quantity_adjusted > 0 else "out",
                 "product_id": batch.product_id,
                 "batch_id": adjustment_data.get("batch_id"),
-                "quantity_in": quantity_adjusted if quantity_adjusted > 0 else 0,
-                "quantity_out": abs(quantity_adjusted) if quantity_adjusted < 0 else 0,
+                "quantity": abs(quantity_adjusted),
+                "location_id": 1,  # Default location
                 "reference_number": adjustment_data.get("reference_number", f"ADJ-{datetime.now().strftime('%Y%m%d%H%M')}"),
-                "notes": adjustment_data.get("reason"),
-                "performed_by": adjustment_data.get("adjusted_by")
+                "reason": adjustment_data.get("reason"),
+                "created_by": 1  # Default user
             }
         ).scalar()
         
@@ -226,30 +224,29 @@ def process_physical_count(count_data: dict, db: Session = Depends(get_db)):
                 movement_id = db.execute(
                     text("""
                         INSERT INTO inventory.inventory_movements (
-                            org_id, movement_date, movement_type,
-                            product_id, batch_id,
-                            quantity_in, quantity_out,
+                            org_id, movement_date, movement_type, movement_direction,
+                            product_id, batch_id, quantity, location_id,
                             reference_type, reference_number,
-                            notes, performed_by
+                            reason, created_by
                         ) VALUES (
                             :org_id,
-                            :movement_date, 'stock_count',
-                            :product_id, :batch_id,
-                            :quantity_in, :quantity_out,
+                            :movement_date, 'stock_count', :movement_direction,
+                            :product_id, :batch_id, :quantity, :location_id,
                             'physical_count', :reference_number,
-                            :notes, :performed_by
+                            :reason, :created_by
                         ) RETURNING movement_id
                     """),
                     {
                         "org_id": DEFAULT_ORG_ID,
                         "movement_date": count_data.get("count_date", datetime.utcnow()),
+                        "movement_direction": "in" if difference > 0 else "out",
                         "product_id": batch.product_id,
                         "batch_id": batch_id,
-                        "quantity_in": difference if difference > 0 else 0,
-                        "quantity_out": abs(difference) if difference < 0 else 0,
+                        "quantity": abs(difference),
+                        "location_id": 1,  # Default location
                         "reference_number": count_data.get("count_reference", f"COUNT-{datetime.now().strftime('%Y%m%d')}"),
-                        "notes": f"Physical count adjustment: System {system_quantity}, Counted {counted_quantity}",
-                        "performed_by": count_data.get("counted_by")
+                        "reason": f"Physical count adjustment: System {system_quantity}, Counted {counted_quantity}",
+                        "created_by": 1  # Default user
                     }
                 ).scalar()
                 
@@ -312,27 +309,27 @@ def expire_batches(db: Session = Depends(get_db)):
             movement_id = db.execute(
                 text("""
                     INSERT INTO inventory.inventory_movements (
-                        org_id, movement_date, movement_type,
-                        product_id, batch_id,
-                        quantity_in, quantity_out,
+                        org_id, movement_date, movement_type, movement_direction,
+                        product_id, batch_id, quantity, location_id,
                         reference_type, reference_number,
-                        notes
+                        reason, created_by
                     ) VALUES (
                         :org_id,
-                        CURRENT_DATE, 'stock_expiry',
-                        :product_id, :batch_id,
-                        0, :quantity_out,
+                        CURRENT_DATE, 'stock_expiry', 'out',
+                        :product_id, :batch_id, :quantity, :location_id,
                         'expiry', :reference_number,
-                        :notes
+                        :reason, :created_by
                     ) RETURNING movement_id
                 """),
                 {
                     "org_id": DEFAULT_ORG_ID,
                     "product_id": batch.product_id,
                     "batch_id": batch.batch_id,
-                    "quantity_out": batch.quantity_available,
+                    "quantity": batch.quantity_available,
+                    "location_id": 1,  # Default location
                     "reference_number": f"EXP-{batch.batch_number}",
-                    "notes": f"Batch expired on {batch.expiry_date}"
+                    "reason": f"Batch expired on {batch.expiry_date}",
+                    "created_by": 1  # Default user
                 }
             ).scalar()
             
