@@ -541,8 +541,6 @@ async def update_product(
         # Handle batch-level fields that moved from products table
         batch_fields = {}
         batch_field_mapping = {
-            "category": "category_name",
-            "category_name": "category_name", 
             "pack_type": "pack_type",
             "pack_size": "pack_size",
             "pack_unit_quantity": "units_per_pack",
@@ -551,6 +549,7 @@ async def update_product(
             "sale_unit": "base_uom"
         }
         
+        # Handle regular batch fields (non-category)
         for frontend_field, batch_field in batch_field_mapping.items():
             if frontend_field in product:
                 batch_fields[batch_field] = product[frontend_field]
