@@ -194,7 +194,7 @@ async def list_customers(
     is_active: Optional[bool] = None,
     city: Optional[str] = None,
     has_gstin: Optional[bool] = None,
-    include_stats: bool = Query(True, description="Include business statistics"),
+    include_stats: bool = Query(False, description="Include business statistics (disabled by default for performance)"),
     db: Session = Depends(get_db)
 ):
     """
@@ -283,11 +283,17 @@ async def list_customers(
         # Collect all customer data first
         customer_rows = list(result)
         
-        # Get statistics in batch if requested
+        # Get statistics in batch if requested (with error handling for production)
         stats_by_customer = {}
         if include_stats:
-            customer_ids = [row.customer_id for row in customer_rows]
-            stats_by_customer = CustomerService.get_customers_statistics_batch(db, customer_ids)
+            try:
+                customer_ids = [row.customer_id for row in customer_rows]
+                stats_by_customer = CustomerService.get_customers_statistics_batch(db, customer_ids)
+                logger.info(f"Successfully loaded stats for {len(stats_by_customer)} customers")
+            except Exception as stats_error:
+                logger.warning(f"Failed to load customer statistics: {stats_error}")
+                # Continue without stats rather than failing the entire request
+                stats_by_customer = {}
         
         # Build customer responses
         for row in customer_rows:
