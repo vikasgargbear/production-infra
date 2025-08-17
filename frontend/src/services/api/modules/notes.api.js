@@ -61,7 +61,7 @@ export const notesApi = {
 
   // Get invoice items for credit/debit note creation
   getInvoiceItems: async (invoiceId) => {
-    const response = await apiClient.get(`/sale-returns/invoice/${invoiceId}/items`);
+    const response = await apiClient.get(`/sales/${invoiceId}`);
     return response.data;
   },
 
