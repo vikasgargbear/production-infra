@@ -792,11 +792,12 @@ async def create_product_category(
         # Insert new category
         result = db.execute(text("""
             INSERT INTO inventory.product_categories (
-                category_name, category_code, is_active, created_at
+                org_id, category_name, category_code, is_active, created_at
             ) VALUES (
-                :category_name, :category_code, true, CURRENT_TIMESTAMP
+                :org_id, :category_name, :category_code, true, CURRENT_TIMESTAMP
             ) RETURNING category_id, category_name, category_code
         """), {
+            "org_id": DEFAULT_ORG_ID,
             "category_name": category_name,
             "category_code": category_code
         })
