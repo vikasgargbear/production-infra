@@ -63,17 +63,23 @@ const ProductCreationModal = ({
         setLoadingMasterData(true);
         
         // Load categories and product types in parallel
+        console.log('Loading master data...');
         const [categoriesResponse, typesResponse] = await Promise.all([
           productsApi.get('/products/master/categories'),
           productsApi.get('/products/master/types')
         ]);
         
+        console.log('Categories response:', categoriesResponse);
+        console.log('Types response:', typesResponse);
+        
         if (categoriesResponse.data?.success) {
           setCategories(categoriesResponse.data.data);
+          console.log('Categories loaded:', categoriesResponse.data.data.length);
         }
         
         if (typesResponse.data?.success) {
           setProductTypes(typesResponse.data.data);
+          console.log('Product types loaded:', typesResponse.data.data.length);
         }
         
       } catch (error) {
