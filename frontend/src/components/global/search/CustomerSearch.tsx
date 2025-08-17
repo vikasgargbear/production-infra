@@ -116,10 +116,10 @@ export const CustomerSearch = forwardRef<CustomerSearchRef, CustomerSearchProps>
             // Try to get city and state from multiple possible sources
             const city = customer.billing_address?.city || 
                         customer.address_info?.billing_city || 
-                        customer.city || '';
+                        (customer as any).city || '';
             const state = customer.billing_address?.state || 
                          customer.address_info?.billing_state || 
-                         customer.state || '';
+                         (customer as any).state || '';
             
             if (city || state) {
               return (

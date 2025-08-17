@@ -55,6 +55,12 @@ const ProductCreationModal = ({
   const [categories, setCategories] = useState([]);
   const [productTypes, setProductTypes] = useState([]);
   const [loadingMasterData, setLoadingMasterData] = useState(true);
+  
+  // Custom input states
+  const [showCustomCategory, setShowCustomCategory] = useState(false);
+  const [showCustomType, setShowCustomType] = useState(false);
+  const [customCategoryName, setCustomCategoryName] = useState('');
+  const [customTypeName, setCustomTypeName] = useState('');
 
   // Load master data when component mounts
   useEffect(() => {
@@ -104,6 +110,69 @@ const ProductCreationModal = ({
       }));
     }
   }, [show, initialProductName]);
+
+  // Function to create new category
+  const createNewCategory = async () => {
+    if (!customCategoryName.trim()) return;
+    
+    try {
+      const response = await productsApi.post('/products/master/categories', {
+        category_name: customCategoryName.trim()
+      });
+      
+      if (response.data?.success) {
+        const newCategory = response.data.data;
+        setCategories([...categories, newCategory]);
+        setNewProduct({
+          ...newProduct,
+          category_id: newCategory.category_id.toString(),
+          category: newCategory.category_name
+        });
+        setCustomCategoryName('');
+        setShowCustomCategory(false);
+        console.log('New category created:', newCategory);
+      }
+    } catch (error) {
+      console.error('Error creating category:', error);
+      if (error.response?.data?.detail?.includes('already exists')) {
+        setErrors(['Category already exists']);
+      } else {
+        setErrors(['Failed to create category']);
+      }
+    }
+  };
+
+  // Function to create new product type
+  const createNewType = async () => {
+    if (!customTypeName.trim()) return;
+    
+    try {
+      const response = await productsApi.post('/products/master/types', {
+        type_name: customTypeName.trim(),
+        default_base_uom: 'Unit'
+      });
+      
+      if (response.data?.success) {
+        const newType = response.data.data;
+        setProductTypes([...productTypes, newType]);
+        setNewProduct({
+          ...newProduct,
+          type_id: newType.type_id.toString(),
+          product_type: newType.type_name
+        });
+        setCustomTypeName('');
+        setShowCustomType(false);
+        console.log('New type created:', newType);
+      }
+    } catch (error) {
+      console.error('Error creating type:', error);
+      if (error.response?.data?.detail?.includes('already exists')) {
+        setErrors(['Product type already exists']);
+      } else {
+        setErrors(['Failed to create product type']);
+      }
+    }
+  };
 
   const calculateExpiryDate = (mfgDate, monthsToAdd = 24) => {
     if (!mfgDate || !mfgDate.includes('-')) return '';
@@ -428,56 +497,136 @@ const ProductCreationModal = ({
                   <label className="block text-sm font-medium text-gray-700 mb-2">
                     Category
                   </label>
-                  <select
-                    value={newProduct.category_id}
-                    onChange={(e) => {
-                      const selectedCategory = categories.find(cat => cat.category_id === parseInt(e.target.value));
-                      setNewProduct({ 
-                        ...newProduct, 
-                        category_id: e.target.value,
-                        category: selectedCategory ? selectedCategory.category_name : ''
-                      });
-                    }}
-                    className="w-full px-3 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all"
-                    disabled={loadingMasterData}
-                  >
-                    <option value="">
-                      {loadingMasterData ? 'Loading categories...' : 'Select Category'}
-                    </option>
-                    {categories.map(category => (
-                      <option key={category.category_id} value={category.category_id}>
-                        {category.category_name}
-                      </option>
-                    ))}
-                  </select>
+                  {!showCustomCategory ? (
+                    <div className="space-y-2">
+                      <select
+                        value={newProduct.category_id}
+                        onChange={(e) => {
+                          if (e.target.value === 'add_new') {
+                            setShowCustomCategory(true);
+                            return;
+                          }
+                          const selectedCategory = categories.find(cat => cat.category_id === parseInt(e.target.value));
+                          setNewProduct({ 
+                            ...newProduct, 
+                            category_id: e.target.value,
+                            category: selectedCategory ? selectedCategory.category_name : ''
+                          });
+                        }}
+                        className="w-full px-3 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all"
+                        disabled={loadingMasterData}
+                      >
+                        <option value="">
+                          {loadingMasterData ? 'Loading categories...' : 'Select Category'}
+                        </option>
+                        {categories.map(category => (
+                          <option key={category.category_id} value={category.category_id}>
+                            {category.category_name}
+                          </option>
+                        ))}
+                        <option value="add_new" className="font-medium text-green-600">
+                          + Add New Category
+                        </option>
+                      </select>
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      <div className="flex space-x-2">
+                        <input
+                          type="text"
+                          value={customCategoryName}
+                          onChange={(e) => setCustomCategoryName(e.target.value)}
+                          placeholder="Enter new category name"
+                          className="flex-1 px-3 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all"
+                          onKeyPress={(e) => e.key === 'Enter' && createNewCategory()}
+                        />
+                        <button
+                          onClick={createNewCategory}
+                          disabled={!customCategoryName.trim()}
+                          className="px-4 py-3 bg-green-600 text-white rounded-xl hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                        >
+                          Add
+                        </button>
+                        <button
+                          onClick={() => {
+                            setShowCustomCategory(false);
+                            setCustomCategoryName('');
+                          }}
+                          className="px-4 py-3 bg-gray-300 text-gray-700 rounded-xl hover:bg-gray-400 transition-all"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
                     Product Type
                   </label>
-                  <select
-                    value={newProduct.type_id}
-                    onChange={(e) => {
-                      const selectedType = productTypes.find(type => type.type_id === parseInt(e.target.value));
-                      setNewProduct({ 
-                        ...newProduct, 
-                        type_id: e.target.value,
-                        product_type: selectedType ? selectedType.type_name : ''
-                      });
-                    }}
-                    className="w-full px-3 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all"
-                    disabled={loadingMasterData}
-                  >
-                    <option value="">
-                      {loadingMasterData ? 'Loading types...' : 'Select Product Type'}
-                    </option>
-                    {productTypes.map(type => (
-                      <option key={type.type_id} value={type.type_id}>
-                        {type.type_name}
-                      </option>
-                    ))}
-                  </select>
+                  {!showCustomType ? (
+                    <div className="space-y-2">
+                      <select
+                        value={newProduct.type_id}
+                        onChange={(e) => {
+                          if (e.target.value === 'add_new') {
+                            setShowCustomType(true);
+                            return;
+                          }
+                          const selectedType = productTypes.find(type => type.type_id === parseInt(e.target.value));
+                          setNewProduct({ 
+                            ...newProduct, 
+                            type_id: e.target.value,
+                            product_type: selectedType ? selectedType.type_name : ''
+                          });
+                        }}
+                        className="w-full px-3 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all"
+                        disabled={loadingMasterData}
+                      >
+                        <option value="">
+                          {loadingMasterData ? 'Loading types...' : 'Select Product Type'}
+                        </option>
+                        {productTypes.map(type => (
+                          <option key={type.type_id} value={type.type_id}>
+                            {type.type_name}
+                          </option>
+                        ))}
+                        <option value="add_new" className="font-medium text-green-600">
+                          + Add New Product Type
+                        </option>
+                      </select>
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      <div className="flex space-x-2">
+                        <input
+                          type="text"
+                          value={customTypeName}
+                          onChange={(e) => setCustomTypeName(e.target.value)}
+                          placeholder="Enter new product type"
+                          className="flex-1 px-3 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all"
+                          onKeyPress={(e) => e.key === 'Enter' && createNewType()}
+                        />
+                        <button
+                          onClick={createNewType}
+                          disabled={!customTypeName.trim()}
+                          className="px-4 py-3 bg-green-600 text-white rounded-xl hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                        >
+                          Add
+                        </button>
+                        <button
+                          onClick={() => {
+                            setShowCustomType(false);
+                            setCustomTypeName('');
+                          }}
+                          className="px-4 py-3 bg-gray-300 text-gray-700 rounded-xl hover:bg-gray-400 transition-all"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 <div className="md:col-span-2">
