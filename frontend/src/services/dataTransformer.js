@@ -275,10 +275,12 @@ class DataTransformer {
   static prepareCustomerForAPI(customerData) {
     return {
       customer_name: customerData.customer_name,
-      phone: customerData.primary_phone, // Map primary_phone to phone for API
-      email: customerData.primary_email || null, // Map primary_email to email
+      primary_phone: customerData.primary_phone, // Keep as primary_phone for API
+      secondary_phone: customerData.secondary_phone || null,
+      whatsapp_number: customerData.whatsapp_number || null,
+      email: customerData.primary_email || null,
       customer_type: customerData.customer_type || 'retail',
-      gstin: customerData.gst_number || null, // Map gst_number to gstin
+      gstin: customerData.gst_number || null, // Map gst_number to gstin for API
       pan_number: customerData.pan_number || null,
       drug_license_number: customerData.drug_license_number || null,
       credit_limit: parseFloat(customerData.credit_limit || 0),
