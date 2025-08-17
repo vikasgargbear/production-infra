@@ -710,3 +710,45 @@ async def update_product_batches(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to update product batches: {str(e)}"
         )
+
+@router.get("/categories")
+async def get_product_categories(db: Session = Depends(get_db)):
+    """Get all active product categories"""
+    try:
+        result = db.execute(text("""
+            SELECT category_id, category_name, category_code, parent_category_id
+            FROM inventory.product_categories
+            WHERE is_active = true
+            ORDER BY category_name
+        """))
+        
+        categories = [dict(row._mapping) for row in result]
+        return {"success": True, "data": categories}
+        
+    except Exception as e:
+        logger.error(f"Error fetching categories: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to fetch categories: {str(e)}"
+        )
+
+@router.get("/types")
+async def get_product_types(db: Session = Depends(get_db)):
+    """Get all active product types"""
+    try:
+        result = db.execute(text("""
+            SELECT type_id, type_name, type_code, default_base_uom
+            FROM inventory.product_types
+            WHERE is_active = true
+            ORDER BY type_name
+        """))
+        
+        types = [dict(row._mapping) for row in result]
+        return {"success": True, "data": types}
+        
+    except Exception as e:
+        logger.error(f"Error fetching product types: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to fetch product types: {str(e)}"
+        )
