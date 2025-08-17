@@ -138,23 +138,23 @@ class FrontendBackendIntegrationTester:
             
         elif data_type == 'purchase':
             return {
-                'supplier_id': None,  # Will be set dynamically
-                'purchase_date': date.today().isoformat(),
-                'invoice_number': f'PUR{timestamp}',
-                'invoice_date': date.today().isoformat(),
-                'payment_mode': 'credit',
-                'payment_terms': 30,
-                'discount_amount': 0,
-                'shipping_charges': 100,
+                'po_number': f'PO-TEST-{timestamp}',
+                'supplier_id': 1,  # Use existing supplier
+                'po_date': date.today().isoformat(),
+                'po_type': 'regular',
+                'po_status': 'draft',
+                'subtotal_amount': 7000.00,
+                'tax_amount': 1260.00,  # 18% GST
+                'total_amount': 8260.00,
                 'notes': 'Test purchase via integration',
                 'items': [
                     {
                         'product_id': None,  # Will be set dynamically
                         'quantity': 100,
                         'unit_price': 70.00,
-                        'discount_percent': 2.0,
-                        'expiry_date': (date.today() + timedelta(days=730)).isoformat(),
-                        'batch_number': f'BATCH{timestamp}'
+                        'discount_percent': 0,
+                        'uom': 'unit',
+                        'pack_type': 'unit'
                     }
                 ]
             }
@@ -344,6 +344,82 @@ class FrontendBackendIntegrationTester:
         else:
             self.log_test(module, f"Field Validation ({operation})", "PASS")
 
+    async def test_purchase_module(self, product_id: int):
+        """Test Purchase Management: Frontend inputs → Backend → Database"""
+        module = "Purchase Management"
+        logger.info(f"\n🧪 Testing {module} Module")
+        
+        if not product_id:
+            self.log_test(module, "Pre-requisites", "FAIL", "Missing product_id")
+            return None
+        
+        try:
+            purchase_data = self.generate_test_data('purchase')
+            purchase_data['items'][0]['product_id'] = product_id
+            
+            logger.info(f"Testing purchase creation with data: {json.dumps(purchase_data, indent=2)}")
+            
+            response = self.session.post(f"{API_BASE}/purchases/purchases/", json=purchase_data)
+            
+            if response.status_code in [200, 201]:
+                created_purchase = response.json()
+                purchase_id = created_purchase.get('po_id') or created_purchase.get('purchase_order_id')
+                
+                if purchase_id:
+                    self.log_test(module, "Purchase Creation", "PASS")
+                    self.verify_purchase_fields(purchase_data, created_purchase, "creation")
+                    
+                    # Test Purchase Retrieval
+                    get_response = self.session.get(f"{API_BASE}/purchases/purchases/{purchase_id}")
+                    if get_response.status_code == 200:
+                        retrieved_purchase = get_response.json()
+                        self.verify_purchase_fields(purchase_data, retrieved_purchase, "retrieval")
+                    else:
+                        self.log_test(module, "Purchase Retrieval", "FAIL", f"Status: {get_response.status_code}")
+                else:
+                    self.log_test(module, "Purchase Creation", "FAIL", "No purchase_id returned")
+                
+                return purchase_id
+            else:
+                self.log_test(module, "Purchase Creation", "FAIL", f"Status: {response.status_code}, Response: {response.text}")
+                return None
+                
+        except Exception as e:
+            self.log_test(module, "Purchase Module", "ERROR", str(e))
+            return None
+
+    def verify_purchase_fields(self, input_data: Dict, output_data: Dict, operation: str):
+        """Verify purchase field preservation"""
+        module = "Purchase Management"
+        
+        # Fields that should be present in the API response
+        critical_fields = [
+            'po_id', 'po_number', 'supplier_id'
+        ]
+        
+        missing_fields = []
+        mismatched_fields = []
+        
+        for field in critical_fields:
+            # Handle po_id vs purchase_order_id
+            if field == 'po_id' and field not in output_data:
+                if 'purchase_order_id' not in output_data:
+                    missing_fields.append(field)
+            elif field in output_data and field in input_data:
+                if str(input_data.get(field)) != str(output_data.get(field)):
+                    mismatched_fields.append(f"{field}: {input_data.get(field)} != {output_data.get(field)}")
+        
+        # Check if po_number matches
+        if input_data.get('po_number') and output_data.get('po_number'):
+            if input_data['po_number'] != output_data['po_number']:
+                mismatched_fields.append(f"po_number: {input_data['po_number']} != {output_data['po_number']}")
+        
+        if missing_fields or mismatched_fields:
+            error_details = f"Missing: {missing_fields}, Mismatched: {mismatched_fields}"
+            self.log_test(module, f"Field Validation ({operation})", "FAIL", error_details)
+        else:
+            self.log_test(module, f"Field Validation ({operation})", "PASS")
+
     async def test_sales_invoice_module(self, customer_id: int, product_id: int):
         """Test Sales/Invoice: Frontend inputs → Backend → Database"""
         module = "Sales/Invoice Management"
@@ -496,6 +572,7 @@ class FrontendBackendIntegrationTester:
         # Test modules in dependency order
         customer_id = await self.test_customer_module()
         product_id = await self.test_product_module()
+        purchase_id = await self.test_purchase_module(product_id)
         invoice_id = await self.test_sales_invoice_module(customer_id, product_id)
         payment_id = await self.test_payment_module(invoice_id)
         

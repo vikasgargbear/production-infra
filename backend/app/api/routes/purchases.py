@@ -216,6 +216,19 @@ def create_purchase(purchase_data: dict, db: Session = Depends(get_db)):
             for item in items:
                 item['purchase_order_id'] = po['po_id']  # Use the returned po_id
                 
+                # Fetch product name if not provided
+                if 'product_name' not in item or not item['product_name']:
+                    product_result = db.execute(text("""
+                        SELECT product_name FROM inventory.products
+                        WHERE product_id = :product_id
+                    """), {"product_id": item.get('product_id')})
+                    product = product_result.fetchone()
+                    item['product_name'] = product[0] if product else f"Product {item.get('product_id')}"
+                
+                # Map quantity field (frontend sends 'quantity', DB expects 'ordered_quantity')
+                if 'quantity' in item and 'ordered_quantity' not in item:
+                    item['ordered_quantity'] = item['quantity']
+                
                 # Ensure required fields have defaults
                 if 'uom' not in item:
                     item['uom'] = 'unit'
