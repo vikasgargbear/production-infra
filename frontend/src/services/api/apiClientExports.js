@@ -199,6 +199,14 @@ export const productAPI = {
     const response = await apiClient.get(`/pg/products/${productId}/batches`);
     return response.data;
   },
+
+  /**
+   * Generic GET method for any product endpoint
+   */
+  get: async (endpoint) => {
+    const response = await apiClient.get(endpoint);
+    return response;
+  },
 };
 
 // Define other commonly used APIs
