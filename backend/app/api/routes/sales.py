@@ -339,9 +339,22 @@ async def get_sales(
         
         sales = db.execute(text(query), params).fetchall()
         
-        # Get count
-        count_query = query.replace("SELECT i.invoice_id as sale_id, i.invoice_number", "SELECT COUNT(*)")
-        count_query = count_query.split("ORDER BY")[0]
+        # Get count with a proper count query
+        count_query = """
+            SELECT COUNT(*)
+            FROM sales.invoices i
+            WHERE i.order_id IS NULL  -- Direct sales without orders
+        """
+        # Add the same filters as main query
+        if party_id:
+            count_query += " AND i.customer_id = :party_id"
+        if from_date:
+            count_query += " AND i.invoice_date >= :from_date"
+        if to_date:
+            count_query += " AND i.invoice_date <= :to_date"
+        if payment_method:
+            count_query += " AND i.payment_method = :payment_method"
+            
         total = db.execute(text(count_query), params).scalar()
         
         return {

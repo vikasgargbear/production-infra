@@ -18,6 +18,20 @@ from ...core.jwt_auth import (
 
 router = APIRouter(prefix="/auth", tags=["authentication"])
 
+@router.get("/")
+async def auth_status():
+    """Get authentication status and available endpoints"""
+    return {
+        "status": "Authentication service available",
+        "endpoints": {
+            "login": "POST /api/auth/login",
+            "logout": "POST /api/auth/logout", 
+            "refresh": "POST /api/auth/refresh",
+            "profile": "GET /api/auth/profile"
+        },
+        "version": "1.0.0"
+    }
+
 @router.post("/login")
 async def login(
     form_data: OAuth2PasswordRequestForm = Depends(),

@@ -23,6 +23,35 @@ router = APIRouter(
     tags=["stock"]
 )
 
+@router.get("/")
+async def stock_overview(db: Session = Depends(get_db)):
+    """Get stock overview and available operations"""
+    try:
+        # Simple stock stats
+        result = db.execute(text("""
+            SELECT 
+                COUNT(DISTINCT product_id) as total_products,
+                SUM(quantity_available) as total_quantity,
+                COUNT(*) as total_batches,
+                COUNT(CASE WHEN batch_status = 'active' THEN 1 END) as active_batches
+            FROM inventory.batches
+        """)).fetchone()
+        
+        return {
+            "status": "Stock management service available",
+            "total_products": result.total_products if result else 0,
+            "total_quantity": int(result.total_quantity) if result and result.total_quantity else 0,
+            "total_batches": result.total_batches if result else 0,
+            "active_batches": result.active_batches if result else 0,
+            "operations": ["Stock Receive", "Batch Management", "Stock Adjustments"]
+        }
+    except Exception as e:
+        return {
+            "status": "Stock management service available",
+            "operations": ["Stock Receive", "Batch Management", "Stock Adjustments"],
+            "error": "Could not load statistics"
+        }
+
 class StockReceiveRequest(BaseModel):
     """Request model for receiving stock"""
     product_id: int

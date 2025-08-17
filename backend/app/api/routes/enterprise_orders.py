@@ -29,6 +29,26 @@ router = APIRouter(
     tags=["enterprise-orders"]
 )
 
+@router.get("/")
+async def get_enterprise_orders_overview():
+    """Get enterprise orders overview and service status"""
+    return {
+        "status": "Enterprise Order Management Service Available",
+        "version": "2.0.0",
+        "features": [
+            "Advanced order validation",
+            "Stock reservation",
+            "Multi-location support", 
+            "Comprehensive error handling",
+            "Transaction integrity"
+        ],
+        "endpoints": {
+            "create": "POST /api/enterprise-orders/",
+            "get": "GET /api/enterprise-orders/{order_id}",
+            "health": "GET /api/enterprise-orders/health"
+        }
+    }
+
 # Backwards compatibility endpoint that maps to enterprise service
 @router.post("/", response_model=OrderCreationResponse)
 async def create_enterprise_order(

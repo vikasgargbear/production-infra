@@ -23,6 +23,38 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/billing", tags=["Billing & GST"])
 
+@router.get("/")
+async def billing_overview(db: Session = Depends(get_db)):
+    """Get billing overview and available services"""
+    try:
+        # Simple billing stats
+        result = db.execute(text("""
+            SELECT 
+                COUNT(*) as total_invoices,
+                SUM(final_amount) as total_amount,
+                COUNT(CASE WHEN payment_status = 'paid' THEN 1 END) as paid_invoices,
+                COUNT(CASE WHEN payment_status = 'pending' THEN 1 END) as pending_invoices
+            FROM sales.invoices 
+            WHERE invoice_date >= CURRENT_DATE - INTERVAL '30 days'
+        """)).fetchone()
+        
+        return {
+            "status": "Billing service available",
+            "period": "Last 30 days",
+            "total_invoices": result.total_invoices if result else 0,
+            "total_amount": float(result.total_amount) if result and result.total_amount else 0,
+            "paid_invoices": result.paid_invoices if result else 0,
+            "pending_invoices": result.pending_invoices if result else 0,
+            "services": ["Invoice Generation", "Payment Recording", "GST Reports"]
+        }
+    except Exception as e:
+        logger.error(f"Error getting billing overview: {str(e)}")
+        return {
+            "status": "Billing service available",
+            "services": ["Invoice Generation", "Payment Recording", "GST Reports"],
+            "error": "Could not load statistics"
+        }
+
 @router.post("/invoices", response_model=InvoiceResponse)
 async def generate_invoice(
     invoice_data: InvoiceCreate,
