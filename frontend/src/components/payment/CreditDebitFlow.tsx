@@ -366,9 +366,9 @@ const CreditDebitFlow: React.FC<CreditDebitFlowProps> = ({
   const canProceedToNextStep = () => {
     switch (currentStep) {
       case 1:
-        return selectedCustomer && noteData.selected_invoice;
+        return selectedCustomer && noteData.reason && noteData.settlement_type;
       case 2:
-        return noteData.reason && noteData.settlement_type && noteItems.length > 0;
+        return noteData.selected_invoice && noteItems.length > 0;
       default:
         return false;
     }
@@ -405,8 +405,8 @@ const CreditDebitFlow: React.FC<CreditDebitFlowProps> = ({
             <div className="flex items-center justify-between">
               <div className="flex items-center space-x-8">
                 {[
-                  { step: 1, label: 'Customer & Invoice Selection', icon: Users },
-                  { step: 2, label: 'Note Details & Submit', icon: CheckCircle }
+                  { step: 1, label: 'Customer & Note Details', icon: Users },
+                  { step: 2, label: 'Invoice Selection & Submit', icon: CheckCircle }
                 ].map(({ step, label, icon: Icon }) => (
                   <div
                     key={step}
@@ -482,8 +482,79 @@ const CreditDebitFlow: React.FC<CreditDebitFlowProps> = ({
                   />
                 </Card>
 
-                {/* Invoice Selection */}
+                {/* Note Details */}
                 {selectedCustomer && (
+                  <Card>
+                    <h3 className="text-lg font-semibold text-gray-900 mb-4">
+                      {isCredit ? 'Credit' : 'Debit'} Note Details
+                    </h3>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                      <div className="space-y-2">
+                        <label className="block text-sm font-medium text-gray-700">Note Number</label>
+                        <input
+                          type="text"
+                          value={noteData.note_number}
+                          disabled
+                          className="w-full px-3 py-2.5 border border-gray-300 rounded-lg bg-gray-50 text-gray-600"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <label className="block text-sm font-medium text-gray-700">Note Date</label>
+                        <input
+                          type="date"
+                          value={noteData.note_date}
+                          onChange={(e) => handleFieldChange('note_date', e.target.value)}
+                          className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <label className="block text-sm font-medium text-gray-700">
+                          Reason <span className="text-red-500">*</span>
+                        </label>
+                        <Select
+                          options={reasonOptions}
+                          value={noteData.reason}
+                          onChange={(value) => handleFieldChange('reason', value)}
+                          placeholder="Select reason..."
+                        />
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-1 gap-4">
+                      <div className="space-y-2">
+                        <label className="block text-sm font-medium text-gray-700">
+                          Settlement Type <span className="text-red-500">*</span>
+                        </label>
+                        <Select
+                          options={settlementOptions}
+                          value={noteData.settlement_type}
+                          onChange={(value) => handleFieldChange('settlement_type', value)}
+                          placeholder="Select settlement method..."
+                        />
+                      </div>
+                    </div>
+
+                    {/* Custom Reason Description */}
+                    {noteData.reason === 'CUSTOM' && (
+                      <div className="mt-6">
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          Custom Reason Description <span className="text-red-500">*</span>
+                        </label>
+                        <textarea
+                          value={noteData.description}
+                          onChange={(e) => handleFieldChange('description', e.target.value)}
+                          className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors resize-none"
+                          placeholder="Please describe the reason for this note..."
+                          rows={3}
+                          required
+                        />
+                      </div>
+                    )}
+                  </Card>
+                )}
+
+                {/* Invoice Selection */}
+                {selectedCustomer && noteData.reason && noteData.settlement_type && (
                   <Card>
                     <h3 className="text-lg font-semibold text-gray-900 mb-4">
                       Select {isCredit ? 'Invoice' : 'Purchase Order'}
@@ -581,75 +652,6 @@ const CreditDebitFlow: React.FC<CreditDebitFlowProps> = ({
                   </Card>
                 )}
 
-                {/* Note Details */}
-                <Card>
-                  <h3 className="text-lg font-semibold text-gray-900 mb-4">
-                    {isCredit ? 'Credit' : 'Debit'} Note Details
-                  </h3>
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-                    <div className="space-y-2">
-                      <label className="block text-sm font-medium text-gray-700">Note Number</label>
-                      <input
-                        type="text"
-                        value={noteData.note_number}
-                        disabled
-                        className="w-full px-3 py-2.5 border border-gray-300 rounded-lg bg-gray-50 text-gray-600"
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <label className="block text-sm font-medium text-gray-700">Note Date</label>
-                      <input
-                        type="date"
-                        value={noteData.note_date}
-                        onChange={(e) => handleFieldChange('note_date', e.target.value)}
-                        className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors"
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <label className="block text-sm font-medium text-gray-700">
-                        Reason <span className="text-red-500">*</span>
-                      </label>
-                      <Select
-                        options={reasonOptions}
-                        value={noteData.reason}
-                        onChange={(value) => handleFieldChange('reason', value)}
-                        placeholder="Select reason..."
-                      />
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-1 md:grid-cols-1 gap-4">
-                    <div className="space-y-2">
-                      <label className="block text-sm font-medium text-gray-700">
-                        Settlement Type <span className="text-red-500">*</span>
-                      </label>
-                      <Select
-                        options={settlementOptions}
-                        value={noteData.settlement_type}
-                        onChange={(value) => handleFieldChange('settlement_type', value)}
-                        placeholder="Select settlement method..."
-                      />
-                    </div>
-                  </div>
-
-                  {/* Custom Reason Description */}
-                  {noteData.reason === 'CUSTOM' && (
-                    <div className="mt-6">
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Custom Reason Description <span className="text-red-500">*</span>
-                      </label>
-                      <textarea
-                        value={noteData.description}
-                        onChange={(e) => handleFieldChange('description', e.target.value)}
-                        className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors resize-none"
-                        placeholder="Please describe the reason for this note..."
-                        rows={3}
-                        required
-                      />
-                    </div>
-                  )}
-                </Card>
-
                 {/* Items from Invoice */}
                 <Card>
                   <div className="flex items-center justify-between mb-4">
@@ -710,8 +712,8 @@ const CreditDebitFlow: React.FC<CreditDebitFlowProps> = ({
                                 type="number"
                                 step="0.01"
                                 value={item.rate}
-                                onChange={(e) => updateNoteItem(item.id, 'rate', parseFloat(e.target.value) || 0)}
-                                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors"
+                                disabled
+                                className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50 text-gray-600"
                               />
                             </div>
                             <div>
