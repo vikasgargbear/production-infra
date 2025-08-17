@@ -279,7 +279,8 @@ async def create_product(
             "brand": product.get("brand") or product.get("brand_name") or product.get("manufacturer"),
             "manufacturer": product.get("manufacturer"),
             "composition": json.dumps(_format_composition(composition_value)),
-            "category_id": None,  # Let it be NULL if no categories exist
+            "category_id": product.get("category_id") if product.get("category_id") else None,
+            "type_id": product.get("type_id") if product.get("type_id") else None,
             "hsn_code": product.get("hsn_code") or "3004",
             "gst_percentage": product.get("gst_percentage") or product.get("gst_rate") or 12,
             "mrp": float(product.get("mrp", 0)) if product.get("mrp") else None,  # Store MRP in products table
@@ -326,6 +327,10 @@ async def create_product(
         if product_data.get("category_id") is not None:
             columns.insert(7, "category_id")
             values.insert(7, ":category_id")
+        
+        if product_data.get("type_id") is not None:
+            columns.insert(-2, "type_id")
+            values.insert(-2, ":type_id")
         
         if product_data.get("base_uom_id") is not None:
             columns.insert(-2, "base_uom_id")

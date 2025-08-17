@@ -13,7 +13,7 @@ import { ToastProvider } from './components/global';
 import ReturnsHub from './components/returns/ReturnsHub';
 import StockHub from './components/inventory/StockHub';
 import { LedgerHub } from './components/ledger';
-import NotesHub from './components/notes/NotesHub';
+import CreditDebitNoteFlow from './components/notes/CreditDebitNoteFlow';
 import GSTHub from './components/gst/GSTHub';
 import MasterHub from './components/master/MasterHub';
 import testBackendConnection from './utils/testBackendConnection';
@@ -183,7 +183,7 @@ function App(): JSX.Element {
       case 'party-ledger':
         return <LedgerHub key="party-ledger" open={true} onClose={() => setActiveTab('home')} />;
       case 'credit-debit-note':
-        return <NotesHub key="credit-debit-note" open={true} onClose={() => setActiveTab('home')} />;
+        return <CreditDebitNoteFlow key="credit-debit-note" open={true} onClose={() => setActiveTab('home')} />;
       case 'gst':
         return <GSTHub key="gst" open={true} onClose={() => setActiveTab('home')} />;
       case 'master':

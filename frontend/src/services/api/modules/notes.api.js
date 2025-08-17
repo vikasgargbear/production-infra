@@ -1,115 +1,105 @@
 /**
  * Credit/Debit Notes API Module
- * Handles credit notes and debit notes for returns
+ * Handles credit notes and debit notes for financial adjustments
+ * Updated to match actual backend endpoints
  */
 
 import apiClient from '../apiClient';
 
 export const notesApi = {
-  // Credit Notes
+  // List all notes with filters
+  list: async (params = {}) => {
+    const response = await apiClient.get('/notes', { params });
+    return response.data;
+  },
+
+  // Get note details by ID
+  get: async (noteId) => {
+    const response = await apiClient.get(`/notes/${noteId}`);
+    return response.data;
+  },
+
+  // Create credit note
+  createCreditNote: async (data) => {
+    const response = await apiClient.post('/notes/credit-note', data);
+    return response.data;
+  },
+
+  // Create debit note
+  createDebitNote: async (data) => {
+    const response = await apiClient.post('/notes/debit-note', data);
+    return response.data;
+  },
+
+  // Get predefined reasons for notes
+  getReasons: async () => {
+    const response = await apiClient.get('/notes/reasons/list');
+    return response.data;
+  },
+
+  // Get invoices for linking to notes
+  getLinkedInvoices: async (partyId, invoiceType = 'sales') => {
+    const response = await apiClient.get(`/notes/linked-invoices/${partyId}`, {
+      params: { invoice_type: invoiceType }
+    });
+    return response.data;
+  },
+
+  // Cancel/delete a note
+  cancel: async (noteId, cancellationReason) => {
+    const response = await apiClient.delete(`/notes/${noteId}`, {
+      data: { cancellation_reason: cancellationReason }
+    });
+    return response.data;
+  },
+
+  // Get note print data
+  getPrintData: async (noteId) => {
+    const response = await apiClient.get(`/notes/${noteId}/print`);
+    return response.data;
+  },
+
+  // Get invoice items for credit/debit note creation
+  getInvoiceItems: async (invoiceId) => {
+    const response = await apiClient.get(`/sale-returns/invoice/${invoiceId}/items`);
+    return response.data;
+  },
+
+  // Backward compatibility - Credit Notes
   creditNotes: {
-    // List credit notes
     list: async (params) => {
-      const response = await apiClient.get('/credit-notes', { params });
-      return response.data;
+      return notesApi.list({ ...params, note_type: 'credit' });
     },
-
-    // Get credit note details
-    get: async (id) => {
-      const response = await apiClient.get(`/credit-notes/${id}`);
-      return response.data;
-    },
-
-    // Create credit note
+    
     create: async (data) => {
-      const response = await apiClient.post('/credit-notes', data);
-      return response.data;
+      return notesApi.createCreditNote(data);
     },
-
-    // Update credit note
-    update: async (id, data) => {
-      const response = await apiClient.put(`/credit-notes/${id}`, data);
-      return response.data;
+    
+    get: async (id) => {
+      return notesApi.get(id);
     },
-
-    // Approve credit note
-    approve: async (id) => {
-      const response = await apiClient.post(`/credit-notes/${id}/approve`);
-      return response.data;
-    },
-
-    // Cancel credit note
+    
     cancel: async (id, reason) => {
-      const response = await apiClient.post(`/credit-notes/${id}/cancel`, { reason });
-      return response.data;
-    },
-
-    // Generate PDF
-    getPDF: async (id) => {
-      const response = await apiClient.get(`/credit-notes/${id}/pdf`, {
-        responseType: 'blob'
-      });
-      return response.data;
+      return notesApi.cancel(id, reason);
     }
   },
 
-  // Debit Notes
+  // Backward compatibility - Debit Notes
   debitNotes: {
-    // List debit notes
     list: async (params) => {
-      const response = await apiClient.get('/debit-notes', { params });
-      return response.data;
+      return notesApi.list({ ...params, note_type: 'debit' });
     },
-
-    // Get debit note details
-    get: async (id) => {
-      const response = await apiClient.get(`/debit-notes/${id}`);
-      return response.data;
-    },
-
-    // Create debit note
+    
     create: async (data) => {
-      const response = await apiClient.post('/debit-notes', data);
-      return response.data;
+      return notesApi.createDebitNote(data);
     },
-
-    // Update debit note
-    update: async (id, data) => {
-      const response = await apiClient.put(`/debit-notes/${id}`, data);
-      return response.data;
+    
+    get: async (id) => {
+      return notesApi.get(id);
     },
-
-    // Approve debit note
-    approve: async (id) => {
-      const response = await apiClient.post(`/debit-notes/${id}/approve`);
-      return response.data;
-    },
-
-    // Cancel debit note
+    
     cancel: async (id, reason) => {
-      const response = await apiClient.post(`/debit-notes/${id}/cancel`, { reason });
-      return response.data;
-    },
-
-    // Generate PDF
-    getPDF: async (id) => {
-      const response = await apiClient.get(`/debit-notes/${id}/pdf`, {
-        responseType: 'blob'
-      });
-      return response.data;
+      return notesApi.cancel(id, reason);
     }
-  },
-
-  // Common operations
-  // Get notes for a specific invoice
-  getByInvoice: async (invoiceId) => {
-    const response = await apiClient.get(`/invoices/${invoiceId}/notes`);
-    return response.data;
-  },
-
-  // Get notes for a specific party
-  getByParty: async (partyId, partyType = 'customer') => {
-    const response = await apiClient.get(`/${partyType}s/${partyId}/notes`);
-    return response.data;
   }
 };

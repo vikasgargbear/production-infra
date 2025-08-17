@@ -1,7 +1,7 @@
 import React from 'react';
 import { 
   CreditCard, FileText, TrendingUp, Calculator, Receipt, 
-  Users, RefreshCw, Edit, BarChart3
+  Users, RefreshCw
 } from 'lucide-react';
 import { ModuleHub } from '../global';
 import ModularPaymentEntry from './ModularPaymentEntry';
@@ -10,10 +10,6 @@ import FinancialReportsSimple from './FinancialReportsSimple';
 import ExpenseClaimsFlow from './ExpenseClaimsFlow';
 import BankReconciliationFlow from './BankReconciliationFlow';
 import OutstandingManagement from './OutstandingManagement';
-import CreditDebitFlow from './CreditDebitFlow';
-import GSTBalanced from '../gst/GSTBalanced';
-import GSTFilingClean from '../gst/GSTFilingClean';
-import GSTReports from '../gst/GSTReports';
 
 interface FinancialHubProps {
   open?: boolean;
@@ -85,42 +81,6 @@ const FinancialHub: React.FC<FinancialHubProps> = ({ open = true, onClose }) => 
       icon: TrendingUp,
       color: 'purple',
       component: FinancialReportsSimple
-    },
-    {
-      id: 'credit-debit-notes',
-      label: 'Credit/Debit Notes',
-      fullLabel: 'Credit & Debit Notes',
-      description: 'Create credit and debit notes',
-      icon: Edit,
-      color: 'indigo',
-      component: CreditDebitFlow
-    },
-    {
-      id: 'gst-overview',
-      label: 'GST Overview',
-      fullLabel: 'GST Dashboard',
-      description: 'Tax summary & compliance status',
-      icon: Calculator,
-      color: 'blue',
-      component: GSTBalanced
-    },
-    {
-      id: 'gst-filing',
-      label: 'GST Filing',
-      fullLabel: 'GST Return Filing',
-      description: 'File GST returns easily',
-      icon: FileText,
-      color: 'green',
-      component: GSTFilingClean
-    },
-    {
-      id: 'gst-reports',
-      label: 'GST Reports',
-      fullLabel: 'GST Reports & Analytics',
-      description: 'GSTR-1, GSTR-3B and other reports',
-      icon: BarChart3,
-      color: 'cyan',
-      component: GSTReports
     }
   ];
 

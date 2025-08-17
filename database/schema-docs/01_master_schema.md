@@ -8,444 +8,432 @@ The `master` schema contains core organizational data, user management, and syst
 ## Tables
 
 ### 1. organizations
-**Purpose**: Core organization/company information
+
+### organizations
+**Purpose**: [Business purpose description]
 **API Endpoint**: `api.get_organizations()`, `api.create_organization()`
 
 | Field | Type | Required | Description | Frontend Usage |
 |-------|------|----------|-------------|----------------|
-| `org_id` | UUID | ✓ | Unique organization identifier | Primary key for all API calls |
-| `org_code` | TEXT | ✓ | Short organization code (e.g., "PHARMA001") | Display in headers, filters |
-| `org_name` | TEXT | ✓ | Full organization name | Main display name |
-| `org_type` | TEXT | ✓ | Type: 'pharmaceutical', 'hospital', 'clinic' | Business logic routing |
-| `registration_number` | TEXT | - | Company registration number | Legal documents |
-| `gstin` | TEXT | - | GST identification number | Tax calculations |
-| `pan_number` | TEXT | - | PAN card number | Legal compliance |
-| `establishment_year` | INTEGER | - | Year company was established | Display information |
-| `primary_phone` | TEXT | ✓ | Main contact phone | Contact forms |
-| `primary_email` | TEXT | - | Main contact email | Email communications |
-| `website` | TEXT | - | Company website URL | External links |
-| `logo_url` | TEXT | - | Company logo image URL | UI branding |
-| `address_line1` | TEXT | - | Primary address line | Address displays |
-| `address_line2` | TEXT | - | Secondary address line | Address displays |
-| `city` | TEXT | - | City name | Location filters |
-| `state` | TEXT | - | State/province | Location filters |
-| `postal_code` | TEXT | - | ZIP/postal code | Location services |
-| `country` | TEXT | - | Country name | International support |
-| `timezone` | TEXT | - | Timezone (e.g., 'Asia/Kolkata') | Date/time displays |
-| `currency_code` | TEXT | - | Primary currency (e.g., 'INR') | Price formatting |
-| `financial_year_start` | TEXT | - | FY start (MM-DD format) | Reporting periods |
-| `subscription_plan` | TEXT | - | Current plan: 'basic', 'premium', 'enterprise' | Feature access control |
-| `subscription_status` | TEXT | - | Status: 'active', 'suspended', 'expired' | Access validation |
-| `max_users` | INTEGER | - | Maximum allowed users | User creation limits |
-| `max_branches` | INTEGER | - | Maximum allowed branches | Branch creation limits |
-| `features_enabled` | TEXT[] | - | Array of enabled features | Feature toggle UI |
-| `is_active` | BOOLEAN | - | Organization active status | Access control |
-| `created_at` | TIMESTAMPTZ | - | Creation timestamp | Audit trails |
-| `updated_at` | TIMESTAMPTZ | - | Last update timestamp | Change tracking |
-
-**Example API Response**:
-```json
-{
-  "org_id": "123e4567-e89b-12d3-a456-426614174000",
-  "org_code": "PHARMA001",
-  "org_name": "ABC Pharmaceuticals Ltd",
-  "org_type": "pharmaceutical",
-  "primary_phone": "+91-9876543210",
-  "currency_code": "INR",
-  "timezone": "Asia/Kolkata",
-  "subscription_plan": "premium",
-  "is_active": true
-}
-```
+| `org_id` | UUID | ✓ | Primary key identifier | Primary key |
+| `org_code` | TEXT | ✓ | Description needed | Standard field usage |
+| `org_name` | TEXT | ✓ | Description needed | Standard field usage |
+| `legal_name` | TEXT | ✓ | Description needed | Standard field usage |
+| `business_type` | TEXT | - | Description needed | Standard field usage |
+| `establishment_date` | DATE | - | Description needed | Standard field usage |
+| `gst_number` | TEXT | - | Description needed | Standard field usage |
+| `pan_number` | TEXT | - | Description needed | Standard field usage |
+| `drug_license_number` | TEXT | - | Description needed | Standard field usage |
+| `drug_license_validity` | DATE | - | Description needed | Standard field usage |
+| `fssai_number` | TEXT | - | Description needed | Standard field usage |
+| `registered_address` | JSONB | ✓ | Description needed | Standard field usage |
+| `correspondence_address` | JSONB | - | Description needed | Standard field usage |
+| `contact_numbers` | JSONB | - | Description needed | Standard field usage |
+| `email_addresses` | JSONB | - | Description needed | Standard field usage |
+| `website` | TEXT | - | Description needed | Standard field usage |
+| `financial_year_start` | INTEGER | - | Description needed | Standard field usage |
+| `currency_code` | TEXT | - | Description needed | Standard field usage |
+| `date_format` | TEXT | - | Description needed | Standard field usage |
+| `time_zone` | TEXT | - | Description needed | Standard field usage |
+| `subscription_plan` | TEXT | - | Description needed | Standard field usage |
+| `subscription_status` | TEXT | - | Description needed | Standard field usage |
+| `subscription_valid_until` | DATE | - | Description needed | Standard field usage |
+| `user_limit` | INTEGER | - | Description needed | Standard field usage |
+| `branch_limit` | INTEGER | - | Description needed | Standard field usage |
+| `business_settings` | JSONB | - | Description needed | Standard field usage |
+| `feature_flags` | JSONB | - | Description needed | Standard field usage |
+| `is_active` | BOOLEAN | - | Active status flag | Standard field usage |
+| `is_verified` | BOOLEAN | - | Description needed | Standard field usage |
+| `verified_at` | TIMESTAMP | - | Timestamp field | Standard field usage |
+| `created_at` | TIMESTAMP | - | Timestamp field | Standard field usage |
+| `updated_at` | TIMESTAMP | - | Timestamp field | Standard field usage |
+| `created_by` | UUID | - | Creation audit field | Standard field usage |
 
 ---
 
 ### 2. org_branches
-**Purpose**: Branch/location management for multi-location organizations
-**API Endpoint**: `api.get_branches()`, `api.create_branch()`
+
+### org_branches
+**Purpose**: [Business purpose description]
+**API Endpoint**: `api.get_org_branches()`, `api.create_org_branche()`
 
 | Field | Type | Required | Description | Frontend Usage |
 |-------|------|----------|-------------|----------------|
-| `branch_id` | SERIAL | ✓ | Unique branch identifier | Primary key |
-| `org_id` | UUID | ✓ | Parent organization ID | Organization filtering |
-| `branch_code` | TEXT | ✓ | Short branch code (e.g., "MH001") | Quick identification |
-| `branch_name` | TEXT | ✓ | Full branch name | Display name |
-| `branch_type` | TEXT | ✓ | Type: 'head_office', 'branch', 'warehouse', 'store' | Business logic |
-| `parent_branch_id` | INTEGER | - | Parent branch for hierarchy | Tree structure |
-| `manager_id` | INTEGER | - | Branch manager user ID | User assignment |
-| `branch_phone` | TEXT | - | Branch contact phone | Contact info |
-| `branch_email` | TEXT | - | Branch email address | Communications |
-| `branch_gst_number` | TEXT | - | Branch GST registration | Tax compliance |
-| `drug_license_number` | TEXT | - | Drug license for pharmacy | Legal compliance |
-| `drug_license_validity` | DATE | - | License expiry date | Compliance alerts |
-| `address_line1` | TEXT | - | Branch address line 1 | Address display |
-| `address_line2` | TEXT | - | Branch address line 2 | Address display |
-| `city` | TEXT | - | Branch city | Location services |
-| `state` | TEXT | - | Branch state | Location services |
-| `postal_code` | TEXT | - | Branch postal code | Location services |
-| `latitude` | NUMERIC | - | GPS latitude | Map integration |
-| `longitude` | NUMERIC | - | GPS longitude | Map integration |
-| `operating_hours` | JSONB | - | Operating schedule | Business hours display |
-| `services_offered` | TEXT[] | - | Array of services | Service filtering |
-| `storage_capacity` | NUMERIC | - | Storage capacity in units | Inventory planning |
-| `delivery_radius_km` | NUMERIC | - | Delivery coverage radius | Delivery zones |
-| `is_active` | BOOLEAN | - | Branch active status | Access control |
-| `is_default` | BOOLEAN | - | Default branch flag | UI defaults |
-| `created_at` | TIMESTAMPTZ | - | Creation timestamp | Audit trails |
+| `branch_id` | SERIAL | ✓ | Primary key identifier | Primary key |
+| `org_id` | UUID | ✓ | Organization ID | Organization filtering |
+| `branch_code` | TEXT | ✓ | Description needed | Standard field usage |
+| `branch_name` | TEXT | ✓ | Description needed | Standard field usage |
+| `branch_type` | TEXT | - | Description needed | Standard field usage |
+| `address` | JSONB | ✓ | Description needed | Standard field usage |
+| `google_maps_link` | TEXT | - | Description needed | Standard field usage |
+| `latitude` | DECIMAL(10 | - | Description needed | Standard field usage |
+| `longitude` | DECIMAL(11 | - | Description needed | Standard field usage |
+| `branch_phone` | TEXT | - | Description needed | Standard field usage |
+| `branch_email` | TEXT | - | Description needed | Standard field usage |
+| `branch_manager_id` | INTEGER | - | Reference to related entity | Association/lookup |
+| `branch_gst_number` | TEXT | - | Description needed | Standard field usage |
+| `drug_license_number` | TEXT | - | Description needed | Standard field usage |
+| `drug_license_validity` | DATE | - | Description needed | Standard field usage |
+| `is_billing_location` | BOOLEAN | - | Description needed | Standard field usage |
+| `is_shipping_location` | BOOLEAN | - | Description needed | Standard field usage |
+| `is_default_location` | BOOLEAN | - | Description needed | Standard field usage |
+| `storage_capacity` | JSONB | - | Description needed | Standard field usage |
+| `working_hours` | JSONB | - | Description needed | Standard field usage |
+| `holidays` | JSONB | - | Description needed | Standard field usage |
+| `is_active` | BOOLEAN | - | Active status flag | Standard field usage |
+| `operational_since` | DATE | - | Description needed | Standard field usage |
+| `created_at` | TIMESTAMP | - | Timestamp field | Standard field usage |
+| `updated_at` | TIMESTAMP | - | Timestamp field | Standard field usage |
 
-**Example API Response**:
-```json
-{
-  "branch_id": 1,
-  "branch_code": "MH001",
-  "branch_name": "Mumbai Main Branch",
-  "branch_type": "head_office",
-  "branch_phone": "+91-22-12345678",
-  "city": "Mumbai",
-  "state": "Maharashtra",
-  "operating_hours": {
-    "monday": {"open": "09:00", "close": "18:00"},
-    "sunday": {"closed": true}
-  },
-  "is_active": true,
-  "is_default": true
-}
-```
+**Foreign Key Relationships**:
+- `org_id` → `master.organizations.org_id`
 
 ---
 
 ### 3. org_users
-**Purpose**: User management and authentication
-**API Endpoint**: `api.get_users()`, `api.create_user()`
+
+### org_users
+**Purpose**: [Business purpose description]
+**API Endpoint**: `api.get_org_users()`, `api.create_org_user()`
 
 | Field | Type | Required | Description | Frontend Usage |
 |-------|------|----------|-------------|----------------|
-| `user_id` | SERIAL | ✓ | Unique user identifier | Primary key |
+| `user_id` | SERIAL | ✓ | Primary key identifier | Primary key |
 | `org_id` | UUID | ✓ | Organization ID | Organization filtering |
-| `branch_id` | INTEGER | - | Default branch assignment | Branch filtering |
-| `employee_code` | TEXT | ✓ | Employee identification code | Employee lookup |
-| `username` | TEXT | ✓ | Login username | Authentication |
-| `email` | TEXT | ✓ | User email address | Authentication, notifications |
-| `password_hash` | TEXT | ✓ | Encrypted password | Authentication (never expose) |
-| `first_name` | TEXT | ✓ | User's first name | Display name |
-| `last_name` | TEXT | ✓ | User's last name | Display name |
-| `display_name` | TEXT | - | Preferred display name | UI display |
-| `phone` | TEXT | - | Contact phone number | Contact info |
-| `designation` | TEXT | - | Job title/designation | User information |
-| `department` | TEXT | - | Department name | Organizational structure |
-| `date_of_joining` | DATE | - | Employment start date | HR information |
-| `date_of_birth` | DATE | - | User's date of birth | Personal information |
-| `profile_image_url` | TEXT | - | Profile picture URL | Avatar display |
-| `reporting_manager_id` | INTEGER | - | Manager's user ID | Hierarchy structure |
-| `roles` | TEXT[] | ✓ | Array of role names | Permission control |
-| `permissions` | TEXT[] | - | Array of specific permissions | Fine-grained access |
-| `default_language` | TEXT | - | Preferred language code | Localization |
-| `timezone` | TEXT | - | User's timezone | Date/time display |
-| `last_login_at` | TIMESTAMPTZ | - | Last login timestamp | Activity tracking |
-| `login_count` | INTEGER | - | Total login count | Usage analytics |
-| `password_changed_at` | TIMESTAMPTZ | - | Last password change | Security policy |
-| `account_locked` | BOOLEAN | - | Account lock status | Security control |
-| `failed_login_attempts` | INTEGER | - | Failed login counter | Security monitoring |
-| `is_active` | BOOLEAN | - | User active status | Access control |
-| `created_at` | TIMESTAMPTZ | - | Account creation timestamp | Audit trails |
-| `updated_at` | TIMESTAMPTZ | - | Last update timestamp | Change tracking |
+| `auth_user_id` | UUID | - | Reference to related entity | Association/lookup |
+| `username` | TEXT | ✓ | Description needed | Standard field usage |
+| `email` | TEXT | ✓ | Description needed | Standard field usage |
+| `mobile_number` | TEXT | ✓ | Description needed | Standard field usage |
+| `employee_code` | TEXT | - | Description needed | Standard field usage |
+| `first_name` | TEXT | ✓ | Description needed | Standard field usage |
+| `last_name` | TEXT | - | Description needed | Standard field usage |
+| `full_name` | TEXT | - | Description needed | Standard field usage |
+| `role_id` | INTEGER | - | Reference to related entity | Association/lookup |
+| `is_admin` | BOOLEAN | - | Description needed | Standard field usage |
+| `permissions` | JSONB | - | Description needed | Standard field usage |
+| `branch_ids` | INTEGER[] | - | Description needed | Standard field usage |
+| `department_id` | INTEGER | - | Reference to related entity | Association/lookup |
+| `reporting_to_id` | INTEGER | - | Reference to related entity | Association/lookup |
+| `last_login` | TIMESTAMP | - | Description needed | Standard field usage |
+| `login_count` | INTEGER | - | Description needed | Standard field usage |
+| `failed_login_attempts` | INTEGER | - | Description needed | Standard field usage |
+| `locked_until` | TIMESTAMP | - | Description needed | Standard field usage |
+| `ui_preferences` | JSONB | - | Description needed | Standard field usage |
+| `notification_preferences` | JSONB | - | Description needed | Standard field usage |
+| `is_active` | BOOLEAN | - | Active status flag | Standard field usage |
+| `is_online` | BOOLEAN | - | Description needed | Standard field usage |
+| `created_at` | TIMESTAMP | - | Timestamp field | Standard field usage |
+| `updated_at` | TIMESTAMP | - | Timestamp field | Standard field usage |
+| `created_by` | INTEGER | - | Creation audit field | Standard field usage |
 
-**Example API Response**:
-```json
-{
-  "user_id": 1,
-  "employee_code": "EMP001",
-  "username": "john.doe",
-  "email": "john.doe@company.com",
-  "first_name": "John",
-  "last_name": "Doe",
-  "display_name": "John Doe",
-  "designation": "Sales Manager",
-  "department": "Sales",
-  "roles": ["sales_manager", "user"],
-  "permissions": ["view_customers", "create_orders"],
-  "is_active": true,
-  "last_login_at": "2024-01-15T10:30:00Z"
-}
-```
+**Foreign Key Relationships**:
+- `org_id` → `master.organizations.org_id`
+- `reporting_to_id` → `master.org_users.user_id`
 
 ---
 
-### 4. products
-**Purpose**: Master product catalog
-**API Endpoint**: `api.get_products()`, `api.create_product()`
+### 4. roles
+
+### roles
+**Purpose**: [Business purpose description]
+**API Endpoint**: `api.get_roles()`, `api.create_role()`
 
 | Field | Type | Required | Description | Frontend Usage |
 |-------|------|----------|-------------|----------------|
-| `product_id` | SERIAL | ✓ | Unique product identifier | Primary key |
+| `role_id` | SERIAL | ✓ | Primary key identifier | Primary key |
 | `org_id` | UUID | ✓ | Organization ID | Organization filtering |
-| `product_code` | TEXT | ✓ | Product SKU/code | Search, identification |
-| `product_name` | TEXT | ✓ | Product display name | Main display |
-| `generic_name` | TEXT | - | Generic/scientific name | Medical information |
-| `brand_name` | TEXT | - | Brand/commercial name | Marketing display |
-| `manufacturer` | TEXT | - | Manufacturing company | Product information |
-| `category_id` | INTEGER | - | Product category ID | Categorization |
-| `subcategory_id` | INTEGER | - | Product subcategory ID | Fine categorization |
-| `product_type` | TEXT | ✓ | Type: 'medicine', 'surgical', 'ayurvedic', 'cosmetic' | Business logic |
-| `prescription_required` | BOOLEAN | - | Requires prescription | Compliance checks |
-| `schedule_type` | TEXT | - | Drug schedule: 'H', 'H1', 'X', etc. | Legal compliance |
-| `hsn_code` | TEXT | - | HSN code for GST | Tax calculations |
-| `gst_percentage` | NUMERIC | ✓ | GST rate percentage | Tax calculations |
-| `cess_percentage` | NUMERIC | - | Cess rate percentage | Tax calculations |
-| `base_unit` | TEXT | ✓ | Base unit: 'tablet', 'ml', 'gm' | Inventory management |
-| `pack_size` | INTEGER | - | Units per pack | Inventory calculations |
-| `pack_unit` | TEXT | - | Pack unit description | Display information |
-| `strength` | TEXT | - | Drug strength (e.g., "500mg") | Medical information |
-| `form` | TEXT | - | Form: 'tablet', 'syrup', 'injection' | Medical information |
-| `composition` | TEXT | - | Active ingredients | Medical information |
-| `storage_condition` | TEXT | - | Storage requirements | Warehouse management |
-| `shelf_life_months` | INTEGER | - | Shelf life in months | Expiry management |
-| `minimum_stock_level` | NUMERIC | - | Reorder level | Inventory alerts |
-| `maximum_stock_level` | NUMERIC | - | Maximum stock level | Inventory planning |
-| `standard_rate` | NUMERIC | - | Standard selling price | Pricing |
-| `purchase_rate` | NUMERIC | - | Standard purchase price | Cost management |
-| `mrp` | NUMERIC | - | Maximum retail price | Price validation |
-| `margin_percent` | NUMERIC | - | Profit margin percentage | Pricing strategy |
-| `barcode` | TEXT | - | Product barcode | Scanning integration |
-| `qr_code` | TEXT | - | QR code data | Mobile integration |
-| `product_image_url` | TEXT | - | Product image URL | Visual display |
-| `is_active` | BOOLEAN | - | Product active status | Catalog filtering |
-| `is_narcotic` | BOOLEAN | - | Narcotic drug flag | Special handling |
-| `created_at` | TIMESTAMPTZ | - | Creation timestamp | Audit trails |
-| `updated_at` | TIMESTAMPTZ | - | Last update timestamp | Change tracking |
+| `role_code` | TEXT | ✓ | Description needed | Standard field usage |
+| `role_name` | TEXT | ✓ | Description needed | Standard field usage |
+| `role_description` | TEXT | - | Description needed | Standard field usage |
+| `parent_role_id` | INTEGER | - | Reference to related entity | Association/lookup |
+| `role_level` | INTEGER | - | Description needed | Standard field usage |
+| `permissions` | JSONB | - | Description needed | Standard field usage |
+| `allowed_modules` | TEXT[] | - | Description needed | Standard field usage |
+| `restricted_features` | TEXT[] | - | Description needed | Standard field usage |
+| `data_access_level` | TEXT | - | Description needed | Standard field usage |
+| `is_system_role` | BOOLEAN | - | Description needed | Standard field usage |
+| `is_active` | BOOLEAN | - | Active status flag | Standard field usage |
+| `created_at` | TIMESTAMP | - | Timestamp field | Standard field usage |
+| `updated_at` | TIMESTAMP | - | Timestamp field | Standard field usage |
 
-**Example API Response**:
-```json
-{
-  "product_id": 1,
-  "product_code": "MED001",
-  "product_name": "Paracetamol 500mg Tablet",
-  "generic_name": "Paracetamol",
-  "manufacturer": "ABC Pharma",
-  "product_type": "medicine",
-  "prescription_required": false,
-  "hsn_code": "3004",
-  "gst_percentage": 12.00,
-  "base_unit": "tablet",
-  "pack_size": 10,
-  "strength": "500mg",
-  "form": "tablet",
-  "mrp": 25.00,
-  "is_active": true
-}
-```
+**Foreign Key Relationships**:
+- `org_id` → `master.organizations.org_id`
+- `parent_role_id` → `master.roles.role_id`
 
 ---
 
-### 5. product_categories
-**Purpose**: Product categorization hierarchy  
-**API Endpoint**: `api.get_categories()`, `api.create_category()`
+### 5. departments
+
+### departments
+**Purpose**: [Business purpose description]
+**API Endpoint**: `api.get_departments()`, `api.create_department()`
 
 | Field | Type | Required | Description | Frontend Usage |
 |-------|------|----------|-------------|----------------|
-| `category_id` | SERIAL | ✓ | Unique category identifier | Primary key |
+| `department_id` | SERIAL | ✓ | Primary key identifier | Primary key |
 | `org_id` | UUID | ✓ | Organization ID | Organization filtering |
-| `category_code` | TEXT | ✓ | Category code | Quick identification |
-| `category_name` | TEXT | ✓ | Category display name | Menu/filter display |
-| `parent_category_id` | INTEGER | - | Parent category for hierarchy | Tree navigation |
-| `category_level` | INTEGER | - | Hierarchy level (1, 2, 3...) | Tree depth control |
-| `category_path` | TEXT | - | Full path (e.g., "Medicine/Antibiotics") | Breadcrumb navigation |
-| `description` | TEXT | - | Category description | Tooltips/help text |
-| `category_image_url` | TEXT | - | Category image URL | Visual navigation |
-| `sort_order` | INTEGER | - | Display sort order | UI ordering |
-| `is_active` | BOOLEAN | - | Category active status | Menu filtering |
-| `created_at` | TIMESTAMPTZ | - | Creation timestamp | Audit trails |
+| `department_code` | TEXT | ✓ | Description needed | Standard field usage |
+| `department_name` | TEXT | ✓ | Description needed | Standard field usage |
+| `department_type` | TEXT | - | Description needed | Standard field usage |
+| `parent_department_id` | INTEGER | - | Reference to related entity | Association/lookup |
+| `department_head_id` | INTEGER | - | Reference to related entity | Association/lookup |
+| `cost_center_code` | TEXT | - | Description needed | Standard field usage |
+| `budget_allocated` | NUMERIC(15 | - | Description needed | Standard field usage |
+| `is_active` | BOOLEAN | - | Active status flag | Standard field usage |
+| `created_at` | TIMESTAMP | - | Timestamp field | Standard field usage |
+| `updated_at` | TIMESTAMP | - | Timestamp field | Standard field usage |
 
-**Example API Response**:
-```json
-{
-  "category_id": 1,
-  "category_code": "ANTIBIOTICS",
-  "category_name": "Antibiotics",
-  "parent_category_id": null,
-  "category_level": 1,
-  "description": "Antibiotic medications",
-  "sort_order": 1,
-  "is_active": true
-}
-```
+**Foreign Key Relationships**:
+- `org_id` → `master.organizations.org_id`
+- `parent_department_id` → `master.departments.department_id`
+- `department_head_id` → `master.org_users.user_id`
 
 ---
 
-### 6. uom (Units of Measurement)
-**Purpose**: Standard units for inventory and sales
-**API Endpoint**: `api.get_uom()`, `api.create_uom()`
+### 6. org_bank_accounts
+
+### org_bank_accounts
+**Purpose**: [Business purpose description]
+**API Endpoint**: `api.get_org_bank_accounts()`, `api.create_org_bank_account()`
 
 | Field | Type | Required | Description | Frontend Usage |
 |-------|------|----------|-------------|----------------|
-| `uom_id` | SERIAL | ✓ | Unique UOM identifier | Primary key |
-| `uom_code` | TEXT | ✓ | UOM code (e.g., "KG", "L") | Display/selection |
-| `uom_name` | TEXT | ✓ | UOM full name | Display name |
-| `uom_type` | TEXT | ✓ | Type: 'weight', 'volume', 'length', 'count' | Categorization |
-| `base_uom_id` | INTEGER | - | Base unit reference | Conversion calculations |
-| `conversion_factor` | NUMERIC | - | Conversion to base unit | Unit conversions |
-| `decimal_places` | INTEGER | - | Decimal precision | Number formatting |
-| `is_base_unit` | BOOLEAN | - | Base unit flag | Conversion logic |
-| `is_active` | BOOLEAN | - | UOM active status | Selection filtering |
-
-**Example API Response**:
-```json
-{
-  "uom_id": 1,
-  "uom_code": "TAB",
-  "uom_name": "Tablet",
-  "uom_type": "count",
-  "decimal_places": 0,
-  "is_base_unit": true,
-  "is_active": true
-}
-```
-
----
-
-### 7. tax_rates
-**Purpose**: GST and tax rate configuration
-**API Endpoint**: `api.get_tax_rates()`, `api.create_tax_rate()`
-
-| Field | Type | Required | Description | Frontend Usage |
-|-------|------|----------|-------------|----------------|
-| `tax_id` | SERIAL | ✓ | Unique tax rate identifier | Primary key |
-| `code` | TEXT | ✓ | Tax code (e.g., "GST18") | Selection identifier |
-| `tax_type` | TEXT | ✓ | Type: 'gst', 'igst', 'cess' | Tax calculations |
-| `description` | TEXT | ✓ | Tax description | Display name |
-| `rate` | NUMERIC | ✓ | Tax rate percentage | Calculations |
-| `cgst_rate` | NUMERIC | - | CGST component rate | Tax splitting |
-| `sgst_rate` | NUMERIC | - | SGST component rate | Tax splitting |
-| `igst_rate` | NUMERIC | - | IGST rate | Interstate transactions |
-| `is_active` | BOOLEAN | - | Tax rate active status | Selection filtering |
-
-**Example API Response**:
-```json
-{
-  "tax_id": 1,
-  "code": "GST12",
-  "tax_type": "gst",
-  "description": "GST 12%",
-  "rate": 12.00,
-  "cgst_rate": 6.00,
-  "sgst_rate": 6.00,
-  "is_active": true
-}
-```
-
----
-
-### 8. number_series
-**Purpose**: Auto-numbering configuration for documents
-**API Endpoint**: `api.get_number_series()`, `api.create_number_series()`
-
-| Field | Type | Required | Description | Frontend Usage |
-|-------|------|----------|-------------|----------------|
-| `series_id` | SERIAL | ✓ | Unique series identifier | Primary key |
+| `bank_account_id` | SERIAL | ✓ | Primary key identifier | Primary key |
 | `org_id` | UUID | ✓ | Organization ID | Organization filtering |
-| `document_type` | TEXT | ✓ | Document type: 'invoice', 'order', 'payment' | Document creation |
-| `series_code` | TEXT | ✓ | Series code identifier | Series selection |
-| `prefix` | TEXT | - | Number prefix (e.g., "INV") | Number generation |
-| `suffix` | TEXT | - | Number suffix (e.g., "/24-25") | Number generation |
-| `current_number` | INTEGER | ✓ | Current counter value | Next number generation |
-| `start_number` | INTEGER | - | Starting number | Series initialization |
-| `increment_by` | INTEGER | - | Increment step | Number generation |
-| `is_default` | BOOLEAN | - | Default series flag | Auto-selection |
-| `is_active` | BOOLEAN | - | Series active status | Selection filtering |
+| `branch_id` | INTEGER | - | Reference to related entity | Association/lookup |
+| `account_name` | TEXT | ✓ | Description needed | Standard field usage |
+| `account_number` | TEXT | ✓ | Description needed | Standard field usage |
+| `account_type` | TEXT | ✓ | Description needed | Standard field usage |
+| `bank_name` | TEXT | ✓ | Description needed | Standard field usage |
+| `branch_name` | TEXT | ✓ | Description needed | Standard field usage |
+| `ifsc_code` | TEXT | ✓ | Description needed | Standard field usage |
+| `swift_code` | TEXT | - | Description needed | Standard field usage |
+| `bank_address` | JSONB | - | Description needed | Standard field usage |
+| `bank_contact_number` | TEXT | - | Description needed | Standard field usage |
+| `relationship_manager` | TEXT | - | Description needed | Standard field usage |
+| `currency_code` | TEXT | - | Description needed | Standard field usage |
+| `overdraft_limit` | NUMERIC(15 | - | Description needed | Standard field usage |
+| `is_default_account` | BOOLEAN | - | Description needed | Standard field usage |
+| `is_payment_account` | BOOLEAN | - | Description needed | Standard field usage |
+| `is_receipt_account` | BOOLEAN | - | Description needed | Standard field usage |
+| `last_reconciled_date` | DATE | - | Description needed | Standard field usage |
+| `last_statement_date` | DATE | - | Description needed | Standard field usage |
+| `current_balance` | NUMERIC(15 | - | Description needed | Standard field usage |
+| `is_active` | BOOLEAN | - | Active status flag | Standard field usage |
+| `account_opened_date` | DATE | - | Description needed | Standard field usage |
+| `created_at` | TIMESTAMP | - | Timestamp field | Standard field usage |
+| `updated_at` | TIMESTAMP | - | Timestamp field | Standard field usage |
 
-**Example API Response**:
-```json
-{
-  "series_id": 1,
-  "document_type": "invoice",
-  "series_code": "INV-DEFAULT",
-  "prefix": "INV",
-  "suffix": "/24-25",
-  "current_number": 1001,
-  "is_default": true,
-  "is_active": true
-}
-```
+**Foreign Key Relationships**:
+- `org_id` → `master.organizations.org_id`
+- `branch_id` → `master.org_branches.branch_id`
 
 ---
 
-### 9. addresses
-**Purpose**: Polymorphic address storage for multiple entity types (customers, suppliers, branches)
-**API Endpoint**: Addresses are managed through their parent entity endpoints
+### 7. addresses
+
+### addresses
+**Purpose**: [Business purpose description]
+**API Endpoint**: `api.get_addresses()`, `api.create_addresse()`
 
 | Field | Type | Required | Description | Frontend Usage |
 |-------|------|----------|-------------|----------------|
-| `address_id` | SERIAL | ✓ | Unique address identifier | Primary key |
-| `org_id` | UUID | ✓ | Organization ID | Multi-tenant filtering |
-| `entity_type` | TEXT | ✓ | Entity type: 'customer', 'supplier', 'branch' | Polymorphic discriminator |
-| `entity_id` | INTEGER | ✓ | ID from the respective entity table | Polymorphic foreign key |
-| `address_type` | TEXT | ✓ | Type: 'billing', 'shipping', 'registered' | Address classification |
-| `address_line1` | TEXT | ✓ | Primary address line | Main address |
-| `address_line2` | TEXT | - | Secondary address line | Additional details |
-| `city` | TEXT | ✓ | City name | Location |
-| `state_code` | TEXT | ✓ | GST state code (e.g., '27' for Maharashtra) | GST calculations |
-| `state_name` | TEXT | ✓ | State name | Display purposes |
-| `pincode` | TEXT | ✓ | Postal code | Delivery zones |
-| `country` | TEXT | - | Country (default: 'India') | International addresses |
-| `is_default` | BOOLEAN | - | Default address flag | UI selection |
-| `is_active` | BOOLEAN | - | Address active status | Soft delete |
-| `created_at` | TIMESTAMPTZ | - | Creation timestamp | Audit trail |
+| `address_id` | SERIAL | ✓ | Primary key identifier | Primary key |
+| `org_id` | UUID | ✓ | Organization ID | Organization filtering |
+| `entity_type` | TEXT | ✓ | Description needed | Standard field usage |
+| `entity_id` | INTEGER | ✓ | Reference to related entity | Association/lookup |
+| `address_type` | TEXT | ✓ | Description needed | Standard field usage |
+| `address_line1` | TEXT | ✓ | Description needed | Standard field usage |
+| `address_line2` | TEXT | - | Description needed | Standard field usage |
+| `landmark` | TEXT | - | Description needed | Standard field usage |
+| `city` | TEXT | ✓ | Description needed | Standard field usage |
+| `state_code` | TEXT | ✓ | Description needed | Standard field usage |
+| `state_name` | TEXT | ✓ | Description needed | Standard field usage |
+| `country` | TEXT | - | Description needed | Standard field usage |
+| `pincode` | TEXT | ✓ | Description needed | Standard field usage |
+| `latitude` | DECIMAL(10 | - | Description needed | Standard field usage |
+| `longitude` | DECIMAL(11 | - | Description needed | Standard field usage |
+| `google_plus_code` | TEXT | - | Description needed | Standard field usage |
+| `contact_person` | TEXT | - | Description needed | Standard field usage |
+| `contact_number` | TEXT | - | Description needed | Standard field usage |
+| `contact_email` | TEXT | - | Description needed | Standard field usage |
+| `delivery_instructions` | TEXT | - | Description needed | Standard field usage |
+| `is_default` | BOOLEAN | - | Description needed | Standard field usage |
+| `is_active` | BOOLEAN | - | Active status flag | Standard field usage |
+| `created_at` | TIMESTAMP | - | Timestamp field | Standard field usage |
+| `updated_at` | TIMESTAMP | - | Timestamp field | Standard field usage |
 
-**⚠️ IMPORTANT: Referential Integrity Warning**
-This table uses a polymorphic relationship pattern where `entity_type` + `entity_id` identifies the owner. This design **lacks traditional foreign key constraints** because `entity_id` can reference different tables based on `entity_type`. 
-
-Key implications:
-- No database-enforced referential integrity
-- Same `entity_id` value can exist for different entity types (e.g., customer_id=32 and supplier_id=32)
-- **ALWAYS** query with both `entity_type` AND `entity_id` fields together
-- Manual validation required when deleting parent entities
-- Orphaned records possible if parent entities are deleted without cleaning up addresses
-
-**Example API Response**:
-```json
-{
-  "address_id": 1,
-  "entity_type": "customer",
-  "entity_id": 32,
-  "address_type": "billing",
-  "address_line1": "Shop No. 15, Medical Complex",
-  "city": "Jaipur",
-  "state_code": "08",
-  "state_name": "Rajasthan",
-  "pincode": "302001"
-}
-```
+**Foreign Key Relationships**:
+- `org_id` → `master.organizations.org_id`
 
 ---
 
-## API Integration Notes
+### 8. employees
 
-### Authentication
-All API calls require organization context:
-```javascript
-// Headers required for all requests
-{
-  "Authorization": "Bearer <jwt_token>",
-  "X-Org-ID": "<organization_uuid>",
-  "Content-Type": "application/json"
-}
-```
+### employees
+**Purpose**: [Business purpose description]
+**API Endpoint**: `api.get_employees()`, `api.create_employee()`
 
-### Common Patterns
-1. **Filtering**: Use `is_active=true` for active records
-2. **Pagination**: Most APIs support `limit` and `offset`
-3. **Search**: Text fields support `ILIKE` pattern matching
-4. **Sorting**: Use `order_by` parameter with field names
+| Field | Type | Required | Description | Frontend Usage |
+|-------|------|----------|-------------|----------------|
+| `employee_id` | SERIAL | ✓ | Primary key identifier | Primary key |
+| `org_id` | UUID | ✓ | Organization ID | Organization filtering |
+| `user_id` | INTEGER | - | Reference to related entity | Association/lookup |
+| `employee_code` | TEXT | ✓ | Description needed | Standard field usage |
+| `first_name` | TEXT | ✓ | Description needed | Standard field usage |
+| `last_name` | TEXT | - | Description needed | Standard field usage |
+| `full_name` | TEXT | - | Description needed | Standard field usage |
+| `date_of_birth` | DATE | - | Description needed | Standard field usage |
+| `gender` | TEXT | - | Description needed | Standard field usage |
+| `marital_status` | TEXT | - | Description needed | Standard field usage |
+| `blood_group` | TEXT | - | Description needed | Standard field usage |
+| `personal_email` | TEXT | - | Description needed | Standard field usage |
+| `personal_mobile` | TEXT | ✓ | Description needed | Standard field usage |
+| `emergency_contact` | JSONB | - | Description needed | Standard field usage |
+| `permanent_address` | JSONB | - | Description needed | Standard field usage |
+| `current_address` | JSONB | - | Description needed | Standard field usage |
+| `designation` | TEXT | ✓ | Description needed | Standard field usage |
+| `department_id` | INTEGER | - | Reference to related entity | Association/lookup |
+| `branch_id` | INTEGER | - | Reference to related entity | Association/lookup |
+| `joining_date` | DATE | ✓ | Description needed | Standard field usage |
+| `probation_end_date` | DATE | - | Description needed | Standard field usage |
+| `confirmation_date` | DATE | - | Description needed | Standard field usage |
+| `pan_number` | TEXT | - | Description needed | Standard field usage |
+| `aadhar_number` | TEXT | - | Description needed | Standard field usage |
+| `driving_license` | TEXT | - | Description needed | Standard field usage |
+| `passport_number` | TEXT | - | Description needed | Standard field usage |
+| `bank_account_details` | JSONB | - | Description needed | Standard field usage |
+| `employment_status` | TEXT | - | Description needed | Standard field usage |
+| `resignation_date` | DATE | - | Description needed | Standard field usage |
+| `last_working_date` | DATE | - | Description needed | Standard field usage |
+| `created_at` | TIMESTAMP | - | Timestamp field | Standard field usage |
+| `updated_at` | TIMESTAMP | - | Timestamp field | Standard field usage |
 
-### Error Handling
-Standard HTTP status codes with JSON error responses:
-```json
-{
-  "error": "validation_failed",
-  "message": "Required field missing: product_name",
-  "details": {
-    "field": "product_name",
-    "code": "required"
-  }
-}
-```
+**Foreign Key Relationships**:
+- `org_id` → `master.organizations.org_id`
+- `user_id` → `master.org_users.user_id`
+- `department_id` → `master.departments.department_id`
+- `branch_id` → `master.org_branches.branch_id`
+
+---
+
+### 9. doctors
+
+### doctors
+**Purpose**: [Business purpose description]
+**API Endpoint**: `api.get_doctors()`, `api.create_doctor()`
+
+| Field | Type | Required | Description | Frontend Usage |
+|-------|------|----------|-------------|----------------|
+| `doctor_id` | SERIAL | ✓ | Primary key identifier | Primary key |
+| `org_id` | UUID | ✓ | Organization ID | Organization filtering |
+| `doctor_code` | TEXT | ✓ | Description needed | Standard field usage |
+| `doctor_name` | TEXT | ✓ | Description needed | Standard field usage |
+| `qualification` | TEXT | - | Description needed | Standard field usage |
+| `specialization` | TEXT | - | Description needed | Standard field usage |
+| `registration_number` | TEXT | - | Description needed | Standard field usage |
+| `clinic_name` | TEXT | - | Description needed | Standard field usage |
+| `clinic_address` | JSONB | - | Description needed | Standard field usage |
+| `phone_numbers` | TEXT[] | - | Description needed | Standard field usage |
+| `email` | TEXT | - | Description needed | Standard field usage |
+| `years_of_practice` | INTEGER | - | Description needed | Standard field usage |
+| `associated_hospitals` | TEXT[] | - | Description needed | Standard field usage |
+| `commission_rate` | NUMERIC(5 | - | Description needed | Standard field usage |
+| `credit_limit` | NUMERIC(15 | - | Description needed | Standard field usage |
+| `payment_terms_days` | INTEGER | - | Description needed | Standard field usage |
+| `preferred_brands` | TEXT[] | - | Description needed | Standard field usage |
+| `prescription_pattern` | JSONB | - | Description needed | Standard field usage |
+| `is_active` | BOOLEAN | - | Active status flag | Standard field usage |
+| `blacklisted` | BOOLEAN | - | Description needed | Standard field usage |
+| `blacklist_reason` | TEXT | - | Description needed | Standard field usage |
+| `created_at` | TIMESTAMP | - | Timestamp field | Standard field usage |
+| `updated_at` | TIMESTAMP | - | Timestamp field | Standard field usage |
+
+**Foreign Key Relationships**:
+- `org_id` → `master.organizations.org_id`
+
+---
+
+### 10. number_series
+
+### number_series
+**Purpose**: [Business purpose description]
+**API Endpoint**: `api.get_number_series()`, `api.create_number_serie()`
+
+| Field | Type | Required | Description | Frontend Usage |
+|-------|------|----------|-------------|----------------|
+| `series_id` | SERIAL | ✓ | Primary key identifier | Primary key |
+| `org_id` | UUID | ✓ | Organization ID | Organization filtering |
+| `branch_id` | INTEGER | - | Reference to related entity | Association/lookup |
+| `document_type` | TEXT | ✓ | Description needed | Standard field usage |
+| `series_code` | TEXT | ✓ | Description needed | Standard field usage |
+| `series_description` | TEXT | - | Description needed | Standard field usage |
+| `prefix` | TEXT | - | Description needed | Standard field usage |
+| `suffix` | TEXT | - | Description needed | Standard field usage |
+| `separator` | TEXT | - | Description needed | Standard field usage |
+| `current_number` | INTEGER | - | Description needed | Standard field usage |
+| `start_number` | INTEGER | - | Description needed | Standard field usage |
+| `increment_by` | INTEGER | - | Description needed | Standard field usage |
+| `reset_frequency` | TEXT | - | Description needed | Standard field usage |
+| `last_reset_date` | DATE | - | Description needed | Standard field usage |
+| `preview_format` | TEXT | - | Description needed | Standard field usage |
+| `is_default` | BOOLEAN | - | Description needed | Standard field usage |
+| `is_active` | BOOLEAN | - | Active status flag | Standard field usage |
+| `created_at` | TIMESTAMP | - | Timestamp field | Standard field usage |
+| `updated_at` | TIMESTAMP | - | Timestamp field | Standard field usage |
+
+**Foreign Key Relationships**:
+- `org_id` → `master.organizations.org_id`
+- `branch_id` → `master.org_branches.branch_id`
+
+---
+
+### 11. currencies
+
+### currencies
+**Purpose**: [Business purpose description]
+**API Endpoint**: `api.get_currencies()`, `api.create_currencie()`
+
+| Field | Type | Required | Description | Frontend Usage |
+|-------|------|----------|-------------|----------------|
+| `currency_id` | SERIAL | ✓ | Primary key identifier | Primary key |
+| `currency_code` | TEXT | ✓ | Description needed | Standard field usage |
+| `currency_name` | TEXT | ✓ | Description needed | Standard field usage |
+| `currency_symbol` | TEXT | ✓ | Description needed | Standard field usage |
+| `decimal_places` | INTEGER | - | Description needed | Standard field usage |
+| `decimal_separator` | TEXT | - | Description needed | Standard field usage |
+| `thousand_separator` | TEXT | - | Description needed | Standard field usage |
+| `symbol_position` | TEXT | - | Description needed | Standard field usage |
+| `format_pattern` | TEXT | - | Description needed | Standard field usage |
+| `is_base_currency` | BOOLEAN | - | Description needed | Standard field usage |
+| `is_active` | BOOLEAN | - | Active status flag | Standard field usage |
+| `created_at` | TIMESTAMP | - | Timestamp field | Standard field usage |
+
+---
+
+### 12. exchange_rates
+
+### exchange_rates
+**Purpose**: [Business purpose description]
+**API Endpoint**: `api.get_exchange_rates()`, `api.create_exchange_rate()`
+
+| Field | Type | Required | Description | Frontend Usage |
+|-------|------|----------|-------------|----------------|
+| `rate_id` | SERIAL | ✓ | Primary key identifier | Primary key |
+| `org_id` | UUID | ✓ | Organization ID | Organization filtering |
+| `from_currency_code` | TEXT | ✓ | Description needed | Standard field usage |
+| `to_currency_code` | TEXT | ✓ | Description needed | Standard field usage |
+| `exchange_rate` | NUMERIC(15 | ✓ | Description needed | Standard field usage |
+| `inverse_rate` | NUMERIC(15 | - | Description needed | Standard field usage |
+| `effective_from` | DATE | ✓ | Description needed | Standard field usage |
+| `effective_until` | DATE | - | Description needed | Standard field usage |
+| `rate_source` | TEXT | - | Description needed | Standard field usage |
+| `is_active` | BOOLEAN | - | Active status flag | Standard field usage |
+| `created_at` | TIMESTAMP | - | Timestamp field | Standard field usage |
+| `created_by` | INTEGER | - | Creation audit field | Standard field usage |
+
+**Foreign Key Relationships**:
+- `org_id` → `master.organizations.org_id`
+- `created_by` → `master.org_users.user_id`
+
+---

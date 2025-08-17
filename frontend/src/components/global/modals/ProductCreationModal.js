@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { X, Package, Pill, Building2, Hash, Percent, IndianRupee, Shield, AlertTriangle, Thermometer, FileText } from 'lucide-react';
 import { productAPI, productsApi } from '../../../services/api';
 import PackTypeSelector from '../PackTypeSelector';
@@ -21,6 +21,9 @@ const ProductCreationModal = ({
     mrp: '',  // No default - user must enter
     sale_price: '',  // No default - user must enter
     category: '',
+    category_id: '',
+    product_type: '',
+    type_id: '',
     batch_number: '',
     mfg_date: '',
     expiry_date: '',
@@ -47,6 +50,44 @@ const ProductCreationModal = ({
   });
   const [saving, setSaving] = useState(false);
   const [errors, setErrors] = useState([]);
+  
+  // Master data state
+  const [categories, setCategories] = useState([]);
+  const [productTypes, setProductTypes] = useState([]);
+  const [loadingMasterData, setLoadingMasterData] = useState(true);
+
+  // Load master data when component mounts
+  useEffect(() => {
+    const loadMasterData = async () => {
+      try {
+        setLoadingMasterData(true);
+        
+        // Load categories and product types in parallel
+        const [categoriesResponse, typesResponse] = await Promise.all([
+          productsApi.get('/products/master/categories'),
+          productsApi.get('/products/master/types')
+        ]);
+        
+        if (categoriesResponse.data?.success) {
+          setCategories(categoriesResponse.data.data);
+        }
+        
+        if (typesResponse.data?.success) {
+          setProductTypes(typesResponse.data.data);
+        }
+        
+      } catch (error) {
+        console.error('Error loading master data:', error);
+        setErrors(['Failed to load categories and product types']);
+      } finally {
+        setLoadingMasterData(false);
+      }
+    };
+
+    if (show) {
+      loadMasterData();
+    }
+  }, [show]);
 
   // Update product name when modal opens with initialProductName
   React.useEffect(() => {
@@ -127,8 +168,9 @@ const ProductCreationModal = ({
         generic_name: newProduct.generic_name || newProduct.salt_composition,
         brand: newProduct.brand || newProduct.manufacturer,
         manufacturer: newProduct.manufacturer,
-        category_id: newProduct.category_id || null,
-        product_type: 'standard',
+        category_id: newProduct.category_id ? parseInt(newProduct.category_id) : null,
+        type_id: newProduct.type_id ? parseInt(newProduct.type_id) : null,
+        product_type: newProduct.product_type || 'Standard Medicine',
         product_class: 'medicine',
         composition: newProduct.salt_composition ? { active: newProduct.salt_composition } : {},
         strength: newProduct.strength || null,
@@ -382,23 +424,58 @@ const ProductCreationModal = ({
                     Category
                   </label>
                   <select
-                    value={newProduct.category}
-                    onChange={(e) => setNewProduct({ ...newProduct, category: e.target.value })}
+                    value={newProduct.category_id}
+                    onChange={(e) => {
+                      const selectedCategory = categories.find(cat => cat.category_id === parseInt(e.target.value));
+                      setNewProduct({ 
+                        ...newProduct, 
+                        category_id: e.target.value,
+                        category: selectedCategory ? selectedCategory.category_name : ''
+                      });
+                    }}
                     className="w-full px-3 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all"
+                    disabled={loadingMasterData}
                   >
-                    <option value="">Select Category</option>
-                    <option value="Tablet">Tablet</option>
-                    <option value="Capsule">Capsule</option>
-                    <option value="Syrup">Syrup</option>
-                    <option value="Injection">Injection</option>
-                    <option value="Cream">Cream</option>
-                    <option value="Drops">Drops</option>
-                    <option value="Powder">Powder</option>
-                    <option value="Other">Other</option>
+                    <option value="">
+                      {loadingMasterData ? 'Loading categories...' : 'Select Category'}
+                    </option>
+                    {categories.map(category => (
+                      <option key={category.category_id} value={category.category_id}>
+                        {category.category_name}
+                      </option>
+                    ))}
                   </select>
                 </div>
 
-                <div className="md:col-span-3">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Product Type
+                  </label>
+                  <select
+                    value={newProduct.type_id}
+                    onChange={(e) => {
+                      const selectedType = productTypes.find(type => type.type_id === parseInt(e.target.value));
+                      setNewProduct({ 
+                        ...newProduct, 
+                        type_id: e.target.value,
+                        product_type: selectedType ? selectedType.type_name : ''
+                      });
+                    }}
+                    className="w-full px-3 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all"
+                    disabled={loadingMasterData}
+                  >
+                    <option value="">
+                      {loadingMasterData ? 'Loading types...' : 'Select Product Type'}
+                    </option>
+                    {productTypes.map(type => (
+                      <option key={type.type_id} value={type.type_id}>
+                        {type.type_name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="md:col-span-2">
                   <label className="block text-sm font-medium text-gray-700 mb-2">
                     Salt Composition
                   </label>

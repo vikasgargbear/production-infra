@@ -8,508 +8,543 @@ The `procurement` schema manages the complete procurement process from purchase 
 ## Tables
 
 ### 1. purchase_orders
-**Purpose**: Purchase order management and supplier ordering
+
+### purchase_orders
+**Purpose**: [Business purpose description]
 **API Endpoint**: `api.get_purchase_orders()`, `api.create_purchase_order()`
 
 | Field | Type | Required | Description | Frontend Usage |
 |-------|------|----------|-------------|----------------|
-| `po_id` | SERIAL | ✓ | Unique purchase order identifier | Primary key |
+| `purchase_order_id` | SERIAL | ✓ | Primary key identifier | Primary key |
 | `org_id` | UUID | ✓ | Organization ID | Organization filtering |
-| `branch_id` | INTEGER | ✓ | Ordering branch | Branch tracking |
-| `po_number` | TEXT | ✓ | PO document number | PO identification |
-| `po_date` | DATE | ✓ | Order creation date | Date filtering |
-| `po_type` | TEXT | ✓ | Type: 'regular', 'urgent', 'scheduled', 'blanket' | PO classification |
-| `supplier_id` | INTEGER | ✓ | Supplier reference | Supplier association |
-| `supplier_name` | TEXT | - | Supplier name (snapshot) | Display convenience |
-| `supplier_contact` | TEXT | - | Supplier contact info (snapshot) | Contact reference |
-| `supplier_gst` | TEXT | - | Supplier GST (snapshot) | Tax compliance |
-| `requisition_id` | INTEGER | - | Source requisition reference | Requisition linking |
-| `buyer_id` | INTEGER | - | Purchasing officer | User tracking |
-| `delivery_date` | DATE | - | Expected delivery date | Planning tracking |
-| `delivery_branch_id` | INTEGER | - | Delivery destination branch | Delivery planning |
-| `delivery_address` | TEXT | - | Delivery address | Logistics information |
-| `payment_terms` | TEXT | - | Payment terms | Payment planning |
-| `payment_days` | INTEGER | - | Payment due days | Payment tracking |
-| `currency_code` | TEXT | - | Transaction currency | Multi-currency support |
-| `exchange_rate` | NUMERIC(10,6) | - | Currency exchange rate | Currency conversion |
-| `subtotal_amount` | NUMERIC(15,2) | ✓ | Subtotal before taxes | Amount calculations |
-| `discount_percent` | NUMERIC(5,2) | - | Overall discount % | Discount tracking |
-| `discount_amount` | NUMERIC(15,2) | - | Total discount amount | Discount calculations |
-| `freight_amount` | NUMERIC(15,2) | - | Freight/shipping charges | Additional costs |
-| `other_charges` | NUMERIC(15,2) | - | Other charges | Additional costs |
-| `tax_amount` | NUMERIC(15,2) | - | Total tax amount | Tax calculations |
-| `total_amount` | NUMERIC(15,2) | ✓ | Final PO amount | Payment processing |
-| `advance_amount` | NUMERIC(15,2) | - | Advance payment amount | Payment tracking |
-| `po_status` | TEXT | ✓ | Status: 'draft', 'approved', 'sent', 'acknowledged', 'partial', 'completed', 'cancelled' | Status tracking |
-| `approval_status` | TEXT | - | Approval: 'pending', 'approved', 'rejected' | Approval workflow |
-| `approved_by` | INTEGER | - | Approver user ID | Approval tracking |
-| `approved_at` | TIMESTAMPTZ | - | Approval timestamp | Approval tracking |
-| `grn_status` | TEXT | - | GRN: 'pending', 'partial', 'completed' | Receipt tracking |
-| `payment_status` | TEXT | - | Payment: 'unpaid', 'partial', 'paid' | Payment tracking |
-| `quality_check_required` | BOOLEAN | - | QC requirement flag | Quality control |
-| `special_instructions` | TEXT | - | Special handling instructions | Special requirements |
-| `internal_notes` | TEXT | - | Internal notes | Internal documentation |
-| `supplier_notes` | TEXT | - | Notes to supplier | Supplier communication |
-| `cancelled_reason` | TEXT | - | Cancellation reason | Cancellation tracking |
-| `cancelled_by` | INTEGER | - | User who cancelled | Cancellation audit |
-| `cancelled_at` | TIMESTAMPTZ | - | Cancellation timestamp | Cancellation tracking |
-| `created_by` | INTEGER | - | User who created PO | User tracking |
-| `created_at` | TIMESTAMPTZ | - | Creation timestamp | Audit trails |
-| `updated_at` | TIMESTAMPTZ | - | Last update timestamp | Change tracking |
+| `branch_id` | INTEGER | ✓ | Reference to related entity | Association/lookup |
+| `po_number` | TEXT | ✓ | Description needed | Standard field usage |
+| `po_date` | DATE | - | Description needed | Standard field usage |
+| `po_type` | TEXT | - | Description needed | Standard field usage |
+| `supplier_id` | INTEGER | ✓ | Reference to related entity | Association/lookup |
+| `supplier_name` | TEXT | ✓ | Description needed | Standard field usage |
+| `supplier_reference` | TEXT | - | Description needed | Standard field usage |
+| `expected_delivery_date` | DATE | - | Description needed | Standard field usage |
+| `delivery_location_id` | INTEGER | - | Reference to related entity | Association/lookup |
+| `delivery_terms` | TEXT | - | Description needed | Standard field usage |
+| `payment_terms` | TEXT | - | Description needed | Standard field usage |
+| `payment_days` | INTEGER | - | Description needed | Standard field usage |
+| `due_date` | DATE | - | Description needed | Standard field usage |
+| `subtotal_amount` | NUMERIC(15 | - | Description needed | Standard field usage |
+| `discount_amount` | NUMERIC(15 | - | Description needed | Standard field usage |
+| `taxable_amount` | NUMERIC(15 | - | Description needed | Standard field usage |
+| `tax_amount` | NUMERIC(15 | - | Description needed | Standard field usage |
+| `other_charges` | NUMERIC(15 | - | Description needed | Standard field usage |
+| `round_off_amount` | NUMERIC(5 | - | Description needed | Standard field usage |
+| `total_amount` | NUMERIC(15 | - | Description needed | Standard field usage |
+| `igst_amount` | NUMERIC(15 | - | Description needed | Standard field usage |
+| `cgst_amount` | NUMERIC(15 | - | Description needed | Standard field usage |
+| `sgst_amount` | NUMERIC(15 | - | Description needed | Standard field usage |
+| `cess_amount` | NUMERIC(15 | - | Description needed | Standard field usage |
+| `po_status` | TEXT | - | Description needed | Standard field usage |
+| `approval_status` | TEXT | - | Description needed | Standard field usage |
+| `approved_by` | INTEGER | - | Description needed | Standard field usage |
+| `approved_at` | TIMESTAMP | - | Timestamp field | Standard field usage |
+| `items_count` | INTEGER | - | Description needed | Standard field usage |
+| `items_received` | INTEGER | - | Description needed | Standard field usage |
+| `receipt_status` | TEXT | - | Description needed | Standard field usage |
+| `sent_to_supplier` | BOOLEAN | - | Description needed | Standard field usage |
+| `sent_date` | TIMESTAMP | - | Description needed | Standard field usage |
+| `acknowledged_by_supplier` | BOOLEAN | - | Description needed | Standard field usage |
+| `acknowledged_date` | TIMESTAMP | - | Description needed | Standard field usage |
+| `notes` | TEXT | - | Description needed | Standard field usage |
+| `internal_notes` | TEXT | - | Description needed | Standard field usage |
+| `terms_and_conditions` | TEXT | - | Description needed | Standard field usage |
+| `created_at` | TIMESTAMP | - | Timestamp field | Standard field usage |
+| `updated_at` | TIMESTAMP | - | Timestamp field | Standard field usage |
+| `created_by` | INTEGER | ✓ | Creation audit field | Standard field usage |
 
-**Example API Response**:
-```json
-{
-  "po_id": 1,
-  "po_number": "PO-2024-001",
-  "po_date": "2024-01-15",
-  "po_type": "regular",
-  "supplier_id": 1,
-  "supplier_name": "XYZ Pharmaceuticals",
-  "delivery_date": "2024-01-22",
-  "subtotal_amount": 50000.00,
-  "tax_amount": 6000.00,
-  "total_amount": 56000.00,
-  "po_status": "approved",
-  "grn_status": "pending",
-  "payment_status": "unpaid"
-}
-```
+**Foreign Key Relationships**:
+- `org_id` → `master.organizations.org_id`
+- `branch_id` → `master.org_branches.branch_id`
+- `supplier_id` → `parties.suppliers.supplier_id`
+- `delivery_location_id` → `inventory.storage_locations.location_id`
+- `approved_by` → `master.org_users.user_id`
+- `created_by` → `master.org_users.user_id`
 
 ---
 
 ### 2. purchase_order_items
-**Purpose**: Individual line items within purchase orders
-**API Endpoint**: `api.get_po_items()`, `api.create_po_item()`
+
+### purchase_order_items
+**Purpose**: [Business purpose description]
+**API Endpoint**: `api.get_purchase_order_items()`, `api.create_purchase_order_item()`
 
 | Field | Type | Required | Description | Frontend Usage |
 |-------|------|----------|-------------|----------------|
-| `po_item_id` | SERIAL | ✓ | Unique PO item identifier | Primary key |
-| `po_id` | INTEGER | ✓ | Parent PO reference | PO association |
-| `product_id` | INTEGER | ✓ | Product reference | Product association |
-| `product_name` | TEXT | - | Product name (snapshot) | Display convenience |
-| `product_code` | TEXT | - | Product code (snapshot) | Reference convenience |
-| `manufacturer` | TEXT | - | Manufacturer name | Product information |
-| `supplier_product_code` | TEXT | - | Supplier's product code | Supplier reference |
-| `pack_size` | INTEGER | - | Units per pack | Quantity calculations |
-| `ordered_quantity` | NUMERIC(15,3) | ✓ | Ordered quantity | Quantity tracking |
-| `unit_price` | NUMERIC(15,4) | ✓ | Unit purchase price | Price calculations |
-| `free_quantity` | NUMERIC(15,3) | - | Free/bonus quantity | Scheme tracking |
-| `discount_percentage` | NUMERIC(5,2) | - | Line item discount % | Discount calculations |
-| `discount_amount` | NUMERIC(15,2) | - | Line item discount amount | Discount tracking |
-| `line_total` | NUMERIC(15,2) | ✓ | Line total before tax | Amount calculations |
-| `gst_percentage` | NUMERIC(5,2) | - | GST rate % | Tax calculations |
-| `cgst_amount` | NUMERIC(15,2) | - | CGST amount | Tax breakdown |
-| `sgst_amount` | NUMERIC(15,2) | - | SGST amount | Tax breakdown |
-| `igst_amount` | NUMERIC(15,2) | - | IGST amount | Tax breakdown |
-| `cess_amount` | NUMERIC(15,2) | - | Cess amount | Tax calculations |
-| `line_total_with_tax` | NUMERIC(15,2) | ✓ | Final line total | Final calculations |
-| `received_quantity` | NUMERIC(15,3) | - | Quantity received via GRN | Receipt tracking |
-| `accepted_quantity` | NUMERIC(15,3) | - | Quantity accepted after QC | Quality tracking |
-| `rejected_quantity` | NUMERIC(15,3) | - | Quantity rejected in QC | Quality tracking |
-| `pending_quantity` | NUMERIC(15,3) | - | Quantity yet to receive | Pending tracking |
-| `required_by_date` | DATE | - | Required delivery date | Planning information |
-| `specifications` | TEXT | - | Product specifications | Quality requirements |
-| `notes` | TEXT | - | Line item notes | Documentation |
-| `created_at` | TIMESTAMPTZ | - | Creation timestamp | Audit trails |
-| `updated_at` | TIMESTAMPTZ | - | Last update timestamp | Change tracking |
+| `po_item_id` | SERIAL | ✓ | Primary key identifier | Primary key |
+| `purchase_order_id` | INTEGER | ✓ | Reference to related entity | Association/lookup |
+| `product_id` | INTEGER | ✓ | Reference to related entity | Association/lookup |
+| `product_name` | TEXT | ✓ | Description needed | Standard field usage |
+| `manufacturer` | TEXT | - | Description needed | Standard field usage |
+| `hsn_code` | TEXT | - | Description needed | Standard field usage |
+| `ordered_quantity` | NUMERIC(15 | ✓ | Description needed | Standard field usage |
+| `uom` | TEXT | ✓ | Description needed | Standard field usage |
+| `pack_type` | TEXT | ✓ | Description needed | Standard field usage |
+| `pack_size` | INTEGER | - | Description needed | Standard field usage |
+| `base_quantity` | NUMERIC(15 | - | Description needed | Standard field usage |
+| `free_quantity` | NUMERIC(15 | - | Description needed | Standard field usage |
+| `scheme_details` | TEXT | - | Description needed | Standard field usage |
+| `unit_price` | NUMERIC(15 | ✓ | Description needed | Standard field usage |
+| `mrp` | NUMERIC(15 | - | Description needed | Standard field usage |
+| `discount_percent` | NUMERIC(5 | - | Description needed | Standard field usage |
+| `discount_amount` | NUMERIC(15 | - | Description needed | Standard field usage |
+| `taxable_amount` | NUMERIC(15 | - | Description needed | Standard field usage |
+| `tax_percent` | NUMERIC(5 | - | Description needed | Standard field usage |
+| `tax_amount` | NUMERIC(15 | - | Description needed | Standard field usage |
+| `line_total` | NUMERIC(15 | ✓ | Description needed | Standard field usage |
+| `received_quantity` | NUMERIC(15 | - | Description needed | Standard field usage |
+| `pending_quantity` | NUMERIC(15 | - | Description needed | Standard field usage |
+| `cancelled_quantity` | NUMERIC(15 | - | Description needed | Standard field usage |
+| `bonus_quantity` | NUMERIC(15 | - | Description needed | Standard field usage |
+| `item_status` | TEXT | - | Description needed | Standard field usage |
+| `item_notes` | TEXT | - | Description needed | Standard field usage |
+| `display_order` | INTEGER | - | Description needed | Standard field usage |
+| `created_at` | TIMESTAMP | - | Timestamp field | Standard field usage |
+| `updated_at` | TIMESTAMP | - | Timestamp field | Standard field usage |
 
-**Example API Response**:
-```json
-{
-  "po_item_id": 1,
-  "po_id": 1,
-  "product_id": 101,
-  "product_name": "Paracetamol 500mg",
-  "ordered_quantity": 1000.0,
-  "unit_price": 10.50,
-  "free_quantity": 100.0,
-  "discount_percentage": 5.0,
-  "line_total": 9975.00,
-  "gst_percentage": 12.0,
-  "line_total": 11172.00,
-  "received_quantity": 0.0,
-  "pending_quantity": 1000.0
-}
-```
+**Foreign Key Relationships**:
+- `purchase_order_id` → `procurement.purchase_orders.purchase_order_id`
+- `product_id` → `inventory.products.product_id`
 
 ---
 
 ### 3. goods_receipt_notes
-**Purpose**: Goods receipt and quality control management
-**API Endpoint**: `api.get_grns()`, `api.create_grn()`
+
+### goods_receipt_notes
+**Purpose**: [Business purpose description]
+**API Endpoint**: `api.get_goods_receipt_notes()`, `api.create_goods_receipt_note()`
 
 | Field | Type | Required | Description | Frontend Usage |
 |-------|------|----------|-------------|----------------|
-| `grn_id` | SERIAL | ✓ | Unique GRN identifier | Primary key |
+| `grn_id` | SERIAL | ✓ | Primary key identifier | Primary key |
 | `org_id` | UUID | ✓ | Organization ID | Organization filtering |
-| `branch_id` | INTEGER | ✓ | Receiving branch | Branch tracking |
-| `grn_number` | TEXT | ✓ | GRN document number | GRN identification |
-| `grn_date` | DATE | ✓ | Receipt date | Date filtering |
-| `grn_type` | TEXT | ✓ | Type: 'purchase', 'return', 'transfer', 'replacement' | GRN classification |
-| `po_id` | INTEGER | - | Source PO reference | PO linking |
-| `po_number` | TEXT | - | PO number (snapshot) | Reference convenience |
-| `supplier_id` | INTEGER | ✓ | Supplier reference | Supplier association |
-| `supplier_name` | TEXT | - | Supplier name (snapshot) | Display convenience |
-| `supplier_invoice_number` | TEXT | - | Supplier's invoice number | Supplier reference |
-| `supplier_invoice_date` | DATE | - | Supplier's invoice date | Invoice tracking |
-| `dc_number` | TEXT | - | Delivery challan number | Delivery reference |
-| `dc_date` | DATE | - | Delivery challan date | Delivery tracking |
-| `received_by` | INTEGER | ✓ | Receiving user | User tracking |
-| `transporter_name` | TEXT | - | Transport company | Logistics tracking |
-| `lr_number` | TEXT | - | Lorry receipt number | Transport reference |
-| `lr_date` | DATE | - | LR date | Transport tracking |
-| `vehicle_number` | TEXT | - | Vehicle registration | Transport tracking |
-| `total_items` | INTEGER | - | Total line items | Count tracking |
-| `total_quantity` | NUMERIC(15,3) | - | Total received quantity | Quantity summary |
-| `subtotal_amount` | NUMERIC(15,2) | - | Subtotal amount | Amount tracking |
-| `tax_amount` | NUMERIC(15,2) | - | Total tax amount | Tax tracking |
-| `total_amount` | NUMERIC(15,2) | - | Total GRN amount | Amount summary |
-| `grn_status` | TEXT | ✓ | Status: 'draft', 'received', 'qc_pending', 'qc_completed', 'approved', 'rejected' | Status tracking |
-| `qc_status` | TEXT | - | QC: 'pending', 'in_progress', 'passed', 'failed', 'conditional' | Quality tracking |
-| `qc_completed_by` | INTEGER | - | QC inspector user ID | Quality tracking |
-| `qc_completed_at` | TIMESTAMPTZ | - | QC completion timestamp | Quality tracking |
-| `approval_status` | TEXT | - | Approval: 'pending', 'approved', 'rejected' | Approval workflow |
-| `approved_by` | INTEGER | - | Approver user ID | Approval tracking |
-| `approved_at` | TIMESTAMPTZ | - | Approval timestamp | Approval tracking |
-| `rejection_reason` | TEXT | - | Rejection reason | Rejection documentation |
-| `storage_location_id` | INTEGER | - | Default storage location | Storage planning |
-| `notes` | TEXT | - | GRN notes | Documentation |
-| `created_by` | INTEGER | - | User who created GRN | User tracking |
-| `created_at` | TIMESTAMPTZ | - | Creation timestamp | Audit trails |
-| `updated_at` | TIMESTAMPTZ | - | Last update timestamp | Change tracking |
+| `branch_id` | INTEGER | ✓ | Reference to related entity | Association/lookup |
+| `grn_number` | TEXT | ✓ | Description needed | Standard field usage |
+| `grn_date` | DATE | - | Description needed | Standard field usage |
+| `grn_type` | TEXT | - | Description needed | Standard field usage |
+| `purchase_order_id` | INTEGER | - | Reference to related entity | Association/lookup |
+| `supplier_id` | INTEGER | - | Reference to related entity | Association/lookup |
+| `supplier_invoice_number` | TEXT | - | Description needed | Standard field usage |
+| `supplier_invoice_date` | DATE | - | Description needed | Standard field usage |
+| `supplier_challan_number` | TEXT | - | Description needed | Standard field usage |
+| `supplier_challan_date` | DATE | - | Description needed | Standard field usage |
+| `received_by` | INTEGER | ✓ | Description needed | Standard field usage |
+| `received_at` | TIMESTAMP | - | Timestamp field | Standard field usage |
+| `storage_location_id` | INTEGER | - | Reference to related entity | Association/lookup |
+| `transport_mode` | TEXT | - | Description needed | Standard field usage |
+| `vehicle_number` | TEXT | - | Description needed | Standard field usage |
+| `lr_number` | TEXT | - | Description needed | Standard field usage |
+| `lr_date` | DATE | - | Description needed | Standard field usage |
+| `qc_required` | BOOLEAN | - | Description needed | Standard field usage |
+| `qc_status` | TEXT | - | Description needed | Standard field usage |
+| `qc_completed_by` | INTEGER | - | Description needed | Standard field usage |
+| `qc_completed_at` | TIMESTAMP | - | Timestamp field | Standard field usage |
+| `qc_notes` | TEXT | - | Description needed | Standard field usage |
+| `supplier_amount` | NUMERIC(15 | - | Description needed | Standard field usage |
+| `calculated_amount` | NUMERIC(15 | - | Description needed | Standard field usage |
+| `variance_amount` | NUMERIC(15 | - | Description needed | Standard field usage |
+| `grn_status` | TEXT | - | Description needed | Standard field usage |
+| `approval_status` | TEXT | - | Description needed | Standard field usage |
+| `approved_by` | INTEGER | - | Description needed | Standard field usage |
+| `approved_at` | TIMESTAMP | - | Timestamp field | Standard field usage |
+| `stock_updated` | BOOLEAN | - | Description needed | Standard field usage |
+| `stock_updated_at` | TIMESTAMP | - | Timestamp field | Standard field usage |
+| `notes` | TEXT | - | Description needed | Standard field usage |
+| `rejection_reason` | TEXT | - | Description needed | Standard field usage |
+| `created_at` | TIMESTAMP | - | Timestamp field | Standard field usage |
+| `updated_at` | TIMESTAMP | - | Timestamp field | Standard field usage |
 
-**Example API Response**:
-```json
-{
-  "grn_id": 1,
-  "grn_number": "GRN-2024-001",
-  "grn_date": "2024-01-22",
-  "grn_type": "purchase",
-  "po_id": 1,
-  "supplier_name": "XYZ Pharmaceuticals",
-  "supplier_invoice_number": "INV/2024/12345",
-  "total_quantity": 1100.0,
-  "grn_status": "qc_pending",
-  "qc_status": "pending",
-  "approval_status": "pending"
-}
-```
+**Foreign Key Relationships**:
+- `org_id` → `master.organizations.org_id`
+- `branch_id` → `master.org_branches.branch_id`
+- `purchase_order_id` → `procurement.purchase_orders.purchase_order_id`
+- `supplier_id` → `parties.suppliers.supplier_id`
+- `received_by` → `master.org_users.user_id`
+- `storage_location_id` → `inventory.storage_locations.location_id`
+- `qc_completed_by` → `master.org_users.user_id`
+- `approved_by` → `master.org_users.user_id`
 
 ---
 
 ### 4. grn_items
-**Purpose**: Individual items received in GRN with batch details
+
+### grn_items
+**Purpose**: [Business purpose description]
 **API Endpoint**: `api.get_grn_items()`, `api.create_grn_item()`
 
 | Field | Type | Required | Description | Frontend Usage |
 |-------|------|----------|-------------|----------------|
-| `grn_item_id` | SERIAL | ✓ | Unique GRN item identifier | Primary key |
-| `grn_id` | INTEGER | ✓ | Parent GRN reference | GRN association |
-| `po_item_id` | INTEGER | - | Source PO item reference | PO linking |
-| `product_id` | INTEGER | ✓ | Product reference | Product association |
-| `product_name` | TEXT | - | Product name (snapshot) | Display convenience |
-| `batch_number` | TEXT | ✓ | Manufacturer batch number | Batch tracking |
-| `manufacturing_date` | DATE | - | Manufacturing date | Batch information |
-| `expiry_date` | DATE | ✓ | Product expiry date | Expiry validation |
-| `received_quantity` | NUMERIC(15,3) | ✓ | Quantity received | Receipt tracking |
-| `damaged_quantity` | NUMERIC(15,3) | - | Damaged quantity | Damage tracking |
-| `shortage_quantity` | NUMERIC(15,3) | - | Shortage quantity | Shortage tracking |
-| `excess_quantity` | NUMERIC(15,3) | - | Excess quantity | Excess tracking |
-| `sample_quantity` | NUMERIC(15,3) | - | QC sample quantity | Quality sampling |
-| `accepted_quantity` | NUMERIC(15,3) | - | Quantity accepted after QC | Quality tracking |
-| `rejected_quantity` | NUMERIC(15,3) | - | Quantity rejected in QC | Quality tracking |
-| `pack_size` | INTEGER | - | Units per pack | Inventory calculations |
-| `unit_price` | NUMERIC(15,4) | ✓ | Unit cost price | Cost tracking |
-| `mrp` | NUMERIC(15,4) | - | Maximum retail price | Price validation |
-| `selling_price` | NUMERIC(15,4) | - | Selling price | Price planning |
-| `line_total` | NUMERIC(15,2) | ✓ | Line total amount | Amount calculations |
-| `storage_location_id` | INTEGER | - | Assigned storage location | Storage allocation |
-| `qc_status` | TEXT | - | QC: 'pending', 'passed', 'failed', 'conditional' | Quality status |
-| `qc_notes` | TEXT | - | Quality check notes | Quality documentation |
-| `qc_parameters` | JSONB | - | QC test parameters and results | Quality details |
-| `rejection_reason` | TEXT | - | Rejection reason if failed | Quality documentation |
-| `created_at` | TIMESTAMPTZ | - | Creation timestamp | Audit trails |
-| `updated_at` | TIMESTAMPTZ | - | Last update timestamp | Change tracking |
+| `grn_item_id` | SERIAL | ✓ | Primary key identifier | Primary key |
+| `grn_id` | INTEGER | ✓ | Reference to related entity | Association/lookup |
+| `po_item_id` | INTEGER | - | Reference to related entity | Association/lookup |
+| `product_id` | INTEGER | ✓ | Reference to related entity | Association/lookup |
+| `batch_number` | TEXT | ✓ | Description needed | Standard field usage |
+| `manufacturing_date` | DATE | - | Description needed | Standard field usage |
+| `expiry_date` | DATE | ✓ | Description needed | Standard field usage |
+| `ordered_quantity` | NUMERIC(15 | - | Description needed | Standard field usage |
+| `received_quantity` | NUMERIC(15 | ✓ | Description needed | Standard field usage |
+| `accepted_quantity` | NUMERIC(15 | - | Description needed | Standard field usage |
+| `rejected_quantity` | NUMERIC(15 | - | Description needed | Standard field usage |
+| `free_quantity` | NUMERIC(15 | - | Description needed | Standard field usage |
+| `uom` | TEXT | ✓ | Description needed | Standard field usage |
+| `pack_type` | TEXT | ✓ | Description needed | Standard field usage |
+| `pack_size` | INTEGER | - | Description needed | Standard field usage |
+| `unit_price` | NUMERIC(15 | - | Description needed | Standard field usage |
+| `mrp` | NUMERIC(15 | ✓ | Description needed | Standard field usage |
+| `ptr` | NUMERIC(15 | - | Description needed | Standard field usage |
+| `pts` | NUMERIC(15 | - | Description needed | Standard field usage |
+| `ptr_margin_percent` | NUMERIC(5 | - | Description needed | Standard field usage |
+| `pts_margin_percent` | NUMERIC(5 | - | Description needed | Standard field usage |
+| `qc_status` | TEXT | - | Description needed | Standard field usage |
+| `qc_notes` | TEXT | - | Description needed | Standard field usage |
+| `rejection_reason` | TEXT | - | Description needed | Standard field usage |
+| `storage_location_id` | INTEGER | - | Reference to related entity | Association/lookup |
+| `item_status` | TEXT | - | Description needed | Standard field usage |
+| `item_notes` | TEXT | - | Description needed | Standard field usage |
+| `display_order` | INTEGER | - | Description needed | Standard field usage |
+| `created_at` | TIMESTAMP | - | Timestamp field | Standard field usage |
 
-**qc_parameters JSONB Structure**:
-```json
-{
-  "visual_inspection": "passed",
-  "packaging_integrity": "passed",
-  "label_verification": "passed",
-  "weight_check": {
-    "expected": 100.0,
-    "actual": 99.8,
-    "status": "passed"
-  },
-  "moisture_content": {
-    "value": 2.5,
-    "limit": 5.0,
-    "status": "passed"
-  }
-}
-```
+**Foreign Key Relationships**:
+- `grn_id` → `procurement.goods_receipt_notes.grn_id`
+- `po_item_id` → `procurement.purchase_order_items.po_item_id`
+- `product_id` → `inventory.products.product_id`
+- `storage_location_id` → `inventory.storage_locations.location_id`
 
 ---
 
-### 5. purchase_requisitions
-**Purpose**: Internal purchase requisition management
-**API Endpoint**: `api.get_requisitions()`, `api.create_requisition()`
+### 5. supplier_invoices
+
+### supplier_invoices
+**Purpose**: [Business purpose description]
+**API Endpoint**: `api.get_supplier_invoices()`, `api.create_supplier_invoice()`
 
 | Field | Type | Required | Description | Frontend Usage |
 |-------|------|----------|-------------|----------------|
-| `requisition_id` | SERIAL | ✓ | Unique requisition identifier | Primary key |
+| `supplier_invoice_id` | SERIAL | ✓ | Primary key identifier | Primary key |
 | `org_id` | UUID | ✓ | Organization ID | Organization filtering |
-| `branch_id` | INTEGER | ✓ | Requesting branch | Branch tracking |
-| `requisition_number` | TEXT | ✓ | Requisition document number | Document identification |
-| `requisition_date` | DATE | ✓ | Request date | Date filtering |
-| `requisition_type` | TEXT | ✓ | Type: 'stock', 'urgent', 'seasonal', 'new_product' | Request classification |
-| `department_id` | INTEGER | - | Requesting department | Department tracking |
-| `requested_by` | INTEGER | ✓ | Requesting user | User tracking |
-| `required_by_date` | DATE | - | Required delivery date | Planning information |
-| `priority` | TEXT | - | Priority: 'low', 'normal', 'high', 'urgent' | Priority management |
-| `justification` | TEXT | - | Request justification | Documentation |
-| `estimated_amount` | NUMERIC(15,2) | - | Estimated total amount | Budget planning |
-| `requisition_status` | TEXT | ✓ | Status: 'draft', 'submitted', 'approved', 'po_created', 'completed', 'cancelled' | Status tracking |
-| `approval_status` | TEXT | - | Approval: 'pending', 'approved', 'rejected' | Approval workflow |
-| `approved_by` | INTEGER | - | Approver user ID | Approval tracking |
-| `approved_at` | TIMESTAMPTZ | - | Approval timestamp | Approval tracking |
-| `po_created` | BOOLEAN | - | PO creation flag | PO tracking |
-| `notes` | TEXT | - | Requisition notes | Documentation |
-| `created_by` | INTEGER | - | User who created requisition | User tracking |
-| `created_at` | TIMESTAMPTZ | - | Creation timestamp | Audit trails |
-| `updated_at` | TIMESTAMPTZ | - | Last update timestamp | Change tracking |
+| `branch_id` | INTEGER | ✓ | Reference to related entity | Association/lookup |
+| `supplier_invoice_number` | TEXT | ✓ | Description needed | Standard field usage |
+| `invoice_date` | DATE | ✓ | Description needed | Standard field usage |
+| `supplier_id` | INTEGER | ✓ | Reference to related entity | Association/lookup |
+| `purchase_order_ids` | INTEGER[] | - | Description needed | Standard field usage |
+| `grn_ids` | INTEGER[] | - | Description needed | Standard field usage |
+| `subtotal_amount` | NUMERIC(15 | ✓ | Description needed | Standard field usage |
+| `discount_amount` | NUMERIC(15 | - | Description needed | Standard field usage |
+| `taxable_amount` | NUMERIC(15 | ✓ | Description needed | Standard field usage |
+| `igst_amount` | NUMERIC(15 | - | Description needed | Standard field usage |
+| `cgst_amount` | NUMERIC(15 | - | Description needed | Standard field usage |
+| `sgst_amount` | NUMERIC(15 | - | Description needed | Standard field usage |
+| `cess_amount` | NUMERIC(15 | - | Description needed | Standard field usage |
+| `tax_amount` | NUMERIC(15 | ✓ | Description needed | Standard field usage |
+| `freight_charges` | NUMERIC(15 | - | Description needed | Standard field usage |
+| `insurance_charges` | NUMERIC(15 | - | Description needed | Standard field usage |
+| `other_charges` | NUMERIC(15 | - | Description needed | Standard field usage |
+| `round_off_amount` | NUMERIC(5 | - | Description needed | Standard field usage |
+| `invoice_total` | NUMERIC(15 | ✓ | Description needed | Standard field usage |
+| `tds_applicable` | BOOLEAN | - | Description needed | Standard field usage |
+| `tds_percent` | NUMERIC(5 | - | Description needed | Standard field usage |
+| `tds_amount` | NUMERIC(15 | - | Description needed | Standard field usage |
+| `payment_terms` | TEXT | - | Description needed | Standard field usage |
+| `due_date` | DATE | - | Description needed | Standard field usage |
+| `payment_status` | TEXT | - | Description needed | Standard field usage |
+| `paid_amount` | NUMERIC(15 | - | Description needed | Standard field usage |
+| `gstr2a_matched` | BOOLEAN | - | Description needed | Standard field usage |
+| `gstr2a_match_date` | DATE | - | Description needed | Standard field usage |
+| `itc_eligible` | BOOLEAN | - | Description needed | Standard field usage |
+| `matching_status` | TEXT | - | Description needed | Standard field usage |
+| `invoice_status` | TEXT | - | Description needed | Standard field usage |
+| `verified_by` | INTEGER | - | Description needed | Standard field usage |
+| `verified_at` | TIMESTAMP | - | Timestamp field | Standard field usage |
+| `approved_by` | INTEGER | - | Description needed | Standard field usage |
+| `approved_at` | TIMESTAMP | - | Timestamp field | Standard field usage |
+| `notes` | TEXT | - | Description needed | Standard field usage |
+| `rejection_reason` | TEXT | - | Description needed | Standard field usage |
+| `invoice_document_path` | TEXT | - | Description needed | Standard field usage |
+| `supporting_documents` | JSONB | - | Description needed | Standard field usage |
+| `created_at` | TIMESTAMP | - | Timestamp field | Standard field usage |
+| `updated_at` | TIMESTAMP | - | Timestamp field | Standard field usage |
+| `created_by` | INTEGER | ✓ | Creation audit field | Standard field usage |
+
+**Foreign Key Relationships**:
+- `org_id` → `master.organizations.org_id`
+- `branch_id` → `master.org_branches.branch_id`
+- `supplier_id` → `parties.suppliers.supplier_id`
+- `verified_by` → `master.org_users.user_id`
+- `approved_by` → `master.org_users.user_id`
+- `created_by` → `master.org_users.user_id`
 
 ---
 
-### 6. purchase_requisition_items
-**Purpose**: Individual items in purchase requisitions
-**API Endpoint**: `api.get_requisition_items()`, `api.create_requisition_item()`
+### 6. purchase_returns
+
+### purchase_returns
+**Purpose**: [Business purpose description]
+**API Endpoint**: `api.get_purchase_returns()`, `api.create_purchase_return()`
 
 | Field | Type | Required | Description | Frontend Usage |
 |-------|------|----------|-------------|----------------|
-| `requisition_item_id` | SERIAL | ✓ | Unique requisition item identifier | Primary key |
-| `requisition_id` | INTEGER | ✓ | Parent requisition reference | Requisition association |
-| `product_id` | INTEGER | ✓ | Product reference | Product association |
-| `product_name` | TEXT | - | Product name (snapshot) | Display convenience |
-| `current_stock` | NUMERIC(15,3) | - | Current stock level | Stock information |
-| `reorder_level` | NUMERIC(15,3) | - | Reorder level | Planning information |
-| `requested_quantity` | NUMERIC(15,3) | ✓ | Requested quantity | Quantity tracking |
-| `approved_quantity` | NUMERIC(15,3) | - | Approved quantity | Approval tracking |
-| `unit_price_estimate` | NUMERIC(15,4) | - | Estimated unit price | Cost planning |
-| `total_estimate` | NUMERIC(15,2) | - | Estimated line total | Budget planning |
-| `preferred_supplier_id` | INTEGER | - | Preferred supplier | Supplier preference |
-| `justification` | TEXT | - | Item-specific justification | Documentation |
-| `po_created` | BOOLEAN | - | PO creation flag | PO tracking |
-| `po_id` | INTEGER | - | Created PO reference | PO linking |
-| `notes` | TEXT | - | Item notes | Documentation |
-| `created_at` | TIMESTAMPTZ | - | Creation timestamp | Audit trails |
-
----
-
-### 7. supplier_quotations
-**Purpose**: Supplier quotation and price comparison
-**API Endpoint**: `api.get_quotations()`, `api.create_quotation()`
-
-| Field | Type | Required | Description | Frontend Usage |
-|-------|------|----------|-------------|----------------|
-| `quotation_id` | SERIAL | ✓ | Unique quotation identifier | Primary key |
+| `return_id` | SERIAL | ✓ | Primary key identifier | Primary key |
 | `org_id` | UUID | ✓ | Organization ID | Organization filtering |
-| `quotation_number` | TEXT | ✓ | Quotation reference number | Document identification |
-| `quotation_date` | DATE | ✓ | Quotation date | Date filtering |
-| `supplier_id` | INTEGER | ✓ | Supplier reference | Supplier association |
-| `supplier_name` | TEXT | - | Supplier name (snapshot) | Display convenience |
-| `rfq_number` | TEXT | - | Request for quotation number | RFQ tracking |
-| `valid_from` | DATE | ✓ | Validity start date | Validity tracking |
-| `valid_until` | DATE | ✓ | Validity end date | Validity tracking |
-| `delivery_terms` | TEXT | - | Delivery terms | Terms tracking |
-| `payment_terms` | TEXT | - | Payment terms | Terms tracking |
-| `currency_code` | TEXT | - | Quote currency | Currency tracking |
-| `total_items` | INTEGER | - | Total quoted items | Count tracking |
-| `total_amount` | NUMERIC(15,2) | - | Total quote amount | Amount tracking |
-| `quotation_status` | TEXT | ✓ | Status: 'draft', 'submitted', 'under_review', 'accepted', 'rejected', 'expired' | Status tracking |
-| `comparison_rank` | INTEGER | - | Rank in comparison | Comparison tracking |
-| `notes` | TEXT | - | Quotation notes | Documentation |
-| `created_by` | INTEGER | - | User who created record | User tracking |
-| `created_at` | TIMESTAMPTZ | - | Creation timestamp | Audit trails |
+| `branch_id` | INTEGER | ✓ | Reference to related entity | Association/lookup |
+| `return_number` | TEXT | ✓ | Description needed | Standard field usage |
+| `return_date` | DATE | - | Description needed | Standard field usage |
+| `return_type` | TEXT | ✓ | Description needed | Standard field usage |
+| `grn_id` | INTEGER | - | Reference to related entity | Association/lookup |
+| `supplier_invoice_id` | INTEGER | - | Reference to related entity | Association/lookup |
+| `supplier_id` | INTEGER | ✓ | Reference to related entity | Association/lookup |
+| `return_reason` | TEXT | ✓ | Description needed | Standard field usage |
+| `detailed_reason` | TEXT | - | Description needed | Standard field usage |
+| `approval_required` | BOOLEAN | - | Description needed | Standard field usage |
+| `approval_status` | TEXT | - | Description needed | Standard field usage |
+| `approved_by` | INTEGER | - | Description needed | Standard field usage |
+| `approved_at` | TIMESTAMP | - | Timestamp field | Standard field usage |
+| `return_amount` | NUMERIC(15 | - | Description needed | Standard field usage |
+| `tax_amount` | NUMERIC(15 | - | Description needed | Standard field usage |
+| `total_amount` | NUMERIC(15 | - | Description needed | Standard field usage |
+| `debit_note_number` | TEXT | - | Description needed | Standard field usage |
+| `debit_note_date` | DATE | - | Description needed | Standard field usage |
+| `debit_note_status` | TEXT | - | Description needed | Standard field usage |
+| `igst_amount` | NUMERIC(15 | - | Description needed | Standard field usage |
+| `cgst_amount` | NUMERIC(15 | - | Description needed | Standard field usage |
+| `sgst_amount` | NUMERIC(15 | - | Description needed | Standard field usage |
+| `supplier_acknowledged` | BOOLEAN | - | Description needed | Standard field usage |
+| `supplier_acknowledgment_date` | DATE | - | Description needed | Standard field usage |
+| `supplier_credit_note_number` | TEXT | - | Description needed | Standard field usage |
+| `dispatch_date` | DATE | - | Description needed | Standard field usage |
+| `transport_details` | JSONB | - | Description needed | Standard field usage |
+| `adjustment_type` | TEXT | - | Description needed | Standard field usage |
+| `adjusted_amount` | NUMERIC(15 | - | Description needed | Standard field usage |
+| `pending_amount` | NUMERIC(15 | - | Description needed | Standard field usage |
+| `notes` | TEXT | - | Description needed | Standard field usage |
+| `created_at` | TIMESTAMP | - | Timestamp field | Standard field usage |
+| `updated_at` | TIMESTAMP | - | Timestamp field | Standard field usage |
+| `created_by` | INTEGER | ✓ | Creation audit field | Standard field usage |
+
+**Foreign Key Relationships**:
+- `org_id` → `master.organizations.org_id`
+- `branch_id` → `master.org_branches.branch_id`
+- `grn_id` → `procurement.goods_receipt_notes.grn_id`
+- `supplier_invoice_id` → `procurement.supplier_invoices.supplier_invoice_id`
+- `supplier_id` → `parties.suppliers.supplier_id`
+- `approved_by` → `master.org_users.user_id`
+- `created_by` → `master.org_users.user_id`
 
 ---
 
-### 8. supplier_quotation_items
-**Purpose**: Individual items in supplier quotations
-**API Endpoint**: `api.get_quotation_items()`, `api.create_quotation_item()`
+### 7. purchase_return_items
+
+### purchase_return_items
+**Purpose**: [Business purpose description]
+**API Endpoint**: `api.get_purchase_return_items()`, `api.create_purchase_return_item()`
 
 | Field | Type | Required | Description | Frontend Usage |
 |-------|------|----------|-------------|----------------|
-| `quotation_item_id` | SERIAL | ✓ | Unique quotation item identifier | Primary key |
-| `quotation_id` | INTEGER | ✓ | Parent quotation reference | Quotation association |
-| `product_id` | INTEGER | ✓ | Product reference | Product association |
-| `product_name` | TEXT | - | Product name (snapshot) | Display convenience |
-| `quantity` | NUMERIC(15,3) | ✓ | Quoted quantity | Quantity tracking |
-| `unit_price` | NUMERIC(15,4) | ✓ | Unit price quote | Price tracking |
-| `discount_percentage` | NUMERIC(5,2) | - | Discount offered % | Discount tracking |
-| `free_quantity` | NUMERIC(15,3) | - | Free quantity offered | Scheme tracking |
-| `tax_percentage` | NUMERIC(5,2) | - | Tax rate % | Tax tracking |
-| `delivery_days` | INTEGER | - | Delivery lead time | Planning information |
-| `minimum_order_quantity` | NUMERIC(15,3) | - | MOQ requirement | Order planning |
-| `packing_details` | TEXT | - | Packing specifications | Product information |
-| `line_total` | NUMERIC(15,2) | ✓ | Line total amount | Amount calculations |
-| `is_selected` | BOOLEAN | - | Selected for PO flag | Selection tracking |
-| `notes` | TEXT | - | Item notes | Documentation |
-| `created_at` | TIMESTAMPTZ | - | Creation timestamp | Audit trails |
+| `return_item_id` | SERIAL | ✓ | Primary key identifier | Primary key |
+| `return_id` | INTEGER | ✓ | Reference to related entity | Association/lookup |
+| `grn_item_id` | INTEGER | - | Reference to related entity | Association/lookup |
+| `product_id` | INTEGER | ✓ | Reference to related entity | Association/lookup |
+| `batch_number` | TEXT | ✓ | Description needed | Standard field usage |
+| `return_quantity` | NUMERIC(15 | ✓ | Description needed | Standard field usage |
+| `uom` | TEXT | ✓ | Description needed | Standard field usage |
+| `unit_price` | NUMERIC(15 | - | Description needed | Standard field usage |
+| `return_value` | NUMERIC(15 | - | Description needed | Standard field usage |
+| `tax_amount` | NUMERIC(15 | - | Description needed | Standard field usage |
+| `item_return_reason` | TEXT | - | Description needed | Standard field usage |
+| `item_status` | TEXT | - | Description needed | Standard field usage |
+| `created_at` | TIMESTAMP | - | Timestamp field | Standard field usage |
+
+**Foreign Key Relationships**:
+- `return_id` → `procurement.purchase_returns.return_id`
+- `grn_item_id` → `procurement.grn_items.grn_item_id`
+- `product_id` → `inventory.products.product_id`
 
 ---
 
-## API Integration Notes
+### 8. purchase_requisitions
 
-### Purchase Order Workflow
-```javascript
-// Create purchase order
-const purchaseOrder = {
-  po_type: "regular",
-  supplier_id: 1,
-  delivery_date: "2024-01-22",
-  items: [
-    {
-      product_id: 101,
-      ordered_quantity: 1000,
-      unit_price: 10.50,
-      gst_percentage: 12.0
-    }
-  ]
-};
+### purchase_requisitions
+**Purpose**: [Business purpose description]
+**API Endpoint**: `api.get_purchase_requisitions()`, `api.create_purchase_requisition()`
 
-// PO status workflow
-const poStatusFlow = ['draft', 'approved', 'sent', 'acknowledged', 'partial', 'completed'];
-```
+| Field | Type | Required | Description | Frontend Usage |
+|-------|------|----------|-------------|----------------|
+| `requisition_id` | SERIAL | ✓ | Primary key identifier | Primary key |
+| `org_id` | UUID | ✓ | Organization ID | Organization filtering |
+| `branch_id` | INTEGER | ✓ | Reference to related entity | Association/lookup |
+| `requisition_number` | TEXT | ✓ | Description needed | Standard field usage |
+| `requisition_date` | DATE | - | Description needed | Standard field usage |
+| `required_by_date` | DATE | - | Description needed | Standard field usage |
+| `requested_by` | INTEGER | ✓ | Description needed | Standard field usage |
+| `department` | TEXT | - | Description needed | Standard field usage |
+| `requisition_type` | TEXT | - | Description needed | Standard field usage |
+| `priority` | TEXT | - | Description needed | Standard field usage |
+| `approval_status` | TEXT | - | Description needed | Standard field usage |
+| `current_approver_id` | INTEGER | - | Reference to related entity | Association/lookup |
+| `approval_history` | JSONB | - | Description needed | Standard field usage |
+| `requisition_status` | TEXT | - | Description needed | Standard field usage |
+| `converted_to_po` | BOOLEAN | - | Description needed | Standard field usage |
+| `po_ids` | INTEGER[] | - | Description needed | Standard field usage |
+| `purpose` | TEXT | - | Description needed | Standard field usage |
+| `notes` | TEXT | - | Description needed | Standard field usage |
+| `rejection_reason` | TEXT | - | Description needed | Standard field usage |
+| `created_at` | TIMESTAMP | - | Timestamp field | Standard field usage |
+| `updated_at` | TIMESTAMP | - | Timestamp field | Standard field usage |
 
-### GRN Processing
-```javascript
-// Create GRN from PO
-POST /api/grn/create-from-po
-{
-  "po_id": 1,
-  "grn_date": "2024-01-22",
-  "supplier_invoice_number": "INV/2024/12345",
-  "items": [
-    {
-      "po_item_id": 1,
-      "batch_number": "BT240122001",
-      "expiry_date": "2025-01-22",
-      "received_quantity": 1000,
-      "unit_price": 10.50
-    }
-  ]
-}
-```
+**Foreign Key Relationships**:
+- `org_id` → `master.organizations.org_id`
+- `branch_id` → `master.org_branches.branch_id`
+- `requested_by` → `master.org_users.user_id`
+- `current_approver_id` → `master.org_users.user_id`
 
-### Quality Control
-```javascript
-// QC parameter recording
-const qcParameters = {
-  "visual_inspection": "passed",
-  "packaging_integrity": "passed",
-  "label_verification": "passed",
-  "weight_check": {
-    "expected": 100.0,
-    "actual": 99.8,
-    "status": "passed"
-  },
-  "assay": {
-    "value": 99.5,
-    "specification": "98.0-102.0",
-    "status": "passed"
-  }
-};
+---
 
-// Update GRN item with QC results
-PATCH /api/grn-items/1
-{
-  "qc_status": "passed",
-  "accepted_quantity": 990,
-  "rejected_quantity": 10,
-  "qc_parameters": qcParameters
-}
-```
+### 9. purchase_requisition_items
 
-### Requisition to PO
-```javascript
-// Convert approved requisitions to PO
-POST /api/purchase-orders/create-from-requisitions
-{
-  "requisition_ids": [1, 2, 3],
-  "supplier_id": 1,
-  "combine_items": true,
-  "delivery_date": "2024-01-30"
-}
-```
+### purchase_requisition_items
+**Purpose**: [Business purpose description]
+**API Endpoint**: `api.get_purchase_requisition_items()`, `api.create_purchase_requisition_item()`
 
-### Supplier Quotation Comparison
-```javascript
-// Compare quotations
-GET /api/quotations/compare?
-  product_ids=101,102,103&
-  valid_date=2024-01-15&
-  sort_by=total_amount&
-  include_delivery_time=true
+| Field | Type | Required | Description | Frontend Usage |
+|-------|------|----------|-------------|----------------|
+| `requisition_item_id` | SERIAL | ✓ | Primary key identifier | Primary key |
+| `requisition_id` | INTEGER | ✓ | Reference to related entity | Association/lookup |
+| `product_id` | INTEGER | ✓ | Reference to related entity | Association/lookup |
+| `requested_quantity` | NUMERIC(15 | ✓ | Description needed | Standard field usage |
+| `uom` | TEXT | ✓ | Description needed | Standard field usage |
+| `current_stock` | NUMERIC(15 | - | Description needed | Standard field usage |
+| `reorder_level` | NUMERIC(15 | - | Description needed | Standard field usage |
+| `suggested_supplier_id` | INTEGER | - | Reference to related entity | Association/lookup |
+| `last_purchase_price` | NUMERIC(15 | - | Description needed | Standard field usage |
+| `approved_quantity` | NUMERIC(15 | - | Description needed | Standard field usage |
+| `item_status` | TEXT | - | Description needed | Standard field usage |
+| `item_notes` | TEXT | - | Description needed | Standard field usage |
+| `display_order` | INTEGER | - | Description needed | Standard field usage |
+| `created_at` | TIMESTAMP | - | Timestamp field | Standard field usage |
 
-// Response includes ranked quotations
-{
-  "quotations": [
-    {
-      "quotation_id": 1,
-      "supplier_name": "Supplier A",
-      "total_amount": 50000,
-      "average_delivery_days": 7,
-      "comparison_rank": 1,
-      "items": [...]
-    }
-  ]
-}
-```
+**Foreign Key Relationships**:
+- `requisition_id` → `procurement.purchase_requisitions.requisition_id`
+- `product_id` → `inventory.products.product_id`
+- `suggested_supplier_id` → `parties.suppliers.supplier_id`
 
-### Search and Filtering
-```javascript
-// Advanced procurement search
-GET /api/procurement/search?
-  po_status=approved&              // PO status filter
-  supplier_id=1&                   // Supplier filter
-  grn_status=pending&              // GRN status filter
-  date_from=2024-01-01&           // Date range
-  date_to=2024-01-31&
-  product_id=101&                  // Product filter
-  pending_delivery=true&           // Pending deliveries only
-  sort_by=po_date&                // Sort options
-  order=desc                       // Sort direction
-```
+---
 
-### Compliance Features
-1. **Quality Control**: Multi-parameter QC with pass/fail tracking
-2. **Batch Tracking**: Complete batch traceability from receipt
-3. **Expiry Validation**: Automatic expiry date validation
-4. **Document Management**: Supplier invoices, DC, LR tracking
-5. **Approval Workflows**: Multi-level approval for PO and GRN
+### 10. supplier_quotations
 
-### Dashboard Metrics
-```javascript
-// Procurement dashboard data
-GET /api/procurement/dashboard
-{
-  "pending_pos": 5,
-  "pending_grns": 3,
-  "overdue_deliveries": 2,
-  "pending_payments": 150000,
-  "monthly_purchase_value": 500000,
-  "top_suppliers": [...],
-  "pending_requisitions": 8,
-  "qc_failure_rate": 2.5
-}
-```
+### supplier_quotations
+**Purpose**: [Business purpose description]
+**API Endpoint**: `api.get_supplier_quotations()`, `api.create_supplier_quotation()`
 
-### Validation Rules
-1. **PO Quantities**: Must be positive numbers
-2. **Expiry Dates**: Must be future dates for pharmaceuticals
-3. **Batch Numbers**: Must be unique per product per supplier
-4. **GRN Quantities**: Cannot exceed PO quantities
-5. **QC Results**: Required before GRN approval
+| Field | Type | Required | Description | Frontend Usage |
+|-------|------|----------|-------------|----------------|
+| `quotation_id` | SERIAL | ✓ | Primary key identifier | Primary key |
+| `org_id` | UUID | ✓ | Organization ID | Organization filtering |
+| `quotation_number` | TEXT | ✓ | Description needed | Standard field usage |
+| `quotation_date` | DATE | ✓ | Description needed | Standard field usage |
+| `supplier_id` | INTEGER | ✓ | Reference to related entity | Association/lookup |
+| `requisition_id` | INTEGER | - | Reference to related entity | Association/lookup |
+| `rfq_number` | TEXT | - | Description needed | Standard field usage |
+| `valid_until` | DATE | - | Description needed | Standard field usage |
+| `payment_terms` | TEXT | - | Description needed | Standard field usage |
+| `delivery_terms` | TEXT | - | Description needed | Standard field usage |
+| `other_terms` | TEXT | - | Description needed | Standard field usage |
+| `total_amount` | NUMERIC(15 | - | Description needed | Standard field usage |
+| `quotation_status` | TEXT | - | Description needed | Standard field usage |
+| `is_best_price` | BOOLEAN | - | Description needed | Standard field usage |
+| `price_rank` | INTEGER | - | Description needed | Standard field usage |
+| `notes` | TEXT | - | Description needed | Standard field usage |
+| `created_at` | TIMESTAMP | - | Timestamp field | Standard field usage |
+| `updated_at` | TIMESTAMP | - | Timestamp field | Standard field usage |
+| `created_by` | INTEGER | ✓ | Creation audit field | Standard field usage |
+
+**Foreign Key Relationships**:
+- `org_id` → `master.organizations.org_id`
+- `supplier_id` → `parties.suppliers.supplier_id`
+- `requisition_id` → `procurement.purchase_requisitions.requisition_id`
+- `created_by` → `master.org_users.user_id`
+
+---
+
+### 11. supplier_quotation_items
+
+### supplier_quotation_items
+**Purpose**: [Business purpose description]
+**API Endpoint**: `api.get_supplier_quotation_items()`, `api.create_supplier_quotation_item()`
+
+| Field | Type | Required | Description | Frontend Usage |
+|-------|------|----------|-------------|----------------|
+| `quotation_item_id` | SERIAL | ✓ | Primary key identifier | Primary key |
+| `quotation_id` | INTEGER | ✓ | Reference to related entity | Association/lookup |
+| `product_id` | INTEGER | ✓ | Reference to related entity | Association/lookup |
+| `quantity` | NUMERIC(15 | ✓ | Description needed | Standard field usage |
+| `uom` | TEXT | ✓ | Description needed | Standard field usage |
+| `unit_price` | NUMERIC(15 | ✓ | Description needed | Standard field usage |
+| `discount_percent` | NUMERIC(5 | - | Description needed | Standard field usage |
+| `free_quantity` | NUMERIC(15 | - | Description needed | Standard field usage |
+| `tax_percent` | NUMERIC(5 | - | Description needed | Standard field usage |
+| `line_total` | NUMERIC(15 | - | Description needed | Standard field usage |
+| `is_best_price` | BOOLEAN | - | Description needed | Standard field usage |
+| `price_variance_percent` | NUMERIC(5 | - | Description needed | Standard field usage |
+| `item_notes` | TEXT | - | Description needed | Standard field usage |
+| `display_order` | INTEGER | - | Description needed | Standard field usage |
+| `created_at` | TIMESTAMP | - | Timestamp field | Standard field usage |
+
+**Foreign Key Relationships**:
+- `quotation_id` → `procurement.supplier_quotations.quotation_id`
+- `product_id` → `inventory.products.product_id`
+
+---
+
+### 12. vendor_performance
+
+### vendor_performance
+**Purpose**: [Business purpose description]
+**API Endpoint**: `api.get_vendor_performance()`, `api.create_vendor_performance()`
+
+| Field | Type | Required | Description | Frontend Usage |
+|-------|------|----------|-------------|----------------|
+| `performance_id` | SERIAL | ✓ | Primary key identifier | Primary key |
+| `org_id` | UUID | ✓ | Organization ID | Organization filtering |
+| `supplier_id` | INTEGER | ✓ | Reference to related entity | Association/lookup |
+| `evaluation_period` | TEXT | ✓ | Description needed | Standard field usage |
+| `period_start` | DATE | ✓ | Description needed | Standard field usage |
+| `period_end` | DATE | ✓ | Description needed | Standard field usage |
+| `total_orders` | INTEGER | - | Description needed | Standard field usage |
+| `on_time_deliveries` | INTEGER | - | Description needed | Standard field usage |
+| `late_deliveries` | INTEGER | - | Description needed | Standard field usage |
+| `on_time_delivery_percent` | NUMERIC(5 | - | Description needed | Standard field usage |
+| `total_items_received` | INTEGER | - | Description needed | Standard field usage |
+| `items_rejected` | INTEGER | - | Description needed | Standard field usage |
+| `rejection_rate_percent` | NUMERIC(5 | - | Description needed | Standard field usage |
+| `quality_issues_count` | INTEGER | - | Description needed | Standard field usage |
+| `total_purchase_value` | NUMERIC(15 | - | Description needed | Standard field usage |
+| `invoice_accuracy_percent` | NUMERIC(5 | - | Description needed | Standard field usage |
+| `payment_term_adherence` | NUMERIC(5 | - | Description needed | Standard field usage |
+| `return_count` | INTEGER | - | Description needed | Standard field usage |
+| `return_value` | NUMERIC(15 | - | Description needed | Standard field usage |
+| `return_rate_percent` | NUMERIC(5 | - | Description needed | Standard field usage |
+| `delivery_rating` | NUMERIC(3 | - | Description needed | Standard field usage |
+| `quality_rating` | NUMERIC(3 | - | Description needed | Standard field usage |
+| `price_rating` | NUMERIC(3 | - | Description needed | Standard field usage |
+| `service_rating` | NUMERIC(3 | - | Description needed | Standard field usage |
+| `overall_rating` | NUMERIC(3 | - | Description needed | Standard field usage |
+| `evaluation_status` | TEXT | - | Description needed | Standard field usage |
+| `reviewed_by` | INTEGER | - | Description needed | Standard field usage |
+| `reviewed_at` | TIMESTAMP | - | Timestamp field | Standard field usage |
+| `review_notes` | TEXT | - | Description needed | Standard field usage |
+| `improvement_areas` | TEXT[] | - | Description needed | Standard field usage |
+| `action_required` | BOOLEAN | - | Description needed | Standard field usage |
+| `created_at` | TIMESTAMP | - | Timestamp field | Standard field usage |
+| `updated_at` | TIMESTAMP | - | Timestamp field | Standard field usage |
+
+**Foreign Key Relationships**:
+- `org_id` → `master.organizations.org_id`
+- `supplier_id` → `parties.suppliers.supplier_id`
+- `reviewed_by` → `master.org_users.user_id`
+
+---

@@ -103,7 +103,7 @@ const ExpenseClaimsFlow: React.FC<ExpenseClaimsFlowProps> = ({ onClose }) => {
 
         {/* Content */}
         <div className="flex-1 overflow-y-auto p-6">
-          <div className="max-w-4xl mx-auto space-y-6">
+          <div className="max-w-6xl mx-auto space-y-6">
             
             {/* Claim Header */}
             <div className="bg-white rounded-lg border border-gray-200 p-6">

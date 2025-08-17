@@ -9,14 +9,14 @@ This document provides a complete index of all database tables organized by sche
 ## 📊 Database Overview
 
 - **Total Schemas:** 10
-- **Total Tables:** 86
-- **Last Updated:** 2025-08-03
+- **Total Tables:** 128
+- **Last Updated:** 2025-08-16 (Auto-generated from SQL schema files)
 
 ---
 
 ## 🗂️ Schema Structure
 
-### 1. **master** Schema
+### 1. **master** Schema (12 tables)
 **Documentation:** [01_master_schema.md](./01_master_schema.md)  
 **Purpose:** Core master data and system configuration
 
@@ -25,45 +25,54 @@ This document provides a complete index of all database tables organized by sche
 | `organizations` | Organization master data | org_id, org_name, business_type |
 | `org_branches` | Branch/location management | branch_id, branch_name, branch_code |
 | `org_users` | User management | user_id, username, email, role |
-| `products` | Product master (deprecated - use inventory.products) | product_id, product_name, category |
-| `product_categories` | Product categorization | category_id, category_name |
-| `tax_rates` | Tax rate configuration | tax_id, tax_name, rate |
-| `number_series` | Document numbering | series_id, prefix, next_number |
+| `roles` | Role and permission management | role_id, role_name, permissions |
+| `departments` | Department structure | department_id, department_name |
+| `org_bank_accounts` | Bank account management | account_id, bank_name, account_number |
 | `addresses` | Address management | address_id, entity_type, entity_id |
-| `Authentication` | Auth tokens and sessions | token_id, user_id, token |
+| `employees` | Employee records | employee_id, employee_code, employee_name |
+| `doctors` | Doctor registration | doctor_id, license_number, specialization |
+| `number_series` | Document numbering | series_id, prefix, next_number |
+| `currencies` | Currency master | currency_id, currency_code, symbol |
+| `exchange_rates` | Exchange rate tracking | rate_id, from_currency, to_currency, rate |
 
 ---
 
-### 2. **parties** Schema
+### 2. **parties** Schema (8 tables)
 **Documentation:** [02_parties_schema.md](./02_parties_schema.md)  
 **Purpose:** Customer and supplier management
 
 | Table | Purpose | Key Fields |
 |-------|---------|------------|
-| `customers` | Customer master | customer_id, customer_name, phone✓, address_line1✓ |
-| `suppliers` | Supplier master | supplier_id, supplier_name, contact |
-| `customer_contacts` | Customer contact persons | contact_id, customer_id, name, phone |
-| `supplier_contacts` | Supplier contact persons | contact_id, supplier_id, name, phone |
-| `customer_groups` | Customer grouping | group_id, group_name, discount_percent |
-| `territories` | Territory management | territory_id, territory_name |
-| `routes` | Delivery routes | route_id, route_name, territory_id |
+| `customers` | Customer master data | customer_id, customer_name, phone, address_line1 |
+| `suppliers` | Supplier master data | supplier_id, supplier_name, contact_person |
+| `customer_contacts` | Customer contact persons | contact_id, customer_id, contact_name, phone |
+| `supplier_contacts` | Supplier contact persons | contact_id, supplier_id, contact_name, phone |
+| `customer_groups` | Customer grouping and discounts | group_id, group_name, discount_percent |
+| `customer_group_members` | Group membership mapping | membership_id, group_id, customer_id |
+| `territories` | Territory/area management | territory_id, territory_name, region |
+| `routes` | Delivery route planning | route_id, route_name, territory_id |
 
 ---
 
-### 3. **inventory** Schema
+### 3. **inventory** Schema (13 tables)
 **Documentation:** [03_inventory_schema.md](./03_inventory_schema.md)  
 **Purpose:** Product inventory and stock management
 
 | Table | Purpose | Key Fields |
 |-------|---------|------------|
-| `products` | Product master (main) | product_id, product_name, gst_percentage, selling_price |
-| `batches` | Batch-wise inventory | batch_id, product_id, batch_number, sale_price_per_unit, quantity_available |
-| `location_wise_stock` | Stock by location | location_id, product_id, batch_id, quantity |
-| `storage_locations` | Warehouse locations | location_id, location_name, zone |
-| `inventory_movements` | Stock movement tracking | movement_id, product_id, movement_type, quantity |
-| `stock_reservations` | Reserved stock | reservation_id, order_id, product_id, quantity |
-| `stock_adjustments` | Manual adjustments | adjustment_id, product_id, quantity, reason |
-| `product_suppliers` | Product-supplier mapping | mapping_id, product_id, supplier_id, discount_percent |
+| `product_categories` | Product classification hierarchy | category_id, category_name, category_path |
+| `product_types` | Product type definitions | type_id, type_name, default_base_uom |
+| `units_of_measure` | Unit of measure master | uom_id, uom_code, conversion_factor |
+| `products` | Product master catalog | product_id, product_name, gst_percentage, composition |
+| `product_pack_configurations` | Pack hierarchy (tablets→strips→boxes) | pack_config_id, product_id, base_units_per_pack |
+| `batches` | Batch/lot tracking with expiry | batch_id, product_id, batch_number, expiry_date, quantity_available |
+| `storage_locations` | Warehouse location hierarchy | location_id, location_name, location_type, storage_class |
+| `location_wise_stock` | Real-time stock by location | stock_id, product_id, batch_id, location_id, quantity_available |
+| `stock_reservations` | Stock allocation management | reservation_id, product_id, reserved_quantity, reference_type |
+| `inventory_movements` | Complete movement audit trail | movement_id, movement_type, product_id, quantity, movement_direction |
+| `stock_transfers` | Inter-location transfers | transfer_id, transfer_number, from_location_id, to_location_id |
+| `stock_transfer_items` | Transfer line items | transfer_item_id, transfer_id, product_id, requested_quantity |
+| `reorder_suggestions` | Automated reorder alerts | suggestion_id, product_id, suggested_quantity, urgency |
 
 ---
 

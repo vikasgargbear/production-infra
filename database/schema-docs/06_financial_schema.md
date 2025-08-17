@@ -7,569 +7,516 @@ The `financial` schema manages accounting, payments, receivables, and financial 
 
 ## Tables
 
-### 1. chart_of_accounts
-**Purpose**: General ledger account structure and hierarchy
-**API Endpoint**: `api.get_accounts()`, `api.create_account()`
+### 1. payment_methods
+
+### payment_methods
+**Purpose**: [Business purpose description]
+**API Endpoint**: `api.get_payment_methods()`, `api.create_payment_method()`
 
 | Field | Type | Required | Description | Frontend Usage |
 |-------|------|----------|-------------|----------------|
-| `account_id` | SERIAL | ✓ | Unique account identifier | Primary key |
+| `payment_method_id` | SERIAL | ✓ | Primary key identifier | Primary key |
 | `org_id` | UUID | ✓ | Organization ID | Organization filtering |
-| `account_code` | TEXT | ✓ | Account code (e.g., "1001") | Account identification |
-| `account_name` | TEXT | ✓ | Account display name | Display name |
-| `account_type` | TEXT | ✓ | Type: 'asset', 'liability', 'equity', 'revenue', 'expense' | Account classification |
-| `account_subtype` | TEXT | - | Subtype for detailed classification | Fine categorization |
-| `parent_account_id` | INTEGER | - | Parent account for hierarchy | Account hierarchy |
-| `account_level` | INTEGER | - | Hierarchy level (1,2,3...) | Tree depth |
-| `account_path` | TEXT | - | Full path (e.g., "Assets/Current Assets/Cash") | Breadcrumb navigation |
-| `currency_code` | TEXT | - | Account currency | Multi-currency support |
-| `opening_balance` | NUMERIC(15,2) | - | Opening balance | Initial setup |
-| `current_balance` | NUMERIC(15,2) | - | Current balance | Balance tracking |
-| `is_system_account` | BOOLEAN | - | System-managed account flag | Edit protection |
-| `is_bank_account` | BOOLEAN | - | Bank account flag | Banking features |
-| `bank_name` | TEXT | - | Bank name if applicable | Banking information |
-| `bank_account_number` | TEXT | - | Bank account number | Banking reference |
-| `ifsc_code` | TEXT | - | Bank IFSC code | Banking information |
-| `is_reconcilable` | BOOLEAN | - | Reconciliation required flag | Reconciliation tracking |
-| `last_reconciled_date` | DATE | - | Last reconciliation date | Reconciliation tracking |
-| `tax_applicable` | BOOLEAN | - | Tax applicability flag | Tax tracking |
-| `description` | TEXT | - | Account description | Documentation |
-| `is_active` | BOOLEAN | - | Account active status | Account filtering |
-| `created_by` | INTEGER | - | User who created account | User tracking |
-| `created_at` | TIMESTAMPTZ | - | Creation timestamp | Audit trails |
-| `updated_at` | TIMESTAMPTZ | - | Last update timestamp | Change tracking |
+| `method_code` | TEXT | ✓ | Description needed | Standard field usage |
+| `method_name` | TEXT | ✓ | Description needed | Standard field usage |
+| `method_type` | TEXT | ✓ | Description needed | Standard field usage |
+| `requires_reference` | BOOLEAN | - | Description needed | Standard field usage |
+| `requires_approval` | BOOLEAN | - | Description needed | Standard field usage |
+| `default_bank_account_id` | INTEGER | - | Reference to related entity | Association/lookup |
+| `processing_days` | INTEGER | - | Description needed | Standard field usage |
+| `transaction_charge_percent` | NUMERIC(5 | - | Description needed | Standard field usage |
+| `transaction_charge_fixed` | NUMERIC(15 | - | Description needed | Standard field usage |
+| `is_active` | BOOLEAN | - | Active status flag | Standard field usage |
+| `created_at` | TIMESTAMP | - | Timestamp field | Standard field usage |
 
-**Example API Response**:
-```json
-{
-  "account_id": 1,
-  "account_code": "1001",
-  "account_name": "Cash in Hand",
-  "account_type": "asset",
-  "account_subtype": "current_asset",
-  "account_path": "Assets/Current Assets/Cash",
-  "current_balance": 50000.00,
-  "is_bank_account": false,
-  "is_active": true
-}
-```
+**Foreign Key Relationships**:
+- `org_id` → `master.organizations.org_id`
+- `default_bank_account_id` → `master.org_bank_accounts.bank_account_id`
 
 ---
 
-### 2. journal_entries
-**Purpose**: Double-entry bookkeeping journal entries
-**API Endpoint**: `api.get_journal_entries()`, `api.create_journal_entry()`
+### 2. payments
 
-| Field | Type | Required | Description | Frontend Usage |
-|-------|------|----------|-------------|----------------|
-| `journal_id` | SERIAL | ✓ | Unique journal entry identifier | Primary key |
-| `org_id` | UUID | ✓ | Organization ID | Organization filtering |
-| `branch_id` | INTEGER | - | Branch reference | Branch tracking |
-| `journal_number` | TEXT | ✓ | Journal entry number | Document identification |
-| `journal_date` | DATE | ✓ | Transaction date | Date filtering |
-| `journal_type` | TEXT | ✓ | Type: 'general', 'sales', 'purchase', 'cash', 'bank', 'contra' | Journal classification |
-| `reference_type` | TEXT | - | Source document type | Document linking |
-| `reference_id` | INTEGER | - | Source document ID | Document linking |
-| `reference_number` | TEXT | - | Source document number | Reference tracking |
-| `narration` | TEXT | ✓ | Entry description/narration | Documentation |
-| `total_debit` | NUMERIC(15,2) | ✓ | Total debit amount | Balance validation |
-| `total_credit` | NUMERIC(15,2) | ✓ | Total credit amount | Balance validation |
-| `is_balanced` | BOOLEAN | - | Entry balanced flag | Validation status |
-| `posting_status` | TEXT | ✓ | Status: 'draft', 'posted', 'cancelled' | Posting control |
-| `posted_by` | INTEGER | - | User who posted entry | Posting tracking |
-| `posted_at` | TIMESTAMPTZ | - | Posting timestamp | Posting tracking |
-| `is_adjustment` | BOOLEAN | - | Adjustment entry flag | Entry classification |
-| `fiscal_year` | TEXT | - | Fiscal year reference | Period tracking |
-| `accounting_period` | TEXT | - | Accounting period | Period tracking |
-| `cancelled_by` | INTEGER | - | User who cancelled | Cancellation tracking |
-| `cancelled_at` | TIMESTAMPTZ | - | Cancellation timestamp | Cancellation tracking |
-| `cancellation_reason` | TEXT | - | Cancellation reason | Cancellation documentation |
-| `created_by` | INTEGER | - | User who created entry | User tracking |
-| `created_at` | TIMESTAMPTZ | - | Creation timestamp | Audit trails |
-| `updated_at` | TIMESTAMPTZ | - | Last update timestamp | Change tracking |
-
-**Example API Response**:
-```json
-{
-  "journal_id": 1,
-  "journal_number": "JV-2024-001",
-  "journal_date": "2024-01-15",
-  "journal_type": "sales",
-  "reference_type": "invoice",
-  "reference_number": "INV-2024-001",
-  "narration": "Sales invoice posting",
-  "total_debit": 5600.00,
-  "total_credit": 5600.00,
-  "is_balanced": true,
-  "posting_status": "posted"
-}
-```
-
----
-
-### 3. journal_entry_lines
-**Purpose**: Individual debit/credit lines within journal entries
-**API Endpoint**: `api.get_journal_lines()`, `api.create_journal_line()`
-
-| Field | Type | Required | Description | Frontend Usage |
-|-------|------|----------|-------------|----------------|
-| `line_id` | SERIAL | ✓ | Unique line identifier | Primary key |
-| `journal_id` | INTEGER | ✓ | Parent journal entry | Journal association |
-| `line_number` | INTEGER | ✓ | Line sequence number | Line ordering |
-| `account_code` | TEXT | ✓ | GL account code | Account reference |
-| `account_name` | TEXT | - | Account name (snapshot) | Display convenience |
-| `debit_amount` | NUMERIC(15,2) | - | Debit amount (0 if credit) | Amount entry |
-| `credit_amount` | NUMERIC(15,2) | - | Credit amount (0 if debit) | Amount entry |
-| `currency_code` | TEXT | - | Transaction currency | Multi-currency |
-| `exchange_rate` | NUMERIC(10,6) | - | Currency exchange rate | Currency conversion |
-| `base_debit_amount` | NUMERIC(15,2) | - | Debit in base currency | Base currency tracking |
-| `base_credit_amount` | NUMERIC(15,2) | - | Credit in base currency | Base currency tracking |
-| `cost_center_id` | INTEGER | - | Cost center reference | Cost allocation |
-| `project_id` | INTEGER | - | Project reference | Project tracking |
-| `party_type` | TEXT | - | Party type: 'customer', 'supplier' | Party classification |
-| `party_id` | INTEGER | - | Customer/supplier ID | Party tracking |
-| `line_narration` | TEXT | - | Line-specific narration | Line documentation |
-| `created_at` | TIMESTAMPTZ | - | Creation timestamp | Audit trails |
-
-**Example API Response**:
-```json
-{
-  "line_id": 1,
-  "journal_id": 1,
-  "line_number": 1,
-  "account_code": "4001",
-  "account_name": "Sales Revenue",
-  "debit_amount": 0.00,
-  "credit_amount": 5000.00,
-  "line_narration": "Product sales"
-}
-```
-
----
-
-### 4. payments
-**Purpose**: Payment and receipt transaction management
+### payments
+**Purpose**: [Business purpose description]
 **API Endpoint**: `api.get_payments()`, `api.create_payment()`
 
 | Field | Type | Required | Description | Frontend Usage |
 |-------|------|----------|-------------|----------------|
-| `payment_id` | SERIAL | ✓ | Unique payment identifier | Primary key |
+| `payment_id` | SERIAL | ✓ | Primary key identifier | Primary key |
 | `org_id` | UUID | ✓ | Organization ID | Organization filtering |
-| `branch_id` | INTEGER | - | Branch reference | Branch tracking |
-| `payment_number` | TEXT | ✓ | Payment document number | Document identification |
-| `payment_date` | DATE | ✓ | Transaction date | Date filtering |
-| `payment_type` | TEXT | ✓ | Type: 'payment', 'receipt', 'advance' | Payment classification |
-| `payment_mode` | TEXT | ✓ | Mode: 'cash', 'cheque', 'bank_transfer', 'upi', 'credit_card' | Payment method |
-| `party_type` | TEXT | ✓ | Party: 'customer', 'supplier', 'expense', 'income' | Party classification |
-| `party_id` | INTEGER | - | Customer/supplier ID | Party tracking |
-| `party_name` | TEXT | - | Party name (snapshot) | Display convenience |
-| `payment_amount` | NUMERIC(15,2) | ✓ | Payment amount | Amount tracking |
-| `currency_code` | TEXT | - | Payment currency | Multi-currency |
-| `exchange_rate` | NUMERIC(10,6) | - | Currency exchange rate | Currency conversion |
-| `base_amount` | NUMERIC(15,2) | - | Amount in base currency | Base currency tracking |
-| `bank_account_id` | INTEGER | - | Bank account reference | Banking tracking |
-| `cheque_number` | TEXT | - | Cheque number if applicable | Cheque tracking |
-| `cheque_date` | DATE | - | Cheque date | Cheque tracking |
-| `bank_reference` | TEXT | - | Bank transaction reference | Banking reference |
-| `upi_reference` | TEXT | - | UPI transaction ID | UPI tracking |
-| `payment_status` | TEXT | ✓ | Status: 'pending', 'cleared', 'bounced', 'cancelled' | Status tracking |
-| `clearance_date` | DATE | - | Bank clearance date | Clearance tracking |
-| `allocation_status` | TEXT | - | Allocation: 'unallocated', 'partial', 'full' | Allocation tracking |
-| `allocated_amount` | NUMERIC(15,2) | - | Amount allocated to invoices | Allocation tracking |
-| `unallocated_amount` | NUMERIC(15,2) | - | Unallocated amount | Balance tracking |
-| `reference_type` | TEXT | - | Reference document type | Document linking |
-| `reference_id` | INTEGER | - | Reference document ID | Document linking |
-| `reference_number` | TEXT | - | Reference document number | Reference tracking |
-| `notes` | TEXT | - | Payment notes | Documentation |
-| `reconciled` | BOOLEAN | - | Bank reconciliation flag | Reconciliation status |
-| `reconciled_date` | DATE | - | Reconciliation date | Reconciliation tracking |
-| `created_by` | INTEGER | - | User who created payment | User tracking |
-| `created_at` | TIMESTAMPTZ | - | Creation timestamp | Audit trails |
-| `updated_at` | TIMESTAMPTZ | - | Last update timestamp | Change tracking |
+| `branch_id` | INTEGER | ✓ | Reference to related entity | Association/lookup |
+| `payment_number` | TEXT | ✓ | Description needed | Standard field usage |
+| `payment_date` | DATE | - | Description needed | Standard field usage |
+| `payment_type` | TEXT | ✓ | Description needed | Standard field usage |
+| `party_type` | TEXT | ✓ | Description needed | Standard field usage |
+| `party_id` | INTEGER | - | Reference to related entity | Association/lookup |
+| `party_name` | TEXT | ✓ | Description needed | Standard field usage |
+| `payment_amount` | NUMERIC(15 | ✓ | Description needed | Standard field usage |
+| `payment_method_id` | INTEGER | ✓ | Reference to related entity | Association/lookup |
+| `reference_number` | TEXT | - | Description needed | Standard field usage |
+| `reference_date` | DATE | - | Description needed | Standard field usage |
+| `bank_account_id` | INTEGER | - | Reference to related entity | Association/lookup |
+| `deposited_at_bank` | TEXT | - | Description needed | Standard field usage |
+| `payment_status` | TEXT | - | Description needed | Standard field usage |
+| `clearance_date` | DATE | - | Description needed | Standard field usage |
+| `requires_approval` | BOOLEAN | - | Description needed | Standard field usage |
+| `approved_by` | INTEGER | - | Description needed | Standard field usage |
+| `approved_at` | TIMESTAMP | - | Timestamp field | Standard field usage |
+| `allocation_status` | TEXT | - | Description needed | Standard field usage |
+| `allocated_amount` | NUMERIC(15 | - | Description needed | Standard field usage |
+| `unallocated_amount` | NUMERIC(15 | - | Description needed | Standard field usage |
+| `narration` | TEXT | - | Description needed | Standard field usage |
+| `internal_notes` | TEXT | - | Description needed | Standard field usage |
+| `is_pdc` | BOOLEAN | - | Description needed | Standard field usage |
+| `pdc_status` | TEXT | - | Description needed | Standard field usage |
+| `is_cancelled` | BOOLEAN | - | Description needed | Standard field usage |
+| `cancellation_reason` | TEXT | - | Description needed | Standard field usage |
+| `cancelled_by` | INTEGER | - | Description needed | Standard field usage |
+| `cancelled_at` | TIMESTAMP | - | Timestamp field | Standard field usage |
+| `created_at` | TIMESTAMP | - | Timestamp field | Standard field usage |
+| `updated_at` | TIMESTAMP | - | Timestamp field | Standard field usage |
+| `created_by` | INTEGER | ✓ | Creation audit field | Standard field usage |
 
-**Example API Response**:
-```json
-{
-  "payment_id": 1,
-  "payment_number": "RCT-2024-001",
-  "payment_date": "2024-01-15",
-  "payment_type": "receipt",
-  "payment_mode": "bank_transfer",
-  "party_type": "customer",
-  "party_name": "ABC Medical Store",
-  "payment_amount": 5600.00,
-  "payment_status": "cleared",
-  "allocation_status": "full",
-  "bank_reference": "IMPS123456789"
-}
-```
+**Foreign Key Relationships**:
+- `org_id` → `master.organizations.org_id`
+- `branch_id` → `master.org_branches.branch_id`
+- `payment_method_id` → `financial.payment_methods.payment_method_id`
+- `bank_account_id` → `master.org_bank_accounts.bank_account_id`
+- `approved_by` → `master.org_users.user_id`
+- `cancelled_by` → `master.org_users.user_id`
+- `created_by` → `master.org_users.user_id`
 
 ---
 
-### 5. payment_allocations
-**Purpose**: Payment allocation to specific invoices/bills
-**API Endpoint**: `api.get_allocations()`, `api.allocate_payment()`
+### 3. payment_allocations
+
+### payment_allocations
+**Purpose**: [Business purpose description]
+**API Endpoint**: `api.get_payment_allocations()`, `api.create_payment_allocation()`
 
 | Field | Type | Required | Description | Frontend Usage |
 |-------|------|----------|-------------|----------------|
-| `allocation_id` | SERIAL | ✓ | Unique allocation identifier | Primary key |
-| `payment_id` | INTEGER | ✓ | Parent payment reference | Payment association |
-| `reference_type` | TEXT | ✓ | Reference: 'invoice', 'bill', 'advance' | Document type |
-| `reference_id` | INTEGER | ✓ | Invoice/bill ID | Document reference |
-| `reference_number` | TEXT | - | Invoice/bill number | Reference display |
-| `allocated_amount` | NUMERIC(15,2) | ✓ | Amount allocated | Allocation tracking |
-| `discount_amount` | NUMERIC(15,2) | - | Settlement discount | Discount tracking |
-| `write_off_amount` | NUMERIC(15,2) | - | Write-off amount | Write-off tracking |
-| `allocation_date` | DATE | - | Allocation date | Date tracking |
-| `allocation_status` | TEXT | - | Status: 'active', 'reversed' | Status tracking |
-| `reversed_date` | DATE | - | Reversal date if reversed | Reversal tracking |
-| `reversed_reason` | TEXT | - | Reversal reason | Reversal documentation |
-| `allocated_by` | INTEGER | - | User who allocated | User tracking |
-| `allocated_at` | TIMESTAMPTZ | - | Allocation timestamp | Audit trails |
-| `created_at` | TIMESTAMPTZ | - | Creation timestamp | Audit trails |
+| `allocation_id` | SERIAL | ✓ | Primary key identifier | Primary key |
+| `payment_id` | INTEGER | ✓ | Reference to related entity | Association/lookup |
+| `reference_type` | TEXT | ✓ | Description needed | Standard field usage |
+| `reference_id` | INTEGER | ✓ | Reference to related entity | Association/lookup |
+| `reference_number` | TEXT | ✓ | Description needed | Standard field usage |
+| `allocated_amount` | NUMERIC(15 | ✓ | Description needed | Standard field usage |
+| `discount_amount` | NUMERIC(15 | - | Description needed | Standard field usage |
+| `write_off_amount` | NUMERIC(15 | - | Description needed | Standard field usage |
+| `allocation_status` | TEXT | - | Description needed | Standard field usage |
+| `reversed_by` | INTEGER | - | Description needed | Standard field usage |
+| `reversed_at` | TIMESTAMP | - | Timestamp field | Standard field usage |
+| `reversal_reason` | TEXT | - | Description needed | Standard field usage |
+| `created_at` | TIMESTAMP | - | Timestamp field | Standard field usage |
+| `created_by` | INTEGER | ✓ | Creation audit field | Standard field usage |
+
+**Foreign Key Relationships**:
+- `payment_id` → `financial.payments.payment_id`
+- `reversed_by` → `master.org_users.user_id`
+- `created_by` → `master.org_users.user_id`
 
 ---
 
-### 6. customer_outstanding
-**Purpose**: Customer-wise outstanding balance tracking
-**API Endpoint**: `api.get_customer_outstanding()`, `api.update_outstanding()`
+### 4. customer_outstanding
+
+### customer_outstanding
+**Purpose**: [Business purpose description]
+**API Endpoint**: `api.get_customer_outstanding()`, `api.create_customer_outstanding()`
 
 | Field | Type | Required | Description | Frontend Usage |
 |-------|------|----------|-------------|----------------|
-| `outstanding_id` | SERIAL | ✓ | Unique outstanding identifier | Primary key |
-| `customer_id` | INTEGER | ✓ | Customer reference | Customer association |
+| `outstanding_id` | SERIAL | ✓ | Primary key identifier | Primary key |
 | `org_id` | UUID | ✓ | Organization ID | Organization filtering |
-| `document_type` | TEXT | ✓ | Type: 'invoice', 'credit_note', 'advance' | Document classification |
-| `document_id` | INTEGER | ✓ | Source document ID | Document reference |
-| `document_number` | TEXT | - | Document number | Reference display |
-| `document_date` | DATE | ✓ | Document date | Date tracking |
-| `due_date` | DATE | - | Payment due date | Due date tracking |
-| `original_amount` | NUMERIC(15,2) | ✓ | Original document amount | Amount tracking |
-| `paid_amount` | NUMERIC(15,2) | - | Amount paid | Payment tracking |
-| `outstanding_amount` | NUMERIC(15,2) | ✓ | Current outstanding | Balance tracking |
-| `days_overdue` | INTEGER | - | Days past due date | Aging tracking |
-| `aging_bucket` | TEXT | - | Aging: '0-30', '31-60', '61-90', '90+' | Aging classification |
-| `status` | TEXT | ✓ | Status: 'open', 'partial', 'paid', 'written_off' | Status tracking |
-| `last_payment_date` | DATE | - | Last payment received date | Payment tracking |
-| `last_reminder_date` | DATE | - | Last reminder sent date | Collection tracking |
-| `reminder_count` | INTEGER | - | Number of reminders sent | Collection tracking |
-| `notes` | TEXT | - | Outstanding notes | Documentation |
-| `created_at` | TIMESTAMPTZ | - | Creation timestamp | Audit trails |
-| `updated_at` | TIMESTAMPTZ | - | Last update timestamp | Change tracking |
+| `customer_id` | INTEGER | ✓ | Reference to related entity | Association/lookup |
+| `document_type` | TEXT | ✓ | Description needed | Standard field usage |
+| `document_id` | INTEGER | ✓ | Reference to related entity | Association/lookup |
+| `document_number` | TEXT | ✓ | Description needed | Standard field usage |
+| `document_date` | DATE | ✓ | Description needed | Standard field usage |
+| `original_amount` | NUMERIC(15 | ✓ | Description needed | Standard field usage |
+| `outstanding_amount` | NUMERIC(15 | ✓ | Description needed | Standard field usage |
+| `paid_amount` | NUMERIC(15 | - | Description needed | Standard field usage |
+| `due_date` | DATE | - | Description needed | Standard field usage |
+| `days_overdue` | INTEGER | - | Description needed | Standard field usage |
+| `aging_bucket` | TEXT | - | Description needed | Standard field usage |
+| `status` | TEXT | - | Description needed | Standard field usage |
+| `promised_date` | DATE | - | Description needed | Standard field usage |
+| `follow_up_date` | DATE | - | Description needed | Standard field usage |
+| `collection_notes` | TEXT | - | Description needed | Standard field usage |
+| `write_off_amount` | NUMERIC(15 | - | Description needed | Standard field usage |
+| `write_off_date` | DATE | - | Description needed | Standard field usage |
+| `write_off_reason` | TEXT | - | Description needed | Standard field usage |
+| `created_at` | TIMESTAMP | - | Timestamp field | Standard field usage |
+| `updated_at` | TIMESTAMP | - | Timestamp field | Standard field usage |
 
-**Example API Response**:
-```json
-{
-  "outstanding_id": 1,
-  "customer_id": 1,
-  "document_type": "invoice",
-  "document_number": "INV-2024-001",
-  "document_date": "2024-01-01",
-  "due_date": "2024-01-31",
-  "original_amount": 5600.00,
-  "paid_amount": 2000.00,
-  "outstanding_amount": 3600.00,
-  "days_overdue": 15,
-  "aging_bucket": "0-30",
-  "status": "partial"
-}
-```
+**Foreign Key Relationships**:
+- `org_id` → `master.organizations.org_id`
+- `customer_id` → `parties.customers.customer_id`
 
 ---
 
-### 7. supplier_outstanding
-**Purpose**: Supplier-wise outstanding balance tracking
-**API Endpoint**: `api.get_supplier_outstanding()`, `api.update_supplier_outstanding()`
+### 5. supplier_outstanding
+
+### supplier_outstanding
+**Purpose**: [Business purpose description]
+**API Endpoint**: `api.get_supplier_outstanding()`, `api.create_supplier_outstanding()`
 
 | Field | Type | Required | Description | Frontend Usage |
 |-------|------|----------|-------------|----------------|
-| `outstanding_id` | SERIAL | ✓ | Unique outstanding identifier | Primary key |
-| `supplier_id` | INTEGER | ✓ | Supplier reference | Supplier association |
+| `outstanding_id` | SERIAL | ✓ | Primary key identifier | Primary key |
 | `org_id` | UUID | ✓ | Organization ID | Organization filtering |
-| `document_type` | TEXT | ✓ | Type: 'bill', 'debit_note', 'advance' | Document classification |
-| `document_id` | INTEGER | ✓ | Source document ID | Document reference |
-| `document_number` | TEXT | - | Document number | Reference display |
-| `document_date` | DATE | ✓ | Document date | Date tracking |
-| `due_date` | DATE | - | Payment due date | Due date tracking |
-| `original_amount` | NUMERIC(15,2) | ✓ | Original bill amount | Amount tracking |
-| `paid_amount` | NUMERIC(15,2) | - | Amount paid | Payment tracking |
-| `outstanding_amount` | NUMERIC(15,2) | ✓ | Current outstanding | Balance tracking |
-| `days_overdue` | INTEGER | - | Days past due date | Aging tracking |
-| `aging_bucket` | TEXT | - | Aging: '0-30', '31-60', '61-90', '90+' | Aging classification |
-| `status` | TEXT | ✓ | Status: 'open', 'partial', 'paid' | Status tracking |
-| `last_payment_date` | DATE | - | Last payment made date | Payment tracking |
-| `created_at` | TIMESTAMPTZ | - | Creation timestamp | Audit trails |
-| `updated_at` | TIMESTAMPTZ | - | Last update timestamp | Change tracking |
+| `supplier_id` | INTEGER | ✓ | Reference to related entity | Association/lookup |
+| `document_type` | TEXT | ✓ | Description needed | Standard field usage |
+| `document_id` | INTEGER | ✓ | Reference to related entity | Association/lookup |
+| `document_number` | TEXT | ✓ | Description needed | Standard field usage |
+| `document_date` | DATE | ✓ | Description needed | Standard field usage |
+| `original_amount` | NUMERIC(15 | ✓ | Description needed | Standard field usage |
+| `outstanding_amount` | NUMERIC(15 | ✓ | Description needed | Standard field usage |
+| `paid_amount` | NUMERIC(15 | - | Description needed | Standard field usage |
+| `due_date` | DATE | - | Description needed | Standard field usage |
+| `days_until_due` | INTEGER | - | Description needed | Standard field usage |
+| `status` | TEXT | - | Description needed | Standard field usage |
+| `planned_payment_date` | DATE | - | Description needed | Standard field usage |
+| `payment_priority` | TEXT | - | Description needed | Standard field usage |
+| `created_at` | TIMESTAMP | - | Timestamp field | Standard field usage |
+| `updated_at` | TIMESTAMP | - | Timestamp field | Standard field usage |
+
+**Foreign Key Relationships**:
+- `org_id` → `master.organizations.org_id`
+- `supplier_id` → `parties.suppliers.supplier_id`
 
 ---
 
-### 8. bank_reconciliation
-**Purpose**: Bank statement reconciliation tracking
-**API Endpoint**: `api.get_reconciliations()`, `api.create_reconciliation()`
+### 6. journal_entries
+
+### journal_entries
+**Purpose**: [Business purpose description]
+**API Endpoint**: `api.get_journal_entries()`, `api.create_journal_entrie()`
 
 | Field | Type | Required | Description | Frontend Usage |
 |-------|------|----------|-------------|----------------|
-| `reconciliation_id` | SERIAL | ✓ | Unique reconciliation identifier | Primary key |
+| `journal_id` | SERIAL | ✓ | Primary key identifier | Primary key |
 | `org_id` | UUID | ✓ | Organization ID | Organization filtering |
-| `bank_account_id` | INTEGER | ✓ | Bank account reference | Account association |
-| `reconciliation_date` | DATE | ✓ | Reconciliation date | Date tracking |
-| `statement_start_date` | DATE | ✓ | Statement period start | Period tracking |
-| `statement_end_date` | DATE | ✓ | Statement period end | Period tracking |
-| `statement_balance` | NUMERIC(15,2) | ✓ | Bank statement balance | Balance tracking |
-| `book_balance` | NUMERIC(15,2) | ✓ | Books balance | Balance tracking |
-| `reconciled_balance` | NUMERIC(15,2) | - | Reconciled balance | Balance tracking |
-| `difference` | NUMERIC(15,2) | - | Unreconciled difference | Difference tracking |
-| `total_deposits` | NUMERIC(15,2) | - | Total deposits in period | Summary tracking |
-| `total_withdrawals` | NUMERIC(15,2) | - | Total withdrawals in period | Summary tracking |
-| `unreconciled_items` | INTEGER | - | Count of unreconciled items | Status tracking |
-| `reconciliation_status` | TEXT | ✓ | Status: 'draft', 'completed', 'approved' | Status tracking |
-| `reconciled_by` | INTEGER | - | User who reconciled | User tracking |
-| `approved_by` | INTEGER | - | User who approved | Approval tracking |
-| `approved_at` | TIMESTAMPTZ | - | Approval timestamp | Approval tracking |
-| `notes` | TEXT | - | Reconciliation notes | Documentation |
-| `created_at` | TIMESTAMPTZ | - | Creation timestamp | Audit trails |
-| `updated_at` | TIMESTAMPTZ | - | Last update timestamp | Change tracking |
+| `branch_id` | INTEGER | ✓ | Reference to related entity | Association/lookup |
+| `journal_number` | TEXT | ✓ | Description needed | Standard field usage |
+| `journal_date` | DATE | ✓ | Description needed | Standard field usage |
+| `journal_type` | TEXT | ✓ | Description needed | Standard field usage |
+| `reference_type` | TEXT | - | Description needed | Standard field usage |
+| `reference_id` | INTEGER | - | Reference to related entity | Association/lookup |
+| `reference_number` | TEXT | - | Description needed | Standard field usage |
+| `entry_status` | TEXT | - | Description needed | Standard field usage |
+| `posted_by` | INTEGER | - | Description needed | Standard field usage |
+| `posted_at` | TIMESTAMP | - | Timestamp field | Standard field usage |
+| `is_reversal` | BOOLEAN | - | Description needed | Standard field usage |
+| `reversal_of_journal_id` | INTEGER | - | Reference to related entity | Association/lookup |
+| `narration` | TEXT | - | Description needed | Standard field usage |
+| `created_at` | TIMESTAMP | - | Timestamp field | Standard field usage |
+| `created_by` | INTEGER | ✓ | Creation audit field | Standard field usage |
+
+**Foreign Key Relationships**:
+- `org_id` → `master.organizations.org_id`
+- `branch_id` → `master.org_branches.branch_id`
+- `posted_by` → `master.org_users.user_id`
+- `reversal_of_journal_id` → `financial.journal_entries.journal_id`
+- `created_by` → `master.org_users.user_id`
 
 ---
 
-### 9. expense_claims
-**Purpose**: Employee expense claim management
+### 7. journal_entry_lines
+
+### journal_entry_lines
+**Purpose**: [Business purpose description]
+**API Endpoint**: `api.get_journal_entry_lines()`, `api.create_journal_entry_line()`
+
+| Field | Type | Required | Description | Frontend Usage |
+|-------|------|----------|-------------|----------------|
+| `line_id` | SERIAL | ✓ | Primary key identifier | Primary key |
+| `journal_id` | INTEGER | ✓ | Reference to related entity | Association/lookup |
+| `account_code` | TEXT | ✓ | Description needed | Standard field usage |
+| `account_name` | TEXT | ✓ | Description needed | Standard field usage |
+| `debit_amount` | NUMERIC(15 | - | Description needed | Standard field usage |
+| `credit_amount` | NUMERIC(15 | - | Description needed | Standard field usage |
+| `party_type` | TEXT | - | Description needed | Standard field usage |
+| `party_id` | INTEGER | - | Reference to related entity | Association/lookup |
+| `cost_center_id` | INTEGER | - | Reference to related entity | Association/lookup |
+| `line_narration` | TEXT | - | Description needed | Standard field usage |
+| `display_order` | INTEGER | - | Description needed | Standard field usage |
+
+**Foreign Key Relationships**:
+- `journal_id` → `financial.journal_entries.journal_id`
+
+---
+
+### 8. chart_of_accounts
+
+### chart_of_accounts
+**Purpose**: [Business purpose description]
+**API Endpoint**: `api.get_chart_of_accounts()`, `api.create_chart_of_account()`
+
+| Field | Type | Required | Description | Frontend Usage |
+|-------|------|----------|-------------|----------------|
+| `account_id` | SERIAL | ✓ | Primary key identifier | Primary key |
+| `org_id` | UUID | ✓ | Organization ID | Organization filtering |
+| `parent_account_id` | INTEGER | - | Reference to related entity | Association/lookup |
+| `account_code` | TEXT | ✓ | Description needed | Standard field usage |
+| `account_name` | TEXT | ✓ | Description needed | Standard field usage |
+| `account_type` | TEXT | ✓ | Description needed | Standard field usage |
+| `account_subtype` | TEXT | - | Description needed | Standard field usage |
+| `is_group` | BOOLEAN | - | Description needed | Standard field usage |
+| `is_active` | BOOLEAN | - | Active status flag | Standard field usage |
+| `is_system_account` | BOOLEAN | - | Description needed | Standard field usage |
+| `normal_balance` | TEXT | ✓ | Description needed | Standard field usage |
+| `current_balance` | NUMERIC(15 | - | Description needed | Standard field usage |
+| `created_at` | TIMESTAMP | - | Timestamp field | Standard field usage |
+| `updated_at` | TIMESTAMP | - | Timestamp field | Standard field usage |
+
+**Foreign Key Relationships**:
+- `org_id` → `master.organizations.org_id`
+- `parent_account_id` → `financial.chart_of_accounts.account_id`
+
+---
+
+### 9. bank_reconciliations
+
+### bank_reconciliations
+**Purpose**: [Business purpose description]
+**API Endpoint**: `api.get_bank_reconciliations()`, `api.create_bank_reconciliation()`
+
+| Field | Type | Required | Description | Frontend Usage |
+|-------|------|----------|-------------|----------------|
+| `reconciliation_id` | SERIAL | ✓ | Primary key identifier | Primary key |
+| `org_id` | UUID | ✓ | Organization ID | Organization filtering |
+| `bank_account_id` | INTEGER | ✓ | Reference to related entity | Association/lookup |
+| `reconciliation_date` | DATE | ✓ | Description needed | Standard field usage |
+| `from_date` | DATE | ✓ | Description needed | Standard field usage |
+| `to_date` | DATE | ✓ | Description needed | Standard field usage |
+| `statement_balance` | NUMERIC(15 | ✓ | Description needed | Standard field usage |
+| `statement_date` | DATE | ✓ | Description needed | Standard field usage |
+| `book_balance` | NUMERIC(15 | ✓ | Description needed | Standard field usage |
+| `uncleared_deposits` | NUMERIC(15 | - | Description needed | Standard field usage |
+| `uncleared_payments` | NUMERIC(15 | - | Description needed | Standard field usage |
+| `adjusted_book_balance` | NUMERIC(15 | - | Description needed | Standard field usage |
+| `difference` | NUMERIC(15 | - | Description needed | Standard field usage |
+| `reconciliation_status` | TEXT | - | Description needed | Standard field usage |
+| `completed_by` | INTEGER | - | Description needed | Standard field usage |
+| `completed_at` | TIMESTAMP | - | Timestamp field | Standard field usage |
+| `approved_by` | INTEGER | - | Description needed | Standard field usage |
+| `approved_at` | TIMESTAMP | - | Timestamp field | Standard field usage |
+| `notes` | TEXT | - | Description needed | Standard field usage |
+| `created_at` | TIMESTAMP | - | Timestamp field | Standard field usage |
+| `updated_at` | TIMESTAMP | - | Timestamp field | Standard field usage |
+| `created_by` | INTEGER | ✓ | Creation audit field | Standard field usage |
+
+**Foreign Key Relationships**:
+- `org_id` → `master.organizations.org_id`
+- `bank_account_id` → `master.org_bank_accounts.bank_account_id`
+- `completed_by` → `master.org_users.user_id`
+- `approved_by` → `master.org_users.user_id`
+- `created_by` → `master.org_users.user_id`
+
+---
+
+### 10. bank_reconciliation_items
+
+### bank_reconciliation_items
+**Purpose**: [Business purpose description]
+**API Endpoint**: `api.get_bank_reconciliation_items()`, `api.create_bank_reconciliation_item()`
+
+| Field | Type | Required | Description | Frontend Usage |
+|-------|------|----------|-------------|----------------|
+| `item_id` | SERIAL | ✓ | Primary key identifier | Primary key |
+| `reconciliation_id` | INTEGER | ✓ | Reference to related entity | Association/lookup |
+| `transaction_type` | TEXT | ✓ | Description needed | Standard field usage |
+| `transaction_id` | INTEGER | - | Reference to related entity | Association/lookup |
+| `transaction_date` | DATE | ✓ | Description needed | Standard field usage |
+| `transaction_amount` | NUMERIC(15 | ✓ | Description needed | Standard field usage |
+| `is_reconciled` | BOOLEAN | - | Description needed | Standard field usage |
+| `reconciled_amount` | NUMERIC(15 | - | Description needed | Standard field usage |
+| `statement_reference` | TEXT | - | Description needed | Standard field usage |
+| `statement_date` | DATE | - | Description needed | Standard field usage |
+| `notes` | TEXT | - | Description needed | Standard field usage |
+| `created_at` | TIMESTAMP | - | Timestamp field | Standard field usage |
+
+**Foreign Key Relationships**:
+- `reconciliation_id` → `financial.bank_reconciliations.reconciliation_id`
+
+---
+
+### 11. expense_categories
+
+### expense_categories
+**Purpose**: [Business purpose description]
+**API Endpoint**: `api.get_expense_categories()`, `api.create_expense_categorie()`
+
+| Field | Type | Required | Description | Frontend Usage |
+|-------|------|----------|-------------|----------------|
+| `category_id` | SERIAL | ✓ | Primary key identifier | Primary key |
+| `org_id` | UUID | ✓ | Organization ID | Organization filtering |
+| `parent_category_id` | INTEGER | - | Reference to related entity | Association/lookup |
+| `category_code` | TEXT | ✓ | Description needed | Standard field usage |
+| `category_name` | TEXT | ✓ | Description needed | Standard field usage |
+| `expense_account_id` | INTEGER | - | Reference to related entity | Association/lookup |
+| `monthly_budget` | NUMERIC(15 | - | Description needed | Standard field usage |
+| `quarterly_budget` | NUMERIC(15 | - | Description needed | Standard field usage |
+| `annual_budget` | NUMERIC(15 | - | Description needed | Standard field usage |
+| `requires_approval` | BOOLEAN | - | Description needed | Standard field usage |
+| `approval_limit` | NUMERIC(15 | - | Description needed | Standard field usage |
+| `is_active` | BOOLEAN | - | Active status flag | Standard field usage |
+| `created_at` | TIMESTAMP | - | Timestamp field | Standard field usage |
+
+**Foreign Key Relationships**:
+- `org_id` → `master.organizations.org_id`
+- `parent_category_id` → `financial.expense_categories.category_id`
+- `expense_account_id` → `financial.chart_of_accounts.account_id`
+
+---
+
+### 12. expense_claims
+
+### expense_claims
+**Purpose**: [Business purpose description]
 **API Endpoint**: `api.get_expense_claims()`, `api.create_expense_claim()`
 
 | Field | Type | Required | Description | Frontend Usage |
 |-------|------|----------|-------------|----------------|
-| `claim_id` | SERIAL | ✓ | Unique claim identifier | Primary key |
+| `claim_id` | SERIAL | ✓ | Primary key identifier | Primary key |
 | `org_id` | UUID | ✓ | Organization ID | Organization filtering |
-| `claim_number` | TEXT | ✓ | Claim document number | Document identification |
-| `claim_date` | DATE | ✓ | Claim submission date | Date filtering |
-| `employee_id` | INTEGER | ✓ | Employee user ID | Employee tracking |
-| `employee_name` | TEXT | - | Employee name (snapshot) | Display convenience |
-| `department_id` | INTEGER | - | Department reference | Department tracking |
-| `claim_period_from` | DATE | - | Expense period start | Period tracking |
-| `claim_period_to` | DATE | - | Expense period end | Period tracking |
-| `total_amount` | NUMERIC(15,2) | ✓ | Total claim amount | Amount tracking |
-| `advance_amount` | NUMERIC(15,2) | - | Advance adjusted | Advance tracking |
-| `net_payable` | NUMERIC(15,2) | - | Net amount payable | Payment amount |
-| `claim_status` | TEXT | ✓ | Status: 'draft', 'submitted', 'approved', 'paid', 'rejected' | Status tracking |
-| `approval_status` | TEXT | - | Approval: 'pending', 'approved', 'rejected' | Approval workflow |
-| `approved_by` | INTEGER | - | Approver user ID | Approval tracking |
-| `approved_at` | TIMESTAMPTZ | - | Approval timestamp | Approval tracking |
-| `payment_status` | TEXT | - | Payment: 'unpaid', 'paid' | Payment tracking |
-| `payment_date` | DATE | - | Payment date | Payment tracking |
-| `payment_reference` | TEXT | - | Payment reference | Payment tracking |
-| `notes` | TEXT | - | Claim notes | Documentation |
-| `created_by` | INTEGER | - | User who created claim | User tracking |
-| `created_at` | TIMESTAMPTZ | - | Creation timestamp | Audit trails |
-| `updated_at` | TIMESTAMPTZ | - | Last update timestamp | Change tracking |
+| `claim_number` | TEXT | ✓ | Description needed | Standard field usage |
+| `claim_date` | DATE | ✓ | Description needed | Standard field usage |
+| `employee_id` | INTEGER | ✓ | Reference to related entity | Association/lookup |
+| `department` | TEXT | - | Description needed | Standard field usage |
+| `expense_from_date` | DATE | - | Description needed | Standard field usage |
+| `expense_to_date` | DATE | - | Description needed | Standard field usage |
+| `total_amount` | NUMERIC(15 | ✓ | Description needed | Standard field usage |
+| `approved_amount` | NUMERIC(15 | - | Description needed | Standard field usage |
+| `advance_amount` | NUMERIC(15 | - | Description needed | Standard field usage |
+| `payable_amount` | NUMERIC(15 | - | Description needed | Standard field usage |
+| `claim_status` | TEXT | - | Description needed | Standard field usage |
+| `submitted_date` | DATE | - | Description needed | Standard field usage |
+| `current_approver_id` | INTEGER | - | Reference to related entity | Association/lookup |
+| `approval_history` | JSONB | - | Description needed | Standard field usage |
+| `payment_status` | TEXT | - | Description needed | Standard field usage |
+| `payment_id` | INTEGER | - | Reference to related entity | Association/lookup |
+| `paid_date` | DATE | - | Description needed | Standard field usage |
+| `purpose` | TEXT | - | Description needed | Standard field usage |
+| `notes` | TEXT | - | Description needed | Standard field usage |
+| `rejection_reason` | TEXT | - | Description needed | Standard field usage |
+| `created_at` | TIMESTAMP | - | Timestamp field | Standard field usage |
+| `updated_at` | TIMESTAMP | - | Timestamp field | Standard field usage |
+
+**Foreign Key Relationships**:
+- `org_id` → `master.organizations.org_id`
+- `employee_id` → `master.org_users.user_id`
+- `current_approver_id` → `master.org_users.user_id`
+- `payment_id` → `financial.payments.payment_id`
 
 ---
 
-### 10. expense_claim_items
-**Purpose**: Individual expense items within claims
-**API Endpoint**: `api.get_claim_items()`, `api.create_claim_item()`
+### 13. expense_claim_items
+
+### expense_claim_items
+**Purpose**: [Business purpose description]
+**API Endpoint**: `api.get_expense_claim_items()`, `api.create_expense_claim_item()`
 
 | Field | Type | Required | Description | Frontend Usage |
 |-------|------|----------|-------------|----------------|
-| `item_id` | SERIAL | ✓ | Unique item identifier | Primary key |
-| `claim_id` | INTEGER | ✓ | Parent claim reference | Claim association |
-| `expense_date` | DATE | ✓ | Expense incurred date | Date tracking |
-| `expense_category` | TEXT | ✓ | Category: 'travel', 'meals', 'accommodation', 'misc' | Expense classification |
-| `expense_type` | TEXT | - | Detailed expense type | Fine categorization |
-| `description` | TEXT | ✓ | Expense description | Documentation |
-| `amount` | NUMERIC(15,2) | ✓ | Expense amount | Amount tracking |
-| `bill_number` | TEXT | - | Bill/receipt number | Receipt tracking |
-| `vendor_name` | TEXT | - | Vendor/merchant name | Vendor tracking |
-| `project_id` | INTEGER | - | Project reference | Project allocation |
-| `client_billable` | BOOLEAN | - | Client billable flag | Billing tracking |
-| `has_receipt` | BOOLEAN | - | Receipt available flag | Receipt verification |
-| `receipt_url` | TEXT | - | Receipt image URL | Receipt storage |
-| `notes` | TEXT | - | Item notes | Documentation |
-| `created_at` | TIMESTAMPTZ | - | Creation timestamp | Audit trails |
+| `claim_item_id` | SERIAL | ✓ | Primary key identifier | Primary key |
+| `claim_id` | INTEGER | ✓ | Reference to related entity | Association/lookup |
+| `expense_date` | DATE | ✓ | Description needed | Standard field usage |
+| `category_id` | INTEGER | ✓ | Reference to related entity | Association/lookup |
+| `expense_description` | TEXT | ✓ | Description needed | Standard field usage |
+| `claimed_amount` | NUMERIC(15 | ✓ | Description needed | Standard field usage |
+| `approved_amount` | NUMERIC(15 | - | Description needed | Standard field usage |
+| `bill_number` | TEXT | - | Description needed | Standard field usage |
+| `bill_date` | DATE | - | Description needed | Standard field usage |
+| `vendor_name` | TEXT | - | Description needed | Standard field usage |
+| `attachment_path` | TEXT | - | Description needed | Standard field usage |
+| `item_status` | TEXT | - | Description needed | Standard field usage |
+| `rejection_reason` | TEXT | - | Description needed | Standard field usage |
+| `notes` | TEXT | - | Description needed | Standard field usage |
+| `display_order` | INTEGER | - | Description needed | Standard field usage |
+| `created_at` | TIMESTAMP | - | Timestamp field | Standard field usage |
+
+**Foreign Key Relationships**:
+- `claim_id` → `financial.expense_claims.claim_id`
+- `category_id` → `financial.expense_categories.category_id`
 
 ---
 
-## API Integration Notes
+### 14. pdc_management
 
-### Account Management
-```javascript
-// Create chart of accounts
-const account = {
-  account_code: "1001",
-  account_name: "Cash in Hand",
-  account_type: "asset",
-  account_subtype: "current_asset",
-  parent_account_id: 10, // Current Assets parent
-  currency_code: "INR"
-};
+### pdc_management
+**Purpose**: [Business purpose description]
+**API Endpoint**: `api.get_pdc_management()`, `api.create_pdc_management()`
 
-// Account hierarchy
-const accountTypes = {
-  asset: ['current_asset', 'fixed_asset', 'investment'],
-  liability: ['current_liability', 'long_term_liability'],
-  equity: ['capital', 'reserves'],
-  revenue: ['sales', 'other_income'],
-  expense: ['direct_expense', 'indirect_expense']
-};
-```
+| Field | Type | Required | Description | Frontend Usage |
+|-------|------|----------|-------------|----------------|
+| `pdc_id` | SERIAL | ✓ | Primary key identifier | Primary key |
+| `org_id` | UUID | ✓ | Organization ID | Organization filtering |
+| `payment_id` | INTEGER | - | Reference to related entity | Association/lookup |
+| `cheque_number` | TEXT | ✓ | Description needed | Standard field usage |
+| `cheque_date` | DATE | ✓ | Description needed | Standard field usage |
+| `bank_name` | TEXT | ✓ | Description needed | Standard field usage |
+| `party_type` | TEXT | ✓ | Description needed | Standard field usage |
+| `party_id` | INTEGER | ✓ | Reference to related entity | Association/lookup |
+| `party_name` | TEXT | ✓ | Description needed | Standard field usage |
+| `cheque_amount` | NUMERIC(15 | ✓ | Description needed | Standard field usage |
+| `pdc_type` | TEXT | ✓ | Description needed | Standard field usage |
+| `pdc_status` | TEXT | - | Description needed | Standard field usage |
+| `deposit_date` | DATE | - | Description needed | Standard field usage |
+| `clearance_date` | DATE | - | Description needed | Standard field usage |
+| `bounce_count` | INTEGER | - | Description needed | Standard field usage |
+| `bounce_charges` | NUMERIC(15 | - | Description needed | Standard field usage |
+| `bounce_reason` | TEXT | - | Description needed | Standard field usage |
+| `cheque_location` | TEXT | - | Description needed | Standard field usage |
+| `notes` | TEXT | - | Description needed | Standard field usage |
+| `created_at` | TIMESTAMP | - | Timestamp field | Standard field usage |
+| `updated_at` | TIMESTAMP | - | Timestamp field | Standard field usage |
+| `created_by` | INTEGER | ✓ | Creation audit field | Standard field usage |
 
-### Journal Entry Creation
-```javascript
-// Create balanced journal entry
-const journalEntry = {
-  journal_date: "2024-01-15",
-  journal_type: "sales",
-  narration: "Sales invoice posting",
-  lines: [
-    {
-      account_code: "1101", // Accounts Receivable
-      debit_amount: 5600.00,
-      credit_amount: 0,
-      party_type: "customer",
-      party_id: 1
-    },
-    {
-      account_code: "4001", // Sales Revenue
-      debit_amount: 0,
-      credit_amount: 5000.00
-    },
-    {
-      account_code: "2301", // GST Payable
-      debit_amount: 0,
-      credit_amount: 600.00
-    }
-  ]
-};
+**Foreign Key Relationships**:
+- `org_id` → `master.organizations.org_id`
+- `payment_id` → `financial.payments.payment_id`
+- `created_by` → `master.org_users.user_id`
 
-// Validate balanced entry
-const isBalanced = journalEntry.lines.reduce((sum, line) => 
-  sum + line.debit_amount - line.credit_amount, 0) === 0;
-```
+---
 
-### Payment Processing
-```javascript
-// Record customer payment
-const payment = {
-  payment_type: "receipt",
-  payment_mode: "bank_transfer",
-  party_type: "customer",
-  party_id: 1,
-  payment_amount: 5600.00,
-  bank_account_id: 1,
-  bank_reference: "IMPS123456789",
-  allocations: [
-    {
-      reference_type: "invoice",
-      reference_id: 1,
-      allocated_amount: 5600.00
-    }
-  ]
-};
+### 15. cash_flow_forecast
 
-// Payment modes with requirements
-const paymentModes = {
-  cash: [],
-  cheque: ['cheque_number', 'cheque_date'],
-  bank_transfer: ['bank_reference'],
-  upi: ['upi_reference'],
-  credit_card: ['bank_reference']
-};
-```
+### cash_flow_forecast
+**Purpose**: [Business purpose description]
+**API Endpoint**: `api.get_cash_flow_forecast()`, `api.create_cash_flow_forecast()`
 
-### Outstanding Management
-```javascript
-// Get customer aging analysis
-GET /api/customer-outstanding/aging?
-  customer_id=1&
-  as_of_date=2024-01-31
+| Field | Type | Required | Description | Frontend Usage |
+|-------|------|----------|-------------|----------------|
+| `forecast_id` | SERIAL | ✓ | Primary key identifier | Primary key |
+| `org_id` | UUID | ✓ | Organization ID | Organization filtering |
+| `forecast_date` | DATE | ✓ | Description needed | Standard field usage |
+| `forecast_type` | TEXT | ✓ | Description needed | Standard field usage |
+| `opening_balance` | NUMERIC(15 | ✓ | Description needed | Standard field usage |
+| `customer_collections` | NUMERIC(15 | - | Description needed | Standard field usage |
+| `other_income` | NUMERIC(15 | - | Description needed | Standard field usage |
+| `total_inflows` | NUMERIC(15 | - | Description needed | Standard field usage |
+| `supplier_payments` | NUMERIC(15 | - | Description needed | Standard field usage |
+| `salary_payments` | NUMERIC(15 | - | Description needed | Standard field usage |
+| `other_expenses` | NUMERIC(15 | - | Description needed | Standard field usage |
+| `total_outflows` | NUMERIC(15 | - | Description needed | Standard field usage |
+| `projected_closing_balance` | NUMERIC(15 | - | Description needed | Standard field usage |
+| `minimum_required_balance` | NUMERIC(15 | - | Description needed | Standard field usage |
+| `surplus_deficit` | NUMERIC(15 | - | Description needed | Standard field usage |
+| `actual_inflows` | NUMERIC(15 | - | Description needed | Standard field usage |
+| `actual_outflows` | NUMERIC(15 | - | Description needed | Standard field usage |
+| `actual_closing_balance` | NUMERIC(15 | - | Description needed | Standard field usage |
+| `variance` | NUMERIC(15 | - | Description needed | Standard field usage |
+| `forecast_status` | TEXT | - | Description needed | Standard field usage |
+| `notes` | TEXT | - | Description needed | Standard field usage |
+| `created_at` | TIMESTAMP | - | Timestamp field | Standard field usage |
+| `updated_at` | TIMESTAMP | - | Timestamp field | Standard field usage |
+| `created_by` | INTEGER | ✓ | Creation audit field | Standard field usage |
 
-// Response
-{
-  "customer_id": 1,
-  "total_outstanding": 25000.00,
-  "aging_buckets": {
-    "current": 10000.00,
-    "0-30": 8000.00,
-    "31-60": 5000.00,
-    "61-90": 2000.00,
-    "90+": 0.00
-  },
-  "oldest_invoice_days": 75
-}
-```
+**Foreign Key Relationships**:
+- `org_id` → `master.organizations.org_id`
+- `created_by` → `master.org_users.user_id`
 
-### Bank Reconciliation
-```javascript
-// Create bank reconciliation
-const reconciliation = {
-  bank_account_id: 1,
-  reconciliation_date: "2024-01-31",
-  statement_start_date: "2024-01-01",
-  statement_end_date: "2024-01-31",
-  statement_balance: 150000.00,
-  transactions: [
-    {
-      transaction_id: 1,
-      transaction_date: "2024-01-15",
-      amount: 5600.00,
-      matched: true,
-      payment_id: 1
-    }
-  ]
-};
-```
-
-### Financial Reports
-```javascript
-// Trial balance
-GET /api/reports/trial-balance?
-  as_of_date=2024-01-31&
-  include_zero_balance=false
-
-// Profit & Loss
-GET /api/reports/profit-loss?
-  from_date=2024-01-01&
-  to_date=2024-01-31&
-  comparison_period=previous_month
-
-// Balance Sheet
-GET /api/reports/balance-sheet?
-  as_of_date=2024-01-31&
-  format=condensed
-```
-
-### Search and Filtering
-```javascript
-// Payment search
-GET /api/payments/search?
-  payment_type=receipt&
-  payment_status=cleared&
-  date_from=2024-01-01&
-  date_to=2024-01-31&
-  party_type=customer&
-  min_amount=1000&
-  allocation_status=partial
-```
-
-### Dashboard Metrics
-```javascript
-// Financial dashboard
-GET /api/financial/dashboard
-{
-  "cash_balance": 250000.00,
-  "bank_balance": 1500000.00,
-  "total_receivables": 350000.00,
-  "total_payables": 275000.00,
-  "overdue_receivables": 45000.00,
-  "monthly_revenue": 850000.00,
-  "monthly_expenses": 650000.00,
-  "pending_payments": 15,
-  "unreconciled_transactions": 8
-}
-```
-
-### Validation Rules
-1. **Journal Entries**: Must be balanced (total debits = total credits)
-2. **Account Codes**: Must exist in chart of accounts
-3. **Payment Allocations**: Cannot exceed payment amount
-4. **Bank Reconciliation**: Statement balance must match after reconciliation
-5. **Expense Claims**: Receipts required above certain amount threshold
+---

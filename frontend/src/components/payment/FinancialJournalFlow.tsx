@@ -149,7 +149,7 @@ const FinancialJournalFlow: React.FC<FinancialJournalFlowProps> = ({ onClose }) 
 
         {/* Content */}
         <div className="flex-1 overflow-y-auto bg-green-50">
-          <div className="max-w-4xl mx-auto px-6 py-6 space-y-6">
+          <div className="max-w-6xl mx-auto px-6 py-6 space-y-6">
             
             {/* Journal Header */}
             <div className="bg-white rounded-lg border border-gray-200 p-6">

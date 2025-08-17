@@ -7,417 +7,517 @@ The `inventory` schema manages stock, batches, locations, and inventory movement
 
 ## Tables
 
-### 1. batches
-**Purpose**: Batch-wise inventory tracking with expiry and compliance
-**API Endpoint**: `api.get_batches()`, `api.create_batch()`
+### 1. product_categories
+
+### product_categories
+**Purpose**: [Business purpose description]
+**API Endpoint**: `api.get_product_categories()`, `api.create_product_categorie()`
 
 | Field | Type | Required | Description | Frontend Usage |
 |-------|------|----------|-------------|----------------|
-| `batch_id` | SERIAL | ✓ | Unique batch identifier | Primary key |
+| `category_id` | SERIAL | ✓ | Primary key identifier | Primary key |
 | `org_id` | UUID | ✓ | Organization ID | Organization filtering |
-| `product_id` | INTEGER | ✓ | Product reference | Product association |
-| `supplier_id` | INTEGER | - | Supplier reference | Supplier tracking |
-| `batch_number` | TEXT | ✓ | Manufacturer's batch number | Batch identification |
-| `manufacturing_date` | DATE | - | Date of manufacture | Batch information |
-| `expiry_date` | DATE | ✓ | Product expiry date | Expiry alerts, validation |
-| `quantity_received` | NUMERIC(15,3) | ✓ | Initial received quantity | Stock tracking |
-| `quantity_available` | NUMERIC(15,3) | ✓ | Current available quantity | Stock availability |
-| `quantity_sold` | NUMERIC(15,3) | - | Total sold quantity | Sales tracking |
-| `quantity_returned` | NUMERIC(15,3) | - | Total returned quantity | Return tracking |
-| `quantity_damaged` | NUMERIC(15,3) | - | Damaged quantity | Loss tracking |
-| `quantity_expired` | NUMERIC(15,3) | - | Expired quantity | Waste tracking |
-| `quantity_reserved` | NUMERIC(15,3) | - | Reserved quantity | Allocation tracking |
-| `cost_per_unit` | NUMERIC(15,4) | ✓ | Unit cost price | Cost calculations |
-| `selling_price` | NUMERIC(15,4) | - | Unit selling price | Price calculations |
-| `mrp` | NUMERIC(15,4) | - | Maximum retail price | Price validation |
-| `batch_status` | TEXT | - | Status: 'active', 'expired', 'damaged', 'recalled' | Status filtering |
-| `expiry_status` | TEXT | - | Expiry status: 'fresh', 'near_expiry', 'expired' | Expiry management |
-| `qc_status` | TEXT | - | Quality control: 'passed', 'failed', 'pending' | Quality tracking |
-| `qc_date` | DATE | - | Quality check date | Quality records |
-| `qc_notes` | TEXT | - | Quality check notes | Quality documentation |
-| `storage_condition` | TEXT | - | Required storage conditions | Storage compliance |
-| `last_movement_date` | DATE | - | Last stock movement date | Activity tracking |
-| `is_narcotic` | BOOLEAN | - | Narcotic drug flag | Regulatory compliance |
-| `created_at` | TIMESTAMPTZ | - | Creation timestamp | Audit trails |
-| `updated_at` | TIMESTAMPTZ | - | Last update timestamp | Change tracking |
+| `parent_category_id` | INTEGER | - | Reference to related entity | Association/lookup |
+| `category_code` | TEXT | ✓ | Description needed | Standard field usage |
+| `category_name` | TEXT | ✓ | Description needed | Standard field usage |
+| `category_level` | INTEGER | - | Description needed | Standard field usage |
+| `category_path` | TEXT | - | Description needed | Standard field usage |
+| `category_type` | TEXT | - | Description needed | Standard field usage |
+| `requires_prescription` | BOOLEAN | - | Description needed | Standard field usage |
+| `requires_license` | BOOLEAN | - | Description needed | Standard field usage |
+| `display_order` | INTEGER | - | Description needed | Standard field usage |
+| `icon_name` | TEXT | - | Description needed | Standard field usage |
+| `color_code` | TEXT | - | Description needed | Standard field usage |
+| `default_hsn_code` | TEXT | - | Description needed | Standard field usage |
+| `default_gst_rate` | NUMERIC(5 | - | Description needed | Standard field usage |
+| `is_active` | BOOLEAN | - | Active status flag | Standard field usage |
+| `created_at` | TIMESTAMP | - | Timestamp field | Standard field usage |
+| `updated_at` | TIMESTAMP | - | Timestamp field | Standard field usage |
 
-**Example API Response**:
-```json
-{
-  "batch_id": 1,
-  "product_id": 101,
-  "batch_number": "BT240115001",
-  "expiry_date": "2025-01-15",
-  "quantity_available": 500.0,
-  "cost_per_unit": 10.50,
-  "selling_price": 15.75,
-  "mrp": 18.00,
-  "batch_status": "active",
-  "expiry_status": "fresh",
-  "days_to_expiry": 45
-}
-```
+**Foreign Key Relationships**:
+- `org_id` → `master.organizations.org_id`
+- `parent_category_id` → `inventory.product_categories.category_id`
 
 ---
 
-### 2. location_wise_stock
-**Purpose**: Stock distribution across storage locations
-**API Endpoint**: `api.get_location_stock()`, `api.move_stock()`
+### 2. product_types
+
+### product_types
+**Purpose**: [Business purpose description]
+**API Endpoint**: `api.get_product_types()`, `api.create_product_type()`
 
 | Field | Type | Required | Description | Frontend Usage |
 |-------|------|----------|-------------|----------------|
-| `stock_id` | SERIAL | ✓ | Unique stock record identifier | Primary key |
-| `product_id` | INTEGER | ✓ | Product reference | Product association |
-| `batch_id` | INTEGER | ✓ | Batch reference | Batch tracking |
-| `location_id` | INTEGER | ✓ | Storage location reference | Location tracking |
-| `zone_id` | INTEGER | - | Storage zone reference | Zone management |
-| `org_id` | UUID | ✓ | Organization ID | Organization filtering |
-| `quantity_available` | NUMERIC(15,3) | ✓ | Available quantity | Stock availability |
-| `quantity_reserved` | NUMERIC(15,3) | - | Reserved quantity | Allocation tracking |
-| `quantity_quarantine` | NUMERIC(15,3) | - | Quarantined quantity | Quality control |
-| `stock_in_date` | DATE | ✓ | Date stock entered location | Movement tracking |
-| `stock_status` | TEXT | - | Status: 'available', 'reserved', 'quarantine', 'damaged' | Status filtering |
-| `quarantine_reason` | TEXT | - | Reason for quarantine | Quality documentation |
-| `unit_cost` | NUMERIC(15,4) | - | Cost per unit at this location | Cost tracking |
-| `last_movement_date` | DATE | - | Last movement date | Activity tracking |
-| `last_updated` | TIMESTAMPTZ | - | Last update timestamp | Change tracking |
-
-**Example API Response**:
-```json
-{
-  "stock_id": 1,
-  "product_id": 101,
-  "batch_id": 1,
-  "location_id": 1,
-  "quantity_available": 250.0,
-  "quantity_reserved": 50.0,
-  "stock_status": "available",
-  "stock_in_date": "2024-01-15",
-  "unit_cost": 10.50
-}
-```
+| `type_id` | SERIAL | ✓ | Primary key identifier | Primary key |
+| `type_code` | TEXT | ✓ | Description needed | Standard field usage |
+| `type_name` | TEXT | ✓ | Description needed | Standard field usage |
+| `default_base_uom` | TEXT | ✓ | Description needed | Standard field usage |
+| `default_purchase_uom` | TEXT | - | Description needed | Standard field usage |
+| `default_sale_uom` | TEXT | - | Description needed | Standard field usage |
+| `default_display_uom` | TEXT | - | Description needed | Standard field usage |
+| `typical_pack_sizes` | INTEGER[] | - | Description needed | Standard field usage |
+| `is_liquid` | BOOLEAN | - | Description needed | Standard field usage |
+| `is_injectable` | BOOLEAN | - | Description needed | Standard field usage |
+| `requires_cold_storage` | BOOLEAN | - | Description needed | Standard field usage |
+| `is_active` | BOOLEAN | - | Active status flag | Standard field usage |
 
 ---
 
-### 3. storage_locations
-**Purpose**: Physical storage location management
-**API Endpoint**: `api.get_locations()`, `api.create_location()`
+### 3. units_of_measure
+
+### units_of_measure
+**Purpose**: [Business purpose description]
+**API Endpoint**: `api.get_units_of_measure()`, `api.create_units_of_measure()`
 
 | Field | Type | Required | Description | Frontend Usage |
 |-------|------|----------|-------------|----------------|
-| `location_id` | SERIAL | ✓ | Unique location identifier | Primary key |
-| `branch_id` | INTEGER | ✓ | Branch reference | Branch association |
+| `uom_id` | SERIAL | ✓ | Primary key identifier | Primary key |
 | `org_id` | UUID | ✓ | Organization ID | Organization filtering |
-| `location_code` | TEXT | ✓ | Location identification code | Location selection |
-| `location_name` | TEXT | ✓ | Location display name | Display name |
-| `location_type` | TEXT | ✓ | Type: 'warehouse', 'store', 'counter', 'cold_storage' | Location classification |
-| `storage_class` | TEXT | - | Class: 'general', 'refrigerated', 'controlled', 'quarantine' | Storage requirements |
-| `parent_location_id` | INTEGER | - | Parent location for hierarchy | Location hierarchy |
-| `location_path` | TEXT | - | Full path (e.g., 'Warehouse/Zone-A/Rack-1') | Location navigation |
-| `address` | TEXT | - | Physical address | Location information |
-| `capacity_units` | NUMERIC(15,3) | - | Storage capacity | Capacity planning |
-| `current_utilization` | NUMERIC(15,3) | - | Current stock volume | Utilization tracking |
-| `temperature_min` | NUMERIC(5,2) | - | Minimum temperature | Environmental control |
-| `temperature_max` | NUMERIC(5,2) | - | Maximum temperature | Environmental control |
-| `humidity_min` | NUMERIC(5,2) | - | Minimum humidity | Environmental control |
-| `humidity_max` | NUMERIC(5,2) | - | Maximum humidity | Environmental control |
-| `is_receiving_location` | BOOLEAN | - | Receiving area flag | Goods receipt |
-| `is_shipping_location` | BOOLEAN | - | Shipping area flag | Dispatch operations |
-| `is_returns_location` | BOOLEAN | - | Returns processing flag | Return handling |
-| `barcode` | TEXT | - | Location barcode | Scanning integration |
-| `qr_code` | TEXT | - | Location QR code | Mobile integration |
-| `is_active` | BOOLEAN | - | Location active status | Location filtering |
-| `created_at` | TIMESTAMPTZ | - | Creation timestamp | Audit trails |
-| `updated_at` | TIMESTAMPTZ | - | Last update timestamp | Change tracking |
+| `uom_code` | TEXT | ✓ | Description needed | Standard field usage |
+| `uom_name` | TEXT | ✓ | Description needed | Standard field usage |
+| `uom_type` | TEXT | ✓ | Description needed | Standard field usage |
+| `base_uom_code` | TEXT | - | Description needed | Standard field usage |
+| `conversion_factor` | NUMERIC(15 | - | Description needed | Standard field usage |
+| `symbol` | TEXT | - | Description needed | Standard field usage |
+| `decimal_places` | INTEGER | - | Description needed | Standard field usage |
+| `is_active` | BOOLEAN | - | Active status flag | Standard field usage |
+| `created_at` | TIMESTAMP | - | Timestamp field | Standard field usage |
 
-**Example API Response**:
-```json
-{
-  "location_id": 1,
-  "location_code": "WH-A-R01",
-  "location_name": "Warehouse A - Rack 1",
-  "location_type": "warehouse",
-  "storage_class": "general",
-  "capacity_units": 1000.0,
-  "current_utilization": 650.0,
-  "temperature_min": 15.0,
-  "temperature_max": 25.0,
-  "is_active": true
-}
-```
+**Foreign Key Relationships**:
+- `org_id` → `master.organizations.org_id`
 
 ---
 
-### 4. inventory_movements
-**Purpose**: Complete audit trail of all stock movements
-**API Endpoint**: `api.get_movements()`, `api.create_movement()`
+### 4. products
+
+### products
+**Purpose**: [Business purpose description]
+**API Endpoint**: `api.get_products()`, `api.create_product()`
 
 | Field | Type | Required | Description | Frontend Usage |
 |-------|------|----------|-------------|----------------|
-| `movement_id` | SERIAL | ✓ | Unique movement identifier | Primary key |
+| `product_id` | SERIAL | ✓ | Primary key identifier | Primary key |
 | `org_id` | UUID | ✓ | Organization ID | Organization filtering |
-| `movement_type` | TEXT | ✓ | Type: 'purchase', 'sale', 'transfer', 'adjustment', 'return' | Movement classification |
-| `movement_date` | DATE | ✓ | Movement date | Date filtering |
-| `movement_direction` | TEXT | ✓ | Direction: 'in', 'out', 'transfer', 'none' | Direction filtering |
-| `product_id` | INTEGER | ✓ | Product reference | Product tracking |
-| `batch_id` | INTEGER | - | Batch reference | Batch tracking |
-| `from_location_id` | INTEGER | - | Source location | Transfer tracking |
-| `to_location_id` | INTEGER | - | Destination location | Transfer tracking |
-| `location_id` | INTEGER | - | Primary location | Location tracking |
-| `quantity` | NUMERIC(15,3) | ✓ | Movement quantity | Quantity tracking |
-| `base_quantity` | NUMERIC(15,3) | - | Quantity in base UOM | Standardized tracking |
-| `unit_cost` | NUMERIC(15,4) | - | Cost per unit | Cost tracking |
-| `total_cost` | NUMERIC(15,2) | - | Total movement cost | Financial tracking |
-| `reference_type` | TEXT | - | Reference document type | Document linking |
-| `reference_id` | INTEGER | - | Reference document ID | Document linking |
-| `reference_number` | TEXT | - | Reference document number | Document identification |
-| `party_id` | INTEGER | - | Customer/supplier ID | Party tracking |
-| `reason` | TEXT | - | Movement reason/notes | Documentation |
-| `created_by` | INTEGER | - | User who created movement | User tracking |
-| `approved_by` | INTEGER | - | User who approved movement | Approval tracking |
-| `created_at` | TIMESTAMPTZ | - | Creation timestamp | Audit trails |
+| `product_code` | TEXT | ✓ | Description needed | Standard field usage |
+| `product_name` | TEXT | ✓ | Description needed | Standard field usage |
+| `generic_name` | TEXT | - | Description needed | Standard field usage |
+| `brand` | TEXT | - | Description needed | Standard field usage |
+| `manufacturer` | TEXT | - | Description needed | Standard field usage |
+| `category_id` | INTEGER | - | Reference to related entity | Association/lookup |
+| `product_type` | TEXT | - | Description needed | Standard field usage |
+| `product_class` | TEXT | - | Description needed | Standard field usage |
+| `composition` | JSONB | - | Description needed | Standard field usage |
+| `strength` | TEXT | - | Description needed | Standard field usage |
+| `hsn_code` | TEXT | - | Description needed | Standard field usage |
+| `drug_schedule` | TEXT | - | Description needed | Standard field usage |
+| `requires_prescription` | BOOLEAN | - | Description needed | Standard field usage |
+| `is_narcotic` | BOOLEAN | - | Description needed | Standard field usage |
+| `is_controlled_substance` | BOOLEAN | - | Description needed | Standard field usage |
+| `barcode` | TEXT | - | Description needed | Standard field usage |
+| `manufacturer_code` | TEXT | - | Description needed | Standard field usage |
+| `pack_config` | JSONB | - | Description needed | Standard field usage |
+| `base_uom_id` | INTEGER | - | Reference to related entity | Association/lookup |
+| `gst_percentage` | NUMERIC(5 | - | Description needed | Standard field usage |
+| `cess_percentage` | NUMERIC(5 | - | Description needed | Standard field usage |
+| `storage_conditions` | TEXT | - | Description needed | Standard field usage |
+| `requires_cold_chain` | BOOLEAN | - | Description needed | Standard field usage |
+| `maintain_batch` | BOOLEAN | - | Description needed | Standard field usage |
+| `maintain_expiry` | BOOLEAN | - | Description needed | Standard field usage |
+| `allow_negative_stock` | BOOLEAN | - | Description needed | Standard field usage |
+| `min_stock_quantity` | NUMERIC(15 | - | Description needed | Standard field usage |
+| `reorder_level` | NUMERIC(15 | - | Description needed | Standard field usage |
+| `reorder_quantity` | NUMERIC(15 | - | Description needed | Standard field usage |
+| `max_stock_quantity` | NUMERIC(15 | - | Description needed | Standard field usage |
+| `critical_stock_level` | NUMERIC(15 | - | Description needed | Standard field usage |
+| `product_status` | TEXT | - | Description needed | Standard field usage |
+| `launch_date` | DATE | - | Description needed | Standard field usage |
+| `discontinuation_date` | DATE | - | Description needed | Standard field usage |
+| `search_keywords` | TEXT[] | - | Description needed | Standard field usage |
+| `tags` | TEXT[] | - | Description needed | Standard field usage |
+| `product_images` | JSONB | - | Description needed | Standard field usage |
+| `documents` | JSONB | - | Description needed | Standard field usage |
+| `is_active` | BOOLEAN | - | Active status flag | Standard field usage |
+| `is_saleable` | BOOLEAN | - | Description needed | Standard field usage |
+| `is_purchasable` | BOOLEAN | - | Description needed | Standard field usage |
+| `created_at` | TIMESTAMP | - | Timestamp field | Standard field usage |
+| `updated_at` | TIMESTAMP | - | Timestamp field | Standard field usage |
+| `created_by` | INTEGER | - | Creation audit field | Standard field usage |
 
-**Example API Response**:
-```json
-{
-  "movement_id": 1,
-  "movement_type": "sale",
-  "movement_date": "2024-01-15",
-  "movement_direction": "out",
-  "product_id": 101,
-  "batch_id": 1,
-  "location_id": 1,
-  "quantity": 10.0,
-  "unit_cost": 10.50,
-  "total_cost": 105.00,
-  "reference_type": "invoice",
-  "reference_number": "INV-2024-001",
-  "reason": "Sale to customer"
-}
-```
+**Foreign Key Relationships**:
+- `org_id` → `master.organizations.org_id`
+- `category_id` → `inventory.product_categories.category_id`
+- `base_uom_id` → `inventory.units_of_measure.uom_id`
+- `created_by` → `master.org_users.user_id`
 
 ---
 
-### 5. stock_reservations
-**Purpose**: Stock allocation and reservation management
-**API Endpoint**: `api.get_reservations()`, `api.create_reservation()`
+### 5. product_pack_configurations
+
+### product_pack_configurations
+**Purpose**: [Business purpose description]
+**API Endpoint**: `api.get_product_pack_configurations()`, `api.create_product_pack_configuration()`
 
 | Field | Type | Required | Description | Frontend Usage |
 |-------|------|----------|-------------|----------------|
-| `reservation_id` | SERIAL | ✓ | Unique reservation identifier | Primary key |
-| `org_id` | UUID | ✓ | Organization ID | Organization filtering |
-| `product_id` | INTEGER | ✓ | Product reference | Product tracking |
-| `batch_id` | INTEGER | - | Specific batch reservation | Batch allocation |
-| `location_id` | INTEGER | ✓ | Location reference | Location tracking |
-| `customer_id` | INTEGER | - | Customer reference | Customer allocation |
-| `reserved_quantity` | NUMERIC(15,3) | ✓ | Reserved quantity | Reservation tracking |
-| `fulfilled_quantity` | NUMERIC(15,3) | - | Fulfilled quantity | Fulfillment tracking |
-| `remaining_quantity` | NUMERIC(15,3) | - | Remaining to fulfill | Balance tracking |
-| `reservation_date` | DATE | ✓ | Reservation date | Date tracking |
-| `expires_at` | TIMESTAMPTZ | - | Reservation expiry | Expiry management |
-| `priority` | INTEGER | - | Reservation priority | Priority management |
-| `reservation_status` | TEXT | ✓ | Status: 'active', 'fulfilled', 'expired', 'cancelled' | Status filtering |
-| `reference_type` | TEXT | - | Reference document type | Document linking |
-| `reference_id` | INTEGER | - | Reference document ID | Document linking |
-| `notes` | TEXT | - | Reservation notes | Documentation |
-| `created_by` | INTEGER | - | User who created reservation | User tracking |
-| `fulfilled_by` | INTEGER | - | User who fulfilled reservation | Fulfillment tracking |
-| `released_at` | TIMESTAMPTZ | - | Release timestamp | Release tracking |
-| `release_reason` | TEXT | - | Release reason | Release documentation |
-| `created_at` | TIMESTAMPTZ | - | Creation timestamp | Audit trails |
+| `pack_config_id` | SERIAL | ✓ | Primary key identifier | Primary key |
+| `product_id` | INTEGER | ✓ | Reference to related entity | Association/lookup |
+| `config_name` | TEXT | ✓ | Description needed | Standard field usage |
+| `base_uom` | TEXT | ✓ | Description needed | Standard field usage |
+| `base_units_per_pack` | INTEGER | ✓ | Description needed | Standard field usage |
+| `pack_uom` | TEXT | ✓ | Description needed | Standard field usage |
+| `packs_per_box` | INTEGER | - | Description needed | Standard field usage |
+| `box_uom` | TEXT | - | Description needed | Standard field usage |
+| `boxes_per_case` | INTEGER | - | Description needed | Standard field usage |
+| `case_uom` | TEXT | - | Description needed | Standard field usage |
+| `pack_label_format` | TEXT | - | Description needed | Standard field usage |
+| `barcode_format` | TEXT | - | Description needed | Standard field usage |
+| `pricing_levels` | JSONB | - | Description needed | Standard field usage |
+| `is_default` | BOOLEAN | - | Description needed | Standard field usage |
+| `is_active` | BOOLEAN | - | Active status flag | Standard field usage |
+| `created_at` | TIMESTAMP | - | Timestamp field | Standard field usage |
 
-**Example API Response**:
-```json
-{
-  "reservation_id": 1,
-  "product_id": 101,
-  "location_id": 1,
-  "customer_id": 1,
-  "reserved_quantity": 25.0,
-  "fulfilled_quantity": 0.0,
-  "remaining_quantity": 25.0,
-  "reservation_date": "2024-01-15",
-  "expires_at": "2024-01-22T18:00:00Z",
-  "reservation_status": "active",
-  "priority": 1
-}
-```
+**Foreign Key Relationships**:
+- `product_id` → `inventory.products.product_id`
 
 ---
 
-### 6. stock_adjustments
-**Purpose**: Stock adjustment tracking for corrections
-**API Endpoint**: `api.get_adjustments()`, `api.create_adjustment()`
+### 6. batches
+
+### batches
+**Purpose**: [Business purpose description]
+**API Endpoint**: `api.get_batches()`, `api.create_batche()`
 
 | Field | Type | Required | Description | Frontend Usage |
 |-------|------|----------|-------------|----------------|
-| `adjustment_id` | SERIAL | ✓ | Unique adjustment identifier | Primary key |
+| `batch_id` | SERIAL | ✓ | Primary key identifier | Primary key |
 | `org_id` | UUID | ✓ | Organization ID | Organization filtering |
-| `adjustment_number` | TEXT | ✓ | Adjustment document number | Document identification |
-| `adjustment_date` | DATE | ✓ | Adjustment date | Date filtering |
-| `adjustment_type` | TEXT | ✓ | Type: 'physical_count', 'damage', 'expiry', 'theft', 'correction' | Adjustment classification |
-| `product_id` | INTEGER | ✓ | Product reference | Product tracking |
-| `batch_id` | INTEGER | - | Batch reference | Batch tracking |
-| `location_id` | INTEGER | ✓ | Location reference | Location tracking |
-| `system_quantity` | NUMERIC(15,3) | ✓ | System recorded quantity | System tracking |
-| `physical_quantity` | NUMERIC(15,3) | ✓ | Actual physical quantity | Physical count |
-| `adjustment_quantity` | NUMERIC(15,3) | ✓ | Difference quantity | Adjustment amount |
-| `adjustment_direction` | TEXT | ✓ | Direction: 'increase', 'decrease' | Direction tracking |
-| `unit_cost` | NUMERIC(15,4) | - | Cost per unit | Cost impact |
-| `total_cost_impact` | NUMERIC(15,2) | - | Total financial impact | Financial tracking |
-| `reason` | TEXT | ✓ | Adjustment reason | Documentation |
-| `approval_status` | TEXT | - | Status: 'pending', 'approved', 'rejected' | Approval workflow |
-| `approved_by` | INTEGER | - | Approver user ID | Approval tracking |
-| `approved_at` | TIMESTAMPTZ | - | Approval timestamp | Approval tracking |
-| `created_by` | INTEGER | - | User who created adjustment | User tracking |
-| `created_at` | TIMESTAMPTZ | - | Creation timestamp | Audit trails |
+| `product_id` | INTEGER | ✓ | Reference to related entity | Association/lookup |
+| `batch_number` | TEXT | ✓ | Description needed | Standard field usage |
+| `alternate_batch_number` | TEXT | - | Description needed | Standard field usage |
+| `manufacturing_date` | DATE | - | Description needed | Standard field usage |
+| `expiry_date` | DATE | ✓ | Description needed | Standard field usage |
+| `retesting_date` | DATE | - | Description needed | Standard field usage |
+| `initial_quantity` | NUMERIC(15 | ✓ | Description needed | Standard field usage |
+| `quantity_available` | NUMERIC(15 | - | Description needed | Standard field usage |
+| `quantity_reserved` | NUMERIC(15 | - | Description needed | Standard field usage |
+| `quantity_quarantine` | NUMERIC(15 | - | Description needed | Standard field usage |
+| `location_count` | INTEGER | - | Description needed | Standard field usage |
+| `primary_location_id` | INTEGER | - | Reference to related entity | Association/lookup |
+| `cost_per_unit` | NUMERIC(15 | - | Description needed | Standard field usage |
+| `mrp_per_unit` | NUMERIC(15 | ✓ | Description needed | Standard field usage |
+| `sale_price_per_unit` | NUMERIC(15 | - | Description needed | Standard field usage |
+| `trade_price_per_unit` | NUMERIC(15 | - | Description needed | Standard field usage |
+| `strip_mrp` | NUMERIC(15 | - | Description needed | Standard field usage |
+| `strip_ptr` | NUMERIC(15 | - | Description needed | Standard field usage |
+| `strip_pts` | NUMERIC(15 | - | Description needed | Standard field usage |
+| `box_mrp` | NUMERIC(15 | - | Description needed | Standard field usage |
+| `box_ptr` | NUMERIC(15 | - | Description needed | Standard field usage |
+| `box_pts` | NUMERIC(15 | - | Description needed | Standard field usage |
+| `case_mrp` | NUMERIC(15 | - | Description needed | Standard field usage |
+| `case_ptr` | NUMERIC(15 | - | Description needed | Standard field usage |
+| `case_pts` | NUMERIC(15 | - | Description needed | Standard field usage |
+| `qc_status` | TEXT | - | Description needed | Standard field usage |
+| `qc_date` | DATE | - | Description needed | Standard field usage |
+| `qc_certificate_number` | TEXT | - | Description needed | Standard field usage |
+| `qc_performed_by` | INTEGER | - | Description needed | Standard field usage |
+| `source_type` | TEXT | ✓ | Description needed | Standard field usage |
+| `source_reference_id` | INTEGER | - | Reference to related entity | Association/lookup |
+| `supplier_id` | INTEGER | - | Reference to related entity | Association/lookup |
+| `weighted_average_cost` | NUMERIC(15 | - | Description needed | Standard field usage |
+| `last_cost_update` | TIMESTAMP | - | Description needed | Standard field usage |
+| `cost_calculation_method` | TEXT | - | Description needed | Standard field usage |
+| `batch_status` | TEXT | - | Description needed | Standard field usage |
+| `expiry_status` | TEXT | - | Description needed | Standard field usage |
+| `recall_status` | TEXT | - | Description needed | Standard field usage |
+| `recall_date` | DATE | - | Description needed | Standard field usage |
+| `recall_reason` | TEXT | - | Description needed | Standard field usage |
+| `serial_numbers` | TEXT[] | - | Description needed | Standard field usage |
+| `created_at` | TIMESTAMP | - | Timestamp field | Standard field usage |
+| `updated_at` | TIMESTAMP | - | Timestamp field | Standard field usage |
+| `created_by` | INTEGER | - | Creation audit field | Standard field usage |
 
-**Example API Response**:
-```json
-{
-  "adjustment_id": 1,
-  "adjustment_number": "ADJ-2024-001",
-  "adjustment_date": "2024-01-15",
-  "adjustment_type": "physical_count",
-  "product_id": 101,
-  "system_quantity": 100.0,
-  "physical_quantity": 95.0,
-  "adjustment_quantity": -5.0,
-  "adjustment_direction": "decrease",
-  "reason": "Physical count discrepancy",
-  "approval_status": "approved"
-}
-```
+**Foreign Key Relationships**:
+- `org_id` → `master.organizations.org_id`
+- `product_id` → `inventory.products.product_id`
+- `qc_performed_by` → `master.org_users.user_id`
+- `supplier_id` → `parties.suppliers.supplier_id`
+- `created_by` → `master.org_users.user_id`
 
 ---
 
-### 7. product_suppliers
-**Purpose**: Product-supplier relationship mapping
-**API Endpoint**: `api.get_product_suppliers()`, `api.create_product_supplier()`
+### 7. storage_locations
+
+### storage_locations
+**Purpose**: [Business purpose description]
+**API Endpoint**: `api.get_storage_locations()`, `api.create_storage_location()`
 
 | Field | Type | Required | Description | Frontend Usage |
 |-------|------|----------|-------------|----------------|
-| `mapping_id` | SERIAL | ✓ | Unique mapping identifier | Primary key |
-| `product_id` | INTEGER | ✓ | Product reference | Product association |
-| `supplier_id` | INTEGER | ✓ | Supplier reference | Supplier association |
+| `location_id` | SERIAL | ✓ | Primary key identifier | Primary key |
 | `org_id` | UUID | ✓ | Organization ID | Organization filtering |
-| `supplier_product_code` | TEXT | - | Supplier's product code | Supplier catalog |
-| `supplier_product_name` | TEXT | - | Supplier's product name | Supplier reference |
-| `purchase_unit` | TEXT | - | Purchase unit of measurement | Purchase planning |
-| `minimum_order_quantity` | NUMERIC(15,3) | - | Minimum order quantity | Order planning |
-| `purchase_rate` | NUMERIC(15,4) | - | Current purchase rate | Cost planning |
-| `discount_percent` | NUMERIC(5,2) | - | Standard discount % | Cost calculations |
-| `lead_time_days` | INTEGER | - | Lead time in days | Planning calculations |
-| `is_preferred_supplier` | BOOLEAN | - | Preferred supplier flag | Supplier prioritization |
-| `quality_rating` | NUMERIC(3,2) | - | Quality rating (1-5) | Supplier evaluation |
-| `last_purchase_date` | DATE | - | Last purchase date | Purchase tracking |
-| `last_purchase_rate` | NUMERIC(15,4) | - | Last purchase rate | Rate tracking |
-| `is_active` | BOOLEAN | - | Mapping active status | Supplier filtering |
-| `created_at` | TIMESTAMPTZ | - | Creation timestamp | Audit trails |
-| `updated_at` | TIMESTAMPTZ | - | Last update timestamp | Change tracking |
+| `branch_id` | INTEGER | ✓ | Reference to related entity | Association/lookup |
+| `parent_location_id` | INTEGER | - | Reference to related entity | Association/lookup |
+| `location_code` | TEXT | ✓ | Description needed | Standard field usage |
+| `location_name` | TEXT | ✓ | Description needed | Standard field usage |
+| `location_type` | TEXT | ✓ | Description needed | Standard field usage |
+| `location_path` | TEXT | - | Description needed | Standard field usage |
+| `storage_capacity` | JSONB | - | Description needed | Standard field usage |
+| `dimensions` | JSONB | - | Description needed | Standard field usage |
+| `temperature_controlled` | BOOLEAN | - | Description needed | Standard field usage |
+| `temperature_range` | JSONB | - | Description needed | Standard field usage |
+| `humidity_controlled` | BOOLEAN | - | Description needed | Standard field usage |
+| `humidity_range` | JSONB | - | Description needed | Standard field usage |
+| `restricted_access` | BOOLEAN | - | Description needed | Standard field usage |
+| `allowed_product_categories` | INTEGER[] | - | Description needed | Standard field usage |
+| `storage_class` | TEXT | - | Description needed | Standard field usage |
+| `is_active` | BOOLEAN | - | Active status flag | Standard field usage |
+| `is_full` | BOOLEAN | - | Description needed | Standard field usage |
+| `created_at` | TIMESTAMP | - | Timestamp field | Standard field usage |
+| `updated_at` | TIMESTAMP | - | Timestamp field | Standard field usage |
+
+**Foreign Key Relationships**:
+- `org_id` → `master.organizations.org_id`
+- `branch_id` → `master.org_branches.branch_id`
+- `parent_location_id` → `inventory.storage_locations.location_id`
 
 ---
 
-## API Integration Notes
+### 8. location_wise_stock
 
-### Batch Management
-```javascript
-// Create batch with expiry validation
-const batch = {
-  product_id: 101,
-  batch_number: "BT240115001",
-  expiry_date: "2025-01-15",
-  quantity_received: 1000,
-  cost_per_unit: 10.50
-};
+### location_wise_stock
+**Purpose**: [Business purpose description]
+**API Endpoint**: `api.get_location_wise_stock()`, `api.create_location_wise_stock()`
 
-// Expiry status calculation
-const daysToExpiry = Math.floor((new Date(batch.expiry_date) - new Date()) / (1000 * 60 * 60 * 24));
-const expiryStatus = daysToExpiry > 90 ? 'fresh' : daysToExpiry > 30 ? 'near_expiry' : 'expired';
-```
+| Field | Type | Required | Description | Frontend Usage |
+|-------|------|----------|-------------|----------------|
+| `stock_id` | SERIAL | ✓ | Primary key identifier | Primary key |
+| `product_id` | INTEGER | ✓ | Reference to related entity | Association/lookup |
+| `batch_id` | INTEGER | ✓ | Reference to related entity | Association/lookup |
+| `location_id` | INTEGER | ✓ | Reference to related entity | Association/lookup |
+| `org_id` | UUID | ✓ | Organization ID | Organization filtering |
+| `quantity_available` | NUMERIC(15 | - | Description needed | Standard field usage |
+| `quantity_reserved` | NUMERIC(15 | - | Description needed | Standard field usage |
+| `quantity_quarantine` | NUMERIC(15 | - | Description needed | Standard field usage |
+| `stock_in_date` | DATE | - | Description needed | Standard field usage |
+| `unit_cost` | NUMERIC(15 | - | Description needed | Standard field usage |
+| `bin_number` | TEXT | - | Description needed | Standard field usage |
+| `pallet_number` | TEXT | - | Description needed | Standard field usage |
+| `stock_status` | TEXT | - | Description needed | Standard field usage |
+| `last_movement_date` | TIMESTAMP | - | Description needed | Standard field usage |
+| `last_counted_date` | DATE | - | Description needed | Standard field usage |
+| `created_at` | TIMESTAMP | - | Timestamp field | Standard field usage |
+| `last_updated` | TIMESTAMP | - | Description needed | Standard field usage |
 
-### Stock Availability Check
-```javascript
-// Check stock availability across locations
-GET /api/stock/availability?
-  product_id=101&
-  required_quantity=50&
-  location_id=1&
-  exclude_expired=true&
-  exclude_reserved=false
+**Foreign Key Relationships**:
+- `product_id` → `inventory.products.product_id`
+- `batch_id` → `inventory.batches.batch_id`
+- `location_id` → `inventory.storage_locations.location_id`
+- `org_id` → `master.organizations.org_id`
 
-// Response includes batch-wise availability
-{
-  "product_id": 101,
-  "total_available": 245.0,
-  "batches": [
-    {
-      "batch_id": 1,
-      "batch_number": "BT240115001",
-      "expiry_date": "2025-01-15",
-      "available_quantity": 150.0,
-      "location_id": 1
-    }
-  ]
-}
-```
+---
 
-### Stock Movement Tracking
-```javascript
-// Create stock movement
-const movement = {
-  movement_type: "sale",
-  movement_direction: "out",
-  product_id: 101,
-  batch_id: 1,
-  location_id: 1,
-  quantity: 10,
-  reference_type: "invoice",
-  reference_id: 1,
-  reason: "Sale to customer ABC"
-};
-```
+### 9. stock_reservations
 
-### Reservation Management
-```javascript
-// Reserve stock for order
-const reservation = {
-  product_id: 101,
-  location_id: 1,
-  customer_id: 1,
-  reserved_quantity: 25,
-  expires_at: "2024-01-22T18:00:00Z",
-  reference_type: "sales_order",
-  reference_id: 1
-};
+### stock_reservations
+**Purpose**: [Business purpose description]
+**API Endpoint**: `api.get_stock_reservations()`, `api.create_stock_reservation()`
 
-// Auto-release expired reservations (handled by triggers)
-```
+| Field | Type | Required | Description | Frontend Usage |
+|-------|------|----------|-------------|----------------|
+| `reservation_id` | SERIAL | ✓ | Primary key identifier | Primary key |
+| `org_id` | UUID | ✓ | Organization ID | Organization filtering |
+| `product_id` | INTEGER | ✓ | Reference to related entity | Association/lookup |
+| `batch_id` | INTEGER | - | Reference to related entity | Association/lookup |
+| `location_id` | INTEGER | ✓ | Reference to related entity | Association/lookup |
+| `reserved_quantity` | NUMERIC(15 | ✓ | Description needed | Standard field usage |
+| `fulfilled_quantity` | NUMERIC(15 | - | Description needed | Standard field usage |
+| `reference_type` | TEXT | ✓ | Description needed | Standard field usage |
+| `reference_id` | INTEGER | ✓ | Reference to related entity | Association/lookup |
+| `reservation_date` | TIMESTAMP | - | Description needed | Standard field usage |
+| `expires_at` | TIMESTAMP | - | Timestamp field | Standard field usage |
+| `priority` | INTEGER | - | Description needed | Standard field usage |
+| `reservation_status` | TEXT | - | Description needed | Standard field usage |
+| `reserved_by` | INTEGER | ✓ | Description needed | Standard field usage |
+| `created_at` | TIMESTAMP | - | Timestamp field | Standard field usage |
 
-### Search and Filtering
-```javascript
-// Advanced inventory search
-GET /api/inventory/search?
-  product_name=paracetamol&     // Product search
-  batch_status=active&          // Active batches only
-  location_type=warehouse&      // Warehouse locations
-  expiry_date_from=2024-01-01&  // Expiry range
-  expiry_date_to=2024-12-31&
-  min_quantity=10&              // Minimum stock
-  sort_by=expiry_date&          // Sort by expiry
-  order=asc                     // Ascending order
-```
+**Foreign Key Relationships**:
+- `org_id` → `master.organizations.org_id`
+- `product_id` → `inventory.products.product_id`
+- `batch_id` → `inventory.batches.batch_id`
+- `location_id` → `inventory.storage_locations.location_id`
+- `reserved_by` → `master.org_users.user_id`
 
-### Compliance and Alerts
-1. **Expiry Alerts**: Automatic alerts for near-expiry batches
-2. **Low Stock Alerts**: Based on minimum stock levels
-3. **Narcotic Tracking**: Special handling for controlled substances
-4. **Quality Control**: QC status tracking for batches
-5. **Temperature Monitoring**: Environmental compliance
+---
 
-### Validation Rules
-1. **Batch Numbers**: Must be unique per product per supplier
-2. **Expiry Dates**: Cannot be in the past for new batches
-3. **Quantities**: Cannot be negative
-4. **Movements**: Must balance (in = out + adjustments)
-5. **Reservations**: Cannot exceed available stock
+### 10. inventory_movements
+
+### inventory_movements
+**Purpose**: [Business purpose description]
+**API Endpoint**: `api.get_inventory_movements()`, `api.create_inventory_movement()`
+
+| Field | Type | Required | Description | Frontend Usage |
+|-------|------|----------|-------------|----------------|
+| `movement_id` | SERIAL | ✓ | Primary key identifier | Primary key |
+| `org_id` | UUID | ✓ | Organization ID | Organization filtering |
+| `movement_type` | TEXT | ✓ | Description needed | Standard field usage |
+| `movement_date` | TIMESTAMP | - | Description needed | Standard field usage |
+| `movement_direction` | TEXT | ✓ | Description needed | Standard field usage |
+| `product_id` | INTEGER | ✓ | Reference to related entity | Association/lookup |
+| `batch_id` | INTEGER | - | Reference to related entity | Association/lookup |
+| `quantity` | NUMERIC(15 | ✓ | Description needed | Standard field usage |
+| `pack_type` | TEXT | - | Description needed | Standard field usage |
+| `base_quantity` | NUMERIC(15 | - | Description needed | Standard field usage |
+| `location_id` | INTEGER | ✓ | Reference to related entity | Association/lookup |
+| `from_location_id` | INTEGER | - | Reference to related entity | Association/lookup |
+| `to_location_id` | INTEGER | - | Reference to related entity | Association/lookup |
+| `unit_cost` | NUMERIC(15 | - | Description needed | Standard field usage |
+| `total_cost` | NUMERIC(15 | - | Description needed | Standard field usage |
+| `reference_type` | TEXT | - | Description needed | Standard field usage |
+| `reference_id` | INTEGER | - | Reference to related entity | Association/lookup |
+| `reference_number` | TEXT | - | Description needed | Standard field usage |
+| `transfer_type` | TEXT | - | Description needed | Standard field usage |
+| `transfer_pair_id` | INTEGER | - | Reference to related entity | Association/lookup |
+| `reason` | TEXT | - | Description needed | Standard field usage |
+| `notes` | TEXT | - | Description needed | Standard field usage |
+| `pack_display_data` | JSONB | - | Description needed | Standard field usage |
+| `cost_details` | JSONB | - | Description needed | Standard field usage |
+| `created_by` | INTEGER | ✓ | Creation audit field | Standard field usage |
+| `created_at` | TIMESTAMP | - | Timestamp field | Standard field usage |
+| `approved_by` | INTEGER | - | Description needed | Standard field usage |
+| `approved_at` | TIMESTAMP | - | Timestamp field | Standard field usage |
+
+**Foreign Key Relationships**:
+- `org_id` → `master.organizations.org_id`
+- `product_id` → `inventory.products.product_id`
+- `batch_id` → `inventory.batches.batch_id`
+- `location_id` → `inventory.storage_locations.location_id`
+- `from_location_id` → `inventory.storage_locations.location_id`
+- `to_location_id` → `inventory.storage_locations.location_id`
+- `transfer_pair_id` → `inventory.inventory_movements.movement_id`
+- `created_by` → `master.org_users.user_id`
+- `approved_by` → `master.org_users.user_id`
+
+---
+
+### 11. stock_transfers
+
+### stock_transfers
+**Purpose**: [Business purpose description]
+**API Endpoint**: `api.get_stock_transfers()`, `api.create_stock_transfer()`
+
+| Field | Type | Required | Description | Frontend Usage |
+|-------|------|----------|-------------|----------------|
+| `transfer_id` | SERIAL | ✓ | Primary key identifier | Primary key |
+| `org_id` | UUID | ✓ | Organization ID | Organization filtering |
+| `transfer_number` | TEXT | ✓ | Description needed | Standard field usage |
+| `transfer_date` | DATE | ✓ | Description needed | Standard field usage |
+| `transfer_type` | TEXT | ✓ | Description needed | Standard field usage |
+| `from_branch_id` | INTEGER | - | Reference to related entity | Association/lookup |
+| `to_branch_id` | INTEGER | - | Reference to related entity | Association/lookup |
+| `from_location_id` | INTEGER | ✓ | Reference to related entity | Association/lookup |
+| `to_location_id` | INTEGER | ✓ | Reference to related entity | Association/lookup |
+| `transfer_reason` | TEXT | ✓ | Description needed | Standard field usage |
+| `priority` | TEXT | - | Description needed | Standard field usage |
+| `expected_dispatch_date` | DATE | - | Description needed | Standard field usage |
+| `expected_delivery_date` | DATE | - | Description needed | Standard field usage |
+| `actual_dispatch_date` | DATE | - | Description needed | Standard field usage |
+| `actual_delivery_date` | DATE | - | Description needed | Standard field usage |
+| `transport_mode` | TEXT | - | Description needed | Standard field usage |
+| `transporter_name` | TEXT | - | Description needed | Standard field usage |
+| `vehicle_number` | TEXT | - | Description needed | Standard field usage |
+| `lr_number` | TEXT | - | Description needed | Standard field usage |
+| `lr_date` | DATE | - | Description needed | Standard field usage |
+| `transfer_status` | TEXT | - | Description needed | Standard field usage |
+| `requested_by` | INTEGER | ✓ | Description needed | Standard field usage |
+| `approved_by` | INTEGER | - | Description needed | Standard field usage |
+| `approved_at` | TIMESTAMP | - | Timestamp field | Standard field usage |
+| `received_by` | INTEGER | - | Description needed | Standard field usage |
+| `received_at` | TIMESTAMP | - | Timestamp field | Standard field usage |
+| `documents` | JSONB | - | Description needed | Standard field usage |
+| `created_at` | TIMESTAMP | - | Timestamp field | Standard field usage |
+| `updated_at` | TIMESTAMP | - | Timestamp field | Standard field usage |
+
+**Foreign Key Relationships**:
+- `org_id` → `master.organizations.org_id`
+- `from_branch_id` → `master.org_branches.branch_id`
+- `to_branch_id` → `master.org_branches.branch_id`
+- `from_location_id` → `inventory.storage_locations.location_id`
+- `to_location_id` → `inventory.storage_locations.location_id`
+- `requested_by` → `master.org_users.user_id`
+- `approved_by` → `master.org_users.user_id`
+- `received_by` → `master.org_users.user_id`
+
+---
+
+### 12. stock_transfer_items
+
+### stock_transfer_items
+**Purpose**: [Business purpose description]
+**API Endpoint**: `api.get_stock_transfer_items()`, `api.create_stock_transfer_item()`
+
+| Field | Type | Required | Description | Frontend Usage |
+|-------|------|----------|-------------|----------------|
+| `transfer_item_id` | SERIAL | ✓ | Primary key identifier | Primary key |
+| `transfer_id` | INTEGER | ✓ | Reference to related entity | Association/lookup |
+| `product_id` | INTEGER | ✓ | Reference to related entity | Association/lookup |
+| `batch_id` | INTEGER | - | Reference to related entity | Association/lookup |
+| `requested_quantity` | NUMERIC(15 | ✓ | Description needed | Standard field usage |
+| `approved_quantity` | NUMERIC(15 | - | Description needed | Standard field usage |
+| `dispatched_quantity` | NUMERIC(15 | - | Description needed | Standard field usage |
+| `received_quantity` | NUMERIC(15 | - | Description needed | Standard field usage |
+| `pack_type` | TEXT | ✓ | Description needed | Standard field usage |
+| `pack_size` | INTEGER | - | Description needed | Standard field usage |
+| `shortage_quantity` | NUMERIC(15 | - | Description needed | Standard field usage |
+| `damage_quantity` | NUMERIC(15 | - | Description needed | Standard field usage |
+| `discrepancy_reason` | TEXT | - | Description needed | Standard field usage |
+| `item_status` | TEXT | - | Description needed | Standard field usage |
+| `dispatch_notes` | TEXT | - | Description needed | Standard field usage |
+| `receipt_notes` | TEXT | - | Description needed | Standard field usage |
+| `created_at` | TIMESTAMP | - | Timestamp field | Standard field usage |
+
+**Foreign Key Relationships**:
+- `transfer_id` → `inventory.stock_transfers.transfer_id`
+- `product_id` → `inventory.products.product_id`
+- `batch_id` → `inventory.batches.batch_id`
+
+---
+
+### 13. reorder_suggestions
+
+### reorder_suggestions
+**Purpose**: [Business purpose description]
+**API Endpoint**: `api.get_reorder_suggestions()`, `api.create_reorder_suggestion()`
+
+| Field | Type | Required | Description | Frontend Usage |
+|-------|------|----------|-------------|----------------|
+| `suggestion_id` | SERIAL | ✓ | Primary key identifier | Primary key |
+| `org_id` | UUID | ✓ | Organization ID | Organization filtering |
+| `product_id` | INTEGER | ✓ | Reference to related entity | Association/lookup |
+| `current_stock` | NUMERIC(15 | ✓ | Description needed | Standard field usage |
+| `reserved_stock` | NUMERIC(15 | - | Description needed | Standard field usage |
+| `available_stock` | NUMERIC(15 | - | Description needed | Standard field usage |
+| `reorder_level` | NUMERIC(15 | - | Description needed | Standard field usage |
+| `min_stock_level` | NUMERIC(15 | - | Description needed | Standard field usage |
+| `suggested_quantity` | NUMERIC(15 | ✓ | Description needed | Standard field usage |
+| `average_daily_consumption` | NUMERIC(15 | - | Description needed | Standard field usage |
+| `lead_time_days` | INTEGER | - | Description needed | Standard field usage |
+| `safety_stock_days` | INTEGER | - | Description needed | Standard field usage |
+| `preferred_supplier_id` | INTEGER | - | Reference to related entity | Association/lookup |
+| `last_purchase_price` | NUMERIC(15 | - | Description needed | Standard field usage |
+| `last_purchase_date` | DATE | - | Description needed | Standard field usage |
+| `urgency` | TEXT | ✓ | Description needed | Standard field usage |
+| `suggested_order_date` | DATE | - | Description needed | Standard field usage |
+| `suggestion_status` | TEXT | - | Description needed | Standard field usage |
+| `action_taken` | TEXT | - | Description needed | Standard field usage |
+| `action_taken_by` | INTEGER | - | Description needed | Standard field usage |
+| `action_taken_at` | TIMESTAMP | - | Timestamp field | Standard field usage |
+| `created_at` | TIMESTAMP | - | Timestamp field | Standard field usage |
+| `updated_at` | TIMESTAMP | - | Timestamp field | Standard field usage |
+
+**Foreign Key Relationships**:
+- `org_id` → `master.organizations.org_id`
+- `product_id` → `inventory.products.product_id`
+- `preferred_supplier_id` → `parties.suppliers.supplier_id`
+- `action_taken_by` → `master.org_users.user_id`
+
+---

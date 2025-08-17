@@ -92,11 +92,19 @@ const Home: React.FC<HomeProps> = ({ setActiveTab }) => {
     },
     {
       id: 'credit-debit-note',
-      tab: 'payment',
+      tab: 'credit-debit-note',
       title: 'Credit/Debit Note',
       subtitle: 'Financial adjustments without returns',
       icon: FileEdit,
       shortcut: 'Ctrl+N'
+    },
+    {
+      id: 'gst',
+      tab: 'gst',
+      title: 'GST Management',
+      subtitle: 'Tax reports, filing, and compliance',
+      icon: Calculator,
+      shortcut: 'Ctrl+G'
     }
   ];
 
@@ -116,14 +124,6 @@ const Home: React.FC<HomeProps> = ({ setActiveTab }) => {
       subtitle: 'Manage multiple locations and inventory',
       icon: Warehouse,
       shortcut: 'Ctrl+W'
-    },
-    {
-      id: 'gst',
-      tab: 'payment',
-      title: 'GST Management',
-      subtitle: 'Tax reports, filing, and compliance',
-      icon: Calculator,
-      shortcut: 'Ctrl+G'
     },
     {
       id: 'master',
@@ -169,11 +169,11 @@ const Home: React.FC<HomeProps> = ({ setActiveTab }) => {
             break;
           case 'n':
             e.preventDefault();
-            setActiveTab('payment');
+            setActiveTab('credit-debit-note');
             break;
           case 'g':
             e.preventDefault();
-            setActiveTab('payment');
+            setActiveTab('gst');
             break;
           case 'w':
             e.preventDefault();

@@ -8,506 +8,618 @@ The `sales` schema manages the complete sales process from orders to invoices, i
 ## Tables
 
 ### 1. orders
-**Purpose**: Sales order management and order-to-cash workflow
+
+### orders
+**Purpose**: [Business purpose description]
 **API Endpoint**: `api.get_orders()`, `api.create_order()`
 
 | Field | Type | Required | Description | Frontend Usage |
 |-------|------|----------|-------------|----------------|
-| `order_id` | SERIAL | ✓ | Unique order identifier | Primary key |
+| `order_id` | SERIAL | ✓ | Primary key identifier | Primary key |
 | `org_id` | UUID | ✓ | Organization ID | Organization filtering |
-| `branch_id` | INTEGER | - | Originating branch | Branch tracking |
-| `order_number` | TEXT | ✓ | Order document number | Order identification |
-| `order_date` | DATE | ✓ | Order creation date | Date filtering |
-| `customer_id` | INTEGER | ✓ | Customer reference | Customer association |
-| `customer_name` | TEXT | - | Customer name (snapshot) | Display convenience |
-| `customer_phone` | TEXT | - | Customer phone (snapshot) | Contact reference |
-| `order_type` | TEXT | ✓ | Type: 'regular', 'urgent', 'scheduled', 'recurring' | Order classification |
-| `order_priority` | TEXT | - | Priority: 'low', 'normal', 'high', 'urgent' | Priority handling |
-| `sales_person_id` | INTEGER | - | Assigned salesperson | Sales tracking |
-| `order_source` | TEXT | - | Source: 'manual', 'phone', 'email', 'app', 'website' | Channel tracking |
-| `delivery_date` | DATE | - | Requested delivery date | Delivery planning |
-| `delivery_address` | TEXT | - | Delivery address | Logistics planning |
-| `delivery_instructions` | TEXT | - | Special delivery instructions | Delivery guidance |
-| `subtotal_amount` | NUMERIC(15,2) | ✓ | Subtotal before taxes | Amount calculations |
-| `discount_amount` | NUMERIC(15,2) | - | Total discount amount | Discount tracking |
-| `tax_amount` | NUMERIC(15,2) | - | Total tax amount | Tax calculations |
-| `total_amount` | NUMERIC(15,2) | ✓ | Final order amount | Payment processing |
-| `order_status` | TEXT | ✓ | Status: 'draft', 'confirmed', 'processing', 'shipped', 'delivered', 'cancelled' | Status tracking |
-| `fulfillment_status` | TEXT | - | Fulfillment: 'pending', 'partial', 'fulfilled' | Fulfillment tracking |
-| `payment_status` | TEXT | - | Payment: 'unpaid', 'partial', 'paid' | Payment tracking |
-| `payment_terms` | TEXT | - | Payment terms | Payment planning |
-| `due_date` | DATE | - | Payment due date | Payment tracking |
-| `invoice_id` | INTEGER | - | Generated invoice ID | Invoice linking |
-| `invoiced_amount` | NUMERIC(15,2) | - | Amount invoiced | Invoice tracking |
-| `notes` | TEXT | - | Order notes/comments | Documentation |
-| `cancelled_reason` | TEXT | - | Cancellation reason | Cancellation tracking |
-| `cancelled_by` | INTEGER | - | User who cancelled | Cancellation audit |
-| `cancelled_at` | TIMESTAMPTZ | - | Cancellation timestamp | Cancellation tracking |
-| `created_by` | INTEGER | - | User who created order | User tracking |
-| `created_at` | TIMESTAMPTZ | - | Creation timestamp | Audit trails |
-| `updated_at` | TIMESTAMPTZ | - | Last update timestamp | Change tracking |
+| `branch_id` | INTEGER | ✓ | Reference to related entity | Association/lookup |
+| `order_number` | TEXT | ✓ | Description needed | Standard field usage |
+| `order_date` | DATE | - | Description needed | Standard field usage |
+| `order_type` | TEXT | - | Description needed | Standard field usage |
+| `customer_id` | INTEGER | ✓ | Reference to related entity | Association/lookup |
+| `customer_po_number` | TEXT | - | Description needed | Standard field usage |
+| `customer_po_date` | DATE | - | Description needed | Standard field usage |
+| `delivery_date` | DATE | - | Description needed | Standard field usage |
+| `delivery_priority` | TEXT | - | Description needed | Standard field usage |
+| `delivery_address_id` | INTEGER | - | Reference to related entity | Association/lookup |
+| `delivery_instructions` | TEXT | - | Description needed | Standard field usage |
+| `salesperson_id` | INTEGER | - | Reference to related entity | Association/lookup |
+| `territory_id` | INTEGER | - | Reference to related entity | Association/lookup |
+| `route_id` | INTEGER | - | Reference to related entity | Association/lookup |
+| `price_list_id` | INTEGER | - | Reference to related entity | Association/lookup |
+| `currency_code` | TEXT | - | Description needed | Standard field usage |
+| `subtotal_amount` | NUMERIC(15 | - | Description needed | Standard field usage |
+| `discount_amount` | NUMERIC(15 | - | Description needed | Standard field usage |
+| `scheme_discount` | NUMERIC(15 | - | Description needed | Standard field usage |
+| `taxable_amount` | NUMERIC(15 | - | Description needed | Standard field usage |
+| `tax_amount` | NUMERIC(15 | - | Description needed | Standard field usage |
+| `round_off_amount` | NUMERIC(5 | - | Description needed | Standard field usage |
+| `final_amount` | NUMERIC(15 | - | Description needed | Standard field usage |
+| `igst_amount` | NUMERIC(15 | - | Description needed | Standard field usage |
+| `cgst_amount` | NUMERIC(15 | - | Description needed | Standard field usage |
+| `sgst_amount` | NUMERIC(15 | - | Description needed | Standard field usage |
+| `cess_amount` | NUMERIC(15 | - | Description needed | Standard field usage |
+| `order_status` | TEXT | - | Description needed | Standard field usage |
+| `approval_status` | TEXT | - | Description needed | Standard field usage |
+| `approved_by` | INTEGER | - | Description needed | Standard field usage |
+| `approved_at` | TIMESTAMP | - | Timestamp field | Standard field usage |
+| `payment_terms` | TEXT | - | Description needed | Standard field usage |
+| `payment_status` | TEXT | - | Description needed | Standard field usage |
+| `fulfillment_status` | TEXT | - | Description needed | Standard field usage |
+| `items_count` | INTEGER | - | Description needed | Standard field usage |
+| `items_delivered` | INTEGER | - | Description needed | Standard field usage |
+| `notes` | TEXT | - | Description needed | Standard field usage |
+| `internal_notes` | TEXT | - | Description needed | Standard field usage |
+| `tags` | TEXT[] | - | Description needed | Standard field usage |
+| `created_at` | TIMESTAMP | - | Timestamp field | Standard field usage |
+| `updated_at` | TIMESTAMP | - | Timestamp field | Standard field usage |
+| `created_by` | INTEGER | ✓ | Creation audit field | Standard field usage |
+| `updated_by` | INTEGER | - | Update audit field | Standard field usage |
 
-**Example API Response**:
-```json
-{
-  "order_id": 1,
-  "order_number": "SO-2024-001",
-  "order_date": "2024-01-15",
-  "customer_id": 1,
-  "customer_name": "ABC Medical Store",
-  "order_type": "regular",
-  "delivery_date": "2024-01-17",
-  "subtotal_amount": 5000.00,
-  "tax_amount": 600.00,
-  "total_amount": 5600.00,
-  "order_status": "confirmed",
-  "fulfillment_status": "pending",
-  "payment_status": "unpaid"
-}
-```
+**Foreign Key Relationships**:
+- `org_id` → `master.organizations.org_id`
+- `branch_id` → `master.org_branches.branch_id`
+- `customer_id` → `parties.customers.customer_id`
+- `delivery_address_id` → `master.addresses.address_id`
+- `salesperson_id` → `master.org_users.user_id`
+- `territory_id` → `parties.territories.territory_id`
+- `route_id` → `parties.routes.route_id`
+- `approved_by` → `master.org_users.user_id`
+- `created_by` → `master.org_users.user_id`
+- `updated_by` → `master.org_users.user_id`
 
 ---
 
 ### 2. order_items
-**Purpose**: Individual line items within sales orders
+
+### order_items
+**Purpose**: [Business purpose description]
 **API Endpoint**: `api.get_order_items()`, `api.create_order_item()`
 
 | Field | Type | Required | Description | Frontend Usage |
 |-------|------|----------|-------------|----------------|
-| `order_item_id` | SERIAL | ✓ | Unique order item identifier | Primary key |
-| `order_id` | INTEGER | ✓ | Parent order reference | Order association |
-| `product_id` | INTEGER | ✓ | Product reference | Product association |
-| `product_name` | TEXT | - | Product name (snapshot) | Display convenience |
-| `product_code` | TEXT | - | Product code (snapshot) | Reference convenience |
-| `batch_id` | INTEGER | - | Specific batch allocation | Batch tracking |
-| `batch_number` | TEXT | - | Batch number (snapshot) | Batch reference |
-| `quantity` | NUMERIC(15,3) | ✓ | Total ordered quantity | Quantity tracking |
-| `base_quantity` | NUMERIC(15,3) | - | Billable/paid quantity | Revenue calculation |
-| `free_quantity` | NUMERIC(15,3) | - | Free/promotional quantity | Promotional tracking |
-| `delivered_quantity` | NUMERIC(15,3) | - | Delivered quantity | Fulfillment tracking |
-| `unit_price` | NUMERIC(15,4) | ✓ | Unit selling price | Price calculations |
-| `discount_percent` | NUMERIC(5,2) | - | Line item discount % | Discount calculations |
-| `discount_amount` | NUMERIC(15,2) | - | Line item discount amount | Discount tracking |
-| `line_total` | NUMERIC(15,2) | ✓ | Line total before tax | Amount calculations |
-| `cgst_rate` | NUMERIC(5,2) | - | CGST rate % | Tax calculations |
-| `sgst_rate` | NUMERIC(5,2) | - | SGST rate % | Tax calculations |
-| `igst_rate` | NUMERIC(5,2) | - | IGST rate % | Tax calculations |
-| `cgst_amount` | NUMERIC(15,2) | - | CGST amount | Tax breakdown |
-| `sgst_amount` | NUMERIC(15,2) | - | SGST amount | Tax breakdown |
-| `igst_amount` | NUMERIC(15,2) | - | IGST amount | Tax breakdown |
-| `cess_amount` | NUMERIC(15,2) | - | Cess amount | Tax calculations |
-| `line_total` | NUMERIC(15,2) | ✓ | Final line total | Final calculations |
-| `delivery_status` | TEXT | - | Status: 'pending', 'partial', 'delivered' | Delivery tracking |
-| `notes` | TEXT | - | Line item notes | Documentation |
-| `created_at` | TIMESTAMPTZ | - | Creation timestamp | Audit trails |
-| `updated_at` | TIMESTAMPTZ | - | Last update timestamp | Change tracking |
+| `order_item_id` | SERIAL | ✓ | Primary key identifier | Primary key |
+| `order_id` | INTEGER | ✓ | Reference to related entity | Association/lookup |
+| `product_id` | INTEGER | ✓ | Reference to related entity | Association/lookup |
+| `product_name` | TEXT | ✓ | Description needed | Standard field usage |
+| `hsn_code` | TEXT | - | Description needed | Standard field usage |
+| `quantity` | NUMERIC(15 | ✓ | Description needed | Standard field usage |
+| `uom` | TEXT | ✓ | Description needed | Standard field usage |
+| `pack_type` | TEXT | ✓ | Description needed | Standard field usage |
+| `pack_size` | INTEGER | - | Description needed | Standard field usage |
+| `base_quantity` | NUMERIC(15 | - | Description needed | Standard field usage |
+| `unit_price` | NUMERIC(15 | ✓ | Description needed | Standard field usage |
+| `mrp` | NUMERIC(15 | - | Description needed | Standard field usage |
+| `discount_percent` | NUMERIC(5 | - | Description needed | Standard field usage |
+| `discount_amount` | NUMERIC(15 | - | Description needed | Standard field usage |
+| `scheme_discount_percent` | NUMERIC(5 | - | Description needed | Standard field usage |
+| `scheme_discount_amount` | NUMERIC(15 | - | Description needed | Standard field usage |
+| `free_quantity` | NUMERIC(15 | - | Description needed | Standard field usage |
+| `scheme_code` | TEXT | - | Description needed | Standard field usage |
+| `taxable_amount` | NUMERIC(15 | - | Description needed | Standard field usage |
+| `tax_percent` | NUMERIC(5 | - | Description needed | Standard field usage |
+| `tax_amount` | NUMERIC(15 | - | Description needed | Standard field usage |
+| `igst_percent` | NUMERIC(5 | - | Description needed | Standard field usage |
+| `cgst_percent` | NUMERIC(5 | - | Description needed | Standard field usage |
+| `sgst_percent` | NUMERIC(5 | - | Description needed | Standard field usage |
+| `cess_percent` | NUMERIC(5 | - | Description needed | Standard field usage |
+| `line_total` | NUMERIC(15 | ✓ | Description needed | Standard field usage |
+| `batch_id` | INTEGER | - | Reference to related entity | Association/lookup |
+| `batch_number` | TEXT | - | Description needed | Standard field usage |
+| `batch_expiry` | DATE | - | Description needed | Standard field usage |
+| `ordered_quantity` | NUMERIC(15 | - | Description needed | Standard field usage |
+| `delivered_quantity` | NUMERIC(15 | - | Description needed | Standard field usage |
+| `pending_quantity` | NUMERIC(15 | - | Description needed | Standard field usage |
+| `cancelled_quantity` | NUMERIC(15 | - | Description needed | Standard field usage |
+| `item_status` | TEXT | - | Description needed | Standard field usage |
+| `item_notes` | TEXT | - | Description needed | Standard field usage |
+| `display_order` | INTEGER | - | Description needed | Standard field usage |
+| `created_at` | TIMESTAMP | - | Timestamp field | Standard field usage |
+| `updated_at` | TIMESTAMP | - | Timestamp field | Standard field usage |
 
-**Example API Response**:
-```json
-{
-  "order_item_id": 1,
-  "order_id": 1,
-  "product_id": 101,
-  "product_name": "Paracetamol 500mg",
-  "quantity": 100.0,
-  "unit_price": 15.00,
-  "discount_percent": 5.0,
-  "line_total": 1425.00,
-  "gst_percentage": 12.0,
-  "cgst_amount": 85.50,
-  "sgst_amount": 85.50,
-  "line_total": 1596.00,
-  "delivery_status": "pending"
-}
-```
+**Foreign Key Relationships**:
+- `order_id` → `sales.orders.order_id`
+- `product_id` → `inventory.products.product_id`
 
 ---
 
 ### 3. invoices
-**Purpose**: Sales invoice generation and management
+
+### invoices
+**Purpose**: [Business purpose description]
 **API Endpoint**: `api.get_invoices()`, `api.create_invoice()`
 
 | Field | Type | Required | Description | Frontend Usage |
 |-------|------|----------|-------------|----------------|
-| `invoice_id` | SERIAL | ✓ | Unique invoice identifier | Primary key |
+| `invoice_id` | SERIAL | ✓ | Primary key identifier | Primary key |
 | `org_id` | UUID | ✓ | Organization ID | Organization filtering |
-| `branch_id` | INTEGER | ✓ | Invoicing branch | Branch tracking |
-| `invoice_number` | TEXT | ✓ | Invoice document number | Invoice identification |
-| `invoice_date` | DATE | ✓ | Invoice date | Date filtering |
-| `invoice_type` | TEXT | ✓ | Type: 'regular', 'proforma', 'tax_invoice', 'retail' | Invoice classification |
-| `order_id` | INTEGER | - | Source order reference | Order linking |
-| `customer_id` | INTEGER | ✓ | Customer reference | Customer association |
-| `customer_name` | TEXT | - | Customer name (snapshot) | Display convenience |
-| `customer_phone` | TEXT | - | Customer phone (snapshot) | Contact reference |
-| `customer_address` | TEXT | - | Customer address (snapshot) | Address reference |
-| `customer_gst` | TEXT | - | Customer GST number (snapshot) | Tax compliance |
-| `sales_person_id` | INTEGER | - | Salesperson reference | Sales tracking |
-| `invoice_series_id` | INTEGER | - | Number series used | Numbering tracking |
-| `payment_terms` | TEXT | - | Payment terms | Payment planning |
-| `due_date` | DATE | - | Payment due date | Payment tracking |
-| `place_of_supply` | TEXT | - | Place of supply for GST | Tax compliance |
-| `subtotal_amount` | NUMERIC(15,2) | ✓ | Subtotal before taxes | Amount calculations |
-| `discount_amount` | NUMERIC(15,2) | - | Total discount amount | Discount tracking |
-| `taxable_amount` | NUMERIC(15,2) | ✓ | Taxable amount | Tax calculations |
-| `cgst_amount` | NUMERIC(15,2) | - | Total CGST amount | Tax breakdown |
-| `sgst_amount` | NUMERIC(15,2) | - | Total SGST amount | Tax breakdown |
-| `igst_amount` | NUMERIC(15,2) | - | Total IGST amount | Tax breakdown |
-| `cess_amount` | NUMERIC(15,2) | - | Total cess amount | Tax calculations |
-| `total_tax_amount` | NUMERIC(15,2) | ✓ | Total tax amount | Tax summary |
-| `final_amount` | NUMERIC(15,2) | ✓ | Final invoice amount | Payment processing |
-| `paid_amount` | NUMERIC(15,2) | - | Amount paid | Payment tracking |
-| `outstanding_amount` | NUMERIC(15,2) | - | Amount outstanding | Payment tracking |
-| `invoice_status` | TEXT | ✓ | Status: 'draft', 'posted', 'paid', 'overdue', 'cancelled' | Status tracking |
-| `payment_status` | TEXT | - | Payment: 'unpaid', 'partial', 'paid' | Payment tracking |
-| `e_invoice_number` | TEXT | - | E-invoice IRN | Digital compliance |
-| `e_invoice_status` | TEXT | - | E-invoice status | Digital compliance |
-| `qr_code_data` | TEXT | - | Invoice QR code data | Digital verification |
-| `notes` | TEXT | - | Invoice notes | Documentation |
-| `terms_conditions` | TEXT | - | Terms and conditions | Legal terms |
-| `cancelled_reason` | TEXT | - | Cancellation reason | Cancellation tracking |
-| `cancelled_by` | INTEGER | - | User who cancelled | Cancellation audit |
-| `cancelled_at` | TIMESTAMPTZ | - | Cancellation timestamp | Cancellation tracking |
-| `created_by` | INTEGER | - | User who created invoice | User tracking |
-| `created_at` | TIMESTAMPTZ | - | Creation timestamp | Audit trails |
-| `updated_at` | TIMESTAMPTZ | - | Last update timestamp | Change tracking |
+| `branch_id` | INTEGER | ✓ | Reference to related entity | Association/lookup |
+| `invoice_number` | TEXT | ✓ | Description needed | Standard field usage |
+| `invoice_date` | DATE | - | Description needed | Standard field usage |
+| `invoice_type` | TEXT | - | Description needed | Standard field usage |
+| `order_id` | INTEGER | - | Reference to related entity | Association/lookup |
+| `challan_ids` | INTEGER[] | - | Description needed | Standard field usage |
+| `customer_id` | INTEGER | ✓ | Reference to related entity | Association/lookup |
+| `customer_name` | TEXT | ✓ | Description needed | Standard field usage |
+| `billing_address_id` | INTEGER | - | Reference to related entity | Association/lookup |
+| `shipping_address_id` | INTEGER | - | Reference to related entity | Association/lookup |
+| `place_of_supply` | TEXT | - | Description needed | Standard field usage |
+| `reverse_charge` | BOOLEAN | - | Description needed | Standard field usage |
+| `subtotal_amount` | NUMERIC(15 | - | Description needed | Standard field usage |
+| `discount_amount` | NUMERIC(15 | - | Description needed | Standard field usage |
+| `scheme_discount` | NUMERIC(15 | - | Description needed | Standard field usage |
+| `taxable_amount` | NUMERIC(15 | - | Description needed | Standard field usage |
+| `igst_amount` | NUMERIC(15 | - | Description needed | Standard field usage |
+| `cgst_amount` | NUMERIC(15 | - | Description needed | Standard field usage |
+| `sgst_amount` | NUMERIC(15 | - | Description needed | Standard field usage |
+| `cess_amount` | NUMERIC(15 | - | Description needed | Standard field usage |
+| `total_tax_amount` | NUMERIC(15 | - | Description needed | Standard field usage |
+| `freight_charges` | NUMERIC(15 | - | Description needed | Standard field usage |
+| `insurance_charges` | NUMERIC(15 | - | Description needed | Standard field usage |
+| `other_charges` | NUMERIC(15 | - | Description needed | Standard field usage |
+| `round_off_amount` | NUMERIC(5 | - | Description needed | Standard field usage |
+| `final_amount` | NUMERIC(15 | - | Description needed | Standard field usage |
+| `amount_in_words` | TEXT | - | Description needed | Standard field usage |
+| `payment_terms` | TEXT | - | Description needed | Standard field usage |
+| `due_date` | DATE | - | Description needed | Standard field usage |
+| `payment_status` | TEXT | - | Description needed | Standard field usage |
+| `paid_amount` | NUMERIC(15 | - | Description needed | Standard field usage |
+| `einvoice_required` | BOOLEAN | - | Description needed | Standard field usage |
+| `irn` | TEXT | - | Description needed | Standard field usage |
+| `irn_generated_date` | TIMESTAMP | - | Description needed | Standard field usage |
+| `qr_code` | TEXT | - | Description needed | Standard field usage |
+| `ack_number` | TEXT | - | Description needed | Standard field usage |
+| `ack_date` | TIMESTAMP | - | Description needed | Standard field usage |
+| `invoice_status` | TEXT | - | Description needed | Standard field usage |
+| `cancellation_reason` | TEXT | - | Description needed | Standard field usage |
+| `cancelled_date` | DATE | - | Description needed | Standard field usage |
+| `notes` | TEXT | - | Description needed | Standard field usage |
+| `internal_notes` | TEXT | - | Description needed | Standard field usage |
+| `terms_and_conditions` | TEXT | - | Description needed | Standard field usage |
+| `bank_account_id` | INTEGER | - | Reference to related entity | Association/lookup |
+| `created_at` | TIMESTAMP | - | Timestamp field | Standard field usage |
+| `updated_at` | TIMESTAMP | - | Timestamp field | Standard field usage |
+| `created_by` | INTEGER | ✓ | Creation audit field | Standard field usage |
+| `posted_by` | INTEGER | - | Description needed | Standard field usage |
+| `posted_at` | TIMESTAMP | - | Timestamp field | Standard field usage |
 
-**Example API Response**:
-```json
-{
-  "invoice_id": 1,
-  "invoice_number": "INV-2024-001",
-  "invoice_date": "2024-01-15",
-  "invoice_type": "tax_invoice",
-  "customer_id": 1,
-  "customer_name": "ABC Medical Store",
-  "subtotal_amount": 5000.00,
-  "total_tax_amount": 600.00,
-  "final_amount": 5600.00,
-  "paid_amount": 0.00,
-  "outstanding_amount": 5600.00,
-  "invoice_status": "posted",
-  "payment_status": "unpaid",
-  "due_date": "2024-02-14"
-}
-```
+**Foreign Key Relationships**:
+- `org_id` → `master.organizations.org_id`
+- `branch_id` → `master.org_branches.branch_id`
+- `order_id` → `sales.orders.order_id`
+- `customer_id` → `parties.customers.customer_id`
+- `billing_address_id` → `master.addresses.address_id`
+- `shipping_address_id` → `master.addresses.address_id`
+- `bank_account_id` → `master.org_bank_accounts.bank_account_id`
+- `created_by` → `master.org_users.user_id`
+- `posted_by` → `master.org_users.user_id`
 
 ---
 
 ### 4. invoice_items
-**Purpose**: Individual line items within invoices with batch allocation
+
+### invoice_items
+**Purpose**: [Business purpose description]
 **API Endpoint**: `api.get_invoice_items()`, `api.create_invoice_item()`
 
 | Field | Type | Required | Description | Frontend Usage |
 |-------|------|----------|-------------|----------------|
-| `invoice_item_id` | SERIAL | ✓ | Unique invoice item identifier | Primary key |
-| `invoice_id` | INTEGER | ✓ | Parent invoice reference | Invoice association |
-| `order_item_id` | INTEGER | - | Source order item reference | Order linking |
-| `product_id` | INTEGER | ✓ | Product reference | Product association |
-| `product_name` | TEXT | - | Product name (snapshot) | Display convenience |
-| `product_code` | TEXT | - | Product code (snapshot) | Reference convenience |
-| `hsn_code` | TEXT | - | HSN code (snapshot) | Tax compliance |
-| `batch_allocation` | JSONB | - | Batch allocation details | Batch tracking |
-| `quantity` | NUMERIC(15,3) | ✓ | Total quantity (base + free) | Inventory deduction |
-| `base_quantity` | NUMERIC(15,3) | ✓ | Billable/paid quantity | Revenue calculation |
-| `free_quantity` | NUMERIC(15,3) | - | Free/promotional quantity | Promotional tracking |
-| `unit_price` | NUMERIC(15,4) | ✓ | Unit selling price | Price calculations |
-| `discount_percent` | NUMERIC(5,2) | - | Line item discount % | Discount calculations |
-| `discount_amount` | NUMERIC(15,2) | - | Line item discount amount | Discount tracking |
-| `line_total` | NUMERIC(15,2) | ✓ | Line total before tax | Amount calculations |
-| `cgst_rate` | NUMERIC(5,2) | - | CGST rate % | Tax calculations |
-| `sgst_rate` | NUMERIC(5,2) | - | SGST rate % | Tax calculations |
-| `igst_rate` | NUMERIC(5,2) | - | IGST rate % | Tax calculations |
-| `cgst_percentage` | NUMERIC(5,2) | - | CGST rate % | Tax breakdown |
-| `sgst_percentage` | NUMERIC(5,2) | - | SGST rate % | Tax breakdown |
-| `igst_percentage` | NUMERIC(5,2) | - | IGST rate % | Tax breakdown |
-| `cgst_amount` | NUMERIC(15,2) | - | CGST amount | Tax breakdown |
-| `sgst_amount` | NUMERIC(15,2) | - | SGST amount | Tax breakdown |
-| `igst_amount` | NUMERIC(15,2) | - | IGST amount | Tax breakdown |
-| `cess_percentage` | NUMERIC(5,2) | - | Cess rate % | Tax calculations |
-| `cess_amount` | NUMERIC(15,2) | - | Cess amount | Tax calculations |
-| `line_total` | NUMERIC(15,2) | ✓ | Final line total | Final calculations |
-| `pack_size` | INTEGER | - | Pack size (snapshot) | Inventory calculations |
-| `mrp` | NUMERIC(15,4) | - | MRP (snapshot) | Price validation |
-| `expiry_date` | DATE | - | Product expiry date | Compliance tracking |
-| `created_at` | TIMESTAMPTZ | - | Creation timestamp | Audit trails |
-| `updated_at` | TIMESTAMPTZ | - | Last update timestamp | Change tracking |
+| `invoice_item_id` | SERIAL | ✓ | Primary key identifier | Primary key |
+| `invoice_id` | INTEGER | ✓ | Reference to related entity | Association/lookup |
+| `order_item_id` | INTEGER | - | Reference to related entity | Association/lookup |
+| `product_id` | INTEGER | ✓ | Reference to related entity | Association/lookup |
+| `product_name` | TEXT | ✓ | Description needed | Standard field usage |
+| `product_description` | TEXT | - | Description needed | Standard field usage |
+| `hsn_code` | TEXT | - | Description needed | Standard field usage |
+| `batch_number` | TEXT | - | Description needed | Standard field usage |
+| `manufacturing_date` | DATE | - | Description needed | Standard field usage |
+| `expiry_date` | DATE | - | Description needed | Standard field usage |
+| `quantity` | NUMERIC(15 | ✓ | Description needed | Standard field usage |
+| `uom` | TEXT | ✓ | Description needed | Standard field usage |
+| `pack_type` | TEXT | ✓ | Description needed | Standard field usage |
+| `pack_size` | INTEGER | - | Description needed | Standard field usage |
+| `base_quantity` | NUMERIC(15 | - | Description needed | Standard field usage |
+| `mrp` | NUMERIC(15 | - | Description needed | Standard field usage |
+| `unit_price` | NUMERIC(15 | ✓ | Description needed | Standard field usage |
+| `discount_percent` | NUMERIC(5 | - | Description needed | Standard field usage |
+| `discount_amount` | NUMERIC(15 | - | Description needed | Standard field usage |
+| `taxable_amount` | NUMERIC(15 | - | Description needed | Standard field usage |
+| `igst_rate` | NUMERIC(5 | - | Description needed | Standard field usage |
+| `igst_amount` | NUMERIC(15 | - | Description needed | Standard field usage |
+| `cgst_rate` | NUMERIC(5 | - | Description needed | Standard field usage |
+| `cgst_amount` | NUMERIC(15 | - | Description needed | Standard field usage |
+| `sgst_rate` | NUMERIC(5 | - | Description needed | Standard field usage |
+| `sgst_amount` | NUMERIC(15 | - | Description needed | Standard field usage |
+| `cess_rate` | NUMERIC(5 | - | Description needed | Standard field usage |
+| `cess_amount` | NUMERIC(15 | - | Description needed | Standard field usage |
+| `total_tax_amount` | NUMERIC(15 | - | Description needed | Standard field usage |
+| `line_total` | NUMERIC(15 | ✓ | Description needed | Standard field usage |
+| `is_free_item` | BOOLEAN | - | Description needed | Standard field usage |
+| `display_order` | INTEGER | - | Description needed | Standard field usage |
+| `created_at` | TIMESTAMP | - | Timestamp field | Standard field usage |
 
-**batch_allocation JSONB Structure**:
-```json
-[
-  {
-    "batch_id": 1,
-    "batch_number": "BT240115001",
-    "quantity": 50.0,
-    "expiry_date": "2025-01-15",
-    "unit_cost": 10.50
-  }
-]
-```
+**Foreign Key Relationships**:
+- `invoice_id` → `sales.invoices.invoice_id`
+- `order_item_id` → `sales.order_items.order_item_id`
+- `product_id` → `inventory.products.product_id`
 
 ---
 
 ### 5. delivery_challans
-**Purpose**: Delivery challan/dispatch note management
-**API Endpoint**: `api.get_challans()`, `api.create_challan()`
+
+### delivery_challans
+**Purpose**: [Business purpose description]
+**API Endpoint**: `api.get_delivery_challans()`, `api.create_delivery_challan()`
 
 | Field | Type | Required | Description | Frontend Usage |
 |-------|------|----------|-------------|----------------|
-| `challan_id` | SERIAL | ✓ | Unique challan identifier | Primary key |
+| `challan_id` | SERIAL | ✓ | Primary key identifier | Primary key |
 | `org_id` | UUID | ✓ | Organization ID | Organization filtering |
-| `branch_id` | INTEGER | ✓ | Dispatching branch | Branch tracking |
-| `challan_number` | TEXT | ✓ | Challan document number | Challan identification |
-| `challan_date` | DATE | ✓ | Dispatch date | Date filtering |
-| `challan_type` | TEXT | ✓ | Type: 'delivery', 'return', 'transfer', 'sample' | Challan classification |
-| `invoice_id` | INTEGER | - | Related invoice reference | Invoice linking |
-| `order_id` | INTEGER | - | Related order reference | Order linking |
-| `customer_id` | INTEGER | ✓ | Customer reference | Customer association |
-| `customer_name` | TEXT | - | Customer name (snapshot) | Display convenience |
-| `delivery_address` | TEXT | ✓ | Delivery address | Logistics information |
-| `delivery_contact_person` | TEXT | - | Contact person at delivery | Contact reference |
-| `delivery_phone` | TEXT | - | Contact phone | Contact reference |
-| `transporter_name` | TEXT | - | Transporter/logistics partner | Logistics tracking |
-| `vehicle_number` | TEXT | - | Vehicle registration number | Transport tracking |
-| `driver_name` | TEXT | - | Driver name | Transport information |
-| `driver_phone` | TEXT | - | Driver contact | Transport contact |
-| `lr_number` | TEXT | - | Lorry receipt number | Transport reference |
-| `lr_date` | DATE | - | LR date | Transport tracking |
-| `distance_km` | NUMERIC(10,2) | - | Delivery distance | Logistics planning |
-| `e_way_bill_number` | TEXT | - | E-way bill number | Compliance tracking |
-| `e_way_bill_date` | DATE | - | E-way bill date | Compliance tracking |
-| `e_way_bill_valid_until` | TIMESTAMPTZ | - | E-way bill validity | Compliance tracking |
-| `total_packages` | INTEGER | - | Number of packages | Logistics information |
-| `total_weight_kg` | NUMERIC(10,3) | - | Total weight | Logistics planning |
-| `subtotal_amount` | NUMERIC(15,2) | - | Subtotal amount | Amount reference |
-| `total_amount` | NUMERIC(15,2) | - | Total challan amount | Amount reference |
-| `challan_status` | TEXT | ✓ | Status: 'draft', 'dispatched', 'in_transit', 'delivered', 'returned' | Status tracking |
-| `dispatch_time` | TIMESTAMPTZ | - | Actual dispatch time | Logistics tracking |
-| `delivered_time` | TIMESTAMPTZ | - | Actual delivery time | Delivery tracking |
-| `received_by` | TEXT | - | Person who received goods | Delivery confirmation |
-| `delivery_notes` | TEXT | - | Delivery notes/comments | Documentation |
-| `created_by` | INTEGER | - | User who created challan | User tracking |
-| `created_at` | TIMESTAMPTZ | - | Creation timestamp | Audit trails |
-| `updated_at` | TIMESTAMPTZ | - | Last update timestamp | Change tracking |
+| `branch_id` | INTEGER | ✓ | Reference to related entity | Association/lookup |
+| `challan_number` | TEXT | ✓ | Description needed | Standard field usage |
+| `challan_date` | DATE | - | Description needed | Standard field usage |
+| `challan_type` | TEXT | - | Description needed | Standard field usage |
+| `order_id` | INTEGER | - | Reference to related entity | Association/lookup |
+| `invoice_id` | INTEGER | - | Reference to related entity | Association/lookup |
+| `customer_id` | INTEGER | ✓ | Reference to related entity | Association/lookup |
+| `delivery_address_id` | INTEGER | - | Reference to related entity | Association/lookup |
+| `dispatch_date` | DATE | - | Description needed | Standard field usage |
+| `dispatch_time` | TIME | - | Description needed | Standard field usage |
+| `dispatch_address_id` | INTEGER | - | Reference to related entity | Association/lookup |
+| `transport_mode` | TEXT | - | Description needed | Standard field usage |
+| `transporter_name` | TEXT | - | Description needed | Standard field usage |
+| `vehicle_number` | TEXT | - | Description needed | Standard field usage |
+| `lr_number` | TEXT | - | Description needed | Standard field usage |
+| `lr_date` | DATE | - | Description needed | Standard field usage |
+| `freight_charges` | NUMERIC(15 | - | Description needed | Standard field usage |
+| `eway_bill_required` | BOOLEAN | - | Description needed | Standard field usage |
+| `eway_bill_number` | TEXT | - | Description needed | Standard field usage |
+| `eway_bill_date` | DATE | - | Description needed | Standard field usage |
+| `eway_bill_validity_days` | INTEGER | - | Description needed | Standard field usage |
+| `eway_bill_data` | JSONB | - | Description needed | Standard field usage |
+| `total_quantity` | NUMERIC(15 | - | Description needed | Standard field usage |
+| `total_amount` | NUMERIC(15 | - | Description needed | Standard field usage |
+| `challan_status` | TEXT | - | Description needed | Standard field usage |
+| `delivery_status` | TEXT | - | Description needed | Standard field usage |
+| `delivered_date` | DATE | - | Description needed | Standard field usage |
+| `delivered_time` | TIME | - | Description needed | Standard field usage |
+| `received_by` | TEXT | - | Description needed | Standard field usage |
+| `delivery_notes` | TEXT | - | Description needed | Standard field usage |
+| `pod_document` | TEXT | - | Description needed | Standard field usage |
+| `is_returnable` | BOOLEAN | - | Description needed | Standard field usage |
+| `return_by_date` | DATE | - | Description needed | Standard field usage |
+| `return_status` | TEXT | - | Description needed | Standard field usage |
+| `notes` | TEXT | - | Description needed | Standard field usage |
+| `internal_notes` | TEXT | - | Description needed | Standard field usage |
+| `created_at` | TIMESTAMP | - | Timestamp field | Standard field usage |
+| `updated_at` | TIMESTAMP | - | Timestamp field | Standard field usage |
+| `created_by` | INTEGER | ✓ | Creation audit field | Standard field usage |
 
-**Example API Response**:
-```json
-{
-  "challan_id": 1,
-  "challan_number": "DC-2024-001",
-  "challan_date": "2024-01-15",
-  "challan_type": "delivery",
-  "customer_name": "ABC Medical Store",
-  "delivery_address": "123 Main Street, Mumbai",
-  "transporter_name": "XYZ Logistics",
-  "vehicle_number": "MH01AB1234",
-  "e_way_bill_number": "123456789012",
-  "challan_status": "dispatched",
-  "total_packages": 2,
-  "total_weight_kg": 15.5
-}
-```
+**Foreign Key Relationships**:
+- `org_id` → `master.organizations.org_id`
+- `branch_id` → `master.org_branches.branch_id`
+- `order_id` → `sales.orders.order_id`
+- `invoice_id` → `sales.invoices.invoice_id`
+- `customer_id` → `parties.customers.customer_id`
+- `delivery_address_id` → `master.addresses.address_id`
+- `dispatch_address_id` → `master.addresses.address_id`
+- `created_by` → `master.org_users.user_id`
 
 ---
 
-### 6. sales_returns
-**Purpose**: Sales return and credit note management
-**API Endpoint**: `api.get_returns()`, `api.create_return()`
+### 6. delivery_challan_items
+
+### delivery_challan_items
+**Purpose**: [Business purpose description]
+**API Endpoint**: `api.get_delivery_challan_items()`, `api.create_delivery_challan_item()`
 
 | Field | Type | Required | Description | Frontend Usage |
 |-------|------|----------|-------------|----------------|
-| `return_id` | SERIAL | ✓ | Unique return identifier | Primary key |
+| `challan_item_id` | SERIAL | ✓ | Primary key identifier | Primary key |
+| `challan_id` | INTEGER | ✓ | Reference to related entity | Association/lookup |
+| `order_item_id` | INTEGER | - | Reference to related entity | Association/lookup |
+| `product_id` | INTEGER | ✓ | Reference to related entity | Association/lookup |
+| `ordered_quantity` | NUMERIC(15 | - | Description needed | Standard field usage |
+| `dispatched_quantity` | NUMERIC(15 | ✓ | Description needed | Standard field usage |
+| `delivered_quantity` | NUMERIC(15 | - | Description needed | Standard field usage |
+| `returned_quantity` | NUMERIC(15 | - | Description needed | Standard field usage |
+| `damaged_quantity` | NUMERIC(15 | - | Description needed | Standard field usage |
+| `uom` | TEXT | ✓ | Description needed | Standard field usage |
+| `pack_type` | TEXT | ✓ | Description needed | Standard field usage |
+| `item_status` | TEXT | - | Description needed | Standard field usage |
+| `item_notes` | TEXT | - | Description needed | Standard field usage |
+| `display_order` | INTEGER | - | Description needed | Standard field usage |
+| `created_at` | TIMESTAMP | - | Timestamp field | Standard field usage |
+
+**Foreign Key Relationships**:
+- `challan_id` → `sales.delivery_challans.challan_id`
+- `order_item_id` → `sales.order_items.order_item_id`
+- `product_id` → `inventory.products.product_id`
+
+---
+
+### 7. sales_returns
+
+### sales_returns
+**Purpose**: [Business purpose description]
+**API Endpoint**: `api.get_sales_returns()`, `api.create_sales_return()`
+
+| Field | Type | Required | Description | Frontend Usage |
+|-------|------|----------|-------------|----------------|
+| `return_id` | SERIAL | ✓ | Primary key identifier | Primary key |
 | `org_id` | UUID | ✓ | Organization ID | Organization filtering |
-| `branch_id` | INTEGER | ✓ | Return processing branch | Branch tracking |
-| `return_number` | TEXT | ✓ | Return document number | Return identification |
-| `return_date` | DATE | ✓ | Return date | Date filtering |
-| `return_type` | TEXT | ✓ | Type: 'quality_issue', 'damage', 'expiry', 'excess_supply', 'customer_request' | Return classification |
-| `invoice_id` | INTEGER | ✓ | Original invoice reference | Invoice linking |
-| `invoice_number` | TEXT | - | Invoice number (snapshot) | Reference convenience |
-| `customer_id` | INTEGER | ✓ | Customer reference | Customer association |
-| `customer_name` | TEXT | - | Customer name (snapshot) | Display convenience |
-| `return_reason` | TEXT | ✓ | Detailed return reason | Documentation |
-| `subtotal_amount` | NUMERIC(15,2) | ✓ | Return subtotal | Amount calculations |
-| `tax_amount` | NUMERIC(15,2) | - | Return tax amount | Tax calculations |
-| `total_amount` | NUMERIC(15,2) | ✓ | Total return amount | Amount tracking |
-| `credit_note_number` | TEXT | - | Generated credit note number | Credit note reference |
-| `credit_note_date` | DATE | - | Credit note date | Credit tracking |
-| `credit_note_status` | TEXT | - | Status: 'pending', 'issued', 'adjusted' | Credit tracking |
-| `refund_mode` | TEXT | - | Mode: 'cash', 'bank_transfer', 'credit_adjustment', 'replacement' | Refund processing |
-| `refund_amount` | NUMERIC(15,2) | - | Actual refund amount | Refund tracking |
-| `approval_status` | TEXT | ✓ | Status: 'pending', 'approved', 'rejected' | Approval workflow |
-| `approved_by` | INTEGER | - | Approver user ID | Approval tracking |
-| `approved_at` | TIMESTAMPTZ | - | Approval timestamp | Approval tracking |
-| `rejection_reason` | TEXT | - | Rejection reason if rejected | Rejection documentation |
-| `quality_check_status` | TEXT | - | QC status: 'pending', 'passed', 'failed' | Quality tracking |
-| `quality_check_notes` | TEXT | - | QC notes | Quality documentation |
-| `created_by` | INTEGER | - | User who created return | User tracking |
-| `created_at` | TIMESTAMPTZ | - | Creation timestamp | Audit trails |
-| `updated_at` | TIMESTAMPTZ | - | Last update timestamp | Change tracking |
+| `branch_id` | INTEGER | ✓ | Reference to related entity | Association/lookup |
+| `return_number` | TEXT | ✓ | Description needed | Standard field usage |
+| `return_date` | DATE | - | Description needed | Standard field usage |
+| `return_type` | TEXT | ✓ | Description needed | Standard field usage |
+| `invoice_id` | INTEGER | - | Reference to related entity | Association/lookup |
+| `challan_id` | INTEGER | - | Reference to related entity | Association/lookup |
+| `customer_id` | INTEGER | ✓ | Reference to related entity | Association/lookup |
+| `return_reason` | TEXT | ✓ | Description needed | Standard field usage |
+| `return_category` | TEXT | - | Description needed | Standard field usage |
+| `approval_required` | BOOLEAN | - | Description needed | Standard field usage |
+| `approval_status` | TEXT | - | Description needed | Standard field usage |
+| `approved_by` | INTEGER | - | Description needed | Standard field usage |
+| `approved_at` | TIMESTAMP | - | Timestamp field | Standard field usage |
+| `return_amount` | NUMERIC(15 | - | Description needed | Standard field usage |
+| `tax_amount` | NUMERIC(15 | - | Description needed | Standard field usage |
+| `total_amount` | NUMERIC(15 | - | Description needed | Standard field usage |
+| `credit_note_number` | TEXT | - | Description needed | Standard field usage |
+| `credit_note_date` | DATE | - | Description needed | Standard field usage |
+| `credit_note_status` | TEXT | - | Description needed | Standard field usage |
+| `igst_amount` | NUMERIC(15 | - | Description needed | Standard field usage |
+| `cgst_amount` | NUMERIC(15 | - | Description needed | Standard field usage |
+| `sgst_amount` | NUMERIC(15 | - | Description needed | Standard field usage |
+| `adjustment_type` | TEXT | - | Description needed | Standard field usage |
+| `adjusted_amount` | NUMERIC(15 | - | Description needed | Standard field usage |
+| `pending_amount` | NUMERIC(15 | - | Description needed | Standard field usage |
+| `goods_received_date` | DATE | - | Description needed | Standard field usage |
+| `goods_received_by` | INTEGER | - | Description needed | Standard field usage |
+| `quality_check_status` | TEXT | - | Description needed | Standard field usage |
+| `notes` | TEXT | - | Description needed | Standard field usage |
+| `internal_notes` | TEXT | - | Description needed | Standard field usage |
+| `created_at` | TIMESTAMP | - | Timestamp field | Standard field usage |
+| `updated_at` | TIMESTAMP | - | Timestamp field | Standard field usage |
+| `created_by` | INTEGER | ✓ | Creation audit field | Standard field usage |
+
+**Foreign Key Relationships**:
+- `org_id` → `master.organizations.org_id`
+- `branch_id` → `master.org_branches.branch_id`
+- `invoice_id` → `sales.invoices.invoice_id`
+- `challan_id` → `sales.delivery_challans.challan_id`
+- `customer_id` → `parties.customers.customer_id`
+- `approved_by` → `master.org_users.user_id`
+- `goods_received_by` → `master.org_users.user_id`
+- `created_by` → `master.org_users.user_id`
 
 ---
 
-### 7. sales_return_items
-**Purpose**: Individual items in sales returns
-**API Endpoint**: `api.get_return_items()`, `api.create_return_item()`
+### 8. sales_return_items
+
+### sales_return_items
+**Purpose**: [Business purpose description]
+**API Endpoint**: `api.get_sales_return_items()`, `api.create_sales_return_item()`
 
 | Field | Type | Required | Description | Frontend Usage |
 |-------|------|----------|-------------|----------------|
-| `return_item_id` | SERIAL | ✓ | Unique return item identifier | Primary key |
-| `return_id` | INTEGER | ✓ | Parent return reference | Return association |
-| `invoice_item_id` | INTEGER | ✓ | Original invoice item reference | Item linking |
-| `product_id` | INTEGER | ✓ | Product reference | Product association |
-| `product_name` | TEXT | - | Product name (snapshot) | Display convenience |
-| `batch_id` | INTEGER | - | Batch reference | Batch tracking |
-| `batch_number` | TEXT | - | Batch number (snapshot) | Batch reference |
-| `returned_quantity` | NUMERIC(15,3) | ✓ | Returned quantity | Quantity tracking |
-| `saleable_quantity` | NUMERIC(15,3) | - | Quantity fit for resale | Stock restoration |
-| `damaged_quantity` | NUMERIC(15,3) | - | Damaged quantity | Loss tracking |
-| `expired_quantity` | NUMERIC(15,3) | - | Expired quantity | Waste tracking |
-| `unit_price` | NUMERIC(15,4) | ✓ | Original unit price | Price calculations |
-| `line_total` | NUMERIC(15,2) | ✓ | Return line total | Amount calculations |
-| `return_reason` | TEXT | ✓ | Item-specific return reason | Documentation |
-| `damage_reason` | TEXT | - | Damage reason if applicable | Quality documentation |
-| `quality_check_result` | TEXT | - | QC result: 'saleable', 'damaged', 'expired' | Quality classification |
-| `created_at` | TIMESTAMPTZ | - | Creation timestamp | Audit trails |
+| `return_item_id` | SERIAL | ✓ | Primary key identifier | Primary key |
+| `return_id` | INTEGER | ✓ | Reference to related entity | Association/lookup |
+| `invoice_item_id` | INTEGER | - | Reference to related entity | Association/lookup |
+| `product_id` | INTEGER | ✓ | Reference to related entity | Association/lookup |
+| `batch_number` | TEXT | - | Description needed | Standard field usage |
+| `return_quantity` | NUMERIC(15 | ✓ | Description needed | Standard field usage |
+| `uom` | TEXT | ✓ | Description needed | Standard field usage |
+| `damaged_quantity` | NUMERIC(15 | - | Description needed | Standard field usage |
+| `saleable_quantity` | NUMERIC(15 | - | Description needed | Standard field usage |
+| `unit_price` | NUMERIC(15 | - | Description needed | Standard field usage |
+| `return_value` | NUMERIC(15 | - | Description needed | Standard field usage |
+| `tax_amount` | NUMERIC(15 | - | Description needed | Standard field usage |
+| `item_return_reason` | TEXT | - | Description needed | Standard field usage |
+| `disposition` | TEXT | - | Description needed | Standard field usage |
+| `created_at` | TIMESTAMP | - | Timestamp field | Standard field usage |
+
+**Foreign Key Relationships**:
+- `return_id` → `sales.sales_returns.return_id`
+- `invoice_item_id` → `sales.invoice_items.invoice_item_id`
+- `product_id` → `inventory.products.product_id`
 
 ---
 
-## API Integration Notes
+### 9. price_lists
 
-### Order Management
-```javascript
-// Create order with validation
-const order = {
-  customer_id: 1,
-  order_type: "regular",
-  delivery_date: "2024-01-17",
-  items: [
-    {
-      product_id: 101,
-      quantity: 100,
-      unit_price: 15.00,
-      gst_percentage: 12.0
-    }
-  ]
-};
+### price_lists
+**Purpose**: [Business purpose description]
+**API Endpoint**: `api.get_price_lists()`, `api.create_price_list()`
 
-// Order status workflow
-const statusFlow = ['draft', 'confirmed', 'processing', 'shipped', 'delivered'];
-```
+| Field | Type | Required | Description | Frontend Usage |
+|-------|------|----------|-------------|----------------|
+| `price_list_id` | SERIAL | ✓ | Primary key identifier | Primary key |
+| `org_id` | UUID | ✓ | Organization ID | Organization filtering |
+| `price_list_name` | TEXT | ✓ | Description needed | Standard field usage |
+| `price_list_type` | TEXT | ✓ | Description needed | Standard field usage |
+| `currency_code` | TEXT | - | Description needed | Standard field usage |
+| `effective_from` | DATE | ✓ | Description needed | Standard field usage |
+| `effective_until` | DATE | - | Description needed | Standard field usage |
+| `applicable_branches` | INTEGER[] | - | Description needed | Standard field usage |
+| `applicable_territories` | INTEGER[] | - | Description needed | Standard field usage |
+| `applicable_customer_groups` | INTEGER[] | - | Description needed | Standard field usage |
+| `parent_price_list_id` | INTEGER | - | Reference to related entity | Association/lookup |
+| `adjustment_type` | TEXT | - | Description needed | Standard field usage |
+| `adjustment_value` | NUMERIC(15 | - | Description needed | Standard field usage |
+| `requires_approval` | BOOLEAN | - | Description needed | Standard field usage |
+| `approval_status` | TEXT | - | Description needed | Standard field usage |
+| `approved_by` | INTEGER | - | Description needed | Standard field usage |
+| `approved_date` | DATE | - | Description needed | Standard field usage |
+| `is_active` | BOOLEAN | - | Active status flag | Standard field usage |
+| `is_default` | BOOLEAN | - | Description needed | Standard field usage |
+| `description` | TEXT | - | Description needed | Standard field usage |
+| `created_at` | TIMESTAMP | - | Timestamp field | Standard field usage |
+| `updated_at` | TIMESTAMP | - | Timestamp field | Standard field usage |
+| `created_by` | INTEGER | ✓ | Creation audit field | Standard field usage |
 
-### Invoice Generation
-```javascript
-// Generate invoice from order
-POST /api/invoices/generate-from-order
-{
-  "order_id": 1,
-  "invoice_date": "2024-01-15",
-  "due_date": "2024-02-14",
-  "batch_allocations": [
-    {
-      "order_item_id": 1,
-      "batch_id": 1,
-      "quantity": 100
-    }
-  ]
-}
-```
+**Foreign Key Relationships**:
+- `org_id` → `master.organizations.org_id`
+- `parent_price_list_id` → `sales.price_lists.price_list_id`
+- `approved_by` → `master.org_users.user_id`
+- `created_by` → `master.org_users.user_id`
 
-### Batch Allocation
-```javascript
-// Batch allocation for invoice items
-const batchAllocation = [
-  {
-    "batch_id": 1,
-    "batch_number": "BT240115001",
-    "quantity": 50.0,
-    "expiry_date": "2025-01-15",
-    "unit_cost": 10.50
-  },
-  {
-    "batch_id": 2,
-    "batch_number": "BT240120001", 
-    "quantity": 50.0,
-    "expiry_date": "2025-02-20",
-    "unit_cost": 11.00
-  }
-];
-```
+---
 
-### Tax Calculations
-```javascript
-// GST calculation logic
-function calculateGST(amount, gstRate, customerState, companyState) {
-  const taxAmount = (amount * gstRate) / 100;
-  
-  if (customerState === companyState) {
-    // Intra-state: CGST + SGST
-    return {
-      cgst_percentage: gstRate / 2,
-      sgst_percentage: gstRate / 2,
-      cgst_amount: taxAmount / 2,
-      sgst_amount: taxAmount / 2,
-      igst_percentage: 0,
-      igst_amount: 0
-    };
-  } else {
-    // Inter-state: IGST
-    return {
-      cgst_percentage: 0,
-      sgst_percentage: 0,
-      cgst_amount: 0,
-      sgst_amount: 0,
-      igst_percentage: gstRate,
-      igst_amount: taxAmount
-    };
-  }
-}
-```
+### 10. price_list_items
 
-### Return Processing
-```javascript
-// Process sales return
-const salesReturn = {
-  invoice_id: 1,
-  return_type: "quality_issue",
-  return_reason: "Product damaged during transport",
-  items: [
-    {
-      invoice_item_id: 1,
-      returned_quantity: 10,
-      saleable_quantity: 0,
-      damaged_quantity: 10,
-      return_reason: "Physical damage"
-    }
-  ]
-};
-```
+### price_list_items
+**Purpose**: [Business purpose description]
+**API Endpoint**: `api.get_price_list_items()`, `api.create_price_list_item()`
 
-### Search and Filtering
-```javascript
-// Advanced sales search
-GET /api/sales/search?
-  customer_id=1&                   // Customer filter
-  invoice_status=posted&           // Status filter
-  payment_status=unpaid&           // Payment filter
-  date_from=2024-01-01&           // Date range
-  date_to=2024-01-31&
-  min_amount=1000&                // Amount range
-  salesperson_id=5&               // Salesperson filter
-  sort_by=invoice_date&           // Sort options
-  order=desc                      // Sort direction
-```
+| Field | Type | Required | Description | Frontend Usage |
+|-------|------|----------|-------------|----------------|
+| `price_list_item_id` | SERIAL | ✓ | Primary key identifier | Primary key |
+| `price_list_id` | INTEGER | ✓ | Reference to related entity | Association/lookup |
+| `product_id` | INTEGER | ✓ | Reference to related entity | Association/lookup |
+| `base_unit_price` | NUMERIC(15 | - | Description needed | Standard field usage |
+| `pack_unit_price` | NUMERIC(15 | - | Description needed | Standard field usage |
+| `box_unit_price` | NUMERIC(15 | - | Description needed | Standard field usage |
+| `case_unit_price` | NUMERIC(15 | - | Description needed | Standard field usage |
+| `mrp` | NUMERIC(15 | - | Description needed | Standard field usage |
+| `ptr_margin_percent` | NUMERIC(5 | - | Description needed | Standard field usage |
+| `pts_margin_percent` | NUMERIC(5 | - | Description needed | Standard field usage |
+| `min_order_quantity` | NUMERIC(15 | - | Description needed | Standard field usage |
+| `min_order_pack_type` | TEXT | - | Description needed | Standard field usage |
+| `max_discount_percent` | NUMERIC(5 | - | Description needed | Standard field usage |
+| `is_active` | BOOLEAN | - | Active status flag | Standard field usage |
+| `created_at` | TIMESTAMP | - | Timestamp field | Standard field usage |
+| `updated_at` | TIMESTAMP | - | Timestamp field | Standard field usage |
 
-### Compliance Features
-1. **E-Invoice Integration**: IRN generation and QR codes
-2. **E-Way Bill**: Automatic generation for interstate sales
-3. **GST Compliance**: Proper tax calculation and reporting
-4. **Batch Tracking**: Complete batch traceability
-5. **Return Management**: Quality-based return processing
+**Foreign Key Relationships**:
+- `price_list_id` → `sales.price_lists.price_list_id`
+- `product_id` → `inventory.products.product_id`
 
-### Validation Rules
-1. **Order Quantities**: Cannot exceed available stock
-2. **Pricing**: Cannot be below cost unless authorized
-3. **GST Numbers**: Must be valid if provided
-4. **Batch Allocation**: Must match invoice quantities
-5. **Return Quantities**: Cannot exceed original invoice quantities
+---
+
+### 11. sales_schemes
+
+### sales_schemes
+**Purpose**: [Business purpose description]
+**API Endpoint**: `api.get_sales_schemes()`, `api.create_sales_scheme()`
+
+| Field | Type | Required | Description | Frontend Usage |
+|-------|------|----------|-------------|----------------|
+| `scheme_id` | SERIAL | ✓ | Primary key identifier | Primary key |
+| `org_id` | UUID | ✓ | Organization ID | Organization filtering |
+| `scheme_code` | TEXT | ✓ | Description needed | Standard field usage |
+| `scheme_name` | TEXT | ✓ | Description needed | Standard field usage |
+| `scheme_type` | TEXT | ✓ | Description needed | Standard field usage |
+| `start_date` | DATE | ✓ | Description needed | Standard field usage |
+| `end_date` | DATE | ✓ | Description needed | Standard field usage |
+| `applicable_branches` | INTEGER[] | - | Description needed | Standard field usage |
+| `applicable_territories` | INTEGER[] | - | Description needed | Standard field usage |
+| `applicable_customers` | INTEGER[] | - | Description needed | Standard field usage |
+| `applicable_customer_types` | TEXT[] | - | Description needed | Standard field usage |
+| `scheme_rules` | JSONB | ✓ | Description needed | Standard field usage |
+| `applicable_products` | INTEGER[] | - | Description needed | Standard field usage |
+| `applicable_categories` | INTEGER[] | - | Description needed | Standard field usage |
+| `scheme_budget` | NUMERIC(15 | - | Description needed | Standard field usage |
+| `utilized_budget` | NUMERIC(15 | - | Description needed | Standard field usage |
+| `max_benefit_per_order` | NUMERIC(15 | - | Description needed | Standard field usage |
+| `approval_status` | TEXT | - | Description needed | Standard field usage |
+| `approved_by` | INTEGER | - | Description needed | Standard field usage |
+| `approved_date` | DATE | - | Description needed | Standard field usage |
+| `is_active` | BOOLEAN | - | Active status flag | Standard field usage |
+| `can_combine` | BOOLEAN | - | Description needed | Standard field usage |
+| `total_orders` | INTEGER | - | Description needed | Standard field usage |
+| `total_discount_given` | NUMERIC(15 | - | Description needed | Standard field usage |
+| `created_at` | TIMESTAMP | - | Timestamp field | Standard field usage |
+| `updated_at` | TIMESTAMP | - | Timestamp field | Standard field usage |
+| `created_by` | INTEGER | ✓ | Creation audit field | Standard field usage |
+
+**Foreign Key Relationships**:
+- `org_id` → `master.organizations.org_id`
+- `approved_by` → `master.org_users.user_id`
+- `created_by` → `master.org_users.user_id`
+
+---
+
+### 12. sales_targets
+
+### sales_targets
+**Purpose**: [Business purpose description]
+**API Endpoint**: `api.get_sales_targets()`, `api.create_sales_target()`
+
+| Field | Type | Required | Description | Frontend Usage |
+|-------|------|----------|-------------|----------------|
+| `target_id` | SERIAL | ✓ | Primary key identifier | Primary key |
+| `org_id` | UUID | ✓ | Organization ID | Organization filtering |
+| `target_year` | INTEGER | ✓ | Description needed | Standard field usage |
+| `target_month` | INTEGER | - | Description needed | Standard field usage |
+| `target_quarter` | INTEGER | - | Description needed | Standard field usage |
+| `period_type` | TEXT | ✓ | Description needed | Standard field usage |
+| `target_type` | TEXT | ✓ | Description needed | Standard field usage |
+| `target_entity_id` | INTEGER | ✓ | Reference to related entity | Association/lookup |
+| `revenue_target` | NUMERIC(15 | - | Description needed | Standard field usage |
+| `quantity_target` | NUMERIC(15 | - | Description needed | Standard field usage |
+| `new_customer_target` | INTEGER | - | Description needed | Standard field usage |
+| `visit_target` | INTEGER | - | Description needed | Standard field usage |
+| `revenue_achieved` | NUMERIC(15 | - | Description needed | Standard field usage |
+| `quantity_achieved` | NUMERIC(15 | - | Description needed | Standard field usage |
+| `new_customers_achieved` | INTEGER | - | Description needed | Standard field usage |
+| `visits_achieved` | INTEGER | - | Description needed | Standard field usage |
+| `revenue_achievement_percent` | NUMERIC(5 | - | Description needed | Standard field usage |
+| `overall_achievement_percent` | NUMERIC(5 | - | Description needed | Standard field usage |
+| `incentive_percentage` | NUMERIC(5 | - | Description needed | Standard field usage |
+| `calculated_incentive` | NUMERIC(15 | - | Description needed | Standard field usage |
+| `status` | TEXT | - | Description needed | Standard field usage |
+| `notes` | TEXT | - | Description needed | Standard field usage |
+| `created_at` | TIMESTAMP | - | Timestamp field | Standard field usage |
+| `updated_at` | TIMESTAMP | - | Timestamp field | Standard field usage |
+| `created_by` | INTEGER | ✓ | Creation audit field | Standard field usage |
+
+**Foreign Key Relationships**:
+- `org_id` → `master.organizations.org_id`
+- `created_by` → `master.org_users.user_id`
+
+---
+
+### 13. customer_visits
+
+### customer_visits
+**Purpose**: [Business purpose description]
+**API Endpoint**: `api.get_customer_visits()`, `api.create_customer_visit()`
+
+| Field | Type | Required | Description | Frontend Usage |
+|-------|------|----------|-------------|----------------|
+| `visit_id` | SERIAL | ✓ | Primary key identifier | Primary key |
+| `org_id` | UUID | ✓ | Organization ID | Organization filtering |
+| `visit_date` | DATE | ✓ | Description needed | Standard field usage |
+| `visit_time` | TIME | - | Description needed | Standard field usage |
+| `customer_id` | INTEGER | ✓ | Reference to related entity | Association/lookup |
+| `visited_by` | INTEGER | ✓ | Description needed | Standard field usage |
+| `route_id` | INTEGER | - | Reference to related entity | Association/lookup |
+| `visit_purpose` | TEXT | ✓ | Description needed | Standard field usage |
+| `visit_outcome` | TEXT | - | Description needed | Standard field usage |
+| `order_id` | INTEGER | - | Reference to related entity | Association/lookup |
+| `collection_amount` | NUMERIC(15 | - | Description needed | Standard field usage |
+| `check_in_time` | TIMESTAMP | - | Description needed | Standard field usage |
+| `check_out_time` | TIMESTAMP | - | Description needed | Standard field usage |
+| `visit_location` | JSONB | - | Description needed | Standard field usage |
+| `visit_notes` | TEXT | - | Description needed | Standard field usage |
+| `follow_up_required` | BOOLEAN | - | Description needed | Standard field usage |
+| `follow_up_date` | DATE | - | Description needed | Standard field usage |
+| `follow_up_notes` | TEXT | - | Description needed | Standard field usage |
+| `visit_photos` | JSONB | - | Description needed | Standard field usage |
+| `visit_status` | TEXT | - | Description needed | Standard field usage |
+| `created_at` | TIMESTAMP | - | Timestamp field | Standard field usage |
+| `updated_at` | TIMESTAMP | - | Timestamp field | Standard field usage |
+
+**Foreign Key Relationships**:
+- `org_id` → `master.organizations.org_id`
+- `customer_id` → `parties.customers.customer_id`
+- `visited_by` → `master.org_users.user_id`
+- `route_id` → `parties.routes.route_id`
+- `order_id` → `sales.orders.order_id`
+
+---
