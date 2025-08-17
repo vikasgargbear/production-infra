@@ -282,7 +282,6 @@ async def create_product(
             "category_id": product.get("category_id") if product.get("category_id") else None,
             "hsn_code": product.get("hsn_code") or "3004",
             "gst_percentage": product.get("gst_percentage") or product.get("gst_rate") or 12,
-            "pack_config": json.dumps({}),  # Default empty JSONB
             "base_uom_id": None,  # Let it be NULL if no UOMs exist
             "maintain_batch": True,
             "maintain_expiry": True,
@@ -314,11 +313,11 @@ async def create_product(
         # Build INSERT with only non-NULL foreign keys
         columns = ["org_id", "product_code", "product_name", "generic_name",
                   "brand", "manufacturer", "composition", "hsn_code", 
-                  "gst_percentage", "pack_config", "maintain_batch", 
+                  "gst_percentage", "maintain_batch", 
                   "maintain_expiry", "is_active", "created_at", "updated_at"]
         values = [":org_id", ":product_code", ":product_name", ":generic_name",
                  ":brand", ":manufacturer", "CAST(:composition AS jsonb)", ":hsn_code",
-                 ":gst_percentage", "CAST(:pack_config AS jsonb)", ":maintain_batch",
+                 ":gst_percentage", ":maintain_batch",
                  ":maintain_expiry", ":is_active", "CURRENT_TIMESTAMP", "CURRENT_TIMESTAMP"]
         
         # Only add foreign keys if they're not None
