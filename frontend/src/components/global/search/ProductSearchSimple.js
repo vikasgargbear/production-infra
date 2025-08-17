@@ -47,7 +47,7 @@ const ProductSearchSimple = forwardRef(({ onAddItem, onCreateProduct, showBatchS
       } finally {
         setLoading(false);
       }
-    }, 300),
+    }, 100), // Reduced to 100ms for lightning-fast search
     []
   );
 

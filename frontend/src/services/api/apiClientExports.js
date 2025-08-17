@@ -42,25 +42,62 @@ apiClient.interceptors.response.use(
 // Define the customerAPI directly in JavaScript to avoid TypeScript export issues
 export const customerAPI = {
   /**
-   * Search customers using PostgreSQL function
+   * Lightning-fast customer search for production
    */
   search: async (query, options = {}) => {
-    const response = await apiClient.get('/customers/', {
-      params: {
-        search: query,
-        customer_type: options.customerType,
-        limit: options.limit || 50,
-        offset: options.offset || 0,
-      },
-    });
-    // Wrap the response to match expected format
-    return {
-      success: true,
-      data: response.data.customers || [],
-      total: response.data.total,
-      page: response.data.page,
-      per_page: response.data.per_page
-    };
+    try {
+      // Use PostgreSQL wrapper endpoint for faster response
+      const response = await apiClient.get('/pg/customers/search', {
+        params: {
+          q: query,
+          limit: Math.min(options.limit || 20, 20), // Limit to 20 for speed
+          include_stats: false, // Never include stats for search
+        },
+        timeout: 3000, // 3 second timeout for production
+      });
+      
+      return {
+        success: true,
+        data: response.data.customers || response.data || [],
+        total: response.data.total || 0
+      };
+    } catch (error) {
+      // Fallback to simplified search if PostgreSQL endpoint fails
+      if (error.code === 'ECONNABORTED' || error.response?.status === 404) {
+        try {
+          const response = await apiClient.get('/customers/', {
+            params: {
+              search: query,
+              limit: 10,
+              include_stats: false,
+            },
+            timeout: 5000,
+          });
+          
+          return {
+            success: true,
+            data: Array.isArray(response.data) ? response.data : [],
+            total: response.data?.length || 0
+          };
+        } catch (fallbackError) {
+          console.warn('Customer search failed completely:', fallbackError);
+          return {
+            success: false,
+            data: [],
+            total: 0,
+            error: 'Search temporarily unavailable'
+          };
+        }
+      }
+      
+      console.warn('Customer search error:', error);
+      return {
+        success: false,
+        data: [],
+        total: 0,
+        error: error.message
+      };
+    }
   },
 
   /**
