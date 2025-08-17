@@ -703,24 +703,46 @@ async def get_party_invoices_for_linking(
                 LIMIT :limit OFFSET :offset
             """
         else:  # purchase
-            query = """
+            # Build WHERE conditions for purchase
+            where_conditions = ["supplier_id = :party_id", "purchase_status IN ('received', 'completed')"]
+            params = {"party_id": party_id}
+            
+            if search:
+                where_conditions.append("supplier_invoice_number ILIKE :search")
+                params["search"] = f"%{search}%"
+                
+            where_clause = " AND ".join(where_conditions)
+            
+            # Count query for pagination
+            count_query = f"""
+                SELECT COUNT(*) 
+                FROM procurement.purchases
+                WHERE {where_clause}
+            """
+            total_count = db.execute(text(count_query), params).scalar()
+            
+            # Calculate offset
+            offset = (page - 1) * limit
+            params.update({"limit": limit, "offset": offset})
+            
+            query = f"""
                 SELECT 
                     purchase_id as invoice_id,
                     supplier_invoice_number as invoice_number,
                     supplier_invoice_date as invoice_date,
                     final_amount as grand_total,
                     paid_amount,
-                    payment_status
+                    payment_status,
+                    'completed' as invoice_status
                 FROM procurement.purchases
-                WHERE supplier_id = :party_id
-                AND purchase_status IN ('received', 'completed')
+                WHERE {where_clause}
                 ORDER BY supplier_invoice_date DESC
-                LIMIT 50
+                LIMIT :limit OFFSET :offset
             """
             
         invoices = db.execute(
             text(query),
-            {"party_id": party_id}
+            params
         ).fetchall()
         
         # For debugging: if no invoices found, check if there are any invoices at all
@@ -737,9 +759,9 @@ async def get_party_invoices_for_linking(
             logger.info(f"Sample customer IDs with invoices: {[c.customer_id for c in sample_customers]}")
         
         # Calculate pagination metadata
-        total_pages = (total_count + limit - 1) // limit if invoice_type == "sales" else 1
-        has_next = page < total_pages if invoice_type == "sales" else False
-        has_prev = page > 1 if invoice_type == "sales" else False
+        total_pages = (total_count + limit - 1) // limit
+        has_next = page < total_pages
+        has_prev = page > 1
         
         return {
             "party_id": party_id,
@@ -748,7 +770,7 @@ async def get_party_invoices_for_linking(
             "pagination": {
                 "page": page,
                 "limit": limit,
-                "total_count": total_count if invoice_type == "sales" else len(invoices),
+                "total_count": total_count,
                 "total_pages": total_pages,
                 "has_next": has_next,
                 "has_prev": has_prev
