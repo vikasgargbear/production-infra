@@ -201,37 +201,54 @@ async def create_invoice(
                 batch = batch_result.fetchone()
                 batch_id = batch[0] if batch else None
             
-            # Calculate line_total for non-null constraint
+            # Calculate line_total and tax amounts for proper insertion
             line_total = quantity * unit_price - discount_amt
+            gst_percent = float(item.get("gst_percent", 18.0))
+            cgst_rate = gst_percent / 2
+            sgst_rate = gst_percent / 2
             
-            # Insert invoice item - triggers will recalculate with tax
+            taxable_amount = line_total  # After discount
+            cgst_amount = taxable_amount * cgst_rate / 100
+            sgst_amount = taxable_amount * sgst_rate / 100
+            total_tax_amount = cgst_amount + sgst_amount
+            final_line_total = taxable_amount + total_tax_amount
+            
+            # Insert invoice item with all required fields to avoid column mismatch
             db.execute(text("""
                 INSERT INTO sales.invoice_items (
-                    invoice_id, product_id, product_name,
-                    quantity, unit_price, line_total,
-                    discount_percent, discount_amount,
-                    batch_id, uom, pack_type,
-                    hsn_code, created_at
+                    invoice_id, product_id, product_name, hsn_code,
+                    quantity, uom, pack_type, unit_price,
+                    discount_percent, discount_amount, taxable_amount,
+                    cgst_rate, cgst_amount, sgst_rate, sgst_amount,
+                    total_tax_amount, line_total, batch_id,
+                    created_at
                 ) VALUES (
-                    :invoice_id, :product_id, :product_name,
-                    :quantity, :unit_price, :line_total,
-                    :discount_percent, :discount_amount,
-                    :batch_id, :uom, :pack_type,
-                    :hsn_code, CURRENT_TIMESTAMP
+                    :invoice_id, :product_id, :product_name, :hsn_code,
+                    :quantity, :uom, :pack_type, :unit_price,
+                    :discount_percent, :discount_amount, :taxable_amount,
+                    :cgst_rate, :cgst_amount, :sgst_rate, :sgst_amount,
+                    :total_tax_amount, :line_total, :batch_id,
+                    CURRENT_TIMESTAMP
                 )
             """), {
                 "invoice_id": invoice_id,
                 "product_id": product_id,
                 "product_name": product_name,
+                "hsn_code": item.get("hsn_code", "3004"),
                 "quantity": quantity,
-                "unit_price": unit_price,
-                "line_total": line_total,
-                "discount_percent": discount_percent,
-                "discount_amount": discount_amt,
-                "batch_id": batch_id,
                 "uom": item.get("uom", "PIECE"),
                 "pack_type": item.get("pack_type", "PIECE"),
-                "hsn_code": item.get("hsn_code")
+                "unit_price": unit_price,
+                "discount_percent": discount_percent,
+                "discount_amount": discount_amt,
+                "taxable_amount": taxable_amount,
+                "cgst_rate": cgst_rate,
+                "cgst_amount": cgst_amount,
+                "sgst_rate": sgst_rate,
+                "sgst_amount": sgst_amount,
+                "total_tax_amount": total_tax_amount,
+                "line_total": final_line_total,
+                "batch_id": batch_id
             })
             
             items_created += 1
