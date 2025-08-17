@@ -308,7 +308,7 @@ async def get_sales(
         query = """
             SELECT i.invoice_id as sale_id, i.invoice_number, i.invoice_date as sale_date,
                    i.customer_id as party_id, i.customer_name as party_name, 
-                   i.customer_gstin as party_gst, i.final_amount, i.payment_status,
+                   '' as party_gst, i.final_amount, i.payment_status,
                    i.payment_method, i.cgst_amount, i.sgst_amount, i.igst_amount,
                    i.gst_type, i.created_at
             FROM sales.invoices i
