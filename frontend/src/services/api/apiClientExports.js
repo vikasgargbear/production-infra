@@ -95,52 +95,32 @@ export const productAPI = {
    */
   search: async (query, options = {}) => {
     try {
-      // Use products/search endpoint
-      const response = await apiClient.get('/products/search', {
+      // Use correct products endpoint with search parameter
+      const response = await apiClient.get('/products/', {
         params: {
-          q: query,
-          category: options.category,
-          manufacturer: options.manufacturer,
+          search: query,  // Backend expects 'search' not 'q'
+          product_type: options.product_type || '',
+          manufacturer: options.manufacturer || '',
           limit: options.limit || 50,
-          offset: options.offset || 0,
+          skip: options.offset || 0,  // Backend uses 'skip' not 'offset'
         },
       });
       
-      // Wrap response to match expected format
+      // Backend returns array directly, not wrapped in products
       return {
         success: true,
-        data: response.data.products || response.data || [],
-        total: response.data.total,
-        page: response.data.page,
-        per_page: response.data.per_page
+        data: response.data || [],
+        total: response.data?.length || 0
       };
     } catch (error) {
-      // Fallback to v1 endpoint
-      try {
-        const response = await apiClient.get('/products/search', {
-          params: {
-            q: query,
-            category: options.category,
-            manufacturer: options.manufacturer,
-            limit: options.limit || 50,
-            offset: options.offset || 0,
-          },
-        });
-        return {
-          success: true,
-          data: response.data.products || response.data || [],
-          total: response.data.total
-        };
-      } catch (fallbackError) {
-        console.error('Product search failed:', fallbackError);
-        // Return empty array on error
-        return {
-          success: false,
-          data: [],
-          total: 0,
-          error: fallbackError.message
-        };
-      }
+      console.error('Product search failed:', error);
+      // Return empty array on error
+      return {
+        success: false,
+        data: [],
+        total: 0,
+        error: error.message
+      };
     }
   },
 
