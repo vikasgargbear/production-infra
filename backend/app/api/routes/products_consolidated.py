@@ -514,30 +514,6 @@ async def update_product(
                     update_fields.append(f"{db_field} = :{db_field}")
                     params[db_field] = product[frontend_field]
         
-        if not update_fields:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="No fields to update"
-            )
-        
-        update_fields.append("updated_at = CURRENT_TIMESTAMP")
-        
-        query = f"""
-            UPDATE inventory.products
-            SET {', '.join(update_fields)}
-            WHERE product_id = :product_id AND org_id = :org_id
-            RETURNING product_id, product_code, product_name
-        """
-        
-        result = db.execute(text(query), params)
-        updated = result.fetchone()
-        
-        if not updated:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Product {product_id} not found"
-            )
-        
         # Handle batch-level fields that moved from products table
         batch_fields = {}
         batch_field_mapping = {
@@ -578,6 +554,48 @@ async def update_product(
                     batch_fields["category_name"] = category_name
                     batch_fields["category_id"] = None
                     logger.warning(f"Category '{category_name}' not found in master categories, saving as text only")
+        
+        # Check if we have any fields to update (product OR batch level)
+        if not update_fields and not batch_fields:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="No fields to update"
+            )
+        
+        # Update product table if we have product-level fields
+        updated = None
+        if update_fields:
+            update_fields.append("updated_at = CURRENT_TIMESTAMP")
+            
+            query = f"""
+                UPDATE inventory.products
+                SET {', '.join(update_fields)}
+                WHERE product_id = :product_id AND org_id = :org_id
+                RETURNING product_id, product_code, product_name
+            """
+            
+            result = db.execute(text(query), params)
+            updated = result.fetchone()
+            
+            if not updated:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail=f"Product {product_id} not found"
+                )
+        else:
+            # No product fields to update, but get product info for response
+            result = db.execute(text("""
+                SELECT product_id, product_code, product_name 
+                FROM inventory.products 
+                WHERE product_id = :product_id AND org_id = :org_id
+            """), {"product_id": product_id, "org_id": DEFAULT_ORG_ID})
+            updated = result.fetchone()
+            
+            if not updated:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail=f"Product {product_id} not found"
+                )
         
         # Update active batches if we have batch-level changes
         if batch_fields:
