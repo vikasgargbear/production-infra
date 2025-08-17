@@ -1073,7 +1073,7 @@ async def authenticate_user(
 
 @router.get("/system/settings/{category}")
 async def get_system_settings(
-    category: Optional[str] = Path(None, description="Settings category"),
+    category: str = Path(..., description="Settings category"),
     db: Session = Depends(get_db)
 ):
     """
