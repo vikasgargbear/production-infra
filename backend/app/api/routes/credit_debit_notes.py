@@ -652,17 +652,28 @@ async def get_party_invoices_for_linking(
     """
     try:
         if invoice_type == "sales":
+            # First try to find any invoices for this customer
+            debug_query = """
+                SELECT COUNT(*) as count,
+                       string_agg(DISTINCT invoice_status, ', ') as statuses,
+                       string_agg(DISTINCT payment_status, ', ') as payment_statuses
+                FROM sales.invoices 
+                WHERE customer_id = :party_id
+            """
+            debug_result = db.execute(text(debug_query), {"party_id": party_id}).first()
+            logger.info(f"Customer {party_id} debug - Count: {debug_result.count}, Statuses: {debug_result.statuses}, Payment: {debug_result.payment_statuses}")
+            
             query = """
                 SELECT 
                     invoice_id,
                     invoice_number,
                     invoice_date,
                     final_amount as grand_total,
-                    paid_amount,
-                    payment_status
+                    COALESCE(paid_amount, 0) as paid_amount,
+                    COALESCE(payment_status, 'pending') as payment_status,
+                    COALESCE(invoice_status, 'draft') as invoice_status
                 FROM sales.invoices
                 WHERE customer_id = :party_id
-                AND invoice_status IN ('completed', 'paid', 'partially_paid')
                 ORDER BY invoice_date DESC
                 LIMIT 50
             """
@@ -687,10 +698,28 @@ async def get_party_invoices_for_linking(
             {"party_id": party_id}
         ).fetchall()
         
+        # For debugging: if no invoices found, check if there are any invoices at all
+        if not invoices and invoice_type == "sales":
+            total_count = db.execute(
+                text("SELECT COUNT(*) FROM sales.invoices")
+            ).scalar()
+            logger.info(f"No invoices found for customer {party_id}. Total invoices in system: {total_count}")
+            
+            # Get a sample of customer IDs that do have invoices
+            sample_customers = db.execute(
+                text("SELECT DISTINCT customer_id FROM sales.invoices LIMIT 5")
+            ).fetchall()
+            logger.info(f"Sample customer IDs with invoices: {[c.customer_id for c in sample_customers]}")
+        
         return {
             "party_id": party_id,
             "invoice_type": invoice_type,
-            "invoices": [dict(inv._mapping) for inv in invoices]
+            "invoices": [dict(inv._mapping) for inv in invoices],
+            "debug_info": {
+                "query_executed": True,
+                "party_id_used": party_id,
+                "results_count": len(invoices)
+            }
         }
         
     except Exception as e:
