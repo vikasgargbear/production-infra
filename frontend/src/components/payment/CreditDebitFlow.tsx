@@ -201,26 +201,26 @@ const CreditDebitFlow: React.FC<CreditDebitFlowProps> = ({
       setLoadingItems(true);
       try {
         const response = await notesApi.getInvoiceItems(invoice.id);
-        // Response is the full sales record, extract items from it
-        const saleData = response.data || response;
-        const items = saleData.items || saleData.sale_items || [];
+        // Response structure: { invoice_id, items: [...], items_count }
+        const responseData = response.data || response;
+        const items = responseData.items || [];
         
-        // Transform based on actual sales.sale_items schema
+        // Transform based on actual sales.invoice_items schema
         const transformedItems = items.map((item: any, index: number) => ({
-          id: item.sale_item_id || item.item_id || `item-${index}`,
-          product_name: item.product_name || item.item_name,
+          id: item.invoice_item_id || `item-${index}`,
+          product_name: item.product_name,
           hsn_code: item.hsn_code || '',
           quantity: parseFloat(item.quantity) || 1,
-          rate: parseFloat(item.unit_price) || parseFloat(item.rate) || 0,
+          rate: parseFloat(item.unit_price) || 0,
           discount_percent: parseFloat(item.discount_percent) || 0,
-          taxable_amount: parseFloat(item.taxable_amount) || (parseFloat(item.quantity) * parseFloat(item.unit_price) * (1 - parseFloat(item.discount_percent) / 100)) || 0,
-          cgst_rate: parseFloat(item.cgst_rate) || 9,
-          sgst_rate: parseFloat(item.sgst_rate) || 9,
+          taxable_amount: parseFloat(item.taxable_amount) || 0,
+          cgst_rate: parseFloat(item.cgst_rate) || 0,
+          sgst_rate: parseFloat(item.sgst_rate) || 0,
           igst_rate: parseFloat(item.igst_rate) || 0,
           cgst_amount: parseFloat(item.cgst_amount) || 0,
           sgst_amount: parseFloat(item.sgst_amount) || 0,
           igst_amount: parseFloat(item.igst_amount) || 0,
-          total_amount: parseFloat(item.line_total) || parseFloat(item.total_amount) || 0
+          total_amount: parseFloat(item.line_total) || 0
         }));
         
         setNoteItems(transformedItems);

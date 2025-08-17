@@ -725,3 +725,67 @@ async def get_party_invoices_for_linking(
     except Exception as e:
         logger.error(f"Error fetching party invoices: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/invoice-items/{invoice_id}")
+async def get_invoice_items_for_notes(
+    invoice_id: str,
+    db: Session = Depends(get_db)
+):
+    """
+    Get invoice items for creating credit/debit notes
+    """
+    try:
+        query = """
+            SELECT 
+                ii.invoice_item_id,
+                ii.product_id,
+                ii.product_name,
+                ii.hsn_code,
+                ii.batch_number,
+                ii.quantity,
+                ii.uom,
+                ii.pack_type,
+                ii.unit_price,
+                ii.discount_percent,
+                ii.discount_amount,
+                ii.taxable_amount,
+                ii.igst_rate,
+                ii.cgst_rate,
+                ii.sgst_rate,
+                ii.igst_amount,
+                ii.cgst_amount,
+                ii.sgst_amount,
+                ii.line_total
+            FROM sales.invoice_items ii
+            WHERE ii.invoice_id = :invoice_id
+            ORDER BY ii.display_order, ii.invoice_item_id
+        """
+        
+        items = db.execute(
+            text(query),
+            {"invoice_id": invoice_id}
+        ).fetchall()
+        
+        if not items:
+            # Check if invoice exists
+            invoice_check = db.execute(
+                text("SELECT COUNT(*) FROM sales.invoices WHERE invoice_id = :invoice_id"),
+                {"invoice_id": invoice_id}
+            ).scalar()
+            
+            if invoice_check == 0:
+                raise HTTPException(status_code=404, detail="Invoice not found")
+            else:
+                logger.info(f"Invoice {invoice_id} exists but has no items")
+        
+        return {
+            "invoice_id": invoice_id,
+            "items": [dict(item._mapping) for item in items],
+            "items_count": len(items)
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error fetching invoice items: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
