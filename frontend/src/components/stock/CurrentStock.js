@@ -448,9 +448,8 @@ const CurrentStock = ({ open = true, onClose }) => {
 
   const handleSaveEdit = async () => {
     try {
-      // Exclude category from the update for now - requires proper category management
-      const { category, ...updateData } = editForm;
-      const response = await stockApi.updateProductProperties(editingProduct.product_id, updateData);
+      // Include category in updates - now has proper master table linking
+      const response = await stockApi.updateProductProperties(editingProduct.product_id, editForm);
       console.log('Product updated:', response);
       
       // Reload stock data to show updated values
