@@ -38,14 +38,9 @@ export const notesApi = {
   },
 
   // Get invoices for linking to notes
-  getLinkedInvoices: async (partyId, invoiceType = 'sales', page = 1, limit = 5, search = '') => {
+  getLinkedInvoices: async (partyId, invoiceType = 'sales') => {
     const response = await apiClient.get(`/notes/linked-invoices/${partyId}`, {
-      params: { 
-        invoice_type: invoiceType,
-        page: page,
-        limit: limit,
-        search: search
-      }
+      params: { invoice_type: invoiceType }
     });
     return response.data;
   },

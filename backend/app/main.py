@@ -28,6 +28,8 @@ from .api.routes import (
 from .api.routes import stock_receive, enterprise_delivery_challan, inventory_batches, create_user, delivery_challan, stock_dashboard
 # Import new APIs
 from .api.routes import master_settings, schemes_discounts, loyalty_points, compliance
+# Import comprehensive enterprise API
+from .api.routes import enterprise_api_complete
 # All temporary endpoints removed - using main endpoints only
 
 # Lifecycle management
@@ -136,6 +138,9 @@ api.include_router(master_settings.router, tags=["Master Settings"])
 api.include_router(schemes_discounts.router, tags=["Schemes & Discounts"])
 api.include_router(loyalty_points.router, tags=["Loyalty Points"])
 api.include_router(compliance.router, tags=["Compliance"])
+
+# Register comprehensive enterprise API
+api.include_router(enterprise_api_complete.router, tags=["Enterprise ERP Complete"])
 
 # All endpoints consolidated - no temporary workarounds
 

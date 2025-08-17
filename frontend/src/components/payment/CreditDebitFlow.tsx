@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { 
-  FileText, CreditCard, Receipt, Save, X, Plus, Trash2, Search, 
+  FileText, CreditCard, Receipt, Save, X, Plus, Trash2, Calendar, Filter,
   Calculator, AlertCircle, CheckCircle, Upload, Download, Users 
 } from 'lucide-react';
 import { ModuleHeader, CustomerSearch, Select, Card } from '../global';
@@ -56,7 +56,13 @@ const CreditDebitFlow: React.FC<CreditDebitFlowProps> = ({
   
   // Pagination state
   const [invoicePage, setInvoicePage] = useState(1);
-  const [invoiceSearch, setInvoiceSearch] = useState('');
+  const [invoiceFilters, setInvoiceFilters] = useState({
+    dateFrom: '',
+    dateTo: '',
+    status: 'all',
+    minAmount: '',
+    maxAmount: ''
+  });
   const [invoicePagination, setInvoicePagination] = useState<any>(null);
 
   const isCredit = noteType === 'credit';
@@ -123,17 +129,14 @@ const CreditDebitFlow: React.FC<CreditDebitFlowProps> = ({
       try {
         // Try to use the notesApi first, fallback to mock data if backend isn't ready
         try {
-          // Use the API client with pagination parameters
+          // Use the original API call (without pagination parameters)
           const data = await notesApi.getLinkedInvoices(
             selectedCustomer.customer_id, 
-            'sales', 
-            invoicePage, 
-            5, 
-            invoiceSearch
+            'sales'
           );
           
           // Transform the API response to match our interface
-          const transformedInvoices = data.invoices?.map((invoice: any) => ({
+          let allInvoices = data.invoices?.map((invoice: any) => ({
             id: invoice.invoice_id,
             invoice_number: invoice.invoice_number,
             invoice_date: invoice.invoice_date,
@@ -143,8 +146,53 @@ const CreditDebitFlow: React.FC<CreditDebitFlowProps> = ({
             items: [] // Items will be fetched separately when invoice is selected
           })) || [];
 
-          setCustomerInvoices(transformedInvoices);
-          setInvoicePagination(data.pagination);
+          // Apply frontend filters
+          if (invoiceFilters.dateFrom) {
+            allInvoices = allInvoices.filter(invoice => 
+              new Date(invoice.invoice_date) >= new Date(invoiceFilters.dateFrom)
+            );
+          }
+          
+          if (invoiceFilters.dateTo) {
+            allInvoices = allInvoices.filter(invoice => 
+              new Date(invoice.invoice_date) <= new Date(invoiceFilters.dateTo)
+            );
+          }
+          
+          if (invoiceFilters.status !== 'all') {
+            allInvoices = allInvoices.filter(invoice => 
+              invoice.status.toLowerCase() === invoiceFilters.status.toLowerCase()
+            );
+          }
+          
+          if (invoiceFilters.minAmount) {
+            allInvoices = allInvoices.filter(invoice => 
+              invoice.total_amount >= parseFloat(invoiceFilters.minAmount)
+            );
+          }
+          
+          if (invoiceFilters.maxAmount) {
+            allInvoices = allInvoices.filter(invoice => 
+              invoice.total_amount <= parseFloat(invoiceFilters.maxAmount)
+            );
+          }
+
+          // Apply frontend pagination
+          const limit = 5;
+          const totalCount = allInvoices.length;
+          const totalPages = Math.ceil(totalCount / limit);
+          const offset = (invoicePage - 1) * limit;
+          const paginatedInvoices = allInvoices.slice(offset, offset + limit);
+
+          setCustomerInvoices(paginatedInvoices);
+          setInvoicePagination({
+            page: invoicePage,
+            limit: limit,
+            total_count: totalCount,
+            total_pages: totalPages,
+            has_next: invoicePage < totalPages,
+            has_prev: invoicePage > 1
+          });
         } catch (apiError) {
           console.warn('API not ready, using mock data:', apiError);
           
@@ -200,7 +248,7 @@ const CreditDebitFlow: React.FC<CreditDebitFlowProps> = ({
     };
 
     fetchCustomerInvoices();
-  }, [selectedCustomer, invoicePage, invoiceSearch]);
+  }, [selectedCustomer, invoicePage, invoiceFilters]);
 
   const handleFieldChange = (field: string, value: any) => {
     setNoteData(prev => ({ ...prev, [field]: value }));
@@ -391,27 +439,65 @@ const CreditDebitFlow: React.FC<CreditDebitFlowProps> = ({
   const totals = calculateTotals();
 
   return (
-    <div className="h-full bg-green-50">
-      <div className="h-full flex flex-col">
-        {/* Header */}
-        <ModuleHeader
-          title={`${isCredit ? 'Credit' : 'Debit'} Note`}
-          documentNumber={noteData.note_number || `${isCredit ? 'CR' : 'DR'}-TEMP`}
-          status={`Step ${currentStep} of 2`}
-          icon={isCredit ? CreditCard : Receipt}
-          iconColor={isCredit ? "text-green-600" : "text-orange-600"}
-          onClose={onClose}
-          historyType="notes"
-          showSaveDraft={currentStep === 2}
-          onSaveDraft={handleSave}
-          additionalActions={[
-            {
-              label: "Print Preview",
-              onClick: () => console.log('Print Preview'),
-              variant: "secondary"
-            }
-          ] as any}
-        />
+    <div className={`h-full ${isCredit ? 'bg-green-50' : 'bg-orange-50'}`}>
+      <div className="h-full flex flex-col max-w-6xl mx-auto">
+        {/* Header - Similar to Sales Flow */}
+        <div className={`${isCredit ? 'bg-green-50' : 'bg-orange-50'} border-b ${isCredit ? 'border-green-200' : 'border-orange-200'} px-6 py-4`}>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-4">
+              {isCredit ? (
+                <CreditCard className="w-6 h-6 text-green-600" />
+              ) : (
+                <Receipt className="w-6 h-6 text-orange-600" />
+              )}
+              <div>
+                <h1 className="text-2xl font-bold text-gray-900">
+                  New {isCredit ? 'Credit' : 'Debit'} Note
+                </h1>
+                <div className="flex items-center space-x-4 mt-1">
+                  <span className={`text-lg font-medium ${isCredit ? 'text-green-600' : 'text-orange-600'}`}>
+                    {isCredit ? 'Credit' : 'Debit'} Note #{noteData.note_number}
+                  </span>
+                  <span className="text-gray-500">•</span>
+                  <span className="text-gray-600">
+                    {new Date(noteData.note_date).toLocaleDateString('en-IN', {
+                      day: 'numeric',
+                      month: 'short',
+                      year: 'numeric'
+                    })}
+                  </span>
+                  <span className="text-gray-500">•</span>
+                  <span className="text-gray-600">Step {currentStep} of 2</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex items-center space-x-3">
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">
+                  <Calendar className="w-3 h-3 inline mr-1" />
+                  Note Date
+                </label>
+                <input
+                  type="date"
+                  value={noteData.note_date}
+                  onChange={(e) => handleFieldChange('note_date', e.target.value)}
+                  className="px-3 py-1.5 text-sm border border-gray-300 rounded bg-white focus:outline-none focus:ring-1 focus:ring-blue-500"
+                />
+              </div>
+              
+              {onClose && (
+                <button
+                  onClick={onClose}
+                  className="p-2 text-gray-400 hover:text-gray-600 transition-colors"
+                  aria-label="Close"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
 
         {/* Progress Steps */}
         <div className="bg-white border-b border-gray-200">
@@ -570,23 +656,108 @@ const CreditDebitFlow: React.FC<CreditDebitFlowProps> = ({
                 {/* Invoice Selection */}
                 {selectedCustomer && noteData.reason && noteData.settlement_type && (
                   <Card>
-                    <div className="flex items-center justify-between mb-4">
-                      <h3 className="text-lg font-semibold text-gray-900">
+                    <div className="mb-6">
+                      <h3 className="text-lg font-semibold text-gray-900 mb-4">
                         Select {isCredit ? 'Invoice' : 'Purchase Order'}
                       </h3>
-                      {/* Search Input */}
-                      <div className="relative">
-                        <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
-                        <input
-                          type="text"
-                          placeholder="Search invoices..."
-                          value={invoiceSearch}
-                          onChange={(e) => {
-                            setInvoiceSearch(e.target.value);
-                            setInvoicePage(1); // Reset to first page when searching
-                          }}
-                          className="pl-9 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors w-64"
-                        />
+                      
+                      {/* Filters Section */}
+                      <div className="bg-gray-50 rounded-lg p-4 mb-4">
+                        <div className="flex items-center gap-2 mb-3">
+                          <Filter className="w-4 h-4 text-gray-600" />
+                          <span className="text-sm font-medium text-gray-700">Filter Invoices</span>
+                        </div>
+                        <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+                          <div>
+                            <label className="block text-xs font-medium text-gray-700 mb-1">
+                              <Calendar className="w-3 h-3 inline mr-1" />
+                              From Date
+                            </label>
+                            <input
+                              type="date"
+                              value={invoiceFilters.dateFrom}
+                              onChange={(e) => {
+                                setInvoiceFilters(prev => ({ ...prev, dateFrom: e.target.value }));
+                                setInvoicePage(1);
+                              }}
+                              className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-transparent"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-xs font-medium text-gray-700 mb-1">
+                              <Calendar className="w-3 h-3 inline mr-1" />
+                              To Date
+                            </label>
+                            <input
+                              type="date"
+                              value={invoiceFilters.dateTo}
+                              onChange={(e) => {
+                                setInvoiceFilters(prev => ({ ...prev, dateTo: e.target.value }));
+                                setInvoicePage(1);
+                              }}
+                              className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-transparent"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-xs font-medium text-gray-700 mb-1">Status</label>
+                            <select
+                              value={invoiceFilters.status}
+                              onChange={(e) => {
+                                setInvoiceFilters(prev => ({ ...prev, status: e.target.value }));
+                                setInvoicePage(1);
+                              }}
+                              className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-transparent"
+                            >
+                              <option value="all">All Status</option>
+                              <option value="pending">Pending</option>
+                              <option value="partially_paid">Partially Paid</option>
+                              <option value="paid">Paid</option>
+                            </select>
+                          </div>
+                          <div>
+                            <label className="block text-xs font-medium text-gray-700 mb-1">Min Amount (₹)</label>
+                            <input
+                              type="number"
+                              placeholder="0"
+                              value={invoiceFilters.minAmount}
+                              onChange={(e) => {
+                                setInvoiceFilters(prev => ({ ...prev, minAmount: e.target.value }));
+                                setInvoicePage(1);
+                              }}
+                              className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-transparent"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-xs font-medium text-gray-700 mb-1">Max Amount (₹)</label>
+                            <input
+                              type="number"
+                              placeholder="∞"
+                              value={invoiceFilters.maxAmount}
+                              onChange={(e) => {
+                                setInvoiceFilters(prev => ({ ...prev, maxAmount: e.target.value }));
+                                setInvoicePage(1);
+                              }}
+                              className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-transparent"
+                            />
+                          </div>
+                        </div>
+                        <div className="flex justify-end mt-3">
+                          <button
+                            onClick={() => {
+                              setInvoiceFilters({
+                                dateFrom: '',
+                                dateTo: '',
+                                status: 'all',
+                                minAmount: '',
+                                maxAmount: ''
+                              });
+                              setInvoicePage(1);
+                            }}
+                            className="text-sm text-gray-600 hover:text-gray-800"
+                          >
+                            Clear Filters
+                          </button>
+                        </div>
                       </div>
                     </div>
                     
@@ -600,7 +771,7 @@ const CreditDebitFlow: React.FC<CreditDebitFlowProps> = ({
                         <FileText className="w-12 h-12 mx-auto mb-3 text-gray-300" />
                         <p className="text-lg font-medium">No invoices found</p>
                         <p className="text-sm">
-                          {invoiceSearch ? `No invoices match "${invoiceSearch}"` : 'This customer has no outstanding invoices'}
+                          {Object.values(invoiceFilters).some(v => v && v !== 'all') ? 'No invoices match the selected filters' : 'This customer has no outstanding invoices'}
                         </p>
                       </div>
                     ) : (
