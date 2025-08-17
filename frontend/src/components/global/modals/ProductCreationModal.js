@@ -22,8 +22,6 @@ const ProductCreationModal = ({
     sale_price: '',  // No default - user must enter
     category: '',
     category_id: '',
-    product_type: '',
-    type_id: '',
     batch_number: '',
     mfg_date: '',
     expiry_date: '',
@@ -53,7 +51,6 @@ const ProductCreationModal = ({
   
   // Master data state
   const [categories, setCategories] = useState([]);
-  const [productTypes, setProductTypes] = useState([]);
   const [loadingMasterData, setLoadingMasterData] = useState(true);
 
   // Load master data when component mounts
@@ -62,23 +59,16 @@ const ProductCreationModal = ({
       try {
         setLoadingMasterData(true);
         
-        // Load categories and product types in parallel
-        const [categoriesResponse, typesResponse] = await Promise.all([
-          productsApi.get('/products/master/categories'),
-          productsApi.get('/products/master/types')
-        ]);
+        // Load categories only for now (product types not in schema)
+        const categoriesResponse = await productsApi.get('/products/master/categories');
         
         if (categoriesResponse.data?.success) {
           setCategories(categoriesResponse.data.data);
         }
         
-        if (typesResponse.data?.success) {
-          setProductTypes(typesResponse.data.data);
-        }
-        
       } catch (error) {
         console.error('Error loading master data:', error);
-        setErrors(['Failed to load categories and product types']);
+        setErrors(['Failed to load categories']);
       } finally {
         setLoadingMasterData(false);
       }
@@ -169,8 +159,6 @@ const ProductCreationModal = ({
         brand: newProduct.brand || newProduct.manufacturer,
         manufacturer: newProduct.manufacturer,
         category_id: newProduct.category_id ? parseInt(newProduct.category_id) : null,
-        type_id: newProduct.type_id ? parseInt(newProduct.type_id) : null,
-        product_type: newProduct.product_type || 'Standard Medicine',
         product_class: 'medicine',
         composition: newProduct.salt_composition ? { active: newProduct.salt_composition } : {},
         strength: newProduct.strength || null,
@@ -447,33 +435,6 @@ const ProductCreationModal = ({
                   </select>
                 </div>
 
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Product Type
-                  </label>
-                  <select
-                    value={newProduct.type_id}
-                    onChange={(e) => {
-                      const selectedType = productTypes.find(type => type.type_id === parseInt(e.target.value));
-                      setNewProduct({ 
-                        ...newProduct, 
-                        type_id: e.target.value,
-                        product_type: selectedType ? selectedType.type_name : ''
-                      });
-                    }}
-                    className="w-full px-3 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all"
-                    disabled={loadingMasterData}
-                  >
-                    <option value="">
-                      {loadingMasterData ? 'Loading types...' : 'Select Product Type'}
-                    </option>
-                    {productTypes.map(type => (
-                      <option key={type.type_id} value={type.type_id}>
-                        {type.type_name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
 
                 <div className="md:col-span-2">
                   <label className="block text-sm font-medium text-gray-700 mb-2">
