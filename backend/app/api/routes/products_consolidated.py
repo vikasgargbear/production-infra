@@ -711,7 +711,7 @@ async def update_product_batches(
             detail=f"Failed to update product batches: {str(e)}"
         )
 
-@router.get("/categories")
+@router.get("/master/categories")
 async def get_product_categories(db: Session = Depends(get_db)):
     """Get all active product categories"""
     try:
@@ -732,7 +732,7 @@ async def get_product_categories(db: Session = Depends(get_db)):
             detail=f"Failed to fetch categories: {str(e)}"
         )
 
-@router.get("/types")
+@router.get("/master/types")
 async def get_product_types(db: Session = Depends(get_db)):
     """Get all active product types"""
     try:
