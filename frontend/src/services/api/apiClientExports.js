@@ -286,6 +286,23 @@ export const purchasesAPI = {
     const response = await apiClient.delete(`/purchases/${id}`);
     return response.data;
   },
+  
+  // Purchase Order specific methods
+  generatePONumber: async () => {
+    // Generate PO number locally since backend doesn't have this endpoint
+    try {
+      const year = new Date().getFullYear();
+      const month = String(new Date().getMonth() + 1).padStart(2, '0');
+      const random = Math.floor(Math.random() * 10000).toString().padStart(4, '0');
+      return {
+        data: {
+          po_number: `PO-${year}${month}-${random}`
+        }
+      };
+    } catch (error) {
+      throw error;
+    }
+  },
 };
 
 export const supplierAPI = {
