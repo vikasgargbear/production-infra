@@ -32,46 +32,115 @@ async def get_notes(
     Get list of credit/debit notes with optional filters
     """
     try:
+        # Union query to get both credit notes (from sales returns) and debit notes (from purchase returns)
         query = """
-            SELECT n.*, p.party_name, p.gst_number as party_gst
-            FROM financial_notes n
-            LEFT JOIN parties p ON n.party_id = p.party_id
-            WHERE 1=1
+            SELECT 
+                'credit' as note_type,
+                sr.return_id as note_id,
+                sr.credit_note_number as note_number,
+                sr.credit_note_date as note_date,
+                sr.customer_id as party_id,
+                'customer' as party_type,
+                c.customer_name as party_name,
+                c.gst_number as party_gst,
+                sr.total_amount,
+                sr.return_reason as reason,
+                sr.credit_note_status as status,
+                sr.created_at
+            FROM sales.sales_returns sr
+            LEFT JOIN parties.customers c ON sr.customer_id = c.customer_id
+            WHERE sr.credit_note_number IS NOT NULL
+            
+            UNION ALL
+            
+            SELECT 
+                'debit' as note_type,
+                pr.return_id as note_id,
+                pr.debit_note_number as note_number,
+                pr.debit_note_date as note_date,
+                pr.supplier_id as party_id,
+                'supplier' as party_type,
+                s.supplier_name as party_name,
+                s.gst_number as party_gst,
+                pr.total_amount,
+                pr.return_reason as reason,
+                pr.debit_note_status as status,
+                pr.created_at
+            FROM procurement.purchase_returns pr
+            LEFT JOIN parties.suppliers s ON pr.supplier_id = s.supplier_id
+            WHERE pr.debit_note_number IS NOT NULL
         """
+        # Apply filters
+        filter_conditions = []
         params = {"skip": skip, "limit": limit}
         
         if note_type:
-            query += " AND n.note_type = :note_type"
-            params["note_type"] = note_type
+            if note_type == 'credit':
+                filter_conditions.append("note_type = 'credit'")
+            elif note_type == 'debit':
+                filter_conditions.append("note_type = 'debit'")
             
         if party_id:
-            query += " AND n.party_id = :party_id"
+            filter_conditions.append("party_id = :party_id")
             params["party_id"] = party_id
             
         if from_date:
-            query += " AND n.note_date >= :from_date"
+            filter_conditions.append("note_date >= :from_date")
             params["from_date"] = from_date
             
         if to_date:
-            query += " AND n.note_date <= :to_date"
+            filter_conditions.append("note_date <= :to_date")
             params["to_date"] = to_date
+        
+        # Wrap the union query and apply filters
+        if filter_conditions:
+            query = f"SELECT * FROM ({query}) as notes WHERE " + " AND ".join(filter_conditions)
+        else:
+            query = f"SELECT * FROM ({query}) as notes"
             
-        query += " ORDER BY n.note_date DESC, n.created_at DESC LIMIT :limit OFFSET :skip"
+        query += " ORDER BY note_date DESC, created_at DESC LIMIT :limit OFFSET :skip"
         
         notes = db.execute(text(query), params).fetchall()
         
         # Get total count
-        count_query = """
-            SELECT COUNT(*) FROM financial_notes n WHERE 1=1
+        base_count_query = """
+            SELECT COUNT(*) FROM (
+                SELECT sr.return_id
+                FROM sales.sales_returns sr
+                WHERE sr.credit_note_number IS NOT NULL
+                
+                UNION ALL
+                
+                SELECT pr.return_id
+                FROM procurement.purchase_returns pr
+                WHERE pr.debit_note_number IS NOT NULL
+            ) as all_notes
         """
-        if note_type:
-            count_query += " AND n.note_type = :note_type"
-        if party_id:
-            count_query += " AND n.party_id = :party_id"
-        if from_date:
-            count_query += " AND n.note_date >= :from_date"
-        if to_date:
-            count_query += " AND n.note_date <= :to_date"
+        
+        if filter_conditions:
+            # For count, we need the same base union but with count
+            count_base = """
+                SELECT 
+                    'credit' as note_type,
+                    sr.return_id as note_id,
+                    sr.credit_note_date as note_date,
+                    sr.customer_id as party_id
+                FROM sales.sales_returns sr
+                WHERE sr.credit_note_number IS NOT NULL
+                
+                UNION ALL
+                
+                SELECT 
+                    'debit' as note_type,
+                    pr.return_id as note_id,
+                    pr.debit_note_date as note_date,
+                    pr.supplier_id as party_id
+                FROM procurement.purchase_returns pr
+                WHERE pr.debit_note_number IS NOT NULL
+            """
+            count_query = f"SELECT COUNT(*) FROM ({count_base}) as notes WHERE " + " AND ".join(filter_conditions)
+        else:
+            count_query = base_count_query
             
         total = db.execute(text(count_query), params).scalar()
         
@@ -585,14 +654,16 @@ async def get_party_invoices_for_linking(
         if invoice_type == "sales":
             query = """
                 SELECT 
-                    sale_id as invoice_id,
+                    invoice_id,
                     invoice_number,
-                    sale_date as invoice_date,
-                    grand_total
-                FROM sales
-                WHERE party_id = :party_id
-                AND sale_status = 'completed'
-                ORDER BY sale_date DESC
+                    invoice_date,
+                    final_amount as grand_total,
+                    paid_amount,
+                    payment_status
+                FROM sales.invoices
+                WHERE customer_id = :party_id
+                AND invoice_status IN ('completed', 'paid', 'partially_paid')
+                ORDER BY invoice_date DESC
                 LIMIT 50
             """
         else:  # purchase
@@ -601,11 +672,13 @@ async def get_party_invoices_for_linking(
                     purchase_id as invoice_id,
                     supplier_invoice_number as invoice_number,
                     supplier_invoice_date as invoice_date,
-                    final_amount as grand_total
-                FROM purchases
+                    final_amount as grand_total,
+                    paid_amount,
+                    payment_status
+                FROM procurement.purchases
                 WHERE supplier_id = :party_id
                 AND purchase_status IN ('received', 'completed')
-                ORDER BY purchase_date DESC
+                ORDER BY supplier_invoice_date DESC
                 LIMIT 50
             """
             
