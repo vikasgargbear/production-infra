@@ -755,3 +755,142 @@ async def get_product_types(db: Session = Depends(get_db)):
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to fetch product types: {str(e)}"
         )
+
+@router.post("/master/categories")
+async def create_product_category(
+    category_data: dict,
+    db: Session = Depends(get_db)
+):
+    """Create a new product category"""
+    try:
+        category_name = category_data.get("category_name", "").strip()
+        if not category_name:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Category name is required"
+            )
+        
+        # Generate category code from name
+        category_code = category_name.upper().replace(" ", "_").replace("-", "_")
+        
+        # Check if category already exists
+        existing = db.execute(text("""
+            SELECT category_id FROM inventory.product_categories
+            WHERE LOWER(category_name) = LOWER(:category_name)
+            OR LOWER(category_code) = LOWER(:category_code)
+        """), {
+            "category_name": category_name,
+            "category_code": category_code
+        }).fetchone()
+        
+        if existing:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Category already exists"
+            )
+        
+        # Insert new category
+        result = db.execute(text("""
+            INSERT INTO inventory.product_categories (
+                category_name, category_code, is_active, created_at
+            ) VALUES (
+                :category_name, :category_code, true, CURRENT_TIMESTAMP
+            ) RETURNING category_id, category_name, category_code
+        """), {
+            "category_name": category_name,
+            "category_code": category_code
+        })
+        
+        created = result.fetchone()
+        db.commit()
+        
+        return {
+            "success": True,
+            "data": {
+                "category_id": created.category_id,
+                "category_name": created.category_name,
+                "category_code": created.category_code
+            },
+            "message": f"Category '{category_name}' created successfully"
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Error creating category: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to create category: {str(e)}"
+        )
+
+@router.post("/master/types")
+async def create_product_type(
+    type_data: dict,
+    db: Session = Depends(get_db)
+):
+    """Create a new product type"""
+    try:
+        type_name = type_data.get("type_name", "").strip()
+        if not type_name:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Type name is required"
+            )
+        
+        # Generate type code from name
+        type_code = type_name.upper().replace(" ", "_").replace("-", "_")
+        default_base_uom = type_data.get("default_base_uom", "Unit")
+        
+        # Check if type already exists
+        existing = db.execute(text("""
+            SELECT type_id FROM inventory.product_types
+            WHERE LOWER(type_name) = LOWER(:type_name)
+            OR LOWER(type_code) = LOWER(:type_code)
+        """), {
+            "type_name": type_name,
+            "type_code": type_code
+        }).fetchone()
+        
+        if existing:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Product type already exists"
+            )
+        
+        # Insert new type
+        result = db.execute(text("""
+            INSERT INTO inventory.product_types (
+                type_name, type_code, default_base_uom, is_active
+            ) VALUES (
+                :type_name, :type_code, :default_base_uom, true
+            ) RETURNING type_id, type_name, type_code, default_base_uom
+        """), {
+            "type_name": type_name,
+            "type_code": type_code,
+            "default_base_uom": default_base_uom
+        })
+        
+        created = result.fetchone()
+        db.commit()
+        
+        return {
+            "success": True,
+            "data": {
+                "type_id": created.type_id,
+                "type_name": created.type_name,
+                "type_code": created.type_code,
+                "default_base_uom": created.default_base_uom
+            },
+            "message": f"Product type '{type_name}' created successfully"
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Error creating product type: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to create product type: {str(e)}"
+        )

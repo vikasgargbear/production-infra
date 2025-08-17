@@ -645,6 +645,9 @@ async def get_predefined_reasons():
 async def get_party_invoices_for_linking(
     party_id: str,
     invoice_type: str = Query("sales", description="sales/purchase"),
+    page: int = Query(1, ge=1, description="Page number (1-based)"),
+    limit: int = Query(5, ge=1, le=50, description="Items per page"),
+    search: str = Query("", description="Search invoice number"),
     db: Session = Depends(get_db)
 ):
     """
@@ -663,7 +666,29 @@ async def get_party_invoices_for_linking(
             debug_result = db.execute(text(debug_query), {"party_id": party_id}).first()
             logger.info(f"Customer {party_id} debug - Count: {debug_result.count}, Statuses: {debug_result.statuses}, Payment: {debug_result.payment_statuses}")
             
-            query = """
+            # Build WHERE conditions
+            where_conditions = ["customer_id = :party_id"]
+            params = {"party_id": party_id}
+            
+            if search:
+                where_conditions.append("invoice_number ILIKE :search")
+                params["search"] = f"%{search}%"
+                
+            where_clause = " AND ".join(where_conditions)
+            
+            # Count query for pagination
+            count_query = f"""
+                SELECT COUNT(*) 
+                FROM sales.invoices
+                WHERE {where_clause}
+            """
+            total_count = db.execute(text(count_query), params).scalar()
+            
+            # Calculate offset
+            offset = (page - 1) * limit
+            params.update({"limit": limit, "offset": offset})
+            
+            query = f"""
                 SELECT 
                     invoice_id,
                     invoice_number,
@@ -673,9 +698,9 @@ async def get_party_invoices_for_linking(
                     COALESCE(payment_status, 'pending') as payment_status,
                     COALESCE(invoice_status, 'draft') as invoice_status
                 FROM sales.invoices
-                WHERE customer_id = :party_id
-                ORDER BY invoice_date DESC
-                LIMIT 50
+                WHERE {where_clause}
+                ORDER BY invoice_date DESC, invoice_id DESC
+                LIMIT :limit OFFSET :offset
             """
         else:  # purchase
             query = """
@@ -711,15 +736,24 @@ async def get_party_invoices_for_linking(
             ).fetchall()
             logger.info(f"Sample customer IDs with invoices: {[c.customer_id for c in sample_customers]}")
         
+        # Calculate pagination metadata
+        total_pages = (total_count + limit - 1) // limit if invoice_type == "sales" else 1
+        has_next = page < total_pages if invoice_type == "sales" else False
+        has_prev = page > 1 if invoice_type == "sales" else False
+        
         return {
             "party_id": party_id,
             "invoice_type": invoice_type,
             "invoices": [dict(inv._mapping) for inv in invoices],
-            "debug_info": {
-                "query_executed": True,
-                "party_id_used": party_id,
-                "results_count": len(invoices)
-            }
+            "pagination": {
+                "page": page,
+                "limit": limit,
+                "total_count": total_count if invoice_type == "sales" else len(invoices),
+                "total_pages": total_pages,
+                "has_next": has_next,
+                "has_prev": has_prev
+            },
+            "search": search
         }
         
     except Exception as e:

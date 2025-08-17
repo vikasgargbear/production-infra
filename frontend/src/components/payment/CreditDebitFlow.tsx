@@ -53,6 +53,11 @@ const CreditDebitFlow: React.FC<CreditDebitFlowProps> = ({
   const [loadingInvoices, setLoadingInvoices] = useState(false);
   const [loadingItems, setLoadingItems] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  
+  // Pagination state
+  const [invoicePage, setInvoicePage] = useState(1);
+  const [invoiceSearch, setInvoiceSearch] = useState('');
+  const [invoicePagination, setInvoicePagination] = useState<any>(null);
 
   const isCredit = noteType === 'credit';
 
@@ -117,7 +122,21 @@ const CreditDebitFlow: React.FC<CreditDebitFlowProps> = ({
       try {
         // Try to use the notesApi first, fallback to mock data if backend isn't ready
         try {
-          const data = await notesApi.getLinkedInvoices(selectedCustomer.customer_id, 'sales');
+          // Use pagination parameters
+          const response = await fetch(
+            `/api/notes/linked-invoices/${selectedCustomer.customer_id}?invoice_type=sales&page=${invoicePage}&limit=5&search=${encodeURIComponent(invoiceSearch)}`,
+            {
+              headers: {
+                'Content-Type': 'application/json'
+              }
+            }
+          );
+          
+          if (!response.ok) {
+            throw new Error(`HTTP ${response.status}`);
+          }
+          
+          const data = await response.json();
           
           // Transform the API response to match our interface
           const transformedInvoices = data.invoices?.map((invoice: any) => ({
@@ -131,6 +150,7 @@ const CreditDebitFlow: React.FC<CreditDebitFlowProps> = ({
           })) || [];
 
           setCustomerInvoices(transformedInvoices);
+          setInvoicePagination(data.pagination);
         } catch (apiError) {
           console.warn('API not ready, using mock data:', apiError);
           
@@ -405,8 +425,8 @@ const CreditDebitFlow: React.FC<CreditDebitFlowProps> = ({
             <div className="flex items-center justify-between">
               <div className="flex items-center space-x-8">
                 {[
-                  { step: 1, label: 'Customer & Note Details', icon: Users },
-                  { step: 2, label: 'Invoice Selection & Submit', icon: CheckCircle }
+                  { step: 1, label: 'Customer, Note Details & Invoice Items', icon: Users },
+                  { step: 2, label: 'Review & Submit', icon: CheckCircle }
                 ].map(({ step, label, icon: Icon }) => (
                   <div
                     key={step}

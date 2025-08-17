@@ -207,6 +207,14 @@ export const productAPI = {
     const response = await apiClient.get(endpoint);
     return response;
   },
+
+  /**
+   * Generic POST method for any product endpoint
+   */
+  post: async (endpoint, data) => {
+    const response = await apiClient.post(endpoint, data);
+    return response;
+  },
 };
 
 // Define other commonly used APIs
