@@ -15,8 +15,8 @@ class CustomerBase(BaseModel):
     customer_name: str = Field(..., min_length=1, max_length=200)
     customer_code: Optional[str] = Field(None, max_length=50)
     contact_person: Optional[str] = Field(None, max_length=100)
-    phone: str = Field(..., pattern=r"^[0-9]{10}$", description="10-digit mobile number")
-    alternate_phone: Optional[str] = Field(None, pattern=r"^[0-9]{10}$")
+    primary_phone: str = Field(..., pattern=r"^[0-9]{10}$", description="10-digit mobile number")
+    secondary_phone: Optional[str] = Field(None, pattern=r"^[0-9]{10}$")
     email: Optional[str] = Field(None, pattern=r"^[\w\.-]+@[\w\.-]+\.\w+$")
     
     # Address fields (optional - stored in separate table)
@@ -66,8 +66,8 @@ class CustomerUpdate(BaseModel):
     """Schema for updating customer details"""
     customer_name: Optional[str] = Field(None, min_length=1, max_length=200)
     contact_person: Optional[str] = Field(None, max_length=100)
-    phone: Optional[str] = Field(None, pattern=r"^[0-9]{10}$")
-    alternate_phone: Optional[str] = Field(None, pattern=r"^[0-9]{10}$")
+    primary_phone: Optional[str] = Field(None, pattern=r"^[0-9]{10}$")
+    secondary_phone: Optional[str] = Field(None, pattern=r"^[0-9]{10}$")
     email: Optional[str] = Field(None, pattern=r"^[\w\.-]+@[\w\.-]+\.\w+$")
     
     # Address fields

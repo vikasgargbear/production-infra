@@ -68,15 +68,15 @@ async def create_customer(
         customer_data = customer.dict()
         customer_data["customer_code"] = customer_code
         
-        # Map old field names to new column names
+        # Map schema fields to database columns
         mapped_data = {
             "org_id": customer_data.get("org_id"),
             "customer_code": customer_code,
             "customer_name": customer_data.get("customer_name"),
             "customer_type": customer_data.get("customer_type"),
-            "primary_phone": customer_data.get("phone"),
+            "primary_phone": customer_data.get("primary_phone"),
             "primary_email": customer_data.get("email"),
-            "secondary_phone": customer_data.get("alternate_phone"),
+            "secondary_phone": customer_data.get("secondary_phone"),
             "contact_person_name": customer_data.get("contact_person"),
             "gst_number": customer_data.get("gstin"),
             "pan_number": customer_data.get("pan_number"),
@@ -169,7 +169,7 @@ async def create_customer(
             "customer_code": customer_code,
             "customer_name": customer_data.get("customer_name"),
             "customer_type": customer_data.get("customer_type"),
-            "phone": customer_data.get("phone"),
+            "primary_phone": customer_data.get("primary_phone"),
             "email": customer_data.get("email"),
             "gstin": customer_data.get("gstin"),
             "credit_limit": customer_data.get("credit_limit", 0),
@@ -294,9 +294,9 @@ async def list_customers(
             customer_dict = dict(row._mapping)
             
             # Map database columns to schema fields
-            customer_dict["phone"] = customer_dict.pop("primary_phone", None)
+            customer_dict["primary_phone"] = customer_dict.get("primary_phone", None)
             customer_dict["email"] = customer_dict.pop("primary_email", None)
-            customer_dict["alternate_phone"] = customer_dict.pop("secondary_phone", None)
+            customer_dict["secondary_phone"] = customer_dict.get("secondary_phone", None)
             customer_dict["contact_person"] = customer_dict.pop("contact_person_name", None)
             customer_dict["gstin"] = customer_dict.pop("gst_number", None)
             customer_dict["notes"] = customer_dict.pop("internal_notes", None)
@@ -357,9 +357,9 @@ async def get_customer(
         customer_dict = dict(customer._mapping)
         
         # Map database columns to schema fields
-        customer_dict["phone"] = customer_dict.pop("primary_phone", None)
+        customer_dict["primary_phone"] = customer_dict.get("primary_phone", None)
         customer_dict["email"] = customer_dict.pop("primary_email", None)
-        customer_dict["alternate_phone"] = customer_dict.pop("secondary_phone", None)
+        customer_dict["secondary_phone"] = customer_dict.get("secondary_phone", None)
         customer_dict["contact_person"] = customer_dict.pop("contact_person_name", None)
         customer_dict["gstin"] = customer_dict.pop("gst_number", None)
         customer_dict["notes"] = customer_dict.pop("internal_notes", None)
@@ -397,9 +397,9 @@ async def update_customer(
         
         # Map schema fields to database columns
         field_mapping = {
-            "phone": "primary_phone",
+            "primary_phone": "primary_phone",
             "email": "primary_email",
-            "alternate_phone": "secondary_phone",
+            "secondary_phone": "secondary_phone",
             "contact_person": "contact_person_name",
             "gstin": "gst_number",
             "notes": "internal_notes"
