@@ -9,15 +9,12 @@ from sqlalchemy import text
 import logging
 
 from ...core.database import get_db
-from ...models import User
-from ...core.crud_base import create_crud
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/users", tags=["users"])
+router = APIRouter(tags=["users"])
 
-# Create CRUD instance
-user_crud = create_crud(User)
+# Users API now uses direct SQL queries with master.org_users table
 
 @router.get("/")
 def get_users(
@@ -28,7 +25,7 @@ def get_users(
 ):
     """Get users with optional search"""
     try:
-        query = "SELECT id as user_id, username, email FROM users WHERE 1=1"
+        query = "SELECT user_id, username, email, full_name, is_active FROM master.org_users WHERE 1=1"
         params = {}
         
         if search:
@@ -52,7 +49,7 @@ def get_user(user_id: int, db: Session = Depends(get_db)):
     """Get a single user by ID (excluding password)"""
     try:
         result = db.execute(
-            text("SELECT id as user_id, username, email FROM users WHERE id = :user_id"),
+            text("SELECT user_id, username, email, full_name, is_active FROM master.org_users WHERE user_id = :user_id"),
             {"user_id": user_id}
         )
         user = result.first()
@@ -69,18 +66,24 @@ def get_user(user_id: int, db: Session = Depends(get_db)):
 def create_user(user_data: dict, db: Session = Depends(get_db)):
     """Create a new user"""
     try:
-        # Remove sensitive fields from response
-        user = User(**user_data)
-        db.add(user)
-        db.commit()
-        db.refresh(user)
+        # Insert into master.org_users
+        result = db.execute(
+            text("""
+                INSERT INTO master.org_users (username, email, full_name, is_active, org_id, created_at, updated_at)
+                VALUES (:username, :email, :full_name, true, :org_id, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+                RETURNING user_id, username, email, full_name
+            """),
+            {
+                "username": user_data.get("username"),
+                "email": user_data.get("email"),
+                "full_name": user_data.get("full_name", user_data.get("username")),
+                "org_id": "550e8400-e29b-41d4-a716-446655440000"  # Default org_id
+            }
+        )
+        new_user = result.first()
         
-        # Return user without password
-        return {
-            "user_id": user.id,
-            "username": user.username,
-            "email": user.email
-        }
+        # Return user data
+        return dict(new_user._mapping)
     except Exception as e:
         db.rollback()
         logger.error(f"Error creating user: {str(e)}")
@@ -90,28 +93,49 @@ def create_user(user_data: dict, db: Session = Depends(get_db)):
 def update_user(user_id: int, user_data: dict, db: Session = Depends(get_db)):
     """Update a user"""
     try:
-        user = db.query(User).filter(User.id == user_id).first()
-        if not user:
+        # Check if user exists
+        existing = db.execute(
+            text("SELECT user_id FROM master.org_users WHERE user_id = :user_id"),
+            {"user_id": user_id}
+        ).first()
+        
+        if not existing:
             raise HTTPException(status_code=404, detail="User not found")
         
-        # Don't allow updating password through this endpoint
-        if 'password' in user_data:
-            del user_data['password']
-        if 'hashed_password' in user_data:
-            del user_data['hashed_password']
+        # Build update query
+        update_fields = []
+        params = {"user_id": user_id}
         
-        for key, value in user_data.items():
-            setattr(user, key, value)
+        if 'username' in user_data:
+            update_fields.append("username = :username")
+            params["username"] = user_data['username']
+        if 'email' in user_data:
+            update_fields.append("email = :email")
+            params["email"] = user_data['email']
+        if 'full_name' in user_data:
+            update_fields.append("full_name = :full_name")
+            params["full_name"] = user_data['full_name']
+        if 'is_active' in user_data:
+            update_fields.append("is_active = :is_active")
+            params["is_active"] = user_data['is_active']
+            
+        if not update_fields:
+            raise HTTPException(status_code=400, detail="No fields to update")
+            
+        update_fields.append("updated_at = CURRENT_TIMESTAMP")
         
-        db.commit()
-        db.refresh(user)
+        result = db.execute(
+            text(f"""
+                UPDATE master.org_users 
+                SET {', '.join(update_fields)}
+                WHERE user_id = :user_id
+                RETURNING user_id, username, email, full_name, is_active
+            """),
+            params
+        )
         
-        # Return user without password
-        return {
-            "user_id": user.id,
-            "username": user.username,
-            "email": user.email
-        }
+        updated_user = result.first()
+        return dict(updated_user._mapping)
     except HTTPException:
         raise
     except Exception as e:
@@ -123,13 +147,26 @@ def update_user(user_id: int, user_data: dict, db: Session = Depends(get_db)):
 def delete_user(user_id: int, db: Session = Depends(get_db)):
     """Delete a user"""
     try:
-        user = db.query(User).filter(User.id == user_id).first()
-        if not user:
+        # Check if user exists
+        existing = db.execute(
+            text("SELECT user_id FROM master.org_users WHERE user_id = :user_id"),
+            {"user_id": user_id}
+        ).first()
+        
+        if not existing:
             raise HTTPException(status_code=404, detail="User not found")
         
-        db.delete(user)
-        db.commit()
-        return {"message": "User deleted successfully"}
+        # Soft delete by setting is_active to false
+        db.execute(
+            text("""
+                UPDATE master.org_users 
+                SET is_active = false, updated_at = CURRENT_TIMESTAMP
+                WHERE user_id = :user_id
+            """),
+            {"user_id": user_id}
+        )
+        
+        return {"message": "User deactivated successfully"}
     except HTTPException:
         raise
     except Exception as e:

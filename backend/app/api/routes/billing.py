@@ -21,7 +21,7 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/billing", tags=["Billing & GST"])
+router = APIRouter(tags=["Billing & GST"])
 
 @router.get("/")
 async def billing_overview(db: Session = Depends(get_db)):

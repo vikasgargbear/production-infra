@@ -16,7 +16,7 @@ from ...core.jwt_auth import (
     verify_user_org_access
 )
 
-router = APIRouter(prefix="/auth", tags=["authentication"])
+router = APIRouter(tags=["authentication"])
 
 @router.get("/")
 async def auth_status():

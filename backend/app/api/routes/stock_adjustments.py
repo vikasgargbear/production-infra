@@ -15,7 +15,7 @@ from ...core.config import DEFAULT_ORG_ID
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/stock-adjustments", tags=["stock-adjustments"])
+router = APIRouter(tags=["stock-adjustments"])
 
 @router.get("/")
 def get_stock_adjustments(
@@ -142,7 +142,7 @@ def create_stock_adjustment(adjustment_data: dict, db: Session = Depends(get_db)
                     reference_type, reference_number,
                     notes, performed_by
                 ) VALUES (
-                    DEFAULT_ORG_ID, -- Default org
+                    :org_id
                     :movement_date, :movement_type,
                     :product_id, :batch_id,
                     :quantity_in, :quantity_out,
@@ -151,6 +151,7 @@ def create_stock_adjustment(adjustment_data: dict, db: Session = Depends(get_db)
                 ) RETURNING movement_id
             """),
             {
+                "org_id": DEFAULT_ORG_ID,
                 "movement_date": adjustment_data.get("adjustment_date", datetime.utcnow()),
                 "movement_type": movement_type,
                 "product_id": batch.product_id,
@@ -231,7 +232,7 @@ def process_physical_count(count_data: dict, db: Session = Depends(get_db)):
                             reference_type, reference_number,
                             notes, performed_by
                         ) VALUES (
-                            DEFAULT_ORG_ID,
+                            :org_id,
                             :movement_date, 'stock_count',
                             :product_id, :batch_id,
                             :quantity_in, :quantity_out,
@@ -240,6 +241,7 @@ def process_physical_count(count_data: dict, db: Session = Depends(get_db)):
                         ) RETURNING movement_id
                     """),
                     {
+                        "org_id": DEFAULT_ORG_ID,
                         "movement_date": count_data.get("count_date", datetime.utcnow()),
                         "product_id": batch.product_id,
                         "batch_id": batch_id,
@@ -316,7 +318,7 @@ def expire_batches(db: Session = Depends(get_db)):
                         reference_type, reference_number,
                         notes
                     ) VALUES (
-                        DEFAULT_ORG_ID,
+                        :org_id,
                         CURRENT_DATE, 'stock_expiry',
                         :product_id, :batch_id,
                         0, :quantity_out,
@@ -325,6 +327,7 @@ def expire_batches(db: Session = Depends(get_db)):
                     ) RETURNING movement_id
                 """),
                 {
+                    "org_id": DEFAULT_ORG_ID,
                     "product_id": batch.product_id,
                     "batch_id": batch.batch_id,
                     "quantity_out": batch.quantity_available,
