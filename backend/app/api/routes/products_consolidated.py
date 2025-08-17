@@ -555,6 +555,31 @@ async def update_product(
             if frontend_field in product:
                 batch_fields[batch_field] = product[frontend_field]
         
+        # Handle category updates with proper master table linking
+        if "category" in product or "category_name" in product:
+            category_name = product.get("category") or product.get("category_name")
+            if category_name:
+                # Look up category_id from master categories table
+                category_lookup = db.execute(text("""
+                    SELECT category_id, category_name 
+                    FROM inventory.product_categories 
+                    WHERE LOWER(category_name) = LOWER(:category_name) 
+                      AND org_id = :org_id 
+                      AND is_active = true
+                    LIMIT 1
+                """), {"category_name": category_name, "org_id": DEFAULT_ORG_ID}).fetchone()
+                
+                if category_lookup:
+                    # Use proper category from master table
+                    batch_fields["category_name"] = category_lookup.category_name
+                    batch_fields["category_id"] = category_lookup.category_id
+                    logger.info(f"Found category '{category_lookup.category_name}' with ID {category_lookup.category_id}")
+                else:
+                    # Category not found in master table, save as text only
+                    batch_fields["category_name"] = category_name
+                    batch_fields["category_id"] = None
+                    logger.warning(f"Category '{category_name}' not found in master categories, saving as text only")
+        
         # Update active batches if we have batch-level changes
         if batch_fields:
             batch_update_fields = []
