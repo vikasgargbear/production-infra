@@ -195,6 +195,7 @@ async def list_customers(
     city: Optional[str] = None,
     has_gstin: Optional[bool] = None,
     include_stats: bool = Query(False, description="Include business statistics (disabled by default for performance)"),
+    fast_search: bool = Query(True, description="Use fast search mode (minimal data for quick response)"),
     db: Session = Depends(get_db)
 ):
     """
@@ -209,8 +210,14 @@ async def list_customers(
     try:
         logger.info(f"Customer search request: search={search}, limit={limit}, skip={skip}, include_stats={include_stats}")
         
-        # Build query
-        query = "SELECT * FROM parties.customers WHERE org_id = :org_id"
+        # Build query with fast search optimization
+        if fast_search:
+            # Minimal columns for fast search response
+            query = """SELECT customer_id, customer_name, customer_code, primary_phone, 
+                      customer_type, gst_number, is_active FROM parties.customers WHERE org_id = :org_id"""
+        else:
+            # Full query for detailed view
+            query = "SELECT * FROM parties.customers WHERE org_id = :org_id"
         count_query = "SELECT COUNT(*) FROM parties.customers WHERE org_id = :org_id"
         params = {"org_id": DEFAULT_ORG_ID}
         
