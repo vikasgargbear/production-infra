@@ -22,7 +22,10 @@ import {
   ChevronRight,
   Filter,
   Eye,
-  Share2
+  Share2,
+  Loader2,
+  RefreshCw,
+  AlertCircle
 } from 'lucide-react';
 import { format, parseISO, startOfMonth, endOfMonth, subMonths } from 'date-fns';
 import { ledgerApi } from '../../services/api/modules/ledger.api';
@@ -126,7 +129,7 @@ const PartyStatement: React.FC<PartyStatementProps> = ({
   });
 
   // Fetch statement data
-  const { data: statementData, isLoading, refetch } = useQuery(
+  const { data: statementData, isLoading, refetch, error: queryError } = useQuery(
     ['party-statement', selectedParty?.id || initialPartyId, dateRange, includeOptions],
     () => ledgerApi.getPartyStatement({
       party_id: selectedParty?.id || initialPartyId,
@@ -141,6 +144,29 @@ const PartyStatement: React.FC<PartyStatementProps> = ({
       enabled: !!(selectedParty?.id || initialPartyId)
     }
   );
+
+  const [refreshing, setRefreshing] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    setErrorMessage(null);
+    try {
+      await refetch();
+    } catch (error) {
+      console.error('Refresh failed:', error);
+      setErrorMessage('Failed to refresh data');
+    } finally {
+      setRefreshing(false);
+    }
+  };
+
+  // Set error message when query fails
+  React.useEffect(() => {
+    if (queryError) {
+      setErrorMessage('Failed to load party statement data');
+    }
+  }, [queryError]);
 
   // Print handler
   const handlePrint = useReactToPrint({
@@ -254,6 +280,14 @@ const PartyStatement: React.FC<PartyStatementProps> = ({
               onClose={onClose}
               historyType="ledger"
               onSaveDraft={() => {}}
+              additionalActions={[
+                {
+                  label: "Refresh",
+                  icon: RefreshCw,
+                  onClick: () => refetch(),
+                  variant: "secondary"
+                }
+              ] as any}
             />
             <div className="flex-1 overflow-y-auto">
               <div className="max-w-6xl mx-auto px-6 py-6">
@@ -326,6 +360,12 @@ const PartyStatement: React.FC<PartyStatementProps> = ({
                 icon: Share2,
                 onClick: handleShare,
                 variant: "secondary"
+              },
+              {
+                label: "Refresh",
+                icon: RefreshCw,
+                onClick: () => refetch(),
+                variant: "secondary"
               }
             ] as any}
           />
@@ -334,6 +374,33 @@ const PartyStatement: React.FC<PartyStatementProps> = ({
           </div>
           <div className="flex-1 overflow-y-auto">
             <div className="max-w-6xl mx-auto px-6 py-6">
+
+              {/* Loading State */}
+              {isLoading && (
+                <div className="bg-white rounded-lg shadow-sm border border-blue-200 p-8 mb-6">
+                  <div className="text-center">
+                    <Loader2 className="w-8 h-8 animate-spin mx-auto mb-4 text-blue-600" />
+                    <p className="text-gray-600">Loading party statement...</p>
+                  </div>
+                </div>
+              )}
+
+              {/* Error State */}
+              {errorMessage && (
+                <div className="bg-white rounded-lg shadow-sm border border-red-200 p-6 mb-6">
+                  <div className="text-center max-w-md mx-auto">
+                    <AlertCircle className="w-12 h-12 text-red-400 mx-auto mb-4" />
+                    <h3 className="text-lg font-medium text-red-800 mb-2">Error</h3>
+                    <p className="text-red-700 mb-4">{errorMessage}</p>
+                    <button
+                      onClick={() => refetch()}
+                      className="px-4 py-2 bg-red-100 text-red-700 rounded-md hover:bg-red-200 text-sm"
+                    >
+                      Retry
+                    </button>
+                  </div>
+                </div>
+              )}
 
       {/* Filters */}
       <div className="mb-6 bg-white p-4 rounded-lg shadow">

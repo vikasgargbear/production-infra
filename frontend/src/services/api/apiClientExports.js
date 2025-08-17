@@ -46,56 +46,32 @@ export const customerAPI = {
    */
   search: async (query, options = {}) => {
     try {
-      // Use PostgreSQL wrapper endpoint for faster response
-      const response = await apiClient.get('/pg/customers/search', {
+      // Use the main customers endpoint directly with ultra-conservative settings
+      const response = await apiClient.get('/customers/', {
         params: {
-          q: query,
-          limit: Math.min(options.limit || 20, 20), // Limit to 20 for speed
+          search: query,
+          limit: Math.min(options.limit || 5, 5), // Ultra-small limit to avoid DB overload
           include_stats: false, // Never include stats for search
+          fast_search: true, // Use fast search mode
         },
-        timeout: 3000, // 3 second timeout for production
+        timeout: 5000, // 5 second timeout
       });
+      
+      // Handle the response structure from customers endpoint
+      const customers = response.data?.customers || response.data || [];
       
       return {
         success: true,
-        data: response.data.customers || response.data || [],
-        total: response.data.total || 0
+        data: Array.isArray(customers) ? customers : [],
+        total: response.data?.total || customers.length || 0
       };
     } catch (error) {
-      // Fallback to simplified search if PostgreSQL endpoint fails
-      if (error.code === 'ECONNABORTED' || error.response?.status === 404) {
-        try {
-          const response = await apiClient.get('/customers/', {
-            params: {
-              search: query,
-              limit: 10,
-              include_stats: false,
-            },
-            timeout: 5000,
-          });
-          
-          return {
-            success: true,
-            data: Array.isArray(response.data) ? response.data : [],
-            total: response.data?.length || 0
-          };
-        } catch (fallbackError) {
-          console.warn('Customer search failed completely:', fallbackError);
-          return {
-            success: false,
-            data: [],
-            total: 0,
-            error: 'Search temporarily unavailable'
-          };
-        }
-      }
-      
-      console.warn('Customer search error:', error);
+      console.error('Customer search failed:', error);
       return {
         success: false,
         data: [],
         total: 0,
-        error: error.message
+        error: error.response?.status === 500 ? 'Database connection issue' : error.message
       };
     }
   },
@@ -132,15 +108,16 @@ export const productAPI = {
    */
   search: async (query, options = {}) => {
     try {
-      // Use correct products endpoint with search parameter
+      // Use correct products endpoint with search parameter + timeout protection
       const response = await apiClient.get('/products/', {
         params: {
           search: query,  // Backend expects 'search' not 'q'
           product_type: options.product_type || '',
           manufacturer: options.manufacturer || '',
-          limit: options.limit || 50,
+          limit: Math.min(options.limit || 20, 20), // Reduce to 20 for speed
           skip: options.offset || 0,  // Backend uses 'skip' not 'offset'
         },
+        timeout: 3000, // 3 second timeout for production speed
       });
       
       // Backend returns array directly, not wrapped in products
@@ -150,8 +127,36 @@ export const productAPI = {
         total: response.data?.length || 0
       };
     } catch (error) {
+      // Fallback to simplified search if main endpoint fails or times out
+      if (error.code === 'ECONNABORTED' || error.response?.status >= 500) {
+        try {
+          console.warn('Product search timeout, trying fallback...');
+          const response = await apiClient.get('/products/', {
+            params: {
+              search: query,
+              limit: 10, // Even smaller limit for fallback
+            },
+            timeout: 5000, // 5 second fallback timeout
+          });
+          
+          return {
+            success: true,
+            data: response.data || [],
+            total: response.data?.length || 0,
+            warning: 'Using fallback search'
+          };
+        } catch (fallbackError) {
+          console.error('Product search failed completely:', fallbackError);
+          return {
+            success: false,
+            data: [],
+            total: 0,
+            error: 'Search temporarily unavailable'
+          };
+        }
+      }
+      
       console.error('Product search failed:', error);
-      // Return empty array on error
       return {
         success: false,
         data: [],

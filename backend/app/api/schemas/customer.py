@@ -94,9 +94,10 @@ class CustomerResponse(CustomerBase):
     org_id: UUID
     customer_code: str
     
-    # Computed fields
-    outstanding_amount: Decimal = Field(default=Decimal("0.00"))
-    total_business: Decimal = Field(default=Decimal("0.00"))
+    # Computed fields (optional for fast search)
+    outstanding_amount: Optional[Decimal] = Field(default=Decimal("0.00"))
+    total_business: Optional[Decimal] = Field(default=Decimal("0.00"))
+    total_orders: Optional[int] = Field(default=0)
     last_order_date: Optional[date] = None
     
     # Timestamps

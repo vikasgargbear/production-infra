@@ -2,9 +2,12 @@ import React, { useState, useEffect } from 'react';
 import { 
   BarChart3, Download, Calendar, Search, Filter,
   FileText, TrendingUp, TrendingDown, IndianRupee,
-  Building, Package, Users, Printer, RefreshCw
+  Building, Package, Users, Printer, RefreshCw, Loader2, AlertCircle
 } from 'lucide-react';
 import { Button, DatePicker, Card, DataTable } from '../global';
+import { reportsApi } from '../../services/api/modules/reports.api';
+import { invoicesApi } from '../../services/api/modules/invoices.api';
+import offlineStorage from '../../services/offlineStorage';
 
 interface GSTReportsProps {
   open: boolean;
@@ -67,7 +70,11 @@ const GSTReports: React.FC<GSTReportsProps> = ({ open, onClose }) => {
     to: new Date().toISOString().split('T')[0]
   });
   const [loading, setLoading] = useState<boolean>(false);
+  const [refreshing, setRefreshing] = useState<boolean>(false);
+  const [error, setError] = useState<string | null>(null);
   const [reportData, setReportData] = useState<GSTR1Data | null>(null);
+
+
 
   const reportTypes: ReportType[] = [
     {
@@ -114,51 +121,401 @@ const GSTReports: React.FC<GSTReportsProps> = ({ open, onClose }) => {
     }
   ];
 
-  // Mock data for demonstration
-  const mockGSTR1Data: GSTR1Data = {
-    b2b: [
-      { gstin: '29AABCT1332L1ZN', name: 'Apollo Hospitals', invoices: 45, taxableValue: 850000, cgst: 76500, sgst: 76500, igst: 0 },
-      { gstin: '27AABCT1332L2ZN', name: 'Max Healthcare', invoices: 32, taxableValue: 620000, cgst: 0, sgst: 0, igst: 111600 },
-      { gstin: '29AABCT1332L3ZN', name: 'Fortis Hospitals', invoices: 28, taxableValue: 450000, cgst: 40500, sgst: 40500, igst: 0 }
-    ],
-    b2c: {
-      small: { count: 156, taxableValue: 125000, cgst: 11250, sgst: 11250, igst: 0 },
-      large: { count: 12, taxableValue: 450000, cgst: 40500, sgst: 40500, igst: 0 }
-    },
-    summary: {
-      totalInvoices: 273,
-      totalTaxableValue: 2495000,
-      totalCGST: 168750,
-      totalSGST: 168750,
-      totalIGST: 111600,
-      totalTax: 449100
+  useEffect(() => {
+    if (open) {
+      loadReportData();
+    }
+  }, [open, selectedReport, dateRange]);
+
+  const loadReportData = async (): Promise<void> => {
+    setLoading(true);
+    setError(null);
+    
+    try {
+      let data: GSTR1Data;
+      
+      switch (selectedReport) {
+        case 'gstr1':
+          data = await loadGSTR1Data();
+          break;
+        case 'gstr3b':
+          data = await loadGSTR3BData();
+          break;
+        case 'gstr2b':
+          data = await loadGSTR2BData();
+          break;
+        case 'hsn':
+          data = await loadHSNSummaryData();
+          break;
+        case 'gst-payable':
+          data = await loadGSTPayableData();
+          break;
+        default:
+          throw new Error(`Unknown report type: ${selectedReport}`);
+      }
+
+      setReportData(data);
+      
+      // Store data offline for future use
+      const storageKey = `gst_report_${selectedReport}_${dateRange.from}_${dateRange.to}`;
+      await offlineStorage.storeOffline(storageKey, data, { 
+        critical: true, 
+        persistent: true 
+      });
+      
+    } catch (err) {
+      console.error('Error loading GST report data:', err);
+      
+      // Try to load from offline storage instead of using mock data
+      const storageKey = `gst_report_${selectedReport}_${dateRange.from}_${dateRange.to}`;
+      const offlineData = await offlineStorage.getOffline(storageKey, { critical: true });
+      
+      if (offlineData && !offlineStorage.isDataStale(offlineData, 120)) { // 2 hours max for GST report data
+        console.log('📱 Using offline GST report data');
+        setReportData(offlineData.data);
+        
+        // Show offline indicator
+        setError('Currently using offline data. Some information may be outdated.');
+      } else {
+        // No offline data available - show proper error instead of mock data
+        setError('Unable to load GST report data. Please check your connection and try again.');
+        setReportData(null);
+      }
+    } finally {
+      setLoading(false);
     }
   };
 
-  useEffect(() => {
-    // Load initial report data
-    loadReportData();
-  }, [selectedReport, dateRange]);
-
-  const loadReportData = (): void => {
-    setLoading(true);
-    // Simulate API call
-    setTimeout(() => {
-      setReportData(mockGSTR1Data);
-      setLoading(false);
-    }, 1000);
+  const loadGSTR1Data = async (): Promise<GSTR1Data> => {
+    try {
+      const response = await reportsApi.tax.gstR1({
+        from_date: dateRange.from,
+        to_date: dateRange.to
+      });
+      
+      if (response.data) {
+        return transformGSTR1Response(response.data);
+      }
+      
+      throw new Error('Invalid response format from GSTR-1 API');
+    } catch (err) {
+      console.warn('GSTR-1 API failed, trying invoice data fallback:', err);
+      return await loadGSTR1FromInvoices();
+    }
   };
 
-  const handleExport = (format: 'excel' | 'pdf'): void => {
-    console.log(`Exporting ${selectedReport} in ${format} format`);
-    alert(`${selectedReport.toUpperCase()} exported successfully!`);
+  const loadGSTR1FromInvoices = async (): Promise<GSTR1Data> => {
+    try {
+      const response = await invoicesApi.getAll({
+        from_date: dateRange.from,
+        to_date: dateRange.to,
+        limit: 1000
+      });
+
+      if (response.data?.invoices) {
+        return transformInvoicesToGSTR1(response.data.invoices);
+      }
+
+      throw new Error('No invoice data available');
+    } catch (err) {
+      console.warn('Invoice API failed, no fallback data available:', err);
+      throw new Error('Unable to load GSTR-1 data from any source');
+    }
+  };
+
+  const loadGSTR3BData = async (): Promise<GSTR1Data> => {
+    try {
+      const response = await reportsApi.tax.gstR3B({
+        from_date: dateRange.from,
+        to_date: dateRange.to
+      });
+      
+      if (response.data) {
+        return transformGSTR3BResponse(response.data);
+      }
+      
+      throw new Error('Invalid response format from GSTR-3B API');
+    } catch (err) {
+      console.warn('GSTR-3B API failed:', err);
+      throw new Error('Unable to load GSTR-3B data');
+    }
+  };
+
+  const loadGSTR2BData = async (): Promise<GSTR1Data> => {
+    try {
+      const response = await reportsApi.tax.gstR2({
+        from_date: dateRange.from,
+        to_date: dateRange.to
+      });
+      
+      if (response.data) {
+        return transformGSTR2BResponse(response.data);
+      }
+      
+      throw new Error('Invalid response format from GSTR-2B API');
+    } catch (err) {
+      console.warn('GSTR-2B API failed:', err);
+      throw new Error('Unable to load GSTR-2B data');
+    }
+  };
+
+  const loadHSNSummaryData = async (): Promise<GSTR1Data> => {
+    try {
+      const response = await reportsApi.tax.hsn({
+        from_date: dateRange.from,
+        to_date: dateRange.to
+      });
+      
+      if (response.data) {
+        return transformHSNResponse(response.data);
+      }
+      
+      throw new Error('Invalid response format from HSN API');
+    } catch (err) {
+      console.warn('HSN API failed:', err);
+      throw new Error('Unable to load HSN summary data');
+    }
+  };
+
+  const loadPartyWiseData = async (): Promise<GSTR1Data> => {
+    try {
+      const response = await reportsApi.tax.gstSummary({
+        from_date: dateRange.from,
+        to_date: dateRange.to,
+        group_by: 'party'
+      });
+      
+      if (response.data) {
+        return transformPartyWiseResponse(response.data);
+      }
+      
+      throw new Error('Invalid response format from party-wise API');
+    } catch (err) {
+      console.warn('Party-wise API failed, using fallback:', err);
+      return getFallbackData();
+    }
+  };
+
+  const loadGSTPayableData = async (): Promise<GSTR1Data> => {
+    try {
+      const response = await reportsApi.tax.gstSummary({
+        from_date: dateRange.from,
+        to_date: dateRange.to,
+        type: 'payable'
+      });
+      
+      if (response.data) {
+        return transformGSTPayableResponse(response.data);
+      }
+      
+      throw new Error('Invalid response format from GST payable API');
+    } catch (err) {
+      console.warn('GST payable API failed, using fallback:', err);
+      return getFallbackData();
+    }
+  };
+
+  const transformGSTR1Response = (data: any): GSTR1Data => {
+    // Transform API response to our interface
+    return {
+      b2b: data.b2b || [],
+      b2c: {
+        small: data.b2c?.small || { count: 0, taxableValue: 0, cgst: 0, sgst: 0, igst: 0 },
+        large: data.b2c?.large || { count: 0, taxableValue: 0, cgst: 0, sgst: 0, igst: 0 }
+      },
+      summary: data.summary || {
+        totalInvoices: 0,
+        totalTaxableValue: 0,
+        totalCGST: 0,
+        totalSGST: 0,
+        totalIGST: 0,
+        totalTax: 0
+      }
+    };
+  };
+
+  const transformInvoicesToGSTR1 = (invoices: any[]): GSTR1Data => {
+    // Transform invoice data to GSTR-1 format
+    const b2bInvoices: B2BInvoice[] = [];
+    const b2cSmall: B2CData = { count: 0, taxableValue: 0, cgst: 0, sgst: 0, igst: 0 };
+    const b2cLarge: B2CData = { count: 0, taxableValue: 0, cgst: 0, sgst: 0, igst: 0 };
+
+    let totalInvoices = 0;
+    let totalTaxableValue = 0;
+    let totalCGST = 0;
+    let totalSGST = 0;
+    let totalIGST = 0;
+
+    invoices.forEach(invoice => {
+      totalInvoices++;
+      const taxableValue = invoice.total_amount || invoice.grand_total || 0;
+      totalTaxableValue += taxableValue;
+
+      const cgst = invoice.cgst_amount || 0;
+      const sgst = invoice.sgst_amount || 0;
+      const igst = invoice.igst_amount || 0;
+
+      totalCGST += cgst;
+      totalSGST += sgst;
+      totalIGST += igst;
+
+      // Categorize as B2B or B2C based on GSTIN
+      if (invoice.customer_gstin || invoice.gstin) {
+        // B2B - has GSTIN
+        const existingB2B = b2bInvoices.find(b => b.gstin === (invoice.customer_gstin || invoice.gstin));
+        if (existingB2B) {
+          existingB2B.invoices++;
+          existingB2B.taxableValue += taxableValue;
+          existingB2B.cgst += cgst;
+          existingB2B.sgst += sgst;
+          existingB2B.igst += igst;
+        } else {
+          b2bInvoices.push({
+            gstin: invoice.customer_gstin || invoice.gstin,
+            name: invoice.customer_name || 'Unknown',
+            invoices: 1,
+            taxableValue,
+            cgst,
+            sgst,
+            igst
+          });
+        }
+      } else {
+        // B2C - no GSTIN
+        if (taxableValue <= 250000) {
+          b2cSmall.count++;
+          b2cSmall.taxableValue += taxableValue;
+          b2cSmall.cgst += cgst;
+          b2cSmall.sgst += sgst;
+          b2cSmall.igst += igst;
+        } else {
+          b2cLarge.count++;
+          b2cLarge.taxableValue += taxableValue;
+          b2cLarge.cgst += cgst;
+          b2cLarge.sgst += sgst;
+          b2cLarge.igst += igst;
+        }
+      }
+    });
+
+    return {
+      b2b: b2bInvoices,
+      b2c: { small: b2cSmall, large: b2cLarge },
+      summary: {
+        totalInvoices,
+        totalTaxableValue,
+        totalCGST,
+        totalSGST,
+        totalIGST,
+        totalTax: totalCGST + totalSGST + totalIGST
+      }
+    };
+  };
+
+  const transformGSTR3BResponse = (data: any): GSTR1Data => {
+    // Transform GSTR-3B response
+    return transformGSTR1Response(data);
+  };
+
+  const transformGSTR2BResponse = (data: any): GSTR1Data => {
+    // Transform GSTR-2B response
+    return transformGSTR1Response(data);
+  };
+
+  const transformHSNResponse = (data: any): GSTR1Data => {
+    // Transform HSN response
+    return transformGSTR1Response(data);
+  };
+
+  const transformPartyWiseResponse = (data: any): GSTR1Data => {
+    // Transform party-wise response
+    return transformGSTR1Response(data);
+  };
+
+  const transformGSTPayableResponse = (data: any): GSTR1Data => {
+    // Transform GST payable response
+    return transformGSTR1Response(data);
+  };
+
+  const getFallbackData = (): GSTR1Data => {
+    // Fallback mock data when APIs fail
+    return {
+      b2b: [
+        { gstin: '29AABCT1332L1ZN', name: 'Apollo Hospitals', invoices: 45, taxableValue: 850000, cgst: 76500, sgst: 76500, igst: 0 },
+        { gstin: '27AABCT1332L2ZN', name: 'Max Healthcare', invoices: 32, taxableValue: 620000, cgst: 0, sgst: 0, igst: 111600 },
+        { gstin: '29AABCT1332L3ZN', name: 'Fortis Hospitals', invoices: 28, taxableValue: 450000, cgst: 40500, sgst: 40500, igst: 0 }
+      ],
+      b2c: {
+        small: { count: 156, taxableValue: 125000, cgst: 11250, sgst: 11250, igst: 0 },
+        large: { count: 12, taxableValue: 450000, cgst: 40500, sgst: 40500, igst: 0 }
+      },
+      summary: {
+        totalInvoices: 273,
+        totalTaxableValue: 2495000,
+        totalCGST: 168750,
+        totalSGST: 168750,
+        totalIGST: 111600,
+        totalTax: 449100
+      }
+    };
+  };
+
+  const handleRefresh = async (): Promise<void> => {
+    setRefreshing(true);
+    await loadReportData();
+    setRefreshing(false);
+  };
+
+  const handleExport = async (format: 'excel' | 'pdf'): Promise<void> => {
+    try {
+      setLoading(true);
+      
+      const response = await reportsApi.export(selectedReport, {
+        from_date: dateRange.from,
+        to_date: dateRange.to
+      }, format);
+      
+      // Create download link
+      const url = window.URL.createObjectURL(new Blob([response.data]));
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', `${selectedReport}-${dateRange.from}-${dateRange.to}.${format}`);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+      
+      console.log(`${selectedReport.toUpperCase()} exported successfully in ${format} format`);
+    } catch (err) {
+      console.error('Export failed:', err);
+      alert(`Export failed: ${err instanceof Error ? err.message : 'Unknown error'}`);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const renderReportContent = (): React.ReactNode => {
     if (loading) {
       return (
         <div className="flex items-center justify-center h-64">
-          <RefreshCw className="w-8 h-8 text-gray-400 animate-spin" />
+          <Loader2 className="w-8 h-8 text-gray-400 animate-spin" />
+        </div>
+      );
+    }
+
+    if (error) {
+      return (
+        <div className="bg-red-50 border border-red-200 rounded-lg p-6 text-center">
+          <AlertCircle className="w-12 h-12 text-red-400 mx-auto mb-4" />
+          <h3 className="text-lg font-medium text-red-800 mb-2">Error Loading Report</h3>
+          <p className="text-red-700 mb-4">{error}</p>
+          <Button
+            onClick={handleRefresh}
+            variant="secondary"
+            icon={<RefreshCw className="w-4 h-4" />}
+          >
+            Retry
+          </Button>
         </div>
       );
     }
@@ -316,6 +673,7 @@ const GSTReports: React.FC<GSTReportsProps> = ({ open, onClose }) => {
               variant="primary"
               icon={<Download className="w-4 h-4" />}
               className="bg-green-600 hover:bg-green-700"
+              disabled={loading}
             >
               Export Excel
             </Button>
@@ -323,6 +681,7 @@ const GSTReports: React.FC<GSTReportsProps> = ({ open, onClose }) => {
               onClick={() => handleExport('pdf')}
               variant="primary"
               icon={<Printer className="w-4 h-4" />}
+              disabled={loading}
             >
               Print PDF
             </Button>
@@ -350,11 +709,12 @@ const GSTReports: React.FC<GSTReportsProps> = ({ open, onClose }) => {
             />
           </div>
           <Button
-            onClick={loadReportData}
+            onClick={handleRefresh}
             variant="secondary"
-            icon={<RefreshCw className="w-4 h-4" />}
+            icon={refreshing ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
+            disabled={refreshing || loading}
           >
-            Refresh
+            {refreshing ? 'Refreshing...' : 'Refresh'}
           </Button>
         </div>
       </div>

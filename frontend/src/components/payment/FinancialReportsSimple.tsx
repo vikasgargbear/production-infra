@@ -1,16 +1,39 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
-  TrendingUp, Download, Calendar, FileText, BarChart3
+  TrendingUp, FileText, BarChart3, Loader2, RefreshCw, AlertCircle
 } from 'lucide-react';
 import { ModuleHeader } from '../global';
+import { reportsApi, ledgerApi } from '../../services/api';
+import offlineStorage from '../../services/offlineStorage';
 
 interface FinancialReportsSimpleProps {
   onClose?: () => void;
 }
 
+interface ReportData {
+  reportId: string;
+  period: string;
+  generatedAt: string;
+  data: any;
+  summary?: {
+    totalAssets?: number;
+    totalLiabilities?: number;
+    netWorth?: number;
+    totalIncome?: number;
+    totalExpenses?: number;
+    netProfit?: number;
+  };
+}
+
 const FinancialReportsSimple: React.FC<FinancialReportsSimpleProps> = ({ onClose }) => {
   const [selectedPeriod, setSelectedPeriod] = useState('this_month');
   const [selectedReport, setSelectedReport] = useState('');
+  
+  // API data states
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
+  const [reportData, setReportData] = useState<ReportData | null>(null);
 
   const reports = [
     {
@@ -36,12 +59,133 @@ const FinancialReportsSimple: React.FC<FinancialReportsSimpleProps> = ({ onClose
     }
   ];
 
-  const generateReport = (reportId: string) => {
-    setSelectedReport(reportId);
-    console.log(`Generating ${reportId} for ${selectedPeriod}`);
-    // API call would go here
-    alert(`${reportId} report will be generated for ${selectedPeriod}`);
+  useEffect(() => {
+    // Load initial data
+    loadInitialData();
+  }, []);
+
+  const loadInitialData = async () => {
+    try {
+      setIsLoading(true);
+      setError(null);
+      
+      // Load financial summary data for the selected period
+      const summaryResponse = await reportsApi.financial.getSummary({ period: selectedPeriod });
+      
+      if (summaryResponse?.data) {
+        // Store summary data offline for future use
+        await offlineStorage.storeOffline(`financial_summary_${selectedPeriod}`, summaryResponse.data, { 
+          persistent: true 
+        });
+      }
+      
+    } catch (error) {
+      console.error('Error loading initial data:', error);
+      
+      // Try to load from offline storage
+      const offlineData = await offlineStorage.getOffline(`financial_summary_${selectedPeriod}`, { persistent: true });
+      
+      if (offlineData && !offlineStorage.isDataStale(offlineData, 120)) { // 2 hours max for financial data
+        console.log('📱 Using offline financial summary data');
+        setError('Currently using offline data. Some information may be outdated.');
+      } else {
+        setError('Failed to load initial data. Please check your connection and try again.');
+      }
+    } finally {
+      setIsLoading(false);
+    }
   };
+
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    setError(null);
+    
+    try {
+      await loadInitialData();
+    } catch (error) {
+      console.error('Error refreshing data:', error);
+      setError('Failed to refresh data. Please try again.');
+    } finally {
+      setRefreshing(false);
+    }
+  };
+
+  const generateReport = async (reportId: string) => {
+    setSelectedReport(reportId);
+    setIsLoading(true);
+    setError(null);
+    
+    try {
+      console.log(`Generating ${reportId} for ${selectedPeriod}`);
+      
+      let reportResponse;
+      
+      // Call the actual API to generate the report based on type
+      switch (reportId) {
+        case 'trial_balance':
+          reportResponse = await reportsApi.financial.getTrialBalance({ period: selectedPeriod });
+          break;
+        case 'profit_loss':
+          reportResponse = await reportsApi.financial.getProfitLoss({ period: selectedPeriod });
+          break;
+        case 'balance_sheet':
+          reportResponse = await reportsApi.financial.getBalanceSheet({ period: selectedPeriod });
+          break;
+        default:
+          throw new Error(`Unknown report type: ${reportId}`);
+      }
+      
+      if (reportResponse?.data) {
+        const newReportData: ReportData = {
+          reportId,
+          period: selectedPeriod,
+          generatedAt: new Date().toISOString(),
+          data: reportResponse.data,
+          summary: reportResponse.data.summary
+        };
+        
+        setReportData(newReportData);
+        
+        // Store report data offline for future use
+        const storageKey = `financial_report_${reportId}_${selectedPeriod}`;
+        await offlineStorage.storeOffline(storageKey, newReportData, { 
+          critical: true, 
+          persistent: true 
+        });
+        
+        setError(null);
+      } else {
+        throw new Error('Invalid report data received');
+      }
+      
+    } catch (error) {
+      console.error('Error generating report:', error);
+      
+      // Try to load from offline storage instead of using mock data
+      const storageKey = `financial_report_${reportId}_${selectedPeriod}`;
+      const offlineData = await offlineStorage.getOffline(storageKey, { critical: true });
+      
+      if (offlineData && !offlineStorage.isDataStale(offlineData, 120)) { // 2 hours max for report data
+        console.log('📱 Using offline financial report data');
+        setReportData(offlineData.data);
+        setError('Currently using offline data. Some information may be outdated.');
+      } else {
+        setError(`Failed to generate ${reportId} report. Please check your connection and try again.`);
+        setReportData(null);
+      }
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Clear old offline data periodically
+  useEffect(() => {
+    const interval = setInterval(() => {
+      offlineStorage.clearOldData(24); // Clear data older than 24 hours
+    }, 60 * 60 * 1000); // Check every hour
+
+    return () => clearInterval(interval);
+  }, []);
 
   return (
     <div className="h-full bg-green-50">
@@ -58,6 +202,13 @@ const FinancialReportsSimple: React.FC<FinancialReportsSimpleProps> = ({ onClose
           onSaveDraft={() => {}}
           additionalActions={[
             {
+              label: "Refresh",
+              onClick: handleRefresh,
+              variant: "default",
+              icon: refreshing ? Loader2 : RefreshCw,
+              disabled: refreshing
+            },
+            {
               label: 'Export PDF',
               onClick: () => console.log('Export PDF'),
               variant: 'secondary'
@@ -73,6 +224,33 @@ const FinancialReportsSimple: React.FC<FinancialReportsSimpleProps> = ({ onClose
         {/* Content */}
         <div className="flex-1 overflow-y-auto bg-green-50">
           <div className="max-w-6xl mx-auto px-6 py-6 space-y-6">
+            
+            {/* Loading State */}
+            {isLoading && (
+              <div className="bg-white rounded-lg shadow-sm border border-green-200 p-8 mb-6">
+                <div className="text-center">
+                  <Loader2 className="w-8 h-8 animate-spin mx-auto mb-4 text-green-600" />
+                  <p className="text-gray-600">Loading financial reports...</p>
+                </div>
+              </div>
+            )}
+
+            {/* Error State */}
+            {error && (
+              <div className="bg-white rounded-lg shadow-sm border border-red-200 p-6 mb-6">
+                <div className="text-center max-w-md mx-auto">
+                  <AlertCircle className="w-12 h-12 text-red-400 mx-auto mb-4" />
+                  <h3 className="text-lg font-medium text-red-800 mb-2">Error</h3>
+                  <p className="text-red-700 mb-4">{error}</p>
+                  <button
+                    onClick={() => setError(null)}
+                    className="px-4 py-2 bg-red-100 text-red-700 rounded-md hover:bg-red-200 text-sm"
+                  >
+                    Dismiss
+                  </button>
+                </div>
+              </div>
+            )}
             
             {/* Period Selection */}
             <div className="bg-white rounded-lg border border-gray-200 p-6">
@@ -108,46 +286,95 @@ const FinancialReportsSimple: React.FC<FinancialReportsSimpleProps> = ({ onClose
                   return (
                     <div
                       key={report.id}
-                      className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow cursor-pointer"
+                      className={`p-6 rounded-lg border-2 border-dashed border-gray-200 hover:border-purple-300 transition-colors cursor-pointer ${
+                        selectedReport === report.id ? 'border-purple-400 bg-purple-50' : 'bg-white'
+                      }`}
                       onClick={() => generateReport(report.id)}
                     >
-                      <div className="flex items-center gap-3 mb-3">
-                        <div className={`p-2 ${report.color} rounded-lg`}>
-                          <Icon className="w-5 h-5 text-white" />
+                      <div className="text-center">
+                        <div className={`w-12 h-12 ${report.color} rounded-lg flex items-center justify-center mx-auto mb-3`}>
+                          <Icon className="w-6 h-6 text-white" />
                         </div>
-                        <h4 className="font-medium text-gray-900">{report.name}</h4>
+                        <h4 className="text-lg font-semibold text-gray-900 mb-2">{report.name}</h4>
+                        <p className="text-sm text-gray-600 mb-4">{report.description}</p>
+                        <button
+                          className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+                            selectedReport === report.id
+                              ? 'bg-purple-600 text-white'
+                              : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                          }`}
+                        >
+                          {selectedReport === report.id ? 'Selected' : 'Generate'}
+                        </button>
                       </div>
-                      <p className="text-sm text-gray-600 mb-4">{report.description}</p>
-                      <button className="w-full px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg text-sm font-medium transition-colors">
-                        Generate Report
-                      </button>
                     </div>
                   );
                 })}
               </div>
             </div>
 
-            {/* Quick Summary */}
-            <div className="bg-white rounded-lg border border-gray-200 p-6">
-              <h3 className="text-lg font-medium text-gray-900 mb-4">Quick Summary</h3>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div className="text-center p-4 bg-gray-50 rounded-lg">
-                  <p className="text-sm text-gray-600">Total Revenue</p>
-                  <p className="text-2xl font-bold text-green-600">₹8,50,000</p>
-                  <p className="text-xs text-gray-500">This month</p>
+            {/* Report Results */}
+            {reportData && (
+              <div className="bg-white rounded-lg border border-gray-200 p-6">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-lg font-medium text-gray-900">
+                    {reports.find(r => r.id === reportData.reportId)?.name} Report
+                  </h3>
+                  <div className="text-sm text-gray-500">
+                    Generated: {new Date(reportData.generatedAt).toLocaleString()}
+                  </div>
                 </div>
-                <div className="text-center p-4 bg-gray-50 rounded-lg">
-                  <p className="text-sm text-gray-600">Total Expenses</p>
-                  <p className="text-2xl font-bold text-red-600">₹6,50,000</p>
-                  <p className="text-xs text-gray-500">This month</p>
-                </div>
-                <div className="text-center p-4 bg-gray-50 rounded-lg">
-                  <p className="text-sm text-gray-600">Net Profit</p>
-                  <p className="text-2xl font-bold text-blue-600">₹2,00,000</p>
-                  <p className="text-xs text-gray-500">This month</p>
+                
+                {reportData.summary && (
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                    {reportData.summary.totalAssets !== undefined && (
+                      <div className="text-center p-4 bg-blue-50 rounded-lg">
+                        <p className="text-sm text-gray-600 mb-2">Total Assets</p>
+                        <p className="text-2xl font-bold text-blue-600">₹{reportData.summary.totalAssets.toLocaleString()}</p>
+                      </div>
+                    )}
+                    {reportData.summary.totalLiabilities !== undefined && (
+                      <div className="text-center p-4 bg-red-50 rounded-lg">
+                        <p className="text-sm text-gray-600 mb-2">Total Liabilities</p>
+                        <p className="text-2xl font-bold text-red-600">₹{reportData.summary.totalLiabilities.toLocaleString()}</p>
+                      </div>
+                    )}
+                    {reportData.summary.netWorth !== undefined && (
+                      <div className="text-center p-4 bg-green-50 rounded-lg">
+                        <p className="text-sm text-gray-600 mb-2">Net Worth</p>
+                        <p className="text-2xl font-bold text-green-600">₹{reportData.summary.netWorth.toLocaleString()}</p>
+                      </div>
+                    )}
+                    {reportData.summary.totalIncome !== undefined && (
+                      <div className="text-center p-4 bg-green-50 rounded-lg">
+                        <p className="text-sm text-gray-600 mb-2">Total Income</p>
+                        <p className="text-2xl font-bold text-green-600">₹{reportData.summary.totalIncome.toLocaleString()}</p>
+                      </div>
+                    )}
+                    {reportData.summary.totalExpenses !== undefined && (
+                      <div className="text-center p-4 bg-red-50 rounded-lg">
+                        <p className="text-sm text-gray-600 mb-2">Total Expenses</p>
+                        <p className="text-2xl font-bold text-red-600">₹{reportData.summary.totalExpenses.toLocaleString()}</p>
+                      </div>
+                    )}
+                    {reportData.summary.netProfit !== undefined && (
+                      <div className="text-center p-4 bg-purple-50 rounded-lg">
+                        <p className="text-sm text-gray-600 mb-2">Net Profit</p>
+                        <p className={`text-2xl font-bold ${reportData.summary.netProfit >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                          ₹{Math.abs(reportData.summary.netProfit).toLocaleString()}
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                )}
+                
+                <div className="bg-gray-50 rounded-lg p-4">
+                  <pre className="text-sm text-gray-700 whitespace-pre-wrap">
+                    {JSON.stringify(reportData.data, null, 2)}
+                  </pre>
                 </div>
               </div>
-            </div>
+            )}
           </div>
         </div>
       </div>

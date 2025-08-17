@@ -47,7 +47,7 @@ const ProductSearchSimple = forwardRef(({ onAddItem, onCreateProduct, showBatchS
       } finally {
         setLoading(false);
       }
-    }, 100), // Reduced to 100ms for lightning-fast search
+    }, 50), // Reduced to 50ms for ultra-fast search
     []
   );
 
@@ -131,29 +131,50 @@ const ProductSearchSimple = forwardRef(({ onAddItem, onCreateProduct, showBatchS
                     <p className="mt-2 text-sm">Searching...</p>
                   </div>
                 ) : searchResults.length > 0 ? (
-                  searchResults.map((product) => (
-                    <div
-                      key={product.product_id || product.id}
-                      onClick={() => handleProductSelect(product)}
-                      className="px-4 py-3 hover:bg-gray-50 cursor-pointer border-b border-gray-100 last:border-0"
-                    >
-                      <div className="flex justify-between items-start">
-                        <div>
-                          <div className="font-medium text-gray-900">{product.product_name || product.name}</div>
-                          <div className="text-sm text-gray-600 mt-1">
-                            Code: {product.product_code || product.code || 'N/A'} | HSN: {product.hsn_code || product.hsn || 'N/A'}
+                  <>
+                    {searchResults.map((product) => (
+                      <div
+                        key={product.product_id || product.id}
+                        onClick={() => handleProductSelect(product)}
+                        className="px-4 py-3 hover:bg-gray-50 cursor-pointer border-b border-gray-100"
+                      >
+                        <div className="flex justify-between items-start">
+                          <div>
+                            <div className="font-medium text-gray-900">{product.product_name || product.name}</div>
+                            <div className="text-sm text-gray-600 mt-1">
+                              Code: {product.product_code || product.code || 'N/A'} | HSN: {product.hsn_code || product.hsn || 'N/A'}
+                            </div>
+                            <div className="text-xs text-gray-500 mt-1">
+                              Stock: {product.current_stock || product.stock || 0} | MRP: ₹{product.mrp || 0}
+                            </div>
                           </div>
-                          <div className="text-xs text-gray-500 mt-1">
-                            Stock: {product.current_stock || product.stock || 0} | MRP: ₹{product.mrp || 0}
+                          <div className="text-right">
+                            <div className="font-medium text-blue-600">₹{product.sale_price || product.selling_price || product.mrp || 0}</div>
+                            <div className="text-xs text-gray-500">+GST {product.gst_percent || product.tax_rate || 18}%</div>
                           </div>
-                        </div>
-                        <div className="text-right">
-                          <div className="font-medium text-blue-600">₹{product.sale_price || product.selling_price || product.mrp || 0}</div>
-                          <div className="text-xs text-gray-500">+GST {product.gst_percent || product.tax_rate || 18}%</div>
                         </div>
                       </div>
-                    </div>
-                  ))
+                    ))}
+                    {/* Always show "Add New Product" option when onCreateProduct is available */}
+                    {onCreateProduct && searchQuery.length >= 2 && (
+                      <div className="px-4 py-3 border-t border-gray-200 bg-gray-50">
+                        <button
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            setShowDropdown(false);
+                            if (typeof onCreateProduct === 'function') {
+                              onCreateProduct(searchQuery);
+                            }
+                          }}
+                          className="w-full px-3 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg transition-colors flex items-center justify-center gap-2 text-sm font-medium"
+                        >
+                          <Plus className="w-4 h-4" />
+                          Add "{searchQuery}" as New Product
+                        </button>
+                      </div>
+                    )}
+                  </>
                 ) : searchQuery.length >= 2 ? (
                   <div className="p-4">
                     <div className="text-center mb-3">

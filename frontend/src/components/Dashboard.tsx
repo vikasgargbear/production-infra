@@ -1,49 +1,12 @@
-import React, { useState, useEffect } from 'react';
-import { 
-  Package, 
-  Users, 
-  ShoppingCart, 
-  AlertTriangle,
-  Calendar,
-  DollarSign,
-  FileText,
-  Plus,
-  ArrowUpRight,
-  Bell,
-  Star,
-  Clock,
-  BarChart3,
-  ChevronRight,
-  TrendingUp,
-  Percent,
-  Settings,
-  Grid,
-  PieChart as PieChartIcon,
-  LineChart as LineChartIcon,
-  Activity,
-  Zap,
-  Target,
-  DollarSign as DollarSignIcon,
-  Package as PackageIcon,
-  Users as UsersIcon,
-  ShoppingCart as ShoppingCartIcon,
-  AlertCircle,
-  RefreshCw,
-  X,
-  TrendingDown,
-  ChevronDown,
-  Download,
-  Filter,
-  MoreHorizontal,
-  Share2,
-  ZoomIn,
-  Search,
-  Eye,
-  Check,
-  Trash2,
-  Truck,
-  CreditCard,
-  LucideIcon
+import React, { useState, useEffect, useMemo } from 'react';
+import {
+  Bell, Package, DollarSign, ShoppingCart, Truck, CreditCard,
+  TrendingUp, TrendingDown, AlertCircle, FileText, RefreshCw, Percent,
+  Plus, Settings, BarChart3, Calendar, Filter, Search,
+  Eye, Download, Mail, MessageSquare, Phone, MapPin, Clock, Users,
+  Activity, Zap, CheckCircle, XCircle, AlertTriangle, Play, Pause,
+  File, ArrowRight, Trash2, Check, ArrowUpRight, Share2, X,
+  ChevronDown, MoreHorizontal
 } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Area, AreaChart, BarChart, Bar } from 'recharts';
 // import NewChallan from './NewChallan'; // Old version
@@ -51,6 +14,7 @@ import ModularChallanCreatorV5 from './challan/ModularChallanCreatorV5'; // New 
 // import { AddSalePage } from './Home';
 import BusinessSalesEntry from './BusinessSalesEntry';
 import { apiUtils, dashboardApi, ordersApi } from '../services/api';
+import { Button, StatusBadge, DataTable, DatePicker, ModuleHeader } from './global';
 
 // Type definitions
 interface DashboardStats {
@@ -105,7 +69,7 @@ interface CustomKPI {
   id: number;
   name: string;
   value: string;
-  icon: LucideIcon;
+  icon: React.ElementType;
   color: string;
   trend: string;
 }
@@ -113,7 +77,7 @@ interface CustomKPI {
 interface FabAction {
   id: string;
   label: string;
-  icon: LucideIcon;
+  icon: React.ElementType;
   color: string;
 }
 
@@ -140,7 +104,7 @@ type PanelType = 'add-sale' | 'create-challan' | 'add-purchase' | 'add-payment' 
 interface StatCardProps {
   title: string;
   value: string | number;
-  icon: LucideIcon;
+  icon: React.ElementType;
   gradient: string;
   trend?: 'up' | 'down';
   trendValue?: string;
@@ -150,7 +114,7 @@ interface StatCardProps {
 interface QuickActionProps {
   title: string;
   description: string;
-  icon: LucideIcon;
+  icon: React.ElementType;
   gradient: string;
   onClick: () => void;
 }
@@ -223,82 +187,31 @@ const Dashboard: React.FC = () => {
     returnRate: 0
   });
 
-  const [salesData] = useState<SalesDataPoint[]>([
-    { month: 'Jan', revenue: 65000, orders: 45 },
-    { month: 'Feb', revenue: 75000, orders: 52 },
-    { month: 'Mar', revenue: 85000, orders: 61 },
-    { month: 'Apr', revenue: 95000, orders: 68 },
-    { month: 'May', revenue: 87000, orders: 64 },
-    { month: 'Jun', revenue: 110000, orders: 78 },
-  ]);
-
-  const [productCategories] = useState<ProductCategory[]>([
-    { name: 'Tablets', value: 40, color: '#0088FE' },
-    { name: 'Syrups', value: 30, color: '#00C49F' },
-    { name: 'Injections', value: 20, color: '#FFBB28' },
-    { name: 'Others', value: 10, color: '#FF8042' },
-  ]);
-
+  // Real data state
+  const [salesData, setSalesData] = useState<SalesDataPoint[]>([]);
+  const [productCategories, setProductCategories] = useState<ProductCategory[]>([]);
   const [recentOrders, setRecentOrders] = useState<Order[]>([]);
+  const [alerts, setAlerts] = useState<Alert[]>([]);
+  const [customKPIs, setCustomKPIs] = useState<CustomKPI[]>([]);
+  const [chartData, setChartData] = useState<ChartData>({
+    revenue: [],
+    orders: [],
+    profit: [],
+    customers: []
+  });
+
+  // Loading and error states
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
 
   const [alertFilter, setAlertFilter] = useState<AlertFilter>('all');
-  const [alerts, setAlerts] = useState<Alert[]>([
-    {
-      id: 1,
-      type: 'stock',
-      message: 'Low stock alert: Paracetamol 500mg tablets',
-      severity: 'high',
-      timestamp: '2024-02-20T10:30:00',
-      read: false
-    },
-    {
-      id: 2,
-      type: 'expiry',
-      message: 'Expiry alert: Amoxicillin 250mg capsules expiring in 30 days',
-      severity: 'medium',
-      timestamp: '2024-02-20T09:15:00',
-      read: false
-    },
-    {
-      id: 3,
-      type: 'order',
-      message: 'New bulk order received from City Hospital',
-      severity: 'low',
-      timestamp: '2024-02-20T08:45:00',
-      read: true
-    },
-    {
-      id: 4,
-      type: 'payment',
-      message: 'Payment received for Order #12345',
-      severity: 'low',
-      timestamp: '2024-02-19T16:20:00',
-      read: true
-    }
-  ]);
-
-  const [customKPIs, setCustomKPIs] = useState<CustomKPI[]>([
-    { id: 1, name: 'Stock Value', value: '₹2.5M', icon: PackageIcon, color: 'blue', trend: '+5.2%' },
-    { id: 2, name: 'Low Stock Items', value: '5', icon: AlertCircle, color: 'red', trend: '-2' },
-    { id: 3, name: 'Daily Sales', value: '₹45K', icon: DollarSignIcon, color: 'green', trend: '+12.5%' },
-    { id: 4, name: 'Monthly Growth', value: '+12.5%', icon: TrendingUp, color: 'purple', trend: '+3.2%' },
-    { id: 5, name: 'Profit Margin', value: '32.5%', icon: Percent, color: 'emerald', trend: '+2.1%' },
-    { id: 6, name: 'Inventory Turnover', value: '4.2x', icon: RefreshCw, color: 'indigo', trend: '+0.3x' },
-    { id: 7, name: 'Prescriptions', value: '128', icon: FileText, color: 'amber', trend: '+15' },
-    { id: 8, name: 'Return Rate', value: '1.2%', icon: TrendingDown, color: 'rose', trend: '-0.3%' }
-  ]);
 
   const [isCustomizingKPIs, setIsCustomizingKPIs] = useState<boolean>(false);
   const [selectedKPIs, setSelectedKPIs] = useState<number[]>([1, 2, 3, 4]);
 
   const [chartTimeRange, setChartTimeRange] = useState<ChartTimeRange>('monthly');
   const [selectedChart, setSelectedChart] = useState<SelectedChart>('revenue');
-  const [chartData, setChartData] = useState<ChartData>({
-    revenue: salesData,
-    orders: salesData.map(d => ({ ...d, revenue: d.orders })),
-    profit: salesData.map(d => ({ ...d, revenue: d.revenue * 0.32 })),
-    customers: salesData.map(d => ({ ...d, revenue: Math.floor(d.orders * 1.2) }))
-  });
 
   const [orderFilter, setOrderFilter] = useState<OrderFilter>('all');
   const [orderSort, setOrderSort] = useState<OrderSort>({ field: 'date', direction: 'desc' });
@@ -321,7 +234,7 @@ const Dashboard: React.FC = () => {
     })
     .sort((a, b) => {
       if (orderSort.field === 'date') {
-        return orderSort.direction === 'desc' 
+        return orderSort.direction === 'desc'
           ? new Date(b.date).getTime() - new Date(a.date).getTime()
           : new Date(a.date).getTime() - new Date(b.date).getTime();
       }
@@ -341,7 +254,7 @@ const Dashboard: React.FC = () => {
     .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
 
   const markAsRead = (alertId: number): void => {
-    setAlerts(alerts.map(alert => 
+    setAlerts(alerts.map(alert =>
       alert.id === alertId ? { ...alert, read: true } : alert
     ));
   };
@@ -350,16 +263,16 @@ const Dashboard: React.FC = () => {
     setAlerts(alerts.filter(alert => alert.id !== alertId));
   };
 
-  const getAlertIcon = (type: Alert['type']): LucideIcon => {
+  const getAlertIcon = (type: Alert['type']): React.ElementType => {
     switch (type) {
       case 'stock':
-        return PackageIcon;
+        return Package;
       case 'expiry':
         return AlertCircle;
       case 'order':
         return ShoppingCart;
       case 'payment':
-        return DollarSignIcon;
+        return DollarSign;
       default:
         return Bell;
     }
@@ -435,97 +348,207 @@ const Dashboard: React.FC = () => {
     );
   };
 
-  useEffect(() => {
-    loadDashboardData();
-  }, []);
-
-  const loadDashboardData = async (): Promise<void> => {
+  // Fetch dashboard data from APIs
+  const fetchDashboardData = async () => {
     try {
-      console.log('Loading dashboard data...');
-      
-      // Try to get real dashboard stats
-      const dashboardStats = await apiUtils.getDashboardStats();
-      console.log('Dashboard stats loaded:', dashboardStats);
-      
-      // Also try to get recent orders for additional calculations
-      let recentOrdersData: any[] = [];
-      try {
-        const ordersResponse = await ordersApi.getAll();
-        recentOrdersData = ordersResponse.data.slice(0, 5); // Get latest 5 orders
-        console.log('Recent orders loaded:', recentOrdersData);
-      } catch (ordersError) {
-        console.warn('Could not load recent orders:', ordersError);
+      setLoading(true);
+      setError(null);
+
+      // Fetch all dashboard data in parallel
+      const [
+        statsResponse,
+        recentOrdersResponse,
+        revenueResponse,
+        topProductsResponse,
+        inventoryAlertsResponse,
+        pendingPaymentsResponse,
+        expiringProductsResponse
+      ] = await Promise.all([
+        dashboardApi.getStats(),
+        dashboardApi.getRecentOrders(10),
+        dashboardApi.getRevenueData('monthly'),
+        dashboardApi.getTopProducts(10),
+        dashboardApi.getInventoryAlerts(),
+        dashboardApi.getPendingPayments(),
+        dashboardApi.getExpiringProducts(30)
+      ]);
+
+      // Update stats
+      if (statsResponse.data) {
+        setStats(statsResponse.data);
       }
-      
-      // Calculate additional metrics from orders data
-      const today = new Date().toISOString().split('T')[0];
-      const todaysOrders = recentOrdersData.filter(order => 
-        order.order_date && order.order_date.startsWith(today)
-      );
-      const dailySales = todaysOrders.reduce((sum, order) => sum + (order.final_amount || 0), 0);
-      
-      setStats({
-        totalRevenue: dashboardStats.totalRevenue || 0,
-        totalOrders: dashboardStats.totalOrders || 0,
-        totalProducts: dashboardStats.totalProducts || 0,
-        totalCustomers: dashboardStats.totalCustomers || 0,
-        pendingPayments: dashboardStats.pendingPayments || 0,
-        
-        // Calculated metrics
-        dailySales: dailySales,
-        averageOrderValue: dashboardStats.totalOrders > 0 ? 
-          Math.round(dashboardStats.totalRevenue / dashboardStats.totalOrders) : 0,
-        
-        // Default values for metrics not yet implemented
-        expiringSoon: 12,
-        stockValue: 250000,
-        lowStockItems: 5,
-        monthlyGrowth: 12.5,
-        customerRetention: 85,
-        profitMargin: 23.5,
-        inventoryTurnover: 4.2,
-        prescriptionCount: 189,
-        returnRate: 2.1
-      });
-      
-      // Update recent orders section
-      setRecentOrders(recentOrdersData.map(order => ({
-        id: order.order_number || order.order_id || `ORD-${order.order_id}`,
-        customer: order.customer_name || 'Unknown Customer',
-        amount: order.final_amount || 0,
-        status: order.order_status || 'pending',
-        date: order.order_date || new Date().toISOString().split('T')[0]
-      })));
-      
+
+      // Update recent orders
+      if (recentOrdersResponse.data?.orders) {
+        setRecentOrders(recentOrdersResponse.data.orders);
+      }
+
+      // Update sales data
+      if (revenueResponse.data?.data) {
+        setSalesData(revenueResponse.data.data);
+      }
+
+      // Update product categories from top products
+      if (topProductsResponse.data?.products) {
+        const categories = topProductsResponse.data.products.reduce((acc: any, product: any) => {
+          const category = product.category || 'Others';
+          const existing = acc.find((c: any) => c.name === category);
+          if (existing) {
+            existing.value += product.sold || 0;
+          } else {
+            acc.push({ name: category, value: product.sold || 0, color: getRandomColor() });
+          }
+          return acc;
+        }, []);
+        setProductCategories(categories);
+      }
+
+      // Update alerts from inventory alerts
+      if (inventoryAlertsResponse.data?.alerts) {
+        const inventoryAlerts = inventoryAlertsResponse.data.alerts.map((alert: any) => ({
+          id: alert.id,
+          type: alert.type,
+          message: alert.message,
+          severity: alert.severity,
+          timestamp: alert.timestamp,
+          read: alert.read || false
+        }));
+        setAlerts(inventoryAlerts);
+      }
+
+      // Update custom KPIs based on real data
+      updateCustomKPIs(statsResponse.data, pendingPaymentsResponse.data, expiringProductsResponse.data);
+
+      // Update chart data
+      updateChartData(revenueResponse.data?.data || []);
+
     } catch (error) {
-      console.error('Error loading dashboard data:', error);
-      
-      // Fallback to minimal stats if API fails
-      setStats({
-        totalRevenue: 0,
-        totalOrders: 0,
-        totalProducts: 0,
-        totalCustomers: 0,
-        expiringSoon: 0,
-        pendingPayments: 0,
-        stockValue: 0,
-        lowStockItems: 0,
-        dailySales: 0,
-        monthlyGrowth: 0,
-        customerRetention: 0,
-        averageOrderValue: 0,
-        profitMargin: 0,
-        inventoryTurnover: 0,
-        prescriptionCount: 0,
-        returnRate: 0
-      });
+      console.error('Error fetching dashboard data:', error);
+      setError('Failed to load dashboard data. Please try again.');
+    } finally {
+      setLoading(false);
     }
   };
+
+  // Update custom KPIs with real data
+  const updateCustomKPIs = (statsData: any, pendingPaymentsData: any, expiringProductsData: any) => {
+    const newKPIs: CustomKPI[] = [
+      {
+        id: 1,
+        name: 'Stock Value',
+        value: formatCurrency(statsData?.stockValue || 0),
+        icon: Package,
+        color: 'blue',
+        trend: statsData?.stockValueTrend || '0%'
+      },
+      {
+        id: 2,
+        name: 'Low Stock Items',
+        value: (statsData?.lowStockItems || 0).toString(),
+        icon: AlertCircle,
+        color: 'red',
+        trend: statsData?.lowStockItemsTrend || '0'
+      },
+      {
+        id: 3,
+        name: 'Daily Sales',
+        value: formatCurrency(statsData?.dailySales || 0),
+        icon: DollarSign,
+        color: 'green',
+        trend: statsData?.dailySalesTrend || '0%'
+      },
+      {
+        id: 4,
+        name: 'Monthly Growth',
+        value: `${statsData?.monthlyGrowth || 0}%`,
+        icon: TrendingUp,
+        color: 'purple',
+        trend: statsData?.monthlyGrowthTrend || '0%'
+      },
+      {
+        id: 5,
+        name: 'Profit Margin',
+        value: `${statsData?.profitMargin || 0}%`,
+        icon: Percent,
+        color: 'emerald',
+        trend: statsData?.profitMarginTrend || '0%'
+      },
+      {
+        id: 6,
+        name: 'Inventory Turnover',
+        value: `${statsData?.inventoryTurnover || 0}x`,
+        icon: RefreshCw,
+        color: 'indigo',
+        trend: statsData?.inventoryTurnoverTrend || '0x'
+      },
+      {
+        id: 7,
+        name: 'Prescriptions',
+        value: (statsData?.prescriptionCount || 0).toString(),
+        icon: FileText,
+        color: 'amber',
+        trend: statsData?.prescriptionCountTrend || '0'
+      },
+      {
+        id: 8,
+        name: 'Return Rate',
+        value: `${statsData?.returnRate || 0}%`,
+        icon: TrendingDown,
+        color: 'rose',
+        trend: statsData?.returnRateTrend || '0%'
+      }
+    ];
+    setCustomKPIs(newKPIs);
+  };
+
+  // Update chart data with real data
+  const updateChartData = (revenueData: SalesDataPoint[]) => {
+    setChartData({
+      revenue: revenueData,
+      orders: revenueData.map(d => ({ ...d, revenue: d.orders })),
+      profit: revenueData.map(d => ({ ...d, revenue: d.revenue * (stats.profitMargin / 100) })),
+      customers: revenueData.map(d => ({ ...d, revenue: Math.floor(d.orders * (stats.customerRetention / 100)) }))
+    });
+  };
+
+  // Helper function to get chart colors from theme or API
+  const getChartColors = () => {
+    // These could come from a theme API or user preferences
+    return ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884D8', '#82CA9D'];
+  };
+
+  // Helper function to get random colors for charts
+  const getRandomColor = () => {
+    const colors = getChartColors();
+    return colors[Math.floor(Math.random() * colors.length)];
+  };
+
+  // Helper function to format currency
+  const formatCurrency = (amount: number) => {
+    if (amount >= 1000000) {
+      return `₹${(amount / 1000000).toFixed(1)}M`;
+    } else if (amount >= 1000) {
+      return `₹${(amount / 1000).toFixed(1)}K`;
+    }
+    return `₹${amount.toFixed(0)}`;
+  };
+
+  // Refresh dashboard data
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    await fetchDashboardData();
+    setRefreshing(false);
+  };
+
+  // Load data on component mount
+  useEffect(() => {
+    fetchDashboardData();
+  }, []);
 
   const StatCard: React.FC<StatCardProps> = ({ title, value, icon: Icon, gradient, trend, trendValue, bgGradient }) => (
     <div className={`relative overflow-hidden rounded-2xl bg-gradient-to-br ${bgGradient} border border-white/20 shadow-xl shadow-gray-200/30 p-6 transition-all duration-300 hover:scale-105 hover:shadow-2xl group`}>
       <div className={`absolute top-0 right-0 w-32 h-32 bg-gradient-to-br ${gradient} opacity-10 rounded-full transform translate-x-16 -translate-y-16`}></div>
-      
+
       <div className="relative z-10">
         <div className="flex items-center justify-between mb-4">
           <div className={`p-3 rounded-xl bg-gradient-to-br ${gradient} shadow-lg shadow-gray-300/30`}>
@@ -540,7 +563,7 @@ const Dashboard: React.FC = () => {
             </div>
           )}
         </div>
-        
+
         <div>
           <p className="text-sm font-medium text-gray-600 mb-1">{title}</p>
           <p className="text-3xl font-bold text-gray-900">{value}</p>
@@ -597,7 +620,7 @@ const Dashboard: React.FC = () => {
       <div className="bg-white rounded-2xl p-6 w-full max-w-2xl">
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-lg font-semibold text-gray-900">Customize KPIs</h3>
-          <button 
+          <button
             onClick={() => setIsCustomizingKPIs(false)}
             className="text-gray-400 hover:text-gray-600"
           >
@@ -606,7 +629,7 @@ const Dashboard: React.FC = () => {
         </div>
         <div className="grid grid-cols-2 gap-4">
           {customKPIs.map(kpi => (
-            <div 
+            <div
               key={kpi.id}
               className={`p-3 rounded-lg border cursor-pointer transition-all ${
                 selectedKPIs.includes(kpi.id)
@@ -700,74 +723,74 @@ const Dashboard: React.FC = () => {
                   <stop offset="95%" stopColor="#3B82F6" stopOpacity={0.0}/>
                 </linearGradient>
               </defs>
-              <XAxis 
-                dataKey="month" 
-                axisLine={false} 
-                tickLine={false} 
+              <XAxis
+                dataKey="month"
+                axisLine={false}
+                tickLine={false}
                 tick={{ fontSize: 12 }}
                 tickMargin={10}
               />
-              <YAxis 
-                axisLine={false} 
-                tickLine={false} 
+              <YAxis
+                axisLine={false}
+                tickLine={false}
                 tick={{ fontSize: 12 }}
                 tickFormatter={(value) => `₹${(value/1000).toFixed(0)}K`}
                 tickMargin={10}
               />
               <CartesianGrid vertical={false} stroke="#f0f0f0" strokeDasharray="3 3" />
-              <Tooltip 
+              <Tooltip
                 formatter={(value) => [`₹${(value as number).toLocaleString('en-IN')}`, 'Value']}
-                contentStyle={{ 
-                  backgroundColor: 'white', 
-                  border: '1px solid #e5e7eb', 
+                contentStyle={{
+                  backgroundColor: 'white',
+                  border: '1px solid #e5e7eb',
                   borderRadius: '8px',
                   boxShadow: '0 4px 6px rgba(0,0,0,0.1)',
                   fontSize: '12px',
                   padding: '8px 12px'
                 }}
               />
-              <Area 
-                type="monotone" 
-                dataKey="revenue" 
-                stroke="#3B82F6" 
+              <Area
+                type="monotone"
+                dataKey="revenue"
+                stroke="#3B82F6"
                 strokeWidth={2}
                 fillOpacity={1}
-                fill="url(#colorRevenue)" 
+                fill="url(#colorRevenue)"
                 dot={{ fill: '#3B82F6', strokeWidth: 2, r: 4 }}
                 activeDot={{ r: 6, stroke: '#3B82F6', strokeWidth: 2 }}
               />
             </AreaChart>
           ) : (
             <BarChart data={data} margin={{ top: 5, right: 5, left: 0, bottom: 5 }}>
-              <XAxis 
-                dataKey="month" 
-                axisLine={false} 
-                tickLine={false} 
+              <XAxis
+                dataKey="month"
+                axisLine={false}
+                tickLine={false}
                 tick={{ fontSize: 12 }}
                 tickMargin={10}
               />
-              <YAxis 
-                axisLine={false} 
-                tickLine={false} 
+              <YAxis
+                axisLine={false}
+                tickLine={false}
                 tick={{ fontSize: 12 }}
                 tickFormatter={(value) => `₹${(value/1000).toFixed(0)}K`}
                 tickMargin={10}
               />
               <CartesianGrid vertical={false} stroke="#f0f0f0" strokeDasharray="3 3" />
-              <Tooltip 
+              <Tooltip
                 formatter={(value) => [`₹${(value as number).toLocaleString('en-IN')}`, 'Value']}
-                contentStyle={{ 
-                  backgroundColor: 'white', 
-                  border: '1px solid #e5e7eb', 
+                contentStyle={{
+                  backgroundColor: 'white',
+                  border: '1px solid #e5e7eb',
                   borderRadius: '8px',
                   boxShadow: '0 4px 6px rgba(0,0,0,0.1)',
                   fontSize: '12px',
                   padding: '8px 12px'
                 }}
               />
-              <Bar 
-                dataKey="revenue" 
-                fill="#3B82F6" 
+              <Bar
+                dataKey="revenue"
+                fill="#3B82F6"
                 radius={[4, 4, 0, 0]}
                 maxBarSize={40}
               />
@@ -923,25 +946,26 @@ const Dashboard: React.FC = () => {
               </h1>
               <p className="text-gray-500 text-sm">Welcome back! Here's your business overview.</p>
             </div>
-            
+
             <div className="flex items-center space-x-4">
-              <button 
-                onClick={loadDashboardData}
+              <button
+                onClick={handleRefresh}
                 className="flex items-center space-x-2 px-4 py-2 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 transition-colors"
+                disabled={loading || refreshing}
               >
-                <RefreshCw className="w-4 h-4" />
+                                 <RefreshCw className={`w-4 h-4 ${loading || refreshing ? 'animate-spin' : ''}`} />
                 <span className="text-sm font-medium">Refresh</span>
               </button>
-              
+
               <div className="flex items-center space-x-1 text-sm text-gray-500 bg-gray-50 px-3 py-1.5 rounded-lg border border-gray-100">
                 <Calendar className="w-4 h-4" />
-                <span>{new Date().toLocaleDateString('en-IN', { 
-                  weekday: 'short', 
-                  month: 'short', 
-                  day: 'numeric' 
+                <span>{new Date().toLocaleDateString('en-IN', {
+                  weekday: 'short',
+                  month: 'short',
+                  day: 'numeric'
                 })}</span>
               </div>
-              
+
               <button className="relative p-2 bg-gray-50 hover:bg-gray-100 rounded-lg transition-colors border border-gray-100">
                 <Bell className="w-5 h-5 text-gray-600" />
                 <div className="absolute -top-1 -right-1 w-2 h-2 bg-red-500 rounded-full"></div>
@@ -1026,7 +1050,7 @@ const Dashboard: React.FC = () => {
         <div className="mb-6">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-lg font-semibold text-gray-900">Key Performance Indicators</h2>
-            <button 
+            <button
               onClick={() => setIsCustomizingKPIs(true)}
               className="text-sm text-blue-600 hover:text-blue-700 flex items-center"
             >
@@ -1045,13 +1069,13 @@ const Dashboard: React.FC = () => {
 
         {/* Charts Grid */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
-          <ChartCard 
-            title="Revenue Trend" 
+          <ChartCard
+            title="Revenue Trend"
             data={chartData.revenue}
             type="area"
           />
-          <ChartCard 
-            title="Order Volume" 
+          <ChartCard
+            title="Order Volume"
             data={chartData.orders}
             type="bar"
           />
@@ -1089,11 +1113,11 @@ const Dashboard: React.FC = () => {
                       <Cell key={`cell-${index}`} fill={entry.color} />
                     ))}
                   </Pie>
-                  <Tooltip 
+                  <Tooltip
                     formatter={(value) => [`${value}%`, 'Share']}
-                    contentStyle={{ 
-                      backgroundColor: 'white', 
-                      border: '1px solid #e5e7eb', 
+                    contentStyle={{
+                      backgroundColor: 'white',
+                      border: '1px solid #e5e7eb',
                       borderRadius: '8px',
                       boxShadow: '0 4px 6px rgba(0,0,0,0.1)',
                       fontSize: '12px',
@@ -1107,8 +1131,8 @@ const Dashboard: React.FC = () => {
               <div className="space-y-4">
                 {productCategories.map((category, index) => (
                   <div key={index} className="flex items-center">
-                    <div 
-                      className="w-3 h-3 rounded-full mr-3" 
+                    <div
+                      className="w-3 h-3 rounded-full mr-3"
                       style={{ backgroundColor: category.color }}
                     />
                     <div className="flex-1">
@@ -1117,9 +1141,9 @@ const Dashboard: React.FC = () => {
                         <span className="text-sm text-gray-500">{category.value}%</span>
                       </div>
                       <div className="mt-1 h-2 bg-gray-100 rounded-full overflow-hidden">
-                        <div 
+                        <div
                           className="h-full rounded-full"
-                          style={{ 
+                          style={{
                             width: `${category.value}%`,
                             backgroundColor: category.color
                           }}

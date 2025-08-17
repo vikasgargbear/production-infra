@@ -5,8 +5,7 @@ import {
   Download, Upload, Loader2, AlertCircle, Check,
   ArrowRight, TrendingUp, Activity, Filter, X
 } from 'lucide-react';
-import { settingsApi } from '../../services/api/modules/settings.api';
-import { productsApi } from '../../services/api/modules/products.api';
+import { batchesApi, productsApi } from '../../services/api';
 
 const BatchMaster = ({ open, onClose }) => {
   const [searchTerm, setSearchTerm] = useState('');
@@ -19,6 +18,7 @@ const BatchMaster = ({ open, onClose }) => {
   const [error, setError] = useState(null);
   const [successMessage, setSuccessMessage] = useState('');
   const [products, setProducts] = useState([]);
+  const [refreshing, setRefreshing] = useState(false);
   
   // Load batches on component mount
   useEffect(() => {
@@ -34,22 +34,56 @@ const BatchMaster = ({ open, onClose }) => {
     setError(null);
     
     try {
-      const response = await settingsApi.batches.getAll();
+      const response = await batchesApi.getAll();
       
       if (response?.data && Array.isArray(response.data)) {
-        setBatches(response.data);
+        // Transform backend data to match frontend structure
+        const transformedBatches = response.data.map(batch => ({
+          id: batch.id,
+          batchNo: batch.batch_number || batch.batch_no || `BT-${batch.id}`,
+          productId: batch.product_id || batch.productId,
+          productName: batch.product_name || batch.productName || 'Unknown Product',
+          productCode: batch.product_code || batch.productCode || 'N/A',
+          manufacturingDate: batch.manufacturing_date || batch.manufacturingDate || new Date().toISOString().split('T')[0],
+          expiryDate: batch.expiry_date || batch.expiryDate || new Date().toISOString().split('T')[0],
+          quantity: batch.quantity || batch.total_quantity || 0,
+          availableQty: batch.available_quantity || batch.availableQty || batch.quantity || 0,
+          mrp: batch.mrp || batch.max_retail_price || 0,
+          purchasePrice: batch.purchase_price || batch.purchasePrice || 0,
+          salePrice: batch.sale_price || batch.salePrice || 0,
+          status: getBatchStatus(batch.expiry_date || batch.expiryDate, batch.available_quantity || batch.availableQty),
+          location: batch.location || batch.warehouse || 'Unknown',
+          supplier: batch.supplier_name || batch.supplier || 'Unknown Supplier',
+          invoiceNo: batch.invoice_number || batch.invoiceNo || 'N/A',
+          description: batch.description || batch.notes || ''
+        }));
+        
+        setBatches(transformedBatches);
       } else {
-        // Use mock data as fallback
-        setBatches(mockBatches);
+        setBatches([]);
+        setError('No batch data available');
       }
     } catch (error) {
       console.error('Error loading batches:', error);
-      setError('Failed to load batches. Using offline data.');
-      // Use mock data on error
-      setBatches(mockBatches);
+      setError('Failed to load batches. Please check your connection and try again.');
+      setBatches([]);
     } finally {
       setIsLoading(false);
     }
+  };
+
+  // Determine batch status based on expiry and quantity
+  const getBatchStatus = (expiryDate, availableQty) => {
+    if (!expiryDate) return 'unknown';
+    
+    const today = new Date();
+    const expiry = new Date(expiryDate);
+    const daysUntilExpiry = Math.ceil((expiry - today) / (1000 * 60 * 60 * 24));
+    
+    if (daysUntilExpiry < 0) return 'expired';
+    if (daysUntilExpiry <= 30) return 'expiring';
+    if (availableQty <= 0) return 'out_of_stock';
+    return 'active';
   };
 
   // Load products for dropdown
@@ -59,150 +93,24 @@ const BatchMaster = ({ open, onClose }) => {
       if (response?.data && Array.isArray(response.data)) {
         setProducts(response.data.map(product => ({
           id: product.id,
-          name: product.product_name || product.generic_name,
-          code: product.product_code
+          name: product.product_name || product.generic_name || product.name || 'Unknown Product',
+          code: product.product_code || product.code || 'N/A'
         })));
+      } else {
+        setProducts([]);
       }
     } catch (error) {
       console.error('Error loading products:', error);
-      // Use mock products as fallback
-      setProducts([
-        { id: 1, name: 'Paracetamol 500mg', code: 'PCM-500' },
-        { id: 2, name: 'Amoxicillin 250mg', code: 'AMX-250' },
-        { id: 3, name: 'Ibuprofen 400mg', code: 'IBU-400' }
-      ]);
+      setProducts([]);
+      setError('Failed to load products. Some features may be limited.');
     }
   };
 
-  // Mock batches data as fallback
-  const mockBatches = [
-        {
-          id: 1,
-          batchNo: 'BT-2024-001',
-          productId: 1,
-          productName: 'Paracetamol 500mg',
-          productCode: 'PCM-500',
-          manufacturingDate: '2024-01-15',
-          expiryDate: '2026-01-14',
-          quantity: 5000,
-          availableQty: 3200,
-          mrp: 10.00,
-          purchasePrice: 6.50,
-          salePrice: 8.50,
-          status: 'active',
-          location: 'WH-001',
-          supplier: 'ABC Pharmaceuticals',
-          invoiceNo: 'INV-2024-0123',
-          description: 'Batch received in good condition'
-        },
-        {
-          id: 2,
-          batchNo: 'BT-2024-002',
-          productId: 2,
-          productName: 'Amoxicillin 250mg',
-          productCode: 'AMX-250',
-          manufacturingDate: '2024-02-01',
-          expiryDate: '2025-01-31',
-          quantity: 3000,
-          availableQty: 2100,
-          mrp: 25.00,
-          purchasePrice: 18.00,
-          salePrice: 22.00,
-          status: 'active',
-          location: 'WH-002',
-          supplier: 'XYZ Pharma Ltd',
-          invoiceNo: 'INV-2024-0156',
-          description: ''
-        },
-        {
-          id: 3,
-          batchNo: 'BT-2023-089',
-          productId: 3,
-          productName: 'Vitamin C 500mg',
-          productCode: 'VTC-500',
-          manufacturingDate: '2023-12-01',
-          expiryDate: '2024-11-30',
-          quantity: 2000,
-          availableQty: 500,
-          mrp: 15.00,
-          purchasePrice: 10.00,
-          salePrice: 13.00,
-          status: 'expiring',
-          location: 'ST-001',
-          supplier: 'Health Supplements Inc',
-          invoiceNo: 'INV-2023-0789',
-          description: 'Nearing expiry - priority sales'
-        },
-        {
-          id: 4,
-          batchNo: 'BT-2024-003',
-          productId: 4,
-          productName: 'Insulin Glargine 100IU',
-          productCode: 'INS-100',
-          manufacturingDate: '2024-03-01',
-          expiryDate: '2025-03-01',
-          quantity: 1000,
-          availableQty: 800,
-          mrp: 450.00,
-          purchasePrice: 350.00,
-          salePrice: 420.00,
-          status: 'active',
-          location: 'WH-002',
-          supplier: 'BioPharm Solutions',
-          invoiceNo: 'INV-2024-0234',
-          description: 'Cold chain maintained'
-        },
-        {
-          id: 5,
-          batchNo: 'BT-2023-056',
-          productId: 5,
-          productName: 'Cough Syrup 100ml',
-          productCode: 'CS-100',
-          manufacturingDate: '2023-06-15',
-          expiryDate: '2024-06-14',
-          quantity: 500,
-          availableQty: 0,
-          mrp: 85.00,
-          purchasePrice: 60.00,
-          salePrice: 75.00,
-          status: 'expired',
-          location: 'QT-001',
-          supplier: 'Herbal Medicines Ltd',
-          invoiceNo: 'INV-2023-0456',
-          description: 'Expired - awaiting disposal'
-        },
-        {
-          id: 6,
-          batchNo: 'BT-2024-004',
-          productId: 1,
-          productName: 'Paracetamol 500mg',
-          productCode: 'PCM-500',
-          manufacturingDate: '2024-03-10',
-          expiryDate: '2026-03-09',
-          quantity: 10000,
-          availableQty: 10000,
-          mrp: 10.00,
-          purchasePrice: 6.00,
-          salePrice: 8.50,
-          status: 'active',
-          location: 'WH-001',
-          supplier: 'ABC Pharmaceuticals',
-          invoiceNo: 'INV-2024-0345',
-          description: 'New stock arrival'
-        }
-      ];
-
-  // Remove duplicate loadProducts function - already defined above
-  const loadProductsOld = () => {
-    // Mock product list for dropdown
-    const mockProducts = [
-      { id: 1, name: 'Paracetamol 500mg', code: 'PCM-500' },
-      { id: 2, name: 'Amoxicillin 250mg', code: 'AMX-250' },
-      { id: 3, name: 'Vitamin C 500mg', code: 'VTC-500' },
-      { id: 4, name: 'Insulin Glargine 100IU', code: 'INS-100' },
-      { id: 5, name: 'Cough Syrup 100ml', code: 'CS-100' }
-    ];
-    setProducts(mockProducts);
+  // Refresh data
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    await Promise.all([loadBatches(), loadProducts()]);
+    setRefreshing(false);
   };
 
   const batchStatuses = [
@@ -274,10 +182,10 @@ const BatchMaster = ({ open, onClose }) => {
           mrp: parseFloat(formData.mrp),
           purchasePrice: parseFloat(formData.purchasePrice),
           salePrice: parseFloat(formData.salePrice),
-          status: getStatus(formData.expiryDate)
+          status: getBatchStatus(formData.expiryDate, parseInt(formData.quantity))
         };
         
-        const response = await settingsApi.batches.update(editingBatch.id, batchData);
+        const response = await batchesApi.update(editingBatch.id, batchData);
         if (response?.success) {
           setBatches(prev => prev.map(b => 
             b.id === editingBatch.id ? { ...b, ...batchData } : b
@@ -295,10 +203,10 @@ const BatchMaster = ({ open, onClose }) => {
           mrp: parseFloat(formData.mrp),
           purchasePrice: parseFloat(formData.purchasePrice),
           salePrice: parseFloat(formData.salePrice),
-          status: getStatus(formData.expiryDate)
+          status: getBatchStatus(formData.expiryDate, parseInt(formData.quantity))
         };
         
-        const response = await settingsApi.batches.create(newBatch);
+        const response = await batchesApi.create(newBatch);
         if (response?.success && response.data) {
           setBatches(prev => [...prev, response.data]);
           setSuccessMessage('Batch added successfully!');
@@ -321,7 +229,7 @@ const BatchMaster = ({ open, onClose }) => {
           mrp: parseFloat(formData.mrp),
           purchasePrice: parseFloat(formData.purchasePrice),
           salePrice: parseFloat(formData.salePrice),
-          status: getStatus(formData.expiryDate)
+          status: getBatchStatus(formData.expiryDate, parseInt(formData.quantity))
         };
         setBatches(prev => prev.map(b => 
           b.id === editingBatch.id ? { ...b, ...batchData } : b
@@ -337,7 +245,7 @@ const BatchMaster = ({ open, onClose }) => {
           mrp: parseFloat(formData.mrp),
           purchasePrice: parseFloat(formData.purchasePrice),
           salePrice: parseFloat(formData.salePrice),
-          status: getStatus(formData.expiryDate)
+          status: getBatchStatus(formData.expiryDate, parseInt(formData.quantity))
         };
         setBatches(prev => [...prev, newBatch]);
       }
@@ -345,16 +253,6 @@ const BatchMaster = ({ open, onClose }) => {
       setTimeout(() => setSuccessMessage(''), 3000);
       handleCloseModal();
     }
-  };
-
-  const getStatus = (expiryDate) => {
-    const today = new Date();
-    const expiry = new Date(expiryDate);
-    const daysUntilExpiry = Math.floor((expiry - today) / (1000 * 60 * 60 * 24));
-    
-    if (daysUntilExpiry < 0) return 'expired';
-    if (daysUntilExpiry <= 90) return 'expiring';
-    return 'active';
   };
 
   const handleEdit = (batch) => {
@@ -386,7 +284,7 @@ const BatchMaster = ({ open, onClose }) => {
     
     if (window.confirm('Are you sure you want to delete this batch?')) {
       try {
-        await settingsApi.batches.delete(id);
+        await batchesApi.delete(id);
         setBatches(prev => prev.filter(b => b.id !== id));
         setSuccessMessage('Batch deleted successfully!');
       } catch (error) {
@@ -433,7 +331,9 @@ const BatchMaster = ({ open, onClose }) => {
       active: 'green',
       expiring: 'amber',
       expired: 'red',
-      finished: 'gray'
+      finished: 'gray',
+      out_of_stock: 'gray',
+      unknown: 'gray'
     };
     return colors[status] || 'gray';
   };
@@ -443,7 +343,9 @@ const BatchMaster = ({ open, onClose }) => {
       active: CheckCircle,
       expiring: AlertTriangle,
       expired: AlertCircle,
-      finished: Package2
+      finished: Package2,
+      out_of_stock: Package2,
+      unknown: Package2
     };
     return icons[status] || Package2;
   };
@@ -481,6 +383,14 @@ const BatchMaster = ({ open, onClose }) => {
             <span className="text-sm text-gray-500">({totalBatches} batches)</span>
           </div>
           <div className="flex items-center space-x-3">
+            <button
+              onClick={handleRefresh}
+              disabled={refreshing}
+              className="px-3 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2"
+            >
+              <Activity className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />
+              <span>{refreshing ? 'Refreshing...' : 'Refresh'}</span>
+            </button>
             <button
               onClick={handleImport}
               className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 flex items-center space-x-2"
@@ -582,6 +492,14 @@ const BatchMaster = ({ open, onClose }) => {
         </div>
       </div>
 
+      {/* Loading State */}
+      {isLoading && (
+        <div className="mx-6 mt-4 bg-blue-50 border border-blue-200 text-blue-700 px-4 py-3 rounded-lg flex items-center">
+          <Loader2 className="w-5 h-5 mr-2 animate-spin" />
+          Loading batches...
+        </div>
+      )}
+
       {/* Messages */}
       {error && (
         <div className="mx-6 mt-4 bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg flex items-center">
@@ -633,117 +551,143 @@ const BatchMaster = ({ open, onClose }) => {
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
-                  {filteredBatches.map((batch) => {
-                    const StatusIcon = getStatusIcon(batch.status);
-                    const daysUntilExpiry = getDaysUntilExpiry(batch.expiryDate);
-                    
-                    return (
-                      <tr key={batch.id} className="hover:bg-gray-50">
-                        <td className="px-6 py-4">
-                          <input
-                            type="checkbox"
-                            checked={selectedBatches.includes(batch.id)}
-                            onChange={(e) => {
-                              if (e.target.checked) {
-                                setSelectedBatches([...selectedBatches, batch.id]);
-                              } else {
-                                setSelectedBatches(selectedBatches.filter(id => id !== batch.id));
-                              }
-                            }}
-                            className="rounded border-gray-300"
-                          />
-                        </td>
-                        <td className="px-6 py-4">
-                          <div>
-                            <p className="text-sm font-medium text-gray-900">
-                              {batch.batchNo}
-                            </p>
-                            <p className="text-xs text-gray-500">
-                              {batch.location} • {batch.supplier}
-                            </p>
-                            {batch.invoiceNo && (
-                              <p className="text-xs text-gray-400">
-                                Invoice: {batch.invoiceNo}
+                  {filteredBatches.length === 0 ? (
+                    <tr>
+                      <td colSpan="8" className="px-6 py-12 text-center">
+                        <div className="flex flex-col items-center">
+                          <Package2 className="w-12 h-12 text-gray-400 mb-4" />
+                          <h3 className="text-lg font-medium text-gray-900 mb-2">No batches found</h3>
+                          <p className="text-gray-500 mb-4">
+                            {searchTerm || filterStatus !== 'all' 
+                              ? 'Try adjusting your search or filters'
+                              : 'Get started by adding your first batch'
+                            }
+                          </p>
+                          {!searchTerm && filterStatus === 'all' && (
+                            <button
+                              onClick={() => setShowAddModal(true)}
+                              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center space-x-2"
+                            >
+                              <Plus className="w-4 h-4" />
+                              <span>Add First Batch</span>
+                            </button>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  ) : (
+                    filteredBatches.map((batch) => {
+                      const StatusIcon = getStatusIcon(batch.status);
+                      const daysUntilExpiry = getDaysUntilExpiry(batch.expiryDate);
+                      
+                      return (
+                        <tr key={batch.id} className="hover:bg-gray-50">
+                          <td className="px-6 py-4">
+                            <input
+                              type="checkbox"
+                              checked={selectedBatches.includes(batch.id)}
+                              onChange={(e) => {
+                                if (e.target.checked) {
+                                  setSelectedBatches([...selectedBatches, batch.id]);
+                                } else {
+                                  setSelectedBatches(selectedBatches.filter(id => id !== batch.id));
+                                }
+                              }}
+                              className="rounded border-gray-300"
+                            />
+                          </td>
+                          <td className="px-6 py-4">
+                            <div>
+                              <p className="text-sm font-medium text-gray-900">
+                                {batch.batchNo}
                               </p>
-                            )}
-                          </div>
-                        </td>
-                        <td className="px-6 py-4">
-                          <div className="text-sm">
-                            <p className="font-medium text-gray-900">{batch.productName}</p>
-                            <p className="text-xs text-gray-500">{batch.productCode}</p>
-                          </div>
-                        </td>
-                        <td className="px-6 py-4">
-                          <div className="text-sm">
-                            <p className="text-gray-900">
-                              <span className="text-xs text-gray-500">MFG:</span> {formatDate(batch.manufacturingDate)}
-                            </p>
-                            <p className={`font-medium ${
-                              daysUntilExpiry < 0 ? 'text-red-600' : 
-                              daysUntilExpiry <= 90 ? 'text-amber-600' : 'text-gray-900'
-                            }`}>
-                              <span className="text-xs text-gray-500">EXP:</span> {formatDate(batch.expiryDate)}
-                            </p>
-                            {daysUntilExpiry >= 0 && (
                               <p className="text-xs text-gray-500">
-                                {daysUntilExpiry} days remaining
+                                {batch.location} • {batch.supplier}
                               </p>
-                            )}
-                          </div>
-                        </td>
-                        <td className="px-6 py-4">
-                          <div className="text-sm">
-                            <p className="font-medium text-gray-900">
-                              {batch.availableQty} / {batch.quantity}
-                            </p>
-                            <div className="w-24 bg-gray-200 rounded-full h-2 mt-1">
-                              <div
-                                className="bg-blue-500 h-2 rounded-full"
-                                style={{ width: `${(batch.availableQty / batch.quantity) * 100}%` }}
-                              />
+                              {batch.invoiceNo && (
+                                <p className="text-xs text-gray-400">
+                                  Invoice: {batch.invoiceNo}
+                                </p>
+                              )}
                             </div>
-                          </div>
-                        </td>
-                        <td className="px-6 py-4">
-                          <div className="text-sm">
-                            <p className="text-gray-900">
-                              MRP: ₹{batch.mrp.toFixed(2)}
-                            </p>
-                            <p className="text-xs text-gray-500">
-                              PP: ₹{batch.purchasePrice.toFixed(2)} • SP: ₹{batch.salePrice.toFixed(2)}
-                            </p>
-                          </div>
-                        </td>
-                        <td className="px-6 py-4 text-center">
-                          <div className="flex items-center justify-center">
-                            <StatusIcon className={`w-5 h-5 text-${getStatusColor(batch.status)}-500 mr-2`} />
-                            <span className={`px-2 py-1 text-xs rounded-full bg-${getStatusColor(batch.status)}-100 text-${getStatusColor(batch.status)}-800 capitalize`}>
-                              {batch.status}
-                            </span>
-                          </div>
-                        </td>
-                        <td className="px-6 py-4 text-center">
-                          <div className="flex items-center justify-center space-x-2">
-                            <button
-                              onClick={() => handleEdit(batch)}
-                              className="p-1 text-blue-600 hover:bg-blue-50 rounded"
-                            >
-                              <Edit2 className="w-4 h-4" />
-                            </button>
-                            <button
-                              onClick={() => handleDelete(batch.id)}
-                              className="p-1 text-red-600 hover:bg-red-50 rounded"
-                              disabled={batch.availableQty > 0}
-                              title={batch.availableQty > 0 ? 'Cannot delete batch with stock' : ''}
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })}
+                          </td>
+                          <td className="px-6 py-4">
+                            <div className="text-sm">
+                              <p className="font-medium text-gray-900">{batch.productName}</p>
+                              <p className="text-xs text-gray-500">{batch.productCode}</p>
+                            </div>
+                          </td>
+                          <td className="px-6 py-4">
+                            <div className="text-sm">
+                              <p className="text-gray-900">
+                                <span className="text-xs text-gray-500">MFG:</span> {formatDate(batch.manufacturingDate)}
+                              </p>
+                              <p className={`font-medium ${
+                                daysUntilExpiry < 0 ? 'text-red-600' : 
+                                daysUntilExpiry <= 90 ? 'text-amber-600' : 'text-gray-900'
+                              }`}>
+                                <span className="text-xs text-gray-500">EXP:</span> {formatDate(batch.expiryDate)}
+                              </p>
+                              {daysUntilExpiry >= 0 && (
+                                <p className="text-xs text-gray-500">
+                                  {daysUntilExpiry} days remaining
+                                </p>
+                              )}
+                            </div>
+                          </td>
+                          <td className="px-6 py-4">
+                            <div className="text-sm">
+                              <p className="font-medium text-gray-900">
+                                {batch.availableQty} / {batch.quantity}
+                              </p>
+                              <div className="w-24 bg-gray-200 rounded-full h-2 mt-1">
+                                <div
+                                  className="bg-blue-500 h-2 rounded-full"
+                                  style={{ width: `${(batch.availableQty / batch.quantity) * 100}%` }}
+                                />
+                              </div>
+                            </div>
+                          </td>
+                          <td className="px-6 py-4">
+                            <div className="text-sm">
+                              <p className="text-gray-900">
+                                MRP: ₹{batch.mrp.toFixed(2)}
+                              </p>
+                              <p className="text-xs text-gray-500">
+                                PP: ₹{batch.purchasePrice.toFixed(2)} • SP: ₹{batch.salePrice.toFixed(2)}
+                              </p>
+                            </div>
+                          </td>
+                          <td className="px-6 py-4 text-center">
+                            <div className="flex items-center justify-center">
+                              <StatusIcon className={`w-5 h-5 text-${getStatusColor(batch.status)}-500 mr-2`} />
+                              <span className={`px-2 py-1 text-xs rounded-full bg-${getStatusColor(batch.status)}-100 text-${getStatusColor(batch.status)}-800 capitalize`}>
+                                {batch.status}
+                              </span>
+                            </div>
+                          </td>
+                          <td className="px-6 py-4 text-center">
+                            <div className="flex items-center justify-center space-x-2">
+                              <button
+                                onClick={() => handleEdit(batch)}
+                                className="p-1 text-blue-600 hover:bg-blue-50 rounded"
+                              >
+                                <Edit2 className="w-4 h-4" />
+                              </button>
+                              <button
+                                onClick={() => handleDelete(batch.id)}
+                                className="p-1 text-red-600 hover:bg-red-50 rounded"
+                                disabled={batch.availableQty > 0}
+                                title={batch.availableQty > 0 ? 'Cannot delete batch with stock' : ''}
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
                 </tbody>
               </table>
             </div>

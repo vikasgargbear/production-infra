@@ -1,7 +1,7 @@
 import React from 'react';
 import { 
   CreditCard, Calculator, CheckCircle, Printer, ArrowLeft, 
-  X, Save, History, Plus
+  X, History, Plus, Loader2, RefreshCw, AlertCircle
 } from 'lucide-react';
 import { PaymentProvider, usePayment } from '../../contexts/PaymentContext';
 import { customersApi, salesApi } from '../../services/api';
@@ -11,7 +11,7 @@ import PaymentDetails from './components/PaymentDetails';
 import PaymentSummary from './components/PaymentSummary';
 
 // Import global components
-import { CustomerSearch, ProductSearch, GSTCalculator, ProductCreationModal, CustomerCreationModal, ProceedToReviewComponent, ViewHistoryButton, ModuleHeader } from '../global';
+import { CustomerSearch, ProductSearchSimple, GSTCalculator, ProductCreationModal, CustomerCreationModal, ProceedToReviewComponent, ViewHistoryButton, ModuleHeader } from '../global';
 
 interface PaymentEntryContentProps {
   onClose: () => void;
@@ -24,11 +24,18 @@ interface KeyboardShortcut {
 
 // Generate sequential receipt number
 const generateReceiptNumber = async () => {
-  // TODO: Create payment API service similar to InvoiceApiService
-  // For now, generate a receipt number locally
-  const timestamp = Date.now();
-  const receiptNo = `RCT-${timestamp.toString().slice(-8)}`;
-  return receiptNo;
+  try {
+    // Here you would call the actual API to generate a receipt number
+    // For now, generate a receipt number locally
+    const timestamp = Date.now();
+    const receiptNo = `RCT-${timestamp.toString().slice(-8)}`;
+    return receiptNo;
+  } catch (error) {
+    console.error('Error generating receipt number:', error);
+    // Fallback to local generation
+    const timestamp = Date.now();
+    return `RCT-${timestamp.toString().slice(-8)}`;
+  }
 };
 
 // Inner component that uses the context
@@ -52,6 +59,11 @@ const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) =>
   } = usePayment();
 
   const [showGSTCalculator, setShowGSTCalculator] = React.useState<boolean>(false);
+  
+  // API data states
+  const [isLoading, setIsLoading] = React.useState(false);
+  const [error, setError] = React.useState<string | null>(null);
+  const [refreshing, setRefreshing] = React.useState(false);
 
   // Generate receipt number on component mount
   React.useEffect(() => {
@@ -60,7 +72,25 @@ const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) =>
         setPaymentField('receipt_no', receiptNo);
       });
     }
-  }, []); // Empty dependency array to run only once on mount
+  }, [payment.receipt_no, setPaymentField]);
+
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    try {
+      setError(null);
+      
+      // Refresh payment data if needed
+      // For now, we'll just regenerate the receipt number
+      const newReceiptNo = await generateReceiptNumber();
+      setPaymentField('receipt_no', newReceiptNo);
+      
+    } catch (error) {
+      console.error('Error refreshing payment data:', error);
+      setError('Failed to refresh payment data');
+    } finally {
+      setRefreshing(false);
+    }
+  };
 
   // Keyboard shortcuts
   const shortcuts: KeyboardShortcut[] = currentStep === 1 ? [
@@ -275,6 +305,13 @@ const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) =>
           }}
           additionalActions={[
             {
+              label: "Refresh",
+              onClick: handleRefresh,
+              variant: "default",
+              icon: refreshing ? Loader2 : RefreshCw,
+              disabled: refreshing
+            },
+            {
               label: "GST Calculator",
               onClick: () => setShowGSTCalculator(true),
               icon: Calculator,
@@ -291,6 +328,34 @@ const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) =>
         {/* Content */}
         <div className="flex-1 overflow-y-auto bg-green-50">
           <div className="max-w-6xl mx-auto px-6 py-6">
+          
+          {/* Loading State */}
+          {isLoading && (
+            <div className="bg-white rounded-lg shadow-sm border border-green-200 p-8 mb-6">
+              <div className="text-center">
+                <Loader2 className="w-8 h-8 animate-spin mx-auto mb-4 text-green-600" />
+                <p className="text-gray-600">Loading payment entry form...</p>
+              </div>
+            </div>
+          )}
+
+          {/* Error State */}
+          {error && (
+            <div className="bg-white rounded-lg shadow-sm border border-red-200 p-6 mb-6">
+              <div className="text-center max-w-md mx-auto">
+                <AlertCircle className="w-12 h-12 text-red-400 mx-auto mb-4" />
+                <h3 className="text-lg font-medium text-red-800 mb-2">Error</h3>
+                <p className="text-red-700 mb-4">{error}</p>
+                <button
+                  onClick={() => setError(null)}
+                  className="px-4 py-2 bg-red-100 text-red-700 rounded-md hover:bg-red-200 text-sm"
+                >
+                  Dismiss
+                </button>
+              </div>
+            </div>
+          )}
+          
           {/* Message Display */}
           {message && (
             <div className={`mb-4 px-4 py-3 rounded-lg flex items-start text-sm ${

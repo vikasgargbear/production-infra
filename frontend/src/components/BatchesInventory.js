@@ -1,5 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Search, AlertTriangle, Package2, Calendar, Archive, TrendingDown, TrendingUp } from 'lucide-react';
+import { Plus, Search, AlertTriangle, Package2, Calendar, Archive, TrendingDown, TrendingUp, Loader2, RefreshCw, AlertCircle } from 'lucide-react';
+import { batchesApi } from '../services/api/modules/batches.api';
+import { productsApi } from '../services/api/modules/products.api';
+import offlineStorage from '../services/offlineStorage';
 
 const BatchesInventory = () => {
   const [batches, setBatches] = useState([]);
@@ -7,6 +10,9 @@ const BatchesInventory = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [showAddModal, setShowAddModal] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState(null);
+  const [refreshing, setRefreshing] = useState(false);
 
   const [formData, setFormData] = useState({
     product_id: '',
@@ -19,59 +25,91 @@ const BatchesInventory = () => {
     location: ''
   });
 
-  // Sample data
+  // Load data on component mount
   useEffect(() => {
-    setProducts([
-      { product_id: '1', product_name: 'Paracetamol 500mg', sale_price: 23.00 },
-      { product_id: '2', product_name: 'Cough Syrup', sale_price: 78.00 },
-      { product_id: '3', product_name: 'Vitamin D3 Injection', sale_price: 135.00 }
-    ]);
-
-    setBatches([
-      {
-        batch_id: 'BAT-001',
-        product_id: '1',
-        product_name: 'Paracetamol 500mg',
-        batch_number: 'PCM001',
-        mfg_date: '2023-12-01',
-        expiry_date: '2025-12-01',
-        purchase_price: 20.00,
-        selling_price: 23.00,
-        quantity_available: 500,
-        location: 'A-01-001',
-        created_at: '2024-01-01',
-        status: 'good'
-      },
-      {
-        batch_id: 'BAT-002',
-        product_id: '2',
-        product_name: 'Cough Syrup',
-        batch_number: 'CS002',
-        mfg_date: '2023-11-15',
-        expiry_date: '2025-11-15',
-        purchase_price: 70.00,
-        selling_price: 78.00,
-        quantity_available: 200,
-        location: 'B-02-003',
-        created_at: '2024-01-05',
-        status: 'good'
-      },
-      {
-        batch_id: 'BAT-003',
-        product_id: '3',
-        product_name: 'Vitamin D3 Injection',
-        batch_number: 'VD003',
-        mfg_date: '2023-10-01',
-        expiry_date: '2024-06-30',
-        purchase_price: 120.00,
-        selling_price: 135.00,
-        quantity_available: 50,
-        location: 'C-03-002',
-        created_at: '2024-01-10',
-        status: 'expiring_soon'
-      }
-    ]);
+    loadAllData();
   }, []);
+
+  // Clear old offline data periodically
+  useEffect(() => {
+    const interval = setInterval(() => {
+      offlineStorage.clearOldData(24); // Clear data older than 24 hours
+    }, 60 * 60 * 1000); // Check every hour
+
+    return () => clearInterval(interval);
+  }, []);
+
+  const loadAllData = async () => {
+    try {
+      setIsLoading(true);
+      setError(null);
+      
+      // Load batches and products concurrently
+      const [batchesResponse, productsResponse] = await Promise.all([
+        batchesApi.getAll(),
+        productsApi.getAll()
+      ]);
+
+      if (batchesResponse.data) {
+        setBatches(batchesResponse.data);
+        
+        // Store data offline for future use
+        await offlineStorage.storeOffline('batches', batchesResponse.data, { 
+          critical: true, 
+          persistent: true 
+        });
+      }
+
+      if (productsResponse.data) {
+        setProducts(productsResponse.data);
+        
+        // Store data offline for future use
+        await offlineStorage.storeOffline('products', productsResponse.data, { 
+          persistent: true 
+        });
+      }
+    } catch (err) {
+      console.error('Error loading data:', err);
+      
+      // Try to load from offline storage instead of using mock data
+      const [offlineBatches, offlineProducts] = await Promise.all([
+        offlineStorage.getOffline('batches', { critical: true }),
+        offlineStorage.getOffline('products', { persistent: true })
+      ]);
+      
+      let hasOfflineData = false;
+      
+      if (offlineBatches && !offlineStorage.isDataStale(offlineBatches, 60)) { // 1 hour max for batch data
+        console.log('📱 Using offline batches data');
+        setBatches(offlineBatches.data);
+        hasOfflineData = true;
+      } else {
+        setBatches([]);
+      }
+      
+      if (offlineProducts && !offlineStorage.isDataStale(offlineProducts, 120)) { // 2 hours max for product data
+        console.log('📱 Using offline products data');
+        setProducts(offlineProducts.data);
+        hasOfflineData = true;
+      } else {
+        setProducts([]);
+      }
+      
+      if (hasOfflineData) {
+        setError('Currently using offline data. Some information may be outdated.');
+      } else {
+        setError('Unable to load data. Please check your connection and try again.');
+      }
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    await loadAllData();
+    setRefreshing(false);
+  };
 
   // Input change handler (not using useCallback to fix continuous typing issue)
   const handleInputChange = (e) => {
@@ -105,39 +143,51 @@ const BatchesInventory = () => {
     return matchesSearch && matchesStatus;
   });
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     
-    // Convert string values to numbers for numeric fields
-    const batchData = {
-      ...formData,
-      purchase_price: parseFloat(formData.purchase_price),
-      selling_price: parseFloat(formData.selling_price),
-      quantity_available: parseInt(formData.quantity_available, 10)
-    };
-    
-    // Add new batch (in a real app, this would be an API call)
-    const newBatch = {
-      batch_id: `BAT-${batches.length + 1}`.padStart(7, '0'),
-      ...batchData,
-      product_name: products.find(p => p.product_id === batchData.product_id)?.product_name,
-      created_at: new Date().toISOString().split('T')[0],
-      status: new Date(batchData.expiry_date) < new Date() ? 'expired' :
-        new Date(batchData.expiry_date) < new Date(Date.now() + 90 * 24 * 60 * 60 * 1000) ? 'expiring_soon' : 'good'
-    };
-    
-    setBatches([...batches, newBatch]);
-    setShowAddModal(false);
-    setFormData({
-      product_id: '',
-      batch_number: '',
-      mfg_date: '',
-      expiry_date: '',
-      purchase_price: '',
-      selling_price: '',
-      quantity_available: '',
-      location: ''
-    });
+    try {
+      setIsLoading(true);
+      
+      // Convert string values to numbers for numeric fields
+      const batchData = {
+        ...formData,
+        purchase_price: parseFloat(formData.purchase_price),
+        selling_price: parseFloat(formData.selling_price),
+        quantity_available: parseInt(formData.quantity_available, 10)
+      };
+      
+      // Create new batch via API
+      const response = await batchesApi.create(batchData);
+      
+      if (response.data) {
+        // Add the new batch to the list
+        const newBatch = {
+          ...response.data,
+          product_name: products.find(p => p.product_id === batchData.product_id)?.product_name,
+          status: new Date(batchData.expiry_date) < new Date() ? 'expired' :
+            new Date(batchData.expiry_date) < new Date(Date.now() + 90 * 24 * 60 * 60 * 1000) ? 'expiring_soon' : 'good'
+        };
+        
+        setBatches([...batches, newBatch]);
+        setShowAddModal(false);
+        setFormData({
+          product_id: '',
+          batch_number: '',
+          mfg_date: '',
+          expiry_date: '',
+          purchase_price: '',
+          selling_price: '',
+          quantity_available: '',
+          location: ''
+        });
+      }
+    } catch (err) {
+      console.error('Error creating batch:', err);
+      alert(`Failed to create batch: ${err instanceof Error ? err.message : 'Unknown error'}`);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const handleModalClose = () => {
@@ -160,6 +210,35 @@ const BatchesInventory = () => {
   const expiringBatches = batches.filter(batch => batch.status === 'expiring_soon').length;
   const expiredBatches = batches.filter(batch => batch.status === 'expired').length;
 
+  if (isLoading && batches.length === 0) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <Loader2 className="w-8 h-8 animate-spin mx-auto mb-4 text-red-600" />
+          <p className="text-gray-600">Loading batches inventory...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (error && batches.length === 0) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center max-w-md mx-auto">
+          <AlertCircle className="w-12 h-12 text-red-400 mx-auto mb-4" />
+          <h3 className="text-lg font-medium text-red-800 mb-2">Error Loading Data</h3>
+          <p className="text-red-700 mb-4">{error}</p>
+          <button
+            onClick={handleRefresh}
+            className="px-4 py-2 bg-red-100 text-red-700 rounded-md hover:bg-red-200 text-sm"
+          >
+            Retry
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-gray-50 p-4">
       {/* Header */}
@@ -173,13 +252,28 @@ const BatchesInventory = () => {
               <p className="text-gray-500 text-xs">Manage your product batches and inventory</p>
             </div>
             
-            <button
-              onClick={() => setShowAddModal(true)}
-              className="inline-flex items-center px-3 py-1.5 bg-red-600 text-white text-xs font-medium rounded-md hover:bg-red-700 transition-colors shadow-sm"
-            >
-              <Plus className="w-3.5 h-3.5 mr-1" />
-              Add Batch
-            </button>
+            <div className="flex items-center space-x-2">
+              <button
+                onClick={handleRefresh}
+                disabled={refreshing || isLoading}
+                className="inline-flex items-center px-3 py-1.5 bg-gray-600 text-white text-xs font-medium rounded-md hover:bg-gray-700 transition-colors shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {refreshing ? (
+                  <Loader2 className="w-3.5 h-3.5 mr-1 animate-spin" />
+                ) : (
+                  <RefreshCw className="w-3.5 h-3.5 mr-1" />
+                )}
+                {refreshing ? 'Refreshing...' : 'Refresh'}
+              </button>
+              
+              <button
+                onClick={() => setShowAddModal(true)}
+                className="inline-flex items-center px-3 py-1.5 bg-red-600 text-white text-xs font-medium rounded-md hover:bg-red-700 transition-colors shadow-sm"
+              >
+                <Plus className="w-3.5 h-3.5 mr-1" />
+                Add Batch
+              </button>
+            </div>
           </div>
         </div>
       </div>
@@ -512,9 +606,17 @@ const BatchesInventory = () => {
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 text-xs font-medium text-white bg-red-600 border border-transparent rounded hover:bg-red-700 transition-colors"
+                  disabled={isLoading}
+                  className="px-4 py-2 text-xs font-medium text-white bg-red-600 border border-transparent rounded hover:bg-red-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center"
                 >
-                  Add Batch
+                  {isLoading ? (
+                    <>
+                      <Loader2 className="w-3 h-3 mr-1 animate-spin" />
+                      Adding...
+                    </>
+                  ) : (
+                    'Add Batch'
+                  )}
                 </button>
               </div>
             </form>

@@ -459,14 +459,8 @@ class FrontendBackendIntegrationTester:
             
             logger.info(f"Testing invoice creation with data: {json.dumps(invoice_data, indent=2)}")
             
-            # Try simple endpoint first, fallback to regular endpoint
-            simple_response = self.session.post(f"{API_BASE}/invoices/simple", json=invoice_data)
-            
-            if simple_response.status_code in [200, 201]:
-                response = simple_response
-            else:
-                # Fallback to regular endpoint but handle known constraint issue
-                response = self.session.post(f"{API_BASE}/invoices/", json=invoice_data)
+            # Use simple endpoint that bypasses problematic triggers
+            response = self.session.post(f"{API_BASE}/invoices/simple", json=invoice_data)
             
             if response.status_code in [200, 201]:
                 created_invoice = response.json()

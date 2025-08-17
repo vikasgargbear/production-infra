@@ -1,491 +1,631 @@
 import React, { useState, useEffect } from 'react';
-import PaymentEntryModal from './PaymentEntryModal';
-import { 
-  IndianRupee,
-  Calendar,
-  Clock,
-  CheckCircle,
-  XCircle,
-  AlertCircle,
-  TrendingUp,
-  TrendingDown,
-  FileText,
-  Download,
+import {
   Search,
   Filter,
+  Download,
+  Eye,
+  Edit,
+  Trash2,
   Plus,
-  User,
-  Building,
   CreditCard,
   Banknote,
   Smartphone,
-  MessageSquare,
-  ChevronRight,
-  Camera,
-  Upload
+  Building,
+  FileText,
+  CheckCircle,
+  Clock,
+  XCircle,
+  AlertTriangle,
+  Loader2,
+  RefreshCw,
+  AlertCircle
 } from 'lucide-react';
+import { paymentsApi, customersApi } from '../services/api';
+import offlineStorage from '../services/offlineStorage';
 
 const PaymentTracking = () => {
   const [payments, setPayments] = useState([]);
+  const [filteredPayments, setFilteredPayments] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [refreshing, setRefreshing] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
-  const [filterType, setFilterType] = useState('all');
-  const [dateRange, setDateRange] = useState('today');
-  const [showAddPayment, setShowAddPayment] = useState(false);
+  const [statusFilter, setStatusFilter] = useState('all');
+  const [modeFilter, setModeFilter] = useState('all');
+  const [dateFilter, setDateFilter] = useState('all');
+  const [showFilters, setShowFilters] = useState(false);
   const [selectedPayment, setSelectedPayment] = useState(null);
-  const [paymentStats, setPaymentStats] = useState({
-    todayCollection: 0,
-    weekCollection: 0,
-    monthCollection: 0,
-    pendingAmount: 0,
-    bounceRate: 0,
-    collectionRate: 0
-  });
+  const [showDetails, setShowDetails] = useState(false);
 
-  // Payment modes common in India
+  // Payment mode configurations
   const paymentModes = [
-    { id: 'cash', name: 'Cash', icon: Banknote, color: 'green' },
     { id: 'upi', name: 'UPI', icon: Smartphone, color: 'purple' },
     { id: 'cheque', name: 'Cheque', icon: FileText, color: 'blue' },
-    { id: 'rtgs', name: 'RTGS/NEFT', icon: Building, color: 'orange' },
+    { id: 'cash', name: 'Cash', icon: Banknote, color: 'green' },
+    { id: 'rtgs_neft', name: 'RTGS/NEFT', icon: Building, color: 'orange' },
     { id: 'card', name: 'Card', icon: CreditCard, color: 'pink' }
   ];
 
-  // Sample payment data
-  useEffect(() => {
-    const samplePayments = [
-      {
-        id: 'PAY001',
-        customerName: 'Rajesh Medical Store',
-        customerPhone: '+91 98765 43210',
-        invoiceNo: 'INV-2401',
-        invoiceAmount: 45000,
-        paymentAmount: 45000,
-        paymentMode: 'upi',
-        paymentDate: '2024-01-15',
-        paymentTime: '10:30 AM',
-        transactionId: 'UPI123456789',
-        status: 'completed',
-        collectedBy: 'Sales Rep - Amit',
-        remarks: 'Payment received on time',
-        attachments: []
-      },
-      {
-        id: 'PAY002',
-        customerName: 'City Hospital Pharmacy',
-        customerPhone: '+91 98765 43211',
-        invoiceNo: 'INV-2389',
-        invoiceAmount: 250000,
-        paymentAmount: 100000,
-        paymentMode: 'cheque',
-        paymentDate: '2024-01-15',
-        paymentTime: '2:15 PM',
-        transactionId: 'CHQ-987654',
-        chequeNo: '987654',
-        chequeDate: '2024-01-15',
-        bankName: 'HDFC Bank',
-        status: 'pending',
-        collectedBy: 'Accounts Team',
-        remarks: 'Part payment - Cheque deposited',
-        attachments: ['cheque_photo.jpg']
-      },
-      {
-        id: 'PAY003',
-        customerName: 'Krishna Pharmacy',
-        customerPhone: '+91 98765 43212',
-        invoiceNo: 'INV-2234',
-        invoiceAmount: 95000,
-        paymentAmount: 95000,
-        paymentMode: 'cash',
-        paymentDate: '2024-01-14',
-        paymentTime: '5:45 PM',
-        status: 'completed',
-        collectedBy: 'Sales Rep - Rahul',
-        remarks: 'Cash collected after multiple follow-ups',
-        attachments: []
-      },
-      {
-        id: 'PAY004',
-        customerName: 'Wellness Medical Store',
-        customerPhone: '+91 98765 43213',
-        invoiceNo: 'INV-2098',
-        invoiceAmount: 120000,
-        paymentAmount: 120000,
-        paymentMode: 'cheque',
-        paymentDate: '2024-01-10',
-        paymentTime: '11:00 AM',
-        transactionId: 'CHQ-654321',
-        chequeNo: '654321',
-        chequeDate: '2024-01-10',
-        bankName: 'SBI',
-        status: 'bounced',
-        collectedBy: 'Sales Rep - Suresh',
-        remarks: 'Cheque bounced - Insufficient funds',
-        bounceCharges: 500,
-        attachments: ['bounce_memo.pdf']
-      },
-      {
-        id: 'PAY005',
-        customerName: 'Apollo Pharmacy',
-        customerPhone: '+91 98765 43214',
-        invoiceNo: 'INV-2412',
-        invoiceAmount: 180000,
-        paymentAmount: 180000,
-        paymentMode: 'rtgs',
-        paymentDate: '2024-01-15',
-        paymentTime: '3:30 PM',
-        transactionId: 'RTGS202401151234',
-        status: 'completed',
-        collectedBy: 'Online Transfer',
-        remarks: 'Auto-reconciled payment',
-        attachments: []
+  // Load payments with offline fallback
+  const loadPayments = async () => {
+    setLoading(true);
+    setError(null);
+    
+    try {
+      const response = await paymentsApi.getAll();
+      
+      if (response?.data && Array.isArray(response.data)) {
+        const paymentsData = response.data;
+        setPayments(paymentsData);
+        setFilteredPayments(paymentsData);
+        
+        // Store data offline for future use
+        await offlineStorage.storeOffline('payments', paymentsData, { 
+          critical: true, 
+          persistent: true 
+        });
+      } else {
+        setPayments([]);
+        setFilteredPayments([]);
       }
-    ];
-
-    setPayments(samplePayments);
-
-    // Calculate stats
-    const today = new Date().toISOString().split('T')[0];
-    const todayPayments = samplePayments.filter(p => p.paymentDate === today && p.status === 'completed');
-    const todayCollection = todayPayments.reduce((sum, p) => sum + p.paymentAmount, 0);
-
-    setPaymentStats({
-      todayCollection,
-      weekCollection: 1250000,
-      monthCollection: 5500000,
-      pendingAmount: 450000,
-      bounceRate: 5.2,
-      collectionRate: 92.5
-    });
-  }, []);
-
-  const getStatusColor = (status) => {
-    switch (status) {
-      case 'completed': return 'bg-green-100 text-green-800';
-      case 'pending': return 'bg-yellow-100 text-yellow-800';
-      case 'bounced': return 'bg-red-100 text-red-800';
-      default: return 'bg-gray-100 text-gray-800';
+    } catch (error) {
+      console.error('Error loading payments:', error);
+      
+      // Try to load from offline storage instead of using mock data
+      const offlineData = await offlineStorage.getOffline('payments', { critical: true });
+      
+      if (offlineData && !offlineStorage.isDataStale(offlineData, 30)) { // 30 minutes max for payment data
+        console.log('📱 Using offline payment data');
+        setPayments(offlineData.data);
+        setFilteredPayments(offlineData.data);
+        
+        // Show offline indicator
+        setError('Currently using offline data. Some information may be outdated.');
+      } else {
+        // No offline data available - show proper error instead of mock data
+        setError('Unable to load payment data. Please check your connection and try again.');
+        setPayments([]);
+        setFilteredPayments([]);
+      }
+    } finally {
+      setLoading(false);
     }
   };
 
-  const getModeIcon = (mode) => {
+  // Refresh payments
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    setError(null);
+    
+    try {
+      await loadPayments();
+    } catch (error) {
+      console.error('Error refreshing payments:', error);
+      setError('Failed to refresh data. Please try again.');
+    } finally {
+      setRefreshing(false);
+    }
+  };
+
+  // Filter payments
+  const filterPayments = () => {
+    let filtered = [...payments];
+
+    // Search filter
+    if (searchTerm) {
+      filtered = filtered.filter(payment => 
+        payment.customerName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        payment.invoiceNo?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        payment.transactionId?.toLowerCase().includes(searchTerm.toLowerCase())
+      );
+    }
+
+    // Status filter
+    if (statusFilter !== 'all') {
+      filtered = filtered.filter(payment => payment.status === statusFilter);
+    }
+
+    // Mode filter
+    if (modeFilter !== 'all') {
+      filtered = filtered.filter(payment => payment.paymentMode === modeFilter);
+    }
+
+    // Date filter
+    if (dateFilter !== 'all') {
+      const today = new Date().toISOString().split('T')[0];
+      const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+      const lastWeek = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+      const lastMonth = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+
+      switch (dateFilter) {
+        case 'today':
+          filtered = filtered.filter(payment => payment.paymentDate === today);
+          break;
+        case 'yesterday':
+          filtered = filtered.filter(payment => payment.paymentDate === yesterday);
+          break;
+        case 'last_week':
+          filtered = filtered.filter(payment => payment.paymentDate >= lastWeek);
+          break;
+        case 'last_month':
+          filtered = filtered.filter(payment => payment.paymentDate >= lastMonth);
+          break;
+      }
+    }
+
+    setFilteredPayments(filtered);
+  };
+
+  // Apply filters when any filter changes
+  useEffect(() => {
+    filterPayments();
+  }, [payments, searchTerm, statusFilter, modeFilter, dateFilter]);
+
+  // Calculate stats
+  const calculateStats = () => {
+    if (!payments.length) return { totalCollection: 0, pendingAmount: 0, completedCount: 0, pendingCount: 0 };
+
+    const today = new Date().toISOString().split('T')[0];
+    const todayPayments = payments.filter(p => p.paymentDate === today && p.status === 'completed');
+    const todayCollection = todayPayments.reduce((sum, p) => sum + (p.paymentAmount || 0), 0);
+    
+    const totalCollection = payments
+      .filter(p => p.status === 'completed')
+      .reduce((sum, p) => sum + (p.paymentAmount || 0), 0);
+    
+    const pendingAmount = payments
+      .filter(p => p.status === 'pending')
+      .reduce((sum, p) => sum + (p.paymentAmount || 0), 0);
+    
+    const completedCount = payments.filter(p => p.status === 'completed').length;
+    const pendingCount = payments.filter(p => p.status === 'pending').length;
+
+    return {
+      todayCollection,
+      totalCollection,
+      pendingAmount,
+      completedCount,
+      pendingCount
+    };
+  };
+
+  // Get status color
+  const getStatusColor = (status) => {
+    switch (status) {
+      case 'completed': return 'bg-green-100 text-green-800 border-green-200';
+      case 'pending': return 'bg-yellow-100 text-yellow-800 border-yellow-200';
+      case 'bounced': return 'bg-red-100 text-red-800 border-red-200';
+      case 'failed': return 'bg-red-100 text-red-800 border-red-200';
+      default: return 'bg-gray-100 text-gray-800 border-gray-200';
+    }
+  };
+
+  // Get status icon
+  const getStatusIcon = (status) => {
+    switch (status) {
+      case 'completed': return CheckCircle;
+      case 'pending': return Clock;
+      case 'bounced': return XCircle;
+      case 'failed': return AlertTriangle;
+      default: return Clock;
+    }
+  };
+
+  // Get payment mode icon
+  const getPaymentModeIcon = (mode) => {
     const modeConfig = paymentModes.find(m => m.id === mode);
     return modeConfig ? modeConfig.icon : CreditCard;
   };
 
-  const filteredPayments = payments.filter(payment => {
-    const matchesSearch = payment.customerName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         payment.invoiceNo.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         payment.transactionId?.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesType = filterType === 'all' || payment.paymentMode === filterType;
-    
-    // Date filtering would go here
-    return matchesSearch && matchesType;
-  });
-
-  const sendPaymentReceipt = (payment) => {
-    alert(`Payment receipt sent to ${payment.customerName} via WhatsApp`);
+  // Get payment mode color
+  const getPaymentModeColor = (mode) => {
+    const modeConfig = paymentModes.find(m => m.id === mode);
+    return modeConfig ? modeConfig.color : 'gray';
   };
 
-  const handleExport = () => {
-    // Create CSV content
-    const headers = ['Payment ID', 'Date', 'Customer', 'Invoice', 'Amount', 'Mode', 'Status', 'Transaction ID'];
-    const csvContent = [
-      headers.join(','),
-      ...filteredPayments.map(p => [
-        p.id,
-        p.paymentDate,
-        p.customerName,
-        p.invoiceNo,
-        p.paymentAmount,
-        p.paymentMode,
-        p.status,
-        p.transactionId || ''
-      ].join(','))
-    ].join('\n');
-
-    // Download CSV
-    const blob = new Blob([csvContent], { type: 'text/csv' });
-    const url = window.URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `payments_${new Date().toISOString().split('T')[0]}.csv`;
-    a.click();
+  // Handle payment selection
+  const handlePaymentSelect = (payment) => {
+    setSelectedPayment(payment);
+    setShowDetails(true);
   };
 
-  const handleMarkAsCleared = (payment) => {
-    setPayments(prev => prev.map(p => 
-      p.id === payment.id ? { ...p, status: 'completed' } : p
-    ));
-    alert('Payment marked as cleared');
-  };
+  // Load data on component mount
+  useEffect(() => {
+    loadPayments();
+  }, []);
 
-  const handleMarkAsBounced = (payment) => {
-    setPayments(prev => prev.map(p => 
-      p.id === payment.id ? { ...p, status: 'bounced', bounceCharges: 500 } : p
-    ));
-    alert('Payment marked as bounced');
-  };
+  // Clear old offline data periodically
+  useEffect(() => {
+    const interval = setInterval(() => {
+      offlineStorage.clearOldData(24); // Clear data older than 24 hours
+    }, 60 * 60 * 1000); // Check every hour
 
-  const handleRepresentCheque = (payment) => {
-    alert('Cheque re-presentation recorded');
-  };
+    return () => clearInterval(interval);
+  }, []);
+
+  const stats = calculateStats();
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
+        <span className="ml-2 text-gray-600">Loading payment data...</span>
+      </div>
+    );
+  }
 
   return (
-    <div className="min-h-screen bg-gray-50 p-4">
+    <div className="p-6 space-y-6">
       {/* Header */}
-      <div className="bg-white rounded-lg shadow-sm mb-6 p-6">
-        <div className="flex items-center justify-between mb-6">
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900">Payment Tracking</h1>
-            <p className="text-gray-600">Real-time payment collection and tracking</p>
-          </div>
-          <div className="flex items-center space-x-3">
-            <button 
-              onClick={() => handleExport()}
-              className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 flex items-center"
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">Payment Tracking</h1>
+          <p className="text-gray-600">Monitor and track all payment transactions</p>
+        </div>
+        <div className="flex items-center space-x-3">
+          <button
+            onClick={handleRefresh}
+            disabled={refreshing}
+            className="inline-flex items-center px-3 py-2 border border-gray-300 rounded-md bg-white text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            <RefreshCw className={`h-4 w-4 mr-1 ${refreshing ? 'animate-spin' : ''}`} />
+            {refreshing ? 'Refreshing...' : 'Refresh'}
+          </button>
+          <button className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700">
+            <Plus className="h-4 w-4 mr-2" />
+            New Payment
+          </button>
+        </div>
+      </div>
+
+      {/* Error Display */}
+      {error && (
+        <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center">
+              <AlertCircle className="h-5 w-5 text-red-600 mr-2" />
+              <span className="text-red-800">{error}</span>
+            </div>
+            <button
+              onClick={() => setError(null)}
+              className="text-sm text-red-600 hover:text-red-800 underline"
             >
-              <Download className="w-4 h-4 mr-2" />
+              Dismiss
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Stats Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium text-gray-600">Today's Collection</p>
+              <p className="text-2xl font-bold text-gray-900">
+                ₹{stats.todayCollection.toLocaleString()}
+              </p>
+            </div>
+            <div className="p-3 bg-green-100 rounded-lg">
+              <CheckCircle className="w-6 h-6 text-green-600" />
+            </div>
+          </div>
+        </div>
+
+        <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium text-gray-600">Total Collection</p>
+              <p className="text-2xl font-bold text-gray-900">
+                ₹{stats.totalCollection.toLocaleString()}
+              </p>
+            </div>
+            <div className="p-3 bg-blue-100 rounded-lg">
+              <CreditCard className="w-6 h-6 text-blue-600" />
+            </div>
+          </div>
+        </div>
+
+        <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium text-gray-600">Pending Amount</p>
+              <p className="text-2xl font-bold text-gray-900">
+                ₹{stats.pendingAmount.toLocaleString()}
+              </p>
+            </div>
+            <div className="p-3 bg-yellow-100 rounded-lg">
+              <Clock className="w-6 h-6 text-yellow-600" />
+            </div>
+          </div>
+        </div>
+
+        <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium text-gray-600">Completed</p>
+              <p className="text-2xl font-bold text-gray-900">
+                {stats.completedCount} / {payments.length}
+              </p>
+            </div>
+            <div className="p-3 bg-green-100 rounded-lg">
+              <CheckCircle className="w-6 h-6 text-green-600" />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Filters and Search */}
+      <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
+        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between space-y-4 lg:space-y-0">
+          <div className="flex-1 max-w-md">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
+              <input
+                type="text"
+                placeholder="Search payments..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+          </div>
+
+          <div className="flex items-center space-x-3">
+            <select
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value)}
+              className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="all">All Status</option>
+              <option value="completed">Completed</option>
+              <option value="pending">Pending</option>
+              <option value="bounced">Bounced</option>
+              <option value="failed">Failed</option>
+            </select>
+
+            <select
+              value={modeFilter}
+              onChange={(e) => setModeFilter(e.target.value)}
+              className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="all">All Modes</option>
+              {paymentModes.map(mode => (
+                <option key={mode.id} value={mode.id}>{mode.name}</option>
+              ))}
+            </select>
+
+            <select
+              value={dateFilter}
+              onChange={(e) => setDateFilter(e.target.value)}
+              className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="all">All Dates</option>
+              <option value="today">Today</option>
+              <option value="yesterday">Yesterday</option>
+              <option value="last_week">Last Week</option>
+              <option value="last_month">Last Month</option>
+            </select>
+
+            <button className="inline-flex items-center px-3 py-2 border border-gray-300 rounded-md bg-white text-gray-700 hover:bg-gray-50">
+              <Download className="h-4 w-4 mr-2" />
               Export
             </button>
-            <button 
-              onClick={() => setShowAddPayment(true)}
-              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center"
-            >
-              <Plus className="w-4 h-4 mr-2" />
-              Record Payment
-            </button>
-          </div>
-        </div>
-
-        {/* Stats Dashboard */}
-        <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-4">
-          <div className="bg-gradient-to-r from-green-50 to-green-100 rounded-lg p-4">
-            <div className="flex items-center justify-between mb-2">
-              <p className="text-sm text-green-600">Today's Collection</p>
-              <TrendingUp className="w-4 h-4 text-green-600" />
-            </div>
-            <p className="text-2xl font-bold text-green-900">₹{(paymentStats.todayCollection / 1000).toFixed(0)}K</p>
-          </div>
-
-          <div className="bg-gradient-to-r from-blue-50 to-blue-100 rounded-lg p-4">
-            <div className="flex items-center justify-between mb-2">
-              <p className="text-sm text-blue-600">This Week</p>
-              <Calendar className="w-4 h-4 text-blue-600" />
-            </div>
-            <p className="text-2xl font-bold text-blue-900">₹{(paymentStats.weekCollection / 100000).toFixed(1)}L</p>
-          </div>
-
-          <div className="bg-gradient-to-r from-purple-50 to-purple-100 rounded-lg p-4">
-            <div className="flex items-center justify-between mb-2">
-              <p className="text-sm text-purple-600">This Month</p>
-              <Calendar className="w-4 h-4 text-purple-600" />
-            </div>
-            <p className="text-2xl font-bold text-purple-900">₹{(paymentStats.monthCollection / 100000).toFixed(0)}L</p>
-          </div>
-
-          <div className="bg-gradient-to-r from-orange-50 to-orange-100 rounded-lg p-4">
-            <div className="flex items-center justify-between mb-2">
-              <p className="text-sm text-orange-600">Pending</p>
-              <Clock className="w-4 h-4 text-orange-600" />
-            </div>
-            <p className="text-2xl font-bold text-orange-900">₹{(paymentStats.pendingAmount / 100000).toFixed(1)}L</p>
-          </div>
-
-          <div className="bg-gradient-to-r from-red-50 to-red-100 rounded-lg p-4">
-            <div className="flex items-center justify-between mb-2">
-              <p className="text-sm text-red-600">Bounce Rate</p>
-              <TrendingDown className="w-4 h-4 text-red-600" />
-            </div>
-            <p className="text-2xl font-bold text-red-900">{paymentStats.bounceRate}%</p>
-          </div>
-
-          <div className="bg-gradient-to-r from-green-50 to-green-100 rounded-lg p-4">
-            <div className="flex items-center justify-between mb-2">
-              <p className="text-sm text-green-600">Collection Rate</p>
-              <CheckCircle className="w-4 h-4 text-green-600" />
-            </div>
-            <p className="text-2xl font-bold text-green-900">{paymentStats.collectionRate}%</p>
           </div>
         </div>
       </div>
 
-      {/* Filters */}
-      <div className="bg-white rounded-lg shadow-sm mb-6 p-4">
-        <div className="flex flex-col md:flex-row gap-4">
-          <div className="flex-1 relative">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
-            <input
-              type="text"
-              placeholder="Search by customer, invoice or transaction ID..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-10 pr-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
-            />
-          </div>
-          <select
-            value={filterType}
-            onChange={(e) => setFilterType(e.target.value)}
-            className="px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
-          >
-            <option value="all">All Payment Types</option>
-            {paymentModes.map(mode => (
-              <option key={mode.id} value={mode.id}>{mode.name}</option>
-            ))}
-          </select>
-          <select
-            value={dateRange}
-            onChange={(e) => setDateRange(e.target.value)}
-            className="px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
-          >
-            <option value="today">Today</option>
-            <option value="week">This Week</option>
-            <option value="month">This Month</option>
-            <option value="custom">Custom Range</option>
-          </select>
+      {/* Payments Table */}
+      <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+        <div className="px-6 py-4 border-b border-gray-200">
+          <h3 className="text-lg font-medium text-gray-900">
+            Payments ({filteredPayments.length})
+          </h3>
         </div>
+
+        {filteredPayments.length === 0 ? (
+          <div className="text-center py-8 text-gray-500">
+            <CreditCard className="h-12 w-12 mx-auto mb-2 text-gray-300" />
+            <p>No payments found matching your criteria</p>
+            {payments.length > 0 && (
+              <p className="text-sm text-gray-400 mt-1">Try adjusting your filters</p>
+            )}
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="min-w-full divide-y divide-gray-200">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Payment Details
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Customer
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Amount
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Mode
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Status
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Actions
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="bg-white divide-y divide-gray-200">
+                {filteredPayments.map((payment) => {
+                  const StatusIcon = getStatusIcon(payment.status);
+                  const ModeIcon = getPaymentModeIcon(payment.paymentMode);
+                  
+                  return (
+                    <tr key={payment.id} className="hover:bg-gray-50">
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div>
+                          <div className="text-sm font-medium text-gray-900">
+                            {payment.invoiceNo || 'N/A'}
+                          </div>
+                          <div className="text-sm text-gray-500">
+                            {payment.paymentDate || 'N/A'}
+                          </div>
+                          {payment.transactionId && (
+                            <div className="text-xs text-gray-400 font-mono">
+                              {payment.transactionId}
+                            </div>
+                          )}
+                        </div>
+                      </td>
+                      
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div>
+                          <div className="text-sm font-medium text-gray-900">
+                            {payment.customerName || 'Unknown Customer'}
+                          </div>
+                          {payment.customerPhone && (
+                            <div className="text-sm text-gray-500">
+                              {payment.customerPhone}
+                            </div>
+                          )}
+                        </div>
+                      </td>
+                      
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="text-sm text-gray-900">
+                          <div className="font-medium">
+                            ₹{(payment.paymentAmount || 0).toLocaleString()}
+                          </div>
+                          {payment.invoiceAmount && payment.invoiceAmount !== payment.paymentAmount && (
+                            <div className="text-xs text-gray-500">
+                              of ₹{payment.invoiceAmount.toLocaleString()}
+                            </div>
+                          )}
+                        </div>
+                      </td>
+                      
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="flex items-center">
+                          <div className={`p-2 bg-${getPaymentModeColor(payment.paymentMode)}-100 rounded-lg mr-2`}>
+                            <ModeIcon className={`w-4 h-4 text-${getPaymentModeColor(payment.paymentMode)}-600`} />
+                          </div>
+                          <span className="text-sm text-gray-900">
+                            {paymentModes.find(m => m.id === payment.paymentMode)?.name || 'Unknown'}
+                          </span>
+                        </div>
+                      </td>
+                      
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusColor(payment.status)}`}>
+                          <StatusIcon className="w-3 h-3 mr-1" />
+                          {payment.status || 'Unknown'}
+                        </span>
+                      </td>
+                      
+                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                        <div className="flex items-center space-x-2">
+                          <button
+                            onClick={() => handlePaymentSelect(payment)}
+                            className="text-blue-600 hover:text-blue-900"
+                            title="View Details"
+                          >
+                            <Eye className="h-4 w-4" />
+                          </button>
+                          <button
+                            className="text-gray-600 hover:text-gray-900"
+                            title="Edit"
+                          >
+                            <Edit className="h-4 w-4" />
+                          </button>
+                          <button
+                            className="text-red-600 hover:text-red-900"
+                            title="Delete"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
 
-      {/* Payment List */}
-      <div className="space-y-4">
-        {filteredPayments.map((payment) => {
-          const ModeIcon = getModeIcon(payment.paymentMode);
-          const modeConfig = paymentModes.find(m => m.id === payment.paymentMode);
-          
-          return (
-            <div key={payment.id} className="bg-white rounded-lg shadow-sm p-6">
-              <div className="flex items-center justify-between mb-4">
-                <div className="flex items-center space-x-4">
-                  <div className={`w-12 h-12 bg-${modeConfig?.color || 'gray'}-100 rounded-lg flex items-center justify-center`}>
-                    <ModeIcon className={`w-6 h-6 text-${modeConfig?.color || 'gray'}-600`} />
+      {/* Payment Details Modal */}
+      {showDetails && selectedPayment && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="p-6">
+              <div className="flex items-center justify-between mb-6">
+                <h2 className="text-xl font-bold text-gray-900">Payment Details</h2>
+                <button
+                  onClick={() => setShowDetails(false)}
+                  className="p-2 hover:bg-gray-100 rounded-lg"
+                >
+                  <XCircle className="w-5 h-5 text-gray-500" />
+                </button>
+              </div>
+
+              <div className="space-y-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700">Payment ID</label>
+                    <p className="text-sm text-gray-900">{selectedPayment.id}</p>
                   </div>
                   <div>
-                    <h3 className="text-lg font-semibold text-gray-900">{payment.customerName}</h3>
-                    <div className="flex items-center space-x-3 text-sm text-gray-600">
-                      <span>{payment.customerPhone}</span>
-                      <span>•</span>
-                      <span>Invoice: {payment.invoiceNo}</span>
-                      <span>•</span>
-                      <span>{payment.paymentDate} {payment.paymentTime}</span>
-                    </div>
+                    <label className="block text-sm font-medium text-gray-700">Invoice No</label>
+                    <p className="text-sm text-gray-900">{selectedPayment.invoiceNo || 'N/A'}</p>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700">Customer</label>
+                    <p className="text-sm text-gray-900">{selectedPayment.customerName || 'Unknown'}</p>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700">Amount</label>
+                    <p className="text-sm text-gray-900">₹{(selectedPayment.paymentAmount || 0).toLocaleString()}</p>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700">Payment Mode</label>
+                    <p className="text-sm text-gray-900">
+                      {paymentModes.find(m => m.id === selectedPayment.paymentMode)?.name || 'Unknown'}
+                    </p>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700">Status</label>
+                    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusColor(selectedPayment.status)}`}>
+                      {selectedPayment.status || 'Unknown'}
+                    </span>
                   </div>
                 </div>
-                <span className={`px-3 py-1 rounded-full text-sm font-medium ${getStatusColor(payment.status)}`}>
-                  {payment.status.charAt(0).toUpperCase() + payment.status.slice(1)}
-                </span>
-              </div>
 
-              {/* Payment Details */}
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
-                <div className="bg-gray-50 rounded-lg p-3">
-                  <p className="text-xs text-gray-600">Invoice Amount</p>
-                  <p className="text-lg font-semibold">₹{payment.invoiceAmount.toLocaleString()}</p>
-                </div>
-                <div className="bg-gray-50 rounded-lg p-3">
-                  <p className="text-xs text-gray-600">Payment Amount</p>
-                  <p className={`text-lg font-semibold ${
-                    payment.paymentAmount < payment.invoiceAmount ? 'text-orange-600' : 'text-green-600'
-                  }`}>
-                    ₹{payment.paymentAmount.toLocaleString()}
-                  </p>
-                </div>
-                <div className="bg-gray-50 rounded-lg p-3">
-                  <p className="text-xs text-gray-600">Payment Mode</p>
-                  <p className="text-lg font-semibold">{modeConfig?.name}</p>
-                </div>
-                <div className="bg-gray-50 rounded-lg p-3">
-                  <p className="text-xs text-gray-600">Collected By</p>
-                  <p className="text-sm font-medium">{payment.collectedBy}</p>
-                </div>
-              </div>
-
-              {/* Additional Details */}
-              {payment.paymentMode === 'cheque' && (
-                <div className="bg-blue-50 rounded-lg p-3 mb-4">
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
-                    <div>
-                      <span className="text-gray-600">Cheque No:</span>
-                      <span className="ml-2 font-medium">{payment.chequeNo}</span>
-                    </div>
-                    <div>
-                      <span className="text-gray-600">Cheque Date:</span>
-                      <span className="ml-2 font-medium">{payment.chequeDate}</span>
-                    </div>
-                    <div>
-                      <span className="text-gray-600">Bank:</span>
-                      <span className="ml-2 font-medium">{payment.bankName}</span>
-                    </div>
-                    {payment.status === 'bounced' && (
-                      <div>
-                        <span className="text-gray-600">Bounce Charges:</span>
-                        <span className="ml-2 font-medium text-red-600">₹{payment.bounceCharges}</span>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              )}
-
-              {payment.transactionId && payment.paymentMode !== 'cheque' && (
-                <div className="bg-gray-50 rounded-lg p-3 mb-4">
-                  <span className="text-sm text-gray-600">Transaction ID:</span>
-                  <span className="ml-2 text-sm font-medium">{payment.transactionId}</span>
-                </div>
-              )}
-
-              {payment.remarks && (
-                <div className="text-sm text-gray-600 mb-4">
-                  <span className="font-medium">Remarks:</span> {payment.remarks}
-                </div>
-              )}
-
-              {/* Actions */}
-              <div className="flex items-center justify-between pt-4 border-t">
-                <div className="flex items-center space-x-2">
-                  {payment.attachments.length > 0 && (
-                    <button className="px-3 py-1 text-sm bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 flex items-center">
-                      <FileText className="w-4 h-4 mr-1" />
-                      View Attachments ({payment.attachments.length})
-                    </button>
-                  )}
-                  <button
-                    onClick={() => sendPaymentReceipt(payment)}
-                    className="px-3 py-1 text-sm bg-green-100 text-green-700 rounded-lg hover:bg-green-200 flex items-center"
-                  >
-                    <MessageSquare className="w-4 h-4 mr-1" />
-                    Send Receipt
-                  </button>
-                </div>
-                {payment.status === 'pending' && (
-                  <div className="flex items-center space-x-2">
-                    <button 
-                      onClick={() => handleMarkAsCleared(payment)}
-                      className="px-3 py-1 text-sm bg-green-100 text-green-700 rounded-lg hover:bg-green-200"
-                    >
-                      Mark as Cleared
-                    </button>
-                    <button 
-                      onClick={() => handleMarkAsBounced(payment)}
-                      className="px-3 py-1 text-sm bg-red-100 text-red-700 rounded-lg hover:bg-red-200"
-                    >
-                      Mark as Bounced
-                    </button>
+                {selectedPayment.remarks && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700">Remarks</label>
+                    <p className="text-sm text-gray-900">{selectedPayment.remarks}</p>
                   </div>
                 )}
-                {payment.status === 'bounced' && (
-                  <button 
-                    onClick={() => handleRepresentCheque(payment)}
-                    className="px-3 py-1 text-sm bg-blue-100 text-blue-700 rounded-lg hover:bg-blue-200"
-                  >
-                    Re-present Cheque
-                  </button>
+
+                {selectedPayment.attachments && selectedPayment.attachments.length > 0 && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700">Attachments</label>
+                    <div className="flex space-x-2">
+                      {selectedPayment.attachments.map((attachment, index) => (
+                        <span key={index} className="text-sm text-blue-600 hover:text-blue-800 underline cursor-pointer">
+                          {attachment}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
                 )}
               </div>
             </div>
-          );
-        })}
-      </div>
-
-      {/* Payment Entry Modal */}
-      <PaymentEntryModal open={showAddPayment} onClose={() => setShowAddPayment(false)} />
+          </div>
+        </div>
+      )}
     </div>
   );
 };

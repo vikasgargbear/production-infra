@@ -17,7 +17,9 @@ import {
   CheckCircle,
   Clock,
   Download,
-  MessageSquare
+  MessageSquare,
+  Loader2,
+  RefreshCw
 } from 'lucide-react';
 import { format, parseISO, differenceInDays } from 'date-fns';
 import { ledgerApi } from '../../services/api/modules/ledger.api';
@@ -86,7 +88,7 @@ const OutstandingBills: React.FC<OutstandingBillsProps> = ({
   const [selectedBills, setSelectedBills] = useState<string[]>([]);
 
   // Fetch outstanding bills
-  const { data, isLoading, refetch } = useQuery(
+  const { data, isLoading, refetch, error } = useQuery(
     ['outstanding-bills', partyId || selectedParty?.id, partyType, filters],
     () => ledgerApi.getOutstanding({
       party_id: partyId || selectedParty?.id,
@@ -99,6 +101,29 @@ const OutstandingBills: React.FC<OutstandingBillsProps> = ({
       enabled: !!(partyId || selectedParty?.id) || !partyId
     }
   );
+
+  const [refreshing, setRefreshing] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    setErrorMessage(null);
+    try {
+      await refetch();
+    } catch (error) {
+      console.error('Refresh failed:', error);
+      setErrorMessage('Failed to refresh data');
+    } finally {
+      setRefreshing(false);
+    }
+  };
+
+  // Set error message when query fails
+  React.useEffect(() => {
+    if (error) {
+      setErrorMessage('Failed to load outstanding bills');
+    }
+  }, [error]);
 
   const bills = data?.bills || [];
   const summary: Summary = data?.summary || {
@@ -340,9 +365,16 @@ const OutstandingBills: React.FC<OutstandingBillsProps> = ({
             onSaveDraft={() => {}}
             additionalActions={[
               {
+                label: "Refresh",
+                onClick: handleRefresh,
+                variant: "default",
+                icon: refreshing ? Loader2 : RefreshCw,
+                disabled: refreshing
+              },
+              {
                 label: "Export",
                 icon: Download,
-                onClick: () => console.log('Export outstanding'),
+                onClick: handleExport,
                 variant: "default"
               }
             ] as any}
@@ -352,6 +384,33 @@ const OutstandingBills: React.FC<OutstandingBillsProps> = ({
           </div>
           <div className="flex-1 overflow-y-auto">
             <div className="max-w-6xl mx-auto px-6 py-6">
+
+              {/* Loading State */}
+              {isLoading && (
+                <div className="bg-white rounded-lg shadow-sm border border-blue-200 p-8 mb-6">
+                  <div className="text-center">
+                    <Loader2 className="w-8 h-8 animate-spin mx-auto mb-4 text-blue-600" />
+                    <p className="text-gray-600">Loading outstanding bills...</p>
+                  </div>
+                </div>
+              )}
+
+              {/* Error State */}
+              {errorMessage && (
+                <div className="bg-white rounded-lg shadow-sm border border-red-200 p-6 mb-6">
+                  <div className="text-center max-w-md mx-auto">
+                    <AlertCircle className="w-12 h-12 text-red-400 mx-auto mb-4" />
+                    <h3 className="text-lg font-medium text-red-800 mb-2">Error</h3>
+                    <p className="text-red-700 mb-4">{errorMessage}</p>
+                    <button
+                      onClick={() => refetch()}
+                      className="px-4 py-2 bg-red-100 text-red-700 rounded-md hover:bg-red-200 text-sm"
+                    >
+                      Retry
+                    </button>
+                  </div>
+                </div>
+              )}
 
       {/* Summary Cards */}
       <div className="grid grid-cols-4 gap-4 mb-6">
@@ -487,10 +546,16 @@ const OutstandingBills: React.FC<OutstandingBillsProps> = ({
 
           <div className="flex items-end gap-2">
             <button
-              onClick={() => refetch()}
+              onClick={handleRefresh}
               className="px-4 py-2 bg-gray-100 text-gray-700 rounded-md hover:bg-gray-200"
+              disabled={isLoading || refreshing}
             >
-              Refresh
+              {isLoading || refreshing ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <RefreshCw className="h-4 w-4" />
+              )}
+              {refreshing ? 'Refreshing...' : 'Refresh'}
             </button>
             <button
               onClick={handleExport}

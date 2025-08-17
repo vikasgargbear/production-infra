@@ -1,29 +1,121 @@
-import React, { useState } from 'react';
-import { Users, Search, Filter, Download, AlertTriangle, TrendingUp } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Users, Search, Filter, Download, AlertTriangle, TrendingUp, Loader2, RefreshCw } from 'lucide-react';
 import { ModuleHeader } from '../global';
+import { customersApi, suppliersApi, paymentsApi } from '../../services/api';
+import offlineStorage from '../../services/offlineStorage';
 
 interface OutstandingManagementProps {
   onClose?: () => void;
 }
 
+interface OutstandingParty {
+  id: number;
+  name: string;
+  phone: string;
+  outstanding: number;
+  overdue: number;
+  days: number;
+  email?: string;
+  address?: string;
+  credit_limit?: number;
+}
+
 const OutstandingManagement: React.FC<OutstandingManagementProps> = ({ onClose }) => {
   const [activeTab, setActiveTab] = useState<'customers' | 'suppliers'>('customers');
   const [searchTerm, setSearchTerm] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  
+  const [customerOutstanding, setCustomerOutstanding] = useState<OutstandingParty[]>([]);
+  const [supplierOutstanding, setSupplierOutstanding] = useState<OutstandingParty[]>([]);
 
-  // Mock customer outstanding data
-  const customerOutstanding = [
-    { id: 1, name: 'ABC Medical Store', phone: '9876543210', outstanding: 125000, overdue: 45000, days: 15 },
-    { id: 2, name: 'XYZ Pharmacy', phone: '9876543211', outstanding: 85000, overdue: 0, days: 5 },
-    { id: 3, name: 'City Health Center', phone: '9876543212', outstanding: 225000, overdue: 125000, days: 45 },
-    { id: 4, name: 'Life Care Medical', phone: '9876543213', outstanding: 65000, overdue: 0, days: 8 }
-  ];
+  // Load outstanding data with offline fallback
+  const loadOutstandingData = async () => {
+    setLoading(true);
+    setError(null);
+    
+    try {
+      // Load customer and supplier outstanding data
+      const [customersResponse, suppliersResponse] = await Promise.all([
+        customersApi.getOutstanding(),
+        suppliersApi.getOutstanding()
+      ]);
+      
+      if (customersResponse?.data && Array.isArray(customersResponse.data)) {
+        setCustomerOutstanding(customersResponse.data);
+      } else {
+        setCustomerOutstanding([]);
+      }
+      
+      if (suppliersResponse?.data && Array.isArray(suppliersResponse.data)) {
+        setSupplierOutstanding(suppliersResponse.data);
+      } else {
+        setSupplierOutstanding([]);
+      }
+      
+      // Store data offline for future use
+      await offlineStorage.storeOffline('outstanding_management_data', {
+        customers: customersResponse?.data || [],
+        suppliers: suppliersResponse?.data || [],
+        timestamp: new Date().toISOString()
+      }, { 
+        critical: true, 
+        persistent: true 
+      });
+      
+    } catch (err) {
+      console.error('Error loading outstanding data:', err);
+      
+      // Try to load from offline storage instead of using mock data
+      const offlineData = await offlineStorage.getOffline('outstanding_management_data', { critical: true });
+      
+      if (offlineData && !offlineStorage.isDataStale(offlineData, 60)) { // 1 hour max for outstanding data
+        console.log('📱 Using offline outstanding data');
+        setCustomerOutstanding(offlineData.data.customers || []);
+        setSupplierOutstanding(offlineData.data.suppliers || []);
+        
+        // Show offline indicator
+        setError('Currently using offline data. Some information may be outdated.');
+      } else {
+        // No offline data available - show proper error instead of mock data
+        setError('Unable to load outstanding data. Please check your connection and try again.');
+        setCustomerOutstanding([]);
+        setSupplierOutstanding([]);
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
 
-  // Mock supplier outstanding data
-  const supplierOutstanding = [
-    { id: 1, name: 'Pharma Distributors Ltd', phone: '9876543220', outstanding: 185000, overdue: 85000, days: 25 },
-    { id: 2, name: 'MedSupply Co.', phone: '9876543221', outstanding: 95000, overdue: 0, days: 10 },
-    { id: 3, name: 'Healthcare Wholesalers', phone: '9876543222', outstanding: 275000, overdue: 175000, days: 35 }
-  ];
+  // Refresh outstanding data
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    setError(null);
+    
+    try {
+      await loadOutstandingData();
+    } catch (error) {
+      console.error('Error refreshing outstanding data:', error);
+      setError('Failed to refresh data. Please try again.');
+    } finally {
+      setRefreshing(false);
+    }
+  };
+
+  // Load data when component mounts
+  useEffect(() => {
+    loadOutstandingData();
+  }, []);
+
+  // Clear old offline data periodically
+  useEffect(() => {
+    const interval = setInterval(() => {
+      offlineStorage.clearOldData(24); // Clear data older than 24 hours
+    }, 60 * 60 * 1000); // Check every hour
+
+    return () => clearInterval(interval);
+  }, []);
 
   const currentData = activeTab === 'customers' ? customerOutstanding : supplierOutstanding;
   const totalOutstanding = currentData.reduce((sum, item) => sum + item.outstanding, 0);
@@ -33,6 +125,15 @@ const OutstandingManagement: React.FC<OutstandingManagementProps> = ({ onClose }
     item.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
     item.phone.includes(searchTerm)
   );
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
+        <span className="ml-2 text-gray-600">Loading outstanding data...</span>
+      </div>
+    );
+  }
 
   return (
     <div className="h-full bg-green-50">
@@ -49,12 +150,37 @@ const OutstandingManagement: React.FC<OutstandingManagementProps> = ({ onClose }
           onSaveDraft={() => {}}
           additionalActions={[
             {
+              label: 'Refresh',
+              onClick: handleRefresh,
+              variant: 'outline',
+              disabled: refreshing,
+              icon: <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />
+            },
+            {
               label: 'Export Report',
               onClick: () => console.log('Export outstanding report'),
               variant: 'secondary'
             }
           ] as any}
         />
+
+        {/* Error Display */}
+        {error && (
+          <div className="bg-red-50 border border-red-200 px-4 py-2">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center">
+                <AlertTriangle className="h-4 w-4 text-red-600 mr-2" />
+                <span className="text-red-800 text-sm">{error}</span>
+              </div>
+              <button
+                onClick={() => setError(null)}
+                className="text-sm text-red-600 hover:text-red-800 underline"
+              >
+                Dismiss
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* Keyboard Shortcuts Help */}
         <div className="bg-green-50 px-4 py-2 text-xs text-green-700 border-b border-green-200">
@@ -100,30 +226,30 @@ const OutstandingManagement: React.FC<OutstandingManagementProps> = ({ onClose }
             <div className="bg-white rounded-lg border border-gray-200">
               <div className="px-6 py-4 border-b border-gray-200">
                 <div className="flex items-center justify-between">
-                  <div className="flex gap-4">
+                  <div className="flex space-x-1">
                     <button
                       onClick={() => setActiveTab('customers')}
-                      className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+                      className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
                         activeTab === 'customers'
-                          ? 'bg-amber-100 text-amber-700'
+                          ? 'bg-blue-100 text-blue-700'
                           : 'text-gray-600 hover:text-gray-800'
                       }`}
                     >
-                      Customer Outstanding
+                      Customers ({customerOutstanding.length})
                     </button>
                     <button
                       onClick={() => setActiveTab('suppliers')}
-                      className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+                      className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
                         activeTab === 'suppliers'
-                          ? 'bg-amber-100 text-amber-700'
+                          ? 'bg-blue-100 text-blue-700'
                           : 'text-gray-600 hover:text-gray-800'
                       }`}
                     >
-                      Supplier Outstanding
+                      Suppliers ({supplierOutstanding.length})
                     </button>
                   </div>
                   
-                  <div className="flex items-center gap-3">
+                  <div className="flex items-center space-x-3">
                     <div className="relative">
                       <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
                       <input
@@ -131,77 +257,106 @@ const OutstandingManagement: React.FC<OutstandingManagementProps> = ({ onClose }
                         placeholder="Search parties..."
                         value={searchTerm}
                         onChange={(e) => setSearchTerm(e.target.value)}
-                        className="pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-amber-500"
+                        className="pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                       />
                     </div>
-                    <button className="px-4 py-2 text-gray-600 hover:text-gray-800 border border-gray-300 rounded-lg hover:bg-gray-50 flex items-center gap-2">
+                    <button className="p-2 text-gray-600 hover:text-gray-800 border border-gray-300 rounded-lg">
                       <Filter className="w-4 h-4" />
-                      Filter
-                    </button>
-                    <button className="px-4 py-2 text-gray-600 hover:text-gray-800 border border-gray-300 rounded-lg hover:bg-gray-50 flex items-center gap-2">
-                      <Download className="w-4 h-4" />
-                      Export
                     </button>
                   </div>
                 </div>
               </div>
 
-              {/* Outstanding Table */}
+              {/* Data Table */}
               <div className="overflow-x-auto">
                 <table className="w-full">
                   <thead className="bg-gray-50">
                     <tr>
-                      <th className="px-4 py-3 text-left text-sm font-medium text-gray-600">
-                        {activeTab === 'customers' ? 'Customer' : 'Supplier'} Name
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Party Name
                       </th>
-                      <th className="px-4 py-3 text-left text-sm font-medium text-gray-600">Contact</th>
-                      <th className="px-4 py-3 text-right text-sm font-medium text-gray-600">Outstanding</th>
-                      <th className="px-4 py-3 text-right text-sm font-medium text-gray-600">Overdue</th>
-                      <th className="px-4 py-3 text-center text-sm font-medium text-gray-600">Days</th>
-                      <th className="px-4 py-3 text-center text-sm font-medium text-gray-600">Actions</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Contact
+                      </th>
+                      <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Outstanding Amount
+                      </th>
+                      <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Overdue Amount
+                      </th>
+                      <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Days
+                      </th>
+                      <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Actions
+                      </th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-gray-200">
-                    {filteredData.map((party) => (
-                      <tr key={party.id} className="hover:bg-gray-50">
-                        <td className="px-4 py-3">
-                          <div>
-                            <p className="font-medium text-gray-900">{party.name}</p>
-                            <p className="text-sm text-gray-500">ID: {activeTab === 'customers' ? 'CUST' : 'SUPP'}-{party.id.toString().padStart(3, '0')}</p>
-                          </div>
-                        </td>
-                        <td className="px-4 py-3 text-sm text-gray-600">{party.phone}</td>
-                        <td className="px-4 py-3 text-right">
-                          <span className="font-medium text-gray-900">₹{party.outstanding.toLocaleString()}</span>
-                        </td>
-                        <td className="px-4 py-3 text-right">
-                          {party.overdue > 0 ? (
-                            <span className="font-medium text-red-600">₹{party.overdue.toLocaleString()}</span>
-                          ) : (
-                            <span className="text-gray-400">-</span>
-                          )}
-                        </td>
-                        <td className="px-4 py-3 text-center">
-                          <span className={`px-2 py-1 text-xs font-medium rounded-full ${
-                            party.days <= 15 ? 'bg-green-100 text-green-700' :
-                            party.days <= 30 ? 'bg-yellow-100 text-yellow-700' :
-                            'bg-red-100 text-red-700'
-                          }`}>
-                            {party.days} days
-                          </span>
-                        </td>
-                        <td className="px-4 py-3 text-center">
-                          <div className="flex items-center justify-center gap-2">
-                            <button className="px-3 py-1 text-xs text-blue-600 hover:text-blue-700 border border-blue-200 rounded hover:bg-blue-50">
-                              View Ledger
-                            </button>
-                            <button className="px-3 py-1 text-xs text-green-600 hover:text-green-700 border border-green-200 rounded hover:bg-green-50">
-                              Send Reminder
-                            </button>
-                          </div>
+                  <tbody className="bg-white divide-y divide-gray-200">
+                    {filteredData.length === 0 ? (
+                      <tr>
+                        <td colSpan={6} className="px-6 py-8 text-center text-gray-500">
+                          <Users className="w-12 h-12 mx-auto mb-2 text-gray-300" />
+                          <p>No outstanding parties found</p>
+                          <p className="text-sm">All parties are up to date with payments</p>
                         </td>
                       </tr>
-                    ))}
+                    ) : (
+                      filteredData.map((party) => (
+                        <tr key={party.id} className="hover:bg-gray-50">
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <div>
+                              <div className="text-sm font-medium text-gray-900">{party.name}</div>
+                              {party.email && (
+                                <div className="text-sm text-gray-500">{party.email}</div>
+                              )}
+                            </div>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <div className="text-sm text-gray-900">{party.phone}</div>
+                            {party.address && (
+                              <div className="text-sm text-gray-500">{party.address}</div>
+                            )}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-right">
+                            <div className="text-sm font-medium text-gray-900">
+                              ₹{party.outstanding.toLocaleString()}
+                            </div>
+                            {party.credit_limit && (
+                              <div className="text-xs text-gray-500">
+                                Limit: ₹{party.credit_limit.toLocaleString()}
+                              </div>
+                            )}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-right">
+                            <div className={`text-sm font-medium ${
+                              party.overdue > 0 ? 'text-red-600' : 'text-green-600'
+                            }`}>
+                              ₹{party.overdue.toLocaleString()}
+                            </div>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-center">
+                            <span className={`px-2 py-1 text-xs font-medium rounded-full ${
+                              party.days > 30 ? 'bg-red-100 text-red-800' :
+                              party.days > 15 ? 'bg-yellow-100 text-yellow-800' :
+                              'bg-green-100 text-green-800'
+                            }`}>
+                              {party.days} days
+                            </span>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-center">
+                            <div className="flex items-center justify-center space-x-2">
+                              <button className="text-blue-600 hover:text-blue-800 text-sm">
+                                View Details
+                              </button>
+                              <button className="text-green-600 hover:text-green-800 text-sm">
+                                Send Reminder
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))
+                    )}
                   </tbody>
                 </table>
               </div>

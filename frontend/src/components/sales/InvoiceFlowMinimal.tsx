@@ -1,6 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { Search, X, Plus, Minus, ArrowRight, Check } from 'lucide-react';
-// import { Customer, Product } from '../../types/models';
+import { Search, X, Plus, Minus, ArrowRight, Check, Loader2, AlertCircle, RefreshCw } from 'lucide-react';
+import { customersApi } from '../../services/api/modules/customers.api';
+import { productsApi } from '../../services/api/modules/products.api';
+import { invoicesApi } from '../../services/api/modules/invoices.api';
+import offlineStorage from '../../services/offlineStorage';
 
 interface Customer {
   id?: string | number;
@@ -44,25 +47,108 @@ const InvoiceFlowMinimal: React.FC<InvoiceFlowMinimalProps> = ({ onClose }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [customerSearch, setCustomerSearch] = useState('');
   const [productSearch, setProductSearch] = useState('');
+  
+  // API data states
+  const [customers, setCustomers] = useState<Customer[]>([]);
+  const [products, setProducts] = useState<Product[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
 
-  // Mock data
-  const mockCustomers: Customer[] = [
-    { id: 1, name: 'Apollo Pharmacy', phone: '9876543210', gstin: '27AABCA1234B1Z5' },
-    { id: 2, name: 'MedPlus Healthcare', phone: '9876543211', gstin: '27AABCB1234B1Z6' },
-  ];
+  // Load data on component mount
+  useEffect(() => {
+    loadAllData();
+  }, []);
 
-  const mockProducts: Product[] = [
-    { id: 1, name: 'Paracetamol 500mg', price: 10, stock: 1000 },
-    { id: 2, name: 'Amoxicillin 250mg', price: 25, stock: 500 },
-    { id: 3, name: 'Vitamin C 100mg', price: 15, stock: 800 },
-  ];
+  // Clear old offline data periodically
+  useEffect(() => {
+    const interval = setInterval(() => {
+      offlineStorage.clearOldData(24); // Clear data older than 24 hours
+    }, 60 * 60 * 1000); // Check every hour
 
-  const filteredCustomers = mockCustomers.filter(c => 
-    c.name?.toLowerCase().includes(customerSearch.toLowerCase())
+    return () => clearInterval(interval);
+  }, []);
+
+  const loadAllData = async () => {
+    try {
+      setIsLoading(true);
+      setError(null);
+      
+      // Load customers and products concurrently
+      const [customersResponse, productsResponse] = await Promise.all([
+        customersApi.getAll(),
+        productsApi.getAll()
+      ]);
+
+      if (customersResponse.data) {
+        setCustomers(customersResponse.data);
+        
+        // Store data offline for future use
+        await offlineStorage.storeOffline('customers', customersResponse.data, { 
+          persistent: true 
+        });
+      }
+
+      if (productsResponse.data) {
+        setProducts(productsResponse.data);
+        
+        // Store data offline for future use
+        await offlineStorage.storeOffline('products', productsResponse.data, { 
+          persistent: true 
+        });
+      }
+    } catch (err) {
+      console.error('Error loading data:', err);
+      
+      // Try to load from offline storage instead of using mock data
+      const [offlineCustomers, offlineProducts] = await Promise.all([
+        offlineStorage.getOffline('customers', { persistent: true }),
+        offlineStorage.getOffline('products', { persistent: true })
+      ]);
+      
+      let hasOfflineData = false;
+      
+      if (offlineCustomers && !offlineStorage.isDataStale(offlineCustomers, 60)) { // 1 hour max for customer data
+        console.log('📱 Using offline customers data');
+        setCustomers(offlineCustomers.data);
+        hasOfflineData = true;
+      } else {
+        setCustomers([]);
+      }
+      
+      if (offlineProducts && !offlineStorage.isDataStale(offlineProducts, 120)) { // 2 hours max for product data
+        console.log('📱 Using offline products data');
+        setProducts(offlineProducts.data);
+        hasOfflineData = true;
+      } else {
+        setProducts([]);
+      }
+      
+      if (hasOfflineData) {
+        setError('Currently using offline data. Some information may be outdated.');
+      } else {
+        setError('Unable to load data. Please check your connection and try again.');
+      }
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    await loadAllData();
+    setRefreshing(false);
+  };
+
+  const filteredCustomers = customers.filter(c => 
+    c.name?.toLowerCase().includes(customerSearch.toLowerCase()) ||
+    c.customer_name?.toLowerCase().includes(customerSearch.toLowerCase()) ||
+    c.phone?.includes(customerSearch)
   );
 
-  const filteredProducts = mockProducts.filter(p => 
-    p.name?.toLowerCase().includes(productSearch.toLowerCase())
+  const filteredProducts = products.filter(p => 
+    p.name?.toLowerCase().includes(productSearch.toLowerCase()) ||
+    p.product_name?.toLowerCase().includes(productSearch.toLowerCase())
   );
 
   const addItem = (product: Product) => {
@@ -78,8 +164,8 @@ const InvoiceFlowMinimal: React.FC<InvoiceFlowMinimalProps> = ({ onClose }) => {
         id: Date.now().toString(),
         product,
         quantity: 1,
-        rate: product.price || 0,
-        amount: product.price || 0,
+        rate: product.price || product.sale_price || product.mrp || 0,
+        amount: product.price || product.sale_price || product.mrp || 0,
       };
       setItems([...items, newItem]);
     }
@@ -104,6 +190,71 @@ const InvoiceFlowMinimal: React.FC<InvoiceFlowMinimalProps> = ({ onClose }) => {
   const gst = totalAmount * 0.18;
   const grandTotal = totalAmount + gst;
 
+  const createInvoice = async () => {
+    try {
+      setIsLoading(true);
+      
+      if (!selectedCustomer) {
+        throw new Error('No customer selected');
+      }
+
+      const invoiceData = {
+        customer_id: selectedCustomer.id || selectedCustomer.customer_id,
+        invoice_date: new Date().toISOString().split('T')[0],
+        items: items.map(item => ({
+          product_id: item.product.id || item.product.product_id,
+          quantity: item.quantity,
+          rate: item.rate,
+          discount_percent: 0
+        })),
+        payment_terms: '30 days',
+        notes: 'Invoice created via minimal flow'
+      };
+
+      const response = await invoicesApi.create(invoiceData);
+      
+      if (response.data) {
+        setStep('done');
+      }
+    } catch (err) {
+      console.error('Failed to create invoice:', err);
+      alert(`Failed to create invoice: ${err instanceof Error ? err.message : 'Unknown error'}`);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Loading state
+  if (isLoading && customers.length === 0) {
+    return (
+      <div className="min-h-screen bg-white flex items-center justify-center">
+        <div className="text-center">
+          <Loader2 className="w-8 h-8 animate-spin mx-auto mb-4 text-gray-600" />
+          <p className="text-gray-600">Loading invoice data...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Error state
+  if (error && customers.length === 0) {
+    return (
+      <div className="min-h-screen bg-white flex items-center justify-center">
+        <div className="text-center max-w-md mx-auto">
+          <AlertCircle className="w-12 h-12 text-red-400 mx-auto mb-4" />
+          <h3 className="text-lg font-medium text-red-800 mb-2">Error Loading Data</h3>
+          <p className="text-red-700 mb-4">{error}</p>
+          <button
+            onClick={handleRefresh}
+            className="px-4 py-2 bg-red-100 text-red-700 rounded-md hover:bg-red-200 text-sm"
+          >
+            Retry
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   // Step 1: Select Customer
   if (step === 'customer') {
     return (
@@ -111,11 +262,24 @@ const InvoiceFlowMinimal: React.FC<InvoiceFlowMinimalProps> = ({ onClose }) => {
         <div className="border-b border-gray-100">
           <div className="px-6 py-4 flex items-center justify-between">
             <h1 className="text-lg font-medium text-gray-900">New Invoice</h1>
-            {onClose && (
-              <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-lg">
-                <X className="w-5 h-5 text-gray-500" />
+            <div className="flex items-center space-x-2">
+              <button
+                onClick={handleRefresh}
+                disabled={refreshing}
+                className="p-2 hover:bg-gray-100 rounded-lg disabled:opacity-50"
+              >
+                {refreshing ? (
+                  <Loader2 className="w-4 h-4 animate-spin text-gray-500" />
+                ) : (
+                  <RefreshCw className="w-4 h-4 text-gray-500" />
+                )}
               </button>
-            )}
+              {onClose && (
+                <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-lg">
+                  <X className="w-5 h-5 text-gray-500" />
+                </button>
+              )}
+            </div>
           </div>
         </div>
 
@@ -136,19 +300,26 @@ const InvoiceFlowMinimal: React.FC<InvoiceFlowMinimalProps> = ({ onClose }) => {
           </div>
 
           <div className="space-y-2">
-            {filteredCustomers.map((customer) => (
-              <button
-                key={customer.id}
-                className="w-full p-4 text-left border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
-                onClick={() => {
-                  setSelectedCustomer(customer);
-                  setStep('items');
-                }}
-              >
-                <div className="font-medium text-gray-900">{customer.name}</div>
-                <div className="text-sm text-gray-500">{customer.phone}</div>
-              </button>
-            ))}
+            {filteredCustomers.length === 0 ? (
+              <div className="text-center py-8 text-gray-500">
+                <p>No customers found</p>
+                <p className="text-sm">Try adjusting your search</p>
+              </div>
+            ) : (
+              filteredCustomers.map((customer) => (
+                <button
+                  key={customer.id || customer.customer_id}
+                  className="w-full p-4 text-left border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
+                  onClick={() => {
+                    setSelectedCustomer(customer);
+                    setStep('items');
+                  }}
+                >
+                  <div className="font-medium text-gray-900">{customer.name || customer.customer_name}</div>
+                  <div className="text-sm text-gray-500">{customer.phone}</div>
+                </button>
+              ))
+            )}
           </div>
         </div>
       </div>
@@ -169,7 +340,7 @@ const InvoiceFlowMinimal: React.FC<InvoiceFlowMinimalProps> = ({ onClose }) => {
                 </button>
               )}
             </div>
-            <p className="text-sm text-gray-500">{selectedCustomer?.name}</p>
+            <p className="text-sm text-gray-500">{selectedCustomer?.name || selectedCustomer?.customer_name}</p>
           </div>
         </div>
 
@@ -190,51 +361,65 @@ const InvoiceFlowMinimal: React.FC<InvoiceFlowMinimalProps> = ({ onClose }) => {
             
             {productSearch && (
               <div className="mt-2 border border-gray-200 rounded-lg max-h-48 overflow-y-auto">
-                {filteredProducts.map((product) => (
-                  <button
-                    key={product.id}
-                    className="w-full p-3 text-left hover:bg-gray-50 border-b border-gray-100 last:border-b-0"
-                    onClick={() => addItem(product)}
-                  >
-                    <div className="font-medium text-gray-900">{product.name}</div>
-                    <div className="text-sm text-gray-500">₹{product.price}</div>
-                  </button>
-                ))}
+                {filteredProducts.length === 0 ? (
+                  <div className="p-3 text-center text-gray-500">
+                    <p>No products found</p>
+                    <p className="text-sm">Try adjusting your search</p>
+                  </div>
+                ) : (
+                  filteredProducts.map((product) => (
+                    <button
+                      key={product.id || product.product_id}
+                      className="w-full p-3 text-left hover:bg-gray-50 border-b border-gray-100 last:border-b-0"
+                      onClick={() => addItem(product)}
+                    >
+                      <div className="font-medium text-gray-900">{product.name || product.product_name}</div>
+                      <div className="text-sm text-gray-500">₹{product.price || product.sale_price || product.mrp}</div>
+                    </button>
+                  ))
+                )}
               </div>
             )}
           </div>
 
           {/* Selected Items */}
           <div className="space-y-3">
-            {items.map((item) => (
-              <div key={item.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                <div className="flex-1">
-                  <div className="font-medium text-gray-900">{item.product.name}</div>
-                  <div className="text-sm text-gray-500">₹{item.rate} each</div>
-                </div>
-                <div className="flex items-center gap-3">
-                  <button
-                    onClick={() => updateQuantity(item.id, -1)}
-                    className="p-1 hover:bg-gray-200 rounded"
-                  >
-                    <Minus className="w-4 h-4 text-gray-600" />
-                  </button>
-                  <span className="w-8 text-center font-medium">{item.quantity}</span>
-                  <button
-                    onClick={() => updateQuantity(item.id, 1)}
-                    className="p-1 hover:bg-gray-200 rounded"
-                  >
-                    <Plus className="w-4 h-4 text-gray-600" />
-                  </button>
-                  <button
-                    onClick={() => removeItem(item.id)}
-                    className="ml-2 p-1 hover:bg-gray-200 rounded"
-                  >
-                    <X className="w-4 h-4 text-gray-600" />
-                  </button>
-                </div>
+            {items.length === 0 ? (
+              <div className="text-center py-8 text-gray-500">
+                <p>No items added yet</p>
+                <p className="text-sm">Search and add products above</p>
               </div>
-            ))}
+            ) : (
+              items.map((item) => (
+                <div key={item.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                  <div className="flex-1">
+                    <div className="font-medium text-gray-900">{item.product.name || item.product.product_name}</div>
+                    <div className="text-sm text-gray-500">₹{item.rate} each</div>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <button
+                      onClick={() => updateQuantity(item.id, -1)}
+                      className="p-1 hover:bg-gray-200 rounded"
+                    >
+                      <Minus className="w-4 h-4 text-gray-600" />
+                    </button>
+                    <span className="w-8 text-center font-medium">{item.quantity}</span>
+                    <button
+                      onClick={() => updateQuantity(item.id, 1)}
+                      className="p-1 hover:bg-gray-200 rounded"
+                    >
+                      <Plus className="w-4 h-4 text-gray-600" />
+                    </button>
+                    <button
+                      onClick={() => removeItem(item.id)}
+                      className="ml-2 p-1 hover:bg-gray-200 rounded"
+                    >
+                      <X className="w-4 h-4 text-gray-600" />
+                    </button>
+                  </div>
+                </div>
+              ))
+            )}
           </div>
 
           {/* Summary */}
@@ -272,7 +457,7 @@ const InvoiceFlowMinimal: React.FC<InvoiceFlowMinimalProps> = ({ onClose }) => {
           {/* Customer */}
           <div className="mb-6">
             <p className="text-sm text-gray-500 mb-2">Customer</p>
-            <p className="font-medium text-gray-900">{selectedCustomer?.name}</p>
+            <p className="font-medium text-gray-900">{selectedCustomer?.name || selectedCustomer?.customer_name}</p>
           </div>
 
           {/* Items */}
@@ -282,7 +467,7 @@ const InvoiceFlowMinimal: React.FC<InvoiceFlowMinimalProps> = ({ onClose }) => {
               {items.map((item) => (
                 <div key={item.id} className="flex justify-between py-2">
                   <div>
-                    <div className="text-gray-900">{item.product.name}</div>
+                    <div className="text-gray-900">{item.product.name || item.product.product_name}</div>
                     <div className="text-sm text-gray-500">{item.quantity} × ₹{item.rate}</div>
                   </div>
                   <div className="font-medium text-gray-900">₹{item.amount}</div>
@@ -310,10 +495,18 @@ const InvoiceFlowMinimal: React.FC<InvoiceFlowMinimalProps> = ({ onClose }) => {
           {/* Actions */}
           <div className="mt-6 space-y-3">
             <button
-              onClick={() => setStep('done')}
-              className="w-full py-3 bg-gray-900 text-white rounded-lg hover:bg-gray-800 transition-colors"
+              onClick={createInvoice}
+              disabled={isLoading}
+              className="w-full py-3 bg-gray-900 text-white rounded-lg hover:bg-gray-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
             >
-              Create Invoice
+              {isLoading ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                  Creating Invoice...
+                </>
+              ) : (
+                'Create Invoice'
+              )}
             </button>
             <button
               onClick={() => setStep('items')}

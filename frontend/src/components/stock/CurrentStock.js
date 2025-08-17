@@ -2,10 +2,11 @@ import React, { useState, useEffect } from 'react';
 import {
   Package, Search, Filter, Download, Eye,
   AlertTriangle, CheckCircle, Clock, MoreVertical,
-  TrendingUp, TrendingDown, ArrowUpDown, Edit2, X,
-  HelpCircle
+  TrendingUp, TrendingDown, Edit2, X,
+  HelpCircle, Loader2, RefreshCw, AlertCircle
 } from 'lucide-react';
-import { stockApi, productAPI, batchesApi } from '../../services/api';
+import { productsApi } from '../../services/api/modules/products.api';
+import { stockApi } from '../../services/api/modules/stock.api';
 import { formatCurrency } from '../../utils/formatters';
 import { DataTable, ModuleHeader } from '../global';
 
@@ -150,6 +151,11 @@ const CurrentStock = ({ open = true, onClose }) => {
     purchase_unit: '',
     sale_unit: ''
   });
+  
+  // API data states
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState(null);
+  const [refreshing, setRefreshing] = useState(false);
 
   useEffect(() => {
     loadStockData(0, true);
@@ -179,24 +185,21 @@ const CurrentStock = ({ open = true, onClose }) => {
 
   const loadStockData = async (page = 0, reset = true) => {
     if (page === 0) {
-      setLoading(true);
+      setIsLoading(true);
     } else {
       setLoadingMore(true);
     }
     
     try {
-      // Check if getAll method exists
-      if (!productAPI || typeof productAPI.getAll !== 'function') {
-        throw new Error('productAPI.getAll is not available. Available methods: ' + Object.keys(productAPI || {}));
-      }
+      setError(null);
       
       // Use products API with pagination - load 20 items per page
-      const response = await productAPI.getAll({
+      const response = await productsApi.getAll({
         limit: 20,
         skip: page * 20
       });
       
-      // Handle different response formats from productAPI.getAll()
+      // Handle different response formats from productsApi.getAll()
       let products = [];
       if (response?.success && response?.data) {
         products = response.data;
@@ -231,13 +234,31 @@ const CurrentStock = ({ open = true, onClose }) => {
       
     } catch (error) {
       console.error('Error loading stock data:', error);
+      setError(error.message || 'Failed to load stock data');
+      
       if (page === 0) {
         setStockData([]);
         setAllProducts([]);
       }
     } finally {
-      setLoading(false);
-      setLoadingMore(false);
+      if (page === 0) {
+        setIsLoading(false);
+      } else {
+        setLoadingMore(false);
+      }
+    }
+  };
+
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    setError(null);
+    try {
+      await loadStockData(0, true);
+    } catch (error) {
+      console.error('Refresh failed:', error);
+      setError('Failed to refresh data');
+    } finally {
+      setRefreshing(false);
     }
   };
 
@@ -600,6 +621,13 @@ const CurrentStock = ({ open = true, onClose }) => {
           historyType="stock"
           additionalActions={[
             {
+              label: "Refresh",
+              onClick: handleRefresh,
+              variant: "default",
+              icon: refreshing ? Loader2 : RefreshCw,
+              disabled: refreshing
+            },
+            {
               label: showLowStock ? "Hide Low Stock" : "Low Stock",
               onClick: () => setShowLowStock(!showLowStock),
               variant: showLowStock ? "primary" : "default",
@@ -757,6 +785,33 @@ const CurrentStock = ({ open = true, onClose }) => {
             </div>
           )}
             </div>
+
+            {/* Loading State */}
+            {isLoading && stockData.length === 0 && (
+              <div className="bg-white rounded-lg shadow-sm border border-blue-200 p-8 mb-6">
+                <div className="text-center">
+                  <Loader2 className="w-8 h-8 animate-spin mx-auto mb-4 text-blue-600" />
+                  <p className="text-gray-600">Loading stock data...</p>
+                </div>
+              </div>
+            )}
+
+            {/* Error State */}
+            {error && stockData.length === 0 && (
+              <div className="bg-white rounded-lg shadow-sm border border-red-200 p-6 mb-6">
+                <div className="text-center max-w-md mx-auto">
+                  <AlertCircle className="w-12 h-12 text-red-400 mx-auto mb-4" />
+                  <h3 className="text-lg font-medium text-red-800 mb-2">Error Loading Data</h3>
+                  <p className="text-red-700 mb-4">{error}</p>
+                  <button
+                    onClick={handleRefresh}
+                    className="px-4 py-2 bg-red-100 text-red-700 rounded-md hover:bg-red-200 text-sm"
+                  >
+                    Retry
+                  </button>
+                </div>
+              </div>
+            )}
 
             {/* Stock Table */}
             <div className="bg-white rounded-lg shadow-sm border border-blue-200">

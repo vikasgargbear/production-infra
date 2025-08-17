@@ -1,162 +1,36 @@
 import React, { useState, useEffect } from 'react';
 import {
-  Search, Filter, Download, Eye, Edit, Printer, Send,
-  Plus, Calendar, IndianRupee, FileText, MoreHorizontal,
-  ChevronDown, X, Check, Clock, AlertCircle, RefreshCw
+  Download, Eye, Edit, Printer, Send,
+  FileText, MoreHorizontal,
+  X, Check, AlertCircle, RefreshCw
 } from 'lucide-react';
-import { Button, StatusBadge, DataTable, DatePicker, ModuleHeader } from '../global';
+import { Button, StatusBadge, DataTable, InlineFilterPanel } from '../global';
+import InvoiceApiService from '../../services/invoiceApiService';
 
 interface InvoiceListProps {
-  open?: boolean;
   onClose?: () => void;
 }
 
 interface Invoice {
   id: string;
-  invoiceNo: string;
-  customerName: string;
-  date: string;
-  dueDate: string;
-  amount: number;
-  status: 'Draft' | 'Sent' | 'Paid' | 'Overdue' | 'Cancelled';
-  paymentStatus: 'Pending' | 'Partial' | 'Paid';
-  items: number;
+  invoice_id?: string;
+  invoice_number: string;
+  invoiceNo?: string; // For backward compatibility
+  customer_name: string;
+  customerName?: string; // For backward compatibility
+  invoice_date: string;
+  date?: string; // For backward compatibility
+  dueDate?: string;
+  final_amount: number;
+  amount?: number; // For backward compatibility
+  invoice_status?: string;
+  status?: string; // For backward compatibility
+  payment_status: string;
+  paymentStatus?: string; // For backward compatibility
+  items?: number;
+  order_number?: string;
+  order_date?: string;
 }
-
-// Enhanced filter component
-const FilterPanel: React.FC<{
-  isOpen: boolean;
-  onClose: () => void;
-  onApply: (filters: any) => void;
-}> = ({ isOpen, onClose, onApply }) => {
-  const [filters, setFilters] = useState({
-    status: '',
-    paymentStatus: '',
-    dateRange: { from: '', to: '' },
-    minAmount: '',
-    maxAmount: '',
-    customer: '',
-  });
-
-  if (!isOpen) return null;
-
-  return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-start justify-end">
-      <div className="bg-white w-96 h-full shadow-xl overflow-y-auto">
-        <div className="p-6 border-b border-gray-200">
-          <div className="flex items-center justify-between">
-            <h3 className="text-lg font-semibold text-gray-900">Filter Invoices</h3>
-            <Button variant="ghost" size="sm" onClick={onClose}>
-              <X className="w-4 h-4" />
-            </Button>
-          </div>
-        </div>
-        
-        <div className="p-6 space-y-6">
-          {/* Status Filter */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Status</label>
-            <select 
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-              value={filters.status}
-              onChange={(e) => setFilters({...filters, status: e.target.value})}
-            >
-              <option value="">All Status</option>
-              <option value="Draft">Draft</option>
-              <option value="Sent">Sent</option>
-              <option value="Paid">Paid</option>
-              <option value="Overdue">Overdue</option>
-              <option value="Cancelled">Cancelled</option>
-            </select>
-          </div>
-
-          {/* Payment Status */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Payment Status</label>
-            <select 
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-              value={filters.paymentStatus}
-              onChange={(e) => setFilters({...filters, paymentStatus: e.target.value})}
-            >
-              <option value="">All Payments</option>
-              <option value="Pending">Pending</option>
-              <option value="Partial">Partial</option>
-              <option value="Paid">Paid</option>
-            </select>
-          </div>
-
-          {/* Date Range */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Date Range</label>
-            <div className="grid grid-cols-2 gap-3">
-              <input
-                type="date"
-                className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                placeholder="From"
-                value={filters.dateRange.from}
-                onChange={(e) => setFilters({...filters, dateRange: {...filters.dateRange, from: e.target.value}})}
-              />
-              <input
-                type="date"
-                className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                placeholder="To"
-                value={filters.dateRange.to}
-                onChange={(e) => setFilters({...filters, dateRange: {...filters.dateRange, to: e.target.value}})}
-              />
-            </div>
-          </div>
-
-          {/* Amount Range */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Amount Range</label>
-            <div className="grid grid-cols-2 gap-3">
-              <input
-                type="number"
-                className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                placeholder="Min Amount"
-                value={filters.minAmount}
-                onChange={(e) => setFilters({...filters, minAmount: e.target.value})}
-              />
-              <input
-                type="number"
-                className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                placeholder="Max Amount"
-                value={filters.maxAmount}
-                onChange={(e) => setFilters({...filters, maxAmount: e.target.value})}
-              />
-            </div>
-          </div>
-
-          {/* Customer Filter */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Customer</label>
-            <input
-              type="text"
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-              placeholder="Search customer..."
-              value={filters.customer}
-              onChange={(e) => setFilters({...filters, customer: e.target.value})}
-            />
-          </div>
-        </div>
-
-        <div className="p-6 border-t border-gray-200">
-          <div className="flex space-x-3">
-            <Button variant="outline" onClick={() => setFilters({
-              status: '', paymentStatus: '', dateRange: { from: '', to: '' },
-              minAmount: '', maxAmount: '', customer: ''
-            })}>
-              Clear All
-            </Button>
-            <Button onClick={() => onApply(filters)} className="flex-1">
-              Apply Filters
-            </Button>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-};
 
 // Bulk action bar
 const BulkActionBar: React.FC<{
@@ -203,216 +77,441 @@ const InvoiceListV2: React.FC<InvoiceListProps> = ({ onClose }) => {
   const [showFilters, setShowFilters] = useState(false);
   const [selectedInvoices, setSelectedInvoices] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [pagination, setPagination] = useState({
+    total: 0,
+    page: 1,
+    per_page: 25,
+    total_pages: 0
+  });
 
-  // Mock data - replace with API calls
-  const [invoices] = useState<Invoice[]>([
+  // State for real data
+  const [invoices, setInvoices] = useState<Invoice[]>([]);
+
+  // Filter configuration for the global component
+  const filterOptions = [
     {
-      id: '1',
-      invoiceNo: 'INV-2025-001',
-      customerName: 'Apollo Pharmacy',
-      date: '2025-01-06',
-      dueDate: '2025-02-05',
-      amount: 45000,
-      status: 'Sent',
-      paymentStatus: 'Pending',
-      items: 12,
+      key: 'status',
+      label: 'Status',
+      type: 'select' as const,
+      options: [
+        { value: 'Draft', label: 'Draft' },
+        { value: 'Sent', label: 'Sent' },
+        { value: 'Paid', label: 'Paid' },
+        { value: 'Overdue', label: 'Overdue' },
+        { value: 'Cancelled', label: 'Cancelled' }
+      ]
     },
     {
-      id: '2',
-      invoiceNo: 'INV-2025-002',
-      customerName: 'MedPlus Healthcare',
-      date: '2025-01-05',
-      dueDate: '2025-02-04',
-      amount: 32000,
-      status: 'Paid',
-      paymentStatus: 'Paid',
-      items: 8,
+      key: 'payment_status',
+      label: 'Payment',
+      type: 'select' as const,
+      options: [
+        { value: 'Pending', label: 'Pending' },
+        { value: 'Partial', label: 'Partial' },
+        { value: 'Paid', label: 'Paid' }
+      ]
     },
     {
-      id: '3',
-      invoiceNo: 'INV-2025-003',
-      customerName: 'City Hospital',
-      date: '2024-12-28',
-      dueDate: '2025-01-27',
-      amount: 67000,
-      status: 'Overdue',
-      paymentStatus: 'Pending',
-      items: 15,
+      key: 'dateFrom',
+      label: 'From Date',
+      type: 'date' as const
     },
-    // Add more mock data...
-  ]);
+    {
+      key: 'dateTo',
+      label: 'To Date',
+      type: 'date' as const
+    }
+  ];
+
+  // Fetch invoices from backend
+  const fetchInvoices = async (page = 1, filters: any = {}) => {
+    setLoading(true);
+    setError(null);
+    
+    try {
+      // Prepare search parameters
+      const searchParams: any = {
+        limit: pagination.per_page,
+        offset: (page - 1) * pagination.per_page,
+        ...filters
+      };
+      
+      // If there's a search query, add it to the filters
+      if (filters.search && filters.search.trim()) {
+        searchParams.search = filters.search.trim();
+      }
+      
+      console.log('Fetching invoices with params:', searchParams);
+      
+      const response = await InvoiceApiService.getInvoices(searchParams);
+      
+      if (response.success) {
+        // Transform backend data to match our interface
+        const transformedInvoices = response.data.invoices.map((invoice: any) => {
+          // Log raw backend data for debugging
+          console.log('Raw invoice from backend:', {
+            invoice_id: invoice.invoice_id,
+            invoice_number: invoice.invoice_number,
+            customer_name: invoice.customer_name,
+            invoice_date: invoice.invoice_date,
+            final_amount: invoice.final_amount,
+            invoice_status: invoice.invoice_status,
+            payment_status: invoice.payment_status,
+            order_number: invoice.order_number,
+            order_date: invoice.order_date
+          });
+          
+          return {
+            id: invoice.invoice_id?.toString() || invoice.invoice_number,
+            invoice_id: invoice.invoice_id,
+            invoice_number: invoice.invoice_number,
+            invoiceNo: invoice.invoice_number, // For backward compatibility
+            customer_name: invoice.customer_name,
+            customerName: invoice.customer_name, // For backward compatibility
+            invoice_date: invoice.invoice_date,
+            date: invoice.invoice_date, // For backward compatibility
+            final_amount: invoice.final_amount,
+            amount: invoice.final_amount, // For backward compatibility
+            invoice_status: invoice.invoice_status,
+            status: invoice.invoice_status, // For backward compatibility
+            payment_status: invoice.payment_status,
+            paymentStatus: invoice.payment_status, // For backward compatibility
+            order_number: invoice.order_number,
+            order_date: invoice.order_date,
+            items: 0 // Will be updated when we fetch invoice details
+          };
+        });
+
+        console.log('Transformed invoices:', transformedInvoices);
+        setInvoices(transformedInvoices);
+        setPagination({
+          total: response.data.total || 0,
+          page: page,
+          per_page: pagination.per_page,
+          total_pages: Math.ceil((response.data.total || 0) / pagination.per_page)
+        });
+      } else {
+        setError(response.error?.message || 'Failed to fetch invoices');
+      }
+    } catch (error) {
+      console.error('Error fetching invoices:', error);
+      setError('Failed to fetch invoices. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Load invoices on component mount
+  useEffect(() => {
+    fetchInvoices();
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Refresh invoices
+  const handleRefresh = () => {
+    fetchInvoices(pagination.page);
+  };
+
+  // Handle filter changes with auto-search
+  const handleFilterChange = (filters: any) => {
+    console.log('Filters changed:', filters);
+    // Reset to first page when filters change
+    fetchInvoices(1, { ...filters, search: searchQuery });
+  };
+
+  // Handle search changes with auto-search
+  const handleSearchChange = (query: string) => {
+    setSearchQuery(query);
+    // Auto-search after a short delay to avoid too many API calls
+    const timeoutId = setTimeout(() => {
+      fetchInvoices(1, { search: query });
+    }, 300);
+    
+    return () => clearTimeout(timeoutId);
+  };
+
+  // Action handlers
+  const handleViewInvoice = (invoice: Invoice) => {
+    console.log('Viewing invoice:', invoice.invoice_number);
+    // TODO: Navigate to invoice view page or open modal
+    alert(`Viewing invoice: ${invoice.invoice_number}`);
+  };
+
+  const handleEditInvoice = (invoice: Invoice) => {
+    console.log('Editing invoice:', invoice.invoice_number);
+    // TODO: Navigate to invoice edit page or open modal
+    alert(`Editing invoice: ${invoice.invoice_number}`);
+  };
+
+  const handlePrintInvoice = (invoice: Invoice) => {
+    console.log('Printing invoice:', invoice.invoice_number);
+    // TODO: Open print dialog or generate PDF
+    alert(`Printing invoice: ${invoice.invoice_number}`);
+  };
+
+  const handleMoreOptions = (invoice: Invoice) => {
+    console.log('More options for invoice:', invoice.invoice_number);
+    // TODO: Show dropdown menu with more options
+    alert(`More options for invoice: ${invoice.invoice_number}`);
+  };
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('en-IN', {
       style: 'currency',
       currency: 'INR',
       minimumFractionDigits: 0,
+      maximumFractionDigits: 0,
     }).format(amount);
   };
 
-  const getStatusVariant = (status: string): 'solid' | 'light' | 'outline' => {
-    return 'light'; // Using light variant for all statuses
+  const formatDate = (value: string) => {
+    if (!value) return 'N/A';
+    return new Date(value).toLocaleDateString('en-IN');
   };
 
-  const getPaymentStatusVariant = (status: string): 'solid' | 'light' | 'outline' => {
-    return 'light'; // Using light variant for all statuses
+  // Helper function to get proper status text
+  const getStatusText = (status: string | undefined) => {
+    if (!status) return 'Unknown';
+    
+    console.log('Raw status from backend:', status, 'Type:', typeof status);
+    
+    // Map backend statuses to display text - handle various formats
+    const statusMap: Record<string, string> = {
+      // Common lowercase variations
+      'draft': 'Draft',
+      'sent': 'Sent',
+      'paid': 'Paid',
+      'overdue': 'Overdue',
+      'cancelled': 'Cancelled',
+      'canceled': 'Cancelled', // Handle US spelling
+      'pending': 'Pending',
+      'partial': 'Partial',
+      
+      // Common uppercase variations
+      'DRAFT': 'Draft',
+      'SENT': 'Sent',
+      'PAID': 'Paid',
+      'OVERDUE': 'Overdue',
+      'CANCELLED': 'Cancelled',
+      'CANCELED': 'Cancelled',
+      'PENDING': 'Pending',
+      'PARTIAL': 'Partial',
+      
+      // Handle null/undefined cases
+      'null': 'Unknown',
+      'undefined': 'Unknown',
+      '': 'Unknown',
+      
+      // Handle numeric statuses if backend uses them
+      '0': 'Draft',
+      '1': 'Sent',
+      '2': 'Paid',
+      '3': 'Overdue',
+      '4': 'Cancelled',
+      '5': 'Pending',
+      '6': 'Partial'
+    };
+    
+    const normalizedStatus = status.toString().toLowerCase().trim();
+    const mappedStatus = statusMap[normalizedStatus];
+    
+    if (mappedStatus) {
+      return mappedStatus;
+    }
+    
+    // If no mapping found, log it and return the original value
+    console.log('No status mapping found for:', status, 'Returning original value');
+    return status;
   };
 
   const columns = [
     {
-      key: 'select',
-      header: '',
-      render: (value: any, invoice: Invoice) => (
-        <input
-          type="checkbox"
-          className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
-          checked={selectedInvoices.includes(invoice.id)}
-          onChange={(e) => {
-            if (e.target.checked) {
-              setSelectedInvoices([...selectedInvoices, invoice.id]);
-            } else {
-              setSelectedInvoices(selectedInvoices.filter(id => id !== invoice.id));
-            }
-          }}
-        />
-      ),
-      width: '50px',
-    },
-    {
-      key: 'invoiceNo',
-      header: 'Invoice No.',
+      key: 'invoice_number',
+      header: 'Invoice #',
       render: (value: string, invoice: Invoice) => (
-        <div>
-          <p className="font-medium text-gray-900">{value}</p>
-          <p className="text-sm text-gray-500">{invoice.items} items</p>
+        <div className="font-medium text-gray-900">
+          {invoice.invoice_number}
         </div>
       ),
+      width: '120px',
     },
     {
-      key: 'customerName',
+      key: 'customer_name',
       header: 'Customer',
-      render: (value: string) => (
-        <div className="font-medium text-gray-900">{value}</div>
+      render: (value: string, invoice: Invoice) => (
+        <div className="text-gray-900">{invoice.customer_name}</div>
       ),
+      width: '200px',
     },
     {
-      key: 'date',
+      key: 'invoice_date',
       header: 'Date',
       render: (value: string, invoice: Invoice) => (
-        <div>
-          <p className="text-sm text-gray-900">{new Date(value).toLocaleDateString('en-IN')}</p>
-          <p className="text-xs text-gray-500">Due: {new Date(invoice.dueDate).toLocaleDateString('en-IN')}</p>
+        <div className="text-gray-600">{formatDate(invoice.invoice_date)}</div>
+      ),
+      width: '100px',
+    },
+    {
+      key: 'final_amount',
+      header: 'Amount',
+      render: (value: number, invoice: Invoice) => (
+        <div className="font-medium text-gray-900">
+          {formatCurrency(invoice.final_amount)}
         </div>
       ),
+      width: '120px',
     },
     {
-      key: 'amount',
-      header: 'Amount',
-      render: (value: number) => (
-        <div className="font-medium text-gray-900">{formatCurrency(value)}</div>
-      ),
-      align: 'right' as const,
-    },
-    {
-      key: 'status',
+      key: 'invoice_status',
       header: 'Status',
-      render: (value: string) => (
-        <StatusBadge status={value} variant={getStatusVariant(value)} />
-      ),
+      render: (value: string, invoice: Invoice) => {
+        const statusText = getStatusText(invoice.invoice_status);
+        console.log('Status column render:', {
+          original: invoice.invoice_status,
+          processed: statusText,
+          invoice_id: invoice.invoice_id
+        });
+        return (
+          <StatusBadge 
+            status={statusText} 
+            variant="light"
+          />
+        );
+      },
+      width: '100px',
     },
     {
-      key: 'paymentStatus',
+      key: 'payment_status',
       header: 'Payment',
-      render: (value: string) => (
-        <StatusBadge status={value} variant={getPaymentStatusVariant(value)} />
-      ),
+      render: (value: string, invoice: Invoice) => {
+        const paymentText = getStatusText(invoice.payment_status);
+        console.log('Payment column render:', {
+          original: invoice.payment_status,
+          processed: paymentText,
+          invoice_id: invoice.invoice_id
+        });
+        return (
+          <StatusBadge 
+            status={paymentText} 
+            variant="light"
+          />
+        );
+      },
+      width: '100px',
     },
     {
       key: 'actions',
       header: 'Actions',
       render: (value: any, invoice: Invoice) => (
         <div className="flex items-center space-x-2">
-          <Button variant="ghost" size="sm">
-            <Eye className="w-4 h-4" />
+          <Button 
+            variant="ghost" 
+            size="sm"
+            onClick={() => handleViewInvoice(invoice)}
+            title="View Invoice"
+            className="h-10 w-10 p-0 hover:bg-blue-50"
+          >
+            <Eye className="w-5 h-5 text-blue-600" />
           </Button>
-          <Button variant="ghost" size="sm">
-            <Edit className="w-4 h-4" />
+          <Button 
+            variant="ghost" 
+            size="sm"
+            onClick={() => handleEditInvoice(invoice)}
+            title="Edit Invoice"
+            className="h-10 w-10 p-0 hover:bg-green-50"
+          >
+            <Edit className="w-5 h-5 text-green-600" />
           </Button>
-          <Button variant="ghost" size="sm">
-            <Printer className="w-4 h-4" />
+          <Button 
+            variant="ghost" 
+            size="sm"
+            onClick={() => handlePrintInvoice(invoice)}
+            title="Print Invoice"
+            className="h-10 w-10 p-0 hover:bg-purple-50"
+          >
+            <Printer className="w-5 h-5 text-purple-600" />
           </Button>
-          <Button variant="ghost" size="sm">
-            <MoreHorizontal className="w-4 h-4" />
+          <Button 
+            variant="ghost" 
+            size="sm"
+            onClick={() => handleMoreOptions(invoice)}
+            title="More Options"
+            className="h-10 w-10 p-0 hover:bg-gray-50"
+          >
+            <MoreHorizontal className="w-5 h-5 text-gray-600" />
           </Button>
         </div>
       ),
-      width: '150px',
+      width: '180px',
     },
   ];
 
   return (
-    <div className="h-full bg-blue-50">
+    <div className="h-full bg-white">
       <div className="h-full flex flex-col">
         
-        {/* Header - Using Global ModuleHeader */}
-        <ModuleHeader
-          title="Invoice History"
-          documentNumber=""
-          status=""
-          icon={FileText}
-          iconColor="text-blue-600"
-          onClose={onClose}
-          historyType="invoice"
-          onSaveDraft={() => {}}
-          additionalActions={[
-            {
-              label: "Export All",
-              onClick: () => console.log('Export all'),
-              variant: "default"
-            },
-            {
-              label: "New Invoice",
-              onClick: () => console.log('New invoice'),
-              variant: "primary"
-            }
-          ] as any}
-        />
-
-        {/* Keyboard Shortcuts Help */}
-        <div className="bg-blue-50 px-4 py-2 text-xs text-blue-700 border-b border-blue-200">
-          Keyboard shortcuts: <strong>Ctrl+F</strong> - Search | <strong>Ctrl+N</strong> - New Invoice | <strong>Esc</strong> - Close
+        {/* Header - Simplified */}
+        <div className="bg-white border-b border-gray-200 px-6 py-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-3">
+              <FileText className="w-6 h-6 text-blue-600" />
+              <div>
+                <h1 className="text-2xl font-bold text-gray-900">
+                  Invoice History
+                </h1>
+                <p className="text-sm text-gray-600">
+                  View and manage all your invoices
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center space-x-3">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={handleRefresh}
+                disabled={loading}
+                title="Refresh data"
+              >
+                <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+                Refresh
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() => console.log('Export all invoices')}
+                icon={<Download className="w-4 h-4" />}
+                iconPosition="left"
+              >
+                Export All
+              </Button>
+            </div>
+          </div>
         </div>
 
         {/* Content */}
         <div className="flex-1 overflow-y-auto">
-          <div className="max-w-6xl mx-auto px-6 py-6">
+          <div className="max-w-7xl mx-auto px-6 py-6">
             
-            {/* Search and Filter Bar */}
-            <div className="bg-white rounded-lg shadow-sm border border-blue-200 p-4 mb-6">
-              <div className="flex items-center space-x-4">
-                <div className="flex-1 relative">
-                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
-                  <input
-                    type="text"
-                    placeholder="Search invoices..."
-                    className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                  />
-                </div>
-                <Button
-                  variant="outline"
-                  onClick={() => setShowFilters(true)}
-                  icon={<Filter className="w-4 h-4" />}
-                  iconPosition="left"
-                >
-                  Filters
-                </Button>
-                <Button variant="outline" size="sm">
-                  <RefreshCw className="w-4 h-4" />
-                </Button>
-              </div>
+            {/* Global Inline Filter Panel */}
+            <div className="mb-6">
+              <InlineFilterPanel
+                filters={filterOptions}
+                onFilterChange={handleFilterChange}
+                searchQuery={searchQuery}
+                onSearchChange={handleSearchChange}
+                showFilters={showFilters}
+                onToggleFilters={setShowFilters}
+              />
             </div>
+
+            {/* Error Display */}
+            {error && (
+              <div className="mb-6 bg-red-50 border border-red-200 rounded-lg p-4">
+                <div className="flex items-center">
+                  <AlertCircle className="w-5 h-5 text-red-600 mr-3" />
+                  <span className="text-red-800">{error}</span>
+                </div>
+              </div>
+            )}
 
             {/* Bulk Actions */}
             <BulkActionBar
@@ -423,30 +522,85 @@ const InvoiceListV2: React.FC<InvoiceListProps> = ({ onClose }) => {
               onClear={() => setSelectedInvoices([])}
             />
 
-            {/* Invoice Table */}
-            <div className="bg-white rounded-lg shadow-sm border border-blue-200">
-              <DataTable
-                data={invoices}
-                columns={columns}
-                keyField="id"
-                searchable={false}
-                paginated={true}
-                pageSize={25}
-              />
-            </div>
+            {/* Loading State */}
+            {loading ? (
+              <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-8">
+                <div className="text-center">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-3"></div>
+                  <p className="text-gray-600">Loading invoices...</p>
+                </div>
+              </div>
+            ) : invoices.length === 0 ? (
+              <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-8">
+                <div className="text-center">
+                  <FileText className="w-12 h-12 mx-auto mb-3 text-gray-300" />
+                  <p className="text-lg font-medium text-gray-500">
+                    {searchQuery ? `No invoices found matching "${searchQuery}"` : 'No invoices found'}
+                  </p>
+                  <p className="text-sm text-gray-400">
+                    {error ? 'There was an error loading invoices' : 
+                     searchQuery ? 'Try adjusting your search terms or filters' : 'No invoices match your criteria'}
+                  </p>
+                  {searchQuery && (
+                    <Button 
+                      variant="outline" 
+                      onClick={() => {
+                        setSearchQuery('');
+                        fetchInvoices(1);
+                      }} 
+                      className="mt-4"
+                    >
+                      Clear Search
+                    </Button>
+                  )}
+                </div>
+              </div>
+            ) : (
+              /* Invoice Table */
+              <div className="bg-white rounded-lg shadow-sm border border-gray-200">
+                <DataTable
+                  data={invoices}
+                  columns={columns}
+                  keyField="id"
+                  searchable={false}
+                  paginated={false}
+                  pageSize={pagination.per_page}
+                />
+                
+                {/* Pagination Controls */}
+                {pagination.total_pages > 1 && (
+                  <div className="flex items-center justify-between px-6 py-4 border-t border-gray-200">
+                    <div className="text-sm text-gray-600">
+                      Showing {invoices.length} of {pagination.total} invoices
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => fetchInvoices(pagination.page - 1)}
+                        disabled={pagination.page <= 1 || loading}
+                      >
+                        Previous
+                      </Button>
+                      <span className="text-sm text-gray-600">
+                        Page {pagination.page} of {pagination.total_pages}
+                      </span>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => fetchInvoices(pagination.page + 1)}
+                        disabled={pagination.page >= pagination.total_pages || loading}
+                      >
+                        Next
+                      </Button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         </div>
       </div>
-
-      {/* Filter Panel */}
-      <FilterPanel
-        isOpen={showFilters}
-        onClose={() => setShowFilters(false)}
-        onApply={(filters) => {
-          console.log('Apply filters:', filters);
-          setShowFilters(false);
-        }}
-      />
     </div>
   );
 };

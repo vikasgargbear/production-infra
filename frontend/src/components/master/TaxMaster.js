@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { 
   Receipt, Search, Plus, Edit2, Trash2, 
   Download, Upload, Loader2, AlertCircle, Check,
-  Percent, X
+  Percent, X, RefreshCw
 } from 'lucide-react';
 import { settingsApi } from '../../services/api/modules/settings.api';
 
@@ -16,6 +16,7 @@ const TaxMaster = ({ open, onClose }) => {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
   const [successMessage, setSuccessMessage] = useState('');
+  const [refreshing, setRefreshing] = useState(false);
   
   // Load taxes on component mount
   useEffect(() => {
@@ -41,75 +42,27 @@ const TaxMaster = ({ open, onClose }) => {
         taxData = response;
       }
       
-      // If no data from API, use mock data as fallback
-      if (!taxData || taxData.length === 0) {
-        taxData = [
-          {
-            id: 1,
-            name: 'GST 5%',
-            type: 'GST',
-            rate: 5,
-            cgst: 2.5,
-            sgst: 2.5,
-            igst: 5,
-            description: 'Goods and Services Tax - 5%',
-            isActive: true
-          },
-          {
-            id: 2,
-            name: 'GST 12%',
-            type: 'GST',
-            rate: 12,
-            cgst: 6,
-            sgst: 6,
-            igst: 12,
-            description: 'Goods and Services Tax - 12%',
-            isActive: true
-          },
-          {
-            id: 3,
-            name: 'GST 18%',
-            type: 'GST',
-            rate: 18,
-            cgst: 9,
-            sgst: 9,
-            igst: 18,
-            description: 'Goods and Services Tax - 18%',
-            isActive: true
-          },
-          {
-            id: 4,
-            name: 'GST 28%',
-            type: 'GST',
-            rate: 28,
-            cgst: 14,
-            sgst: 14,
-            igst: 28,
-            description: 'Goods and Services Tax - 28%',
-            isActive: true
-          },
-          {
-            id: 5,
-            name: 'GST Exempt',
-            type: 'GST',
-            rate: 0,
-            cgst: 0,
-            sgst: 0,
-            igst: 0,
-            description: 'GST Exempted Items',
-            isActive: true
-          }
-        ];
-      }
-      
-      setTaxes(taxData);
+      setTaxes(taxData || []);
     } catch (error) {
       console.error('Error loading taxes:', error);
       setError('Failed to load tax rates. Please try again.');
-      // Use mock data on error
       setTaxes([]);
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  // Handle refresh
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    setError(null);
+    try {
+      await loadTaxes();
+    } catch (error) {
+      console.error('Refresh failed:', error);
+      setError('Failed to refresh data');
+    } finally {
+      setRefreshing(false);
     }
   };
 
@@ -122,7 +75,7 @@ const TaxMaster = ({ open, onClose }) => {
 
   const filteredTaxes = taxes.filter(tax => {
     const matchesSearch = searchTerm === '' ||
-                         tax.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                         tax.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
                          tax.description?.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesType = filterType === 'all' || tax.type === filterType;
     return matchesSearch && matchesType;
@@ -194,30 +147,6 @@ const TaxMaster = ({ open, onClose }) => {
     } catch (error) {
       console.error('Error saving tax:', error);
       setError('Failed to save tax. Please try again.');
-      // For now, update local state as fallback
-      if (editingTax) {
-        setTaxes(prev => prev.map(t => 
-          t.id === editingTax.id 
-            ? { ...t, ...formData }
-            : t
-        ));
-      } else {
-        const newTax = {
-          ...formData,
-          id: Date.now(),
-          rate: parseFloat(formData.rate) || 0,
-          cgst: parseFloat(formData.cgst) || 0,
-          sgst: parseFloat(formData.sgst) || 0,
-          igst: parseFloat(formData.igst) || 0
-        };
-        setTaxes(prev => [...prev, newTax]);
-      }
-      setSuccessMessage('Tax saved locally.');
-      setTimeout(() => {
-        setSuccessMessage('');
-        setError(null);
-      }, 3000);
-      handleCloseModal();
     }
   };
 
@@ -227,9 +156,9 @@ const TaxMaster = ({ open, onClose }) => {
       name: tax.name,
       type: tax.type,
       rate: tax.rate,
-      cgst: tax.cgst || 0,
-      sgst: tax.sgst || 0,
-      igst: tax.igst || 0,
+      cgst: tax.cgst,
+      sgst: tax.sgst,
+      igst: tax.igst,
       description: tax.description || '',
       isActive: tax.isActive
     });
@@ -237,31 +166,31 @@ const TaxMaster = ({ open, onClose }) => {
   };
 
   const handleDelete = async (id) => {
-    if (window.confirm('Are you sure you want to delete this tax configuration?')) {
+    if (window.confirm('Are you sure you want to delete this tax rate?')) {
       try {
-        const response = await settingsApi.taxes.delete(id);
-        if (response.success || response.status === 200) {
-          setSuccessMessage('Tax deleted successfully!');
-          await loadTaxes(); // Reload data
-        }
+        await settingsApi.taxes.delete(id);
+        setSuccessMessage('Tax deleted successfully!');
+        await loadTaxes();
+        setTimeout(() => setSuccessMessage(''), 3000);
       } catch (error) {
         console.error('Error deleting tax:', error);
         setError('Failed to delete tax. Please try again.');
-        // Fallback to local deletion
-        setTaxes(prev => prev.filter(t => t.id !== id));
-        setSuccessMessage('Tax deleted locally.');
       }
-      setTimeout(() => {
-        setSuccessMessage('');
-        setError(null);
-      }, 3000);
     }
   };
 
-  const handleToggleActive = (id) => {
-    setTaxes(prev => prev.map(t => 
-      t.id === id ? { ...t, isActive: !t.isActive } : t
-    ));
+  const handleToggleActive = async (id) => {
+    try {
+      const tax = taxes.find(t => t.id === id);
+      const updatedTax = { ...tax, isActive: !tax.isActive };
+      await settingsApi.taxes.update(id, updatedTax);
+      setSuccessMessage(`Tax ${updatedTax.isActive ? 'activated' : 'deactivated'} successfully!`);
+      await loadTaxes();
+      setTimeout(() => setSuccessMessage(''), 3000);
+    } catch (error) {
+      console.error('Error updating tax status:', error);
+      setError('Failed to update tax status. Please try again.');
+    }
   };
 
   const handleCloseModal = () => {
@@ -281,13 +210,35 @@ const TaxMaster = ({ open, onClose }) => {
 
   const handleExport = () => {
     // TODO: Implement export functionality
-    alert('Export functionality coming soon!');
+    setError('Export functionality coming soon!');
+    setTimeout(() => setError(null), 3000);
   };
 
   const handleImport = () => {
     // TODO: Implement import functionality
-    alert('Import functionality coming soon!');
+    setError('Import functionality coming soon!');
+    setTimeout(() => setError(null), 3000);
   };
+
+  const getTaxTypeColor = (type) => {
+    const colors = {
+      'GST': 'blue',
+      'VAT': 'green',
+      'Custom': 'purple'
+    };
+    return colors[type] || 'gray';
+  };
+
+  const getTaxTypeIcon = (type) => {
+    const icons = {
+      'GST': Receipt,
+      'VAT': Percent,
+      'Custom': '📊'
+    };
+    return icons[type] || Receipt;
+  };
+
+  if (!open) return null;
 
   return (
     <div className="flex-1 flex flex-col bg-gray-50 h-full overflow-hidden">
@@ -297,9 +248,17 @@ const TaxMaster = ({ open, onClose }) => {
           <div className="flex items-center space-x-3">
             <Receipt className="w-6 h-6 text-gray-700" />
             <h1 className="text-2xl font-bold text-gray-900">Tax Master</h1>
-            <span className="text-sm text-gray-500">({taxes.length} taxes)</span>
+            <span className="text-sm text-gray-500">({taxes.length} tax rates)</span>
           </div>
           <div className="flex items-center space-x-3">
+            <button
+              onClick={handleRefresh}
+              disabled={refreshing}
+              className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 flex items-center space-x-2 disabled:opacity-50"
+            >
+              {refreshing ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
+              <span>{refreshing ? 'Refreshing...' : 'Refresh'}</span>
+            </button>
             <button
               onClick={handleImport}
               className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 flex items-center space-x-2"
@@ -355,6 +314,12 @@ const TaxMaster = ({ open, onClose }) => {
         <div className="mx-6 mt-4 bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg flex items-center">
           <AlertCircle className="w-5 h-5 mr-2" />
           {error}
+          <button
+            onClick={() => setError(null)}
+            className="ml-auto text-red-400 hover:text-red-600"
+          >
+            <X className="w-4 h-4" />
+          </button>
         </div>
       )}
       
@@ -362,6 +327,12 @@ const TaxMaster = ({ open, onClose }) => {
         <div className="mx-6 mt-4 bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded-lg flex items-center">
           <Check className="w-5 h-5 mr-2" />
           {successMessage}
+          <button
+            onClick={() => setSuccessMessage('')}
+            className="ml-auto text-green-400 hover:text-green-600"
+          >
+            <X className="w-4 h-4" />
+          </button>
         </div>
       )}
 
@@ -370,7 +341,17 @@ const TaxMaster = ({ open, onClose }) => {
         {isLoading ? (
           <div className="flex items-center justify-center h-64">
             <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
-            <span className="ml-2 text-gray-600">Loading taxes...</span>
+            <span className="ml-2 text-gray-600">Loading tax rates...</span>
+          </div>
+        ) : filteredTaxes.length === 0 ? (
+          <div className="flex items-center justify-center h-64">
+            <div className="text-center">
+              <Receipt className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+              <p className="text-gray-600">No tax rates found</p>
+              {searchTerm && (
+                <p className="text-sm text-gray-500 mt-2">Try adjusting your search criteria</p>
+              )}
+            </div>
           </div>
         ) : (
           <div className="bg-white rounded-lg border border-gray-200 h-full flex flex-col">
@@ -391,12 +372,10 @@ const TaxMaster = ({ open, onClose }) => {
                         }}
                       />
                     </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Tax Name</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Tax Details</th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Type</th>
                     <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Rate</th>
-                    <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">CGST</th>
-                    <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">SGST</th>
-                    <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">IGST</th>
+                    <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Components</th>
                     <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
                     <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
                   </tr>
@@ -427,24 +406,32 @@ const TaxMaster = ({ open, onClose }) => {
                         </div>
                       </td>
                       <td className="px-6 py-4">
-                        <span className="px-2 py-1 text-xs rounded-full bg-blue-100 text-blue-800">
+                        <span className={`px-2 py-1 text-xs rounded-full bg-${getTaxTypeColor(tax.type)}-100 text-${getTaxTypeColor(tax.type)}-800`}>
                           {tax.type}
                         </span>
                       </td>
                       <td className="px-6 py-4 text-center">
-                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-sm font-medium bg-purple-100 text-purple-800">
-                          <Percent className="w-3 h-3 mr-1" />
-                          {tax.rate}%
-                        </span>
+                        <span className="text-lg font-semibold text-gray-900">{tax.rate}%</span>
                       </td>
-                      <td className="px-6 py-4 text-center text-sm text-gray-900">
-                        {tax.cgst}%
-                      </td>
-                      <td className="px-6 py-4 text-center text-sm text-gray-900">
-                        {tax.sgst}%
-                      </td>
-                      <td className="px-6 py-4 text-center text-sm text-gray-900">
-                        {tax.igst}%
+                      <td className="px-6 py-4 text-center">
+                        {tax.type === 'GST' ? (
+                          <div className="text-xs space-y-1">
+                            <div className="flex justify-between">
+                              <span>CGST:</span>
+                              <span className="font-medium">{tax.cgst}%</span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span>SGST:</span>
+                              <span className="font-medium">{tax.sgst}%</span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span>IGST:</span>
+                              <span className="font-medium">{tax.igst}%</span>
+                            </div>
+                          </div>
+                        ) : (
+                          <span className="text-gray-500">-</span>
+                        )}
                       </td>
                       <td className="px-6 py-4 text-center">
                         <button
@@ -490,7 +477,7 @@ const TaxMaster = ({ open, onClose }) => {
             <div className="px-6 py-4 border-b border-gray-200">
               <div className="flex items-center justify-between">
                 <h2 className="text-xl font-semibold text-gray-900">
-                  {editingTax ? 'Edit Tax Configuration' : 'Add New Tax'}
+                  {editingTax ? 'Edit Tax Rate' : 'Add New Tax Rate'}
                 </h2>
                 <button
                   onClick={handleCloseModal}
@@ -513,7 +500,7 @@ const TaxMaster = ({ open, onClose }) => {
                     value={formData.name}
                     onChange={(e) => handleInputChange('name', e.target.value)}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                    placeholder="e.g., GST 18%"
+                    placeholder="e.g., GST 18%, VAT 12%"
                   />
                 </div>
                 
@@ -532,16 +519,16 @@ const TaxMaster = ({ open, onClose }) => {
 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Tax Rate (%) <span className="text-red-500">*</span>
+                    Total Rate (%) <span className="text-red-500">*</span>
                   </label>
                   <input
                     type="number"
-                    required
                     step="0.01"
+                    required
                     value={formData.rate}
                     onChange={(e) => handleInputChange('rate', e.target.value)}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                    placeholder="18"
+                    placeholder="e.g., 18.00"
                   />
                 </div>
 
@@ -555,9 +542,10 @@ const TaxMaster = ({ open, onClose }) => {
                         value={formData.cgst}
                         onChange={(e) => handleInputChange('cgst', e.target.value)}
                         className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                        placeholder="e.g., 9.00"
                       />
                     </div>
-
+                    
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">SGST (%)</label>
                       <input
@@ -566,9 +554,10 @@ const TaxMaster = ({ open, onClose }) => {
                         value={formData.sgst}
                         onChange={(e) => handleInputChange('sgst', e.target.value)}
                         className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                        placeholder="e.g., 9.00"
                       />
                     </div>
-
+                    
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">IGST (%)</label>
                       <input
@@ -577,7 +566,7 @@ const TaxMaster = ({ open, onClose }) => {
                         value={formData.igst}
                         onChange={(e) => handleInputChange('igst', e.target.value)}
                         className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                        readOnly
+                        placeholder="e.g., 18.00"
                       />
                     </div>
                   </>

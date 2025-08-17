@@ -1,11 +1,12 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { 
   Upload, Download, FileText, CheckCircle, XCircle,
   AlertTriangle, RotateCcw, Play, Pause, Eye,
   File, Database, Users, Package, Settings,
-  ArrowRight, Clock, Trash2, RefreshCw
+  ArrowRight, Clock, Trash2, RefreshCw, Loader2, X
 } from 'lucide-react';
 import { DataTable, StatusBadge, Toast } from '../global/ui';
+import { settingsApi } from '../../services/api/modules/settings.api';
 
 const BulkOperations = ({ open, onClose }) => {
   const [activeTab, setActiveTab] = useState('import');
@@ -14,6 +15,9 @@ const BulkOperations = ({ open, onClose }) => {
   const [selectedEntity, setSelectedEntity] = useState('products');
   const [uploadProgress, setUploadProgress] = useState(0);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [refreshing, setRefreshing] = useState(false);
   const fileInputRef = useRef(null);
 
   const entityTypes = [
@@ -42,573 +46,474 @@ const BulkOperations = ({ open, onClose }) => {
     }
   };
 
-  const mockImportJobs = [
-    {
-      id: 1,
-      filename: 'products_batch_001.xlsx',
-      entity: 'products',
-      status: 'completed',
-      totalRecords: 1250,
-      successfulRecords: 1187,
-      failedRecords: 63,
-      startedAt: '2024-07-26T09:30:00Z',
-      completedAt: '2024-07-26T09:45:00Z',
-      errors: [
-        { row: 15, field: 'hsn_code', message: 'Invalid HSN code format' },
-        { row: 23, field: 'gst_rate', message: 'GST rate must be 5, 12, 18, or 28' }
-      ]
-    },
-    {
-      id: 2,
-      filename: 'customers_july_2024.xlsx',
-      entity: 'customers',
-      status: 'processing',
-      totalRecords: 450,
-      successfulRecords: 320,
-      failedRecords: 12,
-      startedAt: '2024-07-26T10:15:00Z',
-      progress: 75
-    },
-    {
-      id: 3,
-      filename: 'suppliers_new.xlsx',
-      entity: 'suppliers',
-      status: 'failed',
-      totalRecords: 85,
-      successfulRecords: 0,
-      failedRecords: 85,
-      startedAt: '2024-07-26T08:20:00Z',
-      completedAt: '2024-07-26T08:22:00Z',
-      errors: [
-        { row: 1, field: 'file', message: 'Invalid file format. Expected .xlsx' }
-      ]
+  useEffect(() => {
+    if (open) {
+      loadJobs();
     }
-  ];
+  }, [open]);
 
-  const mockExportJobs = [
-    {
-      id: 1,
-      filename: 'products_export_2024-07-26.xlsx',
-      entity: 'products',
-      status: 'completed',
-      totalRecords: 1250,
-      startedAt: '2024-07-26T11:00:00Z',
-      completedAt: '2024-07-26T11:03:00Z',
-      fileSize: '2.5 MB',
-      downloadUrl: '/downloads/products_export_2024-07-26.xlsx'
-    },
-    {
-      id: 2,
-      filename: 'customers_active_export.xlsx',
-      entity: 'customers',
-      status: 'processing',
-      totalRecords: 856,
-      startedAt: '2024-07-26T11:15:00Z',
-      progress: 45
+  const loadJobs = async () => {
+    setIsLoading(true);
+    setError(null);
+    
+    try {
+      const [importResponse, exportResponse] = await Promise.all([
+        settingsApi.bulkOperations.getImportJobs(),
+        settingsApi.bulkOperations.getExportJobs()
+      ]);
+
+      if (importResponse?.data) {
+        setImportJobs(importResponse.data);
+      }
+      if (exportResponse?.data) {
+        setExportJobs(exportResponse.data);
+      }
+    } catch (error) {
+      console.error('Error loading bulk operations:', error);
+      setError('Failed to load bulk operations. Please try again.');
+    } finally {
+      setIsLoading(false);
     }
-  ];
+  };
 
-  React.useEffect(() => {
-    setImportJobs(mockImportJobs);
-    setExportJobs(mockExportJobs);
-  }, []);
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    setError(null);
+    try {
+      await loadJobs();
+    } catch (error) {
+      console.error('Error refreshing jobs:', error);
+      setError('Failed to refresh jobs. Please try again.');
+    } finally {
+      setRefreshing(false);
+    }
+  };
 
-  const handleFileUpload = async (file) => {
+  const handleFileUpload = async (event) => {
+    const file = event.target.files[0];
     if (!file) return;
 
     setIsProcessing(true);
     setUploadProgress(0);
+    setError(null);
 
     try {
-      // Simulate file upload progress
-      const interval = setInterval(() => {
-        setUploadProgress(prev => {
-          if (prev >= 100) {
-            clearInterval(interval);
-            return 100;
-          }
-          return prev + 10;
-        });
-      }, 200);
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('entity', selectedEntity);
 
-      // Simulate processing
-      await new Promise(resolve => setTimeout(resolve, 3000));
+      const response = await settingsApi.bulkOperations.uploadFile(formData, {
+        onUploadProgress: (progressEvent) => {
+          const progress = Math.round((progressEvent.loaded * 100) / progressEvent.total);
+          setUploadProgress(progress);
+        }
+      });
 
-      const newJob = {
-        id: Date.now(),
-        filename: file.name,
-        entity: selectedEntity,
-        status: 'processing',
-        totalRecords: Math.floor(Math.random() * 1000) + 100,
-        successfulRecords: 0,
-        failedRecords: 0,
-        startedAt: new Date().toISOString(),
-        progress: 0
-      };
-
-      setImportJobs(prev => [newJob, ...prev]);
-      Toast.success('File uploaded successfully. Import started.');
-
-      // Simulate processing progress
-      simulateJobProgress(newJob.id);
-
+      if (response.success) {
+        // Refresh jobs list
+        await loadJobs();
+        setUploadProgress(0);
+      } else {
+        setError('File upload failed. Please try again.');
+      }
     } catch (error) {
-      Toast.error('Failed to upload file: ' + error.message);
+      console.error('Error uploading file:', error);
+      setError('File upload failed. Please try again.');
     } finally {
       setIsProcessing(false);
       setUploadProgress(0);
-      if (fileInputRef.current) {
-        fileInputRef.current.value = '';
-      }
     }
   };
 
-  const simulateJobProgress = (jobId) => {
-    const interval = setInterval(() => {
-      setImportJobs(prev => 
-        prev.map(job => {
-          if (job.id === jobId && job.status === 'processing') {
-            const newProgress = Math.min(job.progress + Math.random() * 20, 100);
-            const isCompleted = newProgress >= 100;
-            
-            return {
-              ...job,
-              progress: newProgress,
-              status: isCompleted ? 'completed' : 'processing',
-              successfulRecords: isCompleted ? Math.floor(job.totalRecords * 0.95) : Math.floor((newProgress / 100) * job.totalRecords * 0.95),
-              failedRecords: isCompleted ? Math.floor(job.totalRecords * 0.05) : Math.floor((newProgress / 100) * job.totalRecords * 0.05),
-              completedAt: isCompleted ? new Date().toISOString() : undefined
-            };
-          }
-          return job;
-        })
-      );
-      
-      const job = importJobs.find(j => j.id === jobId);
-      if (job && (job.status === 'completed' || job.status === 'failed')) {
-        clearInterval(interval);
+  const handleStartJob = async (jobId, jobType) => {
+    try {
+      const response = await settingsApi.bulkOperations.startJob(jobId, jobType);
+      if (response.success) {
+        await loadJobs();
       }
-    }, 1000);
+    } catch (error) {
+      console.error('Error starting job:', error);
+      setError('Failed to start job. Please try again.');
+    }
   };
 
-  const startExport = async () => {
-    const newJob = {
-      id: Date.now(),
-      filename: `${selectedEntity}_export_${new Date().toISOString().split('T')[0]}.xlsx`,
-      entity: selectedEntity,
-      status: 'processing',
-      totalRecords: Math.floor(Math.random() * 1000) + 100,
-      startedAt: new Date().toISOString(),
-      progress: 0
-    };
-
-    setExportJobs(prev => [newJob, ...prev]);
-    Toast.success('Export started successfully.');
-
-    // Simulate export progress
-    const interval = setInterval(() => {
-      setExportJobs(prev =>
-        prev.map(job => {
-          if (job.id === newJob.id && job.status === 'processing') {
-            const newProgress = Math.min(job.progress + Math.random() * 25, 100);
-            const isCompleted = newProgress >= 100;
-
-            return {
-              ...job,
-              progress: newProgress,
-              status: isCompleted ? 'completed' : 'processing',
-              completedAt: isCompleted ? new Date().toISOString() : undefined,
-              fileSize: isCompleted ? `${(Math.random() * 5 + 1).toFixed(1)} MB` : undefined,
-              downloadUrl: isCompleted ? `/downloads/${job.filename}` : undefined
-            };
-          }
-          return job;
-        })
-      );
-
-      const currentJob = exportJobs.find(j => j.id === newJob.id);
-      if (currentJob && (currentJob.status === 'completed' || currentJob.status === 'failed')) {
-        clearInterval(interval);
+  const handlePauseJob = async (jobId, jobType) => {
+    try {
+      const response = await settingsApi.bulkOperations.pauseJob(jobId, jobType);
+      if (response.success) {
+        await loadJobs();
       }
-    }, 1000);
+    } catch (error) {
+      console.error('Error pausing job:', error);
+      setError('Failed to pause job. Please try again.');
+    }
   };
 
-  const downloadTemplate = (entityType) => {
-    const template = importTemplates[entityType];
+  const handleDeleteJob = async (jobId, jobType) => {
+    if (!window.confirm('Are you sure you want to delete this job?')) return;
+
+    try {
+      const response = await settingsApi.bulkOperations.deleteJob(jobId, jobType);
+      if (response.success) {
+        await loadJobs();
+      }
+    } catch (error) {
+      console.error('Error deleting job:', error);
+      setError('Failed to delete job. Please try again.');
+    }
+  };
+
+  const handleDownloadTemplate = (entity) => {
+    const template = importTemplates[entity];
     if (template) {
-      // In real app, this would trigger actual file download
-      Toast.success(`Template ${template.filename} download started`);
+      // Create and download template file
+      const csvContent = [template.columns.join(','), template.sampleData].join('\n');
+      const blob = new Blob([csvContent], { type: 'text/csv' });
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = template.filename;
+      a.click();
+      window.URL.revokeObjectURL(url);
     }
   };
 
-  const getStatusColor = (status) => {
+  const getJobStatusColor = (status) => {
     switch (status) {
       case 'completed': return 'green';
       case 'processing': return 'blue';
       case 'failed': return 'red';
-      case 'pending': return 'yellow';
+      case 'paused': return 'yellow';
+      case 'pending': return 'gray';
       default: return 'gray';
     }
   };
 
-  const getEntityIcon = (entity) => {
-    const entityType = entityTypes.find(e => e.id === entity);
-    return entityType ? entityType.icon : Database;
+  const getJobStatusIcon = (status) => {
+    switch (status) {
+      case 'completed': return CheckCircle;
+      case 'processing': return Play;
+      case 'failed': return XCircle;
+      case 'paused': return Pause;
+      case 'pending': return Clock;
+      default: return Clock;
+    }
   };
-
-  const tabs = [
-    { id: 'import', label: 'Import Data', icon: Upload },
-    { id: 'export', label: 'Export Data', icon: Download },
-    { id: 'templates', label: 'Templates', icon: FileText }
-  ];
 
   if (!open) return null;
 
-  return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-white rounded-lg shadow-xl w-full max-w-6xl mx-4 h-[90vh] flex flex-col">
-        {/* Header */}
-        <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
-          <div>
-            <h2 className="text-xl font-semibold text-gray-900">Bulk Operations</h2>
-            <p className="text-sm text-gray-600">Import and export master data</p>
+  if (isLoading) {
+    return (
+      <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
+        <div className="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white">
+          <div className="flex items-center justify-center">
+            <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
+            <span className="ml-2 text-gray-600">Loading bulk operations...</span>
           </div>
-          <button
-            onClick={onClose}
-            className="text-gray-400 hover:text-gray-600"
-          >
-            ✕
-          </button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
+      <div className="relative top-20 mx-auto p-5 border w-11/12 max-w-6xl shadow-lg rounded-md bg-white">
+        {/* Header */}
+        <div className="flex items-center justify-between mb-6">
+          <div>
+            <h2 className="text-2xl font-bold text-gray-900">Bulk Operations</h2>
+            <p className="text-gray-600">Import and export data in bulk</p>
+          </div>
+          <div className="flex items-center space-x-2">
+            <button
+              onClick={handleRefresh}
+              disabled={refreshing}
+              className="inline-flex items-center px-3 py-2 border border-gray-300 rounded-md bg-white text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <RefreshCw className={`h-4 w-4 mr-1 ${refreshing ? 'animate-spin' : ''}`} />
+              {refreshing ? 'Refreshing...' : 'Refresh'}
+            </button>
+            <button
+              onClick={onClose}
+              className="inline-flex items-center px-3 py-2 border border-gray-300 rounded-md bg-white text-gray-700 hover:bg-gray-50"
+            >
+              <X className="h-4 w-4 mr-1" />
+              Close
+            </button>
+          </div>
         </div>
 
-        {/* Tabs */}
-        <div className="px-6 border-b border-gray-200">
-          <nav className="flex space-x-8">
-            {tabs.map((tab) => (
+        {/* Error Display */}
+        {error && (
+          <div className="mb-6 bg-red-50 border border-red-200 rounded-lg p-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center">
+                <AlertTriangle className="h-5 w-5 text-red-600 mr-2" />
+                <span className="text-red-800">{error}</span>
+              </div>
               <button
-                key={tab.id}
-                onClick={() => setActiveTab(tab.id)}
-                className={`flex items-center py-4 px-1 border-b-2 font-medium text-sm ${
-                  activeTab === tab.id
-                    ? 'border-blue-500 text-blue-600'
-                    : 'border-transparent text-gray-500 hover:text-gray-700'
-                }`}
+                onClick={handleRefresh}
+                className="text-sm text-red-600 hover:text-red-800 underline"
               >
-                <tab.icon className="h-4 w-4 mr-2" />
-                {tab.label}
+                Try Again
               </button>
-            ))}
+            </div>
+          </div>
+        )}
+
+        {/* Tabs */}
+        <div className="border-b border-gray-200 mb-6">
+          <nav className="-mb-px flex space-x-8">
+            <button
+              onClick={() => setActiveTab('import')}
+              className={`py-2 px-1 border-b-2 font-medium text-sm ${
+                activeTab === 'import'
+                  ? 'border-blue-500 text-blue-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+              }`}
+            >
+              Import
+            </button>
+            <button
+              onClick={() => setActiveTab('export')}
+              className={`py-2 px-1 border-b-2 font-medium text-sm ${
+                activeTab === 'export'
+                  ? 'border-blue-500 text-blue-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+              }`}
+            >
+              Export
+            </button>
           </nav>
         </div>
 
-        {/* Content */}
-        <div className="flex-1 overflow-hidden">
-          {activeTab === 'import' && (
-            <div className="p-6 h-full overflow-y-auto">
-              {/* Import Controls */}
-              <div className="mb-6 bg-gray-50 rounded-lg p-4">
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Data Type
-                    </label>
-                    <select
-                      value={selectedEntity}
-                      onChange={(e) => setSelectedEntity(e.target.value)}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
-                    >
-                      {entityTypes.map(entity => (
-                        <option key={entity.id} value={entity.id}>
-                          {entity.label}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Upload File
-                    </label>
-                    <input
-                      ref={fileInputRef}
-                      type="file"
-                      accept=".xlsx,.xls,.csv"
-                      onChange={(e) => handleFileUpload(e.target.files[0])}
-                      disabled={isProcessing}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
-                    />
-                  </div>
-                  <div className="flex items-end">
-                    <button
-                      onClick={() => downloadTemplate(selectedEntity)}
-                      className="w-full inline-flex items-center justify-center px-4 py-2 border border-gray-300 rounded-md bg-white text-gray-700 hover:bg-gray-50"
-                    >
-                      <Download className="h-4 w-4 mr-2" />
-                      Download Template
-                    </button>
-                  </div>
-                </div>
-                
-                {isProcessing && (
-                  <div className="mt-4">
-                    <div className="flex items-center justify-between text-sm text-gray-600 mb-1">
-                      <span>Uploading...</span>
-                      <span>{uploadProgress}%</span>
-                    </div>
-                    <div className="w-full bg-gray-200 rounded-full h-2">
-                      <div 
-                        className="bg-blue-600 h-2 rounded-full transition-all duration-300"
-                        style={{ width: `${uploadProgress}%` }}
-                      ></div>
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              {/* Import Jobs */}
-              <div>
-                <div className="flex items-center justify-between mb-4">
-                  <h3 className="text-lg font-medium text-gray-900">Import History</h3>
-                  <button
-                    onClick={() => setImportJobs([])}
-                    className="text-sm text-red-600 hover:text-red-800"
+        {activeTab === 'import' && (
+          <div className="space-y-6">
+            {/* Import Section */}
+            <div className="bg-gray-50 rounded-lg p-6">
+              <h3 className="text-lg font-medium text-gray-900 mb-4">Import Data</h3>
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Select Entity Type</label>
+                  <select
+                    value={selectedEntity}
+                    onChange={(e) => setSelectedEntity(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500"
                   >
-                    Clear History
+                    {entityTypes.map((entity) => (
+                      <option key={entity.id} value={entity.id}>
+                        {entity.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Download Template</label>
+                  <button
+                    onClick={() => handleDownloadTemplate(selectedEntity)}
+                    className="w-full inline-flex items-center justify-center px-4 py-2 border border-gray-300 rounded-md bg-white text-gray-700 hover:bg-gray-50"
+                  >
+                    <Download className="h-4 w-4 mr-2" />
+                    Download {importTemplates[selectedEntity]?.filename}
                   </button>
                 </div>
-                
-                <div className="space-y-4">
+              </div>
+
+              <div className="mt-4">
+                <label className="block text-sm font-medium text-gray-700 mb-2">Upload File</label>
+                <div className="flex items-center space-x-2">
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept=".xlsx,.xls,.csv"
+                    onChange={handleFileUpload}
+                    className="hidden"
+                  />
+                  <button
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={isProcessing}
+                    className="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md bg-white text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                  >
+                    <Upload className="h-4 w-4 mr-2" />
+                    Choose File
+                  </button>
+                  {isProcessing && (
+                    <div className="flex items-center space-x-2">
+                      <div className="w-32 bg-gray-200 rounded-full h-2">
+                        <div 
+                          className="bg-blue-600 h-2 rounded-full transition-all duration-300"
+                          style={{ width: `${uploadProgress}%` }}
+                        ></div>
+                      </div>
+                      <span className="text-sm text-gray-600">{uploadProgress}%</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Import Jobs */}
+            <div>
+              <h3 className="text-lg font-medium text-gray-900 mb-4">Import Jobs</h3>
+              {importJobs.length === 0 ? (
+                <div className="text-center py-8 text-gray-500">
+                  <FileText className="h-12 w-12 mx-auto mb-2 text-gray-300" />
+                  <p>No import jobs found</p>
+                </div>
+              ) : (
+                <div className="space-y-3">
                   {importJobs.map((job) => {
-                    const EntityIcon = getEntityIcon(job.entity);
+                    const StatusIcon = getJobStatusIcon(job.status);
                     return (
                       <div key={job.id} className="bg-white border border-gray-200 rounded-lg p-4">
-                        <div className="flex items-start justify-between">
-                          <div className="flex items-start space-x-3">
-                            <EntityIcon className="h-5 w-5 text-gray-600 mt-1" />
-                            <div className="flex-1">
-                              <div className="flex items-center space-x-2">
-                                <h4 className="font-medium text-gray-900">{job.filename}</h4>
-                                <StatusBadge 
-                                  status={getStatusColor(job.status)}
-                                  text={job.status}
-                                  size="sm"
-                                />
-                              </div>
-                              <p className="text-sm text-gray-600 capitalize">{job.entity} import</p>
-                              
-                              <div className="flex items-center space-x-4 mt-2 text-sm text-gray-500">
-                                <span>Total: {job.totalRecords}</span>
-                                <span className="text-green-600">Success: {job.successfulRecords}</span>
-                                <span className="text-red-600">Failed: {job.failedRecords}</span>
-                                <span>Started: {new Date(job.startedAt).toLocaleString()}</span>
-                              </div>
-
-                              {job.status === 'processing' && (
-                                <div className="mt-3">
-                                  <div className="flex items-center justify-between text-sm text-gray-600 mb-1">
-                                    <span>Progress</span>
-                                    <span>{job.progress?.toFixed(0) || 0}%</span>
-                                  </div>
-                                  <div className="w-full bg-gray-200 rounded-full h-2">
-                                    <div 
-                                      className="bg-blue-600 h-2 rounded-full transition-all duration-300"
-                                      style={{ width: `${job.progress || 0}%` }}
-                                    ></div>
-                                  </div>
-                                </div>
-                              )}
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center space-x-3">
+                            <StatusIcon className={`h-5 w-5 text-${getJobStatusColor(job.status)}-600`} />
+                            <div>
+                              <h4 className="font-medium text-gray-900">{job.filename}</h4>
+                              <p className="text-sm text-gray-500">
+                                {job.totalRecords} records • {job.entity} • {job.status}
+                              </p>
                             </div>
                           </div>
                           <div className="flex items-center space-x-2">
-                            {job.errors && job.errors.length > 0 && (
+                            {job.status === 'pending' && (
                               <button
-                                title="View Errors"
-                                className="text-red-600 hover:text-red-800"
+                                onClick={() => handleStartJob(job.id, 'import')}
+                                className="px-3 py-1 bg-blue-100 text-blue-800 rounded-md hover:bg-blue-200 text-sm"
                               >
-                                <Eye className="h-4 w-4" />
+                                Start
                               </button>
                             )}
-                            {job.status === 'failed' && (
+                            {job.status === 'processing' && (
                               <button
-                                title="Retry"
-                                className="text-blue-600 hover:text-blue-800"
+                                onClick={() => handlePauseJob(job.id, 'import')}
+                                className="px-3 py-1 bg-yellow-100 text-yellow-800 rounded-md hover:bg-yellow-200 text-sm"
                               >
-                                <RotateCcw className="h-4 w-4" />
+                                Pause
                               </button>
                             )}
+                            <button
+                              onClick={() => handleDeleteJob(job.id, 'import')}
+                              className="px-3 py-1 bg-red-100 text-red-800 rounded-md hover:bg-red-200 text-sm"
+                            >
+                              Delete
+                            </button>
                           </div>
                         </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            </div>
-          )}
-
-          {activeTab === 'export' && (
-            <div className="p-6 h-full overflow-y-auto">
-              {/* Export Controls */}
-              <div className="mb-6 bg-gray-50 rounded-lg p-4">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Data Type
-                    </label>
-                    <select
-                      value={selectedEntity}
-                      onChange={(e) => setSelectedEntity(e.target.value)}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
-                    >
-                      {entityTypes.map(entity => (
-                        <option key={entity.id} value={entity.id}>
-                          {entity.label}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                  <div className="flex items-end">
-                    <button
-                      onClick={startExport}
-                      className="w-full inline-flex items-center justify-center px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
-                    >
-                      <Download className="h-4 w-4 mr-2" />
-                      Start Export
-                    </button>
-                  </div>
-                </div>
-              </div>
-
-              {/* Export Jobs */}
-              <div>
-                <div className="flex items-center justify-between mb-4">
-                  <h3 className="text-lg font-medium text-gray-900">Export History</h3>
-                  <button
-                    onClick={() => setExportJobs([])}
-                    className="text-sm text-red-600 hover:text-red-800"
-                  >
-                    Clear History
-                  </button>
-                </div>
-                
-                <div className="space-y-4">
-                  {exportJobs.map((job) => {
-                    const EntityIcon = getEntityIcon(job.entity);
-                    return (
-                      <div key={job.id} className="bg-white border border-gray-200 rounded-lg p-4">
-                        <div className="flex items-start justify-between">
-                          <div className="flex items-start space-x-3">
-                            <EntityIcon className="h-5 w-5 text-gray-600 mt-1" />
-                            <div className="flex-1">
-                              <div className="flex items-center space-x-2">
-                                <h4 className="font-medium text-gray-900">{job.filename}</h4>
-                                <StatusBadge 
-                                  status={getStatusColor(job.status)}
-                                  text={job.status}
-                                  size="sm"
-                                />
-                              </div>
-                              <p className="text-sm text-gray-600 capitalize">{job.entity} export</p>
-                              
-                              <div className="flex items-center space-x-4 mt-2 text-sm text-gray-500">
-                                <span>Records: {job.totalRecords}</span>
-                                {job.fileSize && <span>Size: {job.fileSize}</span>}
-                                <span>Started: {new Date(job.startedAt).toLocaleString()}</span>
-                              </div>
-
-                              {job.status === 'processing' && (
-                                <div className="mt-3">
-                                  <div className="flex items-center justify-between text-sm text-gray-600 mb-1">
-                                    <span>Progress</span>
-                                    <span>{job.progress?.toFixed(0) || 0}%</span>
-                                  </div>
-                                  <div className="w-full bg-gray-200 rounded-full h-2">
-                                    <div 
-                                      className="bg-blue-600 h-2 rounded-full transition-all duration-300"
-                                      style={{ width: `${job.progress || 0}%` }}
-                                    ></div>
-                                  </div>
-                                </div>
-                              )}
-                            </div>
-                          </div>
-                          <div className="flex items-center space-x-2">
-                            {job.status === 'completed' && job.downloadUrl && (
-                              <button
-                                onClick={() => Toast.success('Download started')}
-                                className="inline-flex items-center px-3 py-1 bg-green-600 text-white text-sm rounded-md hover:bg-green-700"
-                              >
-                                <Download className="h-3 w-3 mr-1" />
-                                Download
-                              </button>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            </div>
-          )}
-
-          {activeTab === 'templates' && (
-            <div className="p-6 h-full overflow-y-auto">
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {entityTypes.map((entity) => {
-                  const template = importTemplates[entity.id];
-                  const EntityIcon = entity.icon;
-                  
-                  return (
-                    <div key={entity.id} className="bg-white border border-gray-200 rounded-lg p-6">
-                      <div className="flex items-center space-x-3 mb-4">
-                        <div className={`w-10 h-10 rounded-lg flex items-center justify-center bg-${entity.color}-100`}>
-                          <EntityIcon className={`h-5 w-5 text-${entity.color}-600`} />
-                        </div>
-                        <div>
-                          <h3 className="font-medium text-gray-900">{entity.label}</h3>
-                          <p className="text-sm text-gray-600">Import template</p>
-                        </div>
-                      </div>
-                      
-                      {template && (
-                        <>
-                          <div className="mb-4">
-                            <h4 className="text-sm font-medium text-gray-900 mb-2">Required Columns:</h4>
-                            <div className="flex flex-wrap gap-1">
-                              {template.columns.map((column) => (
-                                <span 
-                                  key={column}
-                                  className="inline-block px-2 py-1 bg-gray-100 text-gray-700 text-xs rounded"
-                                >
-                                  {column}
-                                </span>
+                        {job.errors && job.errors.length > 0 && (
+                          <div className="mt-3 p-3 bg-red-50 rounded-md">
+                            <p className="text-sm text-red-800 font-medium mb-2">Errors:</p>
+                            <div className="space-y-1">
+                              {job.errors.slice(0, 3).map((error, index) => (
+                                <p key={index} className="text-xs text-red-700">
+                                  Row {error.row}: {error.message}
+                                </p>
                               ))}
                             </div>
                           </div>
-                          
-                          <div className="mb-4">
-                            <h4 className="text-sm font-medium text-gray-900 mb-2">Sample Data:</h4>
-                            <p className="text-xs text-gray-600 bg-gray-50 p-2 rounded">
-                              {template.sampleData}
-                            </p>
-                          </div>
-                        </>
-                      )}
-                      
-                      <button
-                        onClick={() => downloadTemplate(entity.id)}
-                        className="w-full inline-flex items-center justify-center px-4 py-2 bg-blue-600 text-white text-sm rounded-md hover:bg-blue-700"
-                      >
-                        <Download className="h-4 w-4 mr-2" />
-                        Download Template
-                      </button>
-                    </div>
-                  );
-                })}
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'export' && (
+          <div className="space-y-6">
+            {/* Export Section */}
+            <div className="bg-gray-50 rounded-lg p-6">
+              <h3 className="text-lg font-medium text-gray-900 mb-4">Export Data</h3>
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Select Entity Type</label>
+                  <select
+                    value={selectedEntity}
+                    onChange={(e) => setSelectedEntity(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500"
+                  >
+                    {entityTypes.map((entity) => (
+                      <option key={entity.id} value={entity.id}>
+                        {entity.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Export Format</label>
+                  <select className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500">
+                    <option value="xlsx">Excel (.xlsx)</option>
+                    <option value="csv">CSV (.csv)</option>
+                    <option value="pdf">PDF (.pdf)</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="mt-4">
+                <button className="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700">
+                  <Download className="h-4 w-4 mr-2" />
+                  Start Export
+                </button>
               </div>
             </div>
-          )}
-        </div>
+
+            {/* Export Jobs */}
+            <div>
+              <h3 className="text-lg font-medium text-gray-900 mb-4">Export Jobs</h3>
+              {exportJobs.length === 0 ? (
+                <div className="text-center py-8 text-gray-500">
+                  <Download className="h-12 w-12 mx-auto mb-2 text-gray-300" />
+                  <p>No export jobs found</p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {exportJobs.map((job) => {
+                    const StatusIcon = getJobStatusIcon(job.status);
+                    return (
+                      <div key={job.id} className="bg-white border border-gray-200 rounded-lg p-4">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center space-x-3">
+                            <StatusIcon className={`h-5 w-5 text-${getJobStatusColor(job.status)}-600`} />
+                            <div>
+                              <h4 className="font-medium text-gray-900">{job.filename}</h4>
+                              <p className="text-sm text-gray-500">
+                                {job.totalRecords} records • {job.entity} • {job.status}
+                              </p>
+                            </div>
+                          </div>
+                          <div className="flex items-center space-x-2">
+                            {job.status === 'completed' && (
+                              <a
+                                href={job.downloadUrl}
+                                download
+                                className="px-3 py-1 bg-green-100 text-green-800 rounded-md hover:bg-green-200 text-sm"
+                              >
+                                Download
+                              </a>
+                            )}
+                            <button
+                              onClick={() => handleDeleteJob(job.id, 'export')}
+                              className="px-3 py-1 bg-red-100 text-red-800 rounded-md hover:bg-red-200 text-sm"
+                            >
+                              Delete
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

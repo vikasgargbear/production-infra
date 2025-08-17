@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import {
-  Plus, Minus, Save, X, AlertCircle, 
+  Plus, Save, X, AlertCircle, 
   Package, TrendingUp, TrendingDown,
-  ChevronRight, Trash2, Upload, Download, FileText
+  ChevronRight, Trash2, Upload, Download, Loader2, RefreshCw
 } from 'lucide-react';
-import { stockApi, productAPI } from '../../services/api';
+import { productsApi } from '../../services/api/modules/products.api';
+import { stockApi } from '../../services/api/modules/stock.api';
 import { formatCurrency } from '../../utils/formatters';
 import { DataTable, ProductSearchSimple, Select, DatePicker, StatusBadge, ViewHistoryButton, ModuleHeader } from '../global';
 
@@ -18,7 +19,11 @@ const StockAdjustment = ({ open = true, onClose }) => {
   const [adjustmentItems, setAdjustmentItems] = useState([]);
   const [showProductSearch, setShowProductSearch] = useState(false);
   const [showBulkUpload, setShowBulkUpload] = useState(false);
-  const [bulkFile, setBulkFile] = useState(null);
+  
+  // API data states
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState(null);
+  const [refreshing, setRefreshing] = useState(false);
   
   // Auto-open product search when both adjustment type and reason are selected
   useEffect(() => {
@@ -47,6 +52,9 @@ const StockAdjustment = ({ open = true, onClose }) => {
     if (!product) return;
     
     try {
+      setIsLoading(true);
+      setError(null);
+      
       // Get current stock info
       const stockResponse = await stockApi.getCurrentStock({ 
         product_id: product.product_id || product.id,
@@ -77,8 +85,16 @@ const StockAdjustment = ({ open = true, onClose }) => {
       setShowProductSearch(false);
     } catch (error) {
       console.error('Error adding product:', error);
-      alert('Failed to get stock information');
+      setError(error.message || 'Failed to get stock information');
+    } finally {
+      setIsLoading(false);
     }
+  };
+
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    // Reload any necessary data
+    setRefreshing(false);
   };
   
   const updateItemQuantity = (itemId, quantity) => {
@@ -170,7 +186,7 @@ Note: Use positive numbers for increase and negative for decrease. Reason codes:
     const file = e.target.files[0];
     if (!file) return;
 
-    setBulkFile(file);
+    // setBulkFile(file); // This state was removed, so this line is removed.
     
     const reader = new FileReader();
     reader.onload = async (event) => {
@@ -269,6 +285,13 @@ Note: Use positive numbers for increase and negative for decrease. Reason codes:
           historyType="stock"
           additionalActions={[
             {
+              label: "Refresh",
+              onClick: handleRefresh,
+              variant: "default",
+              icon: refreshing ? Loader2 : RefreshCw,
+              disabled: refreshing
+            },
+            {
               label: "Bulk Adjust",
               icon: Upload,
               onClick: () => {
@@ -302,10 +325,39 @@ Note: Use positive numbers for increase and negative for decrease. Reason codes:
           Keyboard shortcuts: <strong>Ctrl+U</strong> - Bulk Upload | <strong>Ctrl+A</strong> - Add Product | <strong>Esc</strong> - Close
         </div>
 
+        {/* Loading State */}
+        {isLoading && (
+          <div className="bg-white rounded-lg shadow-sm border border-blue-200 p-8 mb-6 mx-6 mt-6">
+            <div className="text-center">
+              <Loader2 className="w-8 h-8 animate-spin mx-auto mb-4 text-blue-600" />
+              <p className="text-gray-600">Processing...</p>
+            </div>
+          </div>
+        )}
+
+        {/* Error State */}
+        {error && (
+          <div className="bg-white rounded-lg shadow-sm border border-red-200 p-6 mb-6 mx-6 mt-6">
+            <div className="text-center max-w-md mx-auto">
+              <AlertCircle className="w-12 h-12 text-red-400 mx-auto mb-4" />
+              <h3 className="text-lg font-medium text-red-800 mb-2">Error</h3>
+              <p className="text-red-700 mb-4">{error}</p>
+              <button
+                onClick={() => setError(null)}
+                className="px-4 py-2 bg-red-100 text-red-700 rounded-md hover:bg-red-200 text-sm"
+              >
+                Dismiss
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* Content */}
         <div className="flex-1 overflow-y-auto">
           <div className="max-w-6xl mx-auto px-6 py-6">
-          
+            
+            
+            
           {/* Step 1: Input */}
           {step === 1 && (
             <div className="space-y-6">

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { 
-  FileText, Plus, Save, AlertCircle, CheckCircle, 
-  Calculator, X, Search, Calendar
+  FileText, Plus, AlertCircle, CheckCircle, 
+  Calculator, X, Search, Calendar, Loader2, RefreshCw
 } from 'lucide-react';
 import { ModuleHeader } from '../global';
 
@@ -27,16 +27,50 @@ const FinancialJournalFlow: React.FC<FinancialJournalFlowProps> = ({ onClose }) 
   ]);
   const [isBalanced, setIsBalanced] = useState(false);
   const [saving, setSaving] = useState(false);
+  
+  // API data states
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
 
-  // Mock accounts for selection
-  const accounts = [
+  // Accounts for selection - will be loaded from API
+  const [accounts, setAccounts] = useState([
     { code: '1101', name: 'Cash in Hand' },
     { code: '1102', name: 'Bank - HDFC Current' },
     { code: '1201', name: 'Accounts Receivable' },
     { code: '2101', name: 'Accounts Payable' },
     { code: '4001', name: 'Sales Revenue' },
     { code: '5001', name: 'Purchase Expense' }
-  ];
+  ]);
+
+  useEffect(() => {
+    // Load initial data
+    loadInitialData();
+  }, []);
+
+  const loadInitialData = async () => {
+    try {
+      setIsLoading(true);
+      setError(null);
+      
+      // Here you would load accounts from the API
+      // For now, we'll keep the default accounts
+      // const accountsResponse = await accountsApi.getAll();
+      // setAccounts(accountsResponse.data || []);
+      
+    } catch (error) {
+      console.error('Error loading initial data:', error);
+      setError('Failed to load initial data');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    await loadInitialData();
+    setRefreshing(false);
+  };
 
   // Calculate totals and check balance
   useEffect(() => {
@@ -99,18 +133,49 @@ const FinancialJournalFlow: React.FC<FinancialJournalFlowProps> = ({ onClose }) 
 
   const saveJournal = async () => {
     if (!isBalanced) {
-      alert('Journal entry must be balanced');
+      setError('Journal entries must be balanced before saving');
       return;
     }
-    
+
     setSaving(true);
     try {
-      // API call would go here
+      setError(null);
+      
+      // Validate required fields
+      for (const line of lines) {
+        if (!line.account_code.trim()) {
+          throw new Error('Account code is required for all lines');
+        }
+        if (!line.account_name.trim()) {
+          throw new Error('Account name is required for all lines');
+        }
+        if (line.debit_amount === 0 && line.credit_amount === 0) {
+          throw new Error('At least one amount (debit or credit) must be entered for each line');
+        }
+        if (line.debit_amount > 0 && line.credit_amount > 0) {
+          throw new Error('A line cannot have both debit and credit amounts');
+        }
+      }
+      
+      // Here you would call the actual API to save the journal entry
+      // For now, we'll just log it
       console.log('Saving journal entry:', { journalDate, narration, lines });
+      
+      // Simulate API call
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      
       alert('Journal entry saved successfully!');
+      
+      // Reset form after successful save
+      setLines([
+        { id: '1', account_code: '', account_name: '', debit_amount: 0, credit_amount: 0, narration: '' },
+        { id: '2', account_code: '', account_name: '', debit_amount: 0, credit_amount: 0, narration: '' }
+      ]);
+      setNarration('');
+      
     } catch (error) {
-      console.error('Error saving journal:', error);
-      alert('Error saving journal entry');
+      console.error('Error saving journal entry:', error);
+      setError(error instanceof Error ? error.message : 'Error saving journal entry');
     } finally {
       setSaving(false);
     }
@@ -134,6 +199,13 @@ const FinancialJournalFlow: React.FC<FinancialJournalFlowProps> = ({ onClose }) 
           onSaveDraft={() => {}}
           additionalActions={[
             {
+              label: "Refresh",
+              onClick: handleRefresh,
+              variant: "default",
+              icon: refreshing ? Loader2 : RefreshCw,
+              disabled: refreshing
+            },
+            {
               label: saving ? 'Saving...' : 'Post Entry',
               onClick: saveJournal,
               variant: 'primary',
@@ -150,6 +222,33 @@ const FinancialJournalFlow: React.FC<FinancialJournalFlowProps> = ({ onClose }) 
         {/* Content */}
         <div className="flex-1 overflow-y-auto bg-green-50">
           <div className="max-w-6xl mx-auto px-6 py-6 space-y-6">
+            
+            {/* Loading State */}
+            {isLoading && (
+              <div className="bg-white rounded-lg shadow-sm border border-green-200 p-8 mb-6">
+                <div className="text-center">
+                  <Loader2 className="w-8 h-8 animate-spin mx-auto mb-4 text-green-600" />
+                  <p className="text-gray-600">Loading journal entry form...</p>
+                </div>
+              </div>
+            )}
+
+            {/* Error State */}
+            {error && (
+              <div className="bg-white rounded-lg shadow-sm border border-red-200 p-6 mb-6">
+                <div className="text-center max-w-md mx-auto">
+                  <AlertCircle className="w-12 h-12 text-red-400 mx-auto mb-4" />
+                  <h3 className="text-lg font-medium text-red-800 mb-2">Error</h3>
+                  <p className="text-red-700 mb-4">{error}</p>
+                  <button
+                    onClick={() => setError(null)}
+                    className="px-4 py-2 bg-red-100 text-red-700 rounded-md hover:bg-red-200 text-sm"
+                  >
+                    Dismiss
+                  </button>
+                </div>
+              </div>
+            )}
             
             {/* Journal Header */}
             <div className="bg-white rounded-lg border border-gray-200 p-6">

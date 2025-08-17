@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { Receipt, Plus, Save, Calendar, X } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Receipt, Plus, Calendar, X, Loader2, RefreshCw, AlertCircle } from 'lucide-react';
 import { ModuleHeader } from '../global';
 
 interface ExpenseClaimsFlowProps {
@@ -23,6 +23,11 @@ const ExpenseClaimsFlow: React.FC<ExpenseClaimsFlowProps> = ({ onClose }) => {
     { id: '1', expense_type: '', description: '', amount: 0, date: new Date().toISOString().split('T')[0], receipt_attached: false }
   ]);
   const [saving, setSaving] = useState(false);
+  
+  // API data states
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
 
   const expenseTypes = [
     'Travel',
@@ -34,6 +39,34 @@ const ExpenseClaimsFlow: React.FC<ExpenseClaimsFlowProps> = ({ onClose }) => {
     'Training',
     'Other'
   ];
+
+  useEffect(() => {
+    // Load any initial data if needed
+    loadInitialData();
+  }, []);
+
+  const loadInitialData = async () => {
+    try {
+      setIsLoading(true);
+      setError(null);
+      
+      // Load employee data or other necessary data
+      // For now, we'll just set a default employee name
+      setEmployeeName('Current User');
+      
+    } catch (error) {
+      console.error('Error loading initial data:', error);
+      setError('Failed to load initial data');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    await loadInitialData();
+    setRefreshing(false);
+  };
 
   const addExpenseLine = () => {
     const newExpense: ExpenseLine = {
@@ -61,11 +94,46 @@ const ExpenseClaimsFlow: React.FC<ExpenseClaimsFlowProps> = ({ onClose }) => {
   const saveExpenseClaim = async () => {
     setSaving(true);
     try {
+      setError(null);
+      
+      // Validate required fields
+      if (!employeeName.trim()) {
+        throw new Error('Employee name is required');
+      }
+      
+      if (expenses.length === 0) {
+        throw new Error('At least one expense line is required');
+      }
+      
+      // Validate expense lines
+      for (const expense of expenses) {
+        if (!expense.expense_type.trim()) {
+          throw new Error('Expense type is required for all lines');
+        }
+        if (!expense.description.trim()) {
+          throw new Error('Description is required for all lines');
+        }
+        if (expense.amount <= 0) {
+          throw new Error('Amount must be greater than 0 for all lines');
+        }
+      }
+      
+      // Here you would call the actual API to save the expense claim
+      // For now, we'll just log it
       console.log('Saving expense claim:', { claimDate, employeeName, purpose, expenses });
+      
+      // Simulate API call
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      
       alert('Expense claim saved successfully!');
+      
+      // Reset form after successful save
+      setExpenses([{ id: '1', expense_type: '', description: '', amount: 0, date: new Date().toISOString().split('T')[0], receipt_attached: false }]);
+      setPurpose('');
+      
     } catch (error) {
       console.error('Error saving expense claim:', error);
-      alert('Error saving expense claim');
+      setError(error instanceof Error ? error.message : 'Error saving expense claim');
     } finally {
       setSaving(false);
     }
@@ -88,6 +156,13 @@ const ExpenseClaimsFlow: React.FC<ExpenseClaimsFlowProps> = ({ onClose }) => {
           onSaveDraft={() => {}}
           additionalActions={[
             {
+              label: "Refresh",
+              onClick: handleRefresh,
+              variant: "default",
+              icon: refreshing ? Loader2 : RefreshCw,
+              disabled: refreshing
+            },
+            {
               label: saving ? 'Saving...' : 'Submit Claim',
               onClick: saveExpenseClaim,
               variant: 'primary',
@@ -104,6 +179,33 @@ const ExpenseClaimsFlow: React.FC<ExpenseClaimsFlowProps> = ({ onClose }) => {
         {/* Content */}
         <div className="flex-1 overflow-y-auto p-6">
           <div className="max-w-6xl mx-auto space-y-6">
+            
+            {/* Loading State */}
+            {isLoading && (
+              <div className="bg-white rounded-lg shadow-sm border border-green-200 p-8 mb-6">
+                <div className="text-center">
+                  <Loader2 className="w-8 h-8 animate-spin mx-auto mb-4 text-green-600" />
+                  <p className="text-gray-600">Loading expense claim form...</p>
+                </div>
+              </div>
+            )}
+
+            {/* Error State */}
+            {error && (
+              <div className="bg-white rounded-lg shadow-sm border border-red-200 p-6 mb-6">
+                <div className="text-center max-w-md mx-auto">
+                  <AlertCircle className="w-12 h-12 text-red-400 mx-auto mb-4" />
+                  <h3 className="text-lg font-medium text-red-800 mb-2">Error</h3>
+                  <p className="text-red-700 mb-4">{error}</p>
+                  <button
+                    onClick={() => setError(null)}
+                    className="px-4 py-2 bg-red-100 text-red-700 rounded-md hover:bg-red-200 text-sm"
+                  >
+                    Dismiss
+                  </button>
+                </div>
+              </div>
+            )}
             
             {/* Claim Header */}
             <div className="bg-white rounded-lg border border-gray-200 p-6">

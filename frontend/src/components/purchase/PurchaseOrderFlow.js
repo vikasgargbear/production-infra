@@ -4,7 +4,7 @@ import {
   ChevronRight, AlertCircle, CheckCircle, Printer, Share2, Plus,
   Save, Calculator, History, ArrowLeft, ArrowRight, Phone, MapPin,
   Mail, MessageCircle, FileInput, Upload, Building2, CreditCard,
-  Truck, Shield, Clock, DollarSign, Download
+  Truck, Shield, Clock, DollarSign, Download, Loader2, RefreshCw
 } from 'lucide-react';
 import { suppliersApi, productsApi, purchaseApi } from '../../services/api';
 import { searchCache } from '../../utils/searchCache';
@@ -22,6 +22,9 @@ const PurchaseOrderFlow = ({ onClose, prefilledData = null }) => {
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState('');
   const [messageType, setMessageType] = useState('');
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [refreshing, setRefreshing] = useState(false);
 
   // Refs for keyboard navigation
   const supplierSearchRef = useRef(null);
@@ -114,7 +117,6 @@ const PurchaseOrderFlow = ({ onClose, prefilledData = null }) => {
     items: [],
     
     // Dates
-    expected_delivery_date: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
     validity_date: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
     
     // Metadata
@@ -124,6 +126,42 @@ const PurchaseOrderFlow = ({ onClose, prefilledData = null }) => {
   });
 
   const [selectedSupplier, setSelectedSupplier] = useState(null);
+
+  // Load data on component mount
+  useEffect(() => {
+    loadInitialData();
+  }, []);
+
+  // Load initial data
+  const loadInitialData = async () => {
+    setIsLoading(true);
+    setError(null);
+    
+    try {
+      // Preload data for search cache
+      await Promise.all([
+        searchCache.preloadData('suppliers', () => suppliersApi.getAll()),
+        searchCache.preloadData('products', () => productsApi.getAll())
+      ]);
+      
+      // Generate PO number
+      const poNo = await generatePONumber();
+      setPurchaseOrder(prev => ({ ...prev, po_no: poNo }));
+      
+    } catch (error) {
+      console.error('Error loading initial data:', error);
+      setError('Failed to load required data. Please check your connection and try again.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Refresh data
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    await loadInitialData();
+    setRefreshing(false);
+  };
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -195,13 +233,6 @@ const PurchaseOrderFlow = ({ onClose, prefilledData = null }) => {
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
   }, [currentStep, selectedSupplier, showGSTCalculator, showSupplierModal, showProductModal, showShareModal]);
-
-  // Generate PO number on mount
-  useEffect(() => {
-    generatePONumber().then(poNumber => {
-      setPurchaseOrder(prev => ({ ...prev, po_no: poNumber }));
-    });
-  }, []);
 
   // Auto-save draft
   useEffect(() => {
@@ -490,6 +521,13 @@ ${localStorage.getItem('company_name') || 'AASO Pharmaceuticals'}
                 label: "GST Calculator",
                 onClick: () => setShowGSTCalculator(true),
                 variant: "default"
+              },
+              {
+                label: refreshing ? "Refreshing..." : "Refresh",
+                onClick: handleRefresh,
+                variant: "outline",
+                disabled: refreshing,
+                icon: refreshing ? Loader2 : RefreshCw
               }
             ]}
           />
@@ -512,6 +550,31 @@ ${localStorage.getItem('company_name') || 'AASO Pharmaceuticals'}
                     <CheckCircle className="w-5 h-5" />
                   )}
                   <span>{message}</span>
+                </div>
+              )}
+
+              {/* Loading State */}
+              {isLoading && (
+                <div className="bg-white rounded-lg shadow-sm border border-blue-200 p-8 text-center">
+                  <Loader2 className="h-8 w-8 animate-spin mx-auto mb-4 text-blue-600" />
+                  <p className="text-gray-600">Loading purchase order data...</p>
+                </div>
+              )}
+
+              {/* Error State */}
+              {error && (
+                <div className="bg-red-50 border border-red-200 rounded-lg p-4 flex items-center gap-3">
+                  <AlertCircle className="w-5 h-5 text-red-600" />
+                  <div>
+                    <p className="text-red-800 font-medium">Error loading data</p>
+                    <p className="text-red-700 text-sm">{error}</p>
+                  </div>
+                  <button
+                    onClick={handleRefresh}
+                    className="ml-auto px-3 py-1 bg-red-100 text-red-700 rounded-md hover:bg-red-200 text-sm"
+                  >
+                    Retry
+                  </button>
                 </div>
               )}
 
@@ -934,6 +997,13 @@ ${localStorage.getItem('company_name') || 'AASO Pharmaceuticals'}
               label: "Print",
               onClick: handlePrint,
               variant: "default"
+            },
+            {
+              label: refreshing ? "Refreshing..." : "Refresh",
+              onClick: handleRefresh,
+              variant: "outline",
+              disabled: refreshing,
+              icon: refreshing ? Loader2 : RefreshCw
             }
           ]}
         />

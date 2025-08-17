@@ -4,7 +4,7 @@ import {
   MapPin, Phone, Mail, Package, User,
   Download, Upload, Loader2, AlertCircle, Check,
   ChevronRight, BarChart3, Clock, Settings, X,
-  QrCode, Wifi, Thermometer, Lock, Activity
+  QrCode, Wifi, Thermometer, Lock, Activity, RefreshCw
 } from 'lucide-react';
 import { settingsApi } from '../../services/api/modules/settings.api';
 import { DataTable, StatusBadge, Toast } from '../global/ui';
@@ -19,6 +19,7 @@ const WarehouseMaster = ({ open, onClose }) => {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
   const [successMessage, setSuccessMessage] = useState('');
+  const [refreshing, setRefreshing] = useState(false);
   
   // Load warehouses on component mount
   useEffect(() => {
@@ -44,244 +45,45 @@ const WarehouseMaster = ({ open, onClose }) => {
         warehouseData = response;
       }
       
-      // If no data from API, use mock data as fallback
-      if (!warehouseData || warehouseData.length === 0) {
-        warehouseData = [
-        {
-          id: 1,
-          code: 'WH-001',
-          name: 'Main Warehouse',
-          type: 'primary',
-          address: '123 Industrial Area, Sector 15',
-          city: 'Mumbai',
-          state: 'Maharashtra',
-          pincode: '400001',
-          phone: '+91 98765 43210',
-          email: 'main.warehouse@pharmaerp.com',
-          manager: 'Rajesh Kumar',
-          capacity: 5000,
-          currentStock: 3750,
-          utilizationPercent: 75,
-          status: 'active',
-          features: {
-            temperatureControlled: true,
-            securitySystem: true,
-            inventoryTracking: true,
-            barcodeScanning: true,
-            rfidEnabled: false
-          },
-          operatingHours: {
-            weekdays: '9:00 AM - 6:00 PM',
-            saturday: '9:00 AM - 2:00 PM',
-            sunday: 'Closed'
-          },
-          createdAt: '2024-01-15',
-          lastInspection: '2024-07-15',
-          compliance: {
-            drugLicense: 'DL-MH-001-2024',
-            gstRegistration: 'GST-MH-001',
-            fireNoc: 'FIRE-001-2024'
-          }
-        },
-        {
-          id: 2,
-          code: 'WH-002',
-          name: 'Cold Storage Unit',
-          type: 'specialized',
-          address: '456 Pharma Complex, MIDC',
-          city: 'Pune',
-          state: 'Maharashtra',
-          pincode: '411019',
-          phone: '+91 98765 43211',
-          email: 'cold.storage@pharmaerp.com',
-          manager: 'Priya Sharma',
-          capacity: 1500,
-          currentStock: 1200,
-          utilizationPercent: 80,
-          status: 'active',
-          features: {
-            temperatureControlled: true,
-            securitySystem: true,
-            inventoryTracking: true,
-            barcodeScanning: true,
-            rfidEnabled: true
-          },
-          temperatureRange: '2°C - 8°C',
-          operatingHours: {
-            weekdays: '24/7 Monitoring',
-            saturday: '24/7 Monitoring',
-            sunday: '24/7 Monitoring'
-          },
-          createdAt: '2024-02-01',
-          lastInspection: '2024-07-10',
-          compliance: {
-            drugLicense: 'DL-MH-002-2024',
-            gstRegistration: 'GST-MH-002',
-            temperatureCertification: 'TEMP-CERT-2024'
-          }
-        },
-        {
-          id: 3,
-          code: 'WH-003',
-          name: 'Main Warehouse',
-          type: 'warehouse',
-          address: '123 Industrial Area, Phase 1',
-          city: 'Mumbai',
-          state: 'Maharashtra',
-          pincode: '400001',
-          phone: '+91 22 1234 5678',
-          email: 'main.warehouse@pharma.com',
-          manager: 'Rajesh Kumar',
-          capacity: 10000,
-          occupancy: 7500,
-          isActive: true,
-          isDefault: true,
-          temperature: 'Ambient',
-          description: 'Primary distribution center',
-          stockValue: 5250000,
-          totalProducts: 245
-        },
-        {
-          id: 2,
-          code: 'WH-002',
-          name: 'Cold Storage Facility',
-          type: 'coldStorage',
-          address: '456 Cold Chain Park',
-          city: 'Pune',
-          state: 'Maharashtra',
-          pincode: '411001',
-          phone: '+91 20 9876 5432',
-          email: 'cold.storage@pharma.com',
-          manager: 'Priya Sharma',
-          capacity: 5000,
-          occupancy: 3200,
-          isActive: true,
-          isDefault: false,
-          temperature: '2-8°C',
-          description: 'Temperature controlled storage for vaccines and biologics',
-          stockValue: 8750000,
-          totalProducts: 89
-        },
-        {
-          id: 3,
-          code: 'ST-001',
-          name: 'City Center Store',
-          type: 'store',
-          address: '789 Main Street',
-          city: 'Delhi',
-          state: 'Delhi',
-          pincode: '110001',
-          phone: '+91 11 5555 1234',
-          email: 'delhi.store@pharma.com',
-          manager: 'Amit Singh',
-          capacity: 2000,
-          occupancy: 1500,
-          isActive: true,
-          isDefault: false,
-          temperature: 'Ambient',
-          description: 'Retail pharmacy outlet',
-          stockValue: 1250000,
-          totalProducts: 156
-        },
-        {
-          id: 4,
-          code: 'WH-003',
-          name: 'Regional Distribution Center',
-          type: 'warehouse',
-          address: '321 Logistics Hub',
-          city: 'Bangalore',
-          state: 'Karnataka',
-          pincode: '560001',
-          phone: '+91 80 4444 5678',
-          email: 'bangalore.warehouse@pharma.com',
-          manager: 'Suresh Reddy',
-          capacity: 8000,
-          occupancy: 5600,
-          isActive: true,
-          isDefault: false,
-          temperature: 'Ambient',
-          description: 'South region distribution hub',
-          stockValue: 4100000,
-          totalProducts: 198
-        },
-        {
-          id: 5,
-          code: 'ST-002',
-          name: 'Hospital Pharmacy',
-          type: 'store',
-          address: 'City Hospital Complex',
-          city: 'Chennai',
-          state: 'Tamil Nadu',
-          pincode: '600001',
-          phone: '+91 44 3333 4567',
-          email: 'hospital.pharmacy@pharma.com',
-          manager: 'Dr. Lakshmi Iyer',
-          capacity: 1500,
-          occupancy: 1200,
-          isActive: true,
-          isDefault: false,
-          temperature: 'Ambient',
-          description: 'In-hospital pharmacy',
-          stockValue: 2100000,
-          totalProducts: 134
-        },
-        {
-          id: 6,
-          code: 'QT-001',
-          name: 'Quarantine Area',
-          type: 'quarantine',
-          address: 'Quality Control Building',
-          city: 'Mumbai',
-          state: 'Maharashtra',
-          pincode: '400001',
-          phone: '+91 22 2222 3333',
-          email: 'qc.warehouse@pharma.com',
-          manager: 'Dr. Anil Verma',
-          capacity: 1000,
-          occupancy: 300,
-          isActive: true,
-          isDefault: false,
-          temperature: 'Controlled',
-          description: 'Holding area for quality testing',
-          stockValue: 450000,
-          totalProducts: 23
-        }
-        ];
-      }
-      
-      setWarehouses(warehouseData);
+      setWarehouses(warehouseData || []);
     } catch (error) {
       console.error('Error loading warehouses:', error);
       setError('Failed to load warehouses. Please try again.');
-      // Use empty array on error
       setWarehouses([]);
     } finally {
       setIsLoading(false);
     }
   };
 
-  const warehouseTypes = [
-    { value: 'all', label: 'All Locations' },
-    { value: 'warehouse', label: 'Warehouses' },
-    { value: 'store', label: 'Stores' },
-    { value: 'coldStorage', label: 'Cold Storage' },
-    { value: 'quarantine', label: 'Quarantine' }
-  ];
+  // Handle refresh
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    setError(null);
+    try {
+      await loadWarehouses();
+    } catch (error) {
+      console.error('Refresh failed:', error);
+      setError('Failed to refresh data');
+    } finally {
+      setRefreshing(false);
+    }
+  };
 
-  const temperatureOptions = [
-    { value: 'ambient', label: 'Ambient (15-25°C)' },
-    { value: 'cool', label: 'Cool (8-15°C)' },
-    { value: 'cold', label: 'Cold (2-8°C)' },
-    { value: 'frozen', label: 'Frozen (-20°C)' },
-    { value: 'controlled', label: 'Controlled' }
+  const warehouseTypes = [
+    { value: 'all', label: 'All Types' },
+    { value: 'warehouse', label: 'Warehouse' },
+    { value: 'coldStorage', label: 'Cold Storage' },
+    { value: 'store', label: 'Store' },
+    { value: 'primary', label: 'Primary' },
+    { value: 'specialized', label: 'Specialized' }
   ];
 
   const filteredWarehouses = warehouses.filter(warehouse => {
     const matchesSearch = searchTerm === '' ||
-                         warehouse.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         warehouse.code.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         warehouse.city.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         warehouse.manager.toLowerCase().includes(searchTerm.toLowerCase());
+                         warehouse.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                         warehouse.code?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                         warehouse.city?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                         warehouse.manager?.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesType = filterType === 'all' || warehouse.type === filterType;
     return matchesSearch && matchesType;
   });
@@ -298,10 +100,10 @@ const WarehouseMaster = ({ open, onClose }) => {
     email: '',
     manager: '',
     capacity: '',
-    temperature: 'ambient',
     description: '',
-    isDefault: false,
-    isActive: true
+    temperature: 'Ambient',
+    isActive: true,
+    isDefault: false
   });
 
   const handleInputChange = (field, value) => {
@@ -311,90 +113,88 @@ const WarehouseMaster = ({ open, onClose }) => {
     }));
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
+    setError(null);
     
-    if (editingWarehouse) {
-      // Update existing warehouse
-      setWarehouses(prev => prev.map(w => 
-        w.id === editingWarehouse.id 
-          ? { ...w, ...formData, occupancy: w.occupancy, stockValue: w.stockValue, totalProducts: w.totalProducts }
-          : w
-      ));
-      setSuccessMessage('Warehouse updated successfully!');
-    } else {
-      // Add new warehouse
-      const newWarehouse = {
+    try {
+      const warehouseData = {
         ...formData,
-        id: Date.now(),
-        occupancy: 0,
-        stockValue: 0,
-        totalProducts: 0,
         capacity: parseInt(formData.capacity) || 0
       };
-      setWarehouses(prev => [...prev, newWarehouse]);
-      setSuccessMessage('Warehouse added successfully!');
+      
+      if (editingWarehouse) {
+        // Update existing warehouse
+        const response = await settingsApi.warehouses.update(editingWarehouse.id, warehouseData);
+        if (response.success || response.data) {
+          setSuccessMessage('Warehouse updated successfully!');
+          await loadWarehouses(); // Reload data
+        }
+      } else {
+        // Add new warehouse
+        const response = await settingsApi.warehouses.create(warehouseData);
+        if (response.success || response.data) {
+          setSuccessMessage('Warehouse added successfully!');
+          await loadWarehouses(); // Reload data
+        }
+      }
+      
+      setTimeout(() => setSuccessMessage(''), 3000);
+      handleCloseModal();
+    } catch (error) {
+      console.error('Error saving warehouse:', error);
+      setError('Failed to save warehouse. Please try again.');
     }
-    
-    setTimeout(() => setSuccessMessage(''), 3000);
-    handleCloseModal();
   };
 
   const handleEdit = (warehouse) => {
     setEditingWarehouse(warehouse);
     setFormData({
-      code: warehouse.code,
-      name: warehouse.name,
-      type: warehouse.type,
-      address: warehouse.address,
-      city: warehouse.city,
-      state: warehouse.state,
-      pincode: warehouse.pincode,
-      phone: warehouse.phone,
-      email: warehouse.email,
-      manager: warehouse.manager,
-      capacity: warehouse.capacity,
-      temperature: warehouse.temperature,
+      code: warehouse.code || '',
+      name: warehouse.name || '',
+      type: warehouse.type || 'warehouse',
+      address: warehouse.address || '',
+      city: warehouse.city || '',
+      state: warehouse.state || '',
+      pincode: warehouse.pincode || '',
+      phone: warehouse.phone || '',
+      email: warehouse.email || '',
+      manager: warehouse.manager || '',
+      capacity: warehouse.capacity || warehouse.occupancy || '',
       description: warehouse.description || '',
-      isDefault: warehouse.isDefault,
-      isActive: warehouse.isActive
+      temperature: warehouse.temperature || 'Ambient',
+      isActive: warehouse.isActive !== false,
+      isDefault: warehouse.isDefault || false
     });
     setShowAddModal(true);
   };
 
-  const handleDelete = (id) => {
-    const warehouse = warehouses.find(w => w.id === id);
-    
-    if (warehouse.isDefault) {
-      alert('Cannot delete default warehouse. Please set another warehouse as default first.');
-      return;
-    }
-    
-    if (warehouse.occupancy > 0) {
-      alert(`Cannot delete ${warehouse.name}. It has stock worth ₹${warehouse.stockValue.toLocaleString()}.`);
-      return;
-    }
-    
+  const handleDelete = async (id) => {
     if (window.confirm('Are you sure you want to delete this warehouse?')) {
-      setWarehouses(prev => prev.filter(w => w.id !== id));
-      setSuccessMessage('Warehouse deleted successfully!');
-      setTimeout(() => setSuccessMessage(''), 3000);
+      try {
+        await settingsApi.warehouses.delete(id);
+        setSuccessMessage('Warehouse deleted successfully!');
+        await loadWarehouses();
+        setTimeout(() => setSuccessMessage(''), 3000);
+      } catch (error) {
+        console.error('Error deleting warehouse:', error);
+        setError('Failed to delete warehouse. Please try again.');
+      }
     }
   };
 
-  const handleToggleActive = (id) => {
-    setWarehouses(prev => prev.map(w => 
-      w.id === id ? { ...w, isActive: !w.isActive } : w
-    ));
-  };
-
-  const handleSetDefault = (id) => {
-    setWarehouses(prev => prev.map(w => ({
-      ...w,
-      isDefault: w.id === id
-    })));
-    setSuccessMessage('Default warehouse updated!');
-    setTimeout(() => setSuccessMessage(''), 3000);
+  const handleToggleActive = async (id) => {
+    try {
+      const warehouse = warehouses.find(w => w.id === id);
+      const updatedWarehouse = { ...warehouse, isActive: !warehouse.isActive };
+      await settingsApi.warehouses.update(id, updatedWarehouse);
+      setSuccessMessage(`Warehouse ${updatedWarehouse.isActive ? 'activated' : 'deactivated'} successfully!`);
+      await loadWarehouses();
+      setTimeout(() => setSuccessMessage(''), 3000);
+    } catch (error) {
+      console.error('Error updating warehouse status:', error);
+      setError('Failed to update warehouse status. Please try again.');
+    }
   };
 
   const handleCloseModal = () => {
@@ -412,58 +212,55 @@ const WarehouseMaster = ({ open, onClose }) => {
       email: '',
       manager: '',
       capacity: '',
-      temperature: 'ambient',
       description: '',
-      isDefault: false,
-      isActive: true
+      temperature: 'Ambient',
+      isActive: true,
+      isDefault: false
     });
   };
 
   const handleExport = () => {
     // TODO: Implement export functionality
-    alert('Export functionality coming soon!');
+    setError('Export functionality coming soon!');
+    setTimeout(() => setError(null), 3000);
   };
 
   const handleImport = () => {
     // TODO: Implement import functionality
-    alert('Import functionality coming soon!');
+    setError('Import functionality coming soon!');
+    setTimeout(() => setError(null), 3000);
   };
 
-  const getTypeColor = (type) => {
+  const getWarehouseTypeColor = (type) => {
     const colors = {
-      warehouse: 'blue',
-      store: 'green',
-      coldStorage: 'cyan',
-      quarantine: 'orange'
+      'warehouse': 'blue',
+      'coldStorage': 'cyan',
+      'store': 'green',
+      'primary': 'purple',
+      'specialized': 'orange'
     };
     return colors[type] || 'gray';
   };
 
-  const getTypeIcon = (type) => {
+  const getWarehouseTypeIcon = (type) => {
     const icons = {
-      warehouse: '🏭',
-      store: '🏪',
-      coldStorage: '❄️',
-      quarantine: '⚠️'
+      'warehouse': Warehouse,
+      'coldStorage': Thermometer,
+      'store': Package,
+      'primary': Warehouse,
+      'specialized': Settings
     };
-    return icons[type] || '📦';
+    return icons[type] || Warehouse;
   };
 
-  const getOccupancyPercentage = (warehouse) => {
-    return warehouse.capacity > 0 ? Math.round((warehouse.occupancy / warehouse.capacity) * 100) : 0;
+  const getUtilizationPercent = (warehouse) => {
+    const capacity = warehouse.capacity || warehouse.occupancy || 0;
+    const current = warehouse.currentStock || warehouse.occupancy || 0;
+    if (capacity === 0) return 0;
+    return Math.round((current / capacity) * 100);
   };
 
-  const getOccupancyColor = (percentage) => {
-    if (percentage >= 90) return 'red';
-    if (percentage >= 70) return 'amber';
-    if (percentage >= 50) return 'yellow';
-    return 'green';
-  };
-
-  const totalCapacity = warehouses.reduce((sum, w) => sum + w.capacity, 0);
-  const totalOccupancy = warehouses.reduce((sum, w) => sum + w.occupancy, 0);
-  const totalStockValue = warehouses.reduce((sum, w) => sum + w.stockValue, 0);
-  const activeWarehouses = warehouses.filter(w => w.isActive).length;
+  if (!open) return null;
 
   return (
     <div className="flex-1 flex flex-col bg-gray-50 h-full overflow-hidden">
@@ -473,9 +270,17 @@ const WarehouseMaster = ({ open, onClose }) => {
           <div className="flex items-center space-x-3">
             <Warehouse className="w-6 h-6 text-gray-700" />
             <h1 className="text-2xl font-bold text-gray-900">Warehouse Master</h1>
-            <span className="text-sm text-gray-500">({warehouses.length} locations)</span>
+            <span className="text-sm text-gray-500">({warehouses.length} warehouses)</span>
           </div>
           <div className="flex items-center space-x-3">
+            <button
+              onClick={handleRefresh}
+              disabled={refreshing}
+              className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 flex items-center space-x-2 disabled:opacity-50"
+            >
+              {refreshing ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
+              <span>{refreshing ? 'Refreshing...' : 'Refresh'}</span>
+            </button>
             <button
               onClick={handleImport}
               className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 flex items-center space-x-2"
@@ -495,51 +300,8 @@ const WarehouseMaster = ({ open, onClose }) => {
               className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center space-x-2"
             >
               <Plus className="w-4 h-4" />
-              <span>Add Location</span>
+              <span>Add Warehouse</span>
             </button>
-          </div>
-        </div>
-      </div>
-
-      {/* Summary Cards */}
-      <div className="bg-white border-b border-gray-200 px-6 py-4">
-        <div className="grid grid-cols-4 gap-4">
-          <div className="bg-gray-50 rounded-lg p-3">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-xs text-gray-500">Total Locations</p>
-                <p className="text-lg font-semibold text-gray-900">{warehouses.length}</p>
-              </div>
-              <Warehouse className="w-8 h-8 text-gray-400" />
-            </div>
-          </div>
-          <div className="bg-blue-50 rounded-lg p-3">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-xs text-gray-500">Active Locations</p>
-                <p className="text-lg font-semibold text-blue-900">{activeWarehouses}</p>
-              </div>
-              <MapPin className="w-8 h-8 text-blue-400" />
-            </div>
-          </div>
-          <div className="bg-green-50 rounded-lg p-3">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-xs text-gray-500">Total Capacity</p>
-                <p className="text-lg font-semibold text-green-900">{totalCapacity.toLocaleString()}</p>
-                <p className="text-xs text-gray-500">{Math.round((totalOccupancy / totalCapacity) * 100)}% occupied</p>
-              </div>
-              <Package className="w-8 h-8 text-green-400" />
-            </div>
-          </div>
-          <div className="bg-purple-50 rounded-lg p-3">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-xs text-gray-500">Total Stock Value</p>
-                <p className="text-lg font-semibold text-purple-900">₹{(totalStockValue / 1000000).toFixed(1)}M</p>
-              </div>
-              <BarChart3 className="w-8 h-8 text-purple-400" />
-            </div>
           </div>
         </div>
       </div>
@@ -574,6 +336,12 @@ const WarehouseMaster = ({ open, onClose }) => {
         <div className="mx-6 mt-4 bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg flex items-center">
           <AlertCircle className="w-5 h-5 mr-2" />
           {error}
+          <button
+            onClick={() => setError(null)}
+            className="ml-auto text-red-400 hover:text-red-600"
+          >
+            <X className="w-4 h-4" />
+          </button>
         </div>
       )}
       
@@ -581,6 +349,12 @@ const WarehouseMaster = ({ open, onClose }) => {
         <div className="mx-6 mt-4 bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded-lg flex items-center">
           <Check className="w-5 h-5 mr-2" />
           {successMessage}
+          <button
+            onClick={() => setSuccessMessage('')}
+            className="ml-auto text-green-400 hover:text-green-600"
+          >
+            <X className="w-4 h-4" />
+          </button>
         </div>
       )}
 
@@ -590,6 +364,16 @@ const WarehouseMaster = ({ open, onClose }) => {
           <div className="flex items-center justify-center h-64">
             <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
             <span className="ml-2 text-gray-600">Loading warehouses...</span>
+          </div>
+        ) : filteredWarehouses.length === 0 ? (
+          <div className="flex items-center justify-center h-64">
+            <div className="text-center">
+              <Warehouse className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+              <p className="text-gray-600">No warehouses found</p>
+              {searchTerm && (
+                <p className="text-sm text-gray-500 mt-2">Try adjusting your search criteria</p>
+              )}
+            </div>
           </div>
         ) : (
           <div className="bg-white rounded-lg border border-gray-200 h-full flex flex-col">
@@ -610,19 +394,18 @@ const WarehouseMaster = ({ open, onClose }) => {
                         }}
                       />
                     </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Location Details</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Contact</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Capacity</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Stock Value</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Warehouse Details</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Type</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Location</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Manager</th>
+                    <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Capacity</th>
                     <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
                     <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
                   {filteredWarehouses.map((warehouse) => {
-                    const occupancyPercentage = getOccupancyPercentage(warehouse);
-                    const occupancyColor = getOccupancyColor(occupancyPercentage);
-                    
+                    const utilizationPercent = getUtilizationPercent(warehouse);
                     return (
                       <tr key={warehouse.id} className="hover:bg-gray-50">
                         <td className="px-6 py-4">
@@ -641,96 +424,54 @@ const WarehouseMaster = ({ open, onClose }) => {
                         </td>
                         <td className="px-6 py-4">
                           <div>
-                            <div className="flex items-center space-x-2">
-                              <span className="text-lg">{getTypeIcon(warehouse.type)}</span>
-                              <div>
-                                <p className="text-sm font-medium text-gray-900">
-                                  {warehouse.name}
-                                  {warehouse.isDefault && (
-                                    <span className="ml-2 px-2 py-0.5 text-xs bg-blue-100 text-blue-800 rounded-full">
-                                      Default
-                                    </span>
-                                  )}
-                                </p>
-                                <p className="text-xs text-gray-500">
-                                  {warehouse.code} • {warehouse.city}, {warehouse.state}
-                                </p>
-                                {warehouse.temperature !== 'Ambient' && (
-                                  <p className="text-xs text-blue-600 mt-1">
-                                    🌡️ {warehouse.temperature}
-                                  </p>
-                                )}
-                              </div>
-                            </div>
+                            <p className="text-sm font-medium text-gray-900">{warehouse.name}</p>
+                            <p className="text-xs text-gray-500">Code: {warehouse.code}</p>
+                            {warehouse.description && (
+                              <p className="text-xs text-gray-500">{warehouse.description}</p>
+                            )}
+                          </div>
+                        </td>
+                        <td className="px-6 py-4">
+                          <span className={`px-2 py-1 text-xs rounded-full bg-${getWarehouseTypeColor(warehouse.type)}-100 text-${getWarehouseTypeColor(warehouse.type)}-800`}>
+                            {warehouse.type}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4">
+                          <div className="text-sm">
+                            <p className="text-gray-900">{warehouse.city}, {warehouse.state}</p>
+                            {warehouse.address && (
+                              <p className="text-xs text-gray-500">{warehouse.address}</p>
+                            )}
                           </div>
                         </td>
                         <td className="px-6 py-4">
                           <div className="text-sm">
-                            <p className="text-gray-900">
-                              <User className="w-3 h-3 inline mr-1" />
-                              {warehouse.manager}
-                            </p>
-                            <p className="text-xs text-gray-500">
-                              <Phone className="w-3 h-3 inline mr-1" />
-                              {warehouse.phone}
-                            </p>
-                            <p className="text-xs text-gray-500">
-                              <Mail className="w-3 h-3 inline mr-1" />
-                              {warehouse.email}
-                            </p>
+                            <p className="text-gray-900">{warehouse.manager}</p>
+                            {warehouse.phone && (
+                              <p className="text-xs text-gray-500">{warehouse.phone}</p>
+                            )}
                           </div>
                         </td>
-                        <td className="px-6 py-4">
-                          <div>
-                            <div className="flex items-center justify-between mb-1">
-                              <span className="text-sm text-gray-900">
-                                {warehouse.occupancy.toLocaleString()} / {warehouse.capacity.toLocaleString()}
-                              </span>
-                              <span className={`text-xs font-medium text-${occupancyColor}-600`}>
-                                {occupancyPercentage}%
-                              </span>
-                            </div>
-                            <div className="w-full bg-gray-200 rounded-full h-2">
-                              <div
-                                className={`bg-${occupancyColor}-500 h-2 rounded-full transition-all duration-300`}
-                                style={{ width: `${occupancyPercentage}%` }}
-                              />
-                            </div>
-                          </div>
-                        </td>
-                        <td className="px-6 py-4">
+                        <td className="px-6 py-4 text-center">
                           <div className="text-sm">
-                            <p className="font-medium text-gray-900">
-                              ₹{(warehouse.stockValue / 1000000).toFixed(2)}M
-                            </p>
-                            <p className="text-xs text-gray-500">
-                              {warehouse.totalProducts} products
-                            </p>
+                            <p className="font-medium">{warehouse.capacity || warehouse.occupancy || 0}</p>
+                            <p className="text-xs text-gray-500">{utilizationPercent}% utilized</p>
                           </div>
                         </td>
                         <td className="px-6 py-4 text-center">
                           <button
                             onClick={() => handleToggleActive(warehouse.id)}
                             className={`px-2 py-1 text-xs rounded-full ${
-                              warehouse.isActive 
+                              warehouse.isActive !== false
                                 ? 'bg-green-100 text-green-800' 
                                 : 'bg-gray-100 text-gray-600'
                             }`}
                           >
-                            {warehouse.isActive ? 'Active' : 'Inactive'}
+                            {warehouse.isActive !== false ? 'Active' : 'Inactive'}
                           </button>
                         </td>
                         <td className="px-6 py-4 text-center">
                           <div className="flex items-center justify-center space-x-2">
-                            {!warehouse.isDefault && warehouse.isActive && (
-                              <button
-                                onClick={() => handleSetDefault(warehouse.id)}
-                                className="p-1 text-gray-600 hover:bg-gray-50 rounded"
-                                title="Set as default"
-                              >
-                                <Settings className="w-4 h-4" />
-                              </button>
-                            )}
                             <button
                               onClick={() => handleEdit(warehouse)}
                               className="p-1 text-blue-600 hover:bg-blue-50 rounded"
@@ -740,8 +481,6 @@ const WarehouseMaster = ({ open, onClose }) => {
                             <button
                               onClick={() => handleDelete(warehouse.id)}
                               className="p-1 text-red-600 hover:bg-red-50 rounded"
-                              disabled={warehouse.isDefault || warehouse.occupancy > 0}
-                              title={warehouse.isDefault ? 'Cannot delete default warehouse' : warehouse.occupancy > 0 ? 'Warehouse has stock' : ''}
                             >
                               <Trash2 className="w-4 h-4" />
                             </button>
@@ -760,11 +499,11 @@ const WarehouseMaster = ({ open, onClose }) => {
       {/* Add/Edit Modal */}
       {showAddModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl m-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl m-4">
             <div className="px-6 py-4 border-b border-gray-200">
               <div className="flex items-center justify-between">
                 <h2 className="text-xl font-semibold text-gray-900">
-                  {editingWarehouse ? 'Edit Location' : 'Add New Location'}
+                  {editingWarehouse ? 'Edit Warehouse' : 'Add New Warehouse'}
                 </h2>
                 <button
                   onClick={handleCloseModal}
@@ -779,7 +518,7 @@ const WarehouseMaster = ({ open, onClose }) => {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Location Code <span className="text-red-500">*</span>
+                    Warehouse Code <span className="text-red-500">*</span>
                   </label>
                   <input
                     type="text"
@@ -787,13 +526,13 @@ const WarehouseMaster = ({ open, onClose }) => {
                     value={formData.code}
                     onChange={(e) => handleInputChange('code', e.target.value.toUpperCase())}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                    placeholder="e.g., WH-001, ST-001"
+                    placeholder="e.g., WH-001"
                   />
                 </div>
                 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Location Name <span className="text-red-500">*</span>
+                    Warehouse Name <span className="text-red-500">*</span>
                   </label>
                   <input
                     type="text"
@@ -801,7 +540,7 @@ const WarehouseMaster = ({ open, onClose }) => {
                     value={formData.name}
                     onChange={(e) => handleInputChange('name', e.target.value)}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                    placeholder="e.g., Main Warehouse, City Store"
+                    placeholder="e.g., Main Warehouse"
                   />
                 </div>
 
@@ -813,63 +552,43 @@ const WarehouseMaster = ({ open, onClose }) => {
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
                   >
                     <option value="warehouse">Warehouse</option>
-                    <option value="store">Store</option>
                     <option value="coldStorage">Cold Storage</option>
-                    <option value="quarantine">Quarantine</option>
+                    <option value="store">Store</option>
+                    <option value="primary">Primary</option>
+                    <option value="specialized">Specialized</option>
                   </select>
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Temperature Control</label>
-                  <select
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Capacity</label>
+                  <input
+                    type="number"
+                    value={formData.capacity}
+                    onChange={(e) => handleInputChange('capacity', e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                    placeholder="e.g., 5000"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Temperature</label>
+                  <input
+                    type="text"
                     value={formData.temperature}
                     onChange={(e) => handleInputChange('temperature', e.target.value)}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                  >
-                    {temperatureOptions.map(option => (
-                      <option key={option.value} value={option.value}>{option.label}</option>
-                    ))}
-                  </select>
-                </div>
-
-                <div className="md:col-span-2">
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Address</label>
-                  <input
-                    type="text"
-                    value={formData.address}
-                    onChange={(e) => handleInputChange('address', e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                    placeholder="Street address"
+                    placeholder="e.g., Ambient, 2-8°C"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">City</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Manager</label>
                   <input
                     type="text"
-                    value={formData.city}
-                    onChange={(e) => handleInputChange('city', e.target.value)}
+                    value={formData.manager}
+                    onChange={(e) => handleInputChange('manager', e.target.value)}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">State</label>
-                  <input
-                    type="text"
-                    value={formData.state}
-                    onChange={(e) => handleInputChange('state', e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Pincode</label>
-                  <input
-                    type="text"
-                    value={formData.pincode}
-                    onChange={(e) => handleInputChange('pincode', e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                    placeholder="e.g., John Doe"
                   />
                 </div>
 
@@ -880,7 +599,7 @@ const WarehouseMaster = ({ open, onClose }) => {
                     value={formData.phone}
                     onChange={(e) => handleInputChange('phone', e.target.value)}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                    placeholder="+91 12345 67890"
+                    placeholder="e.g., +91 98765 43210"
                   />
                 </div>
 
@@ -891,29 +610,51 @@ const WarehouseMaster = ({ open, onClose }) => {
                     value={formData.email}
                     onChange={(e) => handleInputChange('email', e.target.value)}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                    placeholder="warehouse@example.com"
+                    placeholder="e.g., warehouse@company.com"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Manager Name</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">City</label>
                   <input
                     type="text"
-                    value={formData.manager}
-                    onChange={(e) => handleInputChange('manager', e.target.value)}
+                    value={formData.city}
+                    onChange={(e) => handleInputChange('city', e.target.value)}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                    placeholder="e.g., Mumbai"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Capacity</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">State</label>
                   <input
-                    type="number"
-                    value={formData.capacity}
-                    onChange={(e) => handleInputChange('capacity', e.target.value)}
+                    type="text"
+                    value={formData.state}
+                    onChange={(e) => handleInputChange('state', e.target.value)}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                    placeholder="e.g., 1000"
-                    min="0"
+                    placeholder="e.g., Maharashtra"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Pincode</label>
+                  <input
+                    type="text"
+                    value={formData.pincode}
+                    onChange={(e) => handleInputChange('pincode', e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                    placeholder="e.g., 400001"
+                  />
+                </div>
+
+                <div className="md:col-span-2">
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Address</label>
+                  <textarea
+                    value={formData.address}
+                    onChange={(e) => handleInputChange('address', e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                    rows={2}
+                    placeholder="Full address..."
                   />
                 </div>
 
@@ -928,16 +669,7 @@ const WarehouseMaster = ({ open, onClose }) => {
                   />
                 </div>
 
-                <div className="md:col-span-2 space-y-2">
-                  <label className="flex items-center space-x-2">
-                    <input
-                      type="checkbox"
-                      checked={formData.isDefault}
-                      onChange={(e) => handleInputChange('isDefault', e.target.checked)}
-                      className="rounded border-gray-300"
-                    />
-                    <span className="text-sm text-gray-700">Set as default location</span>
-                  </label>
+                <div className="md:col-span-2 flex items-center space-x-6">
                   <label className="flex items-center space-x-2">
                     <input
                       type="checkbox"
@@ -946,6 +678,15 @@ const WarehouseMaster = ({ open, onClose }) => {
                       className="rounded border-gray-300"
                     />
                     <span className="text-sm text-gray-700">Active</span>
+                  </label>
+                  <label className="flex items-center space-x-2">
+                    <input
+                      type="checkbox"
+                      checked={formData.isDefault}
+                      onChange={(e) => handleInputChange('isDefault', e.target.checked)}
+                      className="rounded border-gray-300"
+                    />
+                    <span className="text-sm text-gray-700">Default Warehouse</span>
                   </label>
                 </div>
               </div>
@@ -963,7 +704,7 @@ const WarehouseMaster = ({ open, onClose }) => {
                   type="submit"
                   className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
                 >
-                  {editingWarehouse ? 'Update Location' : 'Add Location'}
+                  {editingWarehouse ? 'Update Warehouse' : 'Add Warehouse'}
                 </button>
               </div>
             </form>

@@ -79,10 +79,30 @@ export const settingsApi = {
     getPermissions: () => apiClient.get('/org-users/permissions/'),
   },
 
-  // Notification & Alert APIs
+  // Notification & Alert APIs (with fallback for missing backend endpoints)
   notifications: {
-    getAll: (filters) => apiClient.get('/notifications', { params: filters }),
-    getUnread: () => apiClient.get('/notifications/unread'),
+    getAll: async (filters) => {
+      try {
+        return await apiClient.get('/notifications', { params: filters });
+      } catch (error) {
+        if (error.response?.status === 404) {
+          console.warn('Notifications endpoint not implemented, returning empty array');
+          return { data: [] };
+        }
+        throw error;
+      }
+    },
+    getUnread: async () => {
+      try {
+        return await apiClient.get('/notifications/unread');
+      } catch (error) {
+        if (error.response?.status === 404) {
+          console.warn('Notifications endpoint not implemented, returning empty array');
+          return { data: [] };
+        }
+        throw error;
+      }
+    },
     markAsRead: (id) => apiClient.patch(`/notifications/${id}/read`),
     markAllAsRead: () => apiClient.post('/notifications/mark-all-read'),
     delete: (id) => apiClient.delete(`/notifications/${id}`),

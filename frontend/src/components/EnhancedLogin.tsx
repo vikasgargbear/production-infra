@@ -8,13 +8,6 @@ interface Credentials {
   password: string;
 }
 
-interface DemoUser {
-  role: string;
-  username: string;
-  password: string;
-  color: string;
-}
-
 interface EnhancedLoginProps {
   onLogin: (success: boolean) => void;
 }
@@ -28,15 +21,6 @@ const EnhancedLogin: React.FC<EnhancedLoginProps> = ({ onLogin }) => {
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [error, setError] = useState<string>('');
   const [rememberMe, setRememberMe] = useState<boolean>(false);
-  const [selectedRole, setSelectedRole] = useState<string>('');
-
-  // Demo users for different roles (remove in production)
-  const demoUsers: DemoUser[] = [
-    { role: 'Admin', username: 'admin', password: 'admin123', color: 'purple' },
-    { role: 'Sales', username: 'sales', password: 'sales123', color: 'blue' },
-    { role: 'Accounts', username: 'accounts', password: 'accounts123', color: 'green' },
-    { role: 'Warehouse', username: 'warehouse', password: 'warehouse123', color: 'orange' }
-  ];
 
   useEffect(() => {
     // Check for remembered username
@@ -61,14 +45,6 @@ const EnhancedLogin: React.FC<EnhancedLoginProps> = ({ onLogin }) => {
     setError('');
   };
 
-  const handleDemoLogin = (demoUser: DemoUser) => {
-    setCredentials({
-      username: demoUser.username,
-      password: demoUser.password
-    });
-    setSelectedRole(demoUser.role);
-  };
-
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     
@@ -81,49 +57,24 @@ const EnhancedLogin: React.FC<EnhancedLoginProps> = ({ onLogin }) => {
     setError('');
 
     try {
-      // For demo purposes, use local validation
-      // In production, this will call the actual API
-      const isValidDemo = demoUsers.some(
-        user => user.username === credentials.username && user.password === credentials.password
-      );
-
-      if (isValidDemo) {
-        // Simulate API call
-        await new Promise(resolve => setTimeout(resolve, 1000));
-        
-        // Store mock JWT token
-        const mockToken = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VybmFtZSI6ImFkbWluIiwicm9sZSI6ImFkbWluIn0.mock';
-        localStorage.setItem('authToken', mockToken);
-        localStorage.setItem('user', JSON.stringify({
-          username: credentials.username,
-          role: demoUsers.find(u => u.username === credentials.username)?.role.toLowerCase() || 'user',
-          name: `${credentials.username.charAt(0).toUpperCase() + credentials.username.slice(1)} User`
-        }));
-
-        // Remember username if checked
+      // Call the actual authentication service
+      const success = await authService.login(credentials.username, credentials.password);
+      
+      if (success) {
+        // Handle remember me functionality
         if (rememberMe) {
           localStorage.setItem('rememberedUsername', credentials.username);
         } else {
           localStorage.removeItem('rememberedUsername');
         }
-
+        
         onLogin(true);
       } else {
-        // Try actual API login
-        const result = await authService.login(credentials.username, credentials.password);
-        
-        if (result.success) {
-          if (rememberMe) {
-            localStorage.setItem('rememberedUsername', credentials.username);
-          }
-          onLogin(true);
-        } else {
-          setError(result.error || 'Invalid username or password');
-        }
+        setError('Invalid username or password');
       }
     } catch (err) {
       console.error('Login error:', err);
-      setError('Connection error. Please check your internet connection.');
+      setError('Login failed. Please try again.');
     } finally {
       setIsLoading(false);
     }
@@ -251,30 +202,13 @@ const EnhancedLogin: React.FC<EnhancedLoginProps> = ({ onLogin }) => {
             </Button>
           </form>
 
-          {/* Demo Users Section */}
-          <div className="mt-8 pt-6 border-t border-gray-200">
-            <p className="text-xs text-gray-500 text-center mb-4">Demo Accounts (Development Only)</p>
-            <div className="grid grid-cols-2 gap-2">
-              {demoUsers.map((user) => (
-                <button
-                  key={user.role}
-                  onClick={() => handleDemoLogin(user)}
-                  className={`text-xs py-2 px-3 rounded-lg border transition-all hover:shadow-md bg-${user.color}-50 border-${user.color}-200 hover:bg-${user.color}-100`}
-                >
-                  <div className="font-medium text-gray-700">{user.role}</div>
-                  <div className="text-gray-500">{user.username}</div>
-                </button>
-              ))}
-            </div>
+          {/* Security Notice */}
+          <div className="mt-6 text-center">
+            <p className="text-xs text-gray-500">
+              <Lock className="h-3 w-3 inline mr-1" />
+              Secured with JWT authentication • Session timeout: 30 minutes
+            </p>
           </div>
-        </div>
-
-        {/* Security Notice */}
-        <div className="mt-6 text-center">
-          <p className="text-xs text-gray-500">
-            <Lock className="h-3 w-3 inline mr-1" />
-            Secured with JWT authentication • Session timeout: 30 minutes
-          </p>
         </div>
       </div>
     </div>

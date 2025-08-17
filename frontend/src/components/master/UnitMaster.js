@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { 
   Ruler, Search, Plus, Edit2, Trash2, 
   Download, Upload, Loader2, AlertCircle, Check,
-  ArrowRight, Hash, X
+  ArrowRight, Hash, X, RefreshCw
 } from 'lucide-react';
 import { settingsApi } from '../../services/api/modules/settings.api';
 
@@ -16,6 +16,7 @@ const UnitMaster = ({ open, onClose }) => {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
   const [successMessage, setSuccessMessage] = useState('');
+  const [refreshing, setRefreshing] = useState(false);
   
   // Load units on component mount
   useEffect(() => {
@@ -41,168 +42,27 @@ const UnitMaster = ({ open, onClose }) => {
         unitData = response;
       }
       
-      // If no data from API, use mock data as fallback
-      if (!unitData || unitData.length === 0) {
-        unitData = [
-          // Quantity Units
-        {
-          id: 1,
-          code: 'NOS',
-          name: 'Numbers',
-          symbol: 'Nos',
-          category: 'quantity',
-          baseUnit: null,
-          conversionFactor: 1,
-          isBase: true,
-          isActive: true,
-          description: 'Individual count'
-        },
-        {
-          id: 2,
-          code: 'TAB',
-          name: 'Tablet',
-          symbol: 'Tab',
-          category: 'quantity',
-          baseUnit: 'NOS',
-          conversionFactor: 1,
-          isBase: false,
-          isActive: true,
-          description: 'Single tablet'
-        },
-        {
-          id: 3,
-          code: 'STRIP',
-          name: 'Strip',
-          symbol: 'Strip',
-          category: 'quantity',
-          baseUnit: 'TAB',
-          conversionFactor: 10,
-          isBase: false,
-          isActive: true,
-          description: 'Strip of 10 tablets'
-        },
-        {
-          id: 4,
-          code: 'BOX',
-          name: 'Box',
-          symbol: 'Box',
-          category: 'quantity',
-          baseUnit: 'STRIP',
-          conversionFactor: 10,
-          isBase: false,
-          isActive: true,
-          description: 'Box of 10 strips'
-        },
-        // Volume Units
-        {
-          id: 5,
-          code: 'ML',
-          name: 'Milliliter',
-          symbol: 'ml',
-          category: 'volume',
-          baseUnit: null,
-          conversionFactor: 1,
-          isBase: true,
-          isActive: true,
-          description: 'Base volume unit'
-        },
-        {
-          id: 6,
-          code: 'L',
-          name: 'Liter',
-          symbol: 'L',
-          category: 'volume',
-          baseUnit: 'ML',
-          conversionFactor: 1000,
-          isBase: false,
-          isActive: true,
-          description: '1000 milliliters'
-        },
-        {
-          id: 7,
-          code: 'BOTTLE',
-          name: 'Bottle',
-          symbol: 'Btl',
-          category: 'volume',
-          baseUnit: 'ML',
-          conversionFactor: 100,
-          isBase: false,
-          isActive: true,
-          description: 'Standard 100ml bottle'
-        },
-        // Weight Units
-        {
-          id: 8,
-          code: 'MG',
-          name: 'Milligram',
-          symbol: 'mg',
-          category: 'weight',
-          baseUnit: null,
-          conversionFactor: 1,
-          isBase: true,
-          isActive: true,
-          description: 'Base weight unit'
-        },
-        {
-          id: 9,
-          code: 'G',
-          name: 'Gram',
-          symbol: 'g',
-          category: 'weight',
-          baseUnit: 'MG',
-          conversionFactor: 1000,
-          isBase: false,
-          isActive: true,
-          description: '1000 milligrams'
-        },
-        {
-          id: 10,
-          code: 'KG',
-          name: 'Kilogram',
-          symbol: 'kg',
-          category: 'weight',
-          baseUnit: 'G',
-          conversionFactor: 1000,
-          isBase: false,
-          isActive: true,
-          description: '1000 grams'
-        },
-        // Special Units
-        {
-          id: 11,
-          code: 'VIAL',
-          name: 'Vial',
-          symbol: 'Vial',
-          category: 'special',
-          baseUnit: 'NOS',
-          conversionFactor: 1,
-          isBase: false,
-          isActive: true,
-          description: 'Single vial container'
-        },
-        {
-          id: 12,
-          code: 'TUBE',
-          name: 'Tube',
-          symbol: 'Tube',
-          category: 'special',
-          baseUnit: 'NOS',
-          conversionFactor: 1,
-          isBase: false,
-          isActive: true,
-          description: 'Single tube container'
-        }
-        ];
-      }
-      
-      setUnits(unitData);
+      setUnits(unitData || []);
     } catch (error) {
       console.error('Error loading units:', error);
       setError('Failed to load units. Please try again.');
-      // Use empty array on error
       setUnits([]);
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  // Handle refresh
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    setError(null);
+    try {
+      await loadUnits();
+    } catch (error) {
+      console.error('Refresh failed:', error);
+      setError('Failed to refresh data');
+    } finally {
+      setRefreshing(false);
     }
   };
 
@@ -216,9 +76,9 @@ const UnitMaster = ({ open, onClose }) => {
 
   const filteredUnits = units.filter(unit => {
     const matchesSearch = searchTerm === '' ||
-                         unit.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         unit.code.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         unit.symbol.toLowerCase().includes(searchTerm.toLowerCase());
+                         unit.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                         unit.code?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                         unit.symbol?.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesCategory = filterCategory === 'all' || unit.category === filterCategory;
     return matchesSearch && matchesCategory;
   });
@@ -273,28 +133,6 @@ const UnitMaster = ({ open, onClose }) => {
     } catch (error) {
       console.error('Error saving unit:', error);
       setError('Failed to save unit. Please try again.');
-      // Fallback to local state update
-      if (editingUnit) {
-        setUnits(prev => prev.map(u => 
-          u.id === editingUnit.id 
-            ? { ...u, ...formData, isBase: !formData.baseUnit, conversionFactor: parseFloat(formData.conversionFactor) || 1 }
-            : u
-        ));
-      } else {
-        const newUnit = {
-          ...formData,
-          id: Date.now(),
-          isBase: !formData.baseUnit,
-          conversionFactor: parseFloat(formData.conversionFactor) || 1
-        };
-        setUnits(prev => [...prev, newUnit]);
-      }
-      setSuccessMessage('Unit saved locally.');
-      setTimeout(() => {
-        setSuccessMessage('');
-        setError(null);
-      }, 3000);
-      handleCloseModal();
     }
   };
 
@@ -313,27 +151,41 @@ const UnitMaster = ({ open, onClose }) => {
     setShowAddModal(true);
   };
 
-  const handleDelete = (id) => {
+  const handleDelete = async (id) => {
     const unit = units.find(u => u.id === id);
     // Check if any other unit depends on this unit
     const dependentUnits = units.filter(u => u.baseUnit === unit.code);
     
     if (dependentUnits.length > 0) {
-      alert(`Cannot delete ${unit.name}. ${dependentUnits.length} units depend on it.`);
+      setError(`Cannot delete ${unit.name}. ${dependentUnits.length} units depend on it.`);
       return;
     }
     
     if (window.confirm('Are you sure you want to delete this unit?')) {
-      setUnits(prev => prev.filter(u => u.id !== id));
-      setSuccessMessage('Unit deleted successfully!');
-      setTimeout(() => setSuccessMessage(''), 3000);
+      try {
+        await settingsApi.units.delete(id);
+        setSuccessMessage('Unit deleted successfully!');
+        await loadUnits();
+        setTimeout(() => setSuccessMessage(''), 3000);
+      } catch (error) {
+        console.error('Error deleting unit:', error);
+        setError('Failed to delete unit. Please try again.');
+      }
     }
   };
 
-  const handleToggleActive = (id) => {
-    setUnits(prev => prev.map(u => 
-      u.id === id ? { ...u, isActive: !u.isActive } : u
-    ));
+  const handleToggleActive = async (id) => {
+    try {
+      const unit = units.find(u => u.id === id);
+      const updatedUnit = { ...unit, isActive: !unit.isActive };
+      await settingsApi.units.update(id, updatedUnit);
+      setSuccessMessage(`Unit ${updatedUnit.isActive ? 'activated' : 'deactivated'} successfully!`);
+      await loadUnits();
+      setTimeout(() => setSuccessMessage(''), 3000);
+    } catch (error) {
+      console.error('Error updating unit status:', error);
+      setError('Failed to update unit status. Please try again.');
+    }
   };
 
   const handleCloseModal = () => {
@@ -353,12 +205,14 @@ const UnitMaster = ({ open, onClose }) => {
 
   const handleExport = () => {
     // TODO: Implement export functionality
-    alert('Export functionality coming soon!');
+    setError('Export functionality coming soon!');
+    setTimeout(() => setError(null), 3000);
   };
 
   const handleImport = () => {
     // TODO: Implement import functionality
-    alert('Import functionality coming soon!');
+    setError('Import functionality coming soon!');
+    setTimeout(() => setError(null), 3000);
   };
 
   const getCategoryColor = (category) => {
@@ -399,6 +253,8 @@ const UnitMaster = ({ open, onClose }) => {
     return chain.reverse();
   };
 
+  if (!open) return null;
+
   return (
     <div className="flex-1 flex flex-col bg-gray-50 h-full overflow-hidden">
       {/* Header */}
@@ -410,6 +266,14 @@ const UnitMaster = ({ open, onClose }) => {
             <span className="text-sm text-gray-500">({units.length} units)</span>
           </div>
           <div className="flex items-center space-x-3">
+            <button
+              onClick={handleRefresh}
+              disabled={refreshing}
+              className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 flex items-center space-x-2 disabled:opacity-50"
+            >
+              {refreshing ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
+              <span>{refreshing ? 'Refreshing...' : 'Refresh'}</span>
+            </button>
             <button
               onClick={handleImport}
               className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 flex items-center space-x-2"
@@ -465,6 +329,12 @@ const UnitMaster = ({ open, onClose }) => {
         <div className="mx-6 mt-4 bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg flex items-center">
           <AlertCircle className="w-5 h-5 mr-2" />
           {error}
+          <button
+            onClick={() => setError(null)}
+            className="ml-auto text-red-400 hover:text-red-600"
+          >
+            <X className="w-4 h-4" />
+          </button>
         </div>
       )}
       
@@ -472,6 +342,12 @@ const UnitMaster = ({ open, onClose }) => {
         <div className="mx-6 mt-4 bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded-lg flex items-center">
           <Check className="w-5 h-5 mr-2" />
           {successMessage}
+          <button
+            onClick={() => setSuccessMessage('')}
+            className="ml-auto text-green-400 hover:text-green-600"
+          >
+            <X className="w-4 h-4" />
+          </button>
         </div>
       )}
 
@@ -481,6 +357,16 @@ const UnitMaster = ({ open, onClose }) => {
           <div className="flex items-center justify-center h-64">
             <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
             <span className="ml-2 text-gray-600">Loading units...</span>
+          </div>
+        ) : filteredUnits.length === 0 ? (
+          <div className="flex items-center justify-center h-64">
+            <div className="text-center">
+              <Ruler className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+              <p className="text-gray-600">No units found</p>
+              {searchTerm && (
+                <p className="text-sm text-gray-500 mt-2">Try adjusting your search criteria</p>
+              )}
+            </div>
           </div>
         ) : (
           <div className="bg-white rounded-lg border border-gray-200 h-full flex flex-col">

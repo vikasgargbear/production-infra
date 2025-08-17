@@ -15,8 +15,13 @@ import {
   Upload,
   Trash2,
   Plus,
-  Minus
+  Minus,
+  Loader2,
+  RefreshCw,
+  AlertCircle
 } from 'lucide-react';
+import { customersApi, invoicesApi, paymentsApi } from './services/api';
+import offlineStorage from './services/offlineStorage';
 
 const PaymentEntryModal = ({ open, onClose }) => {
   const [activeTab, setActiveTab] = useState('simple');
@@ -27,6 +32,12 @@ const PaymentEntryModal = ({ open, onClose }) => {
   const [selectedInvoices, setSelectedInvoices] = useState([]);
   const [loading, setLoading] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
+  const [customers, setCustomers] = useState([]);
+  const [customerInvoices, setCustomerInvoices] = useState([]);
+  const [loadingCustomers, setLoadingCustomers] = useState(false);
+  const [loadingInvoices, setLoadingInvoices] = useState(false);
+  const [error, setError] = useState(null);
+  const [refreshing, setRefreshing] = useState(false);
   const fileInputRef = useRef(null);
   
   const [paymentData, setPaymentData] = useState({
@@ -70,51 +81,131 @@ const PaymentEntryModal = ({ open, onClose }) => {
     { id: 'card', name: 'Card', icon: CreditCard, color: 'pink' }
   ];
 
-  // Sample customers
-  const customers = [
-    {
-      id: 'CUST001',
-      name: 'Rajesh Medical Store',
-      phone: '+91 98765 43210',
-      email: 'rajesh@medical.com',
-      totalOutstanding: 450000,
-      overdueAmount: 120000
-    },
-    {
-      id: 'CUST002',
-      name: 'City Hospital Pharmacy',
-      phone: '+91 98765 43211',
-      email: 'pharmacy@cityhospital.com',
-      totalOutstanding: 850000,
-      overdueAmount: 250000
+  // Load customers with offline fallback
+  const loadCustomers = async () => {
+    setLoadingCustomers(true);
+    setError(null);
+    
+    try {
+      const response = await customersApi.getAll();
+      
+      if (response?.data && Array.isArray(response.data)) {
+        setCustomers(response.data);
+        
+        // Store data offline for future use
+        await offlineStorage.storeOffline('customers', response.data, { 
+          persistent: true 
+        });
+      } else {
+        setCustomers([]);
+      }
+      
+    } catch (err) {
+      console.error('Error loading customers:', err);
+      
+      // Try to load from offline storage instead of using mock data
+      const offlineData = await offlineStorage.getOffline('customers', { persistent: true });
+      
+      if (offlineData && !offlineStorage.isDataStale(offlineData, 60)) { // 1 hour max for customer data
+        console.log('📱 Using offline customer data');
+        setCustomers(offlineData.data);
+        setError('Currently using offline data. Some information may be outdated.');
+      } else {
+        // No offline data available - show proper error instead of mock data
+        setError('Unable to load customers. Please check your connection and try again.');
+        setCustomers([]);
+      }
+    } finally {
+      setLoadingCustomers(false);
     }
-  ];
+  };
 
-  // Sample invoices
-  const sampleInvoices = [
-    {
-      id: 'INV-2401',
-      date: '2024-01-05',
-      amount: 150000,
-      balance: 150000,
-      daysOverdue: 0,
-      status: 'pending'
-    },
-    {
-      id: 'INV-2389',
-      date: '2023-12-15',
-      amount: 250000,
-      balance: 150000,
-      daysOverdue: 16,
-      status: 'partial'
+  // Load customer invoices with offline fallback
+  const loadCustomerInvoices = async (customerId) => {
+    if (!customerId) {
+      setCustomerInvoices([]);
+      return;
     }
-  ];
+    
+    setLoadingInvoices(true);
+    setError(null);
+    
+    try {
+      const response = await invoicesApi.getOutstanding({ customer_id: customerId });
+      
+      if (response?.data && Array.isArray(response.data)) {
+        setCustomerInvoices(response.data);
+        
+        // Store data offline for future use
+        await offlineStorage.storeOffline(`customer_invoices_${customerId}`, response.data, { 
+          persistent: true 
+        });
+      } else {
+        setCustomerInvoices([]);
+      }
+      
+    } catch (err) {
+      console.error('Error loading customer invoices:', err);
+      
+      // Try to load from offline storage instead of using mock data
+      const offlineData = await offlineStorage.getOffline(`customer_invoices_${customerId}`, { persistent: true });
+      
+      if (offlineData && !offlineStorage.isDataStale(offlineData, 30)) { // 30 minutes max for invoice data
+        console.log('📱 Using offline customer invoice data');
+        setCustomerInvoices(offlineData.data);
+        setError('Currently using offline data. Some information may be outdated.');
+      } else {
+        // No offline data available - show proper error instead of mock data
+        setError('Unable to load customer invoices. Please check your connection and try again.');
+        setCustomerInvoices([]);
+      }
+    } finally {
+      setLoadingInvoices(false);
+    }
+  };
 
+  // Refresh data
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    setError(null);
+    
+    try {
+      await loadCustomers();
+      if (selectedCustomer) {
+        await loadCustomerInvoices(selectedCustomer.id);
+      }
+    } catch (error) {
+      console.error('Error refreshing data:', error);
+      setError('Failed to refresh data. Please try again.');
+    } finally {
+      setRefreshing(false);
+    }
+  };
+
+  // Load data when component mounts
   useEffect(() => {
     if (open) {
-      resetForm();
+      loadCustomers();
     }
   }, [open]);
+
+  // Load invoices when customer changes
+  useEffect(() => {
+    if (selectedCustomer) {
+      loadCustomerInvoices(selectedCustomer.id);
+    } else {
+      setCustomerInvoices([]);
+    }
+  }, [selectedCustomer]);
+
+  // Clear old offline data periodically
+  useEffect(() => {
+    const interval = setInterval(() => {
+      offlineStorage.clearOldData(24); // Clear data older than 24 hours
+    }, 60 * 60 * 1000); // Check every hour
+
+    return () => clearInterval(interval);
+  }, []);
 
   const resetForm = () => {
     setActiveTab('simple');
@@ -186,12 +277,22 @@ const PaymentEntryModal = ({ open, onClose }) => {
             </h2>
             <p className="text-blue-100 mt-1">Record customer payments quickly</p>
           </div>
-          <button
-            onClick={onClose}
-            className="p-2 hover:bg-white/20 rounded-lg transition-colors"
-          >
-            <X className="w-6 h-6" />
-          </button>
+          <div className="flex items-center space-x-2">
+            <button
+              onClick={handleRefresh}
+              disabled={refreshing}
+              className="p-2 hover:bg-white/20 rounded-lg transition-colors disabled:opacity-50"
+              title="Refresh data"
+            >
+              <RefreshCw className={`w-5 h-5 ${refreshing ? 'animate-spin' : ''}`} />
+            </button>
+            <button
+              onClick={onClose}
+              className="p-2 hover:bg-white/20 rounded-lg transition-colors"
+            >
+              <X className="w-6 h-6" />
+            </button>
+          </div>
         </div>
         
         {/* Tabs */}
@@ -222,6 +323,40 @@ const PaymentEntryModal = ({ open, onClose }) => {
       {/* Content */}
       <div className="flex-1 overflow-y-auto p-6">
         <div className="max-w-4xl mx-auto space-y-6">
+          
+          {/* Error Display */}
+          {error && (
+            <div className="bg-red-50 border border-red-200 px-4 py-3 rounded-lg">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center">
+                  <AlertCircle className="h-4 w-4 text-red-600 mr-2" />
+                  <span className="text-red-800 text-sm">{error}</span>
+                </div>
+                <button
+                  onClick={() => setError(null)}
+                  className="text-sm text-red-600 hover:text-red-800 underline"
+                >
+                  Dismiss
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Loading States */}
+          {loadingCustomers && (
+            <div className="flex items-center justify-center py-8">
+              <Loader2 className="w-6 h-6 animate-spin text-blue-600 mr-2" />
+              <span className="text-gray-600">Loading customers...</span>
+            </div>
+          )}
+
+          {loadingInvoices && selectedCustomer && (
+            <div className="flex items-center justify-center py-4">
+              <Loader2 className="w-4 h-4 animate-spin text-blue-600 mr-2" />
+              <span className="text-gray-600">Loading invoices...</span>
+            </div>
+          )}
+
           {/* Customer Selection */}
           <div className="bg-white rounded-xl border border-gray-200 p-6">
             <h3 className="text-lg font-semibold mb-4">Customer Details</h3>
@@ -583,7 +718,7 @@ const PaymentEntryModal = ({ open, onClose }) => {
             <div className="bg-white rounded-xl border border-gray-200 p-6">
               <h3 className="text-lg font-semibold mb-4">Select Invoices</h3>
               <div className="space-y-3">
-                {sampleInvoices.map(invoice => {
+                {customerInvoices.map(invoice => {
                   const isSelected = selectedInvoices.find(inv => inv.id === invoice.id);
                   
                   return (

@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import {
-  BarChart3, Download, Filter, Calendar, TrendingUp,
+  BarChart3, Download, TrendingUp,
   TrendingDown, Package, AlertTriangle, DollarSign,
-  FileText, ChevronRight, X
+  FileText, ChevronRight, X, Loader2, RefreshCw, AlertCircle
 } from 'lucide-react';
-import { stockApi } from '../../services/api';
+import { productsApi } from '../../services/api/modules/products.api';
+import { stockApi } from '../../services/api/modules/stock.api';
 import { formatCurrency } from '../../utils/formatters';
 import { DatePicker, Select, SummaryCard, DataTable, ModuleHeader } from '../global';
 
@@ -24,6 +25,11 @@ const StockReport = ({ open = true, onClose }) => {
     deadStock: 0,
     fastMoving: 0
   });
+  
+  // API data states
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState(null);
+  const [refreshing, setRefreshing] = useState(false);
 
   const reportTypes = [
     { value: 'summary', label: 'Stock Summary', icon: BarChart3 },
@@ -31,7 +37,7 @@ const StockReport = ({ open = true, onClose }) => {
     { value: 'movement', label: 'Movement Analysis', icon: TrendingUp },
     { value: 'expiry', label: 'Expiry Report', icon: AlertTriangle },
     { value: 'abc', label: 'ABC Analysis', icon: Package },
-    { value: 'aging', label: 'Stock Aging', icon: Calendar }
+    { value: 'aging', label: 'Stock Aging', icon: FileText }
   ];
 
   useEffect(() => {
@@ -39,58 +45,55 @@ const StockReport = ({ open = true, onClose }) => {
   }, [reportType, dateRange]);
 
   const loadReportData = async () => {
-    setLoading(true);
+    setIsLoading(true);
+    setError(null);
     try {
       let response;
       
       switch (reportType) {
         case 'summary':
-          const [stockData, alerts] = await Promise.all([
-            stockApi.getCurrentStock({ include_valuation: true }),
-            stockApi.getStockAlerts()
-          ]);
-          
-          const stock = stockData.data || [];
-          const alertData = alerts.data || {};
+          // Load products data for summary
+          const productsResponse = await productsApi.getAll();
+          const products = productsResponse.data || [];
           
           setSummaryData({
-            totalValue: stock.reduce((sum, item) => sum + (item.stock_value || 0), 0),
-            totalProducts: stock.length,
-            lowStockItems: stock.filter(item => item.low_stock).length,
-            expiringItems: stock.filter(item => item.expiry_alert).length,
-            deadStock: stock.filter(item => item.current_stock === 0).length,
-            fastMoving: stock.filter(item => item.movement_rate === 'fast').length
+            totalValue: products.reduce((sum, item) => sum + ((item.current_stock || 0) * (item.cost_price || 0)), 0),
+            totalProducts: products.length,
+            lowStockItems: products.filter(item => (item.current_stock || 0) <= (item.reorder_level || 0)).length,
+            expiringItems: products.filter(item => item.expiry_alert).length,
+            deadStock: products.filter(item => (item.current_stock || 0) === 0).length,
+            fastMoving: products.filter(item => item.movement_rate === 'fast').length
           });
           
-          setReportData(stock);
+          setReportData(products);
           break;
           
         case 'valuation':
-          response = await stockApi.getValuation({
-            start_date: dateRange.startDate.toISOString(),
-            end_date: dateRange.endDate.toISOString()
-          });
-          setReportData(response.data);
+          // Use products data for valuation
+          const valuationResponse = await productsApi.getAll();
+          const valuationData = valuationResponse.data || [];
+          setReportData(valuationData.map(item => ({
+            ...item,
+            stock_value: (item.current_stock || 0) * (item.cost_price || 0)
+          })));
           break;
           
         case 'movement':
-          response = await stockApi.getMovementAnalysis({
-            start_date: dateRange.startDate.toISOString(),
-            end_date: dateRange.endDate.toISOString()
-          });
-          setReportData(response.data);
+          // Use products data for movement analysis
+          const movementResponse = await productsApi.getAll();
+          setReportData(movementResponse.data || []);
           break;
           
         case 'expiry':
-          response = await stockApi.getExpiryReport({
-            days_ahead: 180
-          });
-          setReportData(response.data);
+          // Use products data for expiry report
+          const expiryResponse = await productsApi.getAll();
+          setReportData(expiryResponse.data || []);
           break;
           
         case 'abc':
-          response = await stockApi.getABCAnalysis();
-          setReportData(response.data);
+          // Use products data for ABC analysis
+          const abcResponse = await productsApi.getAll();
+          setReportData(abcResponse.data || []);
           break;
           
         default:
@@ -98,9 +101,23 @@ const StockReport = ({ open = true, onClose }) => {
       }
     } catch (error) {
       console.error('Error loading report data:', error);
+      setError(error.message || 'Failed to load report data');
       setReportData([]);
     } finally {
-      setLoading(false);
+      setIsLoading(false);
+    }
+  };
+
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    setError(null);
+    try {
+      await loadReportData();
+    } catch (error) {
+      console.error('Refresh failed:', error);
+      setError('Failed to refresh data');
+    } finally {
+      setRefreshing(false);
     }
   };
 
@@ -419,6 +436,15 @@ const StockReport = ({ open = true, onClose }) => {
           iconColor="text-purple-600"
           onClose={onClose}
           historyType="stock"
+          additionalActions={[
+            {
+              label: "Refresh",
+              onClick: handleRefresh,
+              variant: "default",
+              icon: refreshing ? Loader2 : RefreshCw,
+              disabled: refreshing
+            }
+          ]}
         />
 
         {/* Keyboard Shortcuts Help */}
@@ -479,13 +505,7 @@ const StockReport = ({ open = true, onClose }) => {
           </div>
 
           {/* Report Content */}
-          {loading ? (
-            <div className="flex items-center justify-center h-64">
-              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
-            </div>
-          ) : (
-            renderReportContent()
-          )}
+          {renderReportContent()}
           </div>
         </div>
       </div>

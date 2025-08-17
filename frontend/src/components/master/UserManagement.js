@@ -4,9 +4,8 @@ import {
   Save, X, Shield, Clock, Key,
   Eye, EyeOff, Lock, Unlock, Loader2, AlertCircle, Check
 } from 'lucide-react';
-import { settingsApi } from '../../services/api/modules/settings.api';
+import { usersApi } from '../../services/api';
 import { 
-  USER_ROLES, 
   MODULES, 
   MODULE_INFO, 
   ROLE_INFO, 
@@ -23,7 +22,7 @@ const UserManagement = ({ open, onClose }) => {
   const [error, setError] = useState(null);
   const [successMessage, setSuccessMessage] = useState('');
   const [isSaving, setIsSaving] = useState(false);
-  const [isDemoMode, setIsDemoMode] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
   
   // User data
   const [users, setUsers] = useState([]);
@@ -43,10 +42,8 @@ const UserManagement = ({ open, onClose }) => {
     
     try {
       console.log('🔍 Calling API to load users...');
-      const response = await settingsApi.users.getAll();
+      const response = await usersApi.getAll();
       console.log('📥 Users API Response:', response);
-      console.log('📥 Response type:', typeof response);
-      console.log('📥 Response keys:', response ? Object.keys(response) : 'null response');
       
       // Handle different response formats
       let userData = [];
@@ -63,10 +60,13 @@ const UserManagement = ({ open, onClose }) => {
         userData = response;
       } else {
         console.log('⚠️ Unexpected response format:', response);
+        setError('No user data available');
+        setUsers([]);
+        return;
       }
       
       // Map API response to component format - works with both users and org_users tables
-      userData = userData.map(user => ({
+      const transformedUsers = userData.map(user => ({
         // Handle both table structures
         id: user.user_id || user.id,
         username: user.username || user.email?.split('@')[0] || user.employee_id || 'user',
@@ -90,85 +90,24 @@ const UserManagement = ({ open, onClose }) => {
         discountLimit: user.discount_limit_percent
       }));
       
-      setUsers(userData);
-      setIsDemoMode(false);
+      setUsers(transformedUsers);
     } catch (error) {
       console.error('Error loading users:', error);
-      
-      // Check if it's a database/backend error
-      console.log('Error status:', error.response?.status);
-      if (error.response?.status === 500 || error.response?.status === 404 || error.code === 'ERR_BAD_RESPONSE') {
-        console.log('Activating demo mode...');
-        setError('User management is currently unavailable. Using demo mode.');
-        setIsDemoMode(true);
-        
-        // Use mock data when backend fails
-        const mockUsers = [
-          {
-            id: 1,
-            username: 'admin',
-            fullName: 'Administrator',
-            email: 'admin@pharmaerp.com',
-            role: 'admin',
-            status: 'active',
-            lastLogin: new Date().toLocaleString(),
-            createdDate: '2024-01-01',
-            modules: Object.values(MODULES),
-            permissions: getRoleDefaults('admin').permissions,
-            department: 'Management',
-            canViewReports: true,
-            canModifyPrices: true,
-            canApproveDiscounts: true,
-            discountLimit: 100
-          },
-          {
-            id: 2,
-            username: 'manager_demo',
-            fullName: 'Demo Manager',
-            email: 'manager@pharmaerp.com',
-            role: 'manager',
-            status: 'active',
-            lastLogin: 'Yesterday',
-            createdDate: '2024-06-15',
-            modules: getRoleDefaults('manager').modules,
-            permissions: getRoleDefaults('manager').permissions,
-            department: 'Sales',
-            canViewReports: true,
-            canModifyPrices: true,
-            canApproveDiscounts: true,
-            discountLimit: 20
-          },
-          {
-            id: 3,
-            username: 'billing_demo',
-            fullName: 'Demo Billing Staff',
-            email: 'billing@pharmaerp.com',
-            role: 'billing',
-            status: 'active',
-            lastLogin: '2 hours ago',
-            createdDate: '2024-07-01',
-            modules: getRoleDefaults('billing').modules,
-            permissions: getRoleDefaults('billing').permissions,
-            department: 'Billing',
-            canViewReports: false,
-            canModifyPrices: false,
-            canApproveDiscounts: false,
-            discountLimit: 0
-          }
-        ];
-        
-        console.log('Setting mock users:', mockUsers);
-        setUsers(mockUsers);
-      } else {
-        setError('Failed to load users. Please try again.');
-        setUsers([]);
-      }
+      setError('Failed to load users. Please check your connection and try again.');
+      setUsers([]);
       
       // Show user-friendly error message
       setTimeout(() => setError(null), 10000);
     } finally {
       setIsLoading(false);
     }
+  };
+
+  // Refresh data
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    await loadUsers();
+    setRefreshing(false);
   };
 
   const roles = [
@@ -264,36 +203,10 @@ const UserManagement = ({ open, onClose }) => {
     e.preventDefault();
     console.log('Form submitted:', formData);
     console.log('Is editing:', editingUser);
-    console.log('Is demo mode:', isDemoMode);
     
     if (!editingUser && formData.password !== formData.confirmPassword) {
       setError('Passwords do not match!');
       setTimeout(() => setError(null), 5000);
-      return;
-    }
-    
-    if (isDemoMode) {
-      // In demo mode, just update local state
-      if (editingUser) {
-        setUsers(prev => prev.map(u => 
-          u.id === editingUser.id 
-            ? { ...u, ...formData, lastLogin: u.lastLogin }
-            : u
-        ));
-        setSuccessMessage('User updated successfully (Demo Mode)!');
-      } else {
-        const newUser = {
-          ...formData,
-          id: Date.now(),
-          lastLogin: 'Never',
-          createdDate: new Date().toISOString().split('T')[0]
-        };
-        setUsers(prev => [...prev, newUser]);
-        setSuccessMessage('User created successfully (Demo Mode)!');
-      }
-      
-      setTimeout(() => setSuccessMessage(''), 3000);
-      handleCloseModal();
       return;
     }
     
@@ -333,11 +246,11 @@ const UserManagement = ({ open, onClose }) => {
       
       if (editingUser) {
         // Update existing user
-        await settingsApi.users.update(editingUser.id, userData);
+        await usersApi.update(editingUser.id, userData);
         setSuccessMessage('User updated successfully!');
       } else {
         // Add new user
-        await settingsApi.users.create(userData);
+        await usersApi.create(userData);
         setSuccessMessage('User created successfully!');
       }
       
@@ -374,15 +287,10 @@ const UserManagement = ({ open, onClose }) => {
 
   const handleDelete = async (id) => {
     if (window.confirm('Are you sure you want to delete this user?')) {
-      if (isDemoMode) {
-        setUsers(prev => prev.filter(u => u.id !== id));
-        setSuccessMessage('User deleted successfully (Demo Mode)!');
-        setTimeout(() => setSuccessMessage(''), 3000);
-        return;
-      }
-      
+      setIsSaving(true);
+      setError(null);
       try {
-        await settingsApi.users.delete(id);
+        await usersApi.delete(id);
         setSuccessMessage('User deleted successfully!');
         await loadUsers();
         setTimeout(() => setSuccessMessage(''), 3000);
@@ -390,27 +298,20 @@ const UserManagement = ({ open, onClose }) => {
         console.error('Error deleting user:', error);
         setError('Failed to delete user. Please try again.');
         setTimeout(() => setError(null), 5000);
+      } finally {
+        setIsSaving(false);
       }
     }
   };
 
   const handleStatusToggle = async (userId) => {
-    if (isDemoMode) {
-      setUsers(prev => prev.map(u => 
-        u.id === userId 
-          ? { ...u, status: u.status === 'active' ? 'inactive' : 'active' }
-          : u
-      ));
-      setSuccessMessage('User status updated (Demo Mode)!');
-      setTimeout(() => setSuccessMessage(''), 3000);
-      return;
-    }
+    const user = users.find(u => u.id === userId);
+    if (!user) return;
     
+    setIsSaving(true);
+    setError(null);
     try {
-      const user = users.find(u => u.id === userId);
-      if (!user) return;
-      
-      await settingsApi.users.update(userId, {
+      await usersApi.update(userId, {
         is_active: user.status === 'inactive'
       });
       
@@ -421,25 +322,25 @@ const UserManagement = ({ open, onClose }) => {
       console.error('Error updating user status:', error);
       setError('Failed to update user status.');
       setTimeout(() => setError(null), 5000);
+    } finally {
+      setIsSaving(false);
     }
   };
 
   const handleResetPassword = async (userId) => {
     if (window.confirm('Are you sure you want to reset password for this user?')) {
-      if (isDemoMode) {
-        setSuccessMessage('Password reset email sent (Demo Mode)!');
-        setTimeout(() => setSuccessMessage(''), 5000);
-        return;
-      }
-      
+      setIsSaving(true);
+      setError(null);
       try {
-        await settingsApi.users.resetPassword(userId);
+        await usersApi.resetPassword(userId);
         setSuccessMessage('Password reset link sent to user email!');
         setTimeout(() => setSuccessMessage(''), 5000);
       } catch (error) {
         console.error('Error resetting password:', error);
         setError('Failed to reset password.');
         setTimeout(() => setError(null), 5000);
+      } finally {
+        setIsSaving(false);
       }
     }
   };
@@ -476,41 +377,31 @@ const UserManagement = ({ open, onClose }) => {
             <h1 className="text-2xl font-bold text-gray-900">User Management</h1>
             <span className="text-sm text-gray-500">({users.length} users)</span>
           </div>
-          <button
-            onClick={() => setShowAddModal(true)}
-            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center space-x-2"
-          >
-            <Plus className="w-4 h-4" />
-            <span>Add User</span>
-          </button>
+          <div className="flex items-center space-x-3">
+            <button
+              onClick={handleRefresh}
+              disabled={refreshing}
+              className="px-3 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2"
+            >
+              <Clock className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />
+              <span>{refreshing ? 'Refreshing...' : 'Refresh'}</span>
+            </button>
+            <button
+              onClick={() => setShowAddModal(true)}
+              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center space-x-2"
+            >
+              <Plus className="w-4 h-4" />
+              <span>Add User</span>
+            </button>
+          </div>
         </div>
       </div>
 
       {/* Demo Mode Banner */}
-      {isDemoMode && (
-        <div className="bg-yellow-50 border-b border-yellow-200 px-6 py-3">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center">
-              <AlertCircle className="h-5 w-5 text-yellow-600 mr-2" />
-              <span className="text-yellow-800">
-                <strong>Demo Mode:</strong> User management is running in demo mode. Changes won't be saved to the database.
-              </span>
-            </div>
-            <button
-              onClick={() => {
-                console.log('🔄 Retrying API connection...');
-                loadUsers();
-              }}
-              className="px-3 py-1 text-sm bg-yellow-600 text-white rounded hover:bg-yellow-700"
-            >
-              Retry Connection
-            </button>
-          </div>
-        </div>
-      )}
+      {/* Removed demo mode banner as it's no longer used */}
 
       {/* Messages */}
-      {error && !isDemoMode && (
+      {error && (
         <div className="mx-6 mt-4 p-4 bg-red-50 border border-red-200 rounded-lg flex items-center">
           <AlertCircle className="h-5 w-5 text-red-600 mr-2" />
           <span className="text-red-800">{error}</span>

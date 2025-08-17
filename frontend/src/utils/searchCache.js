@@ -267,6 +267,32 @@ class SearchCache {
     this.indexes.delete(type);
     this.preloadedData.delete(type);
   }
+
+  // Add item to preloaded data and update index
+  addItem(type, item) {
+    // Add to preloaded data
+    const currentData = this.preloadedData.get(type) || [];
+    const updatedData = [item, ...currentData]; // Add to beginning
+    this.preloadedData.set(type, updatedData);
+    
+    // Update search index
+    const index = this.indexes.get(type) || new Map();
+    const searchableFields = this.getSearchableFields(type, item);
+    
+    searchableFields.forEach(field => {
+      if (field) {
+        const tokens = this.tokenize(field.toLowerCase());
+        tokens.forEach(token => {
+          if (!index.has(token)) {
+            index.set(token, new Set());
+          }
+          index.get(token).add(item);
+        });
+      }
+    });
+    
+    this.indexes.set(type, index);
+  }
 }
 
 // Create singleton instance

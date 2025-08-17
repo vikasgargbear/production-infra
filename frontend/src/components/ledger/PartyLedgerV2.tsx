@@ -18,7 +18,8 @@ import {
   CreditCard,
   AlertCircle,
   Printer,
-  RefreshCw
+  RefreshCw,
+  Loader2
 } from 'lucide-react';
 import { format, parseISO, startOfMonth, endOfMonth } from 'date-fns';
 import { partyLedgerAPI } from '../../services/api';
@@ -70,9 +71,11 @@ const PartyLedgerV2: React.FC<PartyLedgerV2Props> = ({
   });
   const [transactionFilter, setTransactionFilter] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   // Fetch party details
-  const { data: partyDetails, isLoading: loadingDetails } = useQuery(
+  const { data: partyDetails, isLoading: loadingDetails, error: partyError, refetch } = useQuery(
     ['party-details', selectedParty?.id || initialPartyId],
     () => partyLedgerAPI.getPartyDetails(selectedParty?.id || initialPartyId),
     {
@@ -81,7 +84,7 @@ const PartyLedgerV2: React.FC<PartyLedgerV2Props> = ({
   );
 
   // Fetch ledger entries
-  const { data: ledgerData, isLoading: loadingLedger, refetch } = useQuery(
+  const { data: ledgerData, isLoading: loadingLedger, refetch: refetchLedger, error: ledgerError } = useQuery(
     ['party-ledger', selectedParty?.id || initialPartyId, dateRange, transactionFilter],
     () => partyLedgerAPI.getPartyLedger({
       party_id: selectedParty?.id || initialPartyId,
@@ -94,6 +97,28 @@ const PartyLedgerV2: React.FC<PartyLedgerV2Props> = ({
       enabled: !!(selectedParty?.id || initialPartyId)
     }
   );
+
+  const [refreshing, setRefreshing] = useState(false);
+
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    setError(null);
+    try {
+      await refetch();
+    } catch (error) {
+      console.error('Refresh failed:', error);
+      setError('Failed to refresh data');
+    } finally {
+      setRefreshing(false);
+    }
+  };
+
+  // Set error message when queries fail
+  React.useEffect(() => {
+    if (partyError || ledgerError) {
+      setError('Failed to load party ledger data');
+    }
+  }, [partyError, ledgerError]);
 
   // Filter entries based on search
   const filteredEntries = useMemo(() => {
@@ -214,6 +239,33 @@ const PartyLedgerV2: React.FC<PartyLedgerV2Props> = ({
         <div className="mb-6">
           <h1 className="text-2xl font-bold text-gray-800">Party Ledger</h1>
           <p className="text-gray-600">View transaction history and account balance</p>
+        </div>
+      )}
+
+      {/* Loading State */}
+      {(loadingDetails || loadingLedger) && (
+        <div className="bg-white rounded-lg shadow-sm border border-blue-200 p-8 mb-6">
+          <div className="text-center">
+            <Loader2 className="w-8 h-8 animate-spin mx-auto mb-4 text-blue-600" />
+            <p className="text-gray-600">Loading party ledger data...</p>
+          </div>
+        </div>
+      )}
+
+      {/* Error State */}
+      {error && (
+        <div className="bg-white rounded-lg shadow-sm border border-red-200 p-6 mb-6">
+          <div className="text-center max-w-md mx-auto">
+            <AlertCircle className="w-12 h-12 text-red-400 mx-auto mb-4" />
+            <h3 className="text-lg font-medium text-red-800 mb-2">Error</h3>
+            <p className="text-red-700 mb-4">{error}</p>
+            <button
+              onClick={() => refetch()}
+              className="px-4 py-2 bg-red-100 text-red-700 rounded-md hover:bg-red-200 text-sm"
+            >
+              Retry
+            </button>
+          </div>
         </div>
       )}
 
@@ -360,11 +412,16 @@ const PartyLedgerV2: React.FC<PartyLedgerV2Props> = ({
 
             <div className="flex gap-2">
               <button
-                onClick={() => refetch()}
+                onClick={handleRefresh}
                 className="px-4 py-2 bg-gray-100 text-gray-700 rounded-md hover:bg-gray-200 flex items-center gap-2"
+                disabled={loadingDetails || loadingLedger || refreshing}
               >
-                <RefreshCw className="h-4 w-4" />
-                Refresh
+                {loadingDetails || loadingLedger || refreshing ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <RefreshCw className="h-4 w-4" />
+                )}
+                {refreshing ? 'Refreshing...' : 'Refresh'}
               </button>
               <button
                 onClick={() => handleExport('pdf')}
@@ -388,6 +445,11 @@ const PartyLedgerV2: React.FC<PartyLedgerV2Props> = ({
       {/* Ledger Table */}
       {(selectedParty || initialPartyId) && (
         <div className="bg-white rounded-lg shadow">
+          {error && (
+            <div className="p-4 text-center text-red-600">
+              {error}
+            </div>
+          )}
           <DataTable
             columns={columns}
             data={filteredEntries}

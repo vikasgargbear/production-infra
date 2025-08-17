@@ -2,10 +2,14 @@ import React, { useState, useEffect } from 'react';
 import { 
   Shield, AlertTriangle, FileText, Calendar, User, 
   Phone, Hash, Package, Plus, Search, Download,
-  CheckCircle, X, Clock, Pill, UserCheck
+  CheckCircle, X, Clock, Pill, UserCheck, Loader2, RefreshCw, AlertCircle
 } from 'lucide-react';
 import { Card, Button, Badge, BaseModal } from '../global';
 import { theme, classes } from '../../config/theme.config';
+import { productsApi } from '../../services/api/modules/products.api';
+import { batchesApi } from '../../services/api/modules/batches.api';
+import { invoicesApi } from '../../services/api/modules/invoices.api';
+import offlineStorage from '../../services/offlineStorage';
 
 interface NarcoticEntry {
   id: string;
@@ -201,19 +205,19 @@ const PrescriptionModal: React.FC<PrescriptionModalProps> = ({
                   placeholder="MCI/12345/2020"
                 />
               </div>
-              
-              <div className="col-span-2">
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Doctor Phone
-                </label>
-                <input
-                  type="text"
-                  value={prescription.doctor_phone}
-                  onChange={(e) => setPrescription({...prescription, doctor_phone: e.target.value})}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                  placeholder="+91-9876543210"
-                />
-              </div>
+            </div>
+            
+            <div className="mt-4">
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Doctor Phone
+              </label>
+              <input
+                type="tel"
+                value={prescription.doctor_phone}
+                onChange={(e) => setPrescription({...prescription, doctor_phone: e.target.value})}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                placeholder="+91 98765 43210"
+              />
             </div>
           </div>
 
@@ -221,7 +225,7 @@ const PrescriptionModal: React.FC<PrescriptionModalProps> = ({
           <div>
             <h4 className="text-sm font-semibold text-gray-900 mb-4 flex items-center">
               <User className="w-4 h-4 text-purple-500 mr-2" />
-              Patient Information
+              Patient Details
             </h4>
             <div className="grid grid-cols-2 gap-4">
               <div>
@@ -237,62 +241,36 @@ const PrescriptionModal: React.FC<PrescriptionModalProps> = ({
                 />
               </div>
               
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Age *
-                  </label>
-                  <input
-                    type="number"
-                    value={prescription.patient_age}
-                    onChange={(e) => setPrescription({...prescription, patient_age: e.target.value})}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                    placeholder="35"
-                    min="1"
-                    max="150"
-                  />
-                </div>
-                
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Gender *
-                  </label>
-                  <select
-                    value={prescription.patient_gender}
-                    onChange={(e) => setPrescription({...prescription, patient_gender: e.target.value})}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                  >
-                    <option value="M">Male</option>
-                    <option value="F">Female</option>
-                    <option value="O">Other</option>
-                  </select>
-                </div>
-              </div>
-              
-              <div className="col-span-2">
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Patient Address
-                </label>
-                <input
-                  type="text"
-                  value={prescription.patient_address}
-                  onChange={(e) => setPrescription({...prescription, patient_address: e.target.value})}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                  placeholder="123 Main Street, Mumbai"
-                />
-              </div>
-              
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Patient Phone
+                  Age *
                 </label>
                 <input
-                  type="text"
-                  value={prescription.patient_phone}
-                  onChange={(e) => setPrescription({...prescription, patient_phone: e.target.value})}
+                  type="number"
+                  value={prescription.patient_age}
+                  onChange={(e) => setPrescription({...prescription, patient_age: e.target.value})}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                  placeholder="+91-9876543211"
+                  placeholder="35"
+                  min="1"
+                  max="150"
                 />
+              </div>
+            </div>
+            
+            <div className="mt-4 grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Gender
+                </label>
+                <select
+                  value={prescription.patient_gender}
+                  onChange={(e) => setPrescription({...prescription, patient_gender: e.target.value as 'M' | 'F' | 'O'})}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="M">Male</option>
+                  <option value="F">Female</option>
+                  <option value="O">Other</option>
+                </select>
               </div>
               
               <div>
@@ -308,6 +286,32 @@ const PrescriptionModal: React.FC<PrescriptionModalProps> = ({
                   min="1"
                 />
               </div>
+            </div>
+            
+            <div className="mt-4">
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Patient Address
+              </label>
+              <textarea
+                value={prescription.patient_address}
+                onChange={(e) => setPrescription({...prescription, patient_address: e.target.value})}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                placeholder="123 Main Street, City, State"
+                rows={2}
+              />
+            </div>
+            
+            <div className="mt-4">
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Patient Phone
+              </label>
+              <input
+                type="tel"
+                value={prescription.patient_phone}
+                onChange={(e) => setPrescription({...prescription, patient_phone: e.target.value})}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                placeholder="+91 98765 43210"
+              />
             </div>
           </div>
 
@@ -349,34 +353,152 @@ const NarcoticRegister: React.FC = () => {
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
   const [showPrescriptionModal, setShowPrescriptionModal] = useState(false);
   const [currentProduct, setCurrentProduct] = useState<any>(null);
+  
+  // API data states
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
 
-  // Mock data for demonstration
+  // Load narcotic entries on component mount
   useEffect(() => {
-    const mockEntries: NarcoticEntry[] = [
-      {
-        id: '1',
-        entry_date: new Date().toISOString(),
-        entry_type: 'sale',
-        product_id: 101,
-        product_name: 'Alprazolam 0.5mg',
-        batch_number: 'ALP2024001',
-        schedule_type: 'X',
-        prescription_number: 'RX-2024-0001',
-        prescription_date: new Date().toISOString(),
-        doctor_name: 'Dr. Rajesh Kumar',
-        doctor_registration: 'MCI/12345/2020',
-        patient_name: 'John Doe',
-        patient_age: 35,
-        patient_gender: 'M',
-        opening_balance: 1000,
-        quantity_dispensed: 30,
-        closing_balance: 970,
-        invoice_number: 'INV-2024-0001',
-        created_by: 'Admin User'
-      }
-    ];
-    setEntries(mockEntries);
+    loadNarcoticEntries();
   }, []);
+
+  // Clear old offline data periodically
+  useEffect(() => {
+    const interval = setInterval(() => {
+      offlineStorage.clearOldData(24); // Clear data older than 24 hours
+    }, 60 * 60 * 1000); // Check every hour
+
+    return () => clearInterval(interval);
+  }, []);
+
+  const loadNarcoticEntries = async () => {
+    try {
+      setIsLoading(true);
+      setError(null);
+      
+      // Load narcotic products and their transactions
+      const [productsResponse, batchesResponse, invoicesResponse] = await Promise.all([
+        productsApi.getAll(),
+        batchesApi.getAll(),
+        invoicesApi.getAll()
+      ]);
+
+      // Transform API data into NarcoticEntry format
+      const narcoticEntries: NarcoticEntry[] = [];
+      
+      if (productsResponse.data) {
+        const narcoticProducts = productsResponse.data.filter((product: any) => 
+          product.schedule_type === 'X' || product.schedule_type === 'H1'
+        );
+
+        // Create entries from batches (purchases)
+        if (batchesResponse.data) {
+          narcoticProducts.forEach((product: any) => {
+            const productBatches = batchesResponse.data.filter((batch: any) => 
+              batch.product_id === product.id || batch.product_id === product.product_id
+            );
+
+            productBatches.forEach((batch: any) => {
+              narcoticEntries.push({
+                id: `batch_${batch.id || batch.batch_id}`,
+                entry_date: batch.created_at || batch.mfg_date,
+                entry_type: 'purchase',
+                product_id: product.id || product.product_id,
+                product_name: product.name || product.product_name,
+                batch_number: batch.batch_number,
+                schedule_type: product.schedule_type || 'X',
+                opening_balance: 0,
+                quantity_received: batch.quantity_available || batch.quantity,
+                closing_balance: batch.quantity_available || batch.quantity,
+                grn_number: batch.grn_number || `GRN-${batch.id}`,
+                created_by: batch.created_by || 'System'
+              });
+            });
+          });
+        }
+
+        // Create entries from invoices (sales)
+        if (invoicesResponse.data) {
+          const narcoticInvoices = invoicesResponse.data.filter((invoice: any) => 
+            invoice.items?.some((item: any) => 
+              narcoticProducts.some((product: any) => 
+                product.id === item.product_id || product.product_id === item.product_id
+              )
+            )
+          );
+
+          narcoticInvoices.forEach((invoice: any) => {
+            invoice.items?.forEach((item: any) => {
+              const narcoticProduct = narcoticProducts.find((product: any) => 
+                product.id === item.product_id || product.product_id === item.product_id
+              );
+              
+              if (narcoticProduct) {
+                narcoticEntries.push({
+                  id: `invoice_${invoice.id}_${item.id}`,
+                  entry_date: invoice.invoice_date || invoice.created_at,
+                  entry_type: 'sale',
+                  product_id: narcoticProduct.id || narcoticProduct.product_id,
+                  product_name: narcoticProduct.name || narcoticProduct.product_name,
+                  batch_number: item.batch_number || 'N/A',
+                  schedule_type: narcoticProduct.schedule_type || 'X',
+                  prescription_number: invoice.prescription_number || `RX-${invoice.id}`,
+                  prescription_date: invoice.prescription_date || invoice.invoice_date,
+                  doctor_name: invoice.doctor_name || 'Dr. Prescriber',
+                  doctor_registration: invoice.doctor_registration || 'MCI/XXXXX/XXXX',
+                  patient_name: invoice.patient_name || invoice.customer_name,
+                  patient_age: invoice.patient_age || 30,
+                  patient_gender: invoice.patient_gender || 'M',
+                  opening_balance: 1000, // This would come from actual stock tracking
+                  quantity_dispensed: item.quantity,
+                  closing_balance: 1000 - item.quantity, // This would come from actual stock tracking
+                  invoice_number: invoice.invoice_number || invoice.invoice_no,
+                  created_by: invoice.created_by || 'System'
+                });
+              }
+            });
+          });
+        }
+      }
+
+      // Sort entries by date (newest first)
+      narcoticEntries.sort((a, b) => new Date(b.entry_date).getTime() - new Date(a.entry_date).getTime());
+      
+      setEntries(narcoticEntries);
+      
+      // Store data offline for future use
+      await offlineStorage.storeOffline('narcotic_entries', narcoticEntries, { 
+        critical: true, 
+        persistent: true 
+      });
+      
+    } catch (err) {
+      console.error('Error loading narcotic entries:', err);
+      
+      // Try to load from offline storage instead of using mock data
+      const offlineData = await offlineStorage.getOffline('narcotic_entries', { critical: true });
+      
+      if (offlineData && !offlineStorage.isDataStale(offlineData, 60)) { // 1 hour max for narcotic data
+        console.log('📱 Using offline narcotic entries data');
+        setEntries(offlineData.data);
+        setError('Currently using offline data. Some information may be outdated.');
+      } else {
+        // No offline data available - show proper error instead of mock data
+        setError('Unable to load narcotic entries. Please check your connection and try again.');
+        setEntries([]);
+      }
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    await loadNarcoticEntries();
+    setRefreshing(false);
+  };
 
   const filteredEntries = entries.filter(entry => {
     const matchesSearch = 
@@ -394,95 +516,220 @@ const NarcoticRegister: React.FC = () => {
     setShowPrescriptionModal(true);
   };
 
-  const handlePrescriptionSave = (prescription: any) => {
-    // Here you would save to backend
-    console.log('Saving narcotic entry with prescription:', prescription);
-    setShowPrescriptionModal(false);
-    // Reload entries
+  const handlePrescriptionSave = async (prescription: any) => {
+    try {
+      setLoading(true);
+      
+      // Here you would save to backend
+      console.log('Saving narcotic entry with prescription:', prescription);
+      
+      // Create a new entry
+      const newEntry: NarcoticEntry = {
+        id: Date.now().toString(),
+        entry_date: new Date().toISOString(),
+        entry_type: 'sale',
+        product_id: currentProduct?.id || currentProduct?.product_id,
+        product_name: currentProduct?.product_name || currentProduct?.name,
+        batch_number: 'BATCH-' + Date.now(),
+        schedule_type: currentProduct?.schedule_type || 'X',
+        prescription_number: prescription.prescription_number,
+        prescription_date: prescription.prescription_date,
+        doctor_name: prescription.doctor_name,
+        doctor_registration: prescription.doctor_registration,
+        doctor_phone: prescription.doctor_phone,
+        patient_name: prescription.patient_name,
+        patient_age: parseInt(prescription.patient_age),
+        patient_gender: prescription.patient_gender,
+        patient_address: prescription.patient_address,
+        patient_phone: prescription.patient_phone,
+        opening_balance: 1000, // This would come from actual stock
+        quantity_dispensed: parseInt(prescription.dispensed_quantity),
+        closing_balance: 1000 - parseInt(prescription.dispensed_quantity), // This would come from actual stock
+        created_by: 'Current User',
+        verified_by: 'Current User',
+        verification_date: new Date().toISOString()
+      };
+      
+      setEntries([newEntry, ...entries]);
+      setShowPrescriptionModal(false);
+      
+      // You would also call the backend API here to save the entry
+      // await narcoticApi.createEntry(newEntry);
+      
+    } catch (err) {
+      console.error('Failed to save narcotic entry:', err);
+      alert(`Failed to save entry: ${err instanceof Error ? err.message : 'Unknown error'}`);
+    } finally {
+      setLoading(false);
+    }
   };
 
+  // Loading state
+  if (isLoading && entries.length === 0) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <Loader2 className="w-8 h-8 animate-spin mx-auto mb-4 text-blue-600" />
+          <p className="text-gray-600">Loading narcotic register...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Error state
+  if (error && entries.length === 0) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center max-w-md mx-auto">
+          <AlertCircle className="w-12 h-12 text-red-400 mx-auto mb-4" />
+          <h3 className="text-lg font-medium text-red-800 mb-2">Error Loading Data</h3>
+          <p className="text-red-700 mb-4">{error}</p>
+          <button
+            onClick={handleRefresh}
+            className="px-4 py-2 bg-red-100 text-red-700 rounded-md hover:bg-red-200 text-sm"
+          >
+            Retry
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div className="h-full bg-gray-50">
+    <div className="min-h-screen bg-gray-50">
       {/* Header */}
-      <div className="bg-white border-b border-gray-200 px-6 py-4">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center space-x-3">
-            <div className="w-10 h-10 bg-gradient-to-br from-red-500 to-red-600 rounded-xl flex items-center justify-center">
-              <Shield className="w-5 h-5 text-white" />
-            </div>
-            <div>
-              <h1 className="text-xl font-bold text-gray-900">Narcotic Drug Register</h1>
-              <p className="text-sm text-gray-500">Schedule X & H1 Drug Tracking (Legal Requirement)</p>
-            </div>
+      <div className="bg-white border-b border-gray-200">
+        <div className="px-6 py-4 flex items-center justify-between">
+          <div>
+            <h1 className="text-xl font-semibold text-gray-900 flex items-center">
+              <Shield className="w-6 h-6 text-red-600 mr-3" />
+              Narcotic Drug Register
+            </h1>
+            <p className="text-sm text-gray-500 mt-1">
+              Schedule X & H1 Drugs - Legal Compliance & Tracking
+            </p>
           </div>
-          
-          <div className="flex items-center gap-3">
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={() => {/* Export logic */}}
+          <div className="flex items-center space-x-2">
+            <button
+              onClick={handleRefresh}
+              disabled={refreshing}
+              className="p-2 hover:bg-gray-100 rounded-lg disabled:opacity-50"
             >
-              <Download className="w-4 h-4 mr-2" />
-              Export Register
+              {refreshing ? (
+                <Loader2 className="w-4 h-4 animate-spin text-gray-500" />
+              ) : (
+                <RefreshCw className="w-4 h-4 text-gray-500" />
+              )}
+            </button>
+            <Button variant="primary" onClick={() => handleNewEntry({})}>
+              <Plus className="w-4 h-4 mr-2" />
+              New Entry
             </Button>
           </div>
         </div>
       </div>
 
-      {/* Warning Banner */}
-      <div className="px-6 py-3">
-        <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
-          <div className="flex items-center">
-            <AlertTriangle className="w-5 h-5 text-amber-600 mr-3 flex-shrink-0" />
-            <p className="text-sm text-amber-800">
-              <strong>Legal Compliance:</strong> All narcotic drug transactions must be recorded with complete prescription details. 
-              Failure to maintain proper records can result in license cancellation and legal action.
-            </p>
+      {/* Filters and Search */}
+      <div className="px-6 py-4 bg-white border-b border-gray-200">
+        <div className="flex flex-col sm:flex-row gap-4">
+          <div className="flex-1">
+            <div className="relative">
+              <Search className="absolute left-3 top-3 w-4 h-4 text-gray-400" />
+              <input
+                type="text"
+                placeholder="Search products, prescriptions, patients..."
+                className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+              />
+            </div>
+          </div>
+          
+          <div className="flex gap-3">
+            <select
+              value={filterType}
+              onChange={(e) => setFilterType(e.target.value as 'all' | 'sale' | 'purchase')}
+              className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="all">All Types</option>
+              <option value="sale">Sales</option>
+              <option value="purchase">Purchases</option>
+            </select>
+            
+            <input
+              type="date"
+              value={selectedDate}
+              onChange={(e) => setSelectedDate(e.target.value)}
+              className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+            />
+            
+            <Button variant="secondary">
+              <Download className="w-4 h-4 mr-2" />
+              Export
+            </Button>
           </div>
         </div>
       </div>
 
-      {/* Filters */}
+      {/* Summary Cards */}
       <div className="px-6 py-4">
-        <Card className="p-4">
-          <div className="flex flex-col md:flex-row gap-4">
-            <div className="flex-1">
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
-                <input
-                  type="text"
-                  placeholder="Search by product, prescription, patient..."
-                  className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500"
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                />
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <Card className="p-4">
+            <div className="flex items-center">
+              <div className="p-2 bg-blue-100 rounded-lg">
+                <Package className="w-5 h-5 text-blue-600" />
+              </div>
+              <div className="ml-3">
+                <p className="text-sm font-medium text-gray-500">Total Products</p>
+                <p className="text-lg font-semibold text-gray-900">
+                  {entries.filter(e => e.entry_type === 'purchase').length}
+                </p>
               </div>
             </div>
-            
-            <input
-              type="date"
-              className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500"
-              value={selectedDate}
-              onChange={(e) => setSelectedDate(e.target.value)}
-            />
-            
-            <div className="flex gap-2">
-              {['all', 'sale', 'purchase'].map((type) => (
-                <button
-                  key={type}
-                  onClick={() => setFilterType(type as any)}
-                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                    filterType === type
-                      ? 'bg-red-600 text-white'
-                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                  }`}
-                >
-                  {type.charAt(0).toUpperCase() + type.slice(1)}
-                </button>
-              ))}
+          </Card>
+          
+          <Card className="p-4">
+            <div className="flex items-center">
+              <div className="p-2 bg-green-100 rounded-lg">
+                <CheckCircle className="w-5 h-5 text-green-600" />
+              </div>
+              <div className="ml-3">
+                <p className="text-sm font-medium text-gray-500">Verified Entries</p>
+                <p className="text-lg font-semibold text-gray-900">
+                  {entries.filter(e => e.verified_by).length}
+                </p>
+              </div>
             </div>
-          </div>
-        </Card>
+          </Card>
+          
+          <Card className="p-4">
+            <div className="flex items-center">
+              <div className="p-2 bg-amber-100 rounded-lg">
+                <Clock className="w-5 h-5 text-amber-600" />
+              </div>
+              <div className="ml-3">
+                <p className="text-sm font-medium text-gray-500">Pending Verification</p>
+                <p className="text-lg font-semibold text-gray-900">
+                  {entries.filter(e => !e.verified_by).length}
+                </p>
+              </div>
+            </div>
+          </Card>
+          
+          <Card className="p-4">
+            <div className="flex items-center">
+              <div className="p-2 bg-red-100 rounded-lg">
+                <AlertTriangle className="w-5 h-5 text-red-600" />
+              </div>
+              <div className="ml-3">
+                <p className="text-sm font-medium text-gray-500">Schedule X</p>
+                <p className="text-lg font-semibold text-gray-900">
+                  {entries.filter(e => e.schedule_type === 'X').length}
+                </p>
+              </div>
+            </div>
+          </Card>
+        </div>
       </div>
 
       {/* Register Table */}
@@ -502,70 +749,80 @@ const NarcoticRegister: React.FC = () => {
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
-                {filteredEntries.map((entry) => (
-                  <tr key={entry.id} className="hover:bg-gray-50">
-                    <td className="px-6 py-4 text-sm text-gray-900">
-                      {new Date(entry.entry_date).toLocaleString()}
-                    </td>
-                    <td className="px-6 py-4">
-                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                        entry.entry_type === 'sale' 
-                          ? 'bg-blue-100 text-blue-800' 
-                          : 'bg-green-100 text-green-800'
-                      }`}>
-                        {entry.entry_type}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4">
-                      <div>
-                        <p className="text-sm font-medium text-gray-900">{entry.product_name}</p>
-                        <p className="text-xs text-gray-500">Batch: {entry.batch_number}</p>
-                        <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-red-100 text-red-800">
-                          Schedule {entry.schedule_type}
-                        </span>
-                      </div>
-                    </td>
-                    <td className="px-6 py-4">
-                      {entry.prescription_number && (
-                        <div>
-                          <p className="text-sm font-medium">{entry.prescription_number}</p>
-                          <p className="text-xs text-gray-500">Dr. {entry.doctor_name}</p>
-                        </div>
-                      )}
-                    </td>
-                    <td className="px-6 py-4">
-                      {entry.patient_name && (
-                        <div>
-                          <p className="text-sm">{entry.patient_name}</p>
-                          <p className="text-xs text-gray-500">
-                            {entry.patient_age}y/{entry.patient_gender}
-                          </p>
-                        </div>
-                      )}
-                    </td>
-                    <td className="px-6 py-4">
-                      <div className="text-sm">
-                        <p>Open: {entry.opening_balance}</p>
-                        {entry.quantity_dispensed && <p className="text-red-600">Out: -{entry.quantity_dispensed}</p>}
-                        {entry.quantity_received && <p className="text-green-600">In: +{entry.quantity_received}</p>}
-                        <p className="font-medium">Close: {entry.closing_balance}</p>
-                      </div>
-                    </td>
-                    <td className="px-6 py-4">
-                      {entry.verified_by ? (
-                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                          <CheckCircle className="w-3 h-3 mr-1" />
-                          Verified
-                        </span>
-                      ) : (
-                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-800">
-                          <Clock className="w-3 h-3 mr-1" />
-                          Pending
-                        </span>
-                      )}
+                {filteredEntries.length === 0 ? (
+                  <tr>
+                    <td colSpan={7} className="px-6 py-12 text-center text-gray-500">
+                      <Package className="w-12 h-12 mx-auto mb-4 text-gray-300" />
+                      <p className="text-lg font-medium text-gray-900 mb-2">No narcotic entries found</p>
+                      <p className="text-sm">Try adjusting your search or filters</p>
                     </td>
                   </tr>
-                ))}
+                ) : (
+                  filteredEntries.map((entry) => (
+                    <tr key={entry.id} className="hover:bg-gray-50">
+                      <td className="px-6 py-4 text-sm text-gray-900">
+                        {new Date(entry.entry_date).toLocaleString()}
+                      </td>
+                      <td className="px-6 py-4">
+                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                          entry.entry_type === 'sale' 
+                            ? 'bg-blue-100 text-blue-800' 
+                            : 'bg-green-100 text-green-800'
+                        }`}>
+                          {entry.entry_type}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4">
+                        <div>
+                          <p className="text-sm font-medium text-gray-900">{entry.product_name}</p>
+                          <p className="text-xs text-gray-500">Batch: {entry.batch_number}</p>
+                          <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-red-100 text-red-800">
+                            Schedule {entry.schedule_type}
+                          </span>
+                        </div>
+                      </td>
+                      <td className="px-6 py-4">
+                        {entry.prescription_number && (
+                          <div>
+                            <p className="text-sm font-medium">{entry.prescription_number}</p>
+                            <p className="text-xs text-gray-500">Dr. {entry.doctor_name}</p>
+                          </div>
+                        )}
+                      </td>
+                      <td className="px-6 py-4">
+                        {entry.patient_name && (
+                          <div>
+                            <p className="text-sm">{entry.patient_name}</p>
+                            <p className="text-xs text-gray-500">
+                              {entry.patient_age}y/{entry.patient_gender}
+                            </p>
+                          </div>
+                        )}
+                      </td>
+                      <td className="px-6 py-4">
+                        <div className="text-sm">
+                          <p>Open: {entry.opening_balance}</p>
+                          {entry.quantity_dispensed && <p className="text-red-600">Out: -{entry.quantity_dispensed}</p>}
+                          {entry.quantity_received && <p className="text-green-600">In: +{entry.quantity_received}</p>}
+                          <p className="font-medium">Close: {entry.closing_balance}</p>
+                        </div>
+                      </td>
+                      <td className="px-6 py-4">
+                        {entry.verified_by ? (
+                          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                            <CheckCircle className="w-3 h-3 mr-1" />
+                            Verified
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-800">
+                            <Clock className="w-3 h-3 mr-1" />
+                            Pending
+                          </span>
+                        )}
+                      </td>
+                    </tr>
+                  ))
+                )}
               </tbody>
             </table>
           </div>

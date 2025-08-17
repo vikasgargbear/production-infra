@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import {
   AlertTriangle, Package, ShoppingCart, TrendingDown,
-  Clock, Filter, Download, Bell, Settings, Edit2, X
+  Clock, Filter, Download, Bell, Settings, Edit2, X, Loader2, RefreshCw, AlertCircle
 } from 'lucide-react';
-import { stockApi } from '../../services/api';
+import { productsApi } from '../../services/api/modules/products.api';
+import { stockApi } from '../../services/api/modules/stock.api';
 import { formatCurrency } from '../../utils/formatters';
 import { DataTable, StatusBadge, Select, ModuleHeader } from '../global';
 
@@ -25,6 +26,11 @@ const LowStockAlert = ({ open = true, onClose }) => {
     expiringItems: 0,
     outOfStock: 0
   });
+  
+  // API data states
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState(null);
+  const [refreshing, setRefreshing] = useState(false);
 
   useEffect(() => {
     loadAlerts();
@@ -35,24 +41,22 @@ const LowStockAlert = ({ open = true, onClose }) => {
   }, [alerts, filterType]);
 
   const loadAlerts = async () => {
-    setLoading(true);
+    setIsLoading(true);
     try {
-      const [stockResponse, alertResponse] = await Promise.all([
-        stockApi.getCurrentStock({ include_batches: true }),
-        stockApi.getStockAlerts()
-      ]);
+      setError(null);
+      
+      // Load products with stock information
+      const productsResponse = await productsApi.getAll();
+      const products = productsResponse.data || [];
 
-      const stockData = stockResponse.data || [];
-      const alertData = alertResponse.data || {};
-
-      // Process stock data to identify alerts
+      // Process products to identify alerts
       const processedAlerts = [];
       let criticalCount = 0;
       let lowStockCount = 0;
       let expiringCount = 0;
       let outOfStockCount = 0;
 
-      stockData.forEach(item => {
+      products.forEach(item => {
         const alerts = [];
         let priority = 'low';
 
@@ -75,7 +79,7 @@ const LowStockAlert = ({ open = true, onClose }) => {
           lowStockCount++;
         }
 
-        // Check for expiring items
+        // Check for expiring items (if batch data is available)
         if (item.batches && item.batches.length > 0) {
           const today = new Date();
           const hasExpiring = item.batches.some(batch => {
@@ -119,9 +123,23 @@ const LowStockAlert = ({ open = true, onClose }) => {
       });
     } catch (error) {
       console.error('Error loading alerts:', error);
+      setError(error.message || 'Failed to load alerts');
       setAlerts([]);
     } finally {
-      setLoading(false);
+      setIsLoading(false);
+    }
+  };
+
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    setError(null);
+    try {
+      await loadAlerts();
+    } catch (error) {
+      console.error('Refresh failed:', error);
+      setError('Failed to refresh data');
+    } finally {
+      setRefreshing(false);
     }
   };
 
@@ -372,6 +390,13 @@ const LowStockAlert = ({ open = true, onClose }) => {
           historyType="stock"
           additionalActions={[
             {
+              label: "Refresh",
+              onClick: handleRefresh,
+              variant: "default",
+              icon: refreshing ? Loader2 : RefreshCw,
+              disabled: refreshing
+            },
+            {
               label: "Settings",
               icon: Settings,
               onClick: () => setShowSettings(!showSettings),
@@ -394,70 +419,98 @@ const LowStockAlert = ({ open = true, onClose }) => {
         {/* Content */}
         <div className="flex-1 overflow-y-auto">
           <div className="max-w-6xl mx-auto px-6 py-6">
-          {/* Alert Settings */}
-          {showSettings && (
-            <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-6">
-              <h3 className="text-lg font-medium text-gray-900 mb-4">Alert Settings</h3>
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Low Stock Threshold
-                  </label>
-                  <input
-                    type="number"
-                    value={alertSettings.lowStockThreshold}
-                    onChange={(e) => setAlertSettings({...alertSettings, lowStockThreshold: parseInt(e.target.value) || 0})}
-                    min="0"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    placeholder="Enter threshold"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Critical Stock Threshold
-                  </label>
-                  <input
-                    type="number"
-                    value={alertSettings.criticalStockThreshold}
-                    onChange={(e) => setAlertSettings({...alertSettings, criticalStockThreshold: parseInt(e.target.value) || 0})}
-                    min="0"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    placeholder="Enter threshold"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Expiry Alert Days
-                  </label>
-                  <input
-                    type="number"
-                    value={alertSettings.expiryAlertDays}
-                    onChange={(e) => setAlertSettings({...alertSettings, expiryAlertDays: parseInt(e.target.value) || 0})}
-                    min="1"
-                    max="365"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    placeholder="Enter days"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Notifications
-                  </label>
-                  <label className="flex items-center space-x-2 mt-2">
+            
+            {/* Alert Settings */}
+            {showSettings && (
+              <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-6">
+                <h3 className="text-lg font-medium text-gray-900 mb-4">Alert Settings</h3>
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Low Stock Threshold
+                    </label>
                     <input
-                      type="checkbox"
-                      checked={alertSettings.enableNotifications}
-                      onChange={(e) => setAlertSettings({...alertSettings, enableNotifications: e.target.checked})}
-                      className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                      type="number"
+                      value={alertSettings.lowStockThreshold}
+                      onChange={(e) => setAlertSettings({...alertSettings, lowStockThreshold: parseInt(e.target.value) || 0})}
+                      min="0"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      placeholder="Enter threshold"
                     />
-                    <span className="text-sm text-gray-700">Enable email alerts</span>
-                  </label>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Critical Stock Threshold
+                    </label>
+                    <input
+                      type="number"
+                      value={alertSettings.criticalStockThreshold}
+                      onChange={(e) => setAlertSettings({...alertSettings, criticalStockThreshold: parseInt(e.target.value) || 0})}
+                      min="0"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      placeholder="Enter threshold"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Expiry Alert Days
+                    </label>
+                    <input
+                      type="number"
+                      value={alertSettings.expiryAlertDays}
+                      onChange={(e) => setAlertSettings({...alertSettings, expiryAlertDays: parseInt(e.target.value) || 0})}
+                      min="1"
+                      max="365"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      placeholder="Enter days"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Notifications
+                    </label>
+                    <label className="flex items-center space-x-2 mt-2">
+                      <input
+                        type="checkbox"
+                        checked={alertSettings.enableNotifications}
+                        onChange={(e) => setAlertSettings({...alertSettings, enableNotifications: e.target.checked})}
+                        className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                      />
+                      <span className="text-sm text-gray-700">Enable email alerts</span>
+                    </label>
+                  </div>
                 </div>
               </div>
-            </div>
-          )}
+            )}
 
-          {/* Summary Stats */}
+            {/* Loading State */}
+            {isLoading && alerts.length === 0 && (
+              <div className="bg-white rounded-lg shadow-sm border border-blue-200 p-8 mb-6">
+                <div className="text-center">
+                  <Loader2 className="w-8 h-8 animate-spin mx-auto mb-4 text-blue-600" />
+                  <p className="text-gray-600">Loading stock alerts...</p>
+                </div>
+              </div>
+            )}
+
+            {/* Error State */}
+            {error && alerts.length === 0 && (
+              <div className="bg-white rounded-lg shadow-sm border border-red-200 p-6 mb-6">
+                <div className="text-center max-w-md mx-auto">
+                  <AlertCircle className="w-12 h-12 text-red-400 mx-auto mb-4" />
+                  <h3 className="text-lg font-medium text-red-800 mb-2">Error Loading Data</h3>
+                  <p className="text-red-700 mb-4">{error}</p>
+                  <button
+                    onClick={handleRefresh}
+                    className="px-4 py-2 bg-red-100 text-red-700 rounded-md hover:bg-red-200 text-sm"
+                  >
+                    Retry
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Summary Stats */}
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
             <div 
               onClick={() => setFilterType('out-of-stock')}
@@ -550,9 +603,22 @@ const LowStockAlert = ({ open = true, onClose }) => {
 
           {/* Alerts Table */}
           <div className="bg-white rounded-lg shadow-sm border border-gray-200">
-            {loading ? (
+            {isLoading ? (
               <div className="flex items-center justify-center h-64">
-                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+                <Loader2 className="w-12 h-12 text-blue-600 animate-spin" />
+                <span className="ml-2 text-gray-600">Loading alerts...</span>
+              </div>
+            ) : error ? (
+              <div className="flex flex-col items-center justify-center h-64 text-red-600">
+                <AlertCircle className="w-12 h-12 mb-3" />
+                <p className="text-center">{error}</p>
+                <button
+                  onClick={handleRefresh}
+                  className="mt-4 px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+                >
+                  <RefreshCw className="w-4 h-4 mr-2" />
+                  Refresh
+                </button>
               </div>
             ) : filteredAlerts.length > 0 ? (
               <DataTable

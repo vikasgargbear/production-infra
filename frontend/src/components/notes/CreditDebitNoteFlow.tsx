@@ -46,7 +46,7 @@ const CreditDebitNoteFlow: React.FC<CreditDebitNoteFlowProps> = ({ open = true, 
         <div className="flex-1">
           <CreditDebitFlow 
             noteType={noteType} 
-            onClose={onClose}
+            onClose={onClose || (() => {})}
           />
         </div>
       </div>

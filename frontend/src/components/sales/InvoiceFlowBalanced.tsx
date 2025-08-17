@@ -1,9 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { 
   Search, X, Plus, Minus, ArrowRight, Check, 
-  Calendar, User, Package, Receipt, ArrowLeft 
+  Calendar, User, Package, Receipt, ArrowLeft,
+  Loader2, AlertCircle, RefreshCw
 } from 'lucide-react';
-// import { Customer, Product } from '../../types/models';
+import { customersApi } from '../../services/api/modules/customers.api';
+import { productsApi } from '../../services/api/modules/products.api';
+import { invoicesApi } from '../../services/api/modules/invoices.api';
 
 interface Customer {
   id?: string | number;
@@ -50,27 +53,74 @@ const InvoiceFlowBalanced: React.FC<InvoiceFlowBalancedProps> = ({ onClose }) =>
   const [productSearch, setProductSearch] = useState('');
   const [invoiceDate, setInvoiceDate] = useState(new Date().toISOString().split('T')[0]);
   const [dueDate, setDueDate] = useState('');
+  
+  // API data states
+  const [customers, setCustomers] = useState<Customer[]>([]);
+  const [products, setProducts] = useState<Product[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
 
-  // Mock data
-  const mockCustomers: Customer[] = [
-    { id: 1, name: 'Apollo Pharmacy', phone: '9876543210', gstin: '27AABCA1234B1Z5', address: 'Mumbai, Maharashtra' },
-    { id: 2, name: 'MedPlus Healthcare', phone: '9876543211', gstin: '27AABCB1234B1Z6', address: 'Pune, Maharashtra' },
-    { id: 3, name: 'Wellness Forever', phone: '9876543212', gstin: '27AABCC1234B1Z7', address: 'Nashik, Maharashtra' },
-  ];
+  // Load data on component mount
+  useEffect(() => {
+    loadAllData();
+  }, []);
 
-  const mockProducts: Product[] = [
-    { id: 1, name: 'Paracetamol 500mg', price: 10, stock: 1000, hsn: '3004', unit: 'Strip' },
-    { id: 2, name: 'Amoxicillin 250mg', price: 25, stock: 500, hsn: '3004', unit: 'Strip' },
-    { id: 3, name: 'Vitamin C 100mg', price: 15, stock: 800, hsn: '3004', unit: 'Bottle' },
-    { id: 4, name: 'Cetirizine 10mg', price: 18, stock: 600, hsn: '3004', unit: 'Strip' },
-  ];
+  const loadAllData = async () => {
+    try {
+      setIsLoading(true);
+      setError(null);
+      
+      // Load customers and products concurrently
+      const [customersResponse, productsResponse] = await Promise.all([
+        customersApi.getAll(),
+        productsApi.getAll()
+      ]);
 
-  const filteredCustomers = mockCustomers.filter(c => 
-    c.name?.toLowerCase().includes(customerSearch.toLowerCase())
+      if (customersResponse.data) {
+        setCustomers(customersResponse.data);
+      }
+
+      if (productsResponse.data) {
+        setProducts(productsResponse.data);
+      }
+    } catch (err) {
+      console.error('Error loading data:', err);
+      setError(err instanceof Error ? err.message : 'Failed to load data');
+      
+      // Fallback to mock data for development
+      setCustomers([
+        { id: 1, name: 'Apollo Pharmacy', phone: '9876543210', gstin: '27AABCA1234B1Z5', address: 'Mumbai, Maharashtra' },
+        { id: 2, name: 'MedPlus Healthcare', phone: '9876543211', gstin: '27AABCB1234B1Z6', address: 'Pune, Maharashtra' },
+        { id: 3, name: 'Wellness Forever', phone: '9876543212', gstin: '27AABCC1234B1Z7', address: 'Nashik, Maharashtra' },
+      ]);
+
+      setProducts([
+        { id: 1, name: 'Paracetamol 500mg', price: 10, stock: 1000, hsn: '3004', unit: 'Strip' },
+        { id: 2, name: 'Amoxicillin 250mg', price: 25, stock: 500, hsn: '3004', unit: 'Strip' },
+        { id: 3, name: 'Vitamin C 100mg', price: 15, stock: 800, hsn: '3004', unit: 'Bottle' },
+        { id: 4, name: 'Cetirizine 10mg', price: 18, stock: 600, hsn: '3004', unit: 'Strip' },
+      ]);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    await loadAllData();
+    setRefreshing(false);
+  };
+
+  const filteredCustomers = customers.filter(c => 
+    c.name?.toLowerCase().includes(customerSearch.toLowerCase()) ||
+    c.customer_name?.toLowerCase().includes(customerSearch.toLowerCase()) ||
+    c.phone?.includes(customerSearch)
   );
 
-  const filteredProducts = mockProducts.filter(p => 
-    p.name?.toLowerCase().includes(productSearch.toLowerCase())
+  const filteredProducts = products.filter(p => 
+    p.name?.toLowerCase().includes(productSearch.toLowerCase()) ||
+    p.product_name?.toLowerCase().includes(productSearch.toLowerCase())
   );
 
   const addItem = (product: Product) => {
@@ -90,10 +140,10 @@ const InvoiceFlowBalanced: React.FC<InvoiceFlowBalancedProps> = ({ onClose }) =>
         id: Date.now().toString(),
         product,
         quantity: 1,
-        rate: product.price || 0,
+        rate: product.price || product.sale_price || product.mrp || 0,
         discount: 0,
         tax: 18,
-        amount: calculateItemAmount(1, product.price || 0, 0, 18),
+        amount: calculateItemAmount(1, product.price || product.sale_price || product.mrp || 0, 0, 18),
       };
       setItems([...items, newItem]);
     }
@@ -126,6 +176,42 @@ const InvoiceFlowBalanced: React.FC<InvoiceFlowBalancedProps> = ({ onClose }) =>
     setItems(items.filter(item => item.id !== itemId));
   };
 
+  const createInvoice = async () => {
+    try {
+      setIsLoading(true);
+      
+      if (!selectedCustomer) {
+        throw new Error('No customer selected');
+      }
+
+      const invoiceData = {
+        customer_id: selectedCustomer.id || selectedCustomer.customer_id,
+        invoice_date: invoiceDate,
+        due_date: dueDate || invoiceDate,
+        items: items.map(item => ({
+          product_id: item.product.id || item.product.product_id,
+          quantity: item.quantity,
+          rate: item.rate,
+          discount_percent: item.discount,
+          tax_percent: item.tax
+        })),
+        payment_terms: '30 days',
+        notes: 'Invoice created via balanced flow'
+      };
+
+      const response = await invoicesApi.create(invoiceData);
+      
+      if (response.data) {
+        setStep('done');
+      }
+    } catch (err) {
+      console.error('Failed to create invoice:', err);
+      alert(`Failed to create invoice: ${err instanceof Error ? err.message : 'Unknown error'}`);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   const subtotal = items.reduce((sum, item) => sum + (item.quantity * item.rate), 0);
   const totalDiscount = items.reduce((sum, item) => sum + ((item.quantity * item.rate * item.discount) / 100), 0);
   const taxableAmount = subtotal - totalDiscount;
@@ -136,6 +222,37 @@ const InvoiceFlowBalanced: React.FC<InvoiceFlowBalancedProps> = ({ onClose }) =>
     return sum + ((itemTaxable * item.tax) / 100);
   }, 0);
   const grandTotal = taxableAmount + totalTax;
+
+  // Loading state
+  if (isLoading && customers.length === 0) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <Loader2 className="w-8 h-8 animate-spin mx-auto mb-4 text-blue-600" />
+          <p className="text-gray-600">Loading invoice data...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Error state
+  if (error && customers.length === 0) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center max-w-md mx-auto">
+          <AlertCircle className="w-12 h-12 text-red-400 mx-auto mb-4" />
+          <h3 className="text-lg font-medium text-red-800 mb-2">Error Loading Data</h3>
+          <p className="text-red-700 mb-4">{error}</p>
+          <button
+            onClick={handleRefresh}
+            className="px-4 py-2 bg-red-100 text-red-700 rounded-md hover:bg-red-200 text-sm"
+          >
+            Retry
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   // Progress indicator
   const ProgressBar = () => {
@@ -175,11 +292,24 @@ const InvoiceFlowBalanced: React.FC<InvoiceFlowBalancedProps> = ({ onClose }) =>
               <h1 className="text-xl font-semibold text-gray-900">Create Invoice</h1>
               <p className="text-sm text-gray-500">Select customer and invoice details</p>
             </div>
-            {onClose && (
-              <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-lg">
-                <X className="w-5 h-5 text-gray-500" />
+            <div className="flex items-center space-x-2">
+              <button
+                onClick={handleRefresh}
+                disabled={refreshing}
+                className="p-2 hover:bg-gray-100 rounded-lg disabled:opacity-50"
+              >
+                {refreshing ? (
+                  <Loader2 className="w-4 h-4 animate-spin text-gray-500" />
+                ) : (
+                  <RefreshCw className="w-4 h-4 text-gray-500" />
+                )}
               </button>
-            )}
+              {onClose && (
+                <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-lg">
+                  <X className="w-5 h-5 text-gray-500" />
+                </button>
+              )}
+            </div>
           </div>
         </div>
 
@@ -207,21 +337,28 @@ const InvoiceFlowBalanced: React.FC<InvoiceFlowBalancedProps> = ({ onClose }) =>
               </div>
 
               <div className="space-y-2 max-h-64 overflow-y-auto">
-                {filteredCustomers.map((customer) => (
-                  <button
-                    key={customer.id}
-                    className={`w-full p-3 text-left border rounded-lg transition-colors ${
-                      selectedCustomer?.id === customer.id 
-                        ? 'border-blue-500 bg-blue-50' 
-                        : 'border-gray-200 hover:bg-gray-50'
-                    }`}
-                    onClick={() => setSelectedCustomer(customer)}
-                  >
-                    <div className="font-medium text-gray-900">{customer.name}</div>
-                    <div className="text-sm text-gray-500">{customer.phone}</div>
-                    {customer.gstin && <div className="text-xs text-gray-400">GSTIN: {customer.gstin}</div>}
-                  </button>
-                ))}
+                {filteredCustomers.length === 0 ? (
+                  <div className="text-center py-8 text-gray-500">
+                    <p>No customers found</p>
+                    <p className="text-sm">Try adjusting your search</p>
+                  </div>
+                ) : (
+                  filteredCustomers.map((customer) => (
+                    <button
+                      key={customer.id || customer.customer_id}
+                      className={`w-full p-3 text-left border rounded-lg transition-colors ${
+                        selectedCustomer?.id === customer.id 
+                          ? 'border-blue-500 bg-blue-50' 
+                          : 'border-gray-200 hover:bg-gray-50'
+                      }`}
+                      onClick={() => setSelectedCustomer(customer)}
+                    >
+                      <div className="font-medium text-gray-900">{customer.name || customer.customer_name}</div>
+                      <div className="text-sm text-gray-500">{customer.phone}</div>
+                      {customer.gstin && <div className="text-xs text-gray-400">GSTIN: {customer.gstin}</div>}
+                    </button>
+                  ))
+                )}
               </div>
             </div>
 
@@ -293,7 +430,7 @@ const InvoiceFlowBalanced: React.FC<InvoiceFlowBalancedProps> = ({ onClose }) =>
           <div className="px-6 py-4 flex items-center justify-between">
             <div>
               <h1 className="text-xl font-semibold text-gray-900">Add Items</h1>
-              <p className="text-sm text-gray-500">{selectedCustomer?.name}</p>
+              <p className="text-sm text-gray-500">{selectedCustomer?.name || selectedCustomer?.customer_name}</p>
             </div>
             {onClose && (
               <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-lg">
@@ -303,121 +440,126 @@ const InvoiceFlowBalanced: React.FC<InvoiceFlowBalancedProps> = ({ onClose }) =>
           </div>
         </div>
 
-        <div className="max-w-6xl mx-auto p-6">
+        <div className="max-w-4xl mx-auto p-6">
           <ProgressBar />
-
-          {/* Product Search */}
-          <div className="bg-white rounded-lg border border-gray-200 p-4 mb-4">
-            <div className="relative">
-              <Search className="absolute left-3 top-3 w-4 h-4 text-gray-400" />
-              <input
-                type="text"
-                placeholder="Search products to add..."
-                className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                value={productSearch}
-                onChange={(e) => setProductSearch(e.target.value)}
-                autoFocus
-              />
-            </div>
-            
-            {productSearch && (
-              <div className="mt-2 border border-gray-200 rounded-lg max-h-48 overflow-y-auto">
-                {filteredProducts.map((product) => (
-                  <button
-                    key={product.id}
-                    className="w-full p-3 text-left hover:bg-gray-50 border-b border-gray-100 last:border-b-0"
-                    onClick={() => addItem(product)}
-                  >
-                    <div className="flex justify-between items-center">
-                      <div>
-                        <div className="font-medium text-gray-900">{product.name}</div>
-                        <div className="text-sm text-gray-500">
-                          HSN: {product.hsn} | {product.unit} | Stock: {product.stock}
-                        </div>
-                      </div>
-                      <div className="text-right">
-                        <div className="font-medium text-gray-900">₹{product.price}</div>
-                        <div className="text-xs text-gray-500">+ 18% GST</div>
-                      </div>
-                    </div>
-                  </button>
-                ))}
+          
+          <div className="grid md:grid-cols-2 gap-6">
+            {/* Product Search */}
+            <div className="bg-white rounded-lg border border-gray-200 p-6">
+              <div className="flex items-center mb-4">
+                <Package className="w-5 h-5 text-gray-400 mr-2" />
+                <h2 className="text-base font-semibold text-gray-900">Add Products</h2>
               </div>
-            )}
-          </div>
+              
+              <div className="relative mb-4">
+                <Search className="absolute left-3 top-3 w-4 h-4 text-gray-400" />
+                <input
+                  type="text"
+                  placeholder="Search products..."
+                  className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  value={productSearch}
+                  onChange={(e) => setProductSearch(e.target.value)}
+                  autoFocus
+                />
+              </div>
+              
+              {productSearch && (
+                <div className="space-y-2 max-h-64 overflow-y-auto">
+                  {filteredProducts.length === 0 ? (
+                    <div className="text-center py-8 text-gray-500">
+                      <p>No products found</p>
+                      <p className="text-sm">Try adjusting your search</p>
+                    </div>
+                  ) : (
+                    filteredProducts.map((product) => (
+                      <button
+                        key={product.id || product.product_id}
+                        className="w-full p-3 text-left border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
+                        onClick={() => addItem(product)}
+                      >
+                        <div className="font-medium text-gray-900">{product.name || product.product_name}</div>
+                        <div className="text-sm text-gray-500">₹{product.price || product.sale_price || product.mrp}</div>
+                        {product.hsn && <div className="text-xs text-gray-400">HSN: {product.hsn}</div>}
+                      </button>
+                    ))
+                  )}
+                </div>
+              )}
+            </div>
 
-          {/* Items Table */}
-          {items.length > 0 && (
-            <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
-              <table className="w-full">
-                <thead>
-                  <tr className="bg-gray-50 border-b border-gray-200">
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Product</th>
-                    <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Qty</th>
-                    <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Rate</th>
-                    <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Disc %</th>
-                    <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Tax %</th>
-                    <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Amount</th>
-                    <th className="px-4 py-3"></th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-200">
-                  {items.map((item) => (
-                    <tr key={item.id}>
-                      <td className="px-4 py-3">
-                        <div className="font-medium text-gray-900">{item.product.name}</div>
-                        <div className="text-sm text-gray-500">HSN: {item.product.hsn}</div>
-                      </td>
-                      <td className="px-4 py-3">
-                        <div className="flex items-center justify-center gap-2">
-                          <button
-                            onClick={() => updateQuantity(item.id, -1)}
-                            className="p-1 hover:bg-gray-100 rounded"
-                          >
-                            <Minus className="w-4 h-4 text-gray-600" />
-                          </button>
-                          <span className="w-12 text-center font-medium">{item.quantity}</span>
-                          <button
-                            onClick={() => updateQuantity(item.id, 1)}
-                            className="p-1 hover:bg-gray-100 rounded"
-                          >
-                            <Plus className="w-4 h-4 text-gray-600" />
-                          </button>
-                        </div>
-                      </td>
-                      <td className="px-4 py-3 text-right">₹{item.rate}</td>
-                      <td className="px-4 py-3 text-right">{item.discount}%</td>
-                      <td className="px-4 py-3 text-right">{item.tax}%</td>
-                      <td className="px-4 py-3 text-right font-medium">₹{item.amount.toFixed(2)}</td>
-                      <td className="px-4 py-3">
+            {/* Selected Items */}
+            <div className="bg-white rounded-lg border border-gray-200 p-6">
+              <div className="flex items-center mb-4">
+                <Receipt className="w-5 h-5 text-gray-400 mr-2" />
+                <h2 className="text-base font-semibold text-gray-900">Selected Items</h2>
+              </div>
+              
+              <div className="space-y-3">
+                {items.length === 0 ? (
+                  <div className="text-center py-8 text-gray-500">
+                    <p>No items added yet</p>
+                    <p className="text-sm">Search and add products from the left panel</p>
+                  </div>
+                ) : (
+                  items.map((item) => (
+                    <div key={item.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                      <div className="flex-1">
+                        <div className="font-medium text-gray-900">{item.product.name || item.product.product_name}</div>
+                        <div className="text-sm text-gray-500">₹{item.rate} each</div>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <button
+                          onClick={() => updateQuantity(item.id, -1)}
+                          className="p-1 hover:bg-gray-200 rounded"
+                        >
+                          <Minus className="w-4 h-4 text-gray-600" />
+                        </button>
+                        <span className="w-8 text-center font-medium">{item.quantity}</span>
+                        <button
+                          onClick={() => updateQuantity(item.id, 1)}
+                          className="p-1 hover:bg-gray-200 rounded"
+                        >
+                          <Plus className="w-4 h-4 text-gray-600" />
+                        </button>
                         <button
                           onClick={() => removeItem(item.id)}
-                          className="p-1 hover:bg-gray-100 rounded"
+                          className="ml-2 p-1 hover:bg-gray-200 rounded"
                         >
                           <X className="w-4 h-4 text-gray-600" />
                         </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-              
-              {/* Summary */}
-              <div className="bg-gray-50 px-4 py-3 border-t border-gray-200">
-                <div className="flex justify-between items-center">
-                  <div className="text-sm text-gray-500">
-                    {items.length} item{items.length > 1 ? 's' : ''}
-                  </div>
-                  <div className="text-right">
-                    <span className="text-sm text-gray-500 mr-2">Total:</span>
-                    <span className="text-lg font-semibold text-gray-900">₹{grandTotal.toFixed(2)}</span>
-                  </div>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* Summary */}
+          {items.length > 0 && (
+            <div className="mt-6 bg-white rounded-lg border border-gray-200 p-6">
+              <h3 className="text-lg font-semibold text-gray-900 mb-4">Invoice Summary</h3>
+              <div className="grid md:grid-cols-4 gap-4 text-center">
+                <div className="bg-blue-50 rounded-lg p-4">
+                  <div className="text-2xl font-bold text-blue-600">{items.length}</div>
+                  <div className="text-sm text-blue-600">Items</div>
+                </div>
+                <div className="bg-green-50 rounded-lg p-4">
+                  <div className="text-2xl font-bold text-green-600">₹{subtotal.toFixed(2)}</div>
+                  <div className="text-sm text-green-600">Subtotal</div>
+                </div>
+                <div className="bg-yellow-50 rounded-lg p-4">
+                  <div className="text-2xl font-bold text-yellow-600">₹{totalTax.toFixed(2)}</div>
+                  <div className="text-sm text-yellow-600">Tax</div>
+                </div>
+                <div className="bg-purple-50 rounded-lg p-4">
+                  <div className="text-2xl font-bold text-purple-600">₹{grandTotal.toFixed(2)}</div>
+                  <div className="text-sm text-purple-600">Total</div>
                 </div>
               </div>
             </div>
           )}
 
-          {/* Navigation */}
           <div className="mt-6 flex justify-between">
             <button
               onClick={() => setStep('customer')}
@@ -435,7 +577,7 @@ const InvoiceFlowBalanced: React.FC<InvoiceFlowBalancedProps> = ({ onClose }) =>
                   : 'bg-gray-300 text-gray-500 cursor-not-allowed'
               }`}
             >
-              Review Invoice
+              Continue
               <ArrowRight className="w-4 h-4 ml-2" />
             </button>
           </div>
@@ -451,51 +593,53 @@ const InvoiceFlowBalanced: React.FC<InvoiceFlowBalancedProps> = ({ onClose }) =>
         <div className="bg-white border-b border-gray-200">
           <div className="px-6 py-4">
             <h1 className="text-xl font-semibold text-gray-900">Review Invoice</h1>
-            <p className="text-sm text-gray-500">Review and confirm invoice details</p>
+            <p className="text-sm text-gray-500">{selectedCustomer?.name || selectedCustomer?.customer_name}</p>
           </div>
         </div>
 
         <div className="max-w-4xl mx-auto p-6">
           <ProgressBar />
-
-          <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
-            {/* Invoice Header */}
-            <div className="px-6 py-4 bg-gray-50 border-b border-gray-200">
-              <div className="flex justify-between items-start">
+          
+          <div className="bg-white rounded-lg border border-gray-200">
+            {/* Header */}
+            <div className="px-6 py-4 border-b border-gray-200">
+              <div className="grid md:grid-cols-2 gap-6">
                 <div>
-                  <h2 className="text-lg font-semibold text-gray-900">Invoice #INV-2025-001</h2>
-                  <p className="text-sm text-gray-500">Date: {new Date(invoiceDate).toLocaleDateString()}</p>
-                  {dueDate && <p className="text-sm text-gray-500">Due: {new Date(dueDate).toLocaleDateString()}</p>}
+                  <h3 className="text-lg font-semibold text-gray-900">Customer Details</h3>
+                  <p className="text-gray-600">{selectedCustomer?.name || selectedCustomer?.customer_name}</p>
+                  <p className="text-gray-600">{selectedCustomer?.phone}</p>
+                  {selectedCustomer?.gstin && <p className="text-gray-600">GSTIN: {selectedCustomer.gstin}</p>}
                 </div>
                 <div className="text-right">
-                  <p className="font-medium text-gray-900">{selectedCustomer?.name}</p>
-                  <p className="text-sm text-gray-500">{selectedCustomer?.phone}</p>
-                  {selectedCustomer?.gstin && <p className="text-sm text-gray-500">GSTIN: {selectedCustomer.gstin}</p>}
+                  <h3 className="text-lg font-semibold text-gray-900">Invoice Details</h3>
+                  <p className="text-gray-600">Date: {invoiceDate}</p>
+                  {dueDate && <p className="text-gray-600">Due: {dueDate}</p>}
+                  <p className="text-gray-600">#INV-2025-001</p>
                 </div>
               </div>
             </div>
 
-            {/* Items */}
-            <div className="px-6 py-4">
+            {/* Items Table */}
+            <div className="overflow-x-auto">
               <table className="w-full">
-                <thead>
-                  <tr className="border-b border-gray-200">
-                    <th className="pb-2 text-left text-sm font-medium text-gray-700">Item</th>
-                    <th className="pb-2 text-center text-sm font-medium text-gray-700">Qty</th>
-                    <th className="pb-2 text-right text-sm font-medium text-gray-700">Rate</th>
-                    <th className="pb-2 text-right text-sm font-medium text-gray-700">Amount</th>
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Product</th>
+                    <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Qty</th>
+                    <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Rate</th>
+                    <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Amount</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-gray-100">
+                <tbody className="bg-white divide-y divide-gray-200">
                   {items.map((item) => (
                     <tr key={item.id}>
-                      <td className="py-3">
-                        <div className="text-gray-900">{item.product.name}</div>
-                        <div className="text-sm text-gray-500">HSN: {item.product.hsn}</div>
+                      <td className="px-6 py-3">
+                        <div className="text-gray-900">{item.product.name || item.product.product_name}</div>
+                        {item.product.hsn && <div className="text-sm text-gray-500">HSN: {item.product.hsn}</div>}
                       </td>
-                      <td className="py-3 text-center">{item.quantity}</td>
-                      <td className="py-3 text-right">₹{item.rate}</td>
-                      <td className="py-3 text-right">₹{(item.quantity * item.rate).toFixed(2)}</td>
+                      <td className="px-6 py-3 text-center">{item.quantity}</td>
+                      <td className="px-6 py-3 text-right">₹{item.rate}</td>
+                      <td className="px-6 py-3 text-right">₹{(item.quantity * item.rate).toFixed(2)}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -541,10 +685,18 @@ const InvoiceFlowBalanced: React.FC<InvoiceFlowBalancedProps> = ({ onClose }) =>
                 Save Draft
               </button>
               <button
-                onClick={() => setStep('done')}
-                className="px-6 py-2 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700"
+                onClick={createInvoice}
+                disabled={isLoading}
+                className="px-6 py-2 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center"
               >
-                Create Invoice
+                {isLoading ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    Creating...
+                  </>
+                ) : (
+                  'Create Invoice'
+                )}
               </button>
             </div>
           </div>

@@ -403,6 +403,63 @@ class InvoiceApiService {
   }
 
   /**
+   * Get list of invoices with pagination and filters
+   * @param {Object} params - Query parameters
+   * @returns {Promise<Object>} Invoice list with pagination
+   */
+  static async getInvoices(params = {}) {
+    try {
+      const response = await api.get('/invoices/', {
+        params: {
+          limit: params.limit || 50,
+          offset: params.offset || 0,
+          customer_id: params.customer_id,
+          ...params
+        }
+      });
+      
+      return {
+        success: true,
+        data: response.data
+      };
+    } catch (error) {
+      console.error('Failed to fetch invoices:', error);
+      return {
+        success: false,
+        error: error.response?.data?.error || {
+          code: 'INVOICE_FETCH_ERROR',
+          message: error.message || 'Failed to fetch invoices'
+        }
+      };
+    }
+  }
+
+  /**
+   * Get invoice by ID with full details
+   * @param {String} invoiceId - Invoice ID
+   * @returns {Promise<Object>} Invoice details
+   */
+  static async getInvoiceById(invoiceId) {
+    try {
+      const response = await api.get(`/invoices/${invoiceId}`);
+      
+      return {
+        success: true,
+        data: response.data
+      };
+    } catch (error) {
+      console.error('Failed to fetch invoice:', error);
+      return {
+        success: false,
+        error: error.response?.data?.error || {
+          code: 'INVOICE_FETCH_ERROR',
+          message: error.message || 'Failed to fetch invoice'
+        }
+      };
+    }
+  }
+
+  /**
    * Get current financial year
    * @returns {String} Financial year (e.g., "2024-25")
    */

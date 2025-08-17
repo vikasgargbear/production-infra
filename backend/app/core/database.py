@@ -13,14 +13,14 @@ DATABASE_URL = os.getenv(
     "postgresql://postgres:password@localhost:5432/pharma"
 )
 
-# Create engine with optimized connection pooling for Supabase
+# Create engine with ultra-conservative connection pooling for Supabase session mode
 engine = create_engine(
     DATABASE_URL,
-    pool_size=5,  # Reduced for Supabase limits
-    max_overflow=10,  # Reduced for Supabase limits  
+    pool_size=2,  # Ultra-small for Supabase session mode limits
+    max_overflow=3,  # Maximum 5 total connections
     pool_pre_ping=True,
-    pool_recycle=300,  # Recycle connections every 5 minutes
-    pool_timeout=30,  # 30 second timeout
+    pool_recycle=60,  # Recycle connections every 1 minute
+    pool_timeout=10,  # 10 second timeout
     echo=False
 )
 

@@ -1,8 +1,8 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
-  User, Users, CreditCard, TrendingUp, 
+  User, CreditCard, TrendingUp, 
   Clock, AlertTriangle, BarChart3, FileText,
-  Archive
+  Archive, Loader2, RefreshCw, AlertCircle
 } from 'lucide-react';
 import { ModuleHub } from '../global';
 import PartyStatement from './PartyStatement';
@@ -29,6 +29,11 @@ interface LedgerModule {
 }
 
 const LedgerHub: React.FC<LedgerHubProps> = ({ open = true, onClose }) => {
+  // API data states
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
+
   const ledgerModules: LedgerModule[] = [
     {
       id: 'party-statement',
@@ -85,6 +90,33 @@ const LedgerHub: React.FC<LedgerHubProps> = ({ open = true, onClose }) => {
       component: LedgerReports
     }
   ];
+
+  useEffect(() => {
+    // Load initial data if needed
+    loadInitialData();
+  }, []);
+
+  const loadInitialData = async () => {
+    try {
+      setIsLoading(true);
+      setError(null);
+      
+      // Here you would load any initial ledger data
+      // For now, we'll just set a default state
+      
+    } catch (error) {
+      console.error('Error loading initial ledger data:', error);
+      setError('Failed to load initial ledger data');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    await loadInitialData();
+    setRefreshing(false);
+  };
 
   return (
     <ModuleHub

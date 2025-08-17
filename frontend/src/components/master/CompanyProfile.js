@@ -3,7 +3,7 @@ import {
   Building, Upload, Save, Mail, Phone, 
   MapPin, FileText, Calendar, Printer,
   CreditCard, Globe, Image, Loader2,
-  AlertCircle
+  AlertCircle, RefreshCw
 } from 'lucide-react';
 import { organizationsApi } from '../../services/api';
 
@@ -14,6 +14,7 @@ const CompanyProfile = ({ open, onClose }) => {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
   const [successMessage, setSuccessMessage] = useState('');
+  const [refreshing, setRefreshing] = useState(false);
   
   const [companyData, setCompanyData] = useState({
     // Basic Details
@@ -70,152 +71,95 @@ const CompanyProfile = ({ open, onClose }) => {
 
   // Fetch organization profile on mount
   useEffect(() => {
-    fetchOrganizationProfile();
-  }, []);
-
-  const getMockCompanyData = () => ({
-    // Basic Details
-    businessName: 'PharmaERP Demo Company',
-    tagline: 'Your trusted pharmaceutical partner',
-    logo: null,
-    
-    // Registration Details
-    pan: 'ABCDE1234F',
-    gstin: '27ABCDE1234F1Z5',
-    drugLicenseNo: 'DL-MH-001-2024',
-    fssaiNo: '12345678901234',
-    
-    // Contact Details
-    address: '123 Business District, Pharmaceutical Park',
-    city: 'Mumbai',
-    state: 'Maharashtra',
-    stateCode: '27',
-    pincode: '400001',
-    country: 'India',
-    phone: '+91 98765 43210',
-    altPhone: '+91 98765 43211',
-    email: 'info@pharmaerp.com',
-    website: 'www.pharmaerp.com',
-    
-    // Financial Settings
-    bankName: 'State Bank of India',
-    accountNumber: '1234567890',
-    ifscCode: 'SBIN0001234',
-    branchName: 'Mumbai Main Branch',
-    
-    // Invoice Settings
-    invoicePrefix: 'INV/',
-    challanPrefix: 'DC/',
-    poPrefix: 'PO/',
-    returnPrefix: 'RTN/',
-    creditNotePrefix: 'CN/',
-    debitNotePrefix: 'DN/',
-    
-    // Receipt Settings
-    defaultTerms: 'Payment due within 30 days',
-    defaultFooter: 'Thank you for your business!',
-    printFormat: 'A4',
-    showSignature: true,
-    showLogo: true,
-  });
+    if (open) {
+      fetchOrganizationProfile();
+    }
+  }, [open]);
 
   const fetchOrganizationProfile = async () => {
     try {
       setIsLoading(true);
       setError(null);
       
-      // Try different API endpoints for organization profile
-      let response;
-      try {
-        // Try organizations API first
-        if (organizationsApi?.organizations?.getProfile) {
-          response = await organizationsApi.organizations.getProfile();
-        } else if (organizationsApi?.getProfile) {
-          response = await organizationsApi.getProfile();
-        } else {
-          throw new Error('Organization API not available');
-        }
-      } catch (apiError) {
-        console.log('Organization API not available, using mock data');
-        response = null;
-      }
+      console.log('🔍 Fetching organization profile...');
+      const response = await organizationsApi.getProfile();
+      console.log('📥 Organization API Response:', response);
       
-      console.log('Organization API Response:', response);
-      
-      // Handle different response formats
-      const data = response?.data || response;
-      
-      if (data) {
+      if (response?.data) {
+        const data = response.data;
         
         // Map API response to component state
         setCompanyData({
           // Basic Details
-          businessName: data.org_name || '',
+          businessName: data.org_name || data.business_name || '',
           tagline: data.business_settings?.tagline || '',
           logo: data.business_settings?.logo_url || null,
           
           // Registration Details
-          pan: data.pan_number || '',
-          gstin: data.gst_number || '',
-          drugLicenseNo: data.drug_license_number || '',
-          fssaiNo: data.business_settings?.fssai_number || '',
+          pan: data.pan_number || data.pan || '',
+          gstin: data.gst_number || data.gstin || '',
+          drugLicenseNo: data.drug_license_number || data.drug_license_no || '',
+          fssaiNo: data.business_settings?.fssai_number || data.fssai_no || '',
           
           // Contact Details
-          address: data.business_address?.line1 || '',
-          city: data.business_address?.city || '',
-          state: data.business_address?.state || '',
-          stateCode: data.business_address?.state_code || '',
-          pincode: data.business_address?.pincode || '',
-          country: data.business_address?.country || 'India',
-          phone: data.primary_phone || '',
-          altPhone: data.business_settings?.alternate_phone || '',
-          email: data.primary_email || '',
-          website: data.business_settings?.website || '',
+          address: data.business_address?.line1 || data.address || '',
+          city: data.business_address?.city || data.city || '',
+          state: data.business_address?.state || data.state || '',
+          stateCode: data.business_address?.state_code || data.state_code || '',
+          pincode: data.business_address?.pincode || data.pincode || '',
+          country: data.business_address?.country || data.country || 'India',
+          phone: data.primary_phone || data.phone || '',
+          altPhone: data.business_settings?.alternate_phone || data.alt_phone || '',
+          email: data.primary_email || data.email || '',
+          website: data.business_settings?.website || data.website || '',
           
           // Financial Settings
-          financialYearStart: data.business_settings?.financial_year_start || '2024-04-01',
-          financialYearEnd: data.business_settings?.financial_year_end || '2025-03-31',
-          defaultCurrency: data.business_settings?.currency || 'INR',
-          currencySymbol: data.business_settings?.currency_symbol || '₹',
+          financialYearStart: data.business_settings?.financial_year_start || data.financial_year_start || '2024-04-01',
+          financialYearEnd: data.business_settings?.financial_year_end || data.financial_year_end || '2025-03-31',
+          defaultCurrency: data.business_settings?.currency || data.currency || 'INR',
+          currencySymbol: data.business_settings?.currency_symbol || data.currency_symbol || '₹',
           
           // Bank Details
-          bankName: data.business_settings?.bank_name || '',
-          accountNumber: data.business_settings?.account_number || '',
-          ifscCode: data.business_settings?.ifsc_code || '',
-          branchName: data.business_settings?.branch_name || '',
+          bankName: data.business_settings?.bank_name || data.bank_name || '',
+          accountNumber: data.business_settings?.account_number || data.account_number || '',
+          ifscCode: data.business_settings?.ifsc_code || data.ifsc_code || '',
+          branchName: data.business_settings?.branch_name || data.branch_name || '',
           
           // Invoice Settings
-          invoicePrefix: data.business_settings?.invoice_prefix || 'INV/',
-          challanPrefix: data.business_settings?.challan_prefix || 'DC/',
-          poPrefix: data.business_settings?.po_prefix || 'PO/',
-          returnPrefix: data.business_settings?.return_prefix || 'RTN/',
-          creditNotePrefix: data.business_settings?.credit_note_prefix || 'CN/',
-          debitNotePrefix: data.business_settings?.debit_note_prefix || 'DN/',
+          invoicePrefix: data.business_settings?.invoice_prefix || data.invoice_prefix || 'INV/',
+          challanPrefix: data.business_settings?.challan_prefix || data.challan_prefix || 'DC/',
+          poPrefix: data.business_settings?.po_prefix || data.po_prefix || 'PO/',
+          returnPrefix: data.business_settings?.return_prefix || data.return_prefix || 'RTN/',
+          creditNotePrefix: data.business_settings?.credit_note_prefix || data.credit_note_prefix || 'CN/',
+          debitNotePrefix: data.business_settings?.debit_note_prefix || data.debit_note_prefix || 'DN/',
           
           // Receipt Settings
-          defaultTerms: data.business_settings?.default_terms || '',
-          defaultFooter: data.business_settings?.default_footer || '',
-          printFormat: data.business_settings?.print_format || 'A4',
+          defaultTerms: data.business_settings?.default_terms || data.default_terms || '',
+          defaultFooter: data.business_settings?.default_footer || data.default_footer || '',
+          printFormat: data.business_settings?.print_format || data.print_format || 'A4',
           showSignature: data.business_settings?.show_signature !== false,
           showLogo: data.business_settings?.show_logo !== false,
           showBankDetails: data.business_settings?.show_bank_details !== false
         });
-        
-        if (data.business_settings?.logo_url) {
-          setLogoPreview(data.business_settings.logo_url);
-        }
       } else {
-        // Use mock data if no API response
-        setCompanyData(getMockCompanyData());
+        setError('No organization data available');
       }
     } catch (error) {
       console.error('Error fetching organization profile:', error);
-      setError('Failed to load organization profile. Using offline data.');
-      // Use mock data as fallback
-      setCompanyData(getMockCompanyData());
+      setError('Failed to load organization profile. Please check your connection and try again.');
+      
+      // Show user-friendly error message
+      setTimeout(() => setError(null), 10000);
     } finally {
       setIsLoading(false);
     }
+  };
+
+  // Refresh data
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    await fetchOrganizationProfile();
+    setRefreshing(false);
   };
 
   const handleInputChange = (field, value) => {
@@ -337,20 +281,38 @@ const CompanyProfile = ({ open, onClose }) => {
             <Building className="w-6 h-6 text-gray-700" />
             <h1 className="text-2xl font-bold text-gray-900">Company Profile</h1>
           </div>
-          <button
-            onClick={handleSave}
-            disabled={isSaving}
-            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center space-x-2 disabled:opacity-50"
-          >
-            {isSaving ? (
-              <Loader2 className="w-4 h-4 animate-spin" />
-            ) : (
-              <Save className="w-4 h-4" />
-            )}
-            <span>{isSaving ? 'Saving...' : 'Save Changes'}</span>
-          </button>
+          <div className="flex items-center space-x-3">
+            <button
+              onClick={handleRefresh}
+              disabled={refreshing}
+              className="px-3 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2"
+            >
+              <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />
+              <span>{refreshing ? 'Refreshing...' : 'Refresh'}</span>
+            </button>
+            <button
+              onClick={handleSave}
+              disabled={isSaving}
+              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center space-x-2 disabled:opacity-500"
+            >
+              {isSaving ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <Save className="w-4 h-4" />
+              )}
+              <span>{isSaving ? 'Saving...' : 'Save Changes'}</span>
+            </button>
+          </div>
         </div>
       </div>
+
+      {/* Loading State */}
+      {isLoading && (
+        <div className="mx-6 mt-4 p-4 bg-blue-50 border border-blue-200 rounded-lg flex items-center">
+          <Loader2 className="w-5 h-5 mr-2 animate-spin" />
+          <span className="text-blue-800">Loading company profile...</span>
+        </div>
+      )}
 
       {/* Success/Error Messages */}
       {successMessage && (

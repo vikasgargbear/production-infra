@@ -22,14 +22,18 @@ import {
   Activity,
   Target,
   ArrowUpRight,
-  ArrowDownRight
+  ArrowDownRight,
+  Loader2
 } from 'lucide-react';
-import { customersApi, salesApi } from '../services/api';
+import { customersApi, salesApi, paymentsApi } from '../services/api';
+import offlineStorage from '../services/offlineStorage';
 
 const PaymentDashboard = () => {
   const [dateRange, setDateRange] = useState('month');
   const [analytics, setAnalytics] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [refreshing, setRefreshing] = useState(false);
   const [selectedMetric, setSelectedMetric] = useState('overview');
 
   // Payment mode configurations
@@ -45,8 +49,10 @@ const PaymentDashboard = () => {
     loadAnalytics();
   }, [dateRange]);
 
-  const loadAnalytics = () => {
+  const loadAnalytics = async () => {
     setLoading(true);
+    setError(null);
+    
     const endDate = new Date();
     const startDate = new Date();
     
@@ -66,79 +72,120 @@ const PaymentDashboard = () => {
       case 'year':
         startDate.setFullYear(startDate.getFullYear() - 1);
         break;
+      default:
+        startDate.setMonth(startDate.getMonth() - 1);
     }
 
-    // Simulate API call
-    setTimeout(() => {
-      // TODO: Implement payment service
-      const data = {};
-      
-      // Add some sample data for demonstration
-      setAnalytics({
-        ...data,
-        totalCollected: 12500000,
-        paymentCount: 347,
-        averagePaymentAmount: 36023,
-        previousPeriod: {
-          totalCollected: 11200000,
-          paymentCount: 312
-        },
-        collectionRate: 92.5,
-        avgCollectionDays: 23,
-        paymentModes: {
-          upi: { count: 125, amount: 4500000 },
-          cheque: { count: 89, amount: 5200000 },
-          rtgs_neft: { count: 67, amount: 2300000 },
-          cash: { count: 45, amount: 450000 },
-          card: { count: 21, amount: 50000 }
-        },
-        reconciliationMetrics: {
-          autoReconciled: 298,
-          manualReview: 35,
-          pending: 14,
+    try {
+      // Try to load from API first
+      const [paymentsResponse, customersResponse, salesResponse] = await Promise.all([
+        paymentsApi.getAnalytics({ startDate, endDate }),
+        customersApi.getTopCustomers({ startDate, endDate }),
+        salesApi.getOverdueAnalysis({ startDate, endDate })
+      ]);
+
+      const analyticsData = {
+        totalCollected: paymentsResponse.data?.totalCollected || 0,
+        paymentCount: paymentsResponse.data?.paymentCount || 0,
+        averagePaymentAmount: paymentsResponse.data?.averagePaymentAmount || 0,
+        previousPeriod: paymentsResponse.data?.previousPeriod || { totalCollected: 0, paymentCount: 0 },
+        collectionRate: paymentsResponse.data?.collectionRate || 0,
+        avgCollectionDays: paymentsResponse.data?.avgCollectionDays || 0,
+        paymentModes: paymentsResponse.data?.paymentModes || {},
+        reconciliationMetrics: paymentsResponse.data?.reconciliationMetrics || {
+          autoReconciled: 0,
+          manualReview: 0,
+          pending: 0,
           duplicates: 0,
           failed: 0
         },
-        topCustomers: [
-          { name: 'City Hospital Pharmacy', totalAmount: 2500000, paymentCount: 24 },
-          { name: 'Apollo Pharmacy', totalAmount: 1800000, paymentCount: 18 },
-          { name: 'MedPlus Store', totalAmount: 1500000, paymentCount: 15 },
-          { name: 'Wellness Medical', totalAmount: 1200000, paymentCount: 12 },
-          { name: 'Krishna Pharmacy', totalAmount: 950000, paymentCount: 20 }
-        ],
-        overdueAnalysis: {
-          totalOverdue: 3500000,
-          overdueCount: 45,
+        topCustomers: customersResponse.data || [],
+        overdueAnalysis: salesResponse.data || {
+          totalOverdue: 0,
+          overdueCount: 0,
           agingBuckets: {
-            '0-30': { count: 20, amount: 1200000 },
-            '31-60': { count: 15, amount: 1300000 },
-            '61-90': { count: 7, amount: 700000 },
-            '90+': { count: 3, amount: 300000 }
+            '0-30': { count: 0, amount: 0 },
+            '31-60': { count: 0, amount: 0 },
+            '61-90': { count: 0, amount: 0 },
+            '90+': { count: 0, amount: 0 }
           }
         },
-        dailyTrends: generateDailyTrends(30)
+        dailyTrends: paymentsResponse.data?.dailyTrends || []
+      };
+
+      setAnalytics(analyticsData);
+      
+      // Store data offline for future use
+      await offlineStorage.storeOffline(`payment_analytics_${dateRange}`, analyticsData, { 
+        persistent: true 
       });
+      
+    } catch (error) {
+      console.error('Error loading payment analytics:', error);
+      
+      // Try to load from offline storage instead of using mock data
+      const offlineData = await offlineStorage.getOffline(`payment_analytics_${dateRange}`, { persistent: true });
+      
+      if (offlineData && !offlineStorage.isDataStale(offlineData, 60)) { // 1 hour max for analytics
+        console.log('📱 Using offline payment analytics data');
+        setAnalytics(offlineData.data);
+        
+        // Show offline indicator
+        setError('Currently using offline data. Some information may be outdated.');
+      } else {
+        // No offline data available - show proper error instead of mock data
+        setError('Unable to load payment analytics. Please check your connection and try again.');
+        setAnalytics({
+          totalCollected: 0,
+          paymentCount: 0,
+          averagePaymentAmount: 0,
+          previousPeriod: { totalCollected: 0, paymentCount: 0 },
+          collectionRate: 0,
+          avgCollectionDays: 0,
+          paymentModes: {},
+          reconciliationMetrics: {
+            autoReconciled: 0,
+            manualReview: 0,
+            pending: 0,
+            duplicates: 0,
+            failed: 0
+          },
+          topCustomers: [],
+          overdueAnalysis: {
+            totalOverdue: 0,
+            overdueCount: 0,
+            agingBuckets: {
+              '0-30': { count: 0, amount: 0 },
+              '31-60': { count: 0, amount: 0 },
+              '61-90': { count: 0, amount: 0 },
+              '90+': { count: 0, amount: 0 }
+            }
+          },
+          dailyTrends: []
+        });
+      }
+    } finally {
       setLoading(false);
-    }, 1000);
+    }
   };
 
-  // Generate sample daily trends
-  function generateDailyTrends(days) {
-    const trends = [];
-    const today = new Date();
-    for (let i = days - 1; i >= 0; i--) {
-      const date = new Date(today);
-      date.setDate(date.getDate() - i);
-      trends.push({
-        date: date.toISOString().split('T')[0],
-        amount: Math.floor(Math.random() * 500000) + 200000,
-        count: Math.floor(Math.random() * 20) + 5
-      });
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    setError(null);
+    
+    try {
+      await loadAnalytics();
+    } catch (error) {
+      console.error('Error refreshing analytics:', error);
+      setError('Failed to refresh data. Please try again.');
+    } finally {
+      setRefreshing(false);
     }
-    return trends;
-  }
+  };
 
   const formatCurrency = (amount) => {
+    if (!amount || amount === 0) return '₹0';
+    
     if (amount >= 10000000) {
       return `₹${(amount / 10000000).toFixed(1)}Cr`;
     } else if (amount >= 100000) {
@@ -150,14 +197,39 @@ const PaymentDashboard = () => {
   };
 
   const calculateGrowth = (current, previous) => {
-    if (!previous) return 0;
+    if (!previous || previous === 0) return 0;
     return ((current - previous) / previous * 100).toFixed(1);
   };
+
+  // Load data on component mount
+  useEffect(() => {
+    loadAnalytics();
+  }, []);
+
+  // Clear old offline data periodically
+  useEffect(() => {
+    const interval = setInterval(() => {
+      offlineStorage.clearOldData(24); // Clear data older than 24 hours
+    }, 60 * 60 * 1000); // Check every hour
+
+    return () => clearInterval(interval);
+  }, []);
 
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+        <Loader2 className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600" />
+      </div>
+    );
+  }
+
+  if (!analytics) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="text-center">
+          <AlertCircle className="h-12 w-12 text-red-400 mx-auto mb-4" />
+          <p className="text-gray-600">No analytics data available</p>
+        </div>
       </div>
     );
   }
@@ -183,384 +255,299 @@ const PaymentDashboard = () => {
             <option value="year">This Year</option>
           </select>
           <button
-            onClick={loadAnalytics}
-            className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+            onClick={handleRefresh}
+            disabled={refreshing}
+            className="p-2 hover:bg-gray-100 rounded-lg transition-colors disabled:opacity-50"
           >
-            <RefreshCw className="w-5 h-5" />
+            <RefreshCw className={`w-5 h-5 ${refreshing ? 'animate-spin' : ''}`} />
           </button>
           <button className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center">
-            <Download className="w-4 h-4 mr-2" />
+            <Download className="w-4 w-4 mr-2" />
             Export Report
           </button>
         </div>
       </div>
 
+      {/* Error Display */}
+      {error && (
+        <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center">
+              <AlertCircle className="h-5 w-5 text-red-600 mr-2" />
+              <span className="text-red-800">{error}</span>
+            </div>
+            <button
+              onClick={() => setError(null)}
+              className="text-sm text-red-600 hover:text-red-800 underline"
+            >
+              Dismiss
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Key Metrics */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
-          <div className="flex items-start justify-between">
+          <div className="flex items-center justify-between">
             <div>
               <p className="text-sm font-medium text-gray-600">Total Collected</p>
-              <p className="text-2xl font-bold text-gray-900 mt-2">
+              <p className="text-2xl font-bold text-gray-900">
                 {formatCurrency(analytics.totalCollected)}
               </p>
-              <div className="flex items-center mt-2">
-                {analytics.previousPeriod && (
-                  <>
-                    {parseFloat(calculateGrowth(analytics.totalCollected, analytics.previousPeriod.totalCollected)) > 0 ? (
-                      <>
-                        <ArrowUpRight className="w-4 h-4 text-green-500 mr-1" />
-                        <span className="text-sm text-green-600">
-                          {calculateGrowth(analytics.totalCollected, analytics.previousPeriod.totalCollected)}%
-                        </span>
-                      </>
-                    ) : (
-                      <>
-                        <ArrowDownRight className="w-4 h-4 text-red-500 mr-1" />
-                        <span className="text-sm text-red-600">
-                          {Math.abs(calculateGrowth(analytics.totalCollected, analytics.previousPeriod.totalCollected))}%
-                        </span>
-                      </>
-                    )}
-                    <span className="text-sm text-gray-500 ml-2">vs last period</span>
-                  </>
+            </div>
+            <div className="p-2 bg-green-100 rounded-lg">
+              <IndianRupee className="w-6 h-6 text-green-600" />
+            </div>
+          </div>
+          <div className="mt-4 flex items-center text-sm">
+            {analytics.previousPeriod?.totalCollected > 0 ? (
+              <>
+                {analytics.totalCollected > analytics.previousPeriod.totalCollected ? (
+                  <TrendingUp className="w-4 h-4 text-green-500 mr-1" />
+                ) : (
+                  <TrendingDown className="w-4 h-4 text-red-500 mr-1" />
                 )}
-              </div>
-            </div>
-            <div className="p-3 bg-blue-50 rounded-lg">
-              <IndianRupee className="w-6 h-6 text-blue-600" />
-            </div>
+                <span className={analytics.totalCollected > analytics.previousPeriod.totalCollected ? 'text-green-600' : 'text-red-600'}>
+                  {calculateGrowth(analytics.totalCollected, analytics.previousPeriod.totalCollected)}%
+                </span>
+                <span className="text-gray-500 ml-1">vs previous period</span>
+              </>
+            ) : (
+              <span className="text-gray-500">No previous data</span>
+            )}
           </div>
         </div>
 
         <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
-          <div className="flex items-start justify-between">
+          <div className="flex items-center justify-between">
             <div>
               <p className="text-sm font-medium text-gray-600">Payment Count</p>
-              <p className="text-2xl font-bold text-gray-900 mt-2">{analytics.paymentCount}</p>
-              <div className="flex items-center mt-2">
-                <span className="text-sm text-gray-500">
-                  Avg: {formatCurrency(analytics.averagePaymentAmount)}
+              <p className="text-2xl font-bold text-gray-900">{analytics.paymentCount}</p>
+            </div>
+            <div className="p-2 bg-blue-100 rounded-lg">
+              <CreditCard className="w-6 h-6 text-blue-600" />
+            </div>
+          </div>
+          <div className="mt-4 flex items-center text-sm">
+            {analytics.previousPeriod?.paymentCount > 0 ? (
+              <>
+                {analytics.paymentCount > analytics.previousPeriod.paymentCount ? (
+                  <TrendingUp className="w-4 h-4 text-green-500 mr-1" />
+                ) : (
+                  <TrendingDown className="w-4 h-4 text-red-500 mr-1" />
+                )}
+                <span className={analytics.paymentCount > analytics.previousPeriod.paymentCount ? 'text-green-600' : 'text-red-600'}>
+                  {calculateGrowth(analytics.paymentCount, analytics.previousPeriod.paymentCount)}%
                 </span>
-              </div>
-            </div>
-            <div className="p-3 bg-green-50 rounded-lg">
-              <Activity className="w-6 h-6 text-green-600" />
-            </div>
+                <span className="text-gray-500 ml-1">vs previous period</span>
+              </>
+            ) : (
+              <span className="text-gray-500">No previous data</span>
+            )}
           </div>
         </div>
 
         <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
-          <div className="flex items-start justify-between">
+          <div className="flex items-center justify-between">
             <div>
               <p className="text-sm font-medium text-gray-600">Collection Rate</p>
-              <p className="text-2xl font-bold text-gray-900 mt-2">{analytics.collectionRate}%</p>
-              <div className="flex items-center mt-2">
-                <span className="text-sm text-gray-500">
-                  Avg days: {analytics.avgCollectionDays}
-                </span>
-              </div>
+              <p className="text-2xl font-bold text-gray-900">{analytics.collectionRate}%</p>
             </div>
-            <div className="p-3 bg-purple-50 rounded-lg">
+            <div className="p-2 bg-purple-100 rounded-lg">
               <Target className="w-6 h-6 text-purple-600" />
             </div>
           </div>
+          <div className="mt-4">
+            <div className="w-full bg-gray-200 rounded-full h-2">
+              <div 
+                className="bg-purple-600 h-2 rounded-full" 
+                style={{ width: `${Math.min(analytics.collectionRate, 100)}%` }}
+              ></div>
+            </div>
+            <p className="text-sm text-gray-500 mt-1">Target: 95%</p>
+          </div>
         </div>
 
         <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
-          <div className="flex items-start justify-between">
+          <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm font-medium text-gray-600">Outstanding</p>
-              <p className="text-2xl font-bold text-gray-900 mt-2">
-                {formatCurrency(analytics.overdueAnalysis.totalOverdue)}
-              </p>
-              <div className="flex items-center mt-2">
-                <span className="text-sm text-orange-600">
-                  {analytics.overdueAnalysis.overdueCount} overdue
-                </span>
-              </div>
+              <p className="text-sm font-medium text-gray-600">Avg Collection Days</p>
+              <p className="text-2xl font-bold text-gray-900">{analytics.avgCollectionDays}</p>
             </div>
-            <div className="p-3 bg-orange-50 rounded-lg">
-              <AlertCircle className="w-6 h-6 text-orange-600" />
+            <div className="p-2 bg-orange-100 rounded-lg">
+              <Clock className="w-6 h-6 text-orange-600" />
             </div>
+          </div>
+          <div className="mt-4">
+            <p className="text-sm text-gray-500">
+              {analytics.avgCollectionDays <= 30 ? 'Excellent' : 
+               analytics.avgCollectionDays <= 45 ? 'Good' : 
+               analytics.avgCollectionDays <= 60 ? 'Fair' : 'Needs Attention'}
+            </p>
           </div>
         </div>
       </div>
 
-      {/* Tabs */}
-      <div className="border-b">
-        <div className="flex space-x-8">
-          {['overview', 'modes', 'customers', 'reconciliation', 'trends'].map(tab => (
-            <button
-              key={tab}
-              onClick={() => setSelectedMetric(tab)}
-              className={`pb-3 px-1 border-b-2 transition-colors ${
-                selectedMetric === tab
-                  ? 'border-blue-600 text-blue-600'
-                  : 'border-transparent text-gray-600 hover:text-gray-900'
-              }`}
-            >
-              {tab.charAt(0).toUpperCase() + tab.slice(1)}
-            </button>
-          ))}
+      {/* Payment Modes Distribution */}
+      {Object.keys(analytics.paymentModes).length > 0 && (
+        <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
+          <h3 className="text-lg font-semibold text-gray-900 mb-4">Payment Modes Distribution</h3>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+            {Object.entries(analytics.paymentModes).map(([mode, data]) => {
+              const config = paymentModeConfig[mode] || { icon: CreditCard, color: 'gray', label: mode };
+              const IconComponent = config.icon;
+              const percentage = analytics.totalCollected > 0 ? ((data.amount / analytics.totalCollected) * 100).toFixed(1) : 0;
+              
+              return (
+                <div key={mode} className="text-center p-4 bg-gray-50 rounded-lg">
+                  <div className={`inline-flex p-3 bg-${config.color}-100 rounded-full mb-3`}>
+                    <IconComponent className={`w-6 h-6 text-${config.color}-600`} />
+                  </div>
+                  <p className="font-medium text-gray-900">{config.label}</p>
+                  <p className="text-2xl font-bold text-gray-900">{formatCurrency(data.amount)}</p>
+                  <p className="text-sm text-gray-500">{data.count} payments</p>
+                  <p className="text-xs text-gray-400">{percentage}% of total</p>
+                </div>
+              );
+            })}
+          </div>
         </div>
-      </div>
+      )}
 
-      {/* Tab Content */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {selectedMetric === 'overview' && (
-          <>
-            {/* Payment Modes Distribution */}
-            <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
-              <h3 className="text-lg font-semibold mb-4">Payment Mode Distribution</h3>
-              <div className="space-y-4">
-                {Object.entries(analytics.paymentModes).map(([mode, data]) => {
-                  const config = paymentModeConfig[mode];
-                  const Icon = config?.icon || CreditCard;
-                  const percentage = (data.amount / analytics.totalCollected * 100).toFixed(1);
-                  
-                  return (
-                    <div key={mode} className="space-y-2">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center">
-                          <Icon className={`w-5 h-5 text-${config?.color || 'gray'}-600 mr-2`} />
-                          <span className="font-medium">{config?.label || mode}</span>
-                        </div>
-                        <div className="text-right">
-                          <span className="font-semibold">{formatCurrency(data.amount)}</span>
-                          <span className="text-sm text-gray-500 ml-2">({percentage}%)</span>
-                        </div>
-                      </div>
-                      <div className="w-full bg-gray-200 rounded-full h-2">
-                        <div
-                          className={`bg-${config?.color || 'gray'}-500 h-2 rounded-full transition-all duration-500`}
-                          style={{ width: `${percentage}%` }}
-                        />
-                      </div>
-                      <p className="text-sm text-gray-500">{data.count} transactions</p>
-                    </div>
-                  );
-                })}
+      {/* Reconciliation Metrics */}
+      {analytics.reconciliationMetrics && (
+        <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
+          <h3 className="text-lg font-semibold text-gray-900 mb-4">Reconciliation Status</h3>
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+            <div className="text-center">
+              <div className="p-3 bg-green-100 rounded-full inline-block mb-2">
+                <CheckCircle className="w-6 h-6 text-green-600" />
               </div>
+              <p className="text-2xl font-bold text-gray-900">{analytics.reconciliationMetrics.autoReconciled}</p>
+              <p className="text-sm text-gray-600">Auto Reconciled</p>
             </div>
-
-            {/* Overdue Analysis */}
-            <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
-              <h3 className="text-lg font-semibold mb-4">Overdue Aging Analysis</h3>
-              <div className="space-y-4">
-                {Object.entries(analytics.overdueAnalysis.agingBuckets).map(([bucket, data]) => (
-                  <div key={bucket} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                    <div>
-                      <span className="font-medium">{bucket} days</span>
-                      <p className="text-sm text-gray-500">{data.count} invoices</p>
-                    </div>
-                    <span className="font-semibold text-orange-600">
-                      {formatCurrency(data.amount)}
-                    </span>
-                  </div>
-                ))}
+            <div className="text-center">
+              <div className="p-3 bg-yellow-100 rounded-full inline-block mb-2">
+                <Clock className="w-6 h-6 text-yellow-600" />
               </div>
-              <div className="mt-4 pt-4 border-t">
-                <div className="flex justify-between items-center">
-                  <span className="font-medium text-gray-700">Total Overdue</span>
-                  <span className="text-xl font-bold text-orange-600">
-                    {formatCurrency(analytics.overdueAnalysis.totalOverdue)}
-                  </span>
-                </div>
-              </div>
+              <p className="text-2xl font-bold text-gray-900">{analytics.reconciliationMetrics.manualReview}</p>
+              <p className="text-sm text-gray-600">Manual Review</p>
             </div>
-          </>
-        )}
-
-        {selectedMetric === 'customers' && (
-          <>
-            {/* Top Customers */}
-            <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-100 lg:col-span-2">
-              <h3 className="text-lg font-semibold mb-4">Top Paying Customers</h3>
-              <div className="overflow-x-auto">
-                <table className="w-full">
-                  <thead>
-                    <tr className="border-b">
-                      <th className="text-left py-3 px-4 font-medium text-gray-700">Customer</th>
-                      <th className="text-right py-3 px-4 font-medium text-gray-700">Total Paid</th>
-                      <th className="text-right py-3 px-4 font-medium text-gray-700">Payments</th>
-                      <th className="text-right py-3 px-4 font-medium text-gray-700">Avg Payment</th>
-                      <th className="text-right py-3 px-4 font-medium text-gray-700">% of Total</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {analytics.topCustomers.map((customer, index) => (
-                      <tr key={index} className="border-b hover:bg-gray-50">
-                        <td className="py-3 px-4">
-                          <div className="flex items-center">
-                            <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center mr-3">
-                              <span className="text-sm font-medium text-blue-600">
-                                {customer.name.charAt(0)}
-                              </span>
-                            </div>
-                            <span className="font-medium">{customer.name}</span>
-                          </div>
-                        </td>
-                        <td className="text-right py-3 px-4 font-semibold">
-                          {formatCurrency(customer.totalAmount)}
-                        </td>
-                        <td className="text-right py-3 px-4">{customer.paymentCount}</td>
-                        <td className="text-right py-3 px-4">
-                          {formatCurrency(customer.totalAmount / customer.paymentCount)}
-                        </td>
-                        <td className="text-right py-3 px-4">
-                          <span className="text-sm bg-blue-100 text-blue-700 px-2 py-1 rounded-full">
-                            {((customer.totalAmount / analytics.totalCollected) * 100).toFixed(1)}%
-                          </span>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+            <div className="text-center">
+              <div className="p-3 bg-orange-100 rounded-full inline-block mb-2">
+                <AlertCircle className="w-6 h-6 text-orange-600" />
               </div>
+              <p className="text-2xl font-bold text-gray-900">{analytics.reconciliationMetrics.pending}</p>
+              <p className="text-sm text-gray-600">Pending</p>
             </div>
-          </>
-        )}
-
-        {selectedMetric === 'reconciliation' && (
-          <>
-            {/* Reconciliation Status */}
-            <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
-              <h3 className="text-lg font-semibold mb-4">Reconciliation Status</h3>
-              <div className="space-y-4">
-                <div className="flex items-center justify-between p-4 bg-green-50 rounded-lg">
-                  <div className="flex items-center">
-                    <CheckCircle className="w-5 h-5 text-green-600 mr-3" />
-                    <div>
-                      <p className="font-medium">Auto Reconciled</p>
-                      <p className="text-sm text-gray-600">Automatically matched and verified</p>
-                    </div>
-                  </div>
-                  <span className="text-2xl font-bold text-green-600">
-                    {analytics.reconciliationMetrics.autoReconciled}
-                  </span>
-                </div>
-
-                <div className="flex items-center justify-between p-4 bg-yellow-50 rounded-lg">
-                  <div className="flex items-center">
-                    <AlertCircle className="w-5 h-5 text-yellow-600 mr-3" />
-                    <div>
-                      <p className="font-medium">Manual Review</p>
-                      <p className="text-sm text-gray-600">Requires manual verification</p>
-                    </div>
-                  </div>
-                  <span className="text-2xl font-bold text-yellow-600">
-                    {analytics.reconciliationMetrics.manualReview}
-                  </span>
-                </div>
-
-                <div className="flex items-center justify-between p-4 bg-blue-50 rounded-lg">
-                  <div className="flex items-center">
-                    <Clock className="w-5 h-5 text-blue-600 mr-3" />
-                    <div>
-                      <p className="font-medium">Pending</p>
-                      <p className="text-sm text-gray-600">Awaiting reconciliation</p>
-                    </div>
-                  </div>
-                  <span className="text-2xl font-bold text-blue-600">
-                    {analytics.reconciliationMetrics.pending}
-                  </span>
-                </div>
+            <div className="text-center">
+              <div className="p-3 bg-red-100 rounded-full inline-block mb-2">
+                <AlertCircle className="w-6 h-6 text-red-600" />
               </div>
+              <p className="text-2xl font-bold text-gray-900">{analytics.reconciliationMetrics.failed}</p>
+              <p className="text-sm text-gray-600">Failed</p>
             </div>
+            <div className="text-center">
+              <div className="p-3 bg-gray-100 rounded-full inline-block mb-2">
+                <FileText className="w-6 h-6 text-gray-600" />
+              </div>
+              <p className="text-2xl font-bold text-gray-900">{analytics.reconciliationMetrics.duplicates}</p>
+              <p className="text-sm text-gray-600">Duplicates</p>
+            </div>
+          </div>
+        </div>
+      )}
 
-            {/* Reconciliation Efficiency */}
-            <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
-              <h3 className="text-lg font-semibold mb-4">Reconciliation Efficiency</h3>
-              <div className="flex items-center justify-center h-48">
-                <div className="relative">
-                  <div className="w-40 h-40 rounded-full border-8 border-gray-200"></div>
-                  <div 
-                    className="absolute top-0 left-0 w-40 h-40 rounded-full border-8 border-green-500"
-                    style={{
-                      clipPath: `polygon(0 0, 100% 0, 100% 100%, 0 100%)`,
-                      transform: `rotate(${(analytics.reconciliationMetrics.autoReconciled / analytics.paymentCount * 360)}deg)`
-                    }}
-                  ></div>
-                  <div className="absolute inset-0 flex items-center justify-center">
-                    <div className="text-center">
-                      <p className="text-3xl font-bold text-gray-900">
-                        {((analytics.reconciliationMetrics.autoReconciled / analytics.paymentCount) * 100).toFixed(1)}%
-                      </p>
-                      <p className="text-sm text-gray-600">Auto Rate</p>
-                    </div>
+      {/* Top Customers */}
+      {analytics.topCustomers && analytics.topCustomers.length > 0 && (
+        <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
+          <h3 className="text-lg font-semibold text-gray-900 mb-4">Top Customers by Collection</h3>
+          <div className="space-y-3">
+            {analytics.topCustomers.map((customer, index) => (
+              <div key={index} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                <div className="flex items-center">
+                  <span className="text-lg font-bold text-gray-400 mr-3">#{index + 1}</span>
+                  <div>
+                    <p className="font-medium text-gray-900">{customer.name}</p>
+                    <p className="text-sm text-gray-500">{customer.paymentCount} payments</p>
                   </div>
                 </div>
+                <div className="text-right">
+                  <p className="font-bold text-gray-900">{formatCurrency(customer.totalAmount)}</p>
+                </div>
               </div>
-            </div>
-          </>
-        )}
+            ))}
+          </div>
+        </div>
+      )}
 
-        {selectedMetric === 'trends' && (
-          <>
-            {/* Daily Collection Trend */}
-            <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-100 lg:col-span-2">
-              <h3 className="text-lg font-semibold mb-4">Daily Collection Trend</h3>
-              <div className="h-64 flex items-end space-x-2">
-                {analytics.dailyTrends.slice(-30).map((day, index) => {
-                  const maxAmount = Math.max(...analytics.dailyTrends.map(d => d.amount));
-                  const height = (day.amount / maxAmount) * 100;
-                  
-                  return (
-                    <div
-                      key={index}
-                      className="flex-1 bg-blue-500 hover:bg-blue-600 rounded-t transition-all duration-200 relative group"
-                      style={{ height: `${height}%` }}
-                    >
-                      <div className="absolute bottom-full mb-2 left-1/2 transform -translate-x-1/2 bg-gray-800 text-white text-xs rounded px-2 py-1 opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">
-                        {new Date(day.date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}
-                        <br />
-                        {formatCurrency(day.amount)}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-              <div className="flex justify-between mt-2 text-xs text-gray-500">
-                <span>{new Date(analytics.dailyTrends[0].date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}</span>
-                <span>{new Date(analytics.dailyTrends[analytics.dailyTrends.length - 1].date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}</span>
-              </div>
+      {/* Overdue Analysis */}
+      {analytics.overdueAnalysis && (
+        <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
+          <h3 className="text-lg font-semibold text-gray-900 mb-4">Overdue Analysis</h3>
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div className="text-center p-4 bg-red-50 rounded-lg">
+              <p className="text-2xl font-bold text-red-600">{formatCurrency(analytics.overdueAnalysis.totalOverdue)}</p>
+              <p className="text-sm text-gray-600">Total Overdue</p>
+              <p className="text-xs text-gray-500">{analytics.overdueAnalysis.overdueCount} invoices</p>
             </div>
-          </>
-        )}
+            {Object.entries(analytics.overdueAnalysis.agingBuckets).map(([range, data]) => (
+              <div key={range} className="text-center p-4 bg-gray-50 rounded-lg">
+                <p className="text-lg font-bold text-gray-900">{formatCurrency(data.amount)}</p>
+                <p className="text-sm text-gray-600">{range} days</p>
+                <p className="text-xs text-gray-500">{data.count} invoices</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
-        {selectedMetric === 'modes' && (
-          <>
-            {/* Payment Mode Performance */}
-            <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-100 lg:col-span-2">
-              <h3 className="text-lg font-semibold mb-4">Payment Mode Performance</h3>
-              <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4">
-                {Object.entries(analytics.paymentModes).map(([mode, data]) => {
-                  const config = paymentModeConfig[mode];
-                  const Icon = config?.icon || CreditCard;
-                  
-                  return (
-                    <div key={mode} className="text-center p-4 bg-gray-50 rounded-lg">
-                      <div className={`w-12 h-12 mx-auto mb-3 bg-${config?.color || 'gray'}-100 rounded-lg flex items-center justify-center`}>
-                        <Icon className={`w-6 h-6 text-${config?.color || 'gray'}-600`} />
-                      </div>
-                      <h4 className="font-medium mb-2">{config?.label || mode}</h4>
-                      <p className="text-2xl font-bold text-gray-900">{data.count}</p>
-                      <p className="text-sm text-gray-600">transactions</p>
-                      <p className="text-lg font-semibold text-gray-700 mt-2">
-                        {formatCurrency(data.amount)}
-                      </p>
-                      <p className="text-xs text-gray-500">
-                        Avg: {formatCurrency(data.amount / data.count)}
-                      </p>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          </>
-        )}
-      </div>
+      {/* Daily Trends Chart */}
+      {analytics.dailyTrends && analytics.dailyTrends.length > 0 && (
+        <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
+          <h3 className="text-lg font-semibold text-gray-900 mb-4">Daily Collection Trends</h3>
+          <div className="h-64 flex items-end justify-between space-x-1">
+            {analytics.dailyTrends.map((day, index) => {
+              const maxAmount = Math.max(...analytics.dailyTrends.map(d => d.amount));
+              const height = maxAmount > 0 ? (day.amount / maxAmount) * 100 : 0;
+              
+              return (
+                <div key={index} className="flex-1 flex flex-col items-center">
+                  <div className="w-full bg-blue-200 rounded-t" style={{ height: `${height}%` }}>
+                    <div className="bg-blue-600 h-full rounded-t"></div>
+                  </div>
+                  <p className="text-xs text-gray-500 mt-2 text-center">
+                    {new Date(day.date).toLocaleDateString('en-IN', { month: 'short', day: 'numeric' })}
+                  </p>
+                  <p className="text-xs font-medium text-gray-700 mt-1">
+                    {formatCurrency(day.amount)}
+                  </p>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Empty State */}
+      {(!analytics.totalCollected && !analytics.paymentCount) && (
+        <div className="text-center py-12">
+          <Activity className="h-16 w-16 text-gray-300 mx-auto mb-4" />
+          <h3 className="text-lg font-medium text-gray-900 mb-2">No Payment Data Available</h3>
+          <p className="text-gray-500 mb-4">
+            {error ? 'Unable to load payment analytics at this time.' : 'Start recording payments to see analytics here.'}
+          </p>
+          {!error && (
+            <button
+              onClick={handleRefresh}
+              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+            >
+              Refresh Data
+            </button>
+          )}
+        </div>
+      )}
     </div>
   );
 };

@@ -210,11 +210,12 @@ async def list_customers(
     try:
         logger.info(f"Customer search request: search={search}, limit={limit}, skip={skip}, include_stats={include_stats}")
         
-        # Build query with fast search optimization
+        # Build query with fast search optimization (include required fields for Pydantic)
         if fast_search:
-            # Minimal columns for fast search response
+            # Minimal columns for fast search response + required schema fields
             query = """SELECT customer_id, customer_name, customer_code, primary_phone, 
-                      customer_type, gst_number, is_active FROM parties.customers WHERE org_id = :org_id"""
+                      customer_type, gst_number, is_active, org_id, created_at, updated_at 
+                      FROM parties.customers WHERE org_id = :org_id"""
         else:
             # Full query for detailed view
             query = "SELECT * FROM parties.customers WHERE org_id = :org_id"

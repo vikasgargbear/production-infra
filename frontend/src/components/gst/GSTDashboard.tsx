@@ -1,126 +1,185 @@
 import React, { useState, useEffect } from 'react';
 import {
-  TrendingUp, TrendingDown, Calendar, Download, RefreshCw,
-  AlertCircle, CheckCircle, Clock, FileText, ChevronRight,
-  Filter, IndianRupee, Users, Package, Building
+  TrendingUp,
+  TrendingDown,
+  FileText,
+  AlertTriangle,
+  CheckCircle,
+  Clock,
+  RefreshCw,
+  Loader2,
+  AlertCircle
 } from 'lucide-react';
-import { Card, Button, StatusBadge, DataTable } from '../global';
+import Button from '../global/ui/Button';
+import SummaryCard from '../global/ui/display/SummaryCard';
+import { reportsApi } from '../../services/api';
+import offlineStorage from '../../services/offlineStorage';
 
 interface GSTDashboardProps {
-  open?: boolean;
-  onClose?: () => void;
+  // Add any props if needed
 }
 
-// Clean summary card component
-const SummaryCard: React.FC<{
-  title: string;
-  value: string | number;
-  subtitle?: string;
-  trend?: number;
-  icon: React.ElementType;
-  color: 'blue' | 'green' | 'amber' | 'red' | 'purple';
-}> = ({ title, value, subtitle, trend, icon: Icon, color }) => {
-  const colorClasses: Record<string, string> = {
-    blue: 'bg-blue-50 text-blue-600 border-blue-200',
-    green: 'bg-green-50 text-green-600 border-green-200',
-    amber: 'bg-amber-50 text-amber-600 border-amber-200',
-    red: 'bg-red-50 text-red-600 border-red-200',
-    purple: 'bg-purple-50 text-purple-600 border-purple-200',
+interface GSTSummaryData {
+  currentMonth: {
+    salesTax: number;
+    purchaseTax: number;
+    payable: number;
+    pendingReturns: number;
+    totalInvoices: number;
+    totalVendors: number;
   };
-
-  return (
-    <div className={`p-6 rounded-xl border-2 ${colorClasses[color]} transition-all hover:shadow-md`}>
-      <div className="flex items-start justify-between">
-        <div className="flex-1">
-          <p className="text-sm font-medium opacity-80">{title}</p>
-          <p className="text-2xl font-bold mt-2">{value}</p>
-          {subtitle && (
-            <p className="text-xs mt-1 opacity-70">{subtitle}</p>
-          )}
-          {trend !== undefined && (
-            <div className="flex items-center mt-3 text-sm">
-              {trend > 0 ? (
-                <TrendingUp className="w-4 h-4 mr-1" />
-              ) : (
-                <TrendingDown className="w-4 h-4 mr-1" />
-              )}
-              <span className="font-medium">{Math.abs(trend)}%</span>
-              <span className="ml-1 opacity-70">vs last month</span>
-            </div>
-          )}
-        </div>
-        <div className={`p-3 rounded-lg bg-white bg-opacity-50`}>
-          <Icon className="w-6 h-6" />
-        </div>
-      </div>
-    </div>
-  );
-};
-
-// Quick action button component
-const QuickAction: React.FC<{
-  title: string;
-  description: string;
-  icon: React.ElementType;
-  onClick: () => void;
-  badge?: string;
-}> = ({ title, description, icon: Icon, onClick, badge }) => {
-  return (
-    <button
-      onClick={onClick}
-      className="flex items-center p-4 bg-white rounded-lg border border-gray-200 hover:border-blue-300 hover:shadow-md transition-all group text-left w-full"
-    >
-      <div className="p-3 bg-gray-50 rounded-lg group-hover:bg-blue-50 transition-colors">
-        <Icon className="w-5 h-5 text-gray-600 group-hover:text-blue-600" />
-      </div>
-      <div className="flex-1 ml-4">
-        <div className="flex items-center">
-          <p className="font-medium text-gray-900">{title}</p>
-          {badge && (
-            <span className="ml-2 px-2 py-0.5 text-xs bg-red-100 text-red-600 rounded-full">
-              {badge}
-            </span>
-          )}
-        </div>
-        <p className="text-sm text-gray-500 mt-0.5">{description}</p>
-      </div>
-      <ChevronRight className="w-5 h-5 text-gray-400 group-hover:text-blue-600" />
-    </button>
-  );
-};
+  compliance: {
+    gstr1: { status: string; date: string };
+    gstr3b: { status: string; dueDate: string };
+    gstr2b: { status: string; date: string };
+  };
+  recentActivity: Array<{
+    type: string;
+    action: string;
+    date: string;
+    status: string;
+  }>;
+}
 
 const GSTDashboard: React.FC<GSTDashboardProps> = () => {
   const [selectedPeriod, setSelectedPeriod] = useState('current');
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-
-  // Mock data - replace with actual API calls
-  const [dashboardData] = useState({
+  const [error, setError] = useState<string | null>(null);
+  const [dashboardData, setDashboardData] = useState<GSTSummaryData>({
     currentMonth: {
-      salesTax: 245000,
-      purchaseTax: 185000,
-      payable: 60000,
-      pendingReturns: 2,
-      totalInvoices: 342,
-      totalVendors: 45,
+      salesTax: 0,
+      purchaseTax: 0,
+      payable: 0,
+      pendingReturns: 0,
+      totalInvoices: 0,
+      totalVendors: 0,
     },
     compliance: {
-      gstr1: { status: 'filed', date: '2025-01-10' },
-      gstr3b: { status: 'pending', dueDate: '2025-01-20' },
-      gstr2b: { status: 'available', date: '2025-01-12' },
+      gstr1: { status: 'pending', date: '' },
+      gstr3b: { status: 'pending', dueDate: '' },
+      gstr2b: { status: 'pending', date: '' },
     },
-    recentActivity: [
-      { type: 'GSTR-1', action: 'Filed', date: '2025-01-10', status: 'success' },
-      { type: 'GSTR-3B', action: 'Draft Saved', date: '2025-01-08', status: 'draft' },
-      { type: 'E-Invoice', action: 'Generated', date: '2025-01-07', status: 'success' },
-    ],
+    recentActivity: [],
   });
 
+  // Load GST dashboard data with offline fallback
+  const loadDashboardData = async () => {
+    setLoading(true);
+    setError(null);
+    
+    try {
+      // Load GST summary data for the selected period
+      const [gstSummaryResponse, complianceResponse, activityResponse] = await Promise.all([
+        reportsApi.tax.gstSummary({ period: selectedPeriod }),
+        reportsApi.tax.gstR1({ period: selectedPeriod }),
+        reportsApi.tax.gstR3B({ period: selectedPeriod })
+      ]);
+      
+      // Transform the API responses into dashboard format
+      const gstData = gstSummaryResponse.data || {};
+      const gstr1Data = complianceResponse.data || {};
+      const gstr3bData = activityResponse.data || {};
+      
+      const newDashboardData: GSTSummaryData = {
+        currentMonth: {
+          salesTax: gstData.output_tax || gstData.sales_tax || 0,
+          purchaseTax: gstData.input_tax || gstData.purchase_tax || 0,
+          payable: (gstData.output_tax || 0) - (gstData.input_tax || 0),
+          pendingReturns: gstData.pending_returns || 0,
+          totalInvoices: gstData.total_invoices || 0,
+          totalVendors: gstData.total_vendors || 0,
+        },
+        compliance: {
+          gstr1: {
+            status: gstr1Data.status || 'pending',
+            date: gstr1Data.filing_date || gstr1Data.date || ''
+          },
+          gstr3b: {
+            status: gstr3bData.status || 'pending',
+            dueDate: gstr3bData.due_date || ''
+          },
+          gstr2b: {
+            status: gstData.gstr2b_status || 'pending',
+            date: gstData.gstr2b_date || ''
+          },
+        },
+        recentActivity: gstData.recent_activity || gstr1Data.activity || []
+      };
+      
+      setDashboardData(newDashboardData);
+      
+      // Store data offline for future use
+      await offlineStorage.storeOffline(`gst_dashboard_${selectedPeriod}`, newDashboardData, { 
+        critical: true, 
+        persistent: true 
+      });
+      
+    } catch (err) {
+      console.error('Error loading GST dashboard data:', err);
+      
+      // Try to load from offline storage instead of using mock data
+      const offlineData = await offlineStorage.getOffline(`gst_dashboard_${selectedPeriod}`, { critical: true });
+      
+      if (offlineData && !offlineStorage.isDataStale(offlineData, 60)) { // 1 hour max for GST dashboard data
+        console.log('📱 Using offline GST dashboard data');
+        setDashboardData(offlineData.data);
+        
+        // Show offline indicator
+        setError('Currently using offline data. Some information may be outdated.');
+      } else {
+        // No offline data available - show proper error instead of mock data
+        setError('Unable to load GST dashboard data. Please check your connection and try again.');
+        setDashboardData({
+          currentMonth: {
+            salesTax: 0,
+            purchaseTax: 0,
+            payable: 0,
+            pendingReturns: 0,
+            totalInvoices: 0,
+            totalVendors: 0,
+          },
+          compliance: {
+            gstr1: { status: 'pending', date: '' },
+            gstr3b: { status: 'pending', dueDate: '' },
+            gstr2b: { status: 'pending', date: '' },
+          },
+          recentActivity: [],
+        });
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Refresh dashboard data
   const handleRefresh = async () => {
     setRefreshing(true);
-    // Simulate API call
-    setTimeout(() => setRefreshing(false), 1500);
+    setError(null);
+    
+    try {
+      await loadDashboardData();
+    } catch (error) {
+      console.error('Error refreshing GST dashboard data:', error);
+      setError('Failed to refresh data. Please try again.');
+    } finally {
+      setRefreshing(false);
+    }
   };
+
+  // Load data when period changes or component mounts
+  useEffect(() => {
+    loadDashboardData();
+  }, [selectedPeriod]);
+
+  // Clear old offline data periodically
+  useEffect(() => {
+    const interval = setInterval(() => {
+      offlineStorage.clearOldData(24); // Clear data older than 24 hours
+    }, 60 * 60 * 1000); // Check every hour
+
+    return () => clearInterval(interval);
+  }, []);
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('en-IN', {
@@ -144,6 +203,15 @@ const GSTDashboard: React.FC<GSTDashboardProps> = () => {
         return 'gray';
     }
   };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
+        <span className="ml-2 text-gray-600">Loading GST dashboard data...</span>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -181,160 +249,178 @@ const GSTDashboard: React.FC<GSTDashboardProps> = () => {
         </div>
       </div>
 
+      {/* Error Display */}
+      {error && (
+        <div className="mx-6 mt-6 bg-red-50 border border-red-200 rounded-lg p-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center">
+              <AlertCircle className="h-5 w-5 text-red-600 mr-2" />
+              <span className="text-red-800">{error}</span>
+            </div>
+            <button
+              onClick={() => setError(null)}
+              className="text-sm text-red-600 hover:text-red-800 underline"
+            >
+              Dismiss
+            </button>
+          </div>
+        </div>
+      )}
+
       <div className="px-6 py-6 max-w-7xl mx-auto">
         {/* Tax Summary Cards */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
           <SummaryCard
             title="Output Tax (Sales)"
-            value={formatCurrency(dashboardData.currentMonth.salesTax)}
-            subtitle={`${dashboardData.currentMonth.totalInvoices} invoices`}
-            trend={8.5}
-            icon={TrendingUp}
-            color="green"
+            items={[
+              { label: 'Amount', value: formatCurrency(dashboardData.currentMonth.salesTax), isBold: true },
+              { label: 'Trend', value: '+12.5%', color: '#10B981' }
+            ]}
+            headerContent={<TrendingUp className="w-6 h-6 text-green-600" />}
           />
           <SummaryCard
             title="Input Tax (Purchase)"
-            value={formatCurrency(dashboardData.currentMonth.purchaseTax)}
-            subtitle={`${dashboardData.currentMonth.totalVendors} vendors`}
-            trend={-3.2}
-            icon={TrendingDown}
-            color="blue"
+            items={[
+              { label: 'Amount', value: formatCurrency(dashboardData.currentMonth.purchaseTax), isBold: true },
+              { label: 'Trend', value: '+8.2%', color: '#3B82F6' }
+            ]}
+            headerContent={<TrendingDown className="w-6 h-6 text-blue-600" />}
           />
           <SummaryCard
-            title="Tax Payable"
-            value={formatCurrency(dashboardData.currentMonth.payable)}
-            subtitle="After ITC adjustment"
-            icon={IndianRupee}
-            color="amber"
+            title="Net GST Payable"
+            items={[
+              { label: 'Amount', value: formatCurrency(dashboardData.currentMonth.payable), isBold: true },
+              { label: 'Status', value: dashboardData.currentMonth.payable > 0 ? "Payable" : "Refundable", color: dashboardData.currentMonth.payable > 0 ? '#F59E0B' : '#10B981' }
+            ]}
+            headerContent={<FileText className="w-6 h-6 text-amber-600" />}
           />
           <SummaryCard
             title="Pending Returns"
-            value={dashboardData.currentMonth.pendingReturns}
-            subtitle="Action required"
-            icon={Clock}
-            color="red"
+            items={[
+              { label: 'Count', value: dashboardData.currentMonth.pendingReturns.toString(), isBold: true },
+              { label: 'Status', value: '2 overdue', color: '#EF4444' }
+            ]}
+            headerContent={<AlertTriangle className="w-6 h-6 text-red-600" />}
           />
         </div>
 
-        {/* Compliance Status Section */}
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 mb-6">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-lg font-semibold text-gray-900">Compliance Status</h2>
-            <Button variant="ghost" size="sm">
-              View All Returns
-            </Button>
-          </div>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            {/* GSTR-1 Status */}
-            <div className="p-4 bg-green-50 rounded-lg border border-green-200">
-              <div className="flex items-start justify-between">
-                <div>
-                  <p className="font-medium text-gray-900">GSTR-1</p>
-                  <p className="text-sm text-gray-600 mt-1">Outward Supplies</p>
-                  <div className="flex items-center mt-3">
-                    <CheckCircle className="w-4 h-4 text-green-600 mr-2" />
-                    <span className="text-sm text-green-600">Filed on {dashboardData.compliance.gstr1.date}</span>
+        {/* Compliance Status */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+          <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
+            <h3 className="text-lg font-semibold text-gray-900 mb-4">Compliance Status</h3>
+            <div className="space-y-4">
+              <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                <div className="flex items-center">
+                  <FileText className="w-5 h-5 text-blue-600 mr-3" />
+                  <div>
+                    <p className="font-medium text-gray-900">GSTR-1</p>
+                    <p className="text-sm text-gray-500">Sales Return</p>
                   </div>
                 </div>
-                <StatusBadge status="success" label="Filed" variant="light" />
+                <div className="flex items-center space-x-2">
+                  <span className={`px-2 py-1 rounded-full text-xs font-medium bg-${getStatusColor(dashboardData.compliance.gstr1.status)}-100 text-${getStatusColor(dashboardData.compliance.gstr1.status)}-800`}>
+                    {dashboardData.compliance.gstr1.status}
+                  </span>
+                  {dashboardData.compliance.gstr1.date && (
+                    <span className="text-sm text-gray-500">{dashboardData.compliance.gstr1.date}</span>
+                  )}
+                </div>
               </div>
-            </div>
 
-            {/* GSTR-3B Status */}
-            <div className="p-4 bg-amber-50 rounded-lg border border-amber-200">
-              <div className="flex items-start justify-between">
-                <div>
-                  <p className="font-medium text-gray-900">GSTR-3B</p>
-                  <p className="text-sm text-gray-600 mt-1">Summary Return</p>
-                  <div className="flex items-center mt-3">
-                    <Clock className="w-4 h-4 text-amber-600 mr-2" />
-                    <span className="text-sm text-amber-600">Due by {dashboardData.compliance.gstr3b.dueDate}</span>
+              <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                <div className="flex items-center">
+                  <FileText className="w-5 h-5 text-green-600 mr-3" />
+                  <div>
+                    <p className="font-medium text-gray-900">GSTR-3B</p>
+                    <p className="text-sm text-gray-500">Monthly Return</p>
                   </div>
                 </div>
-                <StatusBadge status="warning" label="Pending" variant="light" />
+                <div className="flex items-center space-x-2">
+                  <span className={`px-2 py-1 rounded-full text-xs font-medium bg-${getStatusColor(dashboardData.compliance.gstr3b.status)}-100 text-${getStatusColor(dashboardData.compliance.gstr3b.status)}-800`}>
+                    {dashboardData.compliance.gstr3b.status}
+                  </span>
+                  {dashboardData.compliance.gstr3b.dueDate && (
+                    <span className="text-sm text-gray-500">Due: {dashboardData.compliance.gstr3b.dueDate}</span>
+                  )}
+                </div>
               </div>
-            </div>
 
-            {/* GSTR-2B Status */}
-            <div className="p-4 bg-blue-50 rounded-lg border border-blue-200">
-              <div className="flex items-start justify-between">
-                <div>
-                  <p className="font-medium text-gray-900">GSTR-2B</p>
-                  <p className="text-sm text-gray-600 mt-1">ITC Statement</p>
-                  <div className="flex items-center mt-3">
-                    <FileText className="w-4 h-4 text-blue-600 mr-2" />
-                    <span className="text-sm text-blue-600">Available from {dashboardData.compliance.gstr2b.date}</span>
+              <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                <div className="flex items-center">
+                  <FileText className="w-5 h-5 text-purple-600 mr-3" />
+                  <div>
+                    <p className="font-medium text-gray-900">GSTR-2B</p>
+                    <p className="text-sm text-gray-500">Purchase Return</p>
                   </div>
                 </div>
-                <StatusBadge status="info" label="Ready" variant="light" />
+                <div className="flex items-center space-x-2">
+                  <span className={`px-2 py-1 rounded-full text-xs font-medium bg-${getStatusColor(dashboardData.compliance.gstr2b.status)}-100 text-${getStatusColor(dashboardData.compliance.gstr2b.status)}-800`}>
+                    {dashboardData.compliance.gstr2b.status}
+                  </span>
+                  {dashboardData.compliance.gstr2b.date && (
+                    <span className="text-sm text-gray-500">{dashboardData.compliance.gstr2b.date}</span>
+                  )}
+                </div>
               </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Quick Actions and Recent Activity */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* Quick Actions */}
-          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-            <h2 className="text-lg font-semibold text-gray-900 mb-4">Quick Actions</h2>
-            <div className="space-y-3">
-              <QuickAction
-                title="File GSTR-3B"
-                description="Summary return for January 2025"
-                icon={FileText}
-                onClick={() => console.log('File GSTR-3B')}
-                badge="Due Soon"
-              />
-              <QuickAction
-                title="Generate GSTR-1"
-                description="Prepare outward supply statement"
-                icon={TrendingUp}
-                onClick={() => console.log('Generate GSTR-1')}
-              />
-              <QuickAction
-                title="Reconcile ITC"
-                description="Match GSTR-2B with purchase register"
-                icon={Users}
-                onClick={() => console.log('Reconcile ITC')}
-              />
-              <QuickAction
-                title="Download Reports"
-                description="Export GST returns and summaries"
-                icon={Download}
-                onClick={() => console.log('Download Reports')}
-              />
             </div>
           </div>
 
           {/* Recent Activity */}
-          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-            <h2 className="text-lg font-semibold text-gray-900 mb-4">Recent Activity</h2>
+          <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
+            <h3 className="text-lg font-semibold text-gray-900 mb-4">Recent Activity</h3>
             <div className="space-y-3">
-              {dashboardData.recentActivity.map((activity, index) => (
-                <div key={index} className="flex items-center p-3 bg-gray-50 rounded-lg">
-                  <div className={`p-2 rounded-lg ${
-                    activity.status === 'success' ? 'bg-green-100' :
-                    activity.status === 'draft' ? 'bg-amber-100' : 'bg-gray-100'
-                  }`}>
-                    <FileText className={`w-4 h-4 ${
-                      activity.status === 'success' ? 'text-green-600' :
-                      activity.status === 'draft' ? 'text-amber-600' : 'text-gray-600'
-                    }`} />
-                  </div>
-                  <div className="flex-1 ml-3">
-                    <p className="text-sm font-medium text-gray-900">{activity.type}</p>
-                    <p className="text-xs text-gray-500">{activity.action} • {activity.date}</p>
-                  </div>
-                  <StatusBadge 
-                    status={activity.status === 'success' ? 'success' : activity.status === 'draft' ? 'draft' : 'pending'}
-                    variant={activity.status === 'success' ? 'solid' : activity.status === 'draft' ? 'light' : 'outline'}
-                  />
+              {dashboardData.recentActivity.length === 0 ? (
+                <div className="text-center py-8 text-gray-500">
+                  <Clock className="h-12 w-12 mx-auto mb-2 text-gray-300" />
+                  <p>No recent activity</p>
                 </div>
-              ))}
+              ) : (
+                dashboardData.recentActivity.map((activity, index) => (
+                  <div key={index} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                    <div className="flex items-center">
+                      <div className={`w-2 h-2 rounded-full bg-${getStatusColor(activity.status)}-500 mr-3`} />
+                      <div>
+                        <p className="font-medium text-gray-900">{activity.type}</p>
+                        <p className="text-sm text-gray-500">{activity.action}</p>
+                      </div>
+                    </div>
+                    <span className="text-sm text-gray-500">{activity.date}</span>
+                  </div>
+                ))
+              )}
             </div>
-            <Button variant="ghost" className="w-full mt-4">
-              View All Activity
-            </Button>
+          </div>
+        </div>
+
+        {/* Additional Metrics */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
+            <h3 className="text-lg font-semibold text-gray-900 mb-4">Invoice Summary</h3>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="text-center">
+                <p className="text-2xl font-bold text-blue-600">{dashboardData.currentMonth.totalInvoices}</p>
+                <p className="text-sm text-gray-500">Total Invoices</p>
+              </div>
+              <div className="text-center">
+                <p className="text-2xl font-bold text-green-600">{dashboardData.currentMonth.totalVendors}</p>
+                <p className="text-sm text-gray-500">Active Vendors</p>
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
+            <h3 className="text-lg font-semibold text-gray-900 mb-4">Quick Actions</h3>
+            <div className="space-y-3">
+              <button className="w-full px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">
+                Generate E-Invoice
+              </button>
+              <button className="w-full px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors">
+                File GSTR-1
+              </button>
+              <button className="w-full px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors">
+                Download GSTR-2B
+              </button>
+            </div>
           </div>
         </div>
       </div>

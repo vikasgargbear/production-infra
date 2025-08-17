@@ -2,9 +2,10 @@ import React, { useState, useEffect } from 'react';
 import { 
   CheckCircle, AlertTriangle, XCircle, Eye, Play,
   Filter, Download, RefreshCw, Settings, Code,
-  Database, Users, Package, FileText, Search
+  Database, Users, Package, FileText, Search, Loader2, X
 } from 'lucide-react';
 import { DataTable, StatusBadge, Toast } from '../global/ui';
+import { settingsApi } from '../../services/api/modules/settings.api';
 
 const DataValidationEngine = ({ open, onClose }) => {
   const [activeTab, setActiveTab] = useState('rules');
@@ -13,6 +14,9 @@ const DataValidationEngine = ({ open, onClose }) => {
   const [isRunning, setIsRunning] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterSeverity, setFilterSeverity] = useState('all');
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [refreshing, setRefreshing] = useState(false);
 
   useEffect(() => {
     if (open) {
@@ -21,347 +25,367 @@ const DataValidationEngine = ({ open, onClose }) => {
     }
   }, [open]);
 
-  const loadValidationRules = () => {
-    // Enterprise validation rules for pharmaceutical data
-    const rules = [
-      {
-        id: 'PROD_001',
-        name: 'Product Name Validation',
-        description: 'Ensures product names follow pharmaceutical naming conventions',
-        category: 'products',
-        severity: 'error',
-        enabled: true,
-        rule: 'Product name must contain generic name and strength',
-        regex: '^[A-Za-z\\s]+\\s+\\d+[mg|ml|gm|tab|cap]',
-        lastRun: '2024-07-26T10:30:00Z',
-        passRate: 94.5
-      },
-      {
-        id: 'PROD_002', 
-        name: 'HSN Code Format',
-        description: 'Validates HSN codes for pharmaceutical products',
-        category: 'products',
-        severity: 'error',
-        enabled: true,
-        rule: 'HSN code must be 8 digits starting with 30',
-        regex: '^30\\d{6}$',
-        lastRun: '2024-07-26T10:30:00Z',
-        passRate: 98.2
-      },
-      {
-        id: 'PROD_003',
-        name: 'Expiry Date Future Check',
-        description: 'Ensures all batch expiry dates are in the future',
-        category: 'batches',
-        severity: 'warning',
-        enabled: true,
-        rule: 'Batch expiry date must be at least 30 days from today',
-        lastRun: '2024-07-26T10:30:00Z',
-        passRate: 87.3
-      },
-      {
-        id: 'CUST_001',
-        name: 'Customer GSTIN Validation',
-        description: 'Validates GSTIN format for customer records',
-        category: 'customers',
-        severity: 'error',
-        enabled: true,
-        rule: 'GSTIN must be 15 characters with valid checksum',
-        regex: '^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$',
-        lastRun: '2024-07-26T10:30:00Z',
-        passRate: 92.1
-      },
-      {
-        id: 'CUST_002',
-        name: 'Customer Contact Validation',
-        description: 'Ensures customers have valid contact information',
-        category: 'customers',
-        severity: 'warning',
-        enabled: true,
-        rule: 'Customer must have either phone or email',
-        lastRun: '2024-07-26T10:30:00Z',
-        passRate: 96.7
-      },
-      {
-        id: 'SUPP_001',
-        name: 'Supplier License Validation',
-        description: 'Validates supplier drug license numbers',
-        category: 'suppliers',
-        severity: 'error',
-        enabled: true,
-        rule: 'Drug license must be valid format for state',
-        lastRun: '2024-07-26T10:30:00Z',
-        passRate: 99.1
-      },
-      {
-        id: 'INV_001',
-        name: 'Negative Stock Check',
-        description: 'Identifies products with negative stock levels',
-        category: 'inventory',
-        severity: 'critical',
-        enabled: true,
-        rule: 'Stock quantity cannot be negative',
-        lastRun: '2024-07-26T10:30:00Z',
-        passRate: 99.8
-      },
-      {
-        id: 'INV_002',
-        name: 'Batch Duplicate Check',
-        description: 'Identifies duplicate batch numbers for same product',
-        category: 'batches',
-        severity: 'error',
-        enabled: true,
-        rule: 'Batch number must be unique per product',
-        lastRun: '2024-07-26T10:30:00Z',
-        passRate: 100.0
+  const loadValidationRules = async () => {
+    try {
+      const response = await settingsApi.validation.getRules();
+      if (response?.data) {
+        setValidationRules(response.data);
+      } else {
+        setValidationRules([]);
       }
-    ];
-    setValidationRules(rules);
+    } catch (error) {
+      console.error('Error loading validation rules:', error);
+      setError('Failed to load validation rules. Please try again.');
+      setValidationRules([]);
+    }
   };
 
-  const loadValidationResults = () => {
-    // Mock validation results
-    const results = [
-      {
-        id: 1,
-        ruleId: 'PROD_001',
-        ruleName: 'Product Name Validation',
-        entity: 'Amoxicillin',
-        entityId: 'PROD_1247',
-        issue: 'Product name missing strength specification',
-        severity: 'error',
-        status: 'open',
-        detectedAt: '2024-07-26T09:15:00Z',
-        suggestion: 'Add strength like "250mg" or "500mg" to product name'
-      },
-      {
-        id: 2,
-        ruleId: 'CUST_001',
-        ruleName: 'Customer GSTIN Validation',
-        entity: 'ABC Pharmacy',
-        entityId: 'CUST_456',
-        issue: 'Invalid GSTIN checksum',
-        severity: 'error',
-        status: 'open',
-        detectedAt: '2024-07-26T08:30:00Z',
-        suggestion: 'Verify GSTIN number with customer'
-      },
-      {
-        id: 3,
-        ruleId: 'PROD_003',
-        ruleName: 'Expiry Date Future Check',
-        entity: 'Batch BCH-2024-001',
-        entityId: 'BATCH_789',
-        issue: 'Batch expires within 30 days',
-        severity: 'warning',
-        status: 'acknowledged',
-        detectedAt: '2024-07-26T07:45:00Z',
-        suggestion: 'Plan inventory movement or markdown'
-      },
-      {
-        id: 4,
-        ruleId: 'INV_001',
-        ruleName: 'Negative Stock Check',
-        entity: 'Paracetamol 500mg',
-        entityId: 'PROD_123',
-        issue: 'Stock quantity is -5 units',
-        severity: 'critical',
-        status: 'open',
-        detectedAt: '2024-07-26T06:20:00Z',
-        suggestion: 'Adjust stock or check transaction history'
+  const loadValidationResults = async () => {
+    try {
+      const response = await settingsApi.validation.getResults();
+      if (response?.data) {
+        setValidationResults(response.data);
+      } else {
+        setValidationResults([]);
       }
-    ];
-    setValidationResults(results);
+    } catch (error) {
+      console.error('Error loading validation results:', error);
+      setError('Failed to load validation results. Please try again.');
+      setValidationResults([]);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
-  const runValidation = async (ruleId = null) => {
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    setError(null);
+    try {
+      await Promise.all([loadValidationRules(), loadValidationResults()]);
+    } catch (error) {
+      console.error('Error refreshing data:', error);
+      setError('Failed to refresh data. Please try again.');
+    } finally {
+      setRefreshing(false);
+    }
+  };
+
+  const handleRunValidation = async () => {
     setIsRunning(true);
+    setError(null);
     
     try {
-      // Simulate API call to run validation
-      await new Promise(resolve => setTimeout(resolve, 2000));
-      
-      // Refresh results
-      loadValidationResults();
-      
-      Toast.success(ruleId ? 'Rule validation completed' : 'Full validation completed');
+      const response = await settingsApi.validation.runValidation();
+      if (response.success) {
+        Toast.success('Validation started successfully');
+        // Refresh results after a delay to allow processing
+        setTimeout(() => {
+          loadValidationResults();
+        }, 2000);
+      } else {
+        setError('Failed to start validation. Please try again.');
+      }
     } catch (error) {
-      Toast.error('Validation failed: ' + error.message);
+      console.error('Error running validation:', error);
+      setError('Failed to start validation. Please try again.');
     } finally {
       setIsRunning(false);
     }
   };
 
-  const updateIssueStatus = (issueId, newStatus) => {
-    setValidationResults(prev => 
-      prev.map(result => 
-        result.id === issueId 
-          ? { ...result, status: newStatus }
-          : result
-      )
-    );
-    Toast.success('Issue status updated');
+  const handleToggleRule = async (ruleId, enabled) => {
+    try {
+      const response = await settingsApi.validation.updateRule(ruleId, { enabled });
+      if (response.success) {
+        setValidationRules(prev => prev.map(rule => 
+          rule.id === ruleId ? { ...rule, enabled } : rule
+        ));
+      }
+    } catch (error) {
+      console.error('Error toggling rule:', error);
+      setError('Failed to update rule. Please try again.');
+    }
+  };
+
+  const handleDeleteRule = async (ruleId) => {
+    if (!window.confirm('Are you sure you want to delete this validation rule?')) return;
+
+    try {
+      const response = await settingsApi.validation.deleteRule(ruleId);
+      if (response.success) {
+        setValidationRules(prev => prev.filter(rule => rule.id !== ruleId));
+        Toast.success('Rule deleted successfully');
+      }
+    } catch (error) {
+      console.error('Error deleting rule:', error);
+      setError('Failed to delete rule. Please try again.');
+    }
+  };
+
+  const handleExportResults = async () => {
+    try {
+      const response = await settingsApi.validation.exportResults();
+      if (response?.data?.downloadUrl) {
+        // Trigger download
+        const a = document.createElement('a');
+        a.href = response.data.downloadUrl;
+        a.download = `validation_results_${new Date().toISOString().split('T')[0]}.xlsx`;
+        a.click();
+      }
+    } catch (error) {
+      console.error('Error exporting results:', error);
+      setError('Failed to export results. Please try again.');
+    }
   };
 
   const getSeverityColor = (severity) => {
     switch (severity) {
-      case 'critical': return 'red';
-      case 'error': return 'orange';
+      case 'error': return 'red';
       case 'warning': return 'yellow';
       case 'info': return 'blue';
       default: return 'gray';
     }
   };
 
-  const getCategoryIcon = (category) => {
-    switch (category) {
-      case 'products': return Package;
-      case 'customers': return Users;
-      case 'suppliers': return Database;
-      case 'batches': return FileText;
-      case 'inventory': return Package;
-      default: return Database;
+  const getSeverityIcon = (severity) => {
+    switch (severity) {
+      case 'error': return XCircle;
+      case 'warning': return AlertTriangle;
+      case 'info': return CheckCircle;
+      default: return CheckCircle;
     }
   };
 
-  const filteredRules = validationRules.filter(rule => 
-    rule.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    rule.description.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const getCategoryIcon = (category) => {
+    const iconMap = {
+      'products': Package,
+      'customers': Users,
+      'suppliers': Database,
+      'batches': FileText,
+      'inventory': Package,
+      'default': Database
+    };
+    return iconMap[category] || iconMap.default;
+  };
+
+  const filteredRules = validationRules.filter(rule => {
+    const matchesSearch = searchTerm === '' || 
+      rule.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      rule.description.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesSeverity = filterSeverity === 'all' || rule.severity === filterSeverity;
+    return matchesSearch && matchesSeverity;
+  });
 
   const filteredResults = validationResults.filter(result => {
-    const matchesSearch = result.entity.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         result.issue.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesSearch = searchTerm === '' || 
+      result.entity.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      result.message.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesSeverity = filterSeverity === 'all' || result.severity === filterSeverity;
     return matchesSearch && matchesSeverity;
   });
 
-  const tabs = [
-    { id: 'rules', label: 'Validation Rules', icon: Settings },
-    { id: 'results', label: 'Issues & Results', icon: AlertTriangle },
-    { id: 'reports', label: 'Reports', icon: FileText }
-  ];
-
   if (!open) return null;
 
+  if (isLoading) {
+    return (
+      <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
+        <div className="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white">
+          <div className="flex items-center justify-center">
+            <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
+            <span className="ml-2 text-gray-600">Loading validation engine...</span>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-white rounded-lg shadow-xl w-full max-w-7xl mx-4 h-[90vh] flex flex-col">
+    <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
+      <div className="relative top-20 mx-auto p-5 border w-11/12 max-w-6xl shadow-lg rounded-md bg-white">
         {/* Header */}
-        <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
+        <div className="flex items-center justify-between mb-6">
           <div>
-            <h2 className="text-xl font-semibold text-gray-900">Data Validation Engine</h2>
-            <p className="text-sm text-gray-600">Enterprise data quality management</p>
+            <h2 className="text-2xl font-bold text-gray-900">Data Validation Engine</h2>
+            <p className="text-gray-600">Validate data quality and integrity</p>
           </div>
           <div className="flex items-center space-x-2">
             <button
-              onClick={() => runValidation()}
+              onClick={handleRunValidation}
               disabled={isRunning}
-              className="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50"
+              className="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {isRunning ? (
-                <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
               ) : (
                 <Play className="h-4 w-4 mr-2" />
               )}
-              {isRunning ? 'Running...' : 'Run All Validations'}
+              {isRunning ? 'Running...' : 'Run Validation'}
+            </button>
+            <button
+              onClick={handleRefresh}
+              disabled={refreshing}
+              className="inline-flex items-center px-3 py-2 border border-gray-300 rounded-md bg-white text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <RefreshCw className={`h-4 w-4 mr-1 ${refreshing ? 'animate-spin' : ''}`} />
+              {refreshing ? 'Refreshing...' : 'Refresh'}
             </button>
             <button
               onClick={onClose}
-              className="text-gray-400 hover:text-gray-600"
+              className="inline-flex items-center px-3 py-2 border border-gray-300 rounded-md bg-white text-gray-700 hover:bg-gray-50"
             >
-              ✕
+              <X className="h-4 w-4 mr-1" />
+              Close
             </button>
           </div>
         </div>
 
-        {/* Tabs */}
-        <div className="px-6 border-b border-gray-200">
-          <nav className="flex space-x-8">
-            {tabs.map((tab) => (
+        {/* Error Display */}
+        {error && (
+          <div className="mb-6 bg-red-50 border border-red-200 rounded-lg p-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center">
+                <AlertTriangle className="h-5 w-5 text-red-600 mr-2" />
+                <span className="text-red-800">{error}</span>
+              </div>
               <button
-                key={tab.id}
-                onClick={() => setActiveTab(tab.id)}
-                className={`flex items-center py-4 px-1 border-b-2 font-medium text-sm ${
-                  activeTab === tab.id
-                    ? 'border-blue-500 text-blue-600'
-                    : 'border-transparent text-gray-500 hover:text-gray-700'
-                }`}
+                onClick={handleRefresh}
+                className="text-sm text-red-600 hover:text-red-800 underline"
               >
-                <tab.icon className="h-4 w-4 mr-2" />
-                {tab.label}
+                Try Again
               </button>
-            ))}
+            </div>
+          </div>
+        )}
+
+        {/* Tabs */}
+        <div className="border-b border-gray-200 mb-6">
+          <nav className="-mb-px flex space-x-8">
+            <button
+              onClick={() => setActiveTab('rules')}
+              className={`py-2 px-1 border-b-2 font-medium text-sm ${
+                activeTab === 'rules'
+                  ? 'border-blue-500 text-blue-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+              }`}
+            >
+              Validation Rules
+            </button>
+            <button
+              onClick={() => setActiveTab('results')}
+              className={`py-2 px-1 border-b-2 font-medium text-sm ${
+                activeTab === 'results'
+                  ? 'border-blue-500 text-blue-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+              }`}
+            >
+              Validation Results
+            </button>
           </nav>
         </div>
 
-        {/* Content */}
-        <div className="flex-1 overflow-hidden">
-          {activeTab === 'rules' && (
-            <div className="p-6 h-full overflow-y-auto">
-              {/* Search and filters */}
-              <div className="mb-6 flex items-center justify-between">
-                <div className="flex items-center space-x-4">
-                  <div className="relative">
-                    <Search className="h-4 w-4 absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
-                    <input
-                      type="text"
-                      placeholder="Search rules..."
-                      value={searchTerm}
-                      onChange={(e) => setSearchTerm(e.target.value)}
-                      className="pl-10 pr-4 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
-                    />
-                  </div>
-                </div>
-                <button className="inline-flex items-center px-3 py-2 border border-gray-300 rounded-md bg-white text-gray-700 hover:bg-gray-50">
-                  <Download className="h-4 w-4 mr-1" />
-                  Export Rules
+        {/* Search and Filters */}
+        <div className="mb-6 flex flex-col sm:flex-row gap-4">
+          <div className="flex-1">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+              <input
+                type="text"
+                placeholder="Search rules or results..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+          </div>
+          <div className="flex items-center space-x-2">
+            <select
+              value={filterSeverity}
+              onChange={(e) => setFilterSeverity(e.target.value)}
+              className="px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="all">All Severities</option>
+              <option value="error">Errors</option>
+              <option value="warning">Warnings</option>
+              <option value="info">Info</option>
+            </select>
+            {activeTab === 'results' && (
+              <button
+                onClick={handleExportResults}
+                className="inline-flex items-center px-3 py-2 border border-gray-300 rounded-md bg-white text-gray-700 hover:bg-gray-50"
+              >
+                <Download className="h-4 w-4 mr-2" />
+                Export
+              </button>
+            )}
+          </div>
+        </div>
+
+        {activeTab === 'rules' && (
+          <div>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-medium text-gray-900">Validation Rules</h3>
+              <span className="text-sm text-gray-500">{filteredRules.length} rules</span>
+            </div>
+            
+            {filteredRules.length === 0 ? (
+              <div className="text-center py-12">
+                <Code className="h-16 w-16 mx-auto mb-4 text-gray-300" />
+                <h3 className="text-lg font-medium text-gray-900 mb-2">No Validation Rules Found</h3>
+                <p className="text-gray-500 mb-4">Configure validation rules through the settings panel</p>
+                <button
+                  onClick={handleRefresh}
+                  className="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
+                >
+                  <RefreshCw className="h-4 w-4 mr-2" />
+                  Refresh
                 </button>
               </div>
-
-              {/* Rules table */}
+            ) : (
               <div className="space-y-4">
                 {filteredRules.map((rule) => {
+                  const SeverityIcon = getSeverityIcon(rule.severity);
                   const CategoryIcon = getCategoryIcon(rule.category);
                   return (
                     <div key={rule.id} className="bg-white border border-gray-200 rounded-lg p-4">
                       <div className="flex items-start justify-between">
                         <div className="flex items-start space-x-3">
-                          <div className={`w-8 h-8 rounded-full flex items-center justify-center ${
-                            rule.enabled ? 'bg-green-100' : 'bg-gray-100'
-                          }`}>
-                            <CategoryIcon className={`h-4 w-4 ${
-                              rule.enabled ? 'text-green-600' : 'text-gray-600'
-                            }`} />
+                          <div className={`w-10 h-10 rounded-lg flex items-center justify-center bg-${getSeverityColor(rule.severity)}-100`}>
+                            <SeverityIcon className={`h-5 w-5 text-${getSeverityColor(rule.severity)}-600`} />
                           </div>
                           <div className="flex-1">
-                            <div className="flex items-center space-x-2">
+                            <div className="flex items-center space-x-2 mb-1">
                               <h4 className="font-medium text-gray-900">{rule.name}</h4>
-                              <StatusBadge 
-                                status={rule.severity === 'critical' ? 'error' : rule.severity === 'error' ? 'warning' : 'active'}
-                                text={rule.severity}
-                                size="sm"
-                              />
-                              <span className="text-xs text-gray-500">#{rule.id}</span>
+                              <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-${getSeverityColor(rule.severity)}-100 text-${getSeverityColor(rule.severity)}-800`}>
+                                {rule.severity}
+                              </span>
                             </div>
-                            <p className="text-sm text-gray-600 mt-1">{rule.description}</p>
-                            <div className="flex items-center space-x-4 mt-2 text-xs text-gray-500">
-                              <span>Category: {rule.category}</span>
+                            <p className="text-sm text-gray-600 mb-2">{rule.description}</p>
+                            <div className="flex items-center space-x-4 text-sm text-gray-500">
+                              <span className="flex items-center">
+                                <CategoryIcon className="h-4 w-4 mr-1" />
+                                {rule.category}
+                              </span>
                               <span>Pass Rate: {rule.passRate}%</span>
-                              <span>Last Run: {new Date(rule.lastRun).toLocaleString()}</span>
+                              <span>Last Run: {new Date(rule.lastRun).toLocaleDateString()}</span>
                             </div>
                           </div>
                         </div>
                         <div className="flex items-center space-x-2">
                           <button
-                            onClick={() => runValidation(rule.id)}
-                            disabled={isRunning}
-                            className="text-blue-600 hover:text-blue-800 text-sm font-medium"
+                            onClick={() => handleToggleRule(rule.id, !rule.enabled)}
+                            className={`px-3 py-1 rounded-md text-sm font-medium ${
+                              rule.enabled
+                                ? 'bg-green-100 text-green-800 hover:bg-green-200'
+                                : 'bg-gray-100 text-gray-800 hover:bg-gray-200'
+                            }`}
                           >
-                            Run
+                            {rule.enabled ? 'Enabled' : 'Disabled'}
                           </button>
-                          <button className="text-gray-600 hover:text-gray-800">
-                            <Eye className="h-4 w-4" />
+                          <button
+                            onClick={() => handleDeleteRule(rule.id)}
+                            className="px-3 py-1 bg-red-100 text-red-800 rounded-md hover:bg-red-200 text-sm"
+                          >
+                            Delete
                           </button>
                         </div>
                       </div>
@@ -369,105 +393,74 @@ const DataValidationEngine = ({ open, onClose }) => {
                   );
                 })}
               </div>
-            </div>
-          )}
+            )}
+          </div>
+        )}
 
-          {activeTab === 'results' && (
-            <div className="p-6 h-full overflow-y-auto">
-              {/* Search and filters */}
-              <div className="mb-6 flex items-center justify-between">
-                <div className="flex items-center space-x-4">
-                  <div className="relative">
-                    <Search className="h-4 w-4 absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
-                    <input
-                      type="text"
-                      placeholder="Search issues..."
-                      value={searchTerm}
-                      onChange={(e) => setSearchTerm(e.target.value)}
-                      className="pl-10 pr-4 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
-                    />
-                  </div>
-                  <select
-                    value={filterSeverity}
-                    onChange={(e) => setFilterSeverity(e.target.value)}
-                    className="px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
-                  >
-                    <option value="all">All Severities</option>
-                    <option value="critical">Critical</option>
-                    <option value="error">Error</option>
-                    <option value="warning">Warning</option>
-                  </select>
-                </div>
-                <button className="inline-flex items-center px-3 py-2 border border-gray-300 rounded-md bg-white text-gray-700 hover:bg-gray-50">
-                  <Download className="h-4 w-4 mr-1" />
-                  Export Issues
+        {activeTab === 'results' && (
+          <div>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-medium text-gray-900">Validation Results</h3>
+              <span className="text-sm text-gray-500">{filteredResults.length} results</span>
+            </div>
+            
+            {filteredResults.length === 0 ? (
+              <div className="text-center py-12">
+                <CheckCircle className="h-16 w-16 mx-auto mb-4 text-gray-300" />
+                <h3 className="text-lg font-medium text-gray-900 mb-2">No Validation Results Found</h3>
+                <p className="text-gray-500 mb-4">Run validation to see results</p>
+                <button
+                  onClick={handleRunValidation}
+                  className="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
+                >
+                  <Play className="h-4 w-4 mr-2" />
+                  Run Validation
                 </button>
               </div>
-
-              {/* Issues table */}
+            ) : (
               <div className="space-y-4">
-                {filteredResults.map((result) => (
-                  <div key={result.id} className="bg-white border border-gray-200 rounded-lg p-4">
-                    <div className="flex items-start justify-between">
-                      <div className="flex items-start space-x-3">
-                        <div className={`w-2 h-2 rounded-full mt-2 ${
-                          getSeverityColor(result.severity) === 'red' ? 'bg-red-500' :
-                          getSeverityColor(result.severity) === 'orange' ? 'bg-orange-500' :
-                          getSeverityColor(result.severity) === 'yellow' ? 'bg-yellow-500' : 'bg-blue-500'
-                        }`}></div>
-                        <div className="flex-1">
-                          <div className="flex items-center space-x-2">
-                            <h4 className="font-medium text-gray-900">{result.entity}</h4>
-                            <StatusBadge 
-                              status={result.status === 'open' ? 'error' : result.status === 'acknowledged' ? 'warning' : 'active'}
-                              text={result.status}
-                              size="sm"
-                            />
-                            <span className="text-xs text-gray-500">Rule: {result.ruleId}</span>
+                {filteredResults.map((result) => {
+                  const SeverityIcon = getSeverityIcon(result.severity);
+                  const CategoryIcon = getCategoryIcon(result.category);
+                  return (
+                    <div key={result.id} className="bg-white border border-gray-200 rounded-lg p-4">
+                      <div className="flex items-start justify-between">
+                        <div className="flex items-start space-x-3">
+                          <div className={`w-10 h-10 rounded-lg flex items-center justify-center bg-${getSeverityColor(result.severity)}-100`}>
+                            <SeverityIcon className={`h-5 w-5 text-${getSeverityColor(result.severity)}-600`} />
                           </div>
-                          <p className="text-sm text-red-600 mt-1">{result.issue}</p>
-                          <p className="text-sm text-gray-600 mt-1">💡 {result.suggestion}</p>
-                          <div className="flex items-center space-x-4 mt-2 text-xs text-gray-500">
-                            <span>Detected: {new Date(result.detectedAt).toLocaleString()}</span>
-                            <span>Entity ID: {result.entityId}</span>
+                          <div className="flex-1">
+                            <div className="flex items-center space-x-2 mb-1">
+                              <h4 className="font-medium text-gray-900">{result.entity}</h4>
+                              <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-${getSeverityColor(result.severity)}-100 text-${getSeverityColor(result.severity)}-800`}>
+                                {result.severity}
+                              </span>
+                            </div>
+                            <p className="text-sm text-gray-600 mb-2">{result.message}</p>
+                            <div className="flex items-center space-x-4 text-sm text-gray-500">
+                              <span className="flex items-center">
+                                <CategoryIcon className="h-4 w-4 mr-1" />
+                                {result.category}
+                              </span>
+                              <span>Rule: {result.ruleName}</span>
+                              <span>Timestamp: {new Date(result.timestamp).toLocaleString()}</span>
+                            </div>
                           </div>
                         </div>
-                      </div>
-                      <div className="flex items-center space-x-2">
-                        {result.status === 'open' && (
-                          <>
-                            <button
-                              onClick={() => updateIssueStatus(result.id, 'acknowledged')}
-                              className="text-yellow-600 hover:text-yellow-800 text-sm font-medium"
-                            >
-                              Acknowledge
-                            </button>
-                            <button
-                              onClick={() => updateIssueStatus(result.id, 'resolved')}
-                              className="text-green-600 hover:text-green-800 text-sm font-medium"
-                            >
-                              Resolve
-                            </button>
-                          </>
-                        )}
+                        <div className="flex items-center space-x-2">
+                          <button className="px-3 py-1 bg-blue-100 text-blue-800 rounded-md hover:bg-blue-200 text-sm">
+                            <Eye className="h-4 w-4 mr-1" />
+                            View
+                          </button>
+                        </div>
                       </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
-            </div>
-          )}
-
-          {activeTab === 'reports' && (
-            <div className="p-6 h-full overflow-y-auto">
-              <div className="text-center py-12">
-                <FileText className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-                <h3 className="text-lg font-medium text-gray-900 mb-2">Validation Reports</h3>
-                <p className="text-gray-600">Detailed reports and analytics coming soon</p>
-              </div>
-            </div>
-          )}
-        </div>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );

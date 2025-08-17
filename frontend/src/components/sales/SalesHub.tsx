@@ -4,7 +4,7 @@ import {
 } from 'lucide-react';
 import { ModuleHub } from '../global';
 import InvoiceFlow from './InvoiceFlow';
-import InvoiceListMinimal from './InvoiceListMinimal';
+import InvoiceListV2 from './InvoiceListV2';
 import SalesOrderFlow from './SalesOrderFlow';
 import ModularChallanCreatorV5 from '../challan/ModularChallanCreatorV5';
 
@@ -59,7 +59,7 @@ const SalesHub: React.FC<SalesHubProps> = ({ open = true, onClose }) => {
       description: 'Manage invoices',
       icon: List,
       color: 'gray',
-      component: InvoiceListMinimal
+      component: InvoiceListV2
     }
   ];
 

@@ -5,7 +5,7 @@
 
 // Search Components
 export { CustomerSearch } from './search/CustomerSearch';
-export { ProductSearch } from './search/ProductSearch';
+// ProductSearch.tsx removed - was broken (batch selection not implemented)
 export { default as ProductSearchSimple } from './search/ProductSearchSimple';
 export { default as PartySearch } from './search/PartySearch';
 export { default as SupplierSearch } from './SupplierSearch';
@@ -95,6 +95,9 @@ export {
   ToastProvider,
   useToast
 } from './ui';
+
+// Filter Components - NEW
+export { default as InlineFilterPanel } from './InlineFilterPanel';
 
 // Ledger Components - temporarily commented out as ledger is empty
 // export * from './ledger';

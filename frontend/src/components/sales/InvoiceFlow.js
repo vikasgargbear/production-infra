@@ -2,7 +2,8 @@ import React, { useState, useEffect, useRef } from 'react';
 import { 
   FileText, User, Search, Package, Calendar, X, Trash2, 
   ChevronRight, AlertCircle, CheckCircle, Printer, Share2, Plus,
-  Save, Calculator, History, ArrowLeft, ArrowRight, FileInput, MessageCircle
+  Save, Calculator, History, ArrowLeft, ArrowRight, FileInput, MessageCircle,
+  Loader2, RefreshCw
 } from 'lucide-react';
 import { customerAPI, productAPI, invoiceAPI, ordersAPI, salesOrdersAPI, apiClient } from '../../services/api';
 import { searchCache, smartSearch } from '../../utils/searchCache';
@@ -34,6 +35,9 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
   const [createdInvoiceData, setCreatedInvoiceData] = useState(null);
   const [message, setMessage] = useState('');
   const [messageType, setMessageType] = useState('');
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [refreshing, setRefreshing] = useState(false);
 
   // Refs for keyboard navigation
   const customerSearchRef = useRef(null);
@@ -48,9 +52,13 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
 
   // Generate sequential invoice number
   const generateInvoiceNumber = async () => {
-    const response = await InvoiceApiService.generateInvoiceNumber();
-    if (response?.success && response?.data?.invoice_number) {
-      return response.data.invoice_number;
+    try {
+      const response = await InvoiceApiService.generateInvoiceNumber();
+      if (response?.success && response?.data?.invoice_number) {
+        return response.data.invoice_number;
+      }
+    } catch (error) {
+      console.warn('Failed to generate invoice number from API:', error);
     }
     
     // Fallback to local generation if needed
@@ -97,6 +105,42 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
   });
 
   const [selectedCustomer, setSelectedCustomer] = useState(prefilledData?.customer_details || null);
+
+  // Load data on component mount
+  useEffect(() => {
+    loadInitialData();
+  }, []);
+
+  // Load initial data
+  const loadInitialData = async () => {
+    setIsLoading(true);
+    setError(null);
+    
+    try {
+      // Preload data for search cache
+      await Promise.all([
+        searchCache.preloadData('customers', () => customerAPI.search('', { limit: 100 })),
+        searchCache.preloadData('products', () => productAPI.search('', { limit: 100 }))
+      ]);
+      
+      // Generate invoice number
+      const invoiceNo = await generateInvoiceNumber();
+      setInvoice(prev => ({ ...prev, invoice_no: invoiceNo }));
+      
+    } catch (error) {
+      console.error('Error loading initial data:', error);
+      setError('Failed to load required data. Please check your connection and try again.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Refresh data
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    await loadInitialData();
+    setRefreshing(false);
+  };
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -841,8 +885,38 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
               console.log('Save draft clicked');
               // TODO: Implement save draft
             }}
-            additionalActions={[]}
+            additionalActions={[
+              {
+                label: refreshing ? 'Refreshing...' : 'Refresh',
+                icon: RefreshCw,
+                onClick: handleRefresh,
+                disabled: refreshing,
+                className: refreshing ? 'animate-spin' : ''
+              }
+            ]}
           />
+
+          {/* Loading State */}
+          {isLoading && (
+            <div className="bg-blue-50 px-4 py-3 text-blue-700 border-b border-blue-200 flex items-center">
+              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+              <span>Loading invoice data...</span>
+            </div>
+          )}
+
+          {/* Error State */}
+          {error && (
+            <div className="bg-red-50 px-4 py-3 text-red-700 border-b border-red-200 flex items-center">
+              <AlertCircle className="w-4 h-4 mr-2" />
+              <span>{error}</span>
+              <button
+                onClick={() => setError(null)}
+                className="ml-auto hover:opacity-70"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+          )}
 
           {/* Keyboard Shortcuts Help */}
           <div className="bg-blue-50 px-4 py-2 text-xs text-blue-700 border-b border-blue-200">
@@ -1006,9 +1080,16 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
             onClose={() => setShowProductModal(false)}
             onProductCreated={(product) => {
               setShowProductModal(false);
-              setMessage('Product created successfully');
+              setMessage(`Product "${product.product_name}" created successfully`);
               setMessageType('success');
-              searchCache.clear();  // Clear all cache after product creation
+              
+              // Add the created product to search cache immediately
+              searchCache.addItem('products', product);
+              
+              // Optionally auto-add the product to invoice
+              if (product && typeof handleAddItem === 'function') {
+                handleAddItem(product);
+              }
             }}
           />
         )}

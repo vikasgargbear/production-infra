@@ -1,10 +1,13 @@
 import React, { useState, useEffect } from 'react';
-import { Search, Filter, ChevronRight, Package, ShoppingCart, RotateCcw } from 'lucide-react';
+import {
+  Download, Eye, Edit, Printer,
+  MoreHorizontal, Package, RotateCcw,
+  X, Check, AlertCircle, RefreshCw
+} from 'lucide-react';
+import { Button, StatusBadge, DataTable, InlineFilterPanel } from '../global';
 import { returnsApi } from '../../services/api';
-import { DataTable, Column, ModuleHeader } from '../global';
 
 interface ReturnsListHistoryProps {
-  open?: boolean;
   onClose?: () => void;
 }
 
@@ -17,60 +20,126 @@ interface Return {
   original_document_no: string;
   return_date: string;
   total_amount: number;
-  status: 'pending' | 'approved' | 'rejected' | 'completed';
+  status: string;
   reason: string;
+  created_at?: string;
+  items_count?: number;
 }
 
+// Bulk action bar
+const BulkActionBar: React.FC<{
+  selectedCount: number;
+  onApprove: () => void;
+  onReject: () => void;
+  onExport: () => void;
+  onClear: () => void;
+}> = ({ selectedCount, onApprove, onReject, onExport, onClear }) => {
+  if (selectedCount === 0) return null;
+
+  return (
+    <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center">
+          <span className="text-sm font-medium text-blue-900">
+            {selectedCount} return{selectedCount > 1 ? 's' : ''} selected
+          </span>
+        </div>
+        <div className="flex items-center space-x-2">
+          <Button variant="outline" size="sm" onClick={onApprove}>
+            <Check className="w-4 h-4 mr-2" />
+            Approve
+          </Button>
+          <Button variant="outline" size="sm" onClick={onReject}>
+            <X className="w-4 h-4 mr-2" />
+            Reject
+          </Button>
+          <Button variant="outline" size="sm" onClick={onExport}>
+            <Download className="w-4 h-4 mr-2" />
+            Export
+          </Button>
+          <Button variant="ghost" size="sm" onClick={onClear}>
+            <X className="w-4 h-4" />
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 const ReturnsListHistory: React.FC<ReturnsListHistoryProps> = ({ onClose }) => {
-  const [returns, setReturns] = useState<Return[]>([]);
-  const [filteredReturns, setFilteredReturns] = useState<Return[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedType, setSelectedType] = useState<'all' | 'sales' | 'purchase'>('all');
-  const [selectedStatus, setSelectedStatus] = useState<'all' | 'pending' | 'approved' | 'completed'>('all');
-  const [loading, setLoading] = useState(true);
+  const [showFilters, setShowFilters] = useState(false);
+  const [selectedReturns, setSelectedReturns] = useState<string[]>([]);
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [pagination, setPagination] = useState({
+    total: 0,
+    page: 1,
+    per_page: 25,
+    total_pages: 0
+  });
 
-  // Load returns data
-  useEffect(() => {
-    loadReturns();
-  }, []);
+  // State for real data
+  const [returns, setReturns] = useState<Return[]>([]);
 
-  // Filter returns based on search and filters
-  useEffect(() => {
-    let filtered = returns;
-
-    // Filter by search query
-    if (searchQuery) {
-      filtered = filtered.filter(ret => 
-        ret.return_no.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        ret.customer_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        ret.supplier_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        ret.original_document_no.toLowerCase().includes(searchQuery.toLowerCase())
-      );
+  // Filter configuration for the global component
+  const filterOptions = [
+    {
+      key: 'return_type',
+      label: 'Type',
+      type: 'select' as const,
+      options: [
+        { value: 'sales', label: 'Sales Returns' },
+        { value: 'purchase', label: 'Purchase Returns' }
+      ]
+    },
+    {
+      key: 'status',
+      label: 'Status',
+      type: 'select' as const,
+      options: [
+        { value: 'pending', label: 'Pending' },
+        { value: 'approved', label: 'Approved' },
+        { value: 'rejected', label: 'Rejected' },
+        { value: 'completed', label: 'Completed' }
+      ]
+    },
+    {
+      key: 'dateFrom',
+      label: 'From Date',
+      type: 'date' as const
+    },
+    {
+      key: 'dateTo',
+      label: 'To Date',
+      type: 'date' as const
     }
+  ];
 
-    // Filter by type
-    if (selectedType !== 'all') {
-      filtered = filtered.filter(ret => ret.return_type === selectedType);
-    }
-
-    // Filter by status
-    if (selectedStatus !== 'all') {
-      filtered = filtered.filter(ret => ret.status === selectedStatus);
-    }
-
-    setFilteredReturns(filtered);
-  }, [returns, searchQuery, selectedType, selectedStatus]);
-
-  const loadReturns = async () => {
+  // Fetch returns from backend
+  const fetchReturns = async (page = 1, filters: any = {}) => {
+    setLoading(true);
+    setError(null);
+    
     try {
-      setLoading(true);
-      setError(null);
-
+      // Prepare search parameters
+      const searchParams: any = {
+        limit: pagination.per_page,
+        offset: (page - 1) * pagination.per_page,
+        ...filters
+      };
+      
+      // If there's a search query, add it to the filters
+      if (filters.search && filters.search.trim()) {
+        searchParams.search = filters.search.trim();
+      }
+      
+      console.log('Fetching returns with params:', searchParams);
+      
       // Fetch both sales and purchase returns
       const [salesResponse, purchaseResponse] = await Promise.all([
-        returnsApi.getSaleReturns(),
-        returnsApi.getPurchaseReturns()
+        returnsApi.getCustomerReturns(searchParams),
+        returnsApi.getSupplierReturns(searchParams)
       ]);
 
       // Transform and combine data
@@ -79,223 +148,460 @@ const ReturnsListHistory: React.FC<ReturnsListHistoryProps> = ({ onClose }) => {
         return_no: ret.return_no || ret.sales_return_no || `SR-${ret.id}`,
         return_type: 'sales' as const,
         customer_name: ret.customer_name,
+        supplier_name: undefined,
         original_document_no: ret.original_invoice_no || ret.invoice_no || '-',
         return_date: ret.return_date,
         total_amount: ret.total_amount || 0,
         status: ret.status || 'pending',
-        reason: ret.return_reason || ret.reason || '-'
+        reason: ret.return_reason || ret.reason || '-',
+        created_at: ret.created_at,
+        items_count: ret.items?.length || 0
       }));
 
       const purchaseReturns: Return[] = (purchaseResponse.data?.returns || []).map((ret: any) => ({
         id: ret.id,
         return_no: ret.return_no || ret.purchase_return_no || `PR-${ret.id}`,
         return_type: 'purchase' as const,
+        customer_name: undefined,
         supplier_name: ret.supplier_name,
         original_document_no: ret.original_purchase_no || ret.purchase_no || '-',
         return_date: ret.return_date,
         total_amount: ret.total_amount || 0,
         status: ret.status || 'pending',
-        reason: ret.return_reason || ret.reason || '-'
+        reason: ret.return_reason || ret.reason || '-',
+        created_at: ret.created_at,
+        items_count: ret.items?.length || 0
       }));
 
-      const allReturns = [...salesReturns, ...purchaseReturns].sort((a, b) => 
-        new Date(b.return_date).getTime() - new Date(a.return_date).getTime()
-      );
+      // Combine and filter based on type filter if specified
+      let allReturns = [...salesReturns, ...purchaseReturns];
+      
+      if (filters.return_type && filters.return_type !== 'all') {
+        allReturns = allReturns.filter(ret => ret.return_type === filters.return_type);
+      }
 
+      console.log('Transformed returns:', allReturns);
       setReturns(allReturns);
-    } catch (err) {
-      console.error('Error loading returns:', err);
-      setError('Failed to load returns history');
+      setPagination({
+        total: allReturns.length,
+        page: page,
+        per_page: pagination.per_page,
+        total_pages: Math.ceil(allReturns.length / pagination.per_page)
+      });
+    } catch (error) {
+      console.error('Error fetching returns:', error);
+      setError('Failed to fetch returns. Please try again.');
     } finally {
       setLoading(false);
     }
   };
 
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'completed': return 'bg-success-100 text-success-800';
-      case 'approved': return 'bg-primary-100 text-primary-800';
-      case 'pending': return 'bg-warning-100 text-warning-800';
-      case 'rejected': return 'bg-danger-100 text-danger-800';
-      default: return 'bg-app-100 text-app-800';
+  // Load returns on component mount
+  useEffect(() => {
+    fetchReturns();
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Refresh returns
+  const handleRefresh = () => {
+    fetchReturns(pagination.page);
+  };
+
+  // Handle filter changes with auto-search
+  const handleFilterChange = (filters: any) => {
+    console.log('Filters changed:', filters);
+    // Reset to first page when filters change
+    fetchReturns(1, { ...filters, search: searchQuery });
+  };
+
+  // Handle search changes with auto-search
+  const handleSearchChange = (query: string) => {
+    setSearchQuery(query);
+    // Auto-search after a short delay to avoid too many API calls
+    const timeoutId = setTimeout(() => {
+      fetchReturns(1, { search: query });
+    }, 300);
+    
+    return () => clearTimeout(timeoutId);
+  };
+
+  // Action handlers
+  const handleViewReturn = (returnItem: Return) => {
+    console.log('Viewing return:', returnItem.return_no);
+    // TODO: Navigate to return view page or open modal
+    alert(`Viewing return: ${returnItem.return_no}`);
+  };
+
+  const handleEditReturn = (returnItem: Return) => {
+    console.log('Editing return:', returnItem.return_no);
+    // TODO: Navigate to return edit page or open modal
+    alert(`Editing return: ${returnItem.return_no}`);
+  };
+
+  const handlePrintReturn = (returnItem: Return) => {
+    console.log('Printing return:', returnItem.return_no);
+    // TODO: Open print dialog or generate PDF
+    alert(`Printing return: ${returnItem.return_no}`);
+  };
+
+  const handleMoreOptions = (returnItem: Return) => {
+    console.log('More options for return:', returnItem.return_no);
+    // TODO: Show dropdown menu with more options
+    alert(`More options for return: ${returnItem.return_no}`);
+  };
+
+  const formatCurrency = (amount: number) => {
+    return new Intl.NumberFormat('en-IN', {
+      style: 'currency',
+      currency: 'INR',
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 0,
+    }).format(amount);
+  };
+
+  const formatDate = (value: string) => {
+    if (!value) return 'N/A';
+    return new Date(value).toLocaleDateString('en-IN');
+  };
+
+  // Helper function to get proper status text
+  const getStatusText = (status: string | undefined) => {
+    if (!status) return 'Unknown';
+    
+    console.log('Raw status from backend:', status, 'Type:', typeof status);
+    
+    // Map backend statuses to display text - handle various formats
+    const statusMap: Record<string, string> = {
+      // Common lowercase variations
+      'pending': 'Pending',
+      'approved': 'Approved',
+      'rejected': 'Rejected',
+      'completed': 'Completed',
+      'cancelled': 'Cancelled',
+      'canceled': 'Cancelled', // Handle US spelling
+      'draft': 'Draft',
+      'sent': 'Sent',
+      
+      // Common uppercase variations
+      'PENDING': 'Pending',
+      'APPROVED': 'Approved',
+      'REJECTED': 'Rejected',
+      'COMPLETED': 'Completed',
+      'CANCELLED': 'Cancelled',
+      'CANCELED': 'Cancelled',
+      'DRAFT': 'Draft',
+      'SENT': 'Sent',
+      
+      // Handle null/undefined cases
+      'null': 'Unknown',
+      'undefined': 'Unknown',
+      '': 'Unknown',
+      
+      // Handle numeric statuses if backend uses them
+      '0': 'Draft',
+      '1': 'Pending',
+      '2': 'Approved',
+      '3': 'Rejected',
+      '4': 'Completed',
+      '5': 'Cancelled'
+    };
+    
+    const normalizedStatus = status.toString().toLowerCase().trim();
+    const mappedStatus = statusMap[normalizedStatus];
+    
+    if (mappedStatus) {
+      return mappedStatus;
     }
+    
+    // If no mapping found, log it and return the original value
+    console.log('No status mapping found for:', status, 'Returning original value');
+    return status;
   };
 
-  const getTypeIcon = (type: 'sales' | 'purchase') => {
-    return type === 'sales' ? 
-      <ShoppingCart className="w-4 h-4 text-sales-600" /> : 
-      <Package className="w-4 h-4 text-purchase-600" />;
-  };
-
-  // Define columns for DataTable
-  const columns: Column<Return>[] = [
+  const columns = [
     {
       key: 'return_no',
-      header: 'Return No.',
-      render: (_, ret) => (
-        <div className="flex items-center gap-2">
-          {getTypeIcon(ret.return_type)}
-          <span className="font-medium text-app-900">{ret.return_no}</span>
+      header: 'Return #',
+      render: (value: string, returnItem: Return) => (
+        <div className="font-medium text-gray-900">
+          {returnItem.return_no}
         </div>
       ),
+      width: '120px',
     },
     {
-      key: 'party',
-      header: 'Party',
-      render: (_, ret) => ret.customer_name || ret.supplier_name || '-',
+      key: 'return_type',
+      header: 'Type',
+      render: (value: string, returnItem: Return) => (
+        <div className="flex items-center space-x-2">
+          {returnItem.return_type === 'sales' ? (
+            <Package className="w-4 h-4 text-blue-600" />
+          ) : (
+            <RotateCcw className="w-4 h-4 text-green-600" />
+          )}
+          <span className="text-gray-900 capitalize">
+            {returnItem.return_type === 'sales' ? 'Sales' : 'Purchase'}
+          </span>
+        </div>
+      ),
+      width: '100px',
+    },
+    {
+      key: 'customer_supplier',
+      header: 'Customer/Supplier',
+      render: (value: string, returnItem: Return) => (
+        <div className="text-gray-900">
+          {returnItem.return_type === 'sales' 
+            ? returnItem.customer_name || 'Unknown Customer'
+            : returnItem.supplier_name || 'Unknown Supplier'
+          }
+        </div>
+      ),
+      width: '180px',
     },
     {
       key: 'original_document_no',
-      header: 'Original Document',
-      render: (_, ret) => (
-        <div>
-          <div className="text-app-900">{ret.original_document_no}</div>
-          <div className="text-sm text-app-500 capitalize">{ret.return_type} return</div>
-        </div>
+      header: 'Original Doc',
+      render: (value: string, returnItem: Return) => (
+        <div className="text-gray-600">{returnItem.original_document_no}</div>
       ),
+      width: '140px',
     },
     {
       key: 'return_date',
       header: 'Return Date',
-      render: (value) => new Date(value).toLocaleDateString(),
+      render: (value: string, returnItem: Return) => (
+        <div className="text-gray-600">{formatDate(returnItem.return_date)}</div>
+      ),
+      width: '120px',
     },
     {
       key: 'total_amount',
       header: 'Amount',
-      align: 'right' as const,
-      render: (value) => `₹${value.toLocaleString()}`,
+      render: (value: number, returnItem: Return) => (
+        <div className="font-medium text-gray-900">
+          {formatCurrency(returnItem.total_amount)}
+        </div>
+      ),
+      width: '120px',
     },
     {
       key: 'status',
       header: 'Status',
-      align: 'center' as const,
-      render: (value) => (
-        <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getStatusColor(value)}`}>
-          {value.charAt(0).toUpperCase() + value.slice(1)}
-        </span>
-      ),
-    },
-    {
-      key: 'reason',
-      header: 'Reason',
-      render: (value) => (
-        <span className="text-app-600 text-sm truncate max-w-32" title={value}>
-          {value}
-        </span>
-      ),
+      render: (value: string, returnItem: Return) => {
+        const statusText = getStatusText(returnItem.status);
+        console.log('Status column render:', {
+          original: returnItem.status,
+          processed: statusText,
+          return_id: returnItem.id
+        });
+        return (
+          <StatusBadge 
+            status={statusText} 
+            variant="light"
+          />
+        );
+      },
+      width: '100px',
     },
     {
       key: 'actions',
       header: 'Actions',
-      align: 'center' as const,
-      sortable: false,
-      render: (_, ret) => (
-        <button
-          onClick={() => console.log('View return:', ret.id)}
-          className="text-primary-600 hover:text-primary-700 p-1 rounded transition-colors"
-        >
-          <ChevronRight className="w-4 h-4" />
-        </button>
+      render: (value: any, returnItem: Return) => (
+        <div className="flex items-center space-x-2">
+          <Button 
+            variant="ghost" 
+            size="sm"
+            onClick={() => handleViewReturn(returnItem)}
+            title="View Return"
+            className="h-10 w-10 p-0 hover:bg-blue-50"
+          >
+            <Eye className="w-5 h-5 text-blue-600" />
+          </Button>
+          <Button 
+            variant="ghost" 
+            size="sm"
+            onClick={() => handleEditReturn(returnItem)}
+            title="Edit Return"
+            className="h-10 w-10 p-0 hover:bg-green-50"
+          >
+            <Edit className="w-5 h-5 text-green-600" />
+          </Button>
+          <Button 
+            variant="ghost" 
+            size="sm"
+            onClick={() => handlePrintReturn(returnItem)}
+            title="Print Return"
+            className="h-10 w-10 p-0 hover:bg-purple-50"
+          >
+            <Printer className="w-5 h-5 text-purple-600" />
+          </Button>
+          <Button 
+            variant="ghost" 
+            size="sm"
+            onClick={() => handleMoreOptions(returnItem)}
+            title="More Options"
+            className="h-10 w-10 p-0 hover:bg-gray-50"
+          >
+            <MoreHorizontal className="w-5 h-5 text-gray-600" />
+          </Button>
+        </div>
       ),
+      width: '180px',
     },
   ];
 
   return (
-    <div className="h-full bg-blue-50">
+    <div className="h-full bg-white">
       <div className="h-full flex flex-col">
         
-        {/* Header - Using Global ModuleHeader */}
-        <ModuleHeader
-          title="Returns History"
-          documentNumber=""
-          status=""
-          icon={RotateCcw}
-          iconColor="text-red-600"
-          onClose={onClose}
-          historyType="return"
-          onSaveDraft={() => {}}
-        />
-
-        {/* Keyboard Shortcuts Help */}
-        <div className="bg-blue-50 px-4 py-2 text-xs text-blue-700 border-b border-blue-200">
-          Keyboard shortcuts: <strong>Ctrl+F</strong> - Search | <strong>Esc</strong> - Close
+        {/* Header - Simplified */}
+        <div className="bg-white border-b border-gray-200 px-6 py-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-3">
+              <RotateCcw className="w-6 h-6 text-blue-600" />
+              <div>
+                <h1 className="text-2xl font-bold text-gray-900">
+                  Returns History
+                </h1>
+                <p className="text-sm text-gray-600">
+                  View and manage all your returns
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center space-x-3">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={handleRefresh}
+                disabled={loading}
+                title="Refresh data"
+              >
+                <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+                Refresh
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() => console.log('Export all returns')}
+                icon={<Download className="w-4 h-4" />}
+                iconPosition="left"
+              >
+                Export All
+              </Button>
+            </div>
+          </div>
         </div>
 
         {/* Content */}
         <div className="flex-1 overflow-y-auto">
-          <div className="max-w-6xl mx-auto px-6 py-6">
+          <div className="max-w-7xl mx-auto px-6 py-6">
             
-            {/* Filters */}
-            <div className="bg-white rounded-lg shadow-sm border border-blue-200 p-6 mb-6">
-              <div className="flex items-center space-x-6">
-                {/* Search */}
-                <div className="flex-1 relative">
-                  <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
-                  <input
-                    type="text"
-                    placeholder="Search returns by number, party, or document..."
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    className="w-full pl-12 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white"
-                  />
-                </div>
-
-                {/* Type Filter */}
-                <select
-                  value={selectedType}
-                  onChange={(e) => setSelectedType(e.target.value as any)}
-                  className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white min-w-[120px]"
-                >
-                  <option value="all">All Types</option>
-                  <option value="sales">Sales Returns</option>
-                  <option value="purchase">Purchase Returns</option>
-                </select>
-
-                {/* Status Filter */}
-                <select
-                  value={selectedStatus}
-                  onChange={(e) => setSelectedStatus(e.target.value as any)}
-                  className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white min-w-[120px]"
-                >
-                  <option value="all">All Status</option>
-                  <option value="pending">Pending</option>
-                  <option value="approved">Approved</option>
-                  <option value="completed">Completed</option>
-                </select>
-              </div>
+            {/* Global Inline Filter Panel */}
+            <div className="mb-6">
+              <InlineFilterPanel
+                filters={filterOptions}
+                onFilterChange={handleFilterChange}
+                searchQuery={searchQuery}
+                onSearchChange={handleSearchChange}
+                showFilters={showFilters}
+                onToggleFilters={setShowFilters}
+              />
             </div>
 
-            {/* Data Table */}
-            <div className="bg-white rounded-lg shadow-sm border border-blue-200">
-              {error ? (
-                <div className="text-center py-12">
-                  <div className="text-red-600 mb-4">
-                    <RotateCcw className="w-12 h-12 mx-auto" />
-                  </div>
-                  <p className="text-red-600">{error}</p>
-                  <button
-                    onClick={loadReturns}
-                    className="mt-4 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-                  >
-                    Retry
-                  </button>
+            {/* Error Display */}
+            {error && (
+              <div className="mb-6 bg-red-50 border border-red-200 rounded-lg p-4">
+                <div className="flex items-center">
+                  <AlertCircle className="w-5 h-5 text-red-600 mr-3" />
+                  <span className="text-red-800">{error}</span>
                 </div>
-              ) : (
+              </div>
+            )}
+
+            {/* Bulk Actions */}
+            <BulkActionBar
+              selectedCount={selectedReturns.length}
+              onApprove={() => console.log('Approve selected')}
+              onReject={() => console.log('Reject selected')}
+              onExport={() => console.log('Export selected')}
+              onClear={() => setSelectedReturns([])}
+            />
+
+            {/* Loading State */}
+            {loading ? (
+              <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-8">
+                <div className="text-center">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-3"></div>
+                  <p className="text-gray-600">Loading returns...</p>
+                </div>
+              </div>
+            ) : returns.length === 0 ? (
+              <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-8">
+                <div className="text-center">
+                  <RotateCcw className="w-12 h-12 mx-auto mb-3 text-gray-300" />
+                  <p className="text-lg font-medium text-gray-500">
+                    {searchQuery ? `No returns found matching "${searchQuery}"` : 'No returns found'}
+                  </p>
+                  <p className="text-sm text-gray-400">
+                    {error ? 'There was an error loading returns' : 
+                     searchQuery ? 'Try adjusting your search terms or filters' : 'No returns match your criteria'}
+                  </p>
+                  {searchQuery && (
+                    <Button 
+                      variant="outline" 
+                      onClick={() => {
+                        setSearchQuery('');
+                        fetchReturns(1);
+                      }} 
+                      className="mt-4"
+                    >
+                      Clear Search
+                    </Button>
+                  )}
+                </div>
+              </div>
+            ) : (
+              /* Returns Table */
+              <div className="bg-white rounded-lg shadow-sm border border-gray-200">
                 <DataTable
-                  data={filteredReturns}
+                  data={returns}
                   columns={columns}
                   keyField="id"
-                  loading={loading}
-                  emptyMessage="No returns found"
-                  emptyIcon={<RotateCcw className="w-12 h-12 text-gray-400" />}
-                  hoverable={true}
-                  striped={true}
-                  paginated={true}
-                  pageSize={20}
                   searchable={false}
+                  paginated={false}
+                  pageSize={pagination.per_page}
                 />
-              )}
-            </div>
+                
+                {/* Pagination Controls */}
+                {pagination.total_pages > 1 && (
+                  <div className="flex items-center justify-between px-6 py-4 border-t border-gray-200">
+                    <div className="text-sm text-gray-600">
+                      Showing {returns.length} of {pagination.total} returns
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => fetchReturns(pagination.page - 1)}
+                        disabled={pagination.page <= 1 || loading}
+                      >
+                        Previous
+                      </Button>
+                      <span className="text-sm text-gray-600">
+                        Page {pagination.page} of {pagination.total_pages}
+                      </span>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => fetchReturns(pagination.page + 1)}
+                        disabled={pagination.page >= pagination.total_pages || loading}
+                      >
+                        Next
+                      </Button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         </div>
       </div>

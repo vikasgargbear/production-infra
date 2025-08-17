@@ -2,13 +2,51 @@ import React, { useState, useEffect } from 'react';
 import {
   TrendingUp, TrendingDown, Users, Package, IndianRupee, 
   FileText, Clock, Calendar, Filter, Download, RefreshCw,
-  ChevronRight, Eye, Edit, Plus, Search, BarChart3
+  ChevronRight, Eye, Edit, Plus, Search, BarChart3, AlertCircle
 } from 'lucide-react';
 import { Card, Button, StatusBadge, DataTable } from '../global';
+import { dashboardApi, reportsApi } from '../../services/api';
 
 interface SalesDashboardProps {
   open?: boolean;
   onClose?: () => void;
+}
+
+interface Invoice {
+  id: string;
+  customer: string;
+  amount: number;
+  date: string;
+  status: string;
+}
+
+interface Product {
+  name: string;
+  sold: number;
+  revenue: number;
+}
+
+interface SalesTrend {
+  month: string;
+  sales: number;
+}
+
+interface DashboardData {
+  stats: {
+    totalSales: number;
+    totalInvoices: number;
+    avgOrderValue: number;
+    pendingOrders: number;
+    totalCustomers: number;
+    newCustomers: number;
+    totalSalesChange: number;
+    totalInvoicesChange: number;
+    totalCustomersChange: number;
+    pendingOrdersChange: number;
+  };
+  recentInvoices: Invoice[];
+  topProducts: Product[];
+  salesTrend: SalesTrend[];
 }
 
 // Quick stats card
@@ -92,36 +130,118 @@ const ActionCard: React.FC<{
 
 const SalesDashboard: React.FC<SalesDashboardProps> = () => {
   const [selectedPeriod, setSelectedPeriod] = useState('month');
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
 
-  // Mock data - replace with API calls
-  const [dashboardData] = useState({
+  // Real data state
+  const [dashboardData, setDashboardData] = useState<DashboardData>({
     stats: {
-      totalSales: 2845000,
-      totalInvoices: 342,
-      avgOrderValue: 8316,
-      pendingOrders: 23,
-      totalCustomers: 156,
-      newCustomers: 12,
+      totalSales: 0,
+      totalInvoices: 0,
+      avgOrderValue: 0,
+      pendingOrders: 0,
+      totalCustomers: 0,
+      newCustomers: 0,
+      totalSalesChange: 0,
+      totalInvoicesChange: 0,
+      totalCustomersChange: 0,
+      pendingOrdersChange: 0,
     },
-    recentInvoices: [
-      { id: 'INV-001', customer: 'Apollo Pharmacy', amount: 45000, date: '2025-01-06', status: 'Paid' },
-      { id: 'INV-002', customer: 'MedPlus', amount: 32000, date: '2025-01-05', status: 'Pending' },
-      { id: 'INV-003', customer: 'City Hospital', amount: 67000, date: '2025-01-04', status: 'Overdue' },
-    ],
-    topProducts: [
-      { name: 'Paracetamol 500mg', sold: 2500, revenue: 125000 },
-      { name: 'Amoxicillin 250mg', sold: 1800, revenue: 90000 },
-      { name: 'Omeprazole 20mg', sold: 1200, revenue: 84000 },
-    ],
-    salesTrend: [
-      { month: 'Sep', sales: 2100000 },
-      { month: 'Oct', sales: 2300000 },
-      { month: 'Nov', sales: 2600000 },
-      { month: 'Dec', sales: 2800000 },
-      { month: 'Jan', sales: 2845000 },
-    ],
+    recentInvoices: [],
+    topProducts: [],
+    salesTrend: [],
   });
+
+  // Fetch sales dashboard data from APIs
+  const fetchSalesData = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+
+      // Fetch all sales data in parallel
+      const [
+        statsResponse,
+        recentInvoicesResponse,
+        topProductsResponse,
+        salesTrendResponse
+      ] = await Promise.all([
+        dashboardApi.getStats(),
+        dashboardApi.getRecentOrders(10),
+        dashboardApi.getTopProducts(10),
+        reportsApi.sales.trends({ period: selectedPeriod })
+      ]);
+
+      // Update stats
+      if (statsResponse.data) {
+        setDashboardData(prev => ({
+          ...prev,
+          stats: {
+            totalSales: statsResponse.data.totalRevenue || 0,
+            totalInvoices: statsResponse.data.totalOrders || 0,
+            avgOrderValue: statsResponse.data.totalOrders > 0 ? 
+              Math.round(statsResponse.data.totalRevenue / statsResponse.data.totalOrders) : 0,
+            pendingOrders: statsResponse.data.pendingOrders || 0,
+            totalCustomers: statsResponse.data.totalCustomers || 0,
+            newCustomers: statsResponse.data.newCustomers || 0,
+            totalSalesChange: statsResponse.data.totalSalesChange || 0,
+            totalInvoicesChange: statsResponse.data.totalInvoicesChange || 0,
+            totalCustomersChange: statsResponse.data.totalCustomersChange || 0,
+            pendingOrdersChange: statsResponse.data.pendingOrdersChange || 0,
+          }
+        }));
+      }
+
+      // Update recent invoices
+      if (recentInvoicesResponse.data?.orders) {
+        const invoices = recentInvoicesResponse.data.orders.map((order: any) => ({
+          id: order.order_number || order.order_id || `ORD-${order.order_id}`,
+          customer: order.customer_name || 'Unknown Customer',
+          amount: order.final_amount || 0,
+          date: order.order_date || new Date().toISOString().split('T')[0],
+          status: order.order_status || 'pending'
+        }));
+        setDashboardData(prev => ({ ...prev, recentInvoices: invoices }));
+      }
+
+      // Update top products
+      if (topProductsResponse.data?.products) {
+        const products = topProductsResponse.data.products.map((product: any) => ({
+          name: product.product_name || product.name,
+          sold: product.sold || product.quantity || 0,
+          revenue: product.revenue || product.total_amount || 0
+        }));
+        setDashboardData(prev => ({ ...prev, topProducts: products }));
+      }
+
+      // Update sales trend
+      if (salesTrendResponse.data?.trends) {
+        const trends = salesTrendResponse.data.trends.map((trend: any) => ({
+          month: trend.month || trend.period,
+          sales: trend.sales || trend.revenue || 0
+        }));
+        setDashboardData(prev => ({ ...prev, salesTrend: trends }));
+      }
+
+    } catch (error) {
+      console.error('Error fetching sales data:', error);
+      setError('Failed to load sales data. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Refresh data
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    await fetchSalesData();
+    setRefreshing(false);
+  };
+
+  // Load data on component mount and period change
+  useEffect(() => {
+    fetchSalesData();
+  }, [selectedPeriod]);
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('en-IN', {
@@ -167,8 +287,10 @@ const SalesDashboard: React.FC<SalesDashboardProps> = () => {
               <Button
                 variant="outline"
                 size="sm"
-                icon={<RefreshCw className="w-4 h-4" />}
+                icon={<RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />}
                 iconPosition="left"
+                onClick={handleRefresh}
+                disabled={loading || refreshing}
               >
                 Refresh
               </Button>
@@ -186,12 +308,30 @@ const SalesDashboard: React.FC<SalesDashboardProps> = () => {
       </div>
 
       <div className="px-6 py-6 max-w-7xl mx-auto">
+        {/* Error State */}
+        {error && (
+          <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg">
+            <div className="flex items-center">
+              <AlertCircle className="w-5 h-5 text-red-600 mr-2" />
+              <span className="text-red-800">{error}</span>
+            </div>
+          </div>
+        )}
+
+        {/* Loading State */}
+        {loading && (
+          <div className="mb-6 p-8 text-center">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-sales-600 mx-auto mb-4"></div>
+            <p className="text-app-600">Loading sales data...</p>
+          </div>
+        )}
+
         {/* Key Metrics */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-6">
           <StatsCard
             title="Total Sales"
             value={formatCurrency(dashboardData.stats.totalSales)}
-            change={12.5}
+            change={dashboardData.stats.totalSalesChange}
             icon={IndianRupee}
             color="green"
             subtitle="This month"
@@ -199,7 +339,7 @@ const SalesDashboard: React.FC<SalesDashboardProps> = () => {
           <StatsCard
             title="Total Invoices"
             value={dashboardData.stats.totalInvoices}
-            change={8.2}
+            change={dashboardData.stats.totalInvoicesChange}
             icon={FileText}
             color="blue"
             subtitle={`Avg: ${formatCurrency(dashboardData.stats.avgOrderValue)}`}
@@ -207,7 +347,7 @@ const SalesDashboard: React.FC<SalesDashboardProps> = () => {
           <StatsCard
             title="Active Customers"
             value={dashboardData.stats.totalCustomers}
-            change={5.1}
+            change={dashboardData.stats.totalCustomersChange}
             icon={Users}
             color="purple"
             subtitle={`+${dashboardData.stats.newCustomers} new`}
@@ -215,7 +355,7 @@ const SalesDashboard: React.FC<SalesDashboardProps> = () => {
           <StatsCard
             title="Pending Orders"
             value={dashboardData.stats.pendingOrders}
-            change={-15.3}
+            change={dashboardData.stats.pendingOrdersChange}
             icon={Clock}
             color="amber"
             subtitle="Need attention"

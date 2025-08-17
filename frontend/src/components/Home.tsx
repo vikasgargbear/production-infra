@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   FileText,
   ShoppingCart, 
@@ -12,10 +12,13 @@ import {
   Warehouse,
   Calculator,
   Settings2,
-  Bell
+  Bell,
+  Loader2
 } from 'lucide-react';
 import { Card, Button } from './global';
 import NotificationCenter from './NotificationCenter';
+import { settingsApi } from '../services/api';
+import offlineStorage from '../services/offlineStorage';
 
 interface HomeProps {
   setActiveTab: (tab: string) => void;
@@ -34,7 +37,33 @@ const Home: React.FC<HomeProps> = ({ setActiveTab }) => {
   const companyName = localStorage.getItem('companyName') || 'PharmaERP Pro';
   const companyLogo = localStorage.getItem('companyLogo');
   const [isNotificationOpen, setIsNotificationOpen] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   
+  useEffect(() => {
+    const loadData = async () => {
+      try {
+        setLoading(true);
+        // Skip notifications loading since endpoint doesn't exist yet
+        // TODO: Implement notifications endpoint on backend
+        // const notifications = await settingsApi.notifications.getAll();
+        
+        // Load any other required data here
+        setError(null); // Clear any previous errors
+      } catch (err) {
+        setError('Failed to load data');
+        console.error('Home data loading error:', err);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadData();
+    // Reduced polling frequency since we're not loading notifications
+    const interval = setInterval(loadData, 60000); // Poll every 60 seconds
+    return () => clearInterval(interval);
+  }, []);
+
   // Mock unread count - in real app, this would come from API
   const unreadNotifications = 3;
   
@@ -262,6 +291,22 @@ const Home: React.FC<HomeProps> = ({ setActiveTab }) => {
       </button>
     );
   };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <Loader2 className="w-12 h-12 text-blue-500 animate-spin" />
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <p className="text-red-500 text-lg">{error}</p>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col">

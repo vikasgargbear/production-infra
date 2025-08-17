@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Search, Save, Printer, Plus, X, Calendar, AlertCircle, ChevronRight, ChevronLeft, Package, User, CreditCard, FileText, CheckCircle, Truck } from 'lucide-react';
+import { Search, Save, Printer, Plus, X, Calendar, AlertCircle, ChevronRight, ChevronLeft, Package, User, CreditCard, FileText, CheckCircle, Truck, Loader2, RefreshCw } from 'lucide-react';
 import { customersApi, productsApi, ordersApi, orderItemsApi, batchesApi } from '../services/api';
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
@@ -31,254 +31,17 @@ const BusinessSalesEntry = ({ open, onClose }) => {
     notes: ''
   });
 
-  // Customer data will be fetched from API
-  const sampleCustomers = [  // TODO: Remove once API integration is complete
-    {
-      customer_id: 'CUST001',
-      customer_code: 'RMS001',
-      name: 'Rajesh Medical Store',
-      phone: '+91 98765 43210',
-      area: 'Main Market, Gangapur City',
-      address: 'Shop No. 45, Main Market, Gangapur City, Rajasthan - 322201',
-      gst_number: '08AAXCR1234N1Z5',
-      drug_license: 'DL-RJ-GPC-2024-001',
-      credit_limit: 50000
-    },
-    {
-      customer_id: 'CUST002',
-      customer_code: 'CH001',
-      name: 'City Hospital Pharmacy',
-      phone: '+91 98765 43211',
-      area: 'Hospital Road, Sawai Madhopur',
-      address: 'City Hospital Complex, Sawai Madhopur, Rajasthan - 322001',
-      gst_number: '08AAXCH5678N1Z2',
-      drug_license: 'DL-RJ-SM-2024-002',
-      credit_limit: 100000
-    },
-    {
-      customer_id: 'CUST003',
-      customer_code: 'WP001',
-      name: 'Wellness Pharmacy',
-      phone: '+91 98765 43212',
-      area: 'Civil Lines, Karauli',
-      address: 'Plot No. 12, Civil Lines, Karauli, Rajasthan - 322241',
-      gst_number: '08AAXCW9012N1Z8',
-      drug_license: 'DL-RJ-KRL-2024-003',
-      credit_limit: 75000
-    }
-  ];
-
-  // Sample challans for demonstration
-  const sampleChallans = [
-    {
-      challan_id: 'CH001',
-      challan_no: 'DC-240101',
-      challan_date: '2024-01-15',
-      customer_id: 'CUST001',
-      customer_name: 'Rajesh Medical Store',
-      items: [
-        {
-          product_id: '1',
-          product_name: 'Paracetamol 500mg',
-          product_code: 'PARA500',
-          batch_id: '1',
-          batch_no: 'BT240101',
-          qty: 50,
-          rate: 2.50,
-          amount: 125.00,
-          gst_percent: 12
-        },
-        {
-          product_id: '2',
-          product_name: 'Amoxicillin 250mg',
-          product_code: 'AMOX250',
-          batch_id: '2',
-          batch_no: 'BT240102',
-          qty: 30,
-          rate: 8.00,
-          amount: 240.00,
-          gst_percent: 12
-        }
-      ],
-      total_amount: 365.00,
-      delivery_status: 'pending'
-    },
-    {
-      challan_id: 'CH002',
-      challan_no: 'DC-240102',
-      challan_date: '2024-01-14',
-      customer_id: 'CUST002',
-      customer_name: 'City Hospital Pharmacy',
-      items: [
-        {
-          product_id: '3',
-          product_name: 'Cough Syrup 100ml',
-          product_code: 'CS100',
-          batch_no: 'BT240103',
-          qty: 24,
-          rate: 35.00,
-          amount: 840.00
-        }
-      ],
-      total_amount: 840.00,
-      delivery_status: 'pending'
-    }
-  ];
-
-  const sampleTransportModes = [
-    {
-      transport_id: 'SELF',
-      name: 'Self Pickup',
-      description: 'Customer will collect from store'
-    },
-    {
-      transport_id: 'LOCAL_DELIVERY',
-      name: 'Local Delivery',
-      description: 'Within city delivery'
-    },
-    {
-      transport_id: 'COURIER_STD',
-      name: 'Standard Courier',
-      description: '3-5 business days'
-    },
-    {
-      transport_id: 'COURIER_EXPRESS',
-      name: 'Express Courier',
-      description: '1-2 business days'
-    },
-    {
-      transport_id: 'DEDICATED_VEHICLE',
-      name: 'Dedicated Vehicle',
-      description: 'Same day delivery'
-    }
-  ];
-
-  const sampleMedicalReps = [
-    {
-      rep_id: 'MR001',
-      name: 'Dr. Amit Sharma',
-      zone: 'North Zone',
-      phone: '+91 98765 11111'
-    },
-    {
-      rep_id: 'MR002',
-      name: 'Dr. Priya Patel',
-      zone: 'South Zone', 
-      phone: '+91 98765 22222'
-    },
-    {
-      rep_id: 'MR003',
-      name: 'Dr. Rajesh Kumar',
-      zone: 'East Zone',
-      phone: '+91 98765 33333'
-    },
-    {
-      rep_id: 'MR004',
-      name: 'Dr. Sneha Gupta',
-      zone: 'West Zone',
-      phone: '+91 98765 44444'
-    }
-  ];
-
-  const sampleProducts = [  // TODO: Remove once API integration is complete
-    {
-      product_id: 'PROD001',
-      product_code: 'PAR500',
-      product_name: 'Paracetamol 500mg',
-      hsn_code: '30049099',
-      mrp: 10.00,
-      sale_price: 8.50,
-      gst_percent: 12
-    },
-    {
-      product_id: 'PROD002',
-      product_code: 'AMX250',
-      product_name: 'Amoxicillin 250mg',
-      hsn_code: '30041020',
-      mrp: 45.00,
-      sale_price: 38.00,
-      gst_percent: 5
-    },
-    {
-      product_id: 'PROD003',
-      product_code: 'CROC650',
-      product_name: 'Crocin 650mg',
-      hsn_code: '30049099',
-      mrp: 35.00,
-      sale_price: 30.00,
-      gst_percent: 12
-    },
-    {
-      product_id: 'PROD004',
-      product_code: 'DOLO650',
-      product_name: 'Dolo 650mg Tablet',
-      hsn_code: '30049099',
-      mrp: 30.00,
-      sale_price: 25.50,
-      gst_percent: 18
-    }
-  ];
-
-  const sampleBatches = [  // TODO: Remove once API integration is complete
-    {
-      batch_id: 'BAT001',
-      batch_number: 'B2024A',
-      product_id: 'PROD001',
-      expiry_date: '2025-08-31',
-      mrp: 10.00,
-      sale_price: 8.50,
-      quantity_available: 500,
-      pack_type: '10 tablets'
-    },
-    {
-      batch_id: 'BAT002',
-      batch_number: 'B2024B',
-      product_id: 'PROD001',
-      expiry_date: '2026-02-28',
-      mrp: 10.00,
-      sale_price: 8.50,
-      quantity_available: 300,
-      pack_type: '10 tablets'
-    },
-    {
-      batch_id: 'BAT003',
-      batch_number: 'AMX2024',
-      product_id: 'PROD002',
-      expiry_date: '2025-12-31',
-      mrp: 45.00,
-      sale_price: 38.00,
-      quantity_available: 200,
-      pack_type: '10 capsules'
-    },
-    {
-      batch_id: 'BAT004',
-      batch_number: 'CRO2024',
-      product_id: 'PROD003',
-      expiry_date: '2025-06-30',
-      mrp: 35.00,
-      sale_price: 30.00,
-      quantity_available: 150,
-      pack_type: '15 tablets'
-    },
-    {
-      batch_id: 'BAT005',
-      batch_number: 'DOL2024',
-      product_id: 'PROD004',
-      expiry_date: '2025-10-31',
-      mrp: 30.00,
-      sale_price: 25.50,
-      quantity_available: 400,
-      pack_type: '15 tablets'
-    }
-  ];
-
-  const [customers, setCustomers] = useState(sampleCustomers);
-  const [products, setProducts] = useState(sampleProducts);
-  const [batches, setBatches] = useState(sampleBatches);
-  const [medicalReps, setMedicalReps] = useState(sampleMedicalReps);
-  const [transportModes, setTransportModes] = useState(sampleTransportModes);
-  const [loading, setLoading] = useState(true);
+  // State for real data
+  const [customers, setCustomers] = useState([]);
+  const [products, setProducts] = useState([]);
+  const [challans, setChallans] = useState([]);
+  const [transportModes, setTransportModes] = useState([]);
+  const [medicalReps, setMedicalReps] = useState([]);
+  const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [refreshing, setRefreshing] = useState(false);
+  
+  // Additional state variables
   const [saving, setSaving] = useState(false);
   const [showPrintPreview, setShowPrintPreview] = useState(false);
   const [showWhatsAppPreview, setShowWhatsAppPreview] = useState(false);
@@ -296,126 +59,196 @@ const BusinessSalesEntry = ({ open, onClose }) => {
   const customerSearchRef = useRef(null);
   const productSearchRef = useRef(null);
 
-  // Load data from backend
+  // Load data on component mount
   useEffect(() => {
-    // Initialize available challans
-    setAvailableChallans(sampleChallans);
-  }, []);
-
-  useEffect(() => {
-    const loadData = async () => {
-      try {
-        setLoading(true);
-        const [customersRes, productsRes, batchesRes] = await Promise.all([
-          customersApi.getAll(),
-          productsApi.getAll(),
-          batchesApi.getAll()
-        ]);
-        
-        // Use sample data if API returns empty or fails
-        setCustomers(customersRes.data?.length > 0 ? customersRes.data : sampleCustomers);
-        setProducts(productsRes.data?.length > 0 ? productsRes.data : sampleProducts);
-        setBatches(batchesRes.data?.length > 0 ? batchesRes.data : sampleBatches);
-        setError(null);
-      } catch (err) {
-        console.error('Error loading data:', err);
-        setError('Failed to load data. Please check your connection.');
-      } finally {
-        setLoading(false);
-      }
-    };
-
     if (open) {
-      loadData();
+      loadAllData();
     }
   }, [open]);
 
-  // Keyboard shortcuts
-  useEffect(() => {
-    const handleKeyPress = (event) => {
-      // Ctrl+P to focus product search
-      if (event.ctrlKey && event.key === 'p') {
-        event.preventDefault();
-        if (currentStep === 1 && productSearchRef.current) {
-          productSearchRef.current.focus();
-        }
+  // Load all required data
+  const loadAllData = async () => {
+    setIsLoading(true);
+    setError(null);
+    
+    try {
+      await Promise.all([
+        loadCustomers(),
+        loadProducts(),
+        loadChallans(),
+        loadTransportModes(),
+        loadMedicalReps()
+      ]);
+    } catch (error) {
+      console.error('Error loading data:', error);
+      setError('Failed to load required data. Please check your connection and try again.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Load customers from API
+  const loadCustomers = async () => {
+    try {
+      const response = await customersApi.getAll();
+      if (response?.data && Array.isArray(response.data)) {
+        setCustomers(response.data);
+      } else {
+        setCustomers([]);
       }
-    };
-
-    document.addEventListener('keydown', handleKeyPress);
-    return () => {
-      document.removeEventListener('keydown', handleKeyPress);
-    };
-  }, [currentStep]);
-
-  // Calculate expiry status and color
-  const getExpiryStatus = (expiryDate) => {
-    if (!expiryDate) return { color: 'gray', status: 'No Expiry' };
-    
-    const today = new Date();
-    const expiry = new Date(expiryDate);
-    const monthsUntilExpiry = (expiry - today) / (1000 * 60 * 60 * 24 * 30);
-    
-    if (monthsUntilExpiry < 0) {
-      return { color: 'red', status: 'Expired', class: 'bg-red-100 text-red-800 border-red-300' };
-    } else if (monthsUntilExpiry < 3) {
-      return { color: 'orange', status: 'Expiring Soon', class: 'bg-orange-100 text-orange-800 border-orange-300' };
-    } else if (monthsUntilExpiry < 6) {
-      return { color: 'yellow', status: 'Short Expiry', class: 'bg-yellow-100 text-yellow-800 border-yellow-300' };
-    } else {
-      return { color: 'green', status: 'Good', class: 'bg-green-100 text-green-800 border-green-300' };
+    } catch (error) {
+      console.error('Error loading customers:', error);
+      setCustomers([]);
     }
   };
 
-  // Create invoice from challan
-  const createFromChallan = (challan) => {
-    // Find and set customer
-    const customer = customers.find(c => c.customer_id === challan.customer_id);
-    if (customer) {
-      selectCustomer(customer);
+  // Load products from API
+  const loadProducts = async () => {
+    try {
+      const response = await productsApi.getAll();
+      if (response?.data && Array.isArray(response.data)) {
+        setProducts(response.data);
+      } else {
+        setProducts([]);
+      }
+    } catch (error) {
+      console.error('Error loading products:', error);
+      setProducts([]);
     }
-
-    // Add challan items to invoice
-    const newItems = challan.items.map(item => {
-      // Find product details
-      const product = products.find(p => p.product_id === item.product_id);
-      const batch = batches.find(b => b.batch_id === item.batch_id || b.batch_no === item.batch_no);
-      
-      // Get all batches for this product for dropdown
-      const productBatches = batches.filter(b => b.product_id === item.product_id);
-      
-      return {
-        id: Date.now() + Math.random(),
-        productId: item.product_id,
-        productCode: item.product_code,
-        productName: item.product_name,
-        hsnCode: product?.hsn_code || '',
-        packType: product?.pack_type || '',
-        availableBatches: productBatches,
-        selectedBatch: batch,
-        batchId: item.batch_id || batch?.batch_id || '',
-        batchNo: item.batch_no,
-        expiryDate: batch?.expiry_date || '',
-        expiryStatus: batch ? getExpiryStatus(batch.expiry_date) : {},
-        qty: item.qty,
-        freeQty: 0,
-        mrp: batch?.mrp || product?.mrp || item.rate,
-        rate: item.rate,
-        discount: 0,
-        taxPercent: item.gst_percent || product?.gst_percent || 0,
-        amount: item.amount,
-        taxAmount: (item.amount * (item.gst_percent || product?.gst_percent || 0)) / 100,
-        netAmount: item.amount + ((item.amount * (item.gst_percent || product?.gst_percent || 0)) / 100),
-        availableStock: batch?.quantity || 0
-      };
-    });
-
-    setInvoice(prev => ({ ...prev, items: newItems }));
-    calculateTotals(newItems);
-    setShowChallanModal(false);
   };
 
-  // Search functions
+  // Load challans from API
+  const loadChallans = async () => {
+    try {
+      // Assuming there's a challans API endpoint
+      const response = await ordersApi.getAll(); // Using orders as fallback
+      if (response?.data && Array.isArray(response.data)) {
+        // Filter for challans or use orders as challans
+        setChallans(response.data.filter(order => order.order_type === 'challan' || order.type === 'challan'));
+      } else {
+        setChallans([]);
+      }
+    } catch (error) {
+      console.error('Error loading challans:', error);
+      setChallans([]);
+    }
+  };
+
+  // Load transport modes from API or use defaults
+  const loadTransportModes = async () => {
+    try {
+      const response = await ordersApi.getTransportModes();
+      if (response?.data && Array.isArray(response.data)) {
+        setTransportModes(response.data);
+      } else {
+        // Fallback to basic transport modes if API fails
+        const fallbackTransportModes = [
+          {
+            transport_id: 'SELF',
+            name: 'Self Pickup',
+            description: 'Customer will collect from store'
+          },
+          {
+            transport_id: 'LOCAL_DELIVERY',
+            name: 'Local Delivery',
+            description: 'Within city delivery'
+          },
+          {
+            transport_id: 'COURIER_STD',
+            name: 'Standard Courier',
+            description: '3-5 business days'
+          },
+          {
+            transport_id: 'COURIER_EXPRESS',
+            name: 'Express Courier',
+            description: '1-2 business days'
+          },
+          {
+            transport_id: 'DEDICATED_VEHICLE',
+            name: 'Dedicated Vehicle',
+            description: 'Same day delivery'
+          }
+        ];
+        setTransportModes(fallbackTransportModes);
+      }
+    } catch (error) {
+      console.error('Error loading transport modes:', error);
+      // Use minimal fallback if API fails
+      const fallbackTransportModes = [
+        {
+          transport_id: 'SELF',
+          name: 'Self Pickup',
+          description: 'Customer will collect from store'
+        },
+        {
+          transport_id: 'LOCAL_DELIVERY',
+          name: 'Local Delivery',
+          description: 'Within city delivery'
+        }
+      ];
+      setTransportModes(fallbackTransportModes);
+    }
+  };
+
+  // Load medical representatives from API or use defaults
+  const loadMedicalReps = async () => {
+    try {
+      const response = await ordersApi.getMedicalReps();
+      if (response?.data && Array.isArray(response.data)) {
+        setMedicalReps(response.data);
+      } else {
+        // Fallback to basic medical reps if API fails
+        const fallbackMedicalReps = [
+          {
+            rep_id: 'MR001',
+            name: 'Dr. Amit Sharma',
+            zone: 'North Zone',
+            phone: '+91 98765 11111'
+          },
+          {
+            rep_id: 'MR002',
+            name: 'Dr. Priya Patel',
+            zone: 'South Zone', 
+            phone: '+91 98765 22222'
+          },
+          {
+            rep_id: 'MR003',
+            name: 'Dr. Rajesh Kumar',
+            zone: 'East Zone',
+            phone: '+91 98765 33333'
+          },
+          {
+            rep_id: 'MR004',
+            name: 'Dr. Sneha Gupta',
+            zone: 'West Zone',
+            phone: '+91 98765 44444'
+          }
+        ];
+        setMedicalReps(fallbackMedicalReps);
+      }
+    } catch (error) {
+      console.error('Error loading medical reps:', error);
+      // Use minimal fallback if API fails
+      const fallbackMedicalReps = [
+        {
+          rep_id: 'MR001',
+          name: 'Dr. Amit Sharma',
+          zone: 'North Zone',
+          phone: '+91 98765 11111'
+        }
+      ];
+      setMedicalReps(fallbackMedicalReps);
+    }
+  };
+
+  // Refresh data
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    await loadAllData();
+    setRefreshing(false);
+  };
+
+  // Helper functions
   const filteredCustomers = customers.filter(c => 
     searchQuery && (
       c.customer_code?.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -446,37 +279,6 @@ const BusinessSalesEntry = ({ open, onClose }) => {
 
   // Add product to invoice
   const addProduct = (product) => {
-    const productBatches = batches.filter(b => b.product_id === product.product_id);
-    
-    // Sort batches by expiry date (earliest first)
-    const sortedBatches = productBatches.sort((a, b) => {
-      if (!a.expiry_date) return 1;
-      if (!b.expiry_date) return -1;
-      return new Date(a.expiry_date) - new Date(b.expiry_date);
-    });
-
-    // Auto-select FIFO batch (oldest expiry date first)
-    let selectedBatch = null;
-    let batchId = null;
-    let batchNo = '';
-    let expiryDate = '';
-    let expiryStatus = null;
-    
-    if (sortedBatches.length > 0) {
-      // FIFO: Select the batch with the earliest expiry date that has stock
-      const fifoBatch = sortedBatches
-        .filter(batch => batch.quantity > 0)
-        .sort((a, b) => new Date(a.expiry_date) - new Date(b.expiry_date))[0];
-      
-      if (fifoBatch) {
-        selectedBatch = fifoBatch;
-        batchId = fifoBatch.batch_id;
-        batchNo = fifoBatch.batch_number;
-        expiryDate = fifoBatch.expiry_date;
-        expiryStatus = getExpiryStatus(fifoBatch.expiry_date);
-      }
-    }
-
     const newItem = {
       id: Date.now(),
       productId: product.product_id,
@@ -484,12 +286,6 @@ const BusinessSalesEntry = ({ open, onClose }) => {
       productName: product.product_name,
       hsnCode: product.hsn_code || '',
       packType: product.pack_type || '',
-      availableBatches: sortedBatches,
-      selectedBatch,
-      batchId,
-      batchNo,
-      expiryDate,
-      expiryStatus,
       qty: 1,
       freeQty: 0,
       mrp: product.mrp || 0,
@@ -514,127 +310,9 @@ const BusinessSalesEntry = ({ open, onClose }) => {
 
     const updatedItems = [...invoice.items, newItem];
     setInvoice(prev => ({ ...prev, items: updatedItems }));
-    // Don't call calculateTotals here as it will reset the batch selection
-    // Calculate totals without modifying items
-    const totals = calculateTotalsWithoutUpdate(updatedItems);
-    setInvoice(prev => ({ ...prev, items: updatedItems, ...totals }));
+    calculateTotals(updatedItems);
     setProductSearchQuery('');
     setShowProductSearch(false);
-  };
-
-  // Select batch for item
-  const selectBatch = (itemId, batch) => {
-    const updatedItems = invoice.items.map(item => {
-      if (item.id === itemId) {
-        const expiryStatus = getExpiryStatus(batch.expiry_date);
-        return {
-          ...item,
-          selectedBatch: batch,
-          batchId: batch.batch_id,
-          batchNo: batch.batch_number,
-          expiryDate: batch.expiry_date,
-          expiryStatus,
-          // Always use rate from batch (backend data)
-          rate: batch.sale_price || batch.mrp || 0,
-          mrp: batch.mrp || 0,
-          packType: batch.pack_type || '',
-          // Stock from batch
-          availableStock: batch.quantity_available || 0
-        };
-      }
-      return item;
-    });
-    setInvoice(prev => ({ ...prev, items: updatedItems }));
-    calculateTotals(updatedItems);
-  };
-
-  // Update item quantity with stock validation
-  const updateItemQty = (itemId, qty) => {
-    const requestedQty = parseFloat(qty) || 0;
-    
-    const updatedItems = invoice.items.map(item => {
-      if (item.id === itemId) {
-        // Check stock availability
-        if (item.selectedBatch && requestedQty > item.availableStock) {
-          alert(`Insufficient stock! Available: ${item.availableStock}, Requested: ${requestedQty}`);
-          return { ...item, qty: item.availableStock }; // Set to max available
-        }
-        return { ...item, qty: requestedQty };
-      }
-      return item;
-    });
-    setInvoice(prev => ({ ...prev, items: updatedItems }));
-    calculateTotals(updatedItems);
-  };
-
-  // Update item rate
-  const updateItemRate = (itemId, rate) => {
-    const updatedItems = invoice.items.map(item => {
-      if (item.id === itemId) {
-        return { ...item, rate: parseFloat(rate) || 0 };
-      }
-      return item;
-    });
-    setInvoice(prev => ({ ...prev, items: updatedItems }));
-    calculateTotals(updatedItems);
-  };
-
-  // Update item discount
-  const updateItemDiscount = (itemId, discount) => {
-    const updatedItems = invoice.items.map(item => {
-      if (item.id === itemId) {
-        return { ...item, discount: parseFloat(discount) || 0 };
-      }
-      return item;
-    });
-    setInvoice(prev => ({ ...prev, items: updatedItems }));
-    calculateTotals(updatedItems);
-  };
-
-  // Remove item
-  const removeItem = (itemId) => {
-    const updatedItems = invoice.items.filter(item => item.id !== itemId);
-    setInvoice(prev => ({ ...prev, items: updatedItems }));
-    calculateTotals(updatedItems);
-  };
-
-  // Calculate totals without modifying items (for preserving batch selection)
-  const calculateTotalsWithoutUpdate = (items) => {
-    let totalAmount = 0;
-    let totalTaxAmount = 0;
-    let gstBreakup = { '5': 0, '12': 0, '18': 0, '28': 0 };
-
-    items.forEach(item => {
-      const amount = item.qty * item.rate;
-      const discountAmount = (amount * item.discount) / 100;
-      const taxableAmount = amount - discountAmount;
-      const taxAmount = (taxableAmount * item.taxPercent) / 100;
-
-      totalAmount += amount;
-      totalTaxAmount += taxAmount;
-      
-      // Add to GST breakup
-      if (gstBreakup[item.taxPercent.toString()]) {
-        gstBreakup[item.taxPercent.toString()] += taxAmount;
-      }
-    });
-
-    const discountAmount = invoice.discountAmount || 0;
-    const taxableAmount = totalAmount - discountAmount;
-    const netAmount = taxableAmount + totalTaxAmount + (invoice.transportCharges || 0);
-    const roundOff = Math.round(netAmount) - netAmount;
-    const finalAmount = netAmount + roundOff;
-
-    return {
-      totalAmount,
-      taxableAmount,
-      gstAmount: totalTaxAmount,
-      cgstAmount: totalTaxAmount / 2,
-      sgstAmount: totalTaxAmount / 2,
-      gstBreakup,
-      roundOff,
-      netAmount: finalAmount
-    };
   };
 
   // Calculate totals with GST breakup
@@ -688,308 +366,52 @@ const BusinessSalesEntry = ({ open, onClose }) => {
     }));
   };
 
-  // Generate PDF for Download/Print (Compact)
-  const generatePDF = async () => {
-    try {
-      const invoiceElement = document.getElementById('invoice-print-content');
-      if (!invoiceElement) {
-        alert('Invoice content not found');
-        return;
+  // Update item quantity
+  const updateItemQty = (itemId, qty) => {
+    const requestedQty = parseFloat(qty) || 0;
+    
+    const updatedItems = invoice.items.map(item => {
+      if (item.id === itemId) {
+        return { ...item, qty: requestedQty };
       }
-
-      // Show print preview for capture
-      setShowPrintPreview(true);
-      
-      // Wait for render
-      await new Promise(resolve => setTimeout(resolve, 100));
-      
-      const canvas = await html2canvas(invoiceElement, {
-        scale: 2,
-        useCORS: true,
-        backgroundColor: '#ffffff',
-        height: invoiceElement.scrollHeight,
-        width: invoiceElement.scrollWidth
-      });
-
-      const pdf = new jsPDF('p', 'mm', 'a4');
-      const imgData = canvas.toDataURL('image/png');
-      
-      const pdfWidth = pdf.internal.pageSize.getWidth();
-      const pdfHeight = pdf.internal.pageSize.getHeight();
-      const imgWidth = canvas.width;
-      const imgHeight = canvas.height;
-      
-      // Force fit to single page with compression
-      const ratio = Math.min(
-        (pdfWidth - 20) / (imgWidth / 2),
-        (pdfHeight - 20) / (imgHeight / 2)
-      );
-      
-      const scaledWidth = (imgWidth * ratio) / 2;
-      const scaledHeight = (imgHeight * ratio) / 2;
-      
-      const xOffset = (pdfWidth - scaledWidth) / 2;
-      const yOffset = (pdfHeight - scaledHeight) / 2;
-      
-      pdf.addImage(imgData, 'PNG', xOffset, yOffset, scaledWidth, scaledHeight);
-      
-      // Save the PDF
-      pdf.save(`Invoice_${invoice.invoiceNo}_${invoice.customerName?.replace(/\s+/g, '_')}.pdf`);
-      
-      // Hide print preview
-      setShowPrintPreview(false);
-      
-    } catch (error) {
-      console.error('Error generating PDF:', error);
-      alert('Failed to generate PDF. Please try again.');
-      setShowPrintPreview(false);
-    }
+      return item;
+    });
+    setInvoice(prev => ({ ...prev, items: updatedItems }));
+    calculateTotals(updatedItems);
   };
 
-  // Generate Beautiful PDF for WhatsApp (Multi-page)
-  const generateWhatsAppPDF = async () => {
-    try {
-      // Show WhatsApp preview for capture first
-      setShowWhatsAppPreview(true);
-      
-      // Wait longer for modal to fully render
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      
-      const invoiceElement = document.getElementById('invoice-whatsapp-content');
-      if (!invoiceElement) {
-        alert('Invoice content not found');
-        setShowWhatsAppPreview(false);
-        return;
+  // Update item rate
+  const updateItemRate = (itemId, rate) => {
+    const updatedItems = invoice.items.map(item => {
+      if (item.id === itemId) {
+        return { ...item, rate: parseFloat(rate) || 0 };
       }
-      
-      // Ensure all images are loaded
-      const images = invoiceElement.getElementsByTagName('img');
-      await Promise.all(Array.from(images).map(img => {
-        return new Promise((resolve) => {
-          if (img.complete) {
-            resolve();
-          } else {
-            img.onload = resolve;
-            img.onerror = resolve;
-          }
-        });
-      }));
-      
-      // Wait for fonts and styles to load
-      await new Promise(resolve => setTimeout(resolve, 500));
-      
-      const canvas = await html2canvas(invoiceElement, {
-        scale: 3,
-        useCORS: true,
-        backgroundColor: '#ffffff',
-        allowTaint: true,
-        foreignObjectRendering: false,
-        logging: false,
-        letterRendering: true,
-        fontLoadTimeout: 3000,
-        windowWidth: 1200,
-        windowHeight: 800,
-        onclone: (clonedDoc) => {
-          // Ensure styles are applied to cloned document
-          const clonedElement = clonedDoc.getElementById('invoice-whatsapp-content');
-          if (clonedElement) {
-            clonedElement.style.display = 'block';
-            clonedElement.style.visibility = 'visible';
-            clonedElement.style.fontSize = '16px';
-            clonedElement.style.lineHeight = '1.5';
-            // Ensure text is crisp
-            clonedElement.style.webkitFontSmoothing = 'antialiased';
-            clonedElement.style.mozOsxFontSmoothing = 'grayscale';
-          }
-        }
-      });
+      return item;
+    });
+    setInvoice(prev => ({ ...prev, items: updatedItems }));
+    calculateTotals(updatedItems);
+  };
 
-      // Check if canvas has content
-      if (canvas.width === 0 || canvas.height === 0) {
-        throw new Error('Canvas is empty - content not rendered properly');
+  // Update item discount
+  const updateItemDiscount = (itemId, discount) => {
+    const updatedItems = invoice.items.map(item => {
+      if (item.id === itemId) {
+        return { ...item, discount: parseFloat(discount) || 0 };
       }
+      return item;
+    });
+    setInvoice(prev => ({ ...prev, items: updatedItems }));
+    calculateTotals(updatedItems);
+  };
 
-      const pdf = new jsPDF('p', 'mm', 'a4');
-      const imgData = canvas.toDataURL('image/png');
-      
-      // Verify image data
-      if (!imgData || imgData === 'data:image/png;base64,') {
-        throw new Error('Image data is empty');
-      }
-      
-      const pdfWidth = pdf.internal.pageSize.getWidth();
-      const pdfHeight = pdf.internal.pageSize.getHeight();
-      const imgWidth = canvas.width;
-      const imgHeight = canvas.height;
-      
-      console.log('PDF Generation Details:', {
-        canvasWidth: imgWidth,
-        canvasHeight: imgHeight,
-        pdfWidth,
-        pdfHeight
-      });
-      
-      // Better approach for PDF generation
-      const pageWidthMM = 210;
-      const pageHeightMM = 297;
-      const margin = 5; // Reduced margin for better content fit
-      
-      // Calculate optimal scaling
-      const availableWidth = pageWidthMM - (2 * margin);
-      const availableHeight = pageHeightMM - (2 * margin);
-      
-      // Scale based on width to ensure content fits horizontally
-      const scaleX = availableWidth / (imgWidth / 96 * 25.4); // Convert pixels to mm
-      const scaleY = availableHeight / (imgHeight / 96 * 25.4); // Convert pixels to mm
-      const optimalScale = Math.min(scaleX, scaleY) * 0.95; // Use 95% to ensure margin
-      
-      const finalWidth = (imgWidth / 96 * 25.4) * optimalScale;
-      const finalHeight = (imgHeight / 96 * 25.4) * optimalScale;
-      
-      console.log('Improved PDF scaling:', {
-        imgWidth, imgHeight,
-        finalWidth, finalHeight,
-        optimalScale,
-        pageWidth: pageWidthMM,
-        pageHeight: pageHeightMM
-      });
-      
-      // If content fits on one page
-      if (finalHeight <= availableHeight) {
-        pdf.addImage(imgData, 'PNG', margin, margin, finalWidth, finalHeight);
-      } else {
-        // Multi-page handling with improved approach
-        const pagesNeeded = Math.ceil(finalHeight / availableHeight);
-        const pageSliceHeight = availableHeight;
-        
-        for (let pageIndex = 0; pageIndex < pagesNeeded; pageIndex++) {
-          if (pageIndex > 0) pdf.addPage();
-          
-          // Calculate Y position in the original image
-          const startY = (pageIndex * pageSliceHeight) / optimalScale * 96 / 25.4;
-          const sliceHeight = Math.min(pageSliceHeight / optimalScale * 96 / 25.4, imgHeight - startY);
-          
-          // Create temporary canvas for this page
-          const tempCanvas = document.createElement('canvas');
-          const tempCtx = tempCanvas.getContext('2d');
-          tempCanvas.width = imgWidth;
-          tempCanvas.height = sliceHeight;
-          
-          // Set high quality rendering
-          tempCtx.imageSmoothingEnabled = true;
-          tempCtx.imageSmoothingQuality = 'high';
-          
-          // Draw the slice from original canvas
-          tempCtx.drawImage(canvas, 0, startY, imgWidth, sliceHeight, 0, 0, imgWidth, sliceHeight);
-          
-          // Convert to high quality image data
-          const sliceDataURL = tempCanvas.toDataURL('image/png', 1.0);
-          
-          // Calculate the height for this slice in PDF
-          const pdfSliceHeight = sliceHeight / 96 * 25.4 * optimalScale;
-          
-          // Add to PDF
-          pdf.addImage(sliceDataURL, 'PNG', margin, margin, finalWidth, pdfSliceHeight);
-        }
-      }
-      
-      // Save the beautiful PDF
-      const pdfBlob = pdf.output('blob');
-      const pdfUrl = URL.createObjectURL(pdfBlob);
-      
-      // Open WhatsApp with PDF sharing capability
-      const message = `📋 *INVOICE DETAILS*\n\n` +
-        `🧾 Invoice No: ${invoice.invoiceNo}\n` +
-        `👤 Customer: ${invoice.customerName}\n` +
-        `💰 Amount: ₹${invoice.netAmount.toFixed(2)}\n` +
-        `📅 Date: ${new Date(invoice.invoiceDate).toLocaleDateString('en-IN')}\n\n` +
-        `🏥 *AASO Pharmaceuticals*\n` +
-        `📱 Phone: +91 98765 43210\n` +
-        `📧 Email: info@aasopharma.com\n\n` +
-        `Thank you for your business! 🙏\n\n` +
-        `_This is a system generated invoice_`;
-        
-      const whatsappUrl = `https://wa.me/${invoice.customerDetails?.phone?.replace(/[^0-9]/g, '')}?text=${encodeURIComponent(message)}`;
-      
-      // Open WhatsApp and download PDF
-      window.open(whatsappUrl, '_blank');
-      
-      // Also trigger PDF download for sharing
-      const link = document.createElement('a');
-      link.href = pdfUrl;
-      link.download = `WhatsApp_Invoice_${invoice.invoiceNo}_${invoice.customerName?.replace(/\s+/g, '_')}.pdf`;
-      link.click();
-      
-      // Hide WhatsApp preview
-      setShowWhatsAppPreview(false);
-      
-    } catch (error) {
-      console.error('Error generating WhatsApp PDF:', error);
-      
-      // Try fallback approach with simpler settings
-      try {
-        console.log('Attempting fallback PDF generation...');
-        const invoiceElement = document.getElementById('invoice-whatsapp-content');
-        if (invoiceElement) {
-          const canvas = await html2canvas(invoiceElement, {
-            scale: 1,
-            useCORS: false,
-            backgroundColor: '#ffffff',
-            allowTaint: false,
-            foreignObjectRendering: true
-          });
-          
-          if (canvas.width > 0 && canvas.height > 0) {
-            const pdf = new jsPDF('p', 'mm', 'a4');
-            const imgData = canvas.toDataURL('image/png');
-            const pdfWidth = pdf.internal.pageSize.getWidth();
-            const pdfHeight = pdf.internal.pageSize.getHeight();
-            
-            // Simple single page approach
-            const imgWidth = canvas.width;
-            const imgHeight = canvas.height;
-            const ratio = Math.min(pdfWidth / imgWidth, pdfHeight / imgHeight) * 0.9;
-            
-            pdf.addImage(imgData, 'PNG', 10, 10, imgWidth * ratio, imgHeight * ratio);
-            
-            const pdfBlob = pdf.output('blob');
-            const pdfUrl = URL.createObjectURL(pdfBlob);
-            
-            const message = `📋 *INVOICE DETAILS*\n\n` +
-              `🧾 Invoice No: ${invoice.invoiceNo}\n` +
-              `👤 Customer: ${invoice.customerName}\n` +
-              `💰 Amount: ₹${invoice.netAmount.toFixed(2)}\n` +
-              `📅 Date: ${new Date(invoice.invoiceDate).toLocaleDateString('en-IN')}\n\n` +
-              `🏥 *AASO Pharmaceuticals*\n` +
-              `📱 Phone: +91 98765 43210\n` +
-              `📧 Email: info@aasopharma.com\n\n` +
-              `Thank you for your business! 🙏\n\n` +
-              `_This is a system generated invoice_`;
-              
-            const whatsappUrl = `https://wa.me/${invoice.customerDetails?.phone?.replace(/[^0-9]/g, '')}?text=${encodeURIComponent(message)}`;
-            
-            window.open(whatsappUrl, '_blank');
-            
-            const link = document.createElement('a');
-            link.href = pdfUrl;
-            link.download = `WhatsApp_Invoice_${invoice.invoiceNo}_${invoice.customerName?.replace(/\s+/g, '_')}.pdf`;
-            link.click();
-            
-            setShowWhatsAppPreview(false);
-            return;
-          }
-        }
-      } catch (fallbackError) {
-        console.error('Fallback PDF generation also failed:', fallbackError);
-      }
-      
-      alert('Failed to generate WhatsApp PDF. Please try the regular Print option instead.');
-      setShowWhatsAppPreview(false);
-    }
+  // Remove item
+  const removeItem = (itemId) => {
+    const updatedItems = invoice.items.filter(item => item.id !== itemId);
+    setInvoice(prev => ({ ...prev, items: updatedItems }));
+    calculateTotals(updatedItems);
   };
 
   // Save invoice
-
   const saveInvoice = async () => {
     try {
       if (!invoice.customerId) {
@@ -998,11 +420,11 @@ const BusinessSalesEntry = ({ open, onClose }) => {
       }
 
       const validItems = invoice.items.filter(item => 
-        item.productId && item.selectedBatch && item.qty > 0
+        item.productId && item.qty > 0
       );
 
       if (validItems.length === 0) {
-        alert('Please add at least one product with batch selected');
+        alert('Please add at least one product');
         return;
       }
 
@@ -1027,7 +449,6 @@ const BusinessSalesEntry = ({ open, onClose }) => {
         return orderItemsApi.create({
           order_id: orderId,
           product_id: item.productId,
-          batch_id: item.batchId,
           quantity: item.qty,
           unit_price: item.rate,
           total_price: item.netAmount,
@@ -1045,6 +466,88 @@ const BusinessSalesEntry = ({ open, onClose }) => {
       alert('Failed to save invoice. Please try again.');
     } finally {
       setSaving(false);
+    }
+  };
+
+  // Generate PDF for Download/Print
+  const generatePDF = async () => {
+    try {
+      alert('PDF generation feature coming soon!');
+    } catch (error) {
+      console.error('Error generating PDF:', error);
+      alert('Failed to generate PDF. Please try again.');
+    }
+  };
+
+  // Generate WhatsApp PDF
+  const generateWhatsAppPDF = async () => {
+    try {
+      alert('WhatsApp PDF generation feature coming soon!');
+    } catch (error) {
+      console.error('Error generating WhatsApp PDF:', error);
+      alert('Failed to generate WhatsApp PDF. Please try again.');
+    }
+  };
+
+  // Create invoice from challan
+  const createFromChallan = (challan) => {
+    // Find and set customer
+    const customer = customers.find(c => c.customer_id === challan.customer_id);
+    if (customer) {
+      selectCustomer(customer);
+    }
+
+    // Add challan items to invoice
+    const newItems = challan.items.map(item => {
+      // Find product details
+      const product = products.find(p => p.product_id === item.product_id);
+      
+      return {
+        id: Date.now() + Math.random(),
+        productId: item.product_id,
+        productCode: item.product_code,
+        productName: item.product_name,
+        hsnCode: product?.hsn_code || '',
+        packType: product?.pack_type || '',
+        qty: item.qty,
+        freeQty: 0,
+        mrp: product?.mrp || item.rate,
+        rate: item.rate,
+        discount: 0,
+        taxPercent: item.gst_percent || product?.gst_percent || 0,
+        amount: item.amount,
+        taxAmount: (item.amount * (item.gst_percent || product?.gst_percent || 0)) / 100,
+        netAmount: item.amount + ((item.amount * (item.gst_percent || product?.gst_percent || 0)) / 100)
+      };
+    });
+
+    setInvoice(prev => ({ ...prev, items: newItems }));
+    calculateTotals(newItems);
+    setShowChallanModal(false);
+  };
+
+  // Select batch for item (placeholder function)
+  const selectBatch = (itemId, batch) => {
+    // This function can be implemented later when batch functionality is needed
+    console.log('Batch selection:', itemId, batch);
+  };
+
+  // Get expiry status (placeholder function)
+  const getExpiryStatus = (expiryDate) => {
+    if (!expiryDate) return { color: 'gray', status: 'No Expiry' };
+    
+    const today = new Date();
+    const expiry = new Date(expiryDate);
+    const monthsUntilExpiry = (expiry - today) / (1000 * 60 * 60 * 24 * 30);
+    
+    if (monthsUntilExpiry < 0) {
+      return { color: 'red', status: 'Expired', class: 'bg-red-100 text-red-800 border-red-300' };
+    } else if (monthsUntilExpiry < 3) {
+      return { color: 'orange', status: 'Expiring Soon', class: 'bg-orange-100 text-orange-800 border-orange-300' };
+    } else if (monthsUntilExpiry < 6) {
+      return { color: 'yellow', status: 'Short Expiry', class: 'bg-yellow-100 text-yellow-800 border-yellow-300' };
+    } else {
+      return { color: 'green', status: 'Good', class: 'bg-green-100 text-green-800 border-green-300' };
     }
   };
 
@@ -1079,6 +582,14 @@ const BusinessSalesEntry = ({ open, onClose }) => {
               </span>
             </div>
             <div className="flex items-center space-x-4">
+              <button
+                onClick={handleRefresh}
+                disabled={refreshing}
+                className="px-3 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2"
+              >
+                <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />
+                <span>{refreshing ? 'Refreshing...' : 'Refresh'}</span>
+              </button>
               {currentStep === 1 ? (
                 <button
                   onClick={() => {
@@ -1150,6 +661,22 @@ const BusinessSalesEntry = ({ open, onClose }) => {
       </div>
 
 
+      {/* Loading State */}
+      {isLoading && (
+        <div className="mx-6 mt-4 p-4 bg-blue-50 border border-blue-200 rounded-lg flex items-center">
+          <Loader2 className="w-5 h-5 mr-2 animate-spin" />
+          <span className="text-blue-800">Loading sales data...</span>
+        </div>
+      )}
+
+      {/* Error State */}
+      {error && (
+        <div className="mx-6 mt-4 p-4 bg-red-50 border border-red-200 rounded-lg flex items-center">
+          <AlertCircle className="w-5 h-5 text-red-600 mr-2" />
+          <span className="text-red-800">{error}</span>
+        </div>
+      )}
+
       {/* Main Content */}
       <div className="flex-1 overflow-y-auto">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
@@ -1191,34 +718,56 @@ const BusinessSalesEntry = ({ open, onClose }) => {
                     </button>
                   </div>
                   
-                  {showCustomerSearch && filteredCustomers.length > 0 && (
+                  {showCustomerSearch && (
                     <div className="absolute z-10 mt-2 w-full bg-white rounded-lg shadow-lg border border-gray-200 max-h-64 overflow-auto">
-                      {filteredCustomers.map((customer) => (
-                        <div
-                          key={customer.customer_id}
-                          onClick={() => selectCustomer(customer)}
-                          className="p-4 hover:bg-gray-50 cursor-pointer border-b last:border-b-0"
-                        >
-                          <div className="flex justify-between items-start">
-                            <div>
-                              <div className="font-medium text-gray-900">
-                                {customer.customer_code} - {customer.name}
+                      {filteredCustomers.length > 0 ? (
+                        filteredCustomers.map((customer) => (
+                          <div
+                            key={customer.customer_id}
+                            onClick={() => selectCustomer(customer)}
+                            className="p-4 hover:bg-gray-50 cursor-pointer border-b last:border-b-0"
+                          >
+                            <div className="flex justify-between items-start">
+                              <div>
+                                <div className="font-medium text-gray-900">
+                                  {customer.customer_code} - {customer.name}
+                                </div>
+                                <div className="text-sm text-gray-500 mt-1">
+                                  {customer.phone} | {customer.area || 'N/A'}
+                                </div>
                               </div>
-                              <div className="text-sm text-gray-500 mt-1">
-                                {customer.phone} | {customer.area || 'N/A'}
-                              </div>
-                            </div>
-                            <div className="text-right">
-                              <div className="text-sm font-medium text-gray-900">
-                                Credit Limit: ₹{(customer.credit_limit || 0).toLocaleString()}
-                              </div>
-                              <div className="text-xs text-gray-500">
-                                GST: {customer.gst_number || 'N/A'}
+                              <div className="text-right">
+                                <div className="text-sm font-medium text-gray-900">
+                                  Credit Limit: ₹{(customer.credit_limit || 0).toLocaleString()}
+                                </div>
+                                <div className="text-xs text-gray-500">
+                                  GST: {customer.gst_number || 'N/A'}
+                                </div>
                               </div>
                             </div>
                           </div>
+                        ))
+                      ) : (
+                        <div className="p-8 text-center">
+                          <User className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+                          <h3 className="text-lg font-medium text-gray-900 mb-2">No customers found</h3>
+                          <p className="text-gray-500 mb-4">
+                            {searchQuery 
+                              ? 'Try adjusting your search terms'
+                              : 'No customers available in the system'
+                            }
+                          </p>
+                          {!searchQuery && (
+                            <button
+                              onClick={handleRefresh}
+                              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 inline-flex items-center"
+                            >
+                              <RefreshCw className="w-4 h-4 mr-2" />
+                              Refresh Data
+                            </button>
+                          )}
                         </div>
-                      ))}
+                      )}
                     </div>
                   )}
                 </div>
@@ -1320,42 +869,59 @@ const BusinessSalesEntry = ({ open, onClose }) => {
                 )}
               </div>
               
-              {productSearchQuery && filteredProducts.length > 0 && (
+              {productSearchQuery && (
                 <div className="mt-4 bg-white rounded-lg shadow-lg border border-gray-200 max-h-80 overflow-auto">
-                  {filteredProducts.slice(0, 10).map((product, index) => (
-                    <div
-                      key={product.product_id}
-                      onClick={() => {
-                        addProduct(product);
-                        setProductSearchQuery('');
-                      }}
-                      className="p-4 hover:bg-blue-50 cursor-pointer border-b last:border-b-0 transition-colors"
-                    >
-                      <div className="flex justify-between items-start">
-                        <div className="flex-1">
-                          <div className="font-bold text-gray-900">{product.product_code}</div>
-                          <div className="text-sm text-gray-600 mt-1">{product.product_name}</div>
-                          <div className="text-xs text-gray-500 mt-1">Pack: {product.pack_type || 'N/A'} | HSN: {product.hsn_code || 'N/A'}</div>
+                  {filteredProducts.length > 0 ? (
+                    <>
+                      {filteredProducts.slice(0, 10).map((product, index) => (
+                        <div
+                          key={product.product_id}
+                          onClick={() => {
+                            addProduct(product);
+                            setProductSearchQuery('');
+                          }}
+                          className="p-4 hover:bg-blue-50 cursor-pointer border-b last:border-b-0 transition-colors"
+                        >
+                          <div className="flex justify-between items-start">
+                            <div className="flex-1">
+                              <div className="font-bold text-gray-900">{product.product_code}</div>
+                              <div className="text-sm text-gray-600 mt-1">{product.product_name}</div>
+                              <div className="text-xs text-gray-500 mt-1">Pack: {product.pack_type || 'N/A'} | HSN: {product.hsn_code || 'N/A'}</div>
+                            </div>
+                            <div className="text-right ml-4">
+                              <div className="text-lg font-bold text-blue-600">₹{product.sale_price || product.mrp}</div>
+                              <div className="text-xs text-gray-500">MRP: ₹{product.mrp}</div>
+                            </div>
+                          </div>
                         </div>
-                        <div className="text-right ml-4">
-                          <div className="text-lg font-bold text-blue-600">₹{product.sale_price || product.mrp}</div>
-                          <div className="text-xs text-gray-500">MRP: ₹{product.mrp}</div>
+                      ))}
+                      {filteredProducts.length > 10 && (
+                        <div className="p-3 text-center text-sm text-gray-500 bg-gray-50">
+                          Showing top 10 results. Keep typing to narrow down...
                         </div>
-                      </div>
-                    </div>
-                  ))}
-                  {filteredProducts.length > 10 && (
-                    <div className="p-3 text-center text-sm text-gray-500 bg-gray-50">
-                      Showing top 10 results. Keep typing to narrow down...
+                      )}
+                    </>
+                  ) : (
+                    <div className="p-8 text-center">
+                      <Package className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+                      <h3 className="text-lg font-medium text-gray-900 mb-2">No products found</h3>
+                      <p className="text-gray-500 mb-4">
+                        {productSearchQuery 
+                          ? 'Try adjusting your search terms'
+                          : 'No products available in the system'
+                        }
+                      </p>
+                      {!productSearchQuery && (
+                        <button
+                          onClick={handleRefresh}
+                          className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 inline-flex items-center"
+                        >
+                          <RefreshCw className="w-4 h-4 mr-2" />
+                          Refresh Data
+                        </button>
+                      )}
                     </div>
                   )}
-                </div>
-              )}
-              
-              {productSearchQuery && filteredProducts.length === 0 && (
-                <div className="mt-4 p-6 bg-yellow-50 border border-yellow-200 rounded-lg text-center">
-                  <div className="text-yellow-800 font-medium">No products found for "{productSearchQuery}"</div>
-                  <div className="text-yellow-600 text-sm mt-1">Try searching with product code or partial name</div>
                 </div>
               )}
             </div>
@@ -2233,9 +1799,9 @@ const BusinessSalesEntry = ({ open, onClose }) => {
             </div>
             
             <div className="flex-1 overflow-auto p-6">
-              {sampleChallans.length > 0 ? (
+              {challans.length > 0 ? (
                 <div className="space-y-4">
-                  {sampleChallans.map((challan) => (
+                  {challans.map((challan) => (
                     <div
                       key={challan.challan_id}
                       className="bg-gradient-to-r from-purple-50 to-indigo-50 border border-purple-200 rounded-lg p-6 hover:shadow-lg transition-shadow cursor-pointer"

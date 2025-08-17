@@ -10,71 +10,140 @@ import {
   Calendar,
   CheckCircle,
   Eye,
-  Trash2
+  Trash2,
+  Loader2,
+  RefreshCw,
+  AlertCircle
 } from 'lucide-react';
+import { settingsApi } from '../services/api';
+import offlineStorage from '../services/offlineStorage';
 
 const NotificationCenter = ({ isOpen, onClose }) => {
   const [notifications, setNotifications] = useState([]);
   const [filter, setFilter] = useState('all');
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [refreshing, setRefreshing] = useState(false);
 
-  // Mock notifications data - in real app, this would come from API
-  const mockNotifications = [
-    {
-      id: 1,
-      type: 'stock_low',
-      title: 'Low Stock Alert',
-      message: 'Paracetamol 500mg - Only 15 units left',
-      severity: 'critical',
-      timestamp: new Date(Date.now() - 2 * 60 * 60 * 1000),
-      read: false,
-      data: { productId: 'P001', currentStock: 15, reorderLevel: 50 }
-    },
-    {
-      id: 2,
-      type: 'expiry',
-      title: 'Expiry Alert',
-      message: 'Batch #B2024001 expires in 7 days',
-      severity: 'warning',
-      timestamp: new Date(Date.now() - 4 * 60 * 60 * 1000),
-      read: false,
-      data: { batchId: 'B2024001', expiryDate: '2024-08-01', daysLeft: 7 }
-    },
-    {
-      id: 3,
-      type: 'payment_due',
-      title: 'Payment Overdue',
-      message: 'Apollo Pharmacy - ₹25,000 overdue by 3 days',
-      severity: 'critical',
-      timestamp: new Date(Date.now() - 6 * 60 * 60 * 1000),
-      read: true,
-      data: { partyId: 'C001', amount: 25000, daysOverdue: 3 }
-    },
-    {
-      id: 4,
-      type: 'scheme_expiry',
-      title: 'Scheme Expiring',
-      message: 'Summer Discount Scheme expires tomorrow',
-      severity: 'warning',
-      timestamp: new Date(Date.now() - 8 * 60 * 60 * 1000),
-      read: false,
-      data: { schemeId: 'S001', expiryDate: '2024-07-25' }
-    },
-    {
-      id: 5,
-      type: 'einvoice_failed',
-      title: 'E-Invoice Failed',
-      message: 'Invoice #INV2024001 - IRN generation failed',
-      severity: 'critical',
-      timestamp: new Date(Date.now() - 12 * 60 * 60 * 1000),
-      read: false,
-      data: { invoiceId: 'INV2024001', error: 'Invalid GST number' }
+  // Load notifications with offline fallback
+  const loadNotifications = async () => {
+    setLoading(true);
+    setError(null);
+    
+    try {
+      const response = await settingsApi.notifications.getAll();
+      
+      if (response?.data && Array.isArray(response.data)) {
+        const notificationsData = response.data;
+        setNotifications(notificationsData);
+        
+        // Store data offline for future use
+        await offlineStorage.storeOffline('notifications', notificationsData, { 
+          critical: true, 
+          persistent: true 
+        });
+      } else {
+        setNotifications([]);
+      }
+    } catch (error) {
+      console.error('Error loading notifications:', error);
+      
+      // Try to load from offline storage instead of using mock data
+      const offlineData = await offlineStorage.getOffline('notifications', { critical: true });
+      
+      if (offlineData && !offlineStorage.isDataStale(offlineData, 30)) { // 30 minutes max for notifications
+        console.log('📱 Using offline notifications data');
+        setNotifications(offlineData.data);
+        
+        // Show offline indicator
+        setError('Currently using offline data. Some information may be outdated.');
+      } else {
+        // No offline data available - show proper error instead of mock data
+        setError('Unable to load notifications. Please check your connection and try again.');
+        setNotifications([]);
+      }
+    } finally {
+      setLoading(false);
     }
-  ];
+  };
 
-  useEffect(() => {
-    setNotifications(mockNotifications);
-  }, []);
+  // Refresh notifications
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    setError(null);
+    
+    try {
+      await loadNotifications();
+    } catch (error) {
+      console.error('Error refreshing notifications:', error);
+      setError('Failed to refresh notifications. Please try again.');
+    } finally {
+      setRefreshing(false);
+    }
+  };
 
+  // Mark notification as read
+  const markAsRead = async (id) => {
+    try {
+      // Update locally first for immediate UI feedback
+      setNotifications(prev =>
+        prev.map(notif => notif.id === id ? { ...notif, read: true } : notif)
+      );
+      
+      // Try to update on server
+      await settingsApi.notifications.markAsRead(id);
+    } catch (error) {
+      console.error('Error marking notification as read:', error);
+      
+      // Queue for offline processing
+      offlineStorage.queueOfflineOperation({
+        type: 'notification_mark_read',
+        data: { notificationId: id }
+      });
+    }
+  };
+
+  // Delete notification
+  const deleteNotification = async (id) => {
+    try {
+      // Remove locally first for immediate UI feedback
+      setNotifications(prev => prev.filter(notif => notif.id !== id));
+      
+      // Try to delete on server
+      await settingsApi.notifications.delete(id);
+    } catch (error) {
+      console.error('Error deleting notification:', error);
+      
+      // Queue for offline processing
+      offlineStorage.queueOfflineOperation({
+        type: 'notification_delete',
+        data: { notificationId: id }
+      });
+    }
+  };
+
+  // Mark all as read
+  const markAllAsRead = async () => {
+    try {
+      // Update locally first for immediate UI feedback
+      setNotifications(prev =>
+        prev.map(notif => ({ ...notif, read: true }))
+      );
+      
+      // Try to update on server
+      await settingsApi.notifications.markAllAsRead();
+    } catch (error) {
+      console.error('Error marking all notifications as read:', error);
+      
+      // Queue for offline processing
+      offlineStorage.queueOfflineOperation({
+        type: 'notification_mark_all_read',
+        data: {}
+      });
+    }
+  };
+
+  // Get icon for notification type
   const getIcon = (type) => {
     switch (type) {
       case 'stock_low': return Package;
@@ -82,31 +151,40 @@ const NotificationCenter = ({ isOpen, onClose }) => {
       case 'payment_due': return CreditCard;
       case 'scheme_expiry': return Clock;
       case 'einvoice_failed': return FileX;
+      case 'system_alert': return AlertTriangle;
+      case 'success': return CheckCircle;
       default: return Bell;
     }
   };
 
+  // Get severity color
   const getSeverityColor = (severity) => {
     switch (severity) {
       case 'critical': return 'bg-red-100 text-red-800 border-red-200';
       case 'warning': return 'bg-yellow-100 text-yellow-800 border-yellow-200';
       case 'info': return 'bg-blue-100 text-blue-800 border-blue-200';
+      case 'success': return 'bg-green-100 text-green-800 border-green-200';
       default: return 'bg-gray-100 text-gray-800 border-gray-200';
     }
   };
 
+  // Get icon color
   const getIconColor = (severity) => {
     switch (severity) {
       case 'critical': return 'text-red-600';
       case 'warning': return 'text-yellow-600';
       case 'info': return 'text-blue-600';
+      case 'success': return 'text-green-600';
       default: return 'text-gray-600';
     }
   };
 
+  // Format timestamp
   const formatTimestamp = (timestamp) => {
+    if (!timestamp) return 'Unknown';
+    
     const now = new Date();
-    const diff = now - timestamp;
+    const diff = now - new Date(timestamp);
     const hours = Math.floor(diff / (1000 * 60 * 60));
     const minutes = Math.floor(diff / (1000 * 60));
 
@@ -119,16 +197,7 @@ const NotificationCenter = ({ isOpen, onClose }) => {
     }
   };
 
-  const markAsRead = (id) => {
-    setNotifications(prev =>
-      prev.map(notif => notif.id === id ? { ...notif, read: true } : notif)
-    );
-  };
-
-  const deleteNotification = (id) => {
-    setNotifications(prev => prev.filter(notif => notif.id !== id));
-  };
-
+  // Filter notifications
   const filteredNotifications = notifications.filter(notif => {
     if (filter === 'unread') return !notif.read;
     if (filter === 'critical') return notif.severity === 'critical';
@@ -136,6 +205,22 @@ const NotificationCenter = ({ isOpen, onClose }) => {
   });
 
   const unreadCount = notifications.filter(n => !n.read).length;
+
+  // Load data on component mount
+  useEffect(() => {
+    if (isOpen) {
+      loadNotifications();
+    }
+  }, [isOpen]);
+
+  // Clear old offline data periodically
+  useEffect(() => {
+    const interval = setInterval(() => {
+      offlineStorage.clearOldData(24); // Clear data older than 24 hours
+    }, 60 * 60 * 1000); // Check every hour
+
+    return () => clearInterval(interval);
+  }, []);
 
   if (!isOpen) return null;
 
@@ -154,12 +239,22 @@ const NotificationCenter = ({ isOpen, onClose }) => {
                 </span>
               )}
             </div>
-            <button
-              onClick={onClose}
-              className="p-1 hover:bg-gray-200 rounded-lg transition-colors"
-            >
-              <X className="w-5 h-5 text-gray-500" />
-            </button>
+            <div className="flex items-center space-x-2">
+              <button
+                onClick={handleRefresh}
+                disabled={refreshing}
+                className="p-1 hover:bg-gray-200 rounded-lg transition-colors disabled:opacity-50"
+                title="Refresh"
+              >
+                <RefreshCw className={`w-4 h-4 text-gray-500 ${refreshing ? 'animate-spin' : ''}`} />
+              </button>
+              <button
+                onClick={onClose}
+                className="p-1 hover:bg-gray-200 rounded-lg transition-colors"
+              >
+                <X className="w-5 h-5 text-gray-500" />
+              </button>
+            </div>
           </div>
 
           {/* Filter tabs */}
@@ -178,83 +273,153 @@ const NotificationCenter = ({ isOpen, onClose }) => {
                     : 'text-gray-600 hover:bg-gray-100'
                 }`}
               >
-                {tab.label}
+                {tab.key === 'unread' ? `${tab.label} (${unreadCount})` : tab.label}
               </button>
             ))}
           </div>
-        </div>
 
-        {/* Notifications List */}
-        <div className="overflow-y-auto max-h-96">
-          {filteredNotifications.length === 0 ? (
-            <div className="p-8 text-center text-gray-500">
-              <Bell className="w-12 h-12 mx-auto mb-3 text-gray-300" />
-              <p>No notifications</p>
-            </div>
-          ) : (
-            <div className="divide-y divide-gray-100">
-              {filteredNotifications.map(notification => {
-                const Icon = getIcon(notification.type);
-                return (
-                  <div
-                    key={notification.id}
-                    className={`p-4 hover:bg-gray-50 transition-colors ${
-                      !notification.read ? 'bg-blue-50 border-l-4 border-blue-500' : ''
-                    }`}
-                  >
-                    <div className="flex items-start space-x-3">
-                      {/* Icon */}
-                      <div className={`p-2 rounded-lg ${getSeverityColor(notification.severity)}`}>
-                        <Icon className={`w-4 h-4 ${getIconColor(notification.severity)}`} />
-                      </div>
-
-                      {/* Content */}
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-start justify-between">
-                          <h4 className="text-sm font-medium text-gray-900 mb-1">
-                            {notification.title}
-                          </h4>
-                          <span className="text-xs text-gray-500 ml-2">
-                            {formatTimestamp(notification.timestamp)}
-                          </span>
-                        </div>
-                        <p className="text-sm text-gray-600 mb-2">
-                          {notification.message}
-                        </p>
-
-                        {/* Actions */}
-                        <div className="flex items-center space-x-2">
-                          {!notification.read && (
-                            <button
-                              onClick={() => markAsRead(notification.id)}
-                              className="inline-flex items-center text-xs text-blue-600 hover:text-blue-700"
-                            >
-                              <Eye className="w-3 h-3 mr-1" />
-                              Mark as read
-                            </button>
-                          )}
-                          <button
-                            onClick={() => deleteNotification(notification.id)}
-                            className="inline-flex items-center text-xs text-red-600 hover:text-red-700"
-                          >
-                            <Trash2 className="w-3 h-3 mr-1" />
-                            Delete
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
+          {/* Actions */}
+          {unreadCount > 0 && (
+            <div className="mt-3">
+              <button
+                onClick={markAllAsRead}
+                className="text-xs text-blue-600 hover:text-blue-800 underline"
+              >
+                Mark all as read
+              </button>
             </div>
           )}
         </div>
 
+        {/* Error Display */}
+        {error && (
+          <div className="p-3 bg-red-50 border-b border-red-200">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center">
+                <AlertCircle className="h-4 w-4 text-red-600 mr-2" />
+                <span className="text-sm text-red-800">{error}</span>
+              </div>
+              <button
+                onClick={() => setError(null)}
+                className="text-xs text-red-600 hover:text-red-800 underline"
+              >
+                Dismiss
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Loading State */}
+        {loading && (
+          <div className="p-8 text-center">
+            <Loader2 className="w-8 h-8 animate-spin mx-auto mb-3 text-blue-600" />
+            <p className="text-gray-600">Loading notifications...</p>
+          </div>
+        )}
+
+        {/* Notifications List */}
+        {!loading && (
+          <div className="overflow-y-auto max-h-96">
+            {filteredNotifications.length === 0 ? (
+              <div className="p-8 text-center text-gray-500">
+                <Bell className="w-12 w-12 mx-auto mb-3 text-gray-300" />
+                <p>No notifications</p>
+                {filter !== 'all' && (
+                  <p className="text-sm text-gray-400 mt-1">
+                    Try changing the filter or refresh
+                  </p>
+                )}
+              </div>
+            ) : (
+              <div className="divide-y divide-gray-100">
+                {filteredNotifications.map(notification => {
+                  const Icon = getIcon(notification.type);
+                  return (
+                    <div
+                      key={notification.id}
+                      className={`p-4 hover:bg-gray-50 transition-colors ${
+                        !notification.read ? 'bg-blue-50' : ''
+                      }`}
+                    >
+                      <div className="flex items-start space-x-3">
+                        <div className={`p-2 rounded-lg ${getSeverityColor(notification.severity)}`}>
+                          <Icon className={`w-4 h-4 ${getIconColor(notification.severity)}`} />
+                        </div>
+                        
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-start justify-between">
+                            <div className="flex-1">
+                              <h4 className="text-sm font-medium text-gray-900 mb-1">
+                                {notification.title || 'Notification'}
+                              </h4>
+                              <p className="text-sm text-gray-600 mb-2">
+                                {notification.message || 'No message content'}
+                              </p>
+                              <div className="flex items-center space-x-4 text-xs text-gray-500">
+                                <span>{formatTimestamp(notification.timestamp)}</span>
+                                {notification.severity && (
+                                  <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                                    notification.severity === 'critical' ? 'bg-red-100 text-red-700' :
+                                    notification.severity === 'warning' ? 'bg-yellow-100 text-yellow-700' :
+                                    notification.severity === 'info' ? 'bg-blue-100 text-blue-700' :
+                                    notification.severity === 'success' ? 'bg-green-100 text-green-700' :
+                                    'bg-gray-100 text-gray-700'
+                                  }`}>
+                                    {notification.severity}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                            
+                            <div className="flex items-center space-x-1 ml-2">
+                              {!notification.read && (
+                                <button
+                                  onClick={() => markAsRead(notification.id)}
+                                  className="p-1 hover:bg-gray-200 rounded transition-colors"
+                                  title="Mark as read"
+                                >
+                                  <Eye className="w-4 h-4 text-gray-500" />
+                                </button>
+                              )}
+                              <button
+                                onClick={() => deleteNotification(notification.id)}
+                                className="p-1 hover:bg-gray-200 rounded transition-colors"
+                                title="Delete"
+                              >
+                                <Trash2 className="w-4 h-4 text-gray-500" />
+                              </button>
+                            </div>
+                          </div>
+                          
+                          {/* Additional data display */}
+                          {notification.data && Object.keys(notification.data).length > 0 && (
+                            <div className="mt-2 p-2 bg-gray-50 rounded text-xs">
+                              <div className="grid grid-cols-2 gap-2">
+                                {Object.entries(notification.data).map(([key, value]) => (
+                                  <div key={key}>
+                                    <span className="font-medium text-gray-700">{key}:</span>
+                                    <span className="text-gray-600 ml-1">{String(value)}</span>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
+
         {/* Footer */}
-        <div className="p-4 border-t border-gray-200 bg-gray-50">
-          <button className="w-full text-sm text-blue-600 hover:text-blue-700 font-medium">
-            View All Notifications
-          </button>
+        <div className="p-3 border-t border-gray-200 bg-gray-50">
+          <div className="flex items-center justify-between text-xs text-gray-500">
+            <span>{notifications.length} total notifications</span>
+            <span>{unreadCount} unread</span>
+          </div>
         </div>
       </div>
     </div>

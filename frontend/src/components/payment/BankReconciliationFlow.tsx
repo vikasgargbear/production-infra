@@ -1,53 +1,184 @@
-import React, { useState } from 'react';
-import { RefreshCw, Upload, CheckCircle, AlertCircle } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { RefreshCw, Upload, CheckCircle, AlertCircle, Loader2 } from 'lucide-react';
 import { ModuleHeader } from '../global';
+import { paymentsApi, ledgerApi } from '../../services/api';
+import offlineStorage from '../../services/offlineStorage';
 
 interface BankReconciliationFlowProps {
   onClose?: () => void;
+}
+
+interface BankAccount {
+  code: string;
+  name: string;
+  balance: number;
+  account_type: string;
+  bank_name: string;
+}
+
+interface UnreconciledTransaction {
+  id: number;
+  date: string;
+  description: string;
+  amount: number;
+  type: 'credit' | 'debit';
+  status: 'unmatched' | 'matched' | 'pending';
+  reference_no?: string;
+  party_name?: string;
 }
 
 const BankReconciliationFlow: React.FC<BankReconciliationFlowProps> = ({ onClose }) => {
   const [selectedBank, setSelectedBank] = useState('');
   const [reconciliationDate, setReconciliationDate] = useState(new Date().toISOString().split('T')[0]);
   const [bankStatementBalance, setBankStatementBalance] = useState(0);
-  const [bookBalance, setBookBalance] = useState(485000); // Mock data
+  const [bookBalance, setBookBalance] = useState(0);
   const [reconciling, setReconciling] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  
+  const [bankAccounts, setBankAccounts] = useState<BankAccount[]>([]);
+  const [unreconciledTransactions, setUnreconciledTransactions] = useState<UnreconciledTransaction[]>([]);
 
-  const bankAccounts = [
-    { code: '1102', name: 'HDFC Current Account', balance: 485000 },
-    { code: '1103', name: 'SBI Savings Account', balance: 125000 },
-    { code: '1104', name: 'ICICI Business Account', balance: 350000 }
-  ];
+  // Load bank accounts and reconciliation data with offline fallback
+  const loadReconciliationData = async () => {
+    setLoading(true);
+    setError(null);
+    
+    try {
+      // Load bank accounts and unreconciled transactions
+      const [accountsResponse, transactionsResponse] = await Promise.all([
+        ledgerApi.getBankAccounts(),
+        paymentsApi.getUnreconciledTransactions({ date: reconciliationDate })
+      ]);
+      
+      if (accountsResponse?.data && Array.isArray(accountsResponse.data)) {
+        setBankAccounts(accountsResponse.data);
+      } else {
+        setBankAccounts([]);
+      }
+      
+      if (transactionsResponse?.data && Array.isArray(transactionsResponse.data)) {
+        setUnreconciledTransactions(transactionsResponse.data);
+      } else {
+        setUnreconciledTransactions([]);
+      }
+      
+      // Store data offline for future use
+      await offlineStorage.storeOffline('bank_reconciliation_data', {
+        accounts: accountsResponse?.data || [],
+        transactions: transactionsResponse?.data || [],
+        date: reconciliationDate
+      }, { 
+        critical: true, 
+        persistent: true 
+      });
+      
+    } catch (err) {
+      console.error('Error loading bank reconciliation data:', err);
+      
+      // Try to load from offline storage instead of using mock data
+      const offlineData = await offlineStorage.getOffline('bank_reconciliation_data', { critical: true });
+      
+      if (offlineData && !offlineStorage.isDataStale(offlineData, 60)) { // 1 hour max for reconciliation data
+        console.log('📱 Using offline bank reconciliation data');
+        setBankAccounts(offlineData.data.accounts || []);
+        setUnreconciledTransactions(offlineData.data.transactions || []);
+        
+        // Show offline indicator
+        setError('Currently using offline data. Some information may be outdated.');
+      } else {
+        // No offline data available - show proper error instead of mock data
+        setError('Unable to load bank reconciliation data. Please check your connection and try again.');
+        setBankAccounts([]);
+        setUnreconciledTransactions([]);
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
 
-  // Mock unreconciled transactions
-  const unreconciledTransactions = [
-    { id: 1, date: '2024-01-15', description: 'Customer Payment - ABC Store', amount: 56000, type: 'credit', status: 'unmatched' },
-    { id: 2, date: '2024-01-14', description: 'Supplier Payment - XYZ Pharma', amount: -125000, type: 'debit', status: 'unmatched' },
-    { id: 3, date: '2024-01-13', description: 'Bank Charges', amount: -250, type: 'debit', status: 'unmatched' }
-  ];
+  // Refresh reconciliation data
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    setError(null);
+    
+    try {
+      await loadReconciliationData();
+    } catch (error) {
+      console.error('Error refreshing bank reconciliation data:', error);
+      setError('Failed to refresh data. Please try again.');
+    } finally {
+      setRefreshing(false);
+    }
+  };
+
+  // Load data when component mounts or date changes
+  useEffect(() => {
+    loadReconciliationData();
+  }, [reconciliationDate]);
+
+  // Clear old offline data periodically
+  useEffect(() => {
+    const interval = setInterval(() => {
+      offlineStorage.clearOldData(24); // Clear data older than 24 hours
+    }, 60 * 60 * 1000); // Check every hour
+
+    return () => clearInterval(interval);
+  }, []);
 
   const startReconciliation = async () => {
     if (!selectedBank) {
-      alert('Please select a bank account');
+      setError('Please select a bank account');
       return;
     }
 
     setReconciling(true);
+    setError(null);
+    
     try {
-      console.log('Starting reconciliation for:', { selectedBank, reconciliationDate, bankStatementBalance });
-      // Mock reconciliation process
-      setTimeout(() => {
-        alert('Bank reconciliation completed successfully!');
-        setReconciling(false);
-      }, 2000);
+      // Call the actual reconciliation API
+      const response = await paymentsApi.startBankReconciliation({
+        bank_account: selectedBank,
+        reconciliation_date: reconciliationDate,
+        bank_statement_balance: bankStatementBalance,
+        book_balance: bookBalance
+      });
+      
+      if (response?.success) {
+        // Refresh data after successful reconciliation
+        await loadReconciliationData();
+        setError(null);
+      } else {
+        setError('Reconciliation failed. Please try again.');
+      }
     } catch (error) {
       console.error('Error during reconciliation:', error);
-      alert('Error during reconciliation');
+      setError('Error during reconciliation. Please check your connection and try again.');
+    } finally {
       setReconciling(false);
     }
   };
 
+  // Update book balance when bank account changes
+  const handleBankAccountChange = (accountCode: string) => {
+    setSelectedBank(accountCode);
+    const account = bankAccounts.find(acc => acc.code === accountCode);
+    if (account) {
+      setBookBalance(account.balance);
+    }
+  };
+
   const difference = bankStatementBalance - bookBalance;
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
+        <span className="ml-2 text-gray-600">Loading bank reconciliation data...</span>
+      </div>
+    );
+  }
 
   return (
     <div className="h-full bg-green-50">
@@ -64,6 +195,13 @@ const BankReconciliationFlow: React.FC<BankReconciliationFlowProps> = ({ onClose
           onSaveDraft={() => {}}
           additionalActions={[
             {
+              label: 'Refresh',
+              onClick: handleRefresh,
+              variant: 'outline',
+              disabled: refreshing,
+              icon: <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />
+            },
+            {
               label: reconciling ? 'Reconciling...' : 'Start Reconciliation',
               onClick: startReconciliation,
               variant: 'primary',
@@ -71,6 +209,24 @@ const BankReconciliationFlow: React.FC<BankReconciliationFlowProps> = ({ onClose
             }
           ] as any}
         />
+
+        {/* Error Display */}
+        {error && (
+          <div className="bg-red-50 border border-red-200 px-4 py-2">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center">
+                <AlertCircle className="h-4 w-4 text-red-600 mr-2" />
+                <span className="text-red-800 text-sm">{error}</span>
+              </div>
+              <button
+                onClick={() => setError(null)}
+                className="text-sm text-red-600 hover:text-red-800 underline"
+              >
+                Dismiss
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* Keyboard Shortcuts Help */}
         <div className="bg-green-50 px-4 py-2 text-xs text-green-700 border-b border-green-200">
@@ -89,11 +245,7 @@ const BankReconciliationFlow: React.FC<BankReconciliationFlowProps> = ({ onClose
                   <label className="block text-sm font-medium text-gray-600 mb-2">Bank Account</label>
                   <select
                     value={selectedBank}
-                    onChange={(e) => {
-                      setSelectedBank(e.target.value);
-                      const account = bankAccounts.find(acc => acc.code === e.target.value);
-                      if (account) setBookBalance(account.balance);
-                    }}
+                    onChange={(e) => handleBankAccountChange(e.target.value)}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-teal-500"
                   >
                     <option value="">Select bank account...</option>
@@ -168,42 +320,50 @@ const BankReconciliationFlow: React.FC<BankReconciliationFlowProps> = ({ onClose
                 </button>
               </div>
 
-              <div className="overflow-x-auto">
-                <table className="w-full">
-                  <thead className="bg-gray-50">
-                    <tr>
-                      <th className="px-4 py-3 text-left text-sm font-medium text-gray-600">Date</th>
-                      <th className="px-4 py-3 text-left text-sm font-medium text-gray-600">Description</th>
-                      <th className="px-4 py-3 text-right text-sm font-medium text-gray-600">Amount</th>
-                      <th className="px-4 py-3 text-center text-sm font-medium text-gray-600">Status</th>
-                      <th className="px-4 py-3 text-center text-sm font-medium text-gray-600">Action</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-200">
-                    {unreconciledTransactions.map((transaction) => (
-                      <tr key={transaction.id} className="hover:bg-gray-50">
-                        <td className="px-4 py-3 text-sm">{transaction.date}</td>
-                        <td className="px-4 py-3 text-sm">{transaction.description}</td>
-                        <td className={`px-4 py-3 text-sm text-right font-medium ${
-                          transaction.amount > 0 ? 'text-green-600' : 'text-red-600'
-                        }`}>
-                          {transaction.amount > 0 ? '+' : ''}₹{Math.abs(transaction.amount).toLocaleString()}
-                        </td>
-                        <td className="px-4 py-3 text-center">
-                          <span className="px-2 py-1 text-xs font-medium bg-yellow-100 text-yellow-700 rounded-full">
-                            Unmatched
-                          </span>
-                        </td>
-                        <td className="px-4 py-3 text-center">
-                          <button className="px-3 py-1 text-xs text-teal-600 hover:text-teal-700 border border-teal-200 rounded hover:bg-teal-50">
-                            Match
-                          </button>
-                        </td>
+              {unreconciledTransactions.length === 0 ? (
+                <div className="px-6 py-8 text-center text-gray-500">
+                  <CheckCircle className="w-12 h-12 mx-auto mb-2 text-green-400" />
+                  <p>No unreconciled transactions found</p>
+                  <p className="text-sm">All transactions are reconciled for the selected period</p>
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full">
+                    <thead className="bg-gray-50">
+                      <tr>
+                        <th className="px-4 py-3 text-left text-sm font-medium text-gray-600">Date</th>
+                        <th className="px-4 py-3 text-left text-sm font-medium text-gray-600">Description</th>
+                        <th className="px-4 py-3 text-right text-sm font-medium text-gray-600">Amount</th>
+                        <th className="px-4 py-3 text-center text-sm font-medium text-gray-600">Status</th>
+                        <th className="px-4 py-3 text-center text-sm font-medium text-gray-600">Action</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+                    </thead>
+                    <tbody className="divide-y divide-gray-200">
+                      {unreconciledTransactions.map((transaction) => (
+                        <tr key={transaction.id} className="hover:bg-gray-50">
+                          <td className="px-4 py-3 text-sm">{transaction.date}</td>
+                          <td className="px-4 py-3 text-sm">{transaction.description}</td>
+                          <td className={`px-4 py-3 text-sm text-right font-medium ${
+                            transaction.amount > 0 ? 'text-green-600' : 'text-red-600'
+                          }`}>
+                            {transaction.amount > 0 ? '+' : ''}₹{Math.abs(transaction.amount).toLocaleString()}
+                          </td>
+                          <td className="px-4 py-3 text-center">
+                            <span className="px-2 py-1 text-xs font-medium bg-yellow-100 text-yellow-700 rounded-full">
+                              {transaction.status}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3 text-center">
+                            <button className="px-3 py-1 text-xs text-teal-600 hover:text-teal-700 border border-teal-200 rounded hover:bg-teal-50">
+                              Match
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </div>
           </div>
         </div>
