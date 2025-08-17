@@ -19,6 +19,36 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["payments"])
 
+@router.get("/")
+async def get_payments_overview(db: Session = Depends(get_db)):
+    """Get payments overview"""
+    try:
+        # Simple payments overview
+        result = db.execute(text("""
+            SELECT 
+                COUNT(*) as total_payments,
+                SUM(amount) as total_amount,
+                COUNT(CASE WHEN payment_type = 'receipt' THEN 1 END) as receipts_count,
+                COUNT(CASE WHEN payment_type = 'payment' THEN 1 END) as payments_count
+            FROM financial.payments 
+            WHERE payment_date >= CURRENT_DATE - INTERVAL '30 days'
+        """)).fetchone()
+        
+        return {
+            "total_payments": result.total_payments if result else 0,
+            "total_amount": float(result.total_amount) if result and result.total_amount else 0,
+            "receipts_count": result.receipts_count if result else 0,
+            "payments_count": result.payments_count if result else 0
+        }
+    except Exception as e:
+        logger.error(f"Error getting payments overview: {str(e)}")
+        return {
+            "total_payments": 0,
+            "total_amount": 0,
+            "receipts_count": 0,
+            "payments_count": 0
+        }
+
 class PaymentCreate(BaseModel):
     """Schema for recording a payment"""
     invoice_id: int

@@ -23,6 +23,33 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["inventory"])
 
+@router.get("/")
+async def get_inventory_overview(db: Session = Depends(get_db)):
+    """Get inventory overview"""
+    try:
+        # Simple inventory overview
+        result = db.execute(text("""
+            SELECT 
+                COUNT(*) as total_products,
+                SUM(CASE WHEN quantity_available > 0 THEN 1 ELSE 0 END) as products_in_stock,
+                SUM(quantity_available) as total_quantity
+            FROM inventory.batches 
+            WHERE batch_status = 'active'
+        """)).fetchone()
+        
+        return {
+            "total_products": result.total_products if result else 0,
+            "products_in_stock": result.products_in_stock if result else 0,
+            "total_quantity": result.total_quantity if result else 0
+        }
+    except Exception as e:
+        logger.error(f"Error getting inventory overview: {str(e)}")
+        return {
+            "total_products": 0,
+            "products_in_stock": 0,
+            "total_quantity": 0
+        }
+
 @router.post("/batches", response_model=BatchResponse)
 async def create_batch(
     batch: BatchCreate,

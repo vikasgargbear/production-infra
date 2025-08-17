@@ -13,7 +13,22 @@ from ...core.database import get_db
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/dashboard", tags=["dashboard"])
+router = APIRouter(tags=["dashboard"])
+
+@router.get("/")
+async def get_dashboard_overview(db: Session = Depends(get_db)):
+    """Get main dashboard overview"""
+    try:
+        # Return the same data as stats for consistency
+        return await get_dashboard_stats(db)
+    except Exception as e:
+        logger.error(f"Error getting dashboard overview: {str(e)}")
+        return {
+            "error": "Failed to load dashboard",
+            "total_products": 0,
+            "total_customers": 0,
+            "total_sales": 0
+        }
 
 @router.get("/stats")
 def get_dashboard_stats(db: Session = Depends(get_db)):
