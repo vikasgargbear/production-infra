@@ -253,6 +253,8 @@ async def create_invoice(
             # Basic calculations (triggers will recalculate if needed)
             discount_percent = float(item.get("discount_percent", 0))
             base_quantity = float(item.get("base_quantity", quantity))
+            
+            # PRODUCTION: Use base_quantity for all billing calculations
             discount_amt = base_quantity * unit_price * discount_percent / 100
             
             # Get batch_id if not provided (for inventory trigger)
@@ -269,8 +271,7 @@ async def create_invoice(
                 batch = batch_result.fetchone()
                 batch_id = batch[0] if batch else None
             
-            # Calculate amounts - use base_quantity for billing
-            # Line total should be based on base_quantity (already accounts for free items)
+            # Calculate amounts - use base_quantity for billing (production logic)
             line_total = (base_quantity * unit_price) - discount_amt
             gst_percent = item.get("gst_percent", 12)
             taxable_amount = line_total
@@ -356,7 +357,7 @@ async def create_invoice(
                     result = inventory_update.fetchone()
                     if result:
                         new_qty = result[0]
-                        logger.info(f"✅ Inventory deducted: Batch {batch_id} full quantity reduced by {quantity}, billed: {base_quantity}, new available: {new_qty}")
+                        logger.info(f"✅ Inventory deducted: Batch {batch_id} quantity reduced by {quantity}, billed: {base_quantity}, new available: {new_qty}")
                         
                         # Create inventory movement record for audit trail
                         try:
