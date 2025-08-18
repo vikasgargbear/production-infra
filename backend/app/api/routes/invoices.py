@@ -280,11 +280,11 @@ async def create_invoice(
             
             total_tax_amount = igst_amount + cgst_amount + sgst_amount
             
-            # Complete INSERT with all important fields
+            # Complete INSERT with all important fields (NOTE: invoice_items has batch_number but NOT batch_id)
             insert_result = db.execute(text("""
                 INSERT INTO sales.invoice_items (
                     invoice_id, product_id, product_name, hsn_code,
-                    batch_id, batch_number, manufacturing_date, expiry_date,
+                    batch_number, manufacturing_date, expiry_date,
                     quantity, uom, pack_type, pack_size, base_quantity,
                     mrp, unit_price, discount_percent, discount_amount, taxable_amount,
                     igst_rate, igst_amount, cgst_rate, cgst_amount, 
@@ -292,7 +292,7 @@ async def create_invoice(
                     free_quantity
                 ) VALUES (
                     :invoice_id, :product_id, :product_name, :hsn_code,
-                    :batch_id, :batch_number, :manufacturing_date, :expiry_date,
+                    :batch_number, :manufacturing_date, :expiry_date,
                     :quantity, :uom, :pack_type, :pack_size, :base_quantity,
                     :mrp, :unit_price, :discount_percent, :discount_amount, :taxable_amount,
                     :igst_rate, :igst_amount, :cgst_rate, :cgst_amount,
@@ -304,7 +304,6 @@ async def create_invoice(
                 "product_id": product_id,
                 "product_name": product_name,
                 "hsn_code": item.get("hsn_code"),
-                "batch_id": int(batch_id) if batch_id else None,  # Convert to integer
                 "batch_number": item.get("batch_number"),
                 "manufacturing_date": item.get("manufacturing_date"),
                 "expiry_date": item.get("expiry_date"),
