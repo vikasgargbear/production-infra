@@ -183,20 +183,22 @@ async def create_invoice(
         cust = cust_result.fetchone()
         customer_name = cust[0] if cust else f"Customer {invoice_data['customer_id']}"
         
-        # Step 7: Create invoice (using ONLY columns that exist)
+        # Step 7: Create invoice with ALL important fields
         invoice_create = db.execute(text("""
             INSERT INTO sales.invoices (
                 org_id, branch_id, invoice_number, invoice_date, invoice_type,
                 order_id, customer_id, customer_name,
                 subtotal_amount, discount_amount, taxable_amount,
-                cgst_amount, sgst_amount, total_tax_amount, final_amount,
+                igst_amount, cgst_amount, sgst_amount, total_tax_amount, final_amount,
+                payment_terms, notes, 
                 invoice_status, payment_status,
                 created_by, created_at
             ) VALUES (
                 :org_id, :branch_id, :invoice_number, :invoice_date, 'tax_invoice',
                 :order_id, :customer_id, :customer_name,
                 :subtotal, :discount, :taxable,
-                :cgst, :sgst, :tax, :final,
+                :igst, :cgst, :sgst, :tax, :final,
+                :payment_terms, :notes,
                 'posted', 'pending',
                 :created_by, CURRENT_TIMESTAMP
             ) RETURNING invoice_id
@@ -211,10 +213,13 @@ async def create_invoice(
             "subtotal": subtotal,
             "discount": discount_amount,
             "taxable": taxable_amount,
+            "igst": invoice_data.get("igst_amount", 0),
             "cgst": total_cgst,
             "sgst": total_sgst,
             "tax": tax_amount,
             "final": final_amount,
+            "payment_terms": invoice_data.get("payment_terms", "cash"),
+            "notes": invoice_data.get("notes"),
             "created_by": created_by
         })
         invoice_id = invoice_create.scalar()
@@ -335,15 +340,20 @@ async def create_invoice(
         except:
             pass  # Ignore if not allowed
         
+        # Calculate total quantity
+        total_qty = sum(float(item.get("quantity", 0)) for item in invoice_data.get("items", []))
+        
         # Manually update invoice totals to work around trigger column name issue
         try:
             db.execute(text("""
                 UPDATE sales.invoices
                 SET 
                     items_count = :items_count,
+                    total_quantity = :total_qty,
                     subtotal_amount = :subtotal,
                     discount_amount = :discount,
                     taxable_amount = :taxable,
+                    igst_amount = :igst,
                     cgst_amount = :cgst,
                     sgst_amount = :sgst,
                     total_tax_amount = :tax,
@@ -352,9 +362,11 @@ async def create_invoice(
                 WHERE invoice_id = :invoice_id
             """), {
                 "items_count": items_created,
+                "total_qty": total_qty,
                 "subtotal": subtotal,
                 "discount": discount_amount,
                 "taxable": taxable_amount,
+                "igst": invoice_data.get("igst_amount", 0),
                 "cgst": total_cgst,
                 "sgst": total_sgst,
                 "tax": tax_amount,
