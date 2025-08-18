@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { X } from 'lucide-react';
 
 /**
- * ModuleHub - A reusable hub component with Apple-inspired sidebar
+ * ModuleHub - A reusable hub component with Apple-inspired layout
  * 
  * @param {Object} props
  * @param {boolean} props.open - Whether the hub is open
@@ -12,6 +12,7 @@ import { X } from 'lucide-react';
  * @param {React.Component} props.icon - Hub icon component
  * @param {Array} props.modules - Array of module objects
  * @param {string} props.defaultModule - Default active module ID
+ * @param {('sidebar'|'centered')} props.layout - Layout variant
  * 
  * Module object structure:
  * {
@@ -31,9 +32,12 @@ const ModuleHub = ({
   subtitle = "Select a module",
   icon: HubIcon,
   modules = [],
-  defaultModule = null
+  defaultModule = null,
+  layout = 'sidebar'
 }) => {
-  const [activeModule, setActiveModule] = useState(defaultModule || (modules[0]?.id || ''));
+  const [activeModule, setActiveModule] = useState(
+    defaultModule || (layout === 'centered' ? '' : (modules[0]?.id || ''))
+  );
 
   // Color mapping for consistent styling and good contrast
   const colorStyles = {
@@ -159,134 +163,167 @@ const ModuleHub = ({
     );
   };
 
+  // Centered layout (no header/title; modules in the middle like Apple)
+  if (layout === 'centered') {
+    const isGrid = !activeModule;
+    return (
+      <div className="fixed inset-0 bg-gray-50 z-50 flex flex-col">
+        {/* Close Button */}
+        <button
+          onClick={onClose}
+          className="absolute top-4 right-4 z-10 p-2 bg-white rounded-lg shadow-md hover:shadow-lg transition-shadow"
+          title="Close (Esc)"
+        >
+          <X className="w-6 h-6 text-gray-600" />
+        </button>
+
+        {/* Back Button when a module is active */}
+        {!isGrid && (
+          <button
+            onClick={() => setActiveModule('')}
+            className="absolute top-4 left-4 z-10 px-3 py-2 bg-white rounded-lg shadow-md hover:shadow-lg transition-shadow text-sm text-gray-700"
+            title="Back to modules"
+          >
+            ← Modules
+          </button>
+        )}
+
+        <div className="flex-1 flex items-center justify-center p-6">
+          {isGrid ? (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 max-w-5xl w-full">
+              {modules.map((module) => {
+                const Icon = module.icon;
+                const colors = colorStyles[module.color] || colorStyles.gray;
+                return (
+                  <button
+                    key={module.id}
+                    onClick={() => setActiveModule(module.id)}
+                    className="group relative bg-white/80 backdrop-blur border border-gray-200 rounded-2xl p-6 text-left shadow-sm hover:shadow-md transition-all hover:-translate-y-0.5"
+                  >
+                    <div className="flex items-center">
+                      <div className={`p-3 rounded-xl mr-4 ${colors.inactive} group-hover:${colors.hover} transition-colors`}>
+                        <Icon className="w-5 h-5" />
+                      </div>
+                      <div>
+                        <div className="text-base font-semibold text-gray-900">{module.fullLabel}</div>
+                        <div className="text-sm text-gray-500">{module.description}</div>
+                      </div>
+                    </div>
+                    {/* Subtle underline on hover */}
+                    <div className="absolute left-6 right-6 -bottom-2 h-0.5 bg-gradient-to-r from-gray-200 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
+                  </button>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="w-full h-full overflow-hidden">
+              {renderModule()}
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  // Sidebar layout (default)
   return (
-    <div className="fixed inset-0 bg-gray-50 z-50 flex flex-col">
-      {/* Top Right Close Button */}
-      <button
-        onClick={onClose}
-        className="absolute top-4 right-4 z-10 p-2 bg-white rounded-lg shadow-md hover:shadow-lg transition-shadow"
-        title="Close (Esc)"
-      >
-        <X className="w-6 h-6 text-gray-600" />
-      </button>
-      
-      <div className="flex-1 flex overflow-hidden">
-        {/* Enhanced Vertical Sidebar */}
-        <div className="w-72 bg-gray-50 border-r border-gray-200 flex flex-col">
-          {/* Enhanced Logo/Title Area */}
-          <div className="h-28 px-6 flex items-center bg-gradient-to-br from-white to-gray-50 border-b border-gray-100 relative overflow-hidden">
-            {/* Background pattern for visual interest */}
-            <div className="absolute inset-0 opacity-5">
-              <div className="absolute top-2 right-2 w-16 h-16 bg-blue-500 rounded-full"></div>
-              <div className="absolute bottom-2 left-2 w-8 h-8 bg-indigo-500 rounded-full"></div>
-              <div className="absolute top-1/2 right-4 w-4 h-4 bg-purple-500 rounded-full"></div>
-            </div>
-            
-            {/* Enhanced Icon Container */}
-            <div className="relative z-10 p-3 bg-gradient-to-br from-blue-500 via-indigo-600 to-purple-600 rounded-2xl shadow-lg transform hover:scale-105 transition-transform duration-200">
-              {HubIcon ? <HubIcon className="w-6 h-6 text-white" /> : null}
-              {/* Subtle glow effect */}
-              <div className="absolute inset-0 bg-gradient-to-br from-blue-400/30 to-purple-400/30 rounded-2xl blur-sm"></div>
-            </div>
-            
-            {/* Enhanced Title Section */}
-            <div className="ml-4 relative z-10 flex-1">
-              <h2 className="text-xl font-bold text-gray-900 tracking-tight">{title}</h2>
-              <p className="text-sm text-gray-600 mt-1 font-medium">{subtitle}</p>
-              
-              {/* Status indicator for Sales Hub */}
-              {title === "Sales Hub" && (
-                <div className="flex items-center mt-2">
-                  <div className="w-2 h-2 bg-green-500 rounded-full mr-2 animate-pulse"></div>
-                  <span className="text-xs text-green-600 font-medium">Active</span>
-                  <span className="text-xs text-gray-400 ml-2">•</span>
-                  <span className="text-xs text-gray-500 ml-2">4 modules</span>
-                </div>
-              )}
-            </div>
-            
-            {/* Quick stats for Sales Hub */}
-            {title === "Sales Hub" && (
-              <div className="absolute bottom-2 right-4 text-right">
-                <div className="text-xs text-gray-500 font-medium">Today's Sales</div>
-                <div className="text-sm font-bold text-green-600">₹24,500</div>
-              </div>
-            )}
+    <div className="fixed inset-0 bg-black/20 backdrop-blur-sm z-50 flex items-start justify-start">
+      {/* Compact Sidebar */}
+      <div className="w-80 h-full bg-white shadow-2xl border-r border-gray-200 flex flex-col">
+        {/* Enhanced Logo/Title Area */}
+        <div className="h-24 px-6 flex items-center bg-gradient-to-br from-white to-gray-50 border-b border-gray-100 relative overflow-hidden">
+          {/* Background pattern for visual interest */}
+          <div className="absolute inset-0 opacity-5">
+            <div className="absolute top-2 right-2 w-16 h-16 bg-blue-500 rounded-full"></div>
+            <div className="absolute bottom-2 left-2 w-8 h-8 bg-indigo-500 rounded-full"></div>
+            <div className="absolute top-1/2 right-4 w-4 h-4 bg-purple-500 rounded-full"></div>
           </div>
           
-          {/* Module List */}
-          <div className="flex-1 px-3 py-4 overflow-y-auto">
-            {modules.map((module, index) => {
-              const Icon = module.icon;
-              const isActive = activeModule === module.id;
-              const colors = colorStyles[module.color] || colorStyles.gray;
-              
-              return (
-                <button
-                  key={module.id}
-                  onClick={() => setActiveModule(module.id)}
-                  className={`
-                    w-full mb-2 px-4 py-4 rounded-xl flex items-center
-                    transition-all duration-200 group relative
-                    ${isActive 
-                      ? 'bg-white shadow-md transform scale-[1.02]' 
-                      : 'hover:bg-white/70 hover:shadow-sm'
-                    }
-                  `}
-                >
-                  {/* Icon with background */}
-                  <div className={`
-                    p-3 rounded-xl mr-4 transition-all duration-200 relative overflow-hidden
-                    ${isActive 
-                      ? `${colors.active} shadow-lg` 
-                      : `${colors.inactive} group-hover:${colors.hover}`
-                    }
-                  `}>
-                    {/* Gradient overlay for active state */}
-                    {isActive && (
-                      <div className={`absolute inset-0 bg-gradient-to-br ${colors.activeOverlay} to-transparent`} />
-                    )}
-                    <Icon className={`
-                      w-5 h-5 relative z-10
-                      ${isActive ? 'text-white' : ''}
-                    `} />
-                  </div>
-                  
-                  {/* Label and description */}
-                  <div className="flex-1 text-left">
-                    <div className={`font-semibold text-sm ${isActive ? 'text-gray-900' : 'text-gray-700'}`}>
-                      {module.fullLabel}
-                    </div>
-                    <div className={`text-xs mt-0.5 ${isActive ? 'text-gray-600' : 'text-gray-500'}`}>
-                      {module.description}
-                    </div>
-                  </div>
-                  
-                  {/* Keyboard shortcut tooltip on hover */}
-                  <div className={`
-                    absolute -right-1 top-1/2 -translate-y-1/2
-                    text-xs font-medium px-2 py-1 rounded-lg
-                    bg-gray-900 text-white
-                    transition-all duration-200 pointer-events-none
-                    ${isActive 
-                      ? 'opacity-0' 
-                      : 'opacity-0 group-hover:opacity-100 group-hover:translate-x-1'
-                    }
-                  `}>
-                    Press {index + 1}
-                  </div>
-                </button>
-              );
-            })}
+          {/* Enhanced Icon Container */}
+          <div className="relative z-10 p-3 bg-gradient-to-br from-blue-500 via-indigo-600 to-purple-600 rounded-2xl shadow-lg transform hover:scale-105 transition-transform duration-200">
+            {HubIcon ? <HubIcon className="w-6 h-6 text-white" /> : null}
+            {/* Subtle glow effect */}
+            <div className="absolute inset-0 bg-gradient-to-br from-blue-400/30 to-purple-400/30 rounded-2xl blur-sm"></div>
+          </div>
+          
+          {/* Enhanced Title Section */}
+          <div className="ml-4 relative z-10 flex-1">
+            <h2 className="text-xl font-bold text-gray-900 tracking-tight">{title}</h2>
+            <p className="text-sm text-gray-600 mt-1 font-medium">{subtitle}</p>
           </div>
         </div>
+        
+        {/* Module List */}
+        <div className="flex-1 px-3 py-4 overflow-y-auto">
+          {modules.map((module, index) => {
+            const Icon = module.icon;
+            const isActive = activeModule === module.id;
+            const colors = colorStyles[module.color] || colorStyles.gray;
+            
+            return (
+              <button
+                key={module.id}
+                onClick={() => setActiveModule(module.id)}
+                className={`
+                  w-full mb-2 px-4 py-4 rounded-xl flex items-center
+                  transition-all duration-200 group relative
+                  ${isActive 
+                    ? 'bg-white shadow-md transform scale-[1.02]' 
+                    : 'hover:bg-white/70 hover:shadow-sm'
+                  }
+                `}
+              >
+                {/* Icon with background */}
+                <div className={`
+                  p-3 rounded-xl mr-4 transition-all duration-200 relative overflow-hidden
+                  ${isActive 
+                    ? `${colors.active} shadow-lg` 
+                    : `${colors.inactive} group-hover:${colors.hover}`
+                  }
+                `}>
+                  {/* Gradient overlay for active state */}
+                  {isActive && (
+                    <div className={`absolute inset-0 bg-gradient-to-br ${colors.activeOverlay} to-transparent`} />
+                  )}
+                  <Icon className={`
+                    w-5 h-5 relative z-10
+                    ${isActive ? 'text-white' : ''}
+                  `} />
+                </div>
+                
+                {/* Label and description */}
+                <div className="flex-1 text-left">
+                  <div className={`font-semibold text-sm ${isActive ? 'text-gray-900' : 'text-gray-700'}`}>
+                    {module.fullLabel}
+                  </div>
+                  <div className={`text-xs mt-0.5 ${isActive ? 'text-gray-600' : 'text-gray-500'}`}>
+                    {module.description}
+                  </div>
+                </div>
+                
+                {/* Keyboard shortcut tooltip on hover */}
+                <div className={`
+                  absolute -right-1 top-1/2 -translate-y-1/2
+                  text-xs font-medium px-2 py-1 rounded-lg
+                  bg-gray-900 text-white
+                  transition-all duration-200 pointer-events-none
+                  ${isActive 
+                    ? 'opacity-0' 
+                    : 'opacity-0 group-hover:opacity-100 group-hover:translate-x-1'
+                  }
+                `}>
+                  Press {index + 1}
+                </div>
+              </button>
+            );
+          })}
+        </div>
+      </div>
 
-        {/* Main Content */}
-        <div className="flex-1 flex flex-col overflow-hidden">
-          {/* Component Content */}
-          <div className="flex-1 overflow-hidden">
-            {renderModule()}
-          </div>
+      {/* Main Content Area */}
+      <div className="flex-1 h-full bg-white shadow-xl">
+        <div className="h-full overflow-hidden">
+          {renderModule()}
         </div>
       </div>
     </div>

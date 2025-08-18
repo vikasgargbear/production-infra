@@ -326,14 +326,22 @@ const ProductCreationModal = ({
         transformedProduct.expiry_date = newProduct.expiry_date;
         transformedProduct.quantity_available = parseInt(newProduct.quantity_available) || 0;
         
-        // Return transformed product
+        // Return transformed product with all pricing fields
         const createdProduct = {
           ...productResponse,  // productResponse is the product itself
           batch_number: batchNumber,
           mfg_date: newProduct.mfg_date, // Keep MM/YY format for frontend
           expiry_date: newProduct.expiry_date, // Keep MM/YY format for frontend
           available_quantity: parseInt(newProduct.quantity_available) || 0,
+          quantity_available: parseInt(newProduct.quantity_available) || 0,
           quantity: 1,
+          // IMPORTANT: Include pricing fields for invoice
+          mrp: parseFloat(newProduct.mrp) || 0,
+          sale_price: parseFloat(newProduct.sale_price) || 0,
+          rate: parseFloat(newProduct.sale_price) || 0, // rate is same as sale_price for invoice
+          cost_price: parseFloat(newProduct.cost_price) || 0,
+          gst_percent: parseFloat(newProduct.gst_percentage) || 12,
+          hsn_code: newProduct.hsn_code || '3004',
           // Include pack configuration for frontend use (individual fields)
           pack_type: packConfig.sale_unit || 'STRIP',
           pack_size: packConfig.qty_per_strip || 1,

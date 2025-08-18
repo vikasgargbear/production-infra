@@ -260,28 +260,68 @@ async def create_invoice(
                 batch = batch_result.fetchone()
                 batch_id = batch[0] if batch else None
             
-            # Simplified approach - insert only absolutely required fields
-            # Calculate basic line_total (quantity * unit_price - discount)
+            # Calculate amounts
             line_total = (quantity * unit_price) - discount_amt
+            gst_percent = item.get("gst_percent", 12)
+            taxable_amount = line_total
             
-            # Minimal INSERT to avoid column mismatch - let database handle defaults/triggers
+            # Calculate GST amounts based on customer type
+            if invoice_data.get("gst_type") == "IGST":
+                igst_amount = (taxable_amount * gst_percent) / 100
+                cgst_amount = sgst_amount = 0
+            else:
+                cgst_amount = sgst_amount = (taxable_amount * gst_percent) / 200  # Split equally
+                igst_amount = 0
+            
+            total_tax_amount = igst_amount + cgst_amount + sgst_amount
+            
+            # Complete INSERT with all important fields
             insert_result = db.execute(text("""
                 INSERT INTO sales.invoice_items (
-                    invoice_id, product_id, product_name, 
-                    quantity, uom, pack_type, unit_price, line_total
+                    invoice_id, product_id, product_name, hsn_code,
+                    batch_id, batch_number, manufacturing_date, expiry_date,
+                    quantity, uom, pack_type, pack_size, base_quantity,
+                    mrp, unit_price, discount_percent, discount_amount, taxable_amount,
+                    igst_rate, igst_amount, cgst_rate, cgst_amount, 
+                    sgst_rate, sgst_amount, total_tax_amount, line_total,
+                    free_quantity
                 ) VALUES (
-                    :invoice_id, :product_id, :product_name,
-                    :quantity, :uom, :pack_type, :unit_price, :line_total
+                    :invoice_id, :product_id, :product_name, :hsn_code,
+                    :batch_id, :batch_number, :manufacturing_date, :expiry_date,
+                    :quantity, :uom, :pack_type, :pack_size, :base_quantity,
+                    :mrp, :unit_price, :discount_percent, :discount_amount, :taxable_amount,
+                    :igst_rate, :igst_amount, :cgst_rate, :cgst_amount,
+                    :sgst_rate, :sgst_amount, :total_tax_amount, :line_total,
+                    :free_quantity
                 ) RETURNING invoice_item_id
             """), {
                 "invoice_id": invoice_id,
                 "product_id": product_id,
                 "product_name": product_name,
+                "hsn_code": item.get("hsn_code"),
+                "batch_id": batch_id,
+                "batch_number": item.get("batch_number"),
+                "manufacturing_date": item.get("manufacturing_date"),
+                "expiry_date": item.get("expiry_date"),
                 "quantity": quantity,
                 "uom": item.get("uom", "PCS"),
                 "pack_type": item.get("pack_type", "UNIT"),
+                "pack_size": item.get("pack_size"),
+                "base_quantity": item.get("base_quantity", quantity),
+                "mrp": item.get("mrp", 0),
                 "unit_price": unit_price,
-                "line_total": line_total
+                "discount_percent": item.get("discount_percent", 0),
+                "discount_amount": discount_amt,
+                "taxable_amount": taxable_amount,
+                "igst_rate": gst_percent if igst_amount > 0 else 0,
+                "igst_amount": igst_amount,
+                "cgst_rate": gst_percent / 2 if cgst_amount > 0 else 0,
+                "cgst_amount": cgst_amount,
+                "sgst_rate": gst_percent / 2 if sgst_amount > 0 else 0,
+                "sgst_amount": sgst_amount,
+                "total_tax_amount": total_tax_amount,
+                "line_total": line_total,
+                "free_quantity": item.get("free_quantity", 0)
             })
             
             invoice_item_id = insert_result.scalar()

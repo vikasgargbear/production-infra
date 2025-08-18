@@ -68,7 +68,7 @@ const SalesHub: React.FC<SalesHubProps> = ({ open = true, onClose }) => {
       open={open}
       onClose={onClose || (() => {})}
       title="Sales Operations"
-      subtitle="Invoice • Orders • Challans • Reports"
+      subtitle=""
       icon={TrendingUp}
       modules={salesModules}
       defaultModule="invoice"
