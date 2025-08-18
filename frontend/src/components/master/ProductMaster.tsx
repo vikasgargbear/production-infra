@@ -9,6 +9,7 @@ import { DataTable, Column } from '../global/ui/display/DataTable';
 import { GlobalLayout, ContentCard, StatsGrid } from '../global';
 import Button from '../global/ui/Button';
 import Input from '../global/ui/forms/Input';
+import { useToast } from '../global/ui/feedback/Toast';
 
 interface Product {
   id: string;
@@ -34,6 +35,7 @@ interface ProductMasterProps {
 }
 
 const ProductMaster: React.FC<ProductMasterProps> = () => {
+  const toast = useToast();
   const [searchTerm, setSearchTerm] = useState<string>('');
   const [filterCategory, setFilterCategory] = useState<string>('all');
   const [showAddModal, setShowAddModal] = useState<boolean>(false);
@@ -147,12 +149,11 @@ const ProductMaster: React.FC<ProductMasterProps> = () => {
 
     try {
       await productsApi.delete(productId);
-      setSuccessMessage('Product deleted successfully');
+      toast.deleted('Product');
       loadProducts();
-      setTimeout(() => setSuccessMessage(''), 3000);
     } catch (err) {
       console.error('Error deleting product:', err);
-      setError('Failed to delete product.');
+      toast.error('Failed to delete product. It may be in use by other records.');
     }
   };
 
@@ -160,8 +161,7 @@ const ProductMaster: React.FC<ProductMasterProps> = () => {
     setEditingProduct(null);
     setShowAddModal(false);
     loadProducts();
-    setSuccessMessage('Product saved successfully');
-    setTimeout(() => setSuccessMessage(''), 3000);
+    toast.created('Product');
   };
 
   const handleBulkDelete = async (): Promise<void> => {
@@ -173,13 +173,12 @@ const ProductMaster: React.FC<ProductMasterProps> = () => {
 
     try {
       await Promise.all(selectedProducts.map(id => productsApi.delete(id)));
-      setSuccessMessage(`${selectedProducts.length} products deleted successfully`);
+      toast.deleted('Products', selectedProducts.length);
       setSelectedProducts([]);
       loadProducts();
-      setTimeout(() => setSuccessMessage(''), 3000);
     } catch (err) {
       console.error('Error bulk deleting products:', err);
-      setError('Failed to delete some products.');
+      toast.error('Failed to delete some products.');
     }
   };
 

@@ -121,22 +121,35 @@ export const INVOICE_CONFIG = {
   // Status Messages
   MESSAGES: {
     SUCCESS: {
-      INVOICE_CREATED: 'Invoice created successfully!',
-      INVOICE_UPDATED: 'Invoice updated successfully!',
+      INVOICE_CREATED: 'Invoice has been created',
+      INVOICE_UPDATED: 'Invoice has been updated',
       ITEM_ADDED: 'Item added to invoice',
-      CUSTOMER_SELECTED: 'Customer selected'
+      CUSTOMER_SELECTED: 'Customer selected',
+      PRODUCT_CREATED: 'Product has been created',
+      CUSTOMER_CREATED: 'Customer has been created',
+      PAYMENT_RECORDED: 'Payment has been recorded',
+      CHALLAN_CREATED: 'Delivery challan has been created',
+      ORDER_CREATED: 'Order has been created',
+      STOCK_UPDATED: 'Stock has been updated',
+      SETTINGS_SAVED: 'Settings have been saved'
     },
     ERROR: {
-      INVOICE_FAILED: 'Failed to create invoice. Please try again.',
-      NO_ITEMS: 'Please add at least one item to the invoice',
-      NO_CUSTOMER: 'Please select a customer',
+      INVOICE_FAILED: 'Unable to create invoice. Please check your data and try again.',
+      NO_ITEMS: 'Please add at least one item to continue',
+      NO_CUSTOMER: 'Please select a customer to continue',
       INVALID_QUANTITY: 'Please enter a valid quantity',
-      BATCH_NOT_FOUND: 'No batches available for this product'
+      BATCH_NOT_FOUND: 'No batches available for this product',
+      NETWORK_ERROR: 'Network error. Please check your connection and try again.',
+      VALIDATION_ERROR: 'Please check your data and try again.',
+      SERVER_ERROR: 'Server error. Please try again in a moment.'
     },
     INFO: {
       LOADING: 'Loading...',
       SEARCHING: 'Searching...',
-      NO_RESULTS: 'No results found'
+      NO_RESULTS: 'No results found',
+      SYNCING: 'Syncing offline data...',
+      UPLOADING: 'Uploading...',
+      PROCESSING: 'Processing...'
     }
   }
 };

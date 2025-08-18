@@ -5,6 +5,7 @@ import PackTypeSelector from '../PackTypeSelector';
 import MonthYearPicker from '../MonthYearPicker';
 import DataTransformer from '../../../services/dataTransformer';
 import { APP_CONFIG } from '../../../config/app.config';
+import { useToast } from '../ui/feedback/Toast';
 
 const ProductCreationModal = ({ 
   show, 
@@ -12,6 +13,7 @@ const ProductCreationModal = ({
   onProductCreated,
   initialProductName = '' 
 }) => {
+  const toast = useToast();
   const [newProduct, setNewProduct] = useState({
     product_name: initialProductName,
     product_code: '',
@@ -341,47 +343,13 @@ const ProductCreationModal = ({
           strips_per_box: packConfig.use_boxes ? packConfig.strips_per_box : null
         };
         
-        // Show success message
-        alert(`✅ Product "${createdProduct.product_name}" added successfully!${createdProduct.quantity_available ? ` Stock: ${createdProduct.quantity_available} units` : ''}`);
+        toast.created(`Product "${createdProduct.product_name}"`, 4000);
         
-        // Reset form for next use
-        setNewProduct({
-          product_name: '',
-          product_code: '',
-          manufacturer: '',
-          hsn_code: '',
-          gst_percent: 12,
-          mrp: '',
-          sale_price: '',
-          category: '',
-          batch_number: '',
-          mfg_date: '',
-          expiry_date: '',
-          quantity_available: '',
-          cost_price: '',
-          salt_composition: '',
-          // Reset pharmaceutical fields
-          schedule_type: '',
-          is_narcotic: false,
-          prescription_required: false,
-          storage_condition: 'room_temp',
-          generic_name: '',
-          composition: ''
-        });
+        if (createdProduct.quantity_available) {
+          toast.info(`Stock: ${createdProduct.quantity_available} units available`, 3000);
+        }
         
-        setPackConfig({
-          sale_unit: '', 
-          qty_per_strip: 10,
-          strips_per_box: 10,
-          use_boxes: true,
-          pack_type_input: '',
-          pack_size: null,
-          pack_unit: null
-        });
-        
-        // Call onProductCreated which will handle closing
         onProductCreated(createdProduct);
-        // Close the modal
         onClose();
       }
     } catch (error) {
@@ -410,6 +378,7 @@ const ProductCreationModal = ({
       }
       
       setErrors(errorMessages);
+      toast.error('Failed to save product. Please check your data and try again.');
     } finally {
       setSaving(false);
     }

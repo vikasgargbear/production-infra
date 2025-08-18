@@ -1,7 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { X, Save, Upload, Building2 } from 'lucide-react';
+import { useToast } from './global/ui/feedback/Toast';
+import { organizationsApi } from '../services/api';
 
 const CompanySettings = ({ open = true, onClose }) => {
+  const toast = useToast();
+  const [isLoading, setIsLoading] = useState(false);
+  const orgId = localStorage.getItem('org_id') || 'ad808530-1ddb-4377-ab20-67bef145d80d';
   const [settings, setSettings] = useState({
     companyName: localStorage.getItem('companyName') || '',
     companyAddress: localStorage.getItem('companyAddress') || '',
@@ -61,14 +66,24 @@ const CompanySettings = ({ open = true, onClose }) => {
     }
   };
 
-  const handleSave = () => {
-    Object.entries(settings).forEach(([key, value]) => {
-      if (value) {
-        localStorage.setItem(key, value);
+  const handleSave = async () => {
+    setIsLoading(true);
+
+    try {
+      const response = await organizationsApi.update(orgId, settings);
+      
+      if (response.success) {
+        toast.saved('Company Settings');
+        setSettings(response.data);
+      } else {
+        toast.error('Failed to save settings. Please check your data and try again.');
       }
-    });
-    alert('Company settings saved successfully!');
-    onClose();
+    } catch (error) {
+      console.error('Error saving settings:', error);
+      toast.error('Network error. Please check your connection and try again.');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (

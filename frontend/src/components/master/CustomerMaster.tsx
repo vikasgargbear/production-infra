@@ -10,6 +10,7 @@ import { Card, Button, Badge, DataTable, BaseModal, GlobalLayout, ContentCard, S
 import { theme, classes } from '../../config/theme.config';
 import { customersApi } from '../../services/api';
 import CustomerCreationModal from '../global/modals/CustomerCreationModal';
+import { useToast } from '../global/ui/feedback/Toast';
 
 interface Customer {
   customer_id: number;
@@ -39,6 +40,7 @@ interface Customer {
 }
 
 const CustomerMaster: React.FC = () => {
+  const toast = useToast();
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
@@ -413,9 +415,10 @@ const CustomerMaster: React.FC = () => {
             setSelectedCustomer(null);
           }}
           onCustomerCreated={(customer) => {
-            loadCustomers();
+            setCustomers(prev => [...prev, customer]);
             setShowCreateModal(false);
             setSelectedCustomer(null);
+            toast.created('Customer');
           }}
         />
       )}

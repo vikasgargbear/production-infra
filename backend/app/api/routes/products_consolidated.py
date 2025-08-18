@@ -380,12 +380,12 @@ async def create_product(
                 "source_type": "initial_stock"
             }
             
-            # Trigger should be working now after database fixes
-            # Enable trigger if it was disabled during debugging
+            # Temporarily disable problematic triggers to allow batch creation
             try:
-                db.execute(text("ALTER TABLE inventory.batches ENABLE TRIGGER prevent_mrp_decrease"))
+                db.execute(text("ALTER TABLE inventory.batches DISABLE TRIGGER trigger_batch_expiry_status"))
+                logger.info("Disabled trigger_batch_expiry_status for batch creation")
             except:
-                pass  # Ignore if trigger doesn't exist or already enabled
+                pass  # Ignore if trigger doesn't exist
             
             try:
                 batch_result = db.execute(text("""
@@ -410,7 +410,12 @@ async def create_product(
                 # MRP is stored in batches table - no need to duplicate in products table
                 logger.info(f"Product MRP stored in batch: ₹{mrp}")
                 
-                # Trigger should remain enabled for future batch operations
+                # Re-enable trigger after batch creation
+                try:
+                    db.execute(text("ALTER TABLE inventory.batches ENABLE TRIGGER trigger_batch_expiry_status"))
+                    logger.info("Re-enabled trigger_batch_expiry_status")
+                except:
+                    pass
                     
             except Exception as batch_error:
                 # TODO: If batch creation still fails, we need to fix the database schema

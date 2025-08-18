@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { 
   FileText, User, Search, Package, Calendar, X, Trash2, 
   ChevronRight, AlertCircle, CheckCircle, Printer, Share2, Plus,
@@ -20,11 +20,13 @@ import Toast from '../common/Toast';
 import InvoicePreview from '../invoice/components/InvoicePreview';
 import ImportDocumentModal from './components/ImportDocumentModal';
 // Removed testBackendConnection - already tested in App.tsx
+import { useToast } from '../global/ui/feedback/Toast';
 
 // Default org ID for development
 const DEFAULT_ORG_ID = 'ad808530-1ddb-4377-ab20-67bef145d80d';
 
 const InvoiceFlow = ({ onClose, prefilledData = null }) => {
+  const toast = useToast();
   const [currentStep, setCurrentStep] = useState(1);
   const [showCustomerModal, setShowCustomerModal] = useState(false);
   const [showProductModal, setShowProductModal] = useState(false);
@@ -649,8 +651,7 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
         }
         
         // Show error to user
-        setMessage(`❌ Backend error: ${errorDetails}`);
-        setMessageType('error');
+        toast.error(`Backend error: ${errorDetails}`);
         
         // Still save locally and show success
         const fallbackInvoiceNumber = 'INV-' + new Date().getTime();
@@ -673,8 +674,7 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
             totalAmount: invoice.net_amount
           });
           setShowSuccessModal(true);
-          setMessage(`⚠️ Invoice ${fallbackInvoiceNumber} saved locally (backend issue)`);
-          setMessageType('warning');
+          toast.warning(`Invoice ${fallbackInvoiceNumber} saved locally (backend issue)`);
         }, 3000);
         
         setSaving(false);
@@ -709,14 +709,12 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
         setShowSuccessModal(true);
         
         // Also show success message as backup
-        setMessage(`✅ Invoice ${invoiceNumber} created successfully!`);
-        setMessageType('success');
+        toast.success(`Invoice ${invoiceNumber} created successfully!`);
         console.log('SUCCESS: Setting message:', `✅ Invoice ${invoiceNumber} created successfully!`);
       } else {
         // If no response data, still show success
         const fallbackInvoiceNumber = 'INV-' + Date.now();
-        setMessage(`✅ Invoice ${fallbackInvoiceNumber} created!`);
-        setMessageType('success');
+        toast.success(`Invoice ${fallbackInvoiceNumber} created!`);
         
         // Still show modal with fallback data
         setCreatedInvoiceData({
@@ -748,15 +746,77 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
         errorMessage = error.message;
       }
       
-      setMessage(errorMessage);
-      setMessageType('error');
+      toast.error(errorMessage);
     } finally {
       setSaving(false);
     }
   };
 
   const handlePrint = () => {
-    window.print();
+    // Create a print-specific layout
+    const printWindow = window.open('', '_blank');
+    if (printWindow) {
+      printWindow.document.write(`
+        <html>
+          <head>
+            <title>Invoice ${createdInvoiceData?.invoiceNumber || invoice.invoice_no}</title>
+            <style>
+              body { font-family: Arial, sans-serif; padding: 20px; }
+              .invoice-header { text-align: center; margin-bottom: 30px; }
+              .invoice-details { margin-bottom: 20px; }
+              .items-table { width: 100%; border-collapse: collapse; }
+              .items-table th, .items-table td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+              .total-section { text-align: right; margin-top: 20px; }
+              @media print {
+                body { margin: 0; }
+                .no-print { display: none; }
+              }
+            </style>
+          </head>
+          <body>
+            <div class="invoice-header">
+              <h1>INVOICE</h1>
+              <p>Invoice #${createdInvoiceData?.invoiceNumber || invoice.invoice_no}</p>
+              <p>Date: ${new Date().toLocaleDateString('en-IN')}</p>
+            </div>
+            <div class="invoice-details">
+              <h3>Bill To:</h3>
+              <p>${createdInvoiceData?.customerName || selectedCustomer?.customer_name || 'Customer'}</p>
+              ${selectedCustomer?.phone ? `<p>Phone: ${selectedCustomer.phone}</p>` : ''}
+              ${selectedCustomer?.address ? `<p>Address: ${selectedCustomer.address}</p>` : ''}
+            </div>
+            <table class="items-table">
+              <thead>
+                <tr>
+                  <th>Item</th>
+                  <th>Quantity</th>
+                  <th>Rate</th>
+                  <th>Amount</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${(invoice.items || []).map(item => `
+                  <tr>
+                    <td>${item.product_name || item.item_name}</td>
+                    <td>${item.quantity}</td>
+                    <td>₹${item.rate || item.sale_price}</td>
+                    <td>₹${((item.quantity || 0) * (item.rate || item.sale_price || 0)).toFixed(2)}</td>
+                  </tr>
+                `).join('')}
+              </tbody>
+            </table>
+            <div class="total-section">
+              <h3>Total: ₹${createdInvoiceData?.totalAmount?.toFixed(2) || invoice.net_amount?.toFixed(2) || '0.00'}</h3>
+            </div>
+          </body>
+        </html>
+      `);
+      printWindow.document.close();
+      printWindow.focus();
+      setTimeout(() => {
+        printWindow.print();
+      }, 250);
+    }
   };
 
   const handleWhatsAppShare = async () => {
@@ -863,8 +923,7 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
       challan_id: importData.challan_id
     }));
     
-    setMessage('Document imported successfully');
-    setMessageType('success');
+    toast.success('Document imported successfully', 3000);
     setShowImportModal(false);
   };
 
@@ -1071,8 +1130,7 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
             onCustomerCreated={(customer) => {
               handleCustomerSelect(customer);
               setShowCustomerModal(false);
-              setMessage('Customer created successfully');
-              setMessageType('success');
+              toast.success('Customer created successfully');
             }}
           />
         )}
@@ -1083,8 +1141,7 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
             onClose={() => setShowProductModal(false)}
             onProductCreated={(product) => {
               setShowProductModal(false);
-              setMessage(`Product "${product.product_name}" created successfully`);
-              setMessageType('success');
+              // Toast is already shown in ProductCreationModal
               
               // Add the created product to search cache immediately
               searchCache.addItem('products', product);
@@ -1384,11 +1441,64 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
           totalAmount={createdInvoiceData.totalAmount}
           onPrint={handlePrint}
           onDownload={() => {
-            // Implement download functionality
-            console.log('Download invoice:', createdInvoiceData.invoiceNumber);
+            // Generate PDF content
+            const pdfContent = `
+INVOICE #${createdInvoiceData.invoiceNumber}
+Date: ${new Date().toLocaleDateString('en-IN')}
+
+Bill To:
+${createdInvoiceData.customerName}
+${selectedCustomer?.phone ? 'Phone: ' + selectedCustomer.phone : ''}
+${selectedCustomer?.address ? 'Address: ' + selectedCustomer.address : ''}
+
+Items:
+${(invoice.items || []).map(item => 
+  `${item.product_name || item.item_name} - Qty: ${item.quantity} × ₹${item.rate || item.sale_price} = ₹${((item.quantity || 0) * (item.rate || item.sale_price || 0)).toFixed(2)}`
+).join('\n')}
+
+Total Amount: ₹${createdInvoiceData.totalAmount?.toFixed(2) || '0.00'}
+`;
+            
+            // Create a blob and download
+            const blob = new Blob([pdfContent], { type: 'text/plain' });
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `Invoice_${createdInvoiceData.invoiceNumber}.txt`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            window.URL.revokeObjectURL(url);
+            
+            toast.success('Invoice downloaded as text file');
           }}
           onShare={() => {
-            handleWhatsAppShare();
+            // Use customer phone from the invoice/selected customer
+            const customerPhone = selectedCustomer?.phone || createdInvoiceData?.customerPhone;
+            
+            if (!customerPhone) {
+              toast.error('Customer phone number not available');
+              return;
+            }
+            
+            // Format phone number
+            let phoneNumber = customerPhone.replace(/\s+/g, '');
+            if (!phoneNumber.startsWith('+')) {
+              phoneNumber = '+91' + phoneNumber; // India code
+            }
+            
+            // Create WhatsApp message
+            const message = encodeURIComponent(
+              `Dear ${createdInvoiceData.customerName},\n\n` +
+              `Your invoice #${createdInvoiceData.invoiceNumber} dated ${new Date().toLocaleDateString('en-IN')} ` +
+              `for amount ₹${createdInvoiceData.totalAmount?.toFixed(2) || '0.00'} has been generated.\n\n` +
+              `Thank you for your business!\n\n` +
+              `Regards,\nAASO Pharma`
+            );
+            
+            // Open WhatsApp
+            window.open(`https://wa.me/${phoneNumber}?text=${message}`, '_blank');
+            toast.info('WhatsApp opened. Please attach the invoice PDF manually before sending.');
             setShowSuccessModal(false);
           }}
         />

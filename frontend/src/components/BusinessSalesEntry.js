@@ -3,8 +3,10 @@ import { Search, Save, Printer, Plus, X, Calendar, AlertCircle, ChevronRight, Ch
 import { customersApi, productsApi, ordersApi, orderItemsApi, batchesApi } from '../services/api';
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
+import { useToast } from './global/ui/feedback/Toast';
 
 const BusinessSalesEntry = ({ open, onClose }) => {
+  const toast = useToast();
   const [invoice, setInvoice] = useState({
     invoiceNo: 'INV-' + Date.now().toString().slice(-6),
     invoiceDate: new Date().toISOString().split('T')[0],
@@ -197,48 +199,44 @@ const BusinessSalesEntry = ({ open, onClose }) => {
       if (response?.data && Array.isArray(response.data)) {
         setMedicalReps(response.data);
       } else {
-        // Fallback to basic medical reps if API fails
-        const fallbackMedicalReps = [
-          {
-            rep_id: 'MR001',
-            name: 'Dr. Amit Sharma',
-            zone: 'North Zone',
-            phone: '+91 98765 11111'
-          },
-          {
-            rep_id: 'MR002',
-            name: 'Dr. Priya Patel',
-            zone: 'South Zone', 
-            phone: '+91 98765 22222'
-          },
-          {
-            rep_id: 'MR003',
-            name: 'Dr. Rajesh Kumar',
-            zone: 'East Zone',
-            phone: '+91 98765 33333'
-          },
-          {
-            rep_id: 'MR004',
-            name: 'Dr. Sneha Gupta',
-            zone: 'West Zone',
-            phone: '+91 98765 44444'
-          }
-        ];
-        setMedicalReps(fallbackMedicalReps);
+        setMedicalReps([]);
       }
     } catch (error) {
       console.error('Error loading medical reps:', error);
-      // Use minimal fallback if API fails
-      const fallbackMedicalReps = [
-        {
-          rep_id: 'MR001',
-          name: 'Dr. Amit Sharma',
-          zone: 'North Zone',
-          phone: '+91 98765 11111'
-        }
-      ];
-      setMedicalReps(fallbackMedicalReps);
+      setMedicalReps([]);
     }
+  };
+
+  // Reset form to initial state
+  const resetForm = () => {
+    setInvoice({
+      invoiceNo: 'INV-' + Date.now().toString().slice(-6),
+      invoiceDate: new Date().toISOString().split('T')[0],
+      dueDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+      customerId: '',
+      customerCode: '',
+      customerName: '',
+      customerDetails: null,
+      items: [],
+      totalAmount: 0,
+      discountPercent: 0,
+      discountAmount: 0,
+      taxableAmount: 0,
+      gstAmount: 0,
+      cgstAmount: 0,
+      sgstAmount: 0,
+      gstBreakup: { '5': 0, '12': 0, '18': 0, '28': 0 },
+      roundOff: 0,
+      netAmount: 0,
+      paymentMode: 'CASH',
+      medicalRep: '',
+      transportMode: '',
+      transportCharges: 0,
+      notes: ''
+    });
+    setSearchQuery('');
+    setProductSearchQuery('');
+    setSelectedItemIndex(null);
   };
 
   // Refresh data
@@ -412,80 +410,62 @@ const BusinessSalesEntry = ({ open, onClose }) => {
   };
 
   // Save invoice
-  const saveInvoice = async () => {
+  const handleSaveInvoice = async () => {
+    if (!invoice.customerId) {
+      toast.error('Please select a customer');
+      return;
+    }
+
+    if (invoice.items.length === 0) {
+      toast.error('Please add at least one product');
+      return;
+    }
+
+    setIsLoading(true);
+
     try {
-      if (!invoice.customerId) {
-        alert('Please select a customer');
-        return;
-      }
-
-      const validItems = invoice.items.filter(item => 
-        item.productId && item.qty > 0
-      );
-
-      if (validItems.length === 0) {
-        alert('Please add at least one product');
-        return;
-      }
-
-      setSaving(true);
-
-      // Create order
-      const orderData = {
-        customer_id: invoice.customerId,
-        order_type: 'SALE',
-        total_amount: invoice.totalAmount,
-        discount: invoice.discountAmount,
-        final_amount: invoice.netAmount,
-        payment_status: 'PENDING',
-        notes: invoice.notes || ''
-      };
-
-      const orderResponse = await ordersApi.create(orderData);
-      const orderId = orderResponse.data.order_id;
-
-      // Create order items
-      const orderItemsPromises = validItems.map(item => {
-        return orderItemsApi.create({
-          order_id: orderId,
-          product_id: item.productId,
-          quantity: item.qty,
-          unit_price: item.rate,
-          total_price: item.netAmount,
-          discount: item.discount
-        });
-      });
-
-      await Promise.all(orderItemsPromises);
-
-      alert('Invoice saved successfully!');
-      onClose();
+      const response = await ordersApi.create(invoice);
       
+      if (response.success) {
+        toast.created('Invoice', 4000, {
+          action: (
+            <button 
+              onClick={() => window.print()}
+              className="text-sm font-medium text-green-700 hover:text-green-800 underline"
+            >
+              Print Invoice
+            </button>
+          )
+        });
+        resetForm();
+      } else {
+        toast.error('Failed to save invoice. Please check your data and try again.');
+      }
     } catch (error) {
       console.error('Error saving invoice:', error);
-      alert('Failed to save invoice. Please try again.');
+      toast.error('Network error. Please check your connection and try again.');
     } finally {
-      setSaving(false);
+      setIsLoading(false);
     }
   };
 
   // Generate PDF for Download/Print
-  const generatePDF = async () => {
+  const handleGeneratePDF = async () => {
     try {
-      alert('PDF generation feature coming soon!');
+      toast.info('PDF generation feature coming soon!', 3000);
     } catch (error) {
       console.error('Error generating PDF:', error);
-      alert('Failed to generate PDF. Please try again.');
+      toast.error('Failed to generate PDF. Please try again.');
     }
   };
 
   // Generate WhatsApp PDF
-  const generateWhatsAppPDF = async () => {
+  const handleWhatsAppPDF = async () => {
     try {
-      alert('WhatsApp PDF generation feature coming soon!');
+      toast.info('WhatsApp PDF generation feature coming soon!', 3000);
     } catch (error) {
       console.error('Error generating WhatsApp PDF:', error);
-      alert('Failed to generate WhatsApp PDF. Please try again.');
+      toast.error('Failed to generate WhatsApp PDF. Please try again.');
     }
   };
 
@@ -594,16 +574,16 @@ const BusinessSalesEntry = ({ open, onClose }) => {
                 <button
                   onClick={() => {
                     if (!invoice.customerId) {
-                      alert('Please select a customer');
+                      toast.error('Please select a customer');
                       return;
                     }
                     if (invoice.items.length === 0) {
-                      alert('Please add at least one product');
+                      toast.error('Please add at least one product');
                       return;
                     }
                     const hasInvalidItems = invoice.items.some(item => !item.qty || item.qty <= 0);
                     if (hasInvalidItems) {
-                      alert('Please enter valid quantity for all items');
+                      toast.error('Please enter valid quantity for all items');
                       return;
                     }
                     setCurrentStep(2);
@@ -622,7 +602,7 @@ const BusinessSalesEntry = ({ open, onClose }) => {
                     Back to Invoice
                   </button>
                   <button
-                    onClick={saveInvoice}
+                    onClick={handleSaveInvoice}
                     disabled={saving}
                     className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
@@ -640,7 +620,7 @@ const BusinessSalesEntry = ({ open, onClose }) => {
                 Print
               </button>
               <button
-                onClick={generateWhatsAppPDF}
+                onClick={handleWhatsAppPDF}
                 disabled={invoice.items.length === 0 || !invoice.customerDetails?.phone}
                 className="inline-flex items-center px-4 py-2 bg-green-600 text-white text-sm font-medium rounded-md hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 disabled:opacity-50 disabled:cursor-not-allowed"
               >
@@ -1292,13 +1272,13 @@ const BusinessSalesEntry = ({ open, onClose }) => {
               <h3 className="text-lg font-semibold">Invoice Preview</h3>
               <div className="flex items-center space-x-2">
                 <button
-                  onClick={generatePDF}
+                  onClick={handleGeneratePDF}
                   className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 text-sm"
                 >
                   Download PDF
                 </button>
                 <button
-                  onClick={generateWhatsAppPDF}
+                  onClick={handleWhatsAppPDF}
                   className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 text-sm"
                 >
                   WhatsApp PDF

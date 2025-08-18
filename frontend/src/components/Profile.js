@@ -1,7 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Upload, Image, X, Save, Building, Phone, Mail, MapPin, CreditCard, FileText, Shield } from 'lucide-react';
+import { useToast } from './global/ui/feedback/Toast';
 
 const Profile = () => {
+  const toast = useToast();
   const [companyLogo, setCompanyLogo] = useState(localStorage.getItem('companyLogo') || null);
   const [companyData, setCompanyData] = useState({
     name: localStorage.getItem('companyName') || 'AASO PHARMACEUTICALS',
@@ -41,7 +43,16 @@ const Profile = () => {
     localStorage.setItem('companyIfscCode', companyData.ifscCode);
     localStorage.setItem('companyUpiId', companyData.upiId);
     
-    alert('Company profile updated successfully!');
+    toast.updated('Company Profile', 4000, {
+      action: (
+        <button 
+          onClick={() => window.location.reload()}
+          className="text-sm font-medium text-green-700 hover:text-green-800 underline"
+        >
+          Refresh Page
+        </button>
+      )
+    });
   };
 
   const handleInputChange = (field, value) => {

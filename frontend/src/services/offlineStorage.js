@@ -319,16 +319,13 @@ class OfflineStorageService {
    * Show sync success message
    */
   showSyncSuccess(count) {
-    // Create a temporary success message
-    const message = document.createElement('div');
-    message.className = 'fixed top-16 left-1/2 transform -translate-x-1/2 z-50 p-3 bg-green-600 text-white rounded-lg shadow-lg';
-    message.textContent = `✅ Successfully synced ${count} offline operations`;
-    
-    document.body.appendChild(message);
-    
-    setTimeout(() => {
-      message.remove();
-    }, 3000);
+    // Try to use the toast system if available
+    if (window.__toast) {
+      window.__toast.success(`Synced ${count} offline operations`);
+    } else {
+      // Fallback to console log
+      console.log(`✅ Successfully synced ${count} offline operations`);
+    }
   }
 
   /**
