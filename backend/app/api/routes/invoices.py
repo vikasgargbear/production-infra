@@ -332,6 +332,58 @@ async def create_invoice(
             invoice_item_id = insert_result.scalar()
             logger.info(f"Created invoice item {invoice_item_id} for product {product_id}")
             
+            # CRITICAL: Deduct inventory from batch (this was missing!)
+            if batch_id:
+                try:
+                    inventory_update = db.execute(text("""
+                        UPDATE inventory.batches 
+                        SET 
+                            quantity_available = quantity_available - :quantity,
+                            last_movement_date = CURRENT_TIMESTAMP,
+                            updated_at = CURRENT_TIMESTAMP
+                        WHERE batch_id = :batch_id 
+                        AND quantity_available >= :quantity
+                        RETURNING quantity_available
+                    """), {
+                        "quantity": quantity,
+                        "batch_id": batch_id
+                    })
+                    
+                    result = inventory_update.fetchone()
+                    if result:
+                        new_qty = result[0]
+                        logger.info(f"✅ Inventory deducted: Batch {batch_id} quantity reduced by {quantity}, new available: {new_qty}")
+                        
+                        # Create inventory movement record
+                        db.execute(text("""
+                            INSERT INTO inventory.inventory_movements (
+                                org_id, movement_type, movement_direction, 
+                                product_id, batch_id, quantity,
+                                reference_type, reference_id, 
+                                created_by, movement_date
+                            ) VALUES (
+                                :org_id, 'sale', 'out',
+                                :product_id, :batch_id, :quantity,
+                                'invoice', :invoice_id,
+                                :created_by, CURRENT_TIMESTAMP
+                            )
+                        """), {
+                            "org_id": ACTUAL_ORG_ID,
+                            "product_id": product_id,
+                            "batch_id": batch_id,
+                            "quantity": quantity,
+                            "invoice_id": invoice_id,
+                            "created_by": created_by
+                        })
+                        logger.info(f"📦 Inventory movement recorded for batch {batch_id}")
+                    else:
+                        logger.warning(f"❌ Insufficient stock in batch {batch_id} for quantity {quantity}")
+                        
+                except Exception as inv_error:
+                    logger.error(f"❌ Inventory deduction failed for batch {batch_id}: {inv_error}")
+            else:
+                logger.warning(f"⚠️ No batch_id for product {product_id} - inventory not deducted")
+            
             items_created += 1
         
         # Re-enable triggers
