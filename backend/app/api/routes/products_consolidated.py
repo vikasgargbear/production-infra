@@ -262,6 +262,7 @@ async def create_product(
     Create a new product
     """
     try:
+        logger.info(f"Creating product with data: {product}")
         # Map frontend fields to database fields (matching actual table columns)
         # Handle composition - could be dict or string
         composition_value = product.get("composition", "")
