@@ -19,7 +19,7 @@ import Toast from '../common/Toast';
 // import BillSummary from './components/BillSummary';
 import InvoicePreview from '../invoice/components/InvoicePreview';
 import ImportDocumentModal from './components/ImportDocumentModal';
-import testBackendConnection from '../../utils/testBackendConnection';
+// Removed testBackendConnection - already tested in App.tsx
 
 // Default org ID for development
 const DEFAULT_ORG_ID = 'ad808530-1ddb-4377-ab20-67bef145d80d';
@@ -43,10 +43,7 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
   const customerSearchRef = useRef(null);
   const productSearchRef = useRef(null);
   
-  // Test backend connection on mount
-  useEffect(() => {
-    testBackendConnection();
-  }, []);
+  // Backend connection already tested in App.tsx - removed redundant test
   
   const firstInputRef = useRef(null);
 
@@ -238,8 +235,11 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
   const calculateTotals = () => {
     const totals = InvoiceCalculator.calculateInvoiceTotals(invoice.items, invoice.gst_type);
     
-    console.log('calculateTotals - items:', invoice.items);
-    console.log('calculateTotals - totals:', totals);
+    // Debug logging only in development mode
+    if (process.env.NODE_ENV === 'development' && window.DEBUG_INVOICE) {
+      console.log('calculateTotals - items:', invoice.items);
+      console.log('calculateTotals - totals:', totals);
+    }
     
     // Add delivery charges to the net amount (don't subtract discount as it's already in item calculations)
     const totalWithCharges = totals.netAmount + (invoice.delivery_charges || 0);
@@ -250,7 +250,10 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
     const roundOff = Math.round(totalAfterDiscount) - totalAfterDiscount;
     const net = Math.round(totalAfterDiscount); // This is simpler and ensures whole number
     
-    console.log('calculateTotals - final amount:', net);
+    // Debug logging only when enabled
+    if (process.env.NODE_ENV === 'development' && window.DEBUG_INVOICE) {
+      console.log('calculateTotals - final amount:', net);
+    }
 
     setInvoice(prev => ({
       ...prev,

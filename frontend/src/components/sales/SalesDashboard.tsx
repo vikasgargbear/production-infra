@@ -372,26 +372,26 @@ const SalesDashboard: React.FC<SalesDashboardProps> = () => {
               title="Create Invoice"
               description="Generate new sales invoice"
               icon={FileText}
-              onClick={() => console.log('Create Invoice')}
+              onClick={() => {/* TODO: Navigate to invoice creation */}}
             />
             <ActionCard
               title="Record Payment"
               description="Update payment status"
               icon={IndianRupee}
-              onClick={() => console.log('Record Payment')}
+              onClick={() => {/* TODO: Navigate to payment recording */}}
             />
             <ActionCard
               title="Overdue Follow-up"
               description="3 invoices overdue"
               icon={Clock}
-              onClick={() => console.log('Overdue Follow-up')}
+              onClick={() => {/* TODO: Navigate to overdue management */}}
               urgent={true}
             />
             <ActionCard
               title="Sales Reports"
               description="View detailed analytics"
               icon={BarChart3}
-              onClick={() => console.log('Sales Reports')}
+              onClick={() => {/* TODO: Navigate to analytics */}}
             />
           </div>
         </div>

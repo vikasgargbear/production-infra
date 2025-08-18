@@ -150,8 +150,8 @@ find . -name ".DS_Store" -delete 2>/dev/null || true
 
 ### Verify Everything Still Works
 ```bash
-# 1. Reinstall frontend dependencies
-cd frontend && npm install
+# 1. Reinstall frontend dependencies (use legacy peer deps for compatibility)
+cd frontend && npm install --legacy-peer-deps
 
 # 2. Test backend
 cd ../backend && python -m pytest tests/
@@ -162,6 +162,23 @@ cd ../frontend && npm run build
 # 4. Test frontend dev server
 npm start
 ```
+
+### ⚠️ Known Issues & Fixes
+
+#### HTML Webpack Plugin Error
+**Error:** `Module not found: Can't resolve 'html-webpack-plugin/lib/loader.js'`  
+**Solution:** 
+```bash
+rm -rf node_modules package-lock.json
+npm install --legacy-peer-deps
+```
+
+#### TypeScript Version Conflicts
+**Issue:** react-scripts@5.0.1 conflicts with TypeScript 5.x  
+**Solution:** Use `--legacy-peer-deps` flag during installation
+
+#### Build Warnings
+**Status:** ✅ Normal - ESLint warnings about unused imports don't prevent functionality
 
 ---
 

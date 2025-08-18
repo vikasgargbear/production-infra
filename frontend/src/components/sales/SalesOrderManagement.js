@@ -167,7 +167,7 @@ const SalesOrderManagement = () => {
                   <div className="flex gap-2">
                     {/* View Button */}
                     <button
-                      onClick={() => console.log('View order:', order.order_id)}
+                      onClick={() => {/* TODO: Navigate to order view */}}
                       className="text-gray-600 hover:text-gray-900"
                       title="View Order"
                     >
@@ -187,7 +187,7 @@ const SalesOrderManagement = () => {
                     {/* Convert to Challan Button */}
                     {!order.challan_created && (
                       <button
-                        onClick={() => console.log('Convert to challan:', order.order_id)}
+                        onClick={() => {/* TODO: Convert to challan */}}
                         className="flex items-center gap-1 text-sm px-3 py-1 bg-purple-600 text-white rounded hover:bg-purple-700"
                       >
                         <Truck className="w-3 h-3" />

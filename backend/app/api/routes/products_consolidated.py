@@ -407,16 +407,8 @@ async def create_product(
                 batch = batch_result.fetchone()
                 logger.info(f"Initial batch created for product {created.product_code}: Batch ID {batch.batch_id}, MRP: {mrp}, Selling: {sale_price}")
                 
-                # Update product's current_mrp with the batch MRP
-                try:
-                    db.execute(text("""
-                        UPDATE inventory.products 
-                        SET current_mrp = :mrp 
-                        WHERE product_id = :product_id
-                    """), {"mrp": mrp, "product_id": created.product_id})
-                    logger.info(f"Updated product current_mrp to ₹{mrp}")
-                except Exception as mrp_error:
-                    logger.warning(f"Could not update product current_mrp: {mrp_error}")
+                # MRP is stored in batches table - no need to duplicate in products table
+                logger.info(f"Product MRP stored in batch: ₹{mrp}")
                 
                 # Trigger should remain enabled for future batch operations
                     

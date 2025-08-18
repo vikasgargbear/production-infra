@@ -4,6 +4,7 @@ import { customersApi } from '../../services/api/modules/customers.api';
 import { productsApi } from '../../services/api/modules/products.api';
 import { invoicesApi } from '../../services/api/modules/invoices.api';
 import offlineStorage from '../../services/offlineStorage';
+import debugLogger from '../../utils/debugLogger';
 
 interface Customer {
   id?: string | number;
@@ -109,7 +110,7 @@ const InvoiceFlowMinimal: React.FC<InvoiceFlowMinimalProps> = ({ onClose }) => {
       let hasOfflineData = false;
       
       if (offlineCustomers && !offlineStorage.isDataStale(offlineCustomers, 60)) { // 1 hour max for customer data
-        console.log('📱 Using offline customers data');
+        debugLogger.debug('📱 Using offline customers data');
         setCustomers(offlineCustomers.data);
         hasOfflineData = true;
       } else {
@@ -117,7 +118,7 @@ const InvoiceFlowMinimal: React.FC<InvoiceFlowMinimalProps> = ({ onClose }) => {
       }
       
       if (offlineProducts && !offlineStorage.isDataStale(offlineProducts, 120)) { // 2 hours max for product data
-        console.log('📱 Using offline products data');
+        debugLogger.debug('📱 Using offline products data');
         setProducts(offlineProducts.data);
         hasOfflineData = true;
       } else {

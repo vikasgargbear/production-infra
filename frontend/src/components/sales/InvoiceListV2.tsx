@@ -6,6 +6,7 @@ import {
 } from 'lucide-react';
 import { Button, StatusBadge, DataTable, InlineFilterPanel } from '../global';
 import InvoiceApiService from '../../services/invoiceApiService';
+import debugLogger from '../../utils/debugLogger';
 
 interface InvoiceListProps {
   onClose?: () => void;
@@ -142,7 +143,7 @@ const InvoiceListV2: React.FC<InvoiceListProps> = ({ onClose }) => {
         searchParams.search = filters.search.trim();
       }
       
-      console.log('Fetching invoices with params:', searchParams);
+      debugLogger.api('Fetching invoices with params:', searchParams);
       
       const response = await InvoiceApiService.getInvoices(searchParams);
       
@@ -150,7 +151,7 @@ const InvoiceListV2: React.FC<InvoiceListProps> = ({ onClose }) => {
         // Transform backend data to match our interface
         const transformedInvoices = response.data.invoices.map((invoice: any) => {
           // Log raw backend data for debugging
-          console.log('Raw invoice from backend:', {
+          debugLogger.api('Raw invoice from backend:', {
             invoice_id: invoice.invoice_id,
             invoice_number: invoice.invoice_number,
             customer_name: invoice.customer_name,
@@ -183,7 +184,7 @@ const InvoiceListV2: React.FC<InvoiceListProps> = ({ onClose }) => {
           };
         });
 
-        console.log('Transformed invoices:', transformedInvoices);
+        debugLogger.api('Transformed invoices:', transformedInvoices);
         setInvoices(transformedInvoices);
         setPagination({
           total: response.data.total || 0,
@@ -214,7 +215,7 @@ const InvoiceListV2: React.FC<InvoiceListProps> = ({ onClose }) => {
 
   // Handle filter changes with auto-search
   const handleFilterChange = (filters: any) => {
-    console.log('Filters changed:', filters);
+    debugLogger.debug('Filters changed:', filters);
     // Reset to first page when filters change
     fetchInvoices(1, { ...filters, search: searchQuery });
   };
@@ -232,25 +233,21 @@ const InvoiceListV2: React.FC<InvoiceListProps> = ({ onClose }) => {
 
   // Action handlers
   const handleViewInvoice = (invoice: Invoice) => {
-    console.log('Viewing invoice:', invoice.invoice_number);
     // TODO: Navigate to invoice view page or open modal
     alert(`Viewing invoice: ${invoice.invoice_number}`);
   };
 
   const handleEditInvoice = (invoice: Invoice) => {
-    console.log('Editing invoice:', invoice.invoice_number);
     // TODO: Navigate to invoice edit page or open modal
     alert(`Editing invoice: ${invoice.invoice_number}`);
   };
 
   const handlePrintInvoice = (invoice: Invoice) => {
-    console.log('Printing invoice:', invoice.invoice_number);
     // TODO: Open print dialog or generate PDF
     alert(`Printing invoice: ${invoice.invoice_number}`);
   };
 
   const handleMoreOptions = (invoice: Invoice) => {
-    console.log('More options for invoice:', invoice.invoice_number);
     // TODO: Show dropdown menu with more options
     alert(`More options for invoice: ${invoice.invoice_number}`);
   };
@@ -273,7 +270,7 @@ const InvoiceListV2: React.FC<InvoiceListProps> = ({ onClose }) => {
   const getStatusText = (status: string | undefined) => {
     if (!status) return 'Unknown';
     
-    console.log('Raw status from backend:', status, 'Type:', typeof status);
+    debugLogger.debug('Raw status from backend:', status, 'Type:', typeof status);
     
     // Map backend statuses to display text - handle various formats
     const statusMap: Record<string, string> = {
@@ -320,7 +317,7 @@ const InvoiceListV2: React.FC<InvoiceListProps> = ({ onClose }) => {
     }
     
     // If no mapping found, log it and return the original value
-    console.log('No status mapping found for:', status, 'Returning original value');
+    debugLogger.warn('No status mapping found for:', status, 'Returning original value');
     return status;
   };
 
@@ -366,7 +363,7 @@ const InvoiceListV2: React.FC<InvoiceListProps> = ({ onClose }) => {
       header: 'Status',
       render: (value: string, invoice: Invoice) => {
         const statusText = getStatusText(invoice.invoice_status);
-        console.log('Status column render:', {
+        debugLogger.render('Status column render:', {
           original: invoice.invoice_status,
           processed: statusText,
           invoice_id: invoice.invoice_id
@@ -385,7 +382,7 @@ const InvoiceListV2: React.FC<InvoiceListProps> = ({ onClose }) => {
       header: 'Payment',
       render: (value: string, invoice: Invoice) => {
         const paymentText = getStatusText(invoice.payment_status);
-        console.log('Payment column render:', {
+        debugLogger.render('Payment column render:', {
           original: invoice.payment_status,
           processed: paymentText,
           invoice_id: invoice.invoice_id
@@ -477,7 +474,7 @@ const InvoiceListV2: React.FC<InvoiceListProps> = ({ onClose }) => {
               </Button>
               <Button
                 variant="outline"
-                onClick={() => console.log('Export all invoices')}
+                onClick={() => {/* TODO: Export all invoices */}}
                 icon={<Download className="w-4 h-4" />}
                 iconPosition="left"
               >
@@ -516,9 +513,9 @@ const InvoiceListV2: React.FC<InvoiceListProps> = ({ onClose }) => {
             {/* Bulk Actions */}
             <BulkActionBar
               selectedCount={selectedInvoices.length}
-              onMarkPaid={() => console.log('Mark as paid')}
-              onSendReminder={() => console.log('Send reminder')}
-              onExport={() => console.log('Export selected')}
+              onMarkPaid={() => {/* TODO: Mark as paid */}}
+              onSendReminder={() => {/* TODO: Send reminder */}}
+              onExport={() => {/* TODO: Export selected */}}
               onClear={() => setSelectedInvoices([])}
             />
 

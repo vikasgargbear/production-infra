@@ -17,6 +17,7 @@ import { ordersApi, salesApi, api } from '../../services/api';
 import salesOrdersAPI from '../../services/api/modules/salesOrders.api';
 import { invoicesApi as invoicesApiModule } from '../../services/api/modules/invoices.api';
 import { challansApi as challansApiModule } from '../../services/api/modules/challans.api';
+import debugLogger from '../../utils/debugLogger';
 
 // Default org ID for development
 const DEFAULT_ORG_ID = 'ad808530-1ddb-4377-ab20-67bef145d80d';
@@ -444,11 +445,9 @@ const SalesOrderFlowV2 = ({ open = true, onClose }) => {
         org_id: localStorage.getItem('orgId') || DEFAULT_ORG_ID
       };
 
-      console.log('=== ORDER CREATION DEBUG ===');
-      console.log('Raw order state:', order);
-      console.log('Order items:', order.items);
-      console.log('EXACT object being sent to API:', JSON.stringify(orderData, null, 2));
-      console.log('=== END DEBUG ===');
+      debugLogger.debug('ORDER CREATION DEBUG - Raw order state:', order);
+      debugLogger.debug('ORDER CREATION DEBUG - Order items:', order.items);
+      debugLogger.debug('ORDER CREATION DEBUG - API payload:', JSON.stringify(orderData, null, 2));
 
       // Create sales order data matching the backend OrderCreate schema
       const salesOrderData = {
@@ -499,7 +498,7 @@ const SalesOrderFlowV2 = ({ open = true, onClose }) => {
         other_charges: parseFloat(order.other_charges) || 0
       };
       
-      console.log('Sales order data to send:', salesOrderData);
+      debugLogger.debug('Sales order data to send:', salesOrderData);
       
       // Direct API call to sales-orders endpoint
       const response = await api.post('/sales-orders/', salesOrderData);
@@ -598,7 +597,7 @@ Expected Delivery: ${order.expected_delivery_date}
             historyType="order"
             showSaveDraft={true}
             onSaveDraft={() => {
-              console.log('Save draft clicked');
+              debugLogger.debug('Save draft clicked');
             }}
           />
 

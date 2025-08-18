@@ -128,7 +128,7 @@ const InvoiceListMinimal: React.FC<InvoiceListMinimalProps> = () => {
             <button
               key={invoice.id}
               className="w-full p-4 flex items-center justify-between hover:bg-gray-50 rounded-lg transition-colors"
-              onClick={() => console.log('View invoice:', invoice.id)}
+              onClick={() => {/* TODO: Navigate to invoice view */}}
             >
               <div className="flex-1 text-left">
                 <div className="flex items-center gap-3 mb-1">

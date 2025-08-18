@@ -297,7 +297,7 @@ const InvoiceManagement = () => {
                   <div className="flex gap-1">
                     {/* View */}
                     <button
-                      onClick={() => console.log('View invoice:', invoice)}
+                      onClick={() => {/* TODO: Navigate to invoice view */}}
                       className="p-1 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded"
                       title="View Invoice"
                     >
