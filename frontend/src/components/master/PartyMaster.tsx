@@ -124,8 +124,8 @@ const PartyMaster: React.FC<PartyMasterProps> = ({ open, onClose }) => {
         if (customersResponse.data) {
           if (Array.isArray(customersResponse.data)) {
             customersData = customersResponse.data;
-          } else if (customersResponse.data.data && Array.isArray(customersResponse.data.data)) {
-            customersData = customersResponse.data.data;
+          } else if ((customersResponse.data as any)?.data && Array.isArray((customersResponse.data as any).data)) {
+            customersData = (customersResponse.data as any).data;
           }
         }
         const customers = customersData.map(c => ({ ...c, type: 'customer' as const }));
