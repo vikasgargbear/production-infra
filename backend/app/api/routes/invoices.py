@@ -353,28 +353,33 @@ async def create_invoice(
                         new_qty = result[0]
                         logger.info(f"✅ Inventory deducted: Batch {batch_id} quantity reduced by {quantity}, new available: {new_qty}")
                         
-                        # Create inventory movement record
-                        db.execute(text("""
-                            INSERT INTO inventory.inventory_movements (
-                                org_id, movement_type, movement_direction, 
-                                product_id, batch_id, quantity,
-                                reference_type, reference_id, 
-                                created_by, movement_date
-                            ) VALUES (
-                                :org_id, 'sale', 'out',
-                                :product_id, :batch_id, :quantity,
-                                'invoice', :invoice_id,
-                                :created_by, CURRENT_TIMESTAMP
-                            )
-                        """), {
-                            "org_id": ACTUAL_ORG_ID,
-                            "product_id": product_id,
-                            "batch_id": batch_id,
-                            "quantity": quantity,
-                            "invoice_id": invoice_id,
-                            "created_by": created_by
-                        })
-                        logger.info(f"📦 Inventory movement recorded for batch {batch_id}")
+                        # Create inventory movement record for audit trail
+                        try:
+                            db.execute(text("""
+                                INSERT INTO inventory.inventory_movements (
+                                    org_id, movement_type, movement_direction, 
+                                    product_id, batch_id, quantity,
+                                    reference_type, reference_id, reference_number,
+                                    location_id, created_by, movement_date
+                                ) VALUES (
+                                    :org_id, 'sale', 'out',
+                                    :product_id, :batch_id, :quantity,
+                                    'invoice', :invoice_id, :invoice_number,
+                                    1, :created_by, CURRENT_TIMESTAMP
+                                )
+                            """), {
+                                "org_id": ACTUAL_ORG_ID,
+                                "product_id": product_id,
+                                "batch_id": int(batch_id) if batch_id else None,
+                                "quantity": quantity,
+                                "invoice_id": invoice_id,
+                                "invoice_number": f"INV-{invoice_id}",
+                                "created_by": created_by
+                            })
+                            logger.info(f"📦 Inventory movement recorded for batch {batch_id}")
+                        except Exception as movement_error:
+                            logger.warning(f"⚠️ Could not record inventory movement: {movement_error}")
+                            # Don't fail the transaction for movement tracking
                     else:
                         logger.warning(f"❌ Insufficient stock in batch {batch_id} for quantity {quantity}")
                         
