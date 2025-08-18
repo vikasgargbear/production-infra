@@ -249,7 +249,9 @@ async def create_invoice(
             
             # Basic calculations (triggers will recalculate if needed)
             discount_percent = float(item.get("discount_percent", 0))
-            discount_amt = quantity * unit_price * discount_percent / 100
+            free_quantity = float(item.get("free_quantity", 0))
+            chargeable_quantity = quantity - free_quantity
+            discount_amt = chargeable_quantity * unit_price * discount_percent / 100
             
             # Get batch_id if not provided (for inventory trigger)
             batch_id = item.get("batch_id")
@@ -265,8 +267,9 @@ async def create_invoice(
                 batch = batch_result.fetchone()
                 batch_id = batch[0] if batch else None
             
-            # Calculate amounts
-            line_total = (quantity * unit_price) - discount_amt
+            # Calculate amounts - use chargeable quantity (exclude free items)
+            # Line total should be based on chargeable quantity only
+            line_total = (chargeable_quantity * unit_price) - discount_amt
             gst_percent = item.get("gst_percent", 12)
             taxable_amount = line_total
             
@@ -344,14 +347,14 @@ async def create_invoice(
                         AND quantity_available >= :quantity
                         RETURNING quantity_available
                     """), {
-                        "quantity": quantity,
+                        "quantity": chargeable_quantity,  # Only deduct chargeable quantity
                         "batch_id": batch_id
                     })
                     
                     result = inventory_update.fetchone()
                     if result:
                         new_qty = result[0]
-                        logger.info(f"✅ Inventory deducted: Batch {batch_id} quantity reduced by {quantity}, new available: {new_qty}")
+                        logger.info(f"✅ Inventory deducted: Batch {batch_id} quantity reduced by {chargeable_quantity} (free: {free_quantity}), new available: {new_qty}")
                         
                         # Create inventory movement record for audit trail
                         try:
@@ -371,7 +374,7 @@ async def create_invoice(
                                 "org_id": ACTUAL_ORG_ID,
                                 "product_id": product_id,
                                 "batch_id": int(batch_id) if batch_id else None,
-                                "quantity": quantity,
+                                "quantity": chargeable_quantity,
                                 "invoice_id": invoice_id,
                                 "invoice_number": f"INV-{invoice_id}",
                                 "created_by": created_by
@@ -381,7 +384,7 @@ async def create_invoice(
                             logger.warning(f"⚠️ Could not record inventory movement: {movement_error}")
                             # Don't fail the transaction for movement tracking
                     else:
-                        logger.warning(f"❌ Insufficient stock in batch {batch_id} for quantity {quantity}")
+                        logger.warning(f"❌ Insufficient stock in batch {batch_id} for chargeable quantity {chargeable_quantity}")
                         
                 except Exception as inv_error:
                     logger.error(f"❌ Inventory deduction failed for batch {batch_id}: {inv_error}")
