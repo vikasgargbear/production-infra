@@ -4,6 +4,7 @@ import { productAPI } from '../../../services/api';
 import { debounce } from '../../../utils/debounce';
 import BatchSelectionModalV2 from '../../invoice/modals/BatchSelectionModalV2';
 import DataTransformer from '../../../services/dataTransformer';
+import { searchCache, smartSearch } from '../../../utils/searchCache';
 
 const ProductSearchSimple = forwardRef(({ onAddItem, onCreateProduct, showBatchSelection = true }, ref) => {
   const [searchQuery, setSearchQuery] = useState('');
@@ -24,7 +25,7 @@ const ProductSearchSimple = forwardRef(({ onAddItem, onCreateProduct, showBatchS
     }
   }));
 
-  // Debounced search function
+  // Debounced search function with smart cache integration
   const searchProducts = useCallback(
     debounce(async (query) => {
       if (!query || query.length < 2) {
@@ -34,8 +35,28 @@ const ProductSearchSimple = forwardRef(({ onAddItem, onCreateProduct, showBatchS
 
       setLoading(true);
       try {
+        // First try smart cache search for ultra-fast response
+        const cachedResults = await smartSearch('products', query, { limit: 20 });
+        
+        if (cachedResults.length > 0) {
+          // Transform cached results to consistent format
+          const transformedResults = cachedResults.map(product => 
+            DataTransformer.transformProduct(product, 'search')
+          );
+          setSearchResults(transformedResults);
+          setLoading(false);
+          return;
+        }
+        
+        // Fallback to API search if no cache results
         const response = await productAPI.search(query);
         const results = response.data || [];
+        
+        // Cache the API results for next time
+        if (results.length > 0) {
+          searchCache.preloadItems('products', results);
+        }
+        
         // Transform results to consistent format
         const transformedResults = results.map(product => 
           DataTransformer.transformProduct(product, 'search')

@@ -59,167 +59,167 @@ export const API_CONFIG: APIConfig = {
     
     // Products
     PRODUCTS: {
-      BASE: '/products',
-      SEARCH: '/products/search',
-      CREATE: '/products',  // POST endpoint for creation
-      BATCH_UPLOAD: '/products/batch-upload',
-      CATEGORIES: '/products/categories',
-      STOCK_UPDATE: '/products/stock-update',
+      BASE: '/products/',  // Added trailing slash to prevent 307 redirects
+      SEARCH: '/products/search/',  // Added trailing slash
+      CREATE: '/products/',  // POST endpoint for creation - trailing slash required!
+      BATCH_UPLOAD: '/products/batch-upload/',  // Added trailing slash
+      CATEGORIES: '/products/categories/',  // Added trailing slash
+      STOCK_UPDATE: '/products/stock-update/',  // Added trailing slash
     },
     
     // Customers
     CUSTOMERS: {
-      BASE: '/customers',
-      SEARCH: '/customers',  // Use same endpoint with search param
-      CREDIT_CHECK: '/customers/credit-check',
-      TRANSACTIONS: '/customers/transactions',
+      BASE: '/customers/',  // Added trailing slash
+      SEARCH: '/customers/',  // Use same endpoint with search param - Added trailing slash
+      CREDIT_CHECK: '/customers/credit-check/',  // Added trailing slash
+      TRANSACTIONS: '/customers/transactions/',  // Added trailing slash
     },
     
     // Suppliers
     SUPPLIERS: {
-      BASE: '/suppliers',
-      SEARCH: '/suppliers',  // Use same endpoint with search param
-      TRANSACTIONS: '/suppliers/transactions',
+      BASE: '/suppliers/',  // Added trailing slash
+      SEARCH: '/suppliers/',  // Use same endpoint with search param - Added trailing slash
+      TRANSACTIONS: '/suppliers/transactions/',  // Added trailing slash
     },
     
     // Purchases
     PURCHASES: {
-      BASE: '/purchases',
-      ENHANCED: '/purchases-enhanced',
-      PDF_PARSE: '/purchase-upload/parse-invoice-safe',
-      PENDING_RECEIPTS: '/purchases-enhanced/pending-receipts',
-      RECEIVE_ITEMS: (id) => `/purchases-enhanced/${id}/receive-fixed`,
+      BASE: '/purchases/',  // Added trailing slash
+      ENHANCED: '/purchases-enhanced/',  // Added trailing slash
+      PDF_PARSE: '/purchase-upload/parse-invoice-safe/',  // Added trailing slash
+      PENDING_RECEIPTS: '/purchases-enhanced/pending-receipts/',  // Added trailing slash
+      RECEIVE_ITEMS: (id) => `/purchases-enhanced/${id}/receive-fixed/`,  // Added trailing slash
     },
     
     // Sales & Invoices
     SALES: {
-      BASE: '/sales',
-      DIRECT_INVOICE: '/sales/direct-invoice-sale',
-      INVOICE_SEARCH: '/sales/invoices/search',
+      BASE: '/sales/',  // Added trailing slash
+      DIRECT_INVOICE: '/sales/direct-invoice-sale/',  // Added trailing slash
+      INVOICE_SEARCH: '/sales/invoices/search/',  // Added trailing slash
     },
     
     INVOICES: {
-      BASE: '/invoices',
-      CALCULATE: '/invoices/calculate-live',
-      VALIDATE: '/invoices/validate',
-      GENERATE_NUMBER: '/invoices/generate-number',
-      DRAFTS: '/invoices/drafts',
-      PDF: (id) => `/invoices/${id}/pdf`,
-      WHATSAPP: (id) => `/invoices/${id}/whatsapp`,
+      BASE: '/invoices/',  // Added trailing slash
+      CALCULATE: '/invoices/calculate-live/',  // Added trailing slash
+      VALIDATE: '/invoices/validate/',  // Added trailing slash
+      GENERATE_NUMBER: '/invoices/generate-number/',  // Added trailing slash
+      DRAFTS: '/invoices/drafts/',  // Added trailing slash
+      PDF: (id) => `/invoices/${id}/pdf/`,  // Added trailing slash
+      WHATSAPP: (id) => `/invoices/${id}/whatsapp/`,  // Added trailing slash
     },
     
     // Challans (implemented as Orders with order_type='challan')
     // Note: Backend challan endpoints have schema issues, so we use orders instead
     CHALLANS: {
-      BASE: '/orders', // Using orders endpoint with order_type filter
-      CONVERT_TO_INVOICE: (id) => `/orders/${id}/generate-invoice`,
-      UPDATE_STATUS: (id) => `/orders/${id}/delivery-status`,
-      PDF: (id) => `/orders/${id}/pdf`,
-      WHATSAPP: (id) => `/orders/${id}/whatsapp`,
+      BASE: '/orders/', // Using orders endpoint with order_type filter - Added trailing slash
+      CONVERT_TO_INVOICE: (id) => `/orders/${id}/generate-invoice/`,  // Added trailing slash
+      UPDATE_STATUS: (id) => `/orders/${id}/delivery-status/`,  // Added trailing slash
+      PDF: (id) => `/orders/${id}/pdf/`,  // Added trailing slash
+      WHATSAPP: (id) => `/orders/${id}/whatsapp/`,  // Added trailing slash
     },
     
     // Orders (confirmed table exists)
     ORDERS: {
-      BASE: '/orders',
-      CREATE: '/orders',
-      CONFIRM: (id) => `/orders/${id}/confirm`,
-      CANCEL: (id) => `/orders/${id}/cancel`,
-      GENERATE_INVOICE: (id) => `/orders/${id}/generate-invoice`,
-      ITEMS: '/order-items',
+      BASE: '/orders/',  // Added trailing slash
+      CREATE: '/orders/',  // Added trailing slash
+      CONFIRM: (id) => `/orders/${id}/confirm/`,  // Added trailing slash
+      CANCEL: (id) => `/orders/${id}/cancel/`,  // Added trailing slash
+      GENERATE_INVOICE: (id) => `/orders/${id}/generate-invoice/`,  // Added trailing slash
+      ITEMS: '/order-items/',  // Added trailing slash
     },
     
     // Sales Orders (enterprise-grade API)
     SALES_ORDERS: {
-      BASE: '/sales-orders',
-      CREATE: '/sales-orders',
-      VALIDATE: '/sales-orders/validate',
-      SEARCH: '/sales-orders/search',
-      APPROVE: (id) => `/sales-orders/${id}/approve`,
-      CONVERT_TO_INVOICE: (id) => `/sales-orders/${id}/convert-to-invoice`,
-      CONVERT_TO_CHALLAN: (id) => `/sales-orders/${id}/convert-to-challan`,
+      BASE: '/sales-orders/',  // Added trailing slash
+      CREATE: '/sales-orders/',  // Added trailing slash
+      VALIDATE: '/sales-orders/validate/',  // Added trailing slash
+      SEARCH: '/sales-orders/search/',  // Added trailing slash
+      APPROVE: (id) => `/sales-orders/${id}/approve/`,  // Added trailing slash
+      CONVERT_TO_INVOICE: (id) => `/sales-orders/${id}/convert-to-invoice/`,  // Added trailing slash
+      CONVERT_TO_CHALLAN: (id) => `/sales-orders/${id}/convert-to-challan/`,  // Added trailing slash
     },
     
     // Inventory
     INVENTORY: {
-      BATCHES: '/batches',
-      MOVEMENTS: '/inventory-movements',
-      STOCK_LEVELS: '/inventory/stock-levels',
-      ADJUSTMENTS: '/inventory/adjustments',
-      REPORTS: '/inventory/reports',
+      BATCHES: '/batches/',  // Added trailing slash
+      MOVEMENTS: '/inventory-movements/',  // Added trailing slash
+      STOCK_LEVELS: '/inventory/stock-levels/',  // Added trailing slash
+      ADJUSTMENTS: '/inventory/adjustments/',  // Added trailing slash
+      REPORTS: '/inventory/reports/',  // Added trailing slash
     },
     
     // Payments
     PAYMENTS: {
-      BASE: '/payments',
-      RECONCILE: '/payments/reconcile',
-      PENDING: '/payments/pending',
-      METHODS: '/payments/methods',
+      BASE: '/payments/',  // Added trailing slash
+      RECONCILE: '/payments/reconcile/',  // Added trailing slash
+      PENDING: '/payments/pending/',  // Added trailing slash
+      METHODS: '/payments/methods/',  // Added trailing slash
     },
     
     // Returns
     RETURNS: {
-      BASE: '/returns',
-      APPROVE: (id) => `/returns/${id}/approve`,
-      REJECT: (id) => `/returns/${id}/reject`,
-      CUSTOMER_RETURNS: '/returns/customer',
-      SUPPLIER_RETURNS: '/returns/supplier',
+      BASE: '/returns/',  // Added trailing slash
+      APPROVE: (id) => `/returns/${id}/approve/`,  // Added trailing slash
+      REJECT: (id) => `/returns/${id}/reject/`,  // Added trailing slash
+      CUSTOMER_RETURNS: '/returns/customer/',  // Added trailing slash
+      SUPPLIER_RETURNS: '/returns/supplier/',  // Added trailing slash
     },
     
     // Party Ledger
     LEDGER: {
-      BASE: '/ledger',
-      PARTY: (partyId) => `/ledger/party/${partyId}`,
-      STATEMENTS: '/ledger/statements',
-      OUTSTANDING: '/ledger/outstanding',
-      AGING: '/ledger/aging',
+      BASE: '/ledger/',  // Added trailing slash
+      PARTY: (partyId) => `/ledger/party/${partyId}/`,  // Added trailing slash
+      STATEMENTS: '/ledger/statements/',  // Added trailing slash
+      OUTSTANDING: '/ledger/outstanding/',  // Added trailing slash
+      AGING: '/ledger/aging/',  // Added trailing slash
     },
     
     // Credit/Debit Notes
     NOTES: {
-      CREDIT: '/credit-notes',
-      DEBIT: '/debit-notes',
-      APPROVE: (type, id) => `/${type}-notes/${id}/approve`,
-      CANCEL: (type, id) => `/${type}-notes/${id}/cancel`,
+      CREDIT: '/credit-notes/',  // Added trailing slash
+      DEBIT: '/debit-notes/',  // Added trailing slash
+      APPROVE: (type, id) => `/${type}-notes/${id}/approve/`,  // Added trailing slash
+      CANCEL: (type, id) => `/${type}-notes/${id}/cancel/`,  // Added trailing slash
     },
     
     // Stock Movement
     STOCK: {
-      BASE: '/stock',
-      MOVEMENTS: '/stock-movements',
-      RECEIVE: '/stock-movements/receive',
-      ISSUE: '/stock-movements/issue',
-      TRANSFER: '/stock-movements/transfer',
-      ADJUST: '/stock-movements/adjust',
+      BASE: '/stock/',  // Added trailing slash
+      MOVEMENTS: '/stock-movements/',  // Added trailing slash
+      RECEIVE: '/stock-movements/receive/',  // Added trailing slash
+      ISSUE: '/stock-movements/issue/',  // Added trailing slash
+      TRANSFER: '/stock-movements/transfer/',  // Added trailing slash
+      ADJUST: '/stock-movements/adjust/',  // Added trailing slash
     },
     
     // Reports & Analytics
     REPORTS: {
-      DASHBOARD: '/dashboard',
-      SALES_REPORT: '/reports/sales',
-      PURCHASE_REPORT: '/reports/purchases',
-      INVENTORY_REPORT: '/reports/inventory',
-      CUSTOMER_REPORT: '/reports/customers',
+      DASHBOARD: '/dashboard/',  // Added trailing slash
+      SALES_REPORT: '/reports/sales/',  // Added trailing slash
+      PURCHASE_REPORT: '/reports/purchases/',  // Added trailing slash
+      INVENTORY_REPORT: '/reports/inventory/',  // Added trailing slash
+      CUSTOMER_REPORT: '/reports/customers/',  // Added trailing slash
       GST_REPORTS: {
-        GSTR1: '/reports/gst/gstr1',
-        GSTR3B: '/reports/gst/gstr3b',
+        GSTR1: '/reports/gst/gstr1/',  // Added trailing slash
+        GSTR3B: '/reports/gst/gstr3b/',  // Added trailing slash
       },
     },
     
     // Settings
     SETTINGS: {
-      COMPANY: '/settings/company',
-      PREFERENCES: '/settings/preferences',
-      USERS: '/users',
-      ROLES: '/roles',
-      PERMISSIONS: '/permissions',
+      COMPANY: '/settings/company/',  // Added trailing slash
+      PREFERENCES: '/settings/preferences/',  // Added trailing slash
+      USERS: '/users/',  // Added trailing slash
+      ROLES: '/roles/',  // Added trailing slash
+      PERMISSIONS: '/permissions/',  // Added trailing slash
     },
     
     // Utilities
     UTILS: {
-      SEARCH: '/search',
-      EXPORT: '/export',
-      IMPORT: '/import',
-      BACKUP: '/backup',
+      SEARCH: '/search/',  // Added trailing slash
+      EXPORT: '/export/',  // Added trailing slash
+      IMPORT: '/import/',  // Added trailing slash
+      BACKUP: '/backup/',  // Added trailing slash
     },
   },
   
