@@ -131,19 +131,21 @@ const PaymentEntryModal = ({ open, onClose }) => {
     setError(null);
     
     try {
-      const response = await invoicesApi.getOutstanding({ customer_id: customerId });
+      // Use invoices API base with customer filter (searchInvoices/getByCustomer depending on availability)
+      const response = await invoicesApi.getByCustomer(customerId);
       
-      if (response?.data && Array.isArray(response.data)) {
-        setCustomerInvoices(response.data);
-        
+      // Normalize response shape
+      const invoices = response?.data?.invoices || response?.data || [];
+      if (Array.isArray(invoices)) {
+        setCustomerInvoices(invoices);
+         
         // Store data offline for future use
-        await offlineStorage.storeOffline(`customer_invoices_${customerId}`, response.data, { 
+        await offlineStorage.storeOffline(`customer_invoices_${customerId}`, invoices, { 
           persistent: true 
         });
       } else {
         setCustomerInvoices([]);
       }
-      
     } catch (err) {
       console.error('Error loading customer invoices:', err);
       

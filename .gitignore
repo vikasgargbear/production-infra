@@ -67,3 +67,38 @@ tmp/
 *.key
 *.cert
 secrets/
+# Build artifacts
+*/build/
+*/dist/
+# Test coverage
+*/coverage/
+*/logs/
+# Test outputs
+test_output.*
+test_results.*
+# OS generated files
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+# === Enhanced ERP Project Rules ===
+out/
+*/out/
+# Test coverage and results
+test-results/
+# Logs and temporary files
+*.log.*
+*/.cache/
+# Python cache
+.venv/
+# IDEs and editors
+.vscode/launch.json
+*~
+# Database dumps and backups
+*.dump
+*.backup
+# Sensitive files
+.env.local
+.env.production
+*/secrets/

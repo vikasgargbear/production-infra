@@ -50,7 +50,7 @@ const ProductSearchSimple = forwardRef(({ onAddItem, onCreateProduct, showBatchS
         
         // Fallback to API search if no cache results
         const response = await productAPI.search(query);
-        const results = response.data || [];
+        const results = response?.data || response || [];
         
         // Cache the API results for next time
         if (results.length > 0) {
@@ -68,7 +68,7 @@ const ProductSearchSimple = forwardRef(({ onAddItem, onCreateProduct, showBatchS
       } finally {
         setLoading(false);
       }
-    }, 50), // Reduced to 50ms for ultra-fast search
+    }, 200), // 200ms to reduce request bursts and timeouts
     []
   );
 

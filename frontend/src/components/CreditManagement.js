@@ -50,17 +50,18 @@ const CreditManagement = () => {
       // Load customers and their credit information
       const [customersResponse, invoicesResponse] = await Promise.all([
         customersApi.getAll({ include_credit: true }),
-        invoicesApi.getOutstanding({ include_customer: true })
+        invoicesApi.getByCustomer(undefined)
       ]);
       
       if (customersResponse?.data && Array.isArray(customersResponse.data)) {
         const customersData = customersResponse.data.map(customer => {
           // Find outstanding invoices for this customer
-          const customerInvoices = invoicesResponse?.data?.filter(inv => 
-            inv.customer_id === customer.id && inv.status === 'outstanding'
-          ) || [];
+          const allInvoices = invoicesResponse?.data || [];
+          const customerInvoices = allInvoices.filter(inv => 
+            inv.customer_id === customer.id && (inv.status === 'UNPAID' || inv.payment_status === 'UNPAID' || inv.status === 'outstanding')
+          );
           
-          const creditUsed = customerInvoices.reduce((sum, inv) => sum + (inv.amount || 0), 0);
+          const creditUsed = customerInvoices.reduce((sum, inv) => sum + (inv.amount || inv.total_amount || inv.grand_total || 0), 0);
           const creditAvailable = (customer.credit_limit || 0) - creditUsed;
           
           return {

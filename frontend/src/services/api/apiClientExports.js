@@ -117,7 +117,7 @@ export const productAPI = {
           limit: Math.min(options.limit || 20, 20), // Reduce to 20 for speed
           skip: options.offset || 0,  // Backend uses 'skip' not 'offset'
         },
-        timeout: 3000, // 3 second timeout for production speed
+        timeout: 8000, // 8 second timeout to reduce false timeouts on slow networks
       });
       
       // Backend returns array directly, not wrapped in products
@@ -130,20 +130,24 @@ export const productAPI = {
       // Fallback to simplified search if main endpoint fails or times out
       if (error.code === 'ECONNABORTED' || error.response?.status >= 500) {
         try {
-          console.warn('Product search timeout, trying fallback...');
+          if (!window.__productSearchFallbackWarned) {
+            // Warn only once per session to avoid console spam
+            console.warn('Product search timeout or server slow; using fallback path.');
+            window.__productSearchFallbackWarned = true;
+          }
           const response = await apiClient.get('/products/', {
             params: {
               search: query,
               limit: 10, // Even smaller limit for fallback
             },
-            timeout: 5000, // 5 second fallback timeout
+            timeout: 7000, // 7 second fallback timeout
           });
           
           return {
             success: true,
             data: response.data || [],
             total: response.data?.length || 0,
-            warning: 'Using fallback search'
+            warning: 'Using fallback search',
           };
         } catch (fallbackError) {
           console.error('Product search failed completely:', fallbackError);

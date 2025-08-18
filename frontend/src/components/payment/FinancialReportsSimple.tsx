@@ -61,47 +61,15 @@ const FinancialReportsSimple: React.FC<FinancialReportsSimpleProps> = ({ onClose
 
   useEffect(() => {
     // Load initial data
-    loadInitialData();
+    // No initial API call required; data loads on report generation
   }, []);
-
-  const loadInitialData = async () => {
-    try {
-      setIsLoading(true);
-      setError(null);
-      
-      // Load financial summary data for the selected period
-      const summaryResponse = await reportsApi.financial.getSummary({ period: selectedPeriod });
-      
-      if (summaryResponse?.data) {
-        // Store summary data offline for future use
-        await offlineStorage.storeOffline(`financial_summary_${selectedPeriod}`, summaryResponse.data, { 
-          persistent: true 
-        });
-      }
-      
-    } catch (error) {
-      console.error('Error loading initial data:', error);
-      
-      // Try to load from offline storage
-      const offlineData = await offlineStorage.getOffline(`financial_summary_${selectedPeriod}`, { persistent: true });
-      
-      if (offlineData && !offlineStorage.isDataStale(offlineData, 120)) { // 2 hours max for financial data
-        console.log('📱 Using offline financial summary data');
-        setError('Currently using offline data. Some information may be outdated.');
-      } else {
-        setError('Failed to load initial data. Please check your connection and try again.');
-      }
-    } finally {
-      setIsLoading(false);
-    }
-  };
 
   const handleRefresh = async () => {
     setRefreshing(true);
     setError(null);
     
     try {
-      await loadInitialData();
+      // For now, nothing to refresh globally; keep UX consistent
     } catch (error) {
       console.error('Error refreshing data:', error);
       setError('Failed to refresh data. Please try again.');
@@ -123,13 +91,14 @@ const FinancialReportsSimple: React.FC<FinancialReportsSimpleProps> = ({ onClose
       // Call the actual API to generate the report based on type
       switch (reportId) {
         case 'trial_balance':
-          reportResponse = await reportsApi.financial.getTrialBalance({ period: selectedPeriod });
+          // Backend doesn't expose trial balance; approximate via balance sheet
+          reportResponse = await reportsApi.financial.balanceSheet({ period: selectedPeriod });
           break;
         case 'profit_loss':
-          reportResponse = await reportsApi.financial.getProfitLoss({ period: selectedPeriod });
+          reportResponse = await reportsApi.financial.profitLoss({ period: selectedPeriod });
           break;
         case 'balance_sheet':
-          reportResponse = await reportsApi.financial.getBalanceSheet({ period: selectedPeriod });
+          reportResponse = await reportsApi.financial.balanceSheet({ period: selectedPeriod });
           break;
         default:
           throw new Error(`Unknown report type: ${reportId}`);

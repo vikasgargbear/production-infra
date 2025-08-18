@@ -77,30 +77,24 @@ const PaymentDashboard = () => {
     }
 
     try {
-      // Try to load from API first
-      const [paymentsResponse, customersResponse, salesResponse] = await Promise.all([
-        paymentsApi.getAnalytics({ startDate, endDate }),
-        customersApi.getTopCustomers({ startDate, endDate }),
-        salesApi.getOverdueAnalysis({ startDate, endDate })
-      ]);
-
+      // Temporarily skip non-existent analytics endpoints; use safe defaults
       const analyticsData = {
-        totalCollected: paymentsResponse.data?.totalCollected || 0,
-        paymentCount: paymentsResponse.data?.paymentCount || 0,
-        averagePaymentAmount: paymentsResponse.data?.averagePaymentAmount || 0,
-        previousPeriod: paymentsResponse.data?.previousPeriod || { totalCollected: 0, paymentCount: 0 },
-        collectionRate: paymentsResponse.data?.collectionRate || 0,
-        avgCollectionDays: paymentsResponse.data?.avgCollectionDays || 0,
-        paymentModes: paymentsResponse.data?.paymentModes || {},
-        reconciliationMetrics: paymentsResponse.data?.reconciliationMetrics || {
+        totalCollected: 0,
+        paymentCount: 0,
+        averagePaymentAmount: 0,
+        previousPeriod: { totalCollected: 0, paymentCount: 0 },
+        collectionRate: 0,
+        avgCollectionDays: 0,
+        paymentModes: {},
+        reconciliationMetrics: {
           autoReconciled: 0,
           manualReview: 0,
           pending: 0,
           duplicates: 0,
           failed: 0
         },
-        topCustomers: customersResponse.data || [],
-        overdueAnalysis: salesResponse.data || {
+        topCustomers: [],
+        overdueAnalysis: {
           totalOverdue: 0,
           overdueCount: 0,
           agingBuckets: {
@@ -110,7 +104,7 @@ const PaymentDashboard = () => {
             '90+': { count: 0, amount: 0 }
           }
         },
-        dailyTrends: paymentsResponse.data?.dailyTrends || []
+        dailyTrends: []
       };
 
       setAnalytics(analyticsData);

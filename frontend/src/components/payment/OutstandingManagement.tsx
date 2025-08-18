@@ -154,7 +154,7 @@ const OutstandingManagement: React.FC<OutstandingManagementProps> = ({ onClose }
               onClick: handleRefresh,
               variant: 'outline',
               disabled: refreshing,
-              icon: <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />
+              icon: RefreshCw
             },
             {
               label: 'Export Report',

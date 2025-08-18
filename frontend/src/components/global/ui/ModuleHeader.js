@@ -83,24 +83,35 @@ const ModuleHeader = ({
             </button>
           )}
           
-          {additionalActions.map((action, index) => (
-            <button
-              key={index}
-              onClick={action.onClick}
-              disabled={action.disabled}
-              className={`px-3 py-1.5 text-sm rounded-lg transition-colors ${
-                action.variant === 'primary' 
-                  ? 'bg-blue-600 text-white hover:bg-blue-700 disabled:bg-gray-400' 
-                  : action.variant === 'success'
-                  ? 'bg-green-500 text-white hover:bg-green-600 disabled:bg-gray-400'
-                  : 'text-gray-600 hover:text-gray-800 hover:bg-gray-100'
-              } ${action.className || ''}`}
-              title={action.title}
-            >
-              {action.icon && <action.icon className="w-4 h-4 inline-block mr-1" />}
-              {action.label}
-            </button>
-          ))}
+          {additionalActions.map((action, index) => {
+            const ActionIcon = action?.icon;
+            const isElement = React.isValidElement(ActionIcon);
+            return (
+              <button
+                key={index}
+                onClick={action.onClick}
+                disabled={action.disabled}
+                className={`px-3 py-1.5 text-sm rounded-lg transition-colors ${
+                  action.variant === 'primary' 
+                    ? 'bg-blue-600 text-white hover:bg-blue-700 disabled:bg-gray-400' 
+                    : action.variant === 'success'
+                    ? 'bg-green-500 text-white hover:bg-green-600 disabled:bg-gray-400'
+                    : 'text-gray-600 hover:text-gray-800 hover:bg-gray-100'
+                } ${action.className || ''}`}
+                title={action.title}
+              >
+                {ActionIcon ? (
+                  isElement ? (
+                    React.cloneElement(ActionIcon, { className: `w-4 h-4 inline-block mr-1 ${ActionIcon.props?.className || ''}` })
+                  ) : (
+                    // Assume it's a component
+                    <ActionIcon className="w-4 h-4 inline-block mr-1" />
+                  )
+                ) : null}
+                {action.label}
+              </button>
+            );
+          })}
           
           {historyType && (
             <ViewHistoryButton 

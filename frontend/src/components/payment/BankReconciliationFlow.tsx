@@ -199,7 +199,7 @@ const BankReconciliationFlow: React.FC<BankReconciliationFlowProps> = ({ onClose
               onClick: handleRefresh,
               variant: 'outline',
               disabled: refreshing,
-              icon: <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />
+              icon: RefreshCw
             },
             {
               label: reconciling ? 'Reconciling...' : 'Start Reconciliation',
