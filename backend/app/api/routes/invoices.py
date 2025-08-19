@@ -416,34 +416,64 @@ async def create_invoice(
         # Calculate total quantity
         total_qty = sum(float(item.get("quantity", 0)) for item in invoice_data.get("items", []))
         
-        # Manually update invoice totals to work around trigger column name issue
+        # Calculate header totals by summing from actual line items (correct approach)
         try:
             db.execute(text("""
                 UPDATE sales.invoices
                 SET 
-                    items_count = :items_count,
-                    total_quantity = :total_qty,
-                    subtotal_amount = :subtotal,
-                    discount_amount = :discount,
-                    taxable_amount = :taxable,
-                    igst_amount = :igst,
-                    cgst_amount = :cgst,
-                    sgst_amount = :sgst,
-                    total_tax_amount = :tax,
-                    final_amount = :final,
+                    items_count = (
+                        SELECT COUNT(*) 
+                        FROM sales.invoice_items 
+                        WHERE invoice_id = :invoice_id
+                    ),
+                    total_quantity = (
+                        SELECT COALESCE(SUM(quantity), 0) 
+                        FROM sales.invoice_items 
+                        WHERE invoice_id = :invoice_id
+                    ),
+                    subtotal_amount = (
+                        SELECT COALESCE(SUM(base_quantity * unit_price), 0) 
+                        FROM sales.invoice_items 
+                        WHERE invoice_id = :invoice_id
+                    ),
+                    discount_amount = (
+                        SELECT COALESCE(SUM(discount_amount), 0) 
+                        FROM sales.invoice_items 
+                        WHERE invoice_id = :invoice_id
+                    ),
+                    taxable_amount = (
+                        SELECT COALESCE(SUM(taxable_amount), 0) 
+                        FROM sales.invoice_items 
+                        WHERE invoice_id = :invoice_id
+                    ),
+                    igst_amount = (
+                        SELECT COALESCE(SUM(igst_amount), 0) 
+                        FROM sales.invoice_items 
+                        WHERE invoice_id = :invoice_id
+                    ),
+                    cgst_amount = (
+                        SELECT COALESCE(SUM(cgst_amount), 0) 
+                        FROM sales.invoice_items 
+                        WHERE invoice_id = :invoice_id
+                    ),
+                    sgst_amount = (
+                        SELECT COALESCE(SUM(sgst_amount), 0) 
+                        FROM sales.invoice_items 
+                        WHERE invoice_id = :invoice_id
+                    ),
+                    total_tax_amount = (
+                        SELECT COALESCE(SUM(total_tax_amount), 0) 
+                        FROM sales.invoice_items 
+                        WHERE invoice_id = :invoice_id
+                    ),
+                    final_amount = (
+                        SELECT COALESCE(SUM(line_total), 0) 
+                        FROM sales.invoice_items 
+                        WHERE invoice_id = :invoice_id
+                    ),
                     updated_at = CURRENT_TIMESTAMP
                 WHERE invoice_id = :invoice_id
             """), {
-                "items_count": items_created,
-                "total_qty": total_qty,
-                "subtotal": subtotal,
-                "discount": 0,  # Item-level discounts only
-                "taxable": taxable_amount,
-                "igst": invoice_data.get("igst_amount", 0),
-                "cgst": total_cgst,
-                "sgst": total_sgst,
-                "tax": tax_amount,
-                "final": final_amount,
                 "invoice_id": invoice_id
             })
         except Exception as update_error:
