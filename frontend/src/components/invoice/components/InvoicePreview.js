@@ -32,11 +32,12 @@ const InvoicePreview = ({
     
     items.forEach(item => {
       const quantity = parseFloat(item.quantity) || 0;
+      const baseQuantity = parseFloat(item.base_quantity || item.baseQuantity || (quantity - (parseFloat(item.free_quantity) || 0)));
       const rate = parseFloat(item.rate) || parseFloat(item.sale_price) || 0;
       const discount = parseFloat(item.discount_percent) || 0;
       
-      const discountAmount = (quantity * rate * discount) / 100;
-      const itemAmount = (quantity * rate) - discountAmount;
+      const discountAmount = (baseQuantity * rate * discount) / 100;
+      const itemAmount = (baseQuantity * rate) - discountAmount;
       const gstPercent = parseFloat(item.gst_percent) || parseFloat(item.tax_rate) || 12;
       const taxAmount = (itemAmount * gstPercent) / 100;
       
@@ -48,8 +49,8 @@ const InvoicePreview = ({
     const discount = parseFloat(invoice.discount_amount) || 0;
     
     const taxableAmount = subtotal - discount;
-    // Use the pre-calculated net_amount if available (which includes rounding), otherwise calculate
-    const totalAmount = invoice.net_amount || Math.round(taxableAmount + totalTax + deliveryCharges);
+    // Use the pre-calculated final_amount if available (which includes rounding), otherwise calculate
+    const totalAmount = invoice.final_amount || invoice.net_amount || Math.round(taxableAmount + totalTax + deliveryCharges);
     
     return {
       subtotal: subtotal,
@@ -312,8 +313,9 @@ const InvoicePreview = ({
                   <td className="px-3 py-3 text-sm text-center text-gray-600">{item.gst_percent || 12}%</td>
                   <td className="px-3 py-3 text-sm text-right text-gray-600">
                     {(() => {
-                      // Calculate GST on the fly to avoid state issues
-                      const subtotal = (item.sale_price || item.rate || 0) * (item.quantity || 0);
+                      // Calculate GST on the fly to avoid state issues - FIXED to use base_quantity
+                      const baseQuantity = parseFloat(item.base_quantity || item.baseQuantity || (item.quantity - (item.free_quantity || 0)));
+                      const subtotal = (item.sale_price || item.rate || 0) * baseQuantity;
                       const discount = (subtotal * (item.discount_percent || 0)) / 100;
                       const taxable = subtotal - discount;
                       const gst = (taxable * (item.gst_percent || 12)) / 100;
@@ -322,8 +324,9 @@ const InvoicePreview = ({
                   </td>
                   <td className="px-3 py-3 text-sm text-right text-gray-600">
                     {(() => {
-                      // Calculate GST on the fly to avoid state issues
-                      const subtotal = (item.sale_price || item.rate || 0) * (item.quantity || 0);
+                      // Calculate GST on the fly to avoid state issues - FIXED to use base_quantity
+                      const baseQuantity = parseFloat(item.base_quantity || item.baseQuantity || (item.quantity - (item.free_quantity || 0)));
+                      const subtotal = (item.sale_price || item.rate || 0) * baseQuantity;
                       const discount = (subtotal * (item.discount_percent || 0)) / 100;
                       const taxable = subtotal - discount;
                       const gst = (taxable * (item.gst_percent || 12)) / 100;
@@ -333,12 +336,13 @@ const InvoicePreview = ({
                   <td className="px-3 py-3 text-sm text-right font-semibold text-gray-900">
                     {(() => {
                       const quantity = parseFloat(item.quantity) || 0;
+                      const baseQuantity = parseFloat(item.base_quantity || item.baseQuantity || (quantity - (parseFloat(item.free_quantity) || 0)));
                       const rate = parseFloat(item.rate) || parseFloat(item.sale_price) || 0;
                       const discount = parseFloat(item.discount_percent) || 0;
                       const gstPercent = parseFloat(item.gst_percent) || parseFloat(item.tax_rate) || 12;
                       
-                      const discountAmount = (quantity * rate * discount) / 100;
-                      const baseAmount = (quantity * rate) - discountAmount;
+                      const discountAmount = (baseQuantity * rate * discount) / 100;
+                      const baseAmount = (baseQuantity * rate) - discountAmount;
                       const taxAmount = (baseAmount * gstPercent) / 100;
                       const totalAmount = baseAmount + taxAmount;
                       

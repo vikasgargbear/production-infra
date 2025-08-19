@@ -1,10 +1,11 @@
-import React, { useState, useEffect, useCallback, forwardRef, useImperativeHandle, useRef } from 'react';
-import { Search, Package, Plus } from 'lucide-react';
-import { productAPI } from '../../../services/api';
-import { debounce } from '../../../utils/debounce';
+import React, { useState, useEffect, useRef, useCallback, forwardRef, useImperativeHandle } from 'react';
+import { Search, Package, Plus, X, Loader2 } from 'lucide-react';
+import { productsApi, productAPI } from '../../../services/api';
+import { AddNewButton } from '../ui';
 import BatchSelectionModalV2 from '../../invoice/modals/BatchSelectionModalV2';
 import DataTransformer from '../../../services/dataTransformer';
 import { searchCache, smartSearch } from '../../../utils/searchCache';
+import { debounce } from '../../../utils/debounce';
 
 const ProductSearchSimple = forwardRef(({ onAddItem, onCreateProduct, showBatchSelection = true }, ref) => {
   const [searchQuery, setSearchQuery] = useState('');
@@ -179,7 +180,8 @@ const ProductSearchSimple = forwardRef(({ onAddItem, onCreateProduct, showBatchS
                     {/* Always show "Add New Product" option when onCreateProduct is available */}
                     {onCreateProduct && searchQuery.length >= 2 && (
                       <div className="px-4 py-3 border-t border-gray-200 bg-gray-50">
-                        <button
+                        <AddNewButton
+                          label={`Add "${searchQuery}" as New Product`}
                           onClick={(e) => {
                             e.preventDefault();
                             e.stopPropagation();
@@ -188,11 +190,10 @@ const ProductSearchSimple = forwardRef(({ onAddItem, onCreateProduct, showBatchS
                               onCreateProduct(searchQuery);
                             }
                           }}
-                          className="w-full px-3 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg transition-colors flex items-center justify-center gap-2 text-sm font-medium"
-                        >
-                          <Plus className="w-4 h-4" />
-                          Add "{searchQuery}" as New Product
-                        </button>
+                          variant="primary"
+                          size="sm"
+                          className="w-full"
+                        />
                       </div>
                     )}
                   </>
@@ -203,7 +204,8 @@ const ProductSearchSimple = forwardRef(({ onAddItem, onCreateProduct, showBatchS
                       <p className="text-sm text-gray-500">No products found for "{searchQuery}"</p>
                     </div>
                     {onCreateProduct && (
-                      <button
+                      <AddNewButton
+                        label={`Add "${searchQuery}" as New Product`}
                         onClick={(e) => {
                           e.preventDefault();
                           e.stopPropagation();
@@ -217,11 +219,10 @@ const ProductSearchSimple = forwardRef(({ onAddItem, onCreateProduct, showBatchS
                             console.error('onCreateProduct is not a function:', onCreateProduct);
                           }
                         }}
-                        className="w-full px-4 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors flex items-center justify-center gap-2 font-medium shadow-sm"
-                      >
-                        <Plus className="w-5 h-5" />
-                        Add "{searchQuery}" as New Product
-                      </button>
+                        variant="primary"
+                        size="md"
+                        className="w-full"
+                      />
                     )}
                   </div>
                 ) : null}

@@ -184,7 +184,7 @@ export const generateInvoicePDF = (invoiceData) => {
   doc.setFont(undefined, 'bold');
   doc.setFontSize(12);
   doc.text('Total:', summaryX, yPosition);
-  doc.text(`₹${invoiceData.total_amount}`, summaryX + 40, yPosition);
+  doc.text(`₹${invoiceData.final_amount || invoiceData.total_amount}`, summaryX + 40, yPosition);
   yPosition += 10;
 
   // Bank Details

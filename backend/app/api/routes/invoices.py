@@ -137,10 +137,15 @@ async def create_invoice(
             total_cgst += cgst
             total_sgst += sgst
         
+        # Get additional charges from invoice data
+        freight_charges = float(invoice_data.get("freight_charges", 0) or invoice_data.get("delivery_charges", 0))
+        insurance_charges = float(invoice_data.get("insurance_charges", 0))
+        other_charges = float(invoice_data.get("other_charges", 0))
+        
         # Item-level discounts are handled individually, no invoice-level discount needed
         taxable_amount = subtotal
         tax_amount = total_cgst + total_sgst
-        final_amount = taxable_amount + tax_amount
+        final_amount = taxable_amount + tax_amount + freight_charges + insurance_charges + other_charges
         
         # Step 4: Create order (using ONLY columns that exist)
         order_create = db.execute(text("""
@@ -195,7 +200,8 @@ async def create_invoice(
                 org_id, branch_id, invoice_number, invoice_date, invoice_type,
                 order_id, customer_id, customer_name,
                 subtotal_amount, discount_amount, taxable_amount,
-                igst_amount, cgst_amount, sgst_amount, total_tax_amount, final_amount,
+                igst_amount, cgst_amount, sgst_amount, total_tax_amount, 
+                freight_charges, insurance_charges, other_charges, final_amount,
                 payment_terms, notes, 
                 invoice_status, payment_status,
                 created_by, created_at
@@ -203,7 +209,8 @@ async def create_invoice(
                 :org_id, :branch_id, :invoice_number, :invoice_date, 'tax_invoice',
                 :order_id, :customer_id, :customer_name,
                 :subtotal, :discount, :taxable,
-                :igst, :cgst, :sgst, :tax, :final,
+                :igst, :cgst, :sgst, :tax,
+                :freight, :insurance, :other, :final,
                 :payment_terms, :notes,
                 'posted', 'pending',
                 :created_by, CURRENT_TIMESTAMP
@@ -223,6 +230,9 @@ async def create_invoice(
             "cgst": total_cgst,
             "sgst": total_sgst,
             "tax": tax_amount,
+            "freight": freight_charges,
+            "insurance": insurance_charges,
+            "other": other_charges,
             "final": final_amount,
             "payment_terms": invoice_data.get("payment_terms", "cash"),
             "notes": invoice_data.get("notes"),

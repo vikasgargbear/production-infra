@@ -98,7 +98,7 @@ export const invoiceService = {
       ...invoice,
       formattedDate: new Date(invoice.invoice_date).toLocaleDateString('en-IN'),
       formattedDueDate: new Date(invoice.due_date).toLocaleDateString('en-IN'),
-      formattedTotal: `₹${parseFloat(invoice.total_amount).toFixed(2)}`,
+      formattedTotal: `₹${parseFloat(invoice.final_amount || invoice.total_amount).toFixed(2)}`,
       formattedBalance: `₹${parseFloat(invoice.balance_amount).toFixed(2)}`,
       taxBreakdown: {
         cgst: `₹${parseFloat(invoice.cgst_amount).toFixed(2)}`,

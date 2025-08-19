@@ -1,7 +1,15 @@
 /**
- * Invoice Calculator Service
- * Single source of truth for all invoice calculations
+ * DEPRECATED: Invoice Calculator Service
+ * 
+ * ⚠️ THIS FILE IS DEPRECATED - USE invoiceCalculatorEnterprise.js INSTEAD
+ * 
+ * This service has been replaced with API-only calculations following enterprise patterns.
+ * Frontend should not perform calculations - use backend API instead.
+ * 
+ * Replacement: import InvoiceCalculatorEnterprise from './invoiceCalculatorEnterprise';
  */
+
+console.warn('⚠️ DEPRECATED: invoiceCalculator.js is deprecated. Use invoiceCalculatorEnterprise.js instead.');
 
 class InvoiceCalculator {
   /**
@@ -14,9 +22,13 @@ class InvoiceCalculator {
     const rate = parseFloat(item.sale_price || item.rate || item.selling_price) || 0;
     const discountPercent = parseFloat(item.discount_percent) || 0;
     const gstPercent = parseFloat(item.gst_percent) || 12;
+    
+    // CRITICAL FIX: Use base_quantity for billing calculations (not total quantity)
+    // base_quantity = billable items only, quantity = total delivered (includes free items)
+    const baseQuantity = parseFloat(item.base_quantity || item.baseQuantity || quantity);
 
-    // Base calculations
-    const subtotal = rate * quantity;
+    // Base calculations using billable quantity only
+    const subtotal = rate * baseQuantity;
     const discountAmount = (subtotal * discountPercent) / 100;
     const taxableAmount = subtotal - discountAmount;
     const gstAmount = (taxableAmount * gstPercent) / 100;
@@ -130,6 +142,7 @@ class InvoiceCalculator {
       // Quantities
       quantity: quantity,
       free_quantity: productData.free_quantity || 0,
+      base_quantity: quantity - (productData.free_quantity || 0), // Billable quantity = total - free
       
       // Tax & Discount
       gst_percent: productData.gst_percent || 12,

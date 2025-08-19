@@ -1,12 +1,8 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { 
-  Package, User, Search, Calendar, X, Trash2, 
-  ChevronRight, AlertCircle, CheckCircle, Printer, Share2, Plus,
-  Save, ArrowLeft, ArrowRight, FileText, Truck, Hash, CreditCard
-} from 'lucide-react';
+import React, { useState, useEffect, useRef, forwardRef } from 'react';
+import { Search, Package, Plus, X, User, Building2, Phone, MapPin, Award, FileText, Clock, TrendingUp, CreditCard, Calendar, Star } from 'lucide-react';
 import { purchasesApi, suppliersApi, productsApi } from '../../services/api';
 import { searchCache } from '../../utils/searchCache';
-import { ProductCreationModal, MonthYearPicker, ViewHistoryButton, ItemsTable, SupplierCreationModal, PurchaseFlow as GlobalPurchaseFlow, ContentCard } from '../global';
+import { ProductCreationModal, MonthYearPicker, ViewHistoryButton, ItemsTable, SupplierCreationModal, PurchaseFlow as GlobalPurchaseFlow, ContentCard, AddNewButton } from '../global';
 import PurchaseSummaryTop from './components/PurchaseSummaryTop';
 import documentNumberService from '../../services/documentNumberService';
 
@@ -708,14 +704,13 @@ const SupplierSearchWrapper = React.forwardRef(({ onSupplierSelect, onCreateSupp
           <User className="w-4 h-4 mr-2" />
           Supplier Details
         </h3>
-        <button
+        <AddNewButton
           onClick={onCreateSupplier}
-          className="text-sm text-blue-600 hover:text-blue-700 flex items-center gap-1"
+          label="Add New Supplier"
+          variant="primary"
+          size="sm"
           ref={ref}
-        >
-          <Plus className="w-4 h-4" />
-          Add New Supplier
-        </button>
+        />
       </div>
 
       {!selectedSupplier ? (
@@ -807,13 +802,12 @@ const ProductSearchWrapper = ({ onAddItem, onCreateProduct }) => {
           <Package className="w-4 h-4 mr-2" />
           Add Products
         </h3>
-        <button
+        <AddNewButton
           onClick={onCreateProduct}
-          className="text-sm text-blue-600 hover:text-blue-700 flex items-center gap-1"
-        >
-          <Plus className="w-4 h-4" />
-          Add New Product
-        </button>
+          label="Add New Product"
+          variant="primary"
+          size="sm"
+        />
       </div>
 
       <div className="relative">

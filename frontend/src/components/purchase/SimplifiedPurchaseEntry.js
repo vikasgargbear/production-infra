@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { X, Plus, Trash2, FileText } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { Plus, Search, Trash2, ChevronRight, ArrowLeft, ArrowRight, Calculator, History, Phone, MapPin, User, Award, FileText, Clock, Download, Upload, FileInput, X } from 'lucide-react';
 import { PurchaseProvider, usePurchase } from '../../contexts/PurchaseContext';
 import PurchaseErrorBoundary from './PurchaseErrorBoundary';
 import { purchasesApi } from '../../services/api';
@@ -11,6 +11,7 @@ import PurchaseSummary from './components/PurchaseSummary';
 import { searchCache } from '../../utils/searchCache';
 import { debounce } from '../../utils/debounce';
 import documentNumberService from '../../services/documentNumberService';
+import { AddNewButton } from '../global/ui';
 
 // Inner component that uses the context
 const SimplifiedPurchaseContent = ({ onClose }) => {
@@ -262,13 +263,12 @@ const SimplifiedPurchaseContent = ({ onClose }) => {
             
         {/* Supplier Section */}
         <ContentCard title="Supplier" subtitle={null} actions={
-          <button
+          <AddNewButton
+            label="New Supplier"
             onClick={() => setShowAddSupplier(true)}
-            className="text-sm text-indigo-600 hover:text-indigo-700 flex items-center gap-1"
-          >
-            <Plus className="w-4 h-4" />
-            New
-          </button>
+            variant="primary"
+            size="sm"
+          />
         }>
           <div className="relative">
             {purchase.supplier_id ? (
@@ -324,13 +324,12 @@ const SimplifiedPurchaseContent = ({ onClose }) => {
             
         {/* Products Section */}
         <ContentCard title="Products" subtitle={null} actions={
-          <button
+          <AddNewButton
+            label="Add New Product"
             onClick={() => setShowAddProduct(true)}
-            className="text-sm text-indigo-600 hover:text-indigo-700 flex items-center gap-1"
-          >
-            <Plus className="w-4 h-4" />
-            Add New Product
-          </button>
+            variant="primary"
+            size="sm"
+          />
         }>
           {/* Product Search */}
           <div className="relative mb-4">

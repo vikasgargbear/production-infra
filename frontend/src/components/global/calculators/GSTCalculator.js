@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Calculator, X, IndianRupee, Percent, Info, Copy, Check } from 'lucide-react';
-import InvoiceCalculator from '../../../services/invoiceCalculator';
+// MIGRATED: Using enterprise API-only calculations
+import InvoiceCalculatorEnterprise from '../../../services/invoiceCalculatorEnterprise';
 import { INVOICE_CONFIG } from '../../../config/invoice.config';
 import { APP_CONFIG, formatCurrency } from '../../../config/app.config';
 import { cx } from '../../invoice/styles/invoiceStyles';
@@ -39,9 +40,16 @@ const GSTCalculator = ({
   const [calculatedResult, setCalculatedResult] = useState(null);
   const [copiedField, setCopiedField] = useState(null);
 
-  // Determine GST type based on GSTINs
+  // Determine GST type based on GSTINs (local logic - simple business rule)
+  const determineGSTType = (sellerGSTIN, buyerGSTIN) => {
+    if (!sellerGSTIN || !buyerGSTIN) return INVOICE_CONFIG.GST.TYPES.INTRA_STATE;
+    const sellerStateCode = sellerGSTIN.substring(0, 2);
+    const buyerStateCode = buyerGSTIN.substring(0, 2);
+    return sellerStateCode === buyerStateCode ? INVOICE_CONFIG.GST.TYPES.INTRA_STATE : INVOICE_CONFIG.GST.TYPES.INTER_STATE;
+  };
+  
   const gstType = companyGSTIN && customerGSTIN 
-    ? InvoiceCalculator.determineGSTType(companyGSTIN, customerGSTIN)
+    ? determineGSTType(companyGSTIN, customerGSTIN)
     : INVOICE_CONFIG.GST.TYPES.INTRA_STATE;
 
   const isInterstate = gstType === INVOICE_CONFIG.GST.TYPES.INTER_STATE;

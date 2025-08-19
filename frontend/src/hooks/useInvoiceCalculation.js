@@ -1,8 +1,17 @@
 /**
- * Invoice Calculation Hook
- * Provides real-time invoice calculations using backend APIs
- * Replaces client-side InvoiceCalculator with secure backend calculations
+ * DEPRECATED: Invoice Calculation Hook
+ * 
+ * ⚠️ THIS HOOK IS DEPRECATED - USE InvoiceCalculatorEnterprise DIRECTLY
+ * 
+ * This hook used old invoiceApiService. New pattern:
+ * 1. Import InvoiceCalculatorEnterprise
+ * 2. Call InvoiceCalculatorEnterprise.calculateInvoice() directly
+ * 3. Use InvoiceCalculatorEnterprise.calculateDebounced() for real-time
+ * 
+ * Migration: Replace useInvoiceCalculation() with direct API calls
  */
+
+console.warn('⚠️ DEPRECATED: useInvoiceCalculation hook is deprecated. Use InvoiceCalculatorEnterprise directly.');
 
 import { useMutation, useQuery, useQueryClient } from 'react-query';
 import { useMemo, useCallback } from 'react';

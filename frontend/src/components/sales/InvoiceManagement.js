@@ -231,7 +231,7 @@ const InvoiceManagement = () => {
           <div>
             <span className="text-gray-500">Total:</span>
             <span className="ml-1 font-semibold">
-              ₹{filteredInvoices.reduce((sum, inv) => sum + (inv.total_amount || 0), 0).toFixed(2)}
+              ₹{filteredInvoices.reduce((sum, inv) => sum + (inv.final_amount || 0), 0).toFixed(2)}
             </span>
           </div>
           <div>
@@ -278,9 +278,9 @@ const InvoiceManagement = () => {
                 <td className="px-6 py-4 whitespace-nowrap">
                   <div>
                     <div className="text-sm font-medium text-gray-900">
-                      {formatCurrency(invoice.total_amount || 0)}
+                      {formatCurrency(invoice.final_amount || 0)}
                     </div>
-                    {invoice.amount_paid > 0 && invoice.amount_paid < invoice.total_amount && (
+                    {invoice.amount_paid > 0 && invoice.amount_paid < invoice.final_amount && (
                       <div className="text-xs text-gray-500">
                         Paid: {formatCurrency(invoice.amount_paid)}
                       </div>

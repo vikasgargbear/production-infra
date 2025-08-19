@@ -5,6 +5,7 @@ export { default as NumberInput } from './forms/NumberInput';
 export { default as CurrencyInput } from './forms/CurrencyInput';
 export { default as Button } from './Button';
 export { default as SearchBar } from './SearchBar';
+export { default as AddNewButton } from './AddNewButton';
 
 // Display Components
 export { DataTable } from './display/DataTable';

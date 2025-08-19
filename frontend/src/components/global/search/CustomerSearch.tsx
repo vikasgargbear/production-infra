@@ -3,6 +3,7 @@ import { User, Search, Plus, X, MapPin, Phone, Mail, Building } from 'lucide-rea
 import { Customer } from '../../../types/models/customer';
 import { useCustomerSearch } from '../../../hooks/customers/useCustomers';
 import { debounce } from 'lodash';
+import { AddNewButton } from '../ui';
 
 /**
  * CustomerSearch Component Props
@@ -192,17 +193,18 @@ export const CustomerSearch = forwardRef<CustomerSearchRef, CustomerSearchProps>
         <div className="text-center py-8">
           <p className="text-gray-500">No customers found</p>
           {showCreateButton && onCreateNew && (
-            <button
+            <AddNewButton
+              label="Create New Customer"
               onClick={() => {
                 setShowSearch(false);
                 setShowDropdown(false);
                 onCreateNew();
               }}
-              className="mt-4 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors inline-flex items-center gap-2"
-            >
-              <Plus className="w-4 h-4" />
-              Create New Customer
-            </button>
+              variant="primary"
+              size="sm"
+              disabled={false}
+              className="mt-4"
+            />
           )}
         </div>
       ) : (
