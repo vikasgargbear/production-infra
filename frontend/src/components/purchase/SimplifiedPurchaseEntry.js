@@ -215,7 +215,7 @@ const SimplifiedPurchaseContent = ({ onClose }) => {
         <div className="flex-1 overflow-y-auto bg-blue-50">
           <div className="max-w-6xl mx-auto px-6 py-6">
         {/* Supplier Invoice Details */}
-        <ContentCard title="Supplier Invoice Details" subtitle={null} actions={null}>
+        <ContentCard title="Supplier Invoice Details" subtitle={null} actions={null} className="mb-6">
           <div className="grid grid-cols-4 gap-8">
             <div>
               <label className="text-sm text-gray-600 mb-1 block">Supplier Invoice Number *</label>
@@ -262,7 +262,7 @@ const SimplifiedPurchaseContent = ({ onClose }) => {
         </ContentCard>
             
         {/* Supplier Section */}
-        <ContentCard title="Supplier" subtitle={null} actions={
+        <ContentCard title="Supplier" subtitle={null} className="mb-6" actions={
           <AddNewButton
             label="New Supplier"
             onClick={() => setShowAddSupplier(true)}
@@ -323,7 +323,7 @@ const SimplifiedPurchaseContent = ({ onClose }) => {
         </ContentCard>
             
         {/* Products Section */}
-        <ContentCard title="Products" subtitle={null} actions={
+        <ContentCard title="Products" subtitle={null} className="mb-6" actions={
           <AddNewButton
             label="Add New Product"
             onClick={() => setShowAddProduct(true)}
@@ -344,7 +344,7 @@ const SimplifiedPurchaseContent = ({ onClose }) => {
 
         {/* Items Table */}
         {purchase.items.length > 0 && (
-          <ContentCard title="Purchase Items" subtitle={null} actions={null}>
+          <ContentCard title="Purchase Items" subtitle={null} actions={null} className="mb-6">
             <div className="border border-blue-200 rounded-md overflow-hidden">
               <table className="w-full min-w-[1200px]">
                 <thead className="bg-blue-50 border-b border-blue-200">
