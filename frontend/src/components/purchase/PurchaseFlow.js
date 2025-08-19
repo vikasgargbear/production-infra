@@ -5,6 +5,7 @@ import { searchCache } from '../../utils/searchCache';
 import { ProductCreationModal, MonthYearPicker, ViewHistoryButton, ItemsTable, SupplierCreationModal, PurchaseFlow as GlobalPurchaseFlow, ContentCard, AddNewButton } from '../global';
 import PurchaseSummaryTop from './components/PurchaseSummaryTop';
 import documentNumberService from '../../services/documentNumberService';
+import PurchaseCalculatorEnterprise from '../../services/purchaseCalculatorEnterprise';
 
 // Default org ID for development
 const DEFAULT_ORG_ID = 'ad808530-1ddb-4377-ab20-67bef145d80d';
@@ -98,36 +99,36 @@ const PurchaseFlow = ({ onClose }) => {
     calculateTotals();
   }, [purchase.items, purchase.discount_amount, purchase.other_charges]);
 
-  const calculateTotals = () => {
-    let gross = 0;
-    let tax = 0;
+  const calculateTotals = async () => {
+    if (!purchase.items || purchase.items.length === 0) {
+      setPurchase(prev => ({
+        ...prev,
+        gross_amount: 0,
+        tax_amount: 0,
+        round_off: 0,
+        net_amount: 0,
+        final_amount: 0
+      }));
+      return;
+    }
 
-    purchase.items.forEach(item => {
-      const quantity = parseFloat(item.quantity) || 0;
-      const rate = parseFloat(item.purchase_price) || 0;
-      const discountPercent = parseFloat(item.discount_percent) || 0;
-      const taxPercent = parseFloat(item.tax_percent) || 12;
+    try {
+      const result = await PurchaseCalculatorEnterprise.calculatePurchase(purchase);
       
-      const subtotal = quantity * rate;
-      const discountAmount = (subtotal * discountPercent) / 100;
-      const taxableAmount = subtotal - discountAmount;
-      const taxAmount = (taxableAmount * taxPercent) / 100;
-      
-      gross += taxableAmount;
-      tax += taxAmount;
-    });
-
-    const total = gross + tax - (purchase.discount_amount || 0) + (purchase.other_charges || 0);
-    const roundOff = Math.round(total) - total;
-    const net = total + roundOff;
-
-    setPurchase(prev => ({
-      ...prev,
-      gross_amount: gross,
-      tax_amount: tax,
-      round_off: roundOff,
-      net_amount: net
-    }));
+      if (result.success && result.totals) {
+        const formattedTotals = PurchaseCalculatorEnterprise.formatTotalsForDisplay(result.totals);
+        
+        setPurchase(prev => ({
+          ...prev,
+          ...formattedTotals,
+          calculatedLineItems: result.line_items
+        }));
+      } else {
+        console.error('Purchase calculation failed:', result.error);
+      }
+    } catch (error) {
+      console.error('Error calculating purchase totals:', error);
+    }
   };
 
   const handleSupplierSelect = (supplier) => {

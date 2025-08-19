@@ -157,13 +157,8 @@ const purchaseReducer = (state, action) => {
         return sum + (quantity * purchasePrice);
       }, 0);
       
-      const taxAmount = state.purchase.items.reduce((sum, item) => {
-        const quantity = parseFloat(item.quantity) || 0;
-        const purchasePrice = parseFloat(item.purchase_price) || 0;
-        const taxPercent = parseFloat(item.tax_percent) || 0;
-        const itemSubtotal = quantity * purchasePrice;
-        return sum + ((itemSubtotal * taxPercent) / 100);
-      }, 0);
+      // Tax calculation moved to backend API
+      const taxAmount = 0;
       
       return {
         ...state,

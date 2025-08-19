@@ -18,6 +18,7 @@ import salesOrdersAPI from '../../services/api/modules/salesOrders.api';
 import { invoicesApi as invoicesApiModule } from '../../services/api/modules/invoices.api';
 import { challansApi as challansApiModule } from '../../services/api/modules/challans.api';
 import debugLogger from '../../utils/debugLogger';
+import SalesOrderCalculatorEnterprise from '../../services/salesOrderCalculatorEnterprise';
 
 // Default org ID for development
 const DEFAULT_ORG_ID = 'ad808530-1ddb-4377-ab20-67bef145d80d';
@@ -334,48 +335,44 @@ const SalesOrderFlowV2 = ({ open = true, onClose }) => {
     recalculateTotals(updatedItems);
   };
 
-  // Recalculate totals
-  const recalculateTotals = (items) => {
-    const totalQuantity = items.reduce((sum, item) => sum + (parseFloat(item.quantity) || 0), 0);
-    const subtotal = items.reduce((sum, item) => {
-      const qty = parseFloat(item.quantity) || 0;
-      const price = parseFloat(item.unit_price) || 0;
-      return sum + (qty * price);
-    }, 0);
-    
-    const totalDiscount = items.reduce((sum, item) => {
-      const qty = parseFloat(item.quantity) || 0;
-      const price = parseFloat(item.unit_price) || 0;
-      const discountPercent = parseFloat(item.discount_percent) || 0;
-      return sum + ((qty * price * discountPercent) / 100);
-    }, 0) + (parseFloat(order.discount_amount) || 0);
-    
-    const totalTax = items.reduce((sum, item) => {
-      const qty = parseFloat(item.quantity) || 0;
-      const price = parseFloat(item.unit_price) || 0;
-      const discountPercent = parseFloat(item.discount_percent) || 0;
-      const taxPercent = parseFloat(item.gst_percent) || 0;
-      const taxableAmount = (qty * price) * (1 - discountPercent / 100);
-      return sum + ((taxableAmount * taxPercent) / 100);
-    }, 0);
-    
-    const totalAmount = subtotal - totalDiscount + totalTax + (parseFloat(order.other_charges) || 0);
-    const cgstAmount = totalTax / 2;
-    const sgstAmount = totalTax / 2;
-    const roundOff = Math.round(totalAmount) - totalAmount;
-    const finalAmount = totalAmount + roundOff;
-    
-    setOrder(prev => ({
-      ...prev,
-      total_quantity: totalQuantity,
-      subtotal_amount: subtotal,
-      discount_amount: totalDiscount,
-      tax_amount: totalTax,
-      cgst_amount: cgstAmount,
-      sgst_amount: sgstAmount,
-      round_off: roundOff,
-      total_amount: finalAmount
-    }));
+  // Recalculate totals using enterprise API
+  const recalculateTotals = async (items) => {
+    if (!items || items.length === 0) {
+      setOrder(prev => ({
+        ...prev,
+        total_quantity: 0,
+        subtotal_amount: 0,
+        tax_amount: 0,
+        total_amount: 0,
+        final_amount: 0
+      }));
+      return;
+    }
+
+    try {
+      const orderData = {
+        ...order,
+        items,
+        customer_id: selectedCustomer?.customer_id
+      };
+
+      const result = await SalesOrderCalculatorEnterprise.calculateSalesOrder(orderData);
+      
+      if (result.success && result.totals) {
+        const formattedTotals = SalesOrderCalculatorEnterprise.formatTotalsForDisplay(result.totals);
+        
+        setOrder(prev => ({
+          ...prev,
+          total_quantity: items.reduce((sum, item) => sum + (parseFloat(item.quantity) || 0), 0),
+          ...formattedTotals,
+          calculatedLineItems: result.line_items
+        }));
+      } else {
+        console.error('Sales order calculation failed:', result.error);
+      }
+    } catch (error) {
+      console.error('Error calculating sales order totals:', error);
+    }
   };
 
   // Save order using enterprise API
