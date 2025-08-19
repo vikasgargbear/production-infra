@@ -297,6 +297,9 @@ async def create_invoice(
             
             total_tax_amount = igst_amount + cgst_amount + sgst_amount
             
+            # Update line_total to include taxes (final amount for this line item)
+            line_total = taxable_amount + total_tax_amount
+            
             # Complete INSERT with all important fields (NOTE: invoice_items has batch_number but NOT batch_id)
             insert_result = db.execute(text("""
                 INSERT INTO sales.invoice_items (
