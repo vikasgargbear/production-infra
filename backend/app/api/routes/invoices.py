@@ -217,7 +217,7 @@ async def create_invoice(
             "customer_id": invoice_data["customer_id"],
             "customer_name": customer_name,
             "subtotal": subtotal,
-            "discount": discount_amount,
+            "discount": 0,  # Item-level discounts only
             "taxable": taxable_amount,
             "igst": invoice_data.get("igst_amount", 0),
             "cgst": total_cgst,
