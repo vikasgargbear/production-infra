@@ -30,6 +30,8 @@ from .api.routes import stock_receive, enterprise_delivery_challan, inventory_ba
 from .api.routes import master_settings, schemes_discounts, loyalty_points, compliance
 # Import comprehensive enterprise API
 from .api.routes import enterprise_api_complete
+# Import enterprise calculation service
+from .api.routes import invoice_calculation
 # All temporary endpoints removed - using main endpoints only
 
 # Lifecycle management
@@ -141,6 +143,9 @@ api.include_router(compliance.router, prefix="/compliance", tags=["Compliance"])
 
 # Register comprehensive enterprise API
 api.include_router(enterprise_api_complete.router, tags=["Enterprise ERP Complete"])
+
+# Register enterprise calculation service
+api.include_router(invoice_calculation.router, tags=["Invoice Calculations"])
 
 # All endpoints consolidated - no temporary workarounds
 

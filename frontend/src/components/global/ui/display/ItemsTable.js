@@ -26,18 +26,27 @@ const ItemsTable = ({
     return `${currencySymbol}${(parseFloat(amount) || 0).toFixed(2)}`;
   };
 
-  const calculateItemTotal = (item) => {
-    const quantity = parseFloat(item.quantity) || 0;
+  // DISPLAY ONLY: Use pre-calculated values from API
+  const getItemTotal = (item) => {
+    // Priority: Use API-calculated values if available
+    if (item.line_total !== undefined) return item.line_total;
+    if (item.total_amount !== undefined) return item.total_amount;
+    if (item.itemTotal !== undefined) return item.itemTotal;
+    
+    // Fallback: Display calculation using correct business logic
+    // base_quantity = what customer pays for (billable)
+    // free_quantity = additional free items given with base quantity  
+    // total_quantity = base_quantity + free_quantity (what customer receives)
+    const baseQuantity = parseFloat(item.base_quantity) || 0;  // What customer pays for
     const rate = parseFloat(item.rate || item.sale_price || item.unit_price) || 0;
     const discount = parseFloat(item.discount || item.discount_percent) || 0;
     const tax = parseFloat(item.tax || item.tax_rate || item.gst_percent) || 0;
     
-    const subtotal = quantity * rate;
+    const subtotal = baseQuantity * rate;
     const discountAmount = (subtotal * discount) / 100;
     const taxableAmount = subtotal - discountAmount;
     const taxAmount = (taxableAmount * tax) / 100;
     
-    // Always calculate, don't use pre-calculated final_amount
     return taxableAmount + taxAmount;
   };
 
@@ -126,7 +135,7 @@ const ItemsTable = ({
       align: 'right',
       render: (item) => (
         <span className="font-semibold text-gray-900">
-          {formatCurrency(calculateItemTotal(item))}
+          {formatCurrency(getItemTotal(item))}
         </span>
       )
     },

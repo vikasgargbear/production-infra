@@ -7,7 +7,8 @@ import {
 } from 'lucide-react';
 import { customerAPI, productAPI, invoiceAPI, ordersAPI, salesOrdersAPI, apiClient } from '../../services/api';
 import { searchCache, smartSearch } from '../../utils/searchCache';
-import InvoiceCalculator from '../../services/invoiceCalculator';
+// MIGRATED: Using enterprise API-only calculations
+import InvoiceCalculatorEnterprise from '../../services/invoiceCalculatorEnterprise';
 import InvoiceValidator from '../../services/invoiceValidator';
 import DataTransformer from '../../services/dataTransformer';
 import DateFormatter from '../../services/dateFormatter';
@@ -17,7 +18,8 @@ import InvoiceSuccessModal from './InvoiceSuccessModal';
 import InvoiceSummaryTop from './components/InvoiceSummaryTop';
 import Toast from '../common/Toast';
 // import BillSummary from './components/BillSummary';
-import InvoicePreview from '../invoice/components/InvoicePreview';
+// MIGRATED: Use enterprise API-driven preview component
+import InvoicePreview from '../invoice/components/InvoicePreviewEnterprise';
 import ImportDocumentModal from './components/ImportDocumentModal';
 // Removed testBackendConnection - already tested in App.tsx
 import { useToast } from '../global/ui/feedback/Toast';
@@ -234,42 +236,72 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
     calculateTotals();
   }, [invoice.items, invoice.discount_amount, invoice.delivery_charges, invoice.customer_id]);
 
-  const calculateTotals = () => {
-    const totals = InvoiceCalculator.calculateInvoiceTotals(invoice.items, invoice.gst_type);
+  const calculateTotals = async () => {
+    try {
+      // MIGRATED: Use enterprise API for calculations
+      const invoiceData = {
+        items: invoice.items.map(item => {
+          // CORRECTED BUSINESS LOGIC:
+          // CORRECT BUSINESS LOGIC:
+          // base_quantity = what customer pays for (billable)
+          // free_quantity = additional free items given with base quantity
+          // total_quantity = base_quantity + free_quantity (what customer receives)
+          const baseQuantity = parseFloat(item.base_quantity) || 0;    // What customer pays for
+          const freeQuantity = parseFloat(item.free_quantity || 0);    // Additional free items
+          const totalQuantity = baseQuantity + freeQuantity;           // Total customer receives
+          
+          return {
+            product_id: item.product_id,
+            quantity: totalQuantity,        // Total quantity customer receives
+            base_quantity: baseQuantity,    // What customer pays for
+            free_quantity: freeQuantity,    // Free items given with base
+            unit_price: item.sale_price || item.rate || item.unit_price,
+            discount_percent: item.discount_percent || 0,
+            gst_percent: item.gst_percent || 12
+          };
+        }),
+        gst_type: invoice.gst_type || 'CGST/SGST',
+        delivery_charges: invoice.delivery_charges || 0,
+        discount_amount: invoice.discount_amount || 0
+      };
+      
+      const result = await InvoiceCalculatorEnterprise.calculateInvoice(invoiceData);
+      const totals = InvoiceCalculatorEnterprise.extractTotals(result);
     
-    // Debug logging only in development mode
-    if (process.env.NODE_ENV === 'development' && window.DEBUG_INVOICE) {
-      console.log('calculateTotals - items:', invoice.items);
-      console.log('calculateTotals - totals:', totals);
-    }
-    
-    // Add delivery charges to the net amount (don't subtract discount as it's already in item calculations)
-    const totalWithCharges = totals.netAmount + (invoice.delivery_charges || 0);
-    
-    // Apply additional invoice-level discount if any
-    const totalAfterDiscount = totalWithCharges - (invoice.discount_amount || 0);
-    
-    const roundOff = Math.round(totalAfterDiscount) - totalAfterDiscount;
-    const net = Math.round(totalAfterDiscount); // This is simpler and ensures whole number
+      // Debug logging only in development mode
+      if (process.env.NODE_ENV === 'development' && window.DEBUG_INVOICE) {
+        console.log('calculateTotals - items:', invoice.items);
+        console.log('calculateTotals - API result:', result);
+        console.log('calculateTotals - extracted totals:', totals);
+      }
+      
+      // Use API-calculated totals directly (already includes all logic)
+      const net = totals.finalAmount;
     
     // Debug logging only when enabled
     if (process.env.NODE_ENV === 'development' && window.DEBUG_INVOICE) {
       console.log('calculateTotals - final amount:', net);
     }
 
-    setInvoice(prev => ({
-      ...prev,
-      gross_amount: totals.grossAmount,
-      tax_amount: totals.gstAmount,
-      cgst_amount: totals.cgstAmount,
-      sgst_amount: totals.sgstAmount,
-      igst_amount: totals.igstAmount,
-      total_amount: totals.grossAmount,
-      taxable_amount: totals.taxableAmount,
-      round_off: roundOff,
-      net_amount: net,
-      final_amount: net  // Add final_amount for validation
-    }));
+      // Update invoice with API-calculated totals
+      setInvoice(prev => ({
+        ...prev,
+        gross_amount: totals.subtotal,
+        tax_amount: totals.gstAmount,
+        cgst_amount: totals.cgstAmount,
+        sgst_amount: totals.sgstAmount,
+        igst_amount: totals.igstAmount,
+        total_amount: totals.subtotal,
+        taxable_amount: totals.taxableAmount,
+        round_off: totals.roundOff,
+        net_amount: net,
+        final_amount: net
+      }));
+      
+    } catch (error) {
+      console.error('Failed to calculate totals via API:', error);
+      // Keep existing totals on error - don't break the UI
+    }
   };
 
   // Use backend calculation API for security
@@ -373,7 +405,8 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
         batch_number: product.batch_number || product.batch_no,
         hsn_code: product.hsn_code,
         expiry_date: product.expiry_date || product.batch_expiry_date,
-        quantity: 1,
+        base_quantity: 1,  // Customer pays for 1
+        quantity: 1,       // Total quantity (will be base + free)
         mrp: product.mrp || product.sale_price || 0,
         rate: product.rate || product.sale_price || 0,
         sale_price: product.sale_price || 0,
@@ -557,12 +590,16 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
           
           // Items with complete details
           items: invoice.items.map((item, index) => {
-            const baseQuantity = parseFloat(item.quantity) || 1;
-            const freeQuantity = parseFloat(item.free_quantity || item.free || 0);
-            const totalQuantity = baseQuantity + freeQuantity; // Total quantity for inventory
+            // CORRECT BUSINESS LOGIC:
+            // base_quantity = what customer pays for
+            // free_quantity = additional free items given with base
+            // total_quantity = base_quantity + free_quantity (what customer receives)
+            const baseQuantity = parseFloat(item.base_quantity) || 0;       // What customer pays for
+            const freeQuantity = parseFloat(item.free_quantity || item.free || 0); // Additional free items  
+            const totalQuantity = baseQuantity + freeQuantity;              // Total customer receives
             const unitPrice = parseFloat(item.rate || item.sale_price || 0);
             const discountPercent = parseFloat(item.discount_percent || 0);
-            // Calculate on base quantity only (free items don't contribute to revenue)
+            // Calculate on base quantity only (customer pays for base quantity only)
             const discountAmount = (baseQuantity * unitPrice * discountPercent) / 100;
             const lineTotal = (baseQuantity * unitPrice) - discountAmount;
             const gstPercent = parseFloat(item.gst_percent || item.tax_rate || item.gst || 12);
@@ -580,10 +617,10 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
               batch_number: item.batch_number || item.batch_no,
               expiry_date: item.expiry_date,
               
-              // Send ALL quantity data - let backend handle storage
-              quantity: totalQuantity,  // Total quantity for inventory deduction
-              base_quantity: baseQuantity,  // Billable quantity for revenue
-              free_quantity: freeQuantity,  // Free quantity for tracking/analytics
+              // Send corrected quantity data
+              quantity: totalQuantity,    // Total quantity customer receives (base + free)
+              base_quantity: baseQuantity, // What customer pays for
+              free_quantity: freeQuantity, // Free items given with base
               unit_price: unitPrice,
               mrp: parseFloat(item.mrp || 0),
               
