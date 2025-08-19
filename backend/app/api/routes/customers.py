@@ -511,11 +511,13 @@ async def get_customer_addresses(
         
         addresses = [dict(row._mapping) for row in result.fetchall()]
         
+        # Return empty array if no addresses found (not 404)
         return {
             "success": True,
             "data": addresses,
             "customer_id": customer_id,
-            "total_addresses": len(addresses)
+            "total_addresses": len(addresses),
+            "message": f"Found {len(addresses)} addresses for customer {customer_id}"
         }
         
     except HTTPException:
