@@ -124,7 +124,10 @@ async def create_invoice(
             gst_percent = float(item.get("gst_percent", 12))
             
             # CRITICAL FIX: Use base_quantity for billing (already accounts for free items)
-            base_quantity = float(item.get("base_quantity", quantity))
+            if "base_quantity" in item:
+                base_quantity = float(item["base_quantity"])
+            else:
+                base_quantity = float(quantity)  # fallback only if not provided
             
             line_total = base_quantity * unit_price
             cgst = line_total * (gst_percent / 2) / 100
@@ -252,10 +255,18 @@ async def create_invoice(
             
             # Basic calculations (triggers will recalculate if needed)
             discount_percent = float(item.get("discount_percent", 0))
-            base_quantity = float(item.get("base_quantity", quantity))
+            
+            # CRITICAL: Ensure base_quantity is used for billing (NOT quantity)
+            if "base_quantity" in item:
+                base_quantity = float(item["base_quantity"])
+            else:
+                base_quantity = float(quantity)  # fallback only if not provided
+                
+            logger.info(f"🔍 BACKEND INPUT: quantity={quantity}, base_quantity={base_quantity}, free_quantity={item.get('free_quantity', 0)}")
             
             # PRODUCTION: Use base_quantity for all billing calculations
             discount_amt = base_quantity * unit_price * discount_percent / 100
+            logger.info(f"🔍 BACKEND CALCULATION: base_quantity={base_quantity}, unit_price={unit_price}, discount_percent={discount_percent}, discount_amt={discount_amt}")
             
             # Get batch_id if not provided (for inventory trigger)
             batch_id = item.get("batch_id")
@@ -317,7 +328,7 @@ async def create_invoice(
                 "uom": item.get("uom", "PCS"),
                 "pack_type": item.get("pack_type", "UNIT"),
                 "pack_size": int(item.get("pack_size")) if item.get("pack_size") else None,
-                "base_quantity": float(item.get("base_quantity", quantity)),
+                "base_quantity": float(base_quantity),  # Use the corrected variable
                 "mrp": float(item.get("mrp", 0)),
                 "unit_price": float(unit_price),
                 "discount_percent": float(item.get("discount_percent", 0)),
