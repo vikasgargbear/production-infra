@@ -479,6 +479,52 @@ async def get_customer_outstanding(
         raise HTTPException(status_code=500, detail=f"Failed to get customer outstanding: {str(e)}")
 
 
+@router.get("/{customer_id}/addresses")
+async def get_customer_addresses(
+    customer_id: int,
+    db: Session = Depends(get_db)
+):
+    """Get all addresses for a customer"""
+    try:
+        # First check if customer exists
+        customer_check = db.execute(text("""
+            SELECT customer_id FROM parties.customers WHERE customer_id = :id
+        """), {"id": customer_id})
+        
+        if not customer_check.fetchone():
+            raise HTTPException(status_code=404, detail=f"Customer {customer_id} not found")
+        
+        # Get all addresses for this customer
+        result = db.execute(text("""
+            SELECT 
+                address_id, entity_type, entity_id, address_type,
+                address_line1, address_line2, landmark, city, 
+                state_code, state_name, country, pincode,
+                latitude, longitude, contact_person, contact_number,
+                is_default, is_active, created_at, updated_at
+            FROM master.addresses 
+            WHERE entity_type = 'customer' 
+            AND entity_id = :customer_id 
+            AND is_active = true
+            ORDER BY is_default DESC, address_type ASC, created_at DESC
+        """), {"customer_id": customer_id})
+        
+        addresses = [dict(row._mapping) for row in result.fetchall()]
+        
+        return {
+            "success": True,
+            "data": addresses,
+            "customer_id": customer_id,
+            "total_addresses": len(addresses)
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error getting customer addresses: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to get customer addresses: {str(e)}")
+
+
 @router.delete("/{customer_id}")
 async def delete_customer(
     customer_id: int,
