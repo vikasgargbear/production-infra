@@ -137,8 +137,8 @@ async def create_invoice(
             total_cgst += cgst
             total_sgst += sgst
         
-        discount_amount = float(invoice_data.get("discount_amount", 0))
-        taxable_amount = subtotal - discount_amount
+        # Item-level discounts are handled individually, no invoice-level discount needed
+        taxable_amount = subtotal
         tax_amount = total_cgst + total_sgst
         final_amount = taxable_amount + tax_amount
         
@@ -162,7 +162,7 @@ async def create_invoice(
             "order_date": date.today(),
             "customer_id": invoice_data["customer_id"],
             "subtotal": subtotal,
-            "discount": discount_amount,
+            "discount": 0,  # Item-level discounts only
             "taxable": taxable_amount,
             "cgst": total_cgst,
             "sgst": total_sgst,
@@ -437,7 +437,7 @@ async def create_invoice(
                 "items_count": items_created,
                 "total_qty": total_qty,
                 "subtotal": subtotal,
-                "discount": discount_amount,
+                "discount": 0,  # Item-level discounts only
                 "taxable": taxable_amount,
                 "igst": invoice_data.get("igst_amount", 0),
                 "cgst": total_cgst,
