@@ -220,128 +220,17 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
     searchCache.preloadData('products', () => productAPI.search('', { limit: 100 }));
   }, []);
 
-  // Calculate totals using frontend calculator (backend API is causing 500 errors)
-  useEffect(() => {
-    // Temporarily disabled backend calculation due to 500 errors
-    // if (invoice.items.length > 0 && invoice.customer_id) {
-    //   calculateTotalsBackend().catch(() => {
-    //     console.warn('Backend calculation failed, using frontend calculation');
-    //     calculateTotals();
-    //   });
-    // } else {
-    //   calculateTotals();
-    // }
-    
-    // Always use frontend calculation for now
-    calculateTotals();
-  }, [invoice.items, invoice.discount_amount, invoice.delivery_charges, invoice.customer_id]);
+  // ENTERPRISE STRUCTURE: No frontend calculations
+  // Backend handles all calculations when invoice is created
+  // Frontend only collects user inputs and displays results
 
-  const calculateTotals = async () => {
-    try {
-      // MIGRATED: Use enterprise API for calculations
-      const invoiceData = {
-        items: invoice.items.map(item => {
-          // CORRECTED BUSINESS LOGIC:
-          // CORRECT BUSINESS LOGIC:
-          // base_quantity = what customer pays for (billable)
-          // free_quantity = additional free items given with base quantity
-          // total_quantity = base_quantity + free_quantity (what customer receives)
-          const baseQuantity = parseFloat(item.base_quantity) || 0;    // What customer pays for
-          const freeQuantity = parseFloat(item.free_quantity || 0);    // Additional free items
-          const totalQuantity = baseQuantity + freeQuantity;           // Total customer receives
-          
-          return {
-            product_id: item.product_id,
-            quantity: totalQuantity,        // Total quantity customer receives
-            base_quantity: baseQuantity,    // What customer pays for
-            free_quantity: freeQuantity,    // Free items given with base
-            unit_price: item.sale_price || item.rate || item.unit_price,
-            discount_percent: item.discount_percent || 0,
-            gst_percent: item.gst_percent || 12
-          };
-        }),
-        gst_type: invoice.gst_type || 'CGST/SGST',
-        delivery_charges: invoice.delivery_charges || 0,
-        discount_amount: invoice.discount_amount || 0
-      };
-      
-      const result = await InvoiceCalculatorEnterprise.calculateInvoice(invoiceData);
-      const totals = InvoiceCalculatorEnterprise.extractTotals(result);
-    
-      // Debug logging only in development mode
-      if (process.env.NODE_ENV === 'development' && window.DEBUG_INVOICE) {
-        console.log('calculateTotals - items:', invoice.items);
-        console.log('calculateTotals - API result:', result);
-        console.log('calculateTotals - extracted totals:', totals);
-      }
-      
-      // Use API-calculated totals directly (already includes all logic)
-      const net = totals.finalAmount;
-    
-    // Debug logging only when enabled
-    if (process.env.NODE_ENV === 'development' && window.DEBUG_INVOICE) {
-      console.log('calculateTotals - final amount:', net);
-    }
-
-      // Update invoice with API-calculated totals
-      setInvoice(prev => ({
-        ...prev,
-        gross_amount: totals.subtotal,
-        tax_amount: totals.gstAmount,
-        cgst_amount: totals.cgstAmount,
-        sgst_amount: totals.sgstAmount,
-        igst_amount: totals.igstAmount,
-        total_amount: totals.subtotal,
-        taxable_amount: totals.taxableAmount,
-        round_off: totals.roundOff,
-        net_amount: net,
-        final_amount: net
-      }));
-      
-    } catch (error) {
-      console.error('Failed to calculate totals via API:', error);
-      // Keep existing totals on error - don't break the UI
-    }
-  };
+  // ENTERPRISE STRUCTURE: Frontend never calculates
+  // All calculations handled by backend when invoice is saved
+  // Frontend only displays "Estimated" totals until backend processes
 
   // Use backend calculation API for security
-  const calculateTotalsBackend = async () => {
-    try {
-      const response = await InvoiceApiService.calculateInvoice({
-        customer_id: invoice.customer_id,
-        delivery_type: invoice.delivery_type || 'PICKUP',
-        payment_mode: invoice.payment_mode,
-        invoice_date: invoice.invoice_date,
-        items: invoice.items,
-        delivery_charges: invoice.delivery_charges || 0,
-        additional_discount: invoice.discount_amount || 0
-      });
-
-      if (response?.data) {
-        const totals = response.data.totals || response.data;
-        
-        // Update invoice with backend calculated totals
-        setInvoice(prev => ({
-          ...prev,
-          subtotal: parseFloat(totals.subtotal_amount || 0),
-          gross_amount: parseFloat(totals.subtotal_amount || 0),
-          tax_amount: parseFloat(totals.total_tax_amount || 0),
-          cgst_amount: parseFloat(totals.cgst_amount || 0),
-          sgst_amount: parseFloat(totals.sgst_amount || 0),
-          igst_amount: parseFloat(totals.igst_amount || 0),
-          total_amount: parseFloat(totals.final_amount || 0),
-          round_off: parseFloat(totals.round_off || 0),
-          net_amount: parseFloat(totals.final_amount || 0),
-          final_amount: parseFloat(totals.final_amount || 0),
-          discount_amount: parseFloat(totals.discount_amount || 0),
-          gst_type: response.data.invoice_info?.gst_type || invoice.gst_type
-        }));
-      }
-    } catch (error) {
-      console.error('Backend calculation failed, using frontend:', error);
-      calculateTotals(); // Fallback to frontend calculation
-    }
-  };
+  // REMOVED: calculateTotalsBackend() - redundant function
+  // Using only InvoiceCalculatorEnterprise for single source of truth
 
   const handleCustomerSelect = (customer) => {
     console.log('handleCustomerSelect called with:', customer);
@@ -513,15 +402,8 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
   const handleSaveInvoice = async () => {
     if (!validateInvoice(true)) return; // Check payment method when saving
 
-    // Ensure totals are calculated before saving
-    calculateTotals();
-    
-    // Validate totals
-    if (!invoice.final_amount || invoice.final_amount <= 0) {
-      setMessage('Invoice total must be greater than zero');
-      setMessageType('error');
-      return;
-    }
+    // ENTERPRISE STRUCTURE: No validation of frontend totals
+    // Backend handles all calculations and validation
 
     setSaving(true);
     try {
@@ -577,16 +459,11 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
           payment_terms: invoice.payment_mode === 'Cash' ? 'cash' : 'credit',
           delivery_priority: 'normal',
           
-          // Financial totals (send all for verification)
-          subtotal_amount: invoice.gross_amount || 0,
+          // ENTERPRISE STRUCTURE: Frontend sends NO calculated totals
+          // Backend calculates everything from raw item data
+          // Only send invoice-level discounts and charges
           discount_amount: invoice.discount_amount || 0,
-          taxable_amount: invoice.taxable_amount || 0,
-          cgst_amount: invoice.cgst_amount || 0,
-          sgst_amount: invoice.sgst_amount || 0,
-          igst_amount: invoice.igst_amount || 0,
-          tax_amount: invoice.tax_amount || 0,
-          round_off: invoice.round_off || 0,
-          final_amount: invoice.net_amount || 0,
+          delivery_charges: invoice.delivery_charges || 0,
           
           // Items with complete details
           items: invoice.items.map((item, index) => {
@@ -594,16 +471,11 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
             // base_quantity = what customer pays for
             // free_quantity = additional free items given with base
             // total_quantity = base_quantity + free_quantity (what customer receives)
-            const baseQuantity = parseFloat(item.base_quantity) || 0;       // What customer pays for
-            const freeQuantity = parseFloat(item.free_quantity || item.free || 0); // Additional free items  
-            const totalQuantity = baseQuantity + freeQuantity;              // Total customer receives
-            const unitPrice = parseFloat(item.rate || item.sale_price || 0);
-            const discountPercent = parseFloat(item.discount_percent || 0);
-            // Calculate on base quantity only (customer pays for base quantity only)
-            const discountAmount = (baseQuantity * unitPrice * discountPercent) / 100;
-            const lineTotal = (baseQuantity * unitPrice) - discountAmount;
-            const gstPercent = parseFloat(item.gst_percent || item.tax_rate || item.gst || 12);
-            const taxAmount = (lineTotal * gstPercent) / 100;
+            // ENTERPRISE STRUCTURE: Frontend sends only raw data
+            // Backend handles all calculations
+            const baseQuantity = parseFloat(item.base_quantity) || 0;
+            const freeQuantity = parseFloat(item.free_quantity || item.free || 0);
+            const totalQuantity = baseQuantity + freeQuantity;
             
             return {
               // Product identification
@@ -617,26 +489,14 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
               batch_number: item.batch_number || item.batch_no,
               expiry_date: item.expiry_date,
               
-              // Send corrected quantity data
-              quantity: totalQuantity,    // Total quantity customer receives (base + free)
+              // ENTERPRISE: Send only raw data, backend calculates everything
+              quantity: totalQuantity,    // Total quantity customer receives
               base_quantity: baseQuantity, // What customer pays for
-              free_quantity: freeQuantity, // Free items given with base
-              unit_price: unitPrice,
-              mrp: parseFloat(item.mrp || 0),
-              
-              // Discounts
-              discount_percent: discountPercent,
-              discount_amount: discountAmount,
-              
-              // Tax
-              gst_percent: gstPercent,
-              cgst_amount: item.cgst_amount || (taxAmount / 2),
-              sgst_amount: item.sgst_amount || (taxAmount / 2),
-              igst_amount: item.igst_amount || 0,
-              
-              // Totals
-              line_total: lineTotal,
-              total_amount: lineTotal + taxAmount
+              free_quantity: freeQuantity, // Free items
+              unit_price: parseFloat(item.rate || item.sale_price || 0),
+              discount_percent: parseFloat(item.discount_percent || 0),
+              gst_percent: parseFloat(item.gst_percent || item.tax_rate || 12)
+              // No calculated amounts - backend handles all calculations
             };
           }),
           
