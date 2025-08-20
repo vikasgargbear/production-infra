@@ -703,7 +703,7 @@ const SupplierSearchWrapper = React.forwardRef(({ onSupplierSelect, onCreateSupp
       <div className="flex items-center justify-between mb-3">
         <h3 className="text-sm font-medium text-gray-700 flex items-center">
           <User className="w-4 h-4 mr-2" />
-          Supplier Details
+          SUPPLIER
         </h3>
         <AddNewButton
           onClick={onCreateSupplier}

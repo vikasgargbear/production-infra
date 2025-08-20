@@ -13,7 +13,7 @@ import InvoiceValidator from '../../services/invoiceValidator';
 import DataTransformer from '../../services/dataTransformer';
 import DateFormatter from '../../services/dateFormatter';
 import InvoiceApiService from '../../services/invoiceApiService';
-import { ProductSearchSimple, ItemsTable, ModuleHeader, CustomerSearch, ProductCreationModal, CustomerCreationModal, ViewHistoryButton, GSTCalculator } from '../global';
+import { ProductSearchSimple, ItemsTable, ModuleHeader, CustomerSearch, ProductCreationModal, CustomerCreationModal, ViewHistoryButton, GSTCalculator, DocumentFooter } from '../global';
 import InvoiceSuccessModal from './InvoiceSuccessModal';
 import InvoiceSummaryTop from './components/InvoiceSummaryTop';
 import Toast from '../common/Toast';
@@ -948,7 +948,10 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
 
             {/* Customer Section */}
             <div className="mb-6">
-              <h3 className="text-sm font-semibold text-blue-700 uppercase tracking-wider mb-3">CUSTOMER</h3>
+              <h3 className="text-sm font-semibold text-blue-700 uppercase tracking-wider mb-3 flex items-center">
+                <User className="w-4 h-4 mr-2" />
+                CUSTOMER
+              </h3>
               <CustomerSearch
                 value={invoice?.customer_details || null}
                 onChange={handleCustomerSelect}
@@ -962,7 +965,10 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
 
             {/* Products Section */}
             <div className="mb-6">
-              <h3 className="text-sm font-semibold text-blue-700 uppercase tracking-wider mb-3">PRODUCTS</h3>
+              <h3 className="text-sm font-semibold text-blue-700 uppercase tracking-wider mb-3 flex items-center">
+                <Package className="w-4 h-4 mr-2" />
+                PRODUCTS
+              </h3>
               <ProductSearchSimple
                 onAddItem={handleAddItem}
                 onCreateProduct={() => setShowProductModal(true)}
@@ -973,7 +979,10 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
             {/* Invoice Items */}
             {invoice.items.length > 0 && (
               <div className="mb-6">
-                <h3 className="text-sm font-semibold text-blue-700 uppercase tracking-wider mb-3">INVOICE ITEMS</h3>
+                <h3 className="text-sm font-semibold text-blue-700 uppercase tracking-wider mb-3 flex items-center">
+                  <Package className="w-4 h-4 mr-2" />
+                  INVOICE ITEMS
+                </h3>
                 <ItemsTable
                   items={invoice.items}
                   onUpdateItem={handleUpdateItem}
@@ -982,6 +991,7 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
                     finalAmount: invoice.net_amount,
                     grandTotal: invoice.net_amount
                   }}
+                  showTotals={false}
                   title="Invoice Items"
                 />
               </div>
@@ -990,32 +1000,16 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
           </div>
 
           {/* Footer */}
-          <div className="border-t border-blue-200 bg-white px-6 py-4">
-            <div className="flex justify-between items-center">
-              <div className="text-sm text-gray-600">
-                Total Items: {invoice.items.length}
-              </div>
-              
-              <div className="flex items-center gap-3">
-                <button
-                  onClick={onClose}
-                  className="px-6 py-2.5 text-blue-700 hover:bg-gray-100 rounded-lg transition-colors"
-                  tabIndex={100}
-                >
-                  Reset
-                </button>
-                <button
-                  onClick={handleProceedToReview}
-                  disabled={!selectedCustomer || invoice.items.length === 0}
-                  className="px-8 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed flex items-center gap-2"
-                  tabIndex={101}
-                >
-                  Continue
-                  <ArrowRight className="w-4 h-4" />
-                </button>
-              </div>
-            </div>
-          </div>
+          <DocumentFooter
+            totalItems={invoice.items.length}
+            totalAmount={invoice.net_amount}
+            onCancel={onClose}
+            onContinue={handleProceedToReview}
+            cancelLabel="Reset"
+            continueLabel="Continue"
+            continueDisabled={!selectedCustomer || invoice.items.length === 0}
+            continueButtonColor="blue"
+          />
 
         </div>
 
@@ -1269,44 +1263,83 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
         </div>
 
         {/* Footer */}
-        <div className="border-t border-blue-200 bg-white px-6 py-4">
-          <div className="flex justify-between items-center">
-            <div className="text-sm text-gray-600">
-              Total Amount: <span className="text-2xl font-bold text-gray-900">₹{invoice.net_amount.toFixed(0)}</span>
-            </div>
+        <DocumentFooter
+          onSaveDraft={() => {
+            console.log('Save draft clicked');
+            // TODO: Implement save draft
+          }}
+          onPrint={handlePrint}
+          onWhatsAppShare={handleWhatsAppShare}
+          onBack={() => setCurrentStep(1)}
+          onNext={handleProceedToReview}
+          onSaveInvoice={handleSaveInvoice}
+          isSaving={saving}
+          totalAmount={invoice.net_amount}
+          invoiceNumber={createdInvoiceData?.invoiceNumber || invoice.invoice_no}
+          customerName={selectedCustomer?.customer_name || invoice.customer_name}
+          invoiceId={createdInvoiceData?.invoiceId || null}
+          onDownload={() => {
+            // Generate PDF content
+            const pdfContent = `
+INVOICE #${createdInvoiceData?.invoiceNumber || invoice.invoice_no}
+Date: ${new Date().toLocaleDateString('en-IN')}
+
+Bill To:
+${selectedCustomer?.customer_name || invoice.customer_name}
+${selectedCustomer?.phone ? 'Phone: ' + selectedCustomer.phone : ''}
+${selectedCustomer?.address ? 'Address: ' + selectedCustomer.address : ''}
+
+Items:
+${(invoice.items || []).map(item => 
+  `${item.product_name || item.item_name} - Qty: ${item.quantity} × ₹${item.rate || item.sale_price} = ₹${((item.quantity || 0) * (item.rate || item.sale_price || 0)).toFixed(2)}`
+).join('\n')}
+
+Total Amount: ₹${createdInvoiceData?.totalAmount?.toFixed(2) || invoice.net_amount?.toFixed(2) || '0.00'}
+`;
             
-            <div className="flex items-center gap-3">
-              <button
-                onClick={() => setCurrentStep(1)}
-                className="px-6 py-2.5 text-blue-700 hover:bg-gray-100 rounded-lg transition-colors"
-              >
-                Back to Edit
-              </button>
-              <button
-                onClick={handlePrint}
-                className="px-6 py-2.5 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors flex items-center gap-2 border border-gray-300"
-              >
-                <Printer className="w-5 h-5 text-blue-700" />
-                <span className="font-medium">Print</span>
-              </button>
-              <button
-                onClick={handleWhatsAppShare}
-                className="px-6 py-2.5 bg-green-500 hover:bg-green-600 text-white rounded-lg transition-colors flex items-center gap-2"
-              >
-                <MessageCircle className="w-5 h-5" />
-                <span className="font-medium">WhatsApp</span>
-              </button>
-              <button
-                onClick={handleSaveInvoice}
-                disabled={saving}
-                className="px-8 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed flex items-center gap-2"
-              >
-                <Save className="w-5 h-5" />
-                {saving ? 'Saving...' : 'Save Invoice'}
-              </button>
-            </div>
-          </div>
-        </div>
+            // Create a blob and download
+            const blob = new Blob([pdfContent], { type: 'text/plain' });
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `Invoice_${createdInvoiceData?.invoiceNumber || invoice.invoice_no}.txt`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            window.URL.revokeObjectURL(url);
+            
+            toast.success('Invoice downloaded as text file');
+          }}
+          onShare={() => {
+            // Use customer phone from the invoice/selected customer
+            const customerPhone = selectedCustomer?.phone || createdInvoiceData?.customerPhone;
+            
+            if (!customerPhone) {
+              toast.error('Customer phone number not available');
+              return;
+            }
+            
+            // Format phone number
+            let phoneNumber = customerPhone.replace(/\s+/g, '');
+            if (!phoneNumber.startsWith('+')) {
+              phoneNumber = '+91' + phoneNumber; // India code
+            }
+            
+            // Create WhatsApp message
+            const message = encodeURIComponent(
+              `Dear ${selectedCustomer?.customer_name || invoice.customer_name},\n\n` +
+              `Your invoice #${createdInvoiceData?.invoiceNumber || invoice.invoice_no} dated ${new Date().toLocaleDateString('en-IN')} ` +
+              `for amount ₹${createdInvoiceData?.totalAmount?.toFixed(2) || invoice.net_amount?.toFixed(2) || '0.00'} has been generated.\n\n` +
+              `Thank you for your business!\n\n` +
+              `Regards,\nAASO Pharma`
+            );
+            
+            // Open WhatsApp
+            window.open(`https://wa.me/${phoneNumber}?text=${message}`, '_blank');
+            toast.info('WhatsApp opened. Please attach the invoice PDF manually before sending.');
+            setShowSuccessModal(false);
+          }}
+        />
 
       </div>
       

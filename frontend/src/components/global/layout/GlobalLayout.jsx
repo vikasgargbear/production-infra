@@ -94,6 +94,7 @@ export const ContentCard = ({
   title, 
   subtitle,
   actions,
+  icon: Icon,
   className = '',
   padding = 'standard' // 'compact', 'standard', 'spacious'
 }) => {
@@ -105,7 +106,12 @@ export const ContentCard = ({
         <div className={cardClasses.header}>
           <div className="flex items-center justify-between">
             <div>
-              {title && <h3 className="text-lg font-semibold text-gray-900">{title}</h3>}
+              {title && (
+                <h3 className="text-lg font-semibold text-gray-900 flex items-center">
+                  {Icon && <Icon className="w-5 h-5 mr-2 text-gray-600" />}
+                  {title}
+                </h3>
+              )}
               {subtitle && <p className="text-sm text-gray-500 mt-1">{subtitle}</p>}
             </div>
             {actions && (

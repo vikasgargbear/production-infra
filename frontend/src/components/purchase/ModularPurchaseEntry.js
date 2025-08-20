@@ -281,7 +281,7 @@ const PurchaseEntryContent = ({ onClose, initialShowPDFUpload = false }) => {
             {/* Supplier Info */}
             <div className="grid grid-cols-2 gap-6 mb-6">
               <div className="bg-white rounded-lg border border-blue-200 p-6">
-                <h3 className="text-sm font-medium text-gray-500 uppercase tracking-wider mb-4">SUPPLIER DETAILS</h3>
+                <h3 className="text-sm font-medium text-gray-500 uppercase tracking-wider mb-4">SUPPLIER</h3>
                 <div className="space-y-3">
                   <div>
                     <h4 className="font-medium text-gray-900">{purchase.supplier_name}</h4>

@@ -5,7 +5,7 @@ import PurchaseErrorBoundary from './PurchaseErrorBoundary';
 import { purchasesApi } from '../../services/api';
 import { PURCHASE_CONFIG } from '../../config/purchase.config';
 import { validatePurchaseForm } from '../../utils/purchaseValidation';
-import { ProductCreationModal, MonthYearPicker, SupplierCreationModal, ViewHistoryButton, GlobalLayout, ContentCard, ModuleHeader } from '../global';
+import { ProductCreationModal, MonthYearPicker, SupplierCreationModal, ViewHistoryButton, GlobalLayout, ContentCard, ModuleHeader, DocumentFooter } from '../global';
 import PDFUploadModal from '../PDFUploadModal';
 import PurchaseSummary from './components/PurchaseSummary';
 import { searchCache } from '../../utils/searchCache';
@@ -489,29 +489,16 @@ const SimplifiedPurchaseContent = ({ onClose }) => {
         </div>
 
         {/* Footer */}
-        <div className="border-t border-blue-200 bg-white px-6 py-4">
-          <div className="flex justify-between items-center">
-            <div className="text-sm text-gray-600">
-              Total Items: {purchase.items.length}
-            </div>
-            
-            <div className="flex items-center gap-3">
-              <button
-                onClick={onClose}
-                className="px-6 py-2.5 text-blue-700 hover:bg-gray-100 rounded-lg transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={() => setShowReview(true)}
-                disabled={purchase.items.length === 0 || !purchase.supplier_id || !purchase.supplier_invoice_number}
-                className="px-8 py-2.5 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed flex items-center gap-2"
-              >
-                Continue →
-              </button>
-            </div>
-          </div>
-        </div>
+        <DocumentFooter
+          totalItems={purchase.items.length}
+          totalAmount={purchase.final_amount}
+          onCancel={onClose}
+          onContinue={() => setShowReview(true)}
+          cancelLabel="Cancel"
+          continueLabel="Continue"
+          continueDisabled={purchase.items.length === 0 || !purchase.supplier_id || !purchase.supplier_invoice_number}
+          continueButtonColor="green"
+        />
 
       </div>
         

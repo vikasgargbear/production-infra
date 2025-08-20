@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Receipt, Plus, Calendar, X, Loader2, RefreshCw, AlertCircle } from 'lucide-react';
+import { Receipt, Plus, Calendar, X, Loader2, RefreshCw, AlertCircle, User } from 'lucide-react';
 import { ModuleHeader } from '../global';
 
 interface ExpenseClaimsFlowProps {
@@ -209,7 +209,10 @@ const ExpenseClaimsFlow: React.FC<ExpenseClaimsFlowProps> = ({ onClose }) => {
             
             {/* Claim Header */}
             <div className="bg-white rounded-lg border border-gray-200 p-6">
-              <h3 className="text-lg font-medium text-gray-900 mb-4">Claim Details</h3>
+              <h3 className="text-lg font-medium text-gray-900 mb-4 flex items-center">
+                  <User className="w-5 h-5 mr-2 text-blue-600" />
+                  Claim Details
+                </h3>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-600 mb-2">Employee Name</label>

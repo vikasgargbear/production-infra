@@ -2,12 +2,13 @@ import React, { useState, useEffect } from 'react';
 import {
   Plus, Save, X, AlertCircle, 
   Package, TrendingUp, TrendingDown,
-  ChevronRight, Trash2, Upload, Download, Loader2, RefreshCw
+  ChevronRight, Trash2, Upload, Download, Loader2, RefreshCw, Settings
 } from 'lucide-react';
 import { productsApi } from '../../services/api/modules/products.api';
 import { stockApi } from '../../services/api/modules/stock.api';
 import { formatCurrency } from '../../utils/formatters';
 import { DataTable, ProductSearchSimple, Select, DatePicker, StatusBadge, ViewHistoryButton, ModuleHeader } from '../global';
+import offlineStorage from '../../services/offlineStorage';
 
 const StockAdjustment = ({ open = true, onClose }) => {
   const [loading, setLoading] = useState(false);
@@ -24,6 +25,78 @@ const StockAdjustment = ({ open = true, onClose }) => {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(null);
   const [refreshing, setRefreshing] = useState(false);
+  const [adjustmentReasons, setAdjustmentReasons] = useState({ increase: [], decrease: [] });
+  
+  // Load adjustment reasons from backend with offline caching
+  useEffect(() => {
+    const loadAdjustmentReasons = async () => {
+      try {
+        // Try backend first
+        const [increaseResponse, decreaseResponse] = await Promise.all([
+          stockApi.getMovementReasons('increase'),
+          stockApi.getMovementReasons('decrease')
+        ]);
+        
+        const reasons = {
+          increase: increaseResponse.data || [],
+          decrease: decreaseResponse.data || []
+        };
+        
+        setAdjustmentReasons(reasons);
+        
+        // Cache in offline storage
+        await offlineStorage.storeOffline('adjustment_reasons', reasons, { persistent: true });
+        
+      } catch (error) {
+        console.error('Error loading adjustment reasons:', error);
+        
+        // Fallback to offline cache
+        try {
+          const cached = await offlineStorage.getOffline('adjustment_reasons', { persistent: true });
+          if (cached && cached.data) {
+            setAdjustmentReasons(cached.data);
+          } else {
+            // Ultimate fallback to basic reasons if no cache
+            setAdjustmentReasons({
+              increase: [
+                { value: 'physical_count', label: 'Physical Count Correction' },
+                { value: 'found_stock', label: 'Found Missing Stock' },
+                { value: 'return_from_customer', label: 'Customer Return' },
+                { value: 'other_increase', label: 'Other Increase' }
+              ],
+              decrease: [
+                { value: 'damage', label: 'Damaged Goods' },
+                { value: 'expiry', label: 'Expired Products' },
+                { value: 'theft', label: 'Theft/Loss' },
+                { value: 'sample', label: 'Sample Given' },
+                { value: 'other_decrease', label: 'Other Decrease' }
+              ]
+            });
+          }
+        } catch (cacheError) {
+          console.error('Error loading from cache:', cacheError);
+          // Use basic fallback
+          setAdjustmentReasons({
+            increase: [
+              { value: 'physical_count', label: 'Physical Count Correction' },
+              { value: 'found_stock', label: 'Found Missing Stock' },
+              { value: 'return_from_customer', label: 'Customer Return' },
+              { value: 'other_increase', label: 'Other Increase' }
+            ],
+            decrease: [
+              { value: 'damage', label: 'Damaged Goods' },
+              { value: 'expiry', label: 'Expired Products' },
+              { value: 'theft', label: 'Theft/Loss' },
+              { value: 'sample', label: 'Sample Given' },
+              { value: 'other_decrease', label: 'Other Decrease' }
+            ]
+          });
+        }
+      }
+    };
+
+    loadAdjustmentReasons();
+  }, []);
   
   // Auto-open product search when both adjustment type and reason are selected
   useEffect(() => {
@@ -31,22 +104,6 @@ const StockAdjustment = ({ open = true, onClose }) => {
       setShowProductSearch(true);
     }
   }, [adjustmentType, reason, adjustmentItems.length, showBulkUpload]);
-
-  const adjustmentReasons = {
-    increase: [
-      { value: 'physical_count', label: 'Physical Count Correction' },
-      { value: 'found_stock', label: 'Found Missing Stock' },
-      { value: 'return_from_customer', label: 'Customer Return' },
-      { value: 'other_increase', label: 'Other Increase' }
-    ],
-    decrease: [
-      { value: 'damage', label: 'Damaged Goods' },
-      { value: 'expiry', label: 'Expired Products' },
-      { value: 'theft', label: 'Theft/Loss' },
-      { value: 'sample', label: 'Sample Given' },
-      { value: 'other_decrease', label: 'Other Decrease' }
-    ]
-  };
 
   const handleProductSelect = async (product) => {
     if (!product) return;
@@ -93,8 +150,32 @@ const StockAdjustment = ({ open = true, onClose }) => {
 
   const handleRefresh = async () => {
     setRefreshing(true);
-    // Reload any necessary data
-    setRefreshing(false);
+    try {
+      // Clear cached adjustment reasons to force fresh fetch
+      await offlineStorage.clearOfflineData('adjustment_reasons');
+      
+      // Reload adjustment reasons
+      const [increaseResponse, decreaseResponse] = await Promise.all([
+        stockApi.getMovementReasons('increase'),
+        stockApi.getMovementReasons('decrease')
+      ]);
+      
+      const reasons = {
+        increase: increaseResponse.data || [],
+        decrease: decreaseResponse.data || []
+      };
+      
+      setAdjustmentReasons(reasons);
+      
+      // Update cache with fresh data
+      await offlineStorage.storeOffline('adjustment_reasons', reasons, { persistent: true });
+      
+    } catch (error) {
+      console.error('Error refreshing adjustment reasons:', error);
+      // Keep existing reasons on error
+    } finally {
+      setRefreshing(false);
+    }
   };
   
   const updateItemQuantity = (itemId, quantity) => {
@@ -139,6 +220,29 @@ const StockAdjustment = ({ open = true, onClose }) => {
         }))
       };
 
+      // Check if offline and queue operation
+      if (!navigator.onLine) {
+        offlineStorage.queueOfflineOperation({
+          type: 'STOCK_ADJUSTMENT',
+          endpoint: 'stock.createAdjustment',
+          payload: adjustmentData,
+          priority: 'high'
+        });
+        
+        alert('Offline: Stock adjustment queued. It will sync automatically when online.');
+        
+        // Reset form
+        setStep(1);
+        setAdjustmentType('');
+        setReason('');
+        setNotes('');
+        setAdjustmentItems([]);
+        setAdjustmentDate(new Date());
+        
+        setLoading(false);
+        return;
+      }
+
       await stockApi.createAdjustment(adjustmentData);
       
       alert('Stock adjustment completed successfully');
@@ -153,7 +257,26 @@ const StockAdjustment = ({ open = true, onClose }) => {
       
     } catch (error) {
       console.error('Error creating adjustment:', error);
-      alert('Failed to create stock adjustment');
+      
+      // Queue on server error/network issues as well
+      offlineStorage.queueOfflineOperation({
+        type: 'STOCK_ADJUSTMENT',
+        endpoint: 'stock.createAdjustment',
+        payload: {
+          adjustment_type: adjustmentType,
+          reason: reason,
+          notes: notes,
+          adjustment_date: adjustmentDate.toISOString(),
+          items: adjustmentItems.map(item => ({
+            product_id: item.product_id,
+            quantity: adjustmentType === 'decrease' ? -item.adjustment_quantity : item.adjustment_quantity,
+            batch_number: null
+          }))
+        },
+        priority: 'high'
+      });
+      
+      alert('Network issue: Stock adjustment saved locally and queued for sync.');
     } finally {
       setLoading(false);
     }
@@ -363,7 +486,10 @@ Note: Use positive numbers for increase and negative for decrease. Reason codes:
             <div className="space-y-6">
               {/* Type & Details Section */}
               <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-                <h3 className="text-lg font-medium text-gray-900 mb-4">Adjustment Details</h3>
+                <h3 className="text-lg font-medium text-gray-900 mb-4 flex items-center">
+                  <Settings className="w-5 h-5 mr-2 text-blue-600" />
+                  Adjustment Details
+                </h3>
                 
                 {/* Adjustment Type Selection */}
                 <div className="flex items-center space-x-4 mb-6">
@@ -430,7 +556,10 @@ Note: Use positive numbers for increase and negative for decrease. Reason codes:
               {showBulkUpload && (
                 <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
                   <div className="flex items-center justify-between mb-3">
-                    <h3 className="text-lg font-medium text-gray-900">Bulk Upload</h3>
+                    <h3 className="text-lg font-medium text-gray-900 flex items-center">
+                      <Upload className="w-5 h-5 mr-2 text-purple-600" />
+                      Bulk Upload
+                    </h3>
                     <button
                       onClick={() => setShowBulkUpload(false)}
                       className="text-gray-500 hover:text-gray-700"
@@ -482,8 +611,11 @@ Note: Use positive numbers for increase and negative for decrease. Reason codes:
               {/* Product Selection Section */}
               {adjustmentType && (
                 <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+                  <h3 className="text-lg font-medium text-gray-900 flex items-center">
+                    <Package className="w-5 h-5 mr-2 text-green-600" />
+                    Products to Adjust
+                  </h3>
                   <div className="flex items-center justify-between mb-4">
-                    <h3 className="text-lg font-medium text-gray-900">Products to Adjust</h3>
                     <button
                         onClick={() => {
                           setShowProductSearch(true);

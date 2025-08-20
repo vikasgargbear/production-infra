@@ -181,7 +181,7 @@ const CustomerMaster: React.FC = () => {
       <StatsGrid stats={statsData} />
 
       {/* Filters and Search */}
-      <ContentCard title="Search & Filter" subtitle={null} actions={null}>
+      <ContentCard title="Search & Filter" subtitle={null} actions={null} icon={Search}>
         <div className="flex flex-col md:flex-row gap-4">
           {/* Search */}
           <div className="flex-1">
@@ -217,7 +217,7 @@ const CustomerMaster: React.FC = () => {
       </ContentCard>
 
       {/* Customer List */}
-      <ContentCard title="Customer List" subtitle={null} actions={null} className="overflow-hidden">
+      <ContentCard title="Customer List" subtitle={null} actions={null} className="overflow-hidden" icon={Users}>
           {loading ? (
             <div className="p-8 text-center">
               <div className="inline-flex items-center text-app-600">

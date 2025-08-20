@@ -668,7 +668,7 @@ const BusinessSalesEntry = ({ open, onClose }) => {
                 <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center mr-2">
                   <User className="w-4 h-4 text-white" />
                 </div>
-                <h3 className="text-lg font-bold text-gray-900">Customer Details</h3>
+                <h3 className="text-lg font-bold text-gray-900">CUSTOMER</h3>
               </div>
               
               {!invoice.customerId ? (
@@ -1568,7 +1568,7 @@ const BusinessSalesEntry = ({ open, onClose }) => {
                       <thead>
                         <tr className="bg-gradient-to-r from-blue-600 to-blue-700 text-white">
                           <th className="text-center py-4 px-2 font-semibold text-sm w-10 align-middle">#</th>
-                          <th className="text-left py-4 px-3 font-semibold text-sm align-middle">Product Details</th>
+                          <th className="text-left py-4 px-3 font-semibold text-sm align-middle">PRODUCT</th>
                           <th className="text-left py-4 px-2 font-semibold text-sm w-24 align-middle">Pack</th>
                           <th className="text-left py-4 px-3 font-semibold text-sm w-36 align-middle">Batch Info</th>
                           <th className="text-center py-4 px-2 font-semibold text-sm w-16 align-middle">Qty</th>

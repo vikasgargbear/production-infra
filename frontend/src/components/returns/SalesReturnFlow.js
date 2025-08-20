@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { 
   ArrowLeft, Search, Package, Calendar, X, AlertCircle, CheckCircle, 
-  RotateCcw, FileText, User, ChevronRight, Save, Printer, History
+  RotateCcw, FileText, User, ChevronRight, Save, Printer, History, Truck
 } from 'lucide-react';
 import { 
   CustomerSearch, ProductSearchSimple, ItemsTable, ModuleHeader,
@@ -11,18 +11,7 @@ import { returnsApi, invoicesApi, customersApi } from '../../services/api';
 // ReturnItemsTable moved to archive - use ItemsTable from global instead
 import ReturnSummary from './components/ReturnSummary';
 import CreditNotePreview from './components/CreditNotePreview';
-
-// Return reason codes as per the requirements doc
-const RETURN_REASONS = [
-  { value: 'EXPIRED', label: 'Expired Product' },
-  { value: 'DAMAGED', label: 'Damaged Product' },
-  { value: 'WRONG_PRODUCT', label: 'Wrong Product Delivered' },
-  { value: 'QUALITY_ISSUE', label: 'Quality Issue' },
-  { value: 'NOT_REQUIRED', label: 'Not Required' },
-  { value: 'EXCESS_STOCK', label: 'Excess Stock' },
-  { value: 'RATE_DIFFERENCE', label: 'Rate Difference' },
-  { value: 'OTHER', label: 'Other' }
-];
+import offlineStorage from '../../services/offlineStorage';
 
 const SalesReturnFlow = ({ onClose }) => {
   const [currentStep, setCurrentStep] = useState(1);
@@ -62,6 +51,64 @@ const SalesReturnFlow = ({ onClose }) => {
   const [selectedInvoice, setSelectedInvoice] = useState(null);
   const [returnableInvoices, setReturnableInvoices] = useState([]);
   const [customerDues, setCustomerDues] = useState(0);
+  const [returnReasons, setReturnReasons] = useState([]);
+
+  // Load return reasons from backend with offline caching
+  useEffect(() => {
+    const loadReturnReasons = async () => {
+      try {
+        // Try backend first
+        const response = await returnsApi.getReturnReasons();
+        const reasons = response.data || [];
+        
+        if (Array.isArray(reasons) && reasons.length > 0) {
+          setReturnReasons(reasons);
+          // Cache in offline storage
+          await offlineStorage.storeOffline('return_reasons', reasons, { persistent: true });
+        } else {
+          throw new Error('No return reasons returned from API');
+        }
+        
+      } catch (error) {
+        console.error('Error loading return reasons:', error);
+        
+        // Fallback to offline cache
+        try {
+          const cached = await offlineStorage.getOffline('return_reasons', { persistent: true });
+          if (cached && cached.data && Array.isArray(cached.data)) {
+            setReturnReasons(cached.data);
+          } else {
+            // Ultimate fallback to basic reasons if no cache
+            setReturnReasons([
+              { value: 'EXPIRED', label: 'Expired Product' },
+              { value: 'DAMAGED', label: 'Damaged Product' },
+              { value: 'WRONG_PRODUCT', label: 'Wrong Product Delivered' },
+              { value: 'QUALITY_ISSUE', label: 'Quality Issue' },
+              { value: 'NOT_REQUIRED', label: 'Not Required' },
+              { value: 'EXCESS_STOCK', label: 'Excess Stock' },
+              { value: 'RATE_DIFFERENCE', label: 'Rate Difference' },
+              { value: 'OTHER', label: 'Other' }
+            ]);
+          }
+        } catch (cacheError) {
+          console.error('Error loading from cache:', cacheError);
+          // Use basic fallback
+          setReturnReasons([
+            { value: 'EXPIRED', label: 'Expired Product' },
+            { value: 'DAMAGED', label: 'Damaged Product' },
+            { value: 'WRONG_PRODUCT', label: 'Wrong Product Delivered' },
+            { value: 'QUALITY_ISSUE', label: 'Quality Issue' },
+            { value: 'NOT_REQUIRED', label: 'Not Required' },
+            { value: 'EXCESS_STOCK', label: 'Excess Stock' },
+            { value: 'RATE_DIFFERENCE', label: 'Rate Difference' },
+            { value: 'OTHER', label: 'Other' }
+          ]);
+        }
+      }
+    };
+
+    loadReturnReasons();
+  }, []);
 
   // Generate return number
   const generateReturnNumber = () => {
@@ -385,7 +432,10 @@ const SalesReturnFlow = ({ onClose }) => {
 
                 {/* Customer Selection */}
                 <div className="mb-6">
-                  <h3 className="text-sm font-medium text-blue-700 mb-2">Select Customer</h3>
+                  <h3 className="text-sm font-medium text-blue-700 mb-2 flex items-center">
+                    <User className="w-4 h-4 mr-2" />
+                    Select Customer
+                  </h3>
                   {!selectedCustomer ? (
                     <CustomerSearch
                       ref={customerSearchRef}
@@ -424,7 +474,10 @@ const SalesReturnFlow = ({ onClose }) => {
                 {/* Invoice Selection */}
                 {selectedCustomer && (
                   <div>
-                    <h3 className="text-sm font-medium text-blue-700 mb-2">Select Invoice</h3>
+                    <h3 className="text-sm font-medium text-blue-700 mb-2 flex items-center">
+                      <FileText className="w-4 h-4 mr-2" />
+                      Select Invoice
+                    </h3>
                     {!selectedInvoice ? (
                       <InvoiceSearch
                         ref={invoiceSearchRef}
@@ -472,7 +525,10 @@ const SalesReturnFlow = ({ onClose }) => {
               {/* Return Reason - Moved Above Items */}
               {selectedInvoice && (
                 <div className="bg-white rounded-lg shadow-sm border border-blue-200 p-6">
-                  <h3 className="text-lg font-semibold text-gray-900 mb-4">Return Details</h3>
+                  <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
+                    <AlertCircle className="w-5 h-5 mr-2 text-red-600" />
+                    Return Details
+                  </h3>
                   
                   <div className="mb-6">
                     <label className="block text-sm font-medium text-blue-700 mb-2">
@@ -481,7 +537,7 @@ const SalesReturnFlow = ({ onClose }) => {
                     <Select
                       value={returnData.return_reason}
                       onChange={(value) => setReturnData(prev => ({ ...prev, return_reason: value }))}
-                      options={RETURN_REASONS}
+                      options={returnReasons}
                       placeholder="Select reason..."
                     />
                   </div>
@@ -509,7 +565,10 @@ const SalesReturnFlow = ({ onClose }) => {
                   {/* Credit Adjustment Option */}
                   {customerDues > 0 && (
                     <div className="p-4 bg-blue-50 rounded-lg">
-                      <h4 className="text-sm font-semibold text-gray-900 mb-3">Credit Adjustment</h4>
+                      <h4 className="text-sm font-semibold text-gray-900 mb-3 flex items-center">
+                        <CheckCircle className="w-4 h-4 mr-2 text-green-600" />
+                        Credit Adjustment
+                      </h4>
                       <p className="text-sm text-gray-600 mb-3">
                         Customer has outstanding dues of ₹{customerDues.toFixed(2)}
                       </p>
@@ -555,7 +614,10 @@ const SalesReturnFlow = ({ onClose }) => {
                 <div className="bg-white rounded-lg shadow-sm border border-blue-200 p-6">
                   <div className="flex justify-between items-center mb-4">
                     <div>
-                      <h3 className="text-lg font-semibold text-gray-900">Select Items to Return</h3>
+                      <h3 className="text-lg font-semibold text-gray-900 flex items-center">
+                        <Package className="w-5 h-5 mr-2 text-blue-600" />
+                        Select Items to Return
+                      </h3>
                       <p className="text-sm text-gray-600 mt-1">
                         Check the items you want to return and specify quantities
                       </p>

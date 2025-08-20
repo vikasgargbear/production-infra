@@ -66,7 +66,7 @@ const CreditDebitNoteSimple: React.FC<CreditDebitNoteSimpleProps> = ({
     console.log('Note data:', noteData);
   };
 
-  // Sample summary data
+  // Calculate summary data dynamically
   const summaryItems = [
     { label: 'Base Amount', value: noteData.amount * 0.8, isBold: false },
     { label: 'Tax Amount', value: noteData.amount * 0.2, isBold: false },

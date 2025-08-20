@@ -274,7 +274,10 @@ const GRNFlow = ({ onClose }) => {
 
             {/* Placeholder for Supplier Selection */}
             <div className="bg-white rounded-lg shadow-sm p-6 mb-6">
-              <h3 className="text-lg font-medium text-gray-900 mb-4">Supplier Details</h3>
+              <h3 className="text-lg font-medium text-gray-900 mb-4 flex items-center">
+                <User className="w-5 h-5 mr-2 text-gray-600" />
+                SUPPLIER
+              </h3>
               <div className="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center">
                 <User className="w-12 h-12 text-gray-400 mx-auto mb-4" />
                 <p className="text-gray-500 mb-2">Supplier search component</p>
@@ -284,7 +287,10 @@ const GRNFlow = ({ onClose }) => {
 
             {/* Placeholder for Received Items */}
             <div className="bg-white rounded-lg shadow-sm p-6 mb-6">
-              <h3 className="text-lg font-medium text-gray-900 mb-4">Received Items</h3>
+              <h3 className="text-lg font-medium text-gray-900 mb-4 flex items-center">
+                <Package className="w-5 h-5 mr-2 text-gray-600" />
+                ITEMS
+              </h3>
               <div className="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center">
                 <Clipboard className="w-12 h-12 text-gray-400 mx-auto mb-4" />
                 <p className="text-gray-500 mb-2">Items received table with quantity verification</p>
@@ -296,7 +302,7 @@ const GRNFlow = ({ onClose }) => {
             <div className="bg-white rounded-lg shadow-sm p-4 mt-4">
               <h3 className="text-sm font-medium text-blue-700 mb-3 flex items-center">
                 <Truck className="w-4 h-4 mr-2" />
-                Transport & Receipt Details
+                TRANSPORT
               </h3>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div>

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { RefreshCw, Upload, CheckCircle, AlertCircle, Loader2 } from 'lucide-react';
+import { RefreshCw, Upload, CheckCircle, AlertCircle, Loader2, Settings } from 'lucide-react';
 import { ModuleHeader } from '../global';
 import { paymentsApi, ledgerApi } from '../../services/api';
 import offlineStorage from '../../services/offlineStorage';
@@ -239,7 +239,10 @@ const BankReconciliationFlow: React.FC<BankReconciliationFlowProps> = ({ onClose
             
             {/* Reconciliation Setup */}
             <div className="bg-white rounded-lg border border-gray-200 p-6">
-              <h3 className="text-lg font-medium text-gray-900 mb-4">Reconciliation Setup</h3>
+              <h3 className="text-lg font-medium text-gray-900 mb-4 flex items-center">
+                <Settings className="w-5 h-5 mr-2 text-blue-600" />
+                Reconciliation Setup
+              </h3>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-600 mb-2">Bank Account</label>
@@ -281,7 +284,10 @@ const BankReconciliationFlow: React.FC<BankReconciliationFlowProps> = ({ onClose
 
             {/* Balance Comparison */}
             <div className="bg-white rounded-lg border border-gray-200 p-6">
-              <h3 className="text-lg font-medium text-gray-900 mb-4">Balance Comparison</h3>
+              <h3 className="text-lg font-medium text-gray-900 mb-4 flex items-center">
+                <CheckCircle className="w-5 h-5 mr-2 text-green-600" />
+                Balance Comparison
+              </h3>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div className="text-center p-4 bg-blue-50 rounded-lg">
                   <p className="text-sm text-gray-600 mb-2">Book Balance</p>
@@ -313,7 +319,10 @@ const BankReconciliationFlow: React.FC<BankReconciliationFlowProps> = ({ onClose
             {/* Unreconciled Transactions */}
             <div className="bg-white rounded-lg border border-gray-200">
               <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
-                <h3 className="text-lg font-medium text-gray-900">Unreconciled Transactions</h3>
+                <h3 className="text-lg font-medium text-gray-900 flex items-center">
+                  <AlertCircle className="w-5 h-5 mr-2 text-orange-600" />
+                  Unreconciled Transactions
+                </h3>
                 <button className="px-4 py-2 text-teal-600 hover:text-teal-700 border border-teal-200 rounded-lg hover:bg-teal-50 flex items-center gap-2">
                   <Upload className="w-4 h-4" />
                   Import Statement

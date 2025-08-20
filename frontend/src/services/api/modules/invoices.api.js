@@ -1,6 +1,7 @@
 import { apiHelpers } from '../apiClient';
 import { API_CONFIG } from '../../../config/api.config';
 import { cleanData } from '../utils/dataUtils';
+import offlineStorage from '../../offlineStorage';
 
 const ENDPOINTS = API_CONFIG.ENDPOINTS.INVOICES;
 const SALES_ENDPOINTS = API_CONFIG.ENDPOINTS.SALES;
@@ -156,66 +157,37 @@ export const invoicesApi = {
       
       return await apiHelpers.get(ENDPOINTS.BASE, { params: searchParams });
     } catch (error) {
-      // If endpoints fail, return mock data for development
       if (error.response?.status === 404) {
-        console.warn('Invoice search endpoint not found, returning mock data');
+        console.warn('Invoice search endpoint not found, trying offline storage');
         
-        // Generate mock invoices for development
-        const mockInvoices = [];
-        if (customer_id) {
-          // Generate some recent invoices for the customer
-          const today = new Date();
-          for (let i = 0; i < 5; i++) {
-            const invoiceDate = new Date(today);
-            invoiceDate.setDate(today.getDate() - (i * 7)); // Weekly invoices
+        // Try to load from offline storage instead of generating mock data
+        try {
+          const offlineData = await offlineStorage.getOffline('invoices', { persistent: true });
+          if (offlineData && offlineData.data) {
+            const filteredInvoices = offlineData.data.filter(inv => 
+              !query || 
+              inv.invoice_number?.toLowerCase().includes(query.toLowerCase()) ||
+              inv.customer_name?.toLowerCase().includes(query.toLowerCase())
+            );
             
-            mockInvoices.push({
-              invoice_id: 1000 + i,
-              id: 1000 + i,
-              invoice_number: `INV-2025-${String(1000 + i).padStart(4, '0')}`,
-              invoice_no: `INV-2025-${String(1000 + i).padStart(4, '0')}`,
-              invoice_date: invoiceDate.toISOString().split('T')[0],
-              customer_id: customer_id,
-              customer_name: 'Test Customer',
-              total_amount: Math.floor(Math.random() * 50000) + 10000,
-              grand_total: Math.floor(Math.random() * 50000) + 10000,
-              payment_status: i === 0 ? 'UNPAID' : (i === 1 ? 'PARTIAL' : 'PAID'),
-              status: i === 0 ? 'UNPAID' : (i === 1 ? 'PARTIAL' : 'PAID'),
-              items: [
-                {
-                  item_id: 1,
-                  product_id: 101,
-                  product_name: 'Paracetamol 500mg',
-                  quantity: 10,
-                  rate: 50,
-                  sale_price: 50,
-                  tax_percent: 12,
-                  gst_percent: 12
-                },
-                {
-                  item_id: 2,
-                  product_id: 102,
-                  product_name: 'Amoxicillin 250mg',
-                  quantity: 5,
-                  rate: 120,
-                  sale_price: 120,
-                  tax_percent: 12,
-                  gst_percent: 12
-                }
-              ]
-            });
+            return {
+              success: true,
+              data: {
+                invoices: filteredInvoices,
+                total: filteredInvoices.length
+              }
+            };
           }
+        } catch (offlineError) {
+          console.error('Error loading from offline storage:', offlineError);
         }
         
+        // No offline data available - return empty result
         return {
           success: true,
           data: {
-            invoices: mockInvoices.filter(inv => 
-              !query || 
-              inv.invoice_number.toLowerCase().includes(query.toLowerCase()) ||
-              inv.customer_name.toLowerCase().includes(query.toLowerCase())
-            ),
-            total: mockInvoices.length
+            invoices: [],
+            total: 0
           }
         };
       }
@@ -245,34 +217,29 @@ export const invoicesApi = {
       return response;
     } catch (error) {
       if (error.response?.status === 404) {
-        console.warn('Invoice/Orders endpoint not found, returning mock data');
+        console.warn('Invoice/Orders endpoint not found, trying offline storage');
         
-        // Generate mock invoices for the customer
-        const mockInvoices = [];
-        const today = new Date();
-        
-        for (let i = 0; i < 5; i++) {
-          const invoiceDate = new Date(today);
-          invoiceDate.setDate(today.getDate() - (i * 7)); // Weekly invoices
-          
-          mockInvoices.push({
-            invoice_id: 1000 + i,
-            id: 1000 + i,
-            invoice_number: `INV-2025-${String(1000 + i).padStart(4, '0')}`,
-            invoice_no: `INV-2025-${String(1000 + i).padStart(4, '0')}`,
-            invoice_date: invoiceDate.toISOString().split('T')[0],
-            customer_id: customerId,
-            customer_name: 'Test Customer',
-            total_amount: Math.floor(Math.random() * 50000) + 10000,
-            grand_total: Math.floor(Math.random() * 50000) + 10000,
-            payment_status: i === 0 ? 'UNPAID' : (i === 1 ? 'PARTIAL' : 'PAID'),
-            status: i === 0 ? 'UNPAID' : (i === 1 ? 'PARTIAL' : 'PAID')
-          });
+        // Try to load from offline storage instead of generating mock data
+        try {
+          const offlineData = await offlineStorage.getOffline('invoices', { persistent: true });
+          if (offlineData && offlineData.data) {
+            const customerInvoices = offlineData.data.filter(inv => 
+              inv.customer_id === customerId
+            );
+            
+            return {
+              success: true,
+              data: customerInvoices
+            };
+          }
+        } catch (offlineError) {
+          console.error('Error loading from offline storage:', offlineError);
         }
         
+        // No offline data available - return empty result
         return {
           success: true,
-          data: mockInvoices
+          data: []
         };
       }
       throw error;

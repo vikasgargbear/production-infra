@@ -356,26 +356,7 @@ const ProductMaster: React.FC<ProductMasterProps> = () => {
       {/* Statistics */}
       <StatsGrid stats={statsData} />
 
-      {/* Success/Error Messages */}
-      {successMessage && (
-        <ContentCard title="" subtitle={null} actions={null} className="border-l-4 border-l-green-500 bg-green-50">
-          <div className="flex items-center space-x-3">
-            <Check className="w-5 h-5 text-green-600" />
-            <span className="text-green-800 font-medium">{successMessage}</span>
-          </div>
-        </ContentCard>
-      )}
-
-      {error && (
-        <ContentCard title="" subtitle={null} actions={null} className="border-l-4 border-l-red-500 bg-red-50">
-          <div className="flex items-center space-x-3">
-            <AlertCircle className="w-5 h-5 text-red-600" />
-            <span className="text-red-800 font-medium">{error}</span>
-          </div>
-        </ContentCard>
-      )}
-
-      {/* Filters */}
+      {/* Filters and Search */}
       <ContentCard title="Search & Filter" subtitle={null} actions={
         selectedProducts.length > 0 ? (
           <Button
@@ -387,33 +368,55 @@ const ProductMaster: React.FC<ProductMasterProps> = () => {
             Delete ({selectedProducts.length})
           </Button>
         ) : null
-      }>
+      } icon={Search}>
         <div className="flex items-center space-x-6">
           <div className="flex-1 relative">
             <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 text-app-400 w-5 h-5" />
-            <input
+            <Input
               type="text"
-              placeholder="Search products by name, code, HSN..."
+              placeholder="Search products..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-12 pr-4 py-2 border border-app-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 bg-white"
+              className="pl-12"
             />
           </div>
-          <select
-            value={filterCategory}
-            onChange={(e) => setFilterCategory(e.target.value)}
-            className="px-3 py-2 border border-app-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 bg-white min-w-[180px]"
-          >
-            <option value="all">All Categories</option>
-            {categories.map(category => (
-              <option key={category} value={category}>{category}</option>
-            ))}
-          </select>
+          <div className="flex items-center space-x-4">
+            <select
+              value={filterCategory}
+              onChange={(e) => setFilterCategory(e.target.value)}
+              className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              {categories.map(category => (
+                <option key={category} value={category === 'All' ? 'all' : category}>
+                  {category}
+                </option>
+              ))}
+            </select>
+          </div>
         </div>
       </ContentCard>
 
+      {/* Success/Error Messages */}
+      {successMessage && (
+        <ContentCard title="" subtitle={null} actions={null} className="border-l-4 border-l-green-500 bg-green-50" icon={Check}>
+          <div className="flex items-center space-x-3">
+            <Check className="w-5 h-5 text-green-600" />
+            <span className="text-green-800">{successMessage}</span>
+          </div>
+        </ContentCard>
+      )}
+
+      {error && (
+        <ContentCard title="" subtitle={null} actions={null} className="border-l-4 border-l-red-500 bg-red-50" icon={AlertCircle}>
+          <div className="flex items-center space-x-3">
+            <AlertCircle className="w-5 h-5 text-red-600" />
+            <span className="text-red-800">{error}</span>
+          </div>
+        </ContentCard>
+      )}
+
       {/* Product List */}
-      <ContentCard title="Product List" subtitle={null} actions={null} className="overflow-hidden">
+      <ContentCard title="Product List" subtitle={null} actions={null} className="overflow-hidden" icon={Package}>
         <DataTable
           data={filteredProducts}
           columns={columns}

@@ -292,7 +292,22 @@ const GSTReports: React.FC<GSTReportsProps> = ({ open, onClose }) => {
       throw new Error('Invalid response format from party-wise API');
     } catch (err) {
       console.warn('Party-wise API failed, using fallback:', err);
-      return getFallbackData();
+      // Return empty data structure instead of mock data
+      return {
+        b2b: [],
+        b2c: {
+          small: { count: 0, taxableValue: 0, cgst: 0, sgst: 0, igst: 0 },
+          large: { count: 0, taxableValue: 0, cgst: 0, sgst: 0, igst: 0 }
+        },
+        summary: {
+          totalInvoices: 0,
+          totalTaxableValue: 0,
+          totalCGST: 0,
+          totalSGST: 0,
+          totalIGST: 0,
+          totalTax: 0
+        }
+      };
     }
   };
 
@@ -311,7 +326,22 @@ const GSTReports: React.FC<GSTReportsProps> = ({ open, onClose }) => {
       throw new Error('Invalid response format from GST payable API');
     } catch (err) {
       console.warn('GST payable API failed, using fallback:', err);
-      return getFallbackData();
+      // Return empty data structure instead of mock data
+      return {
+        b2b: [],
+        b2c: {
+          small: { count: 0, taxableValue: 0, cgst: 0, sgst: 0, igst: 0 },
+          large: { count: 0, taxableValue: 0, cgst: 0, sgst: 0, igst: 0 }
+        },
+        summary: {
+          totalInvoices: 0,
+          totalTaxableValue: 0,
+          totalCGST: 0,
+          totalSGST: 0,
+          totalIGST: 0,
+          totalTax: 0
+        }
+      };
     }
   };
 
@@ -435,29 +465,6 @@ const GSTReports: React.FC<GSTReportsProps> = ({ open, onClose }) => {
   const transformGSTPayableResponse = (data: any): GSTR1Data => {
     // Transform GST payable response
     return transformGSTR1Response(data);
-  };
-
-  const getFallbackData = (): GSTR1Data => {
-    // Fallback mock data when APIs fail
-    return {
-      b2b: [
-        { gstin: '29AABCT1332L1ZN', name: 'Apollo Hospitals', invoices: 45, taxableValue: 850000, cgst: 76500, sgst: 76500, igst: 0 },
-        { gstin: '27AABCT1332L2ZN', name: 'Max Healthcare', invoices: 32, taxableValue: 620000, cgst: 0, sgst: 0, igst: 111600 },
-        { gstin: '29AABCT1332L3ZN', name: 'Fortis Hospitals', invoices: 28, taxableValue: 450000, cgst: 40500, sgst: 40500, igst: 0 }
-      ],
-      b2c: {
-        small: { count: 156, taxableValue: 125000, cgst: 11250, sgst: 11250, igst: 0 },
-        large: { count: 12, taxableValue: 450000, cgst: 40500, sgst: 40500, igst: 0 }
-      },
-      summary: {
-        totalInvoices: 273,
-        totalTaxableValue: 2495000,
-        totalCGST: 168750,
-        totalSGST: 168750,
-        totalIGST: 111600,
-        totalTax: 449100
-      }
-    };
   };
 
   const handleRefresh = async (): Promise<void> => {

@@ -6,6 +6,7 @@ export { default as CurrencyInput } from './forms/CurrencyInput';
 export { default as Button } from './Button';
 export { default as SearchBar } from './SearchBar';
 export { default as AddNewButton } from './AddNewButton';
+export { default as CustomerCreationB2B } from './forms/CustomerCreationB2B';
 
 // Display Components
 export { DataTable } from './display/DataTable';
@@ -14,6 +15,7 @@ export { default as SummaryCard, InvoiceSummary, PaymentSummary, OrderSummary } 
 export { default as ItemsTable } from './display/ItemsTable';
 export { default as Card, CardSection } from './Card';
 export { default as Badge, BadgeGroup, SimpleStatusBadge } from './Badge';
+export { default as DocumentFooter } from './display/DocumentFooter';
 
 // Layout Components
 export { default as ModuleHeader } from './ModuleHeader';

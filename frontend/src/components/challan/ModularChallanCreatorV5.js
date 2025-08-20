@@ -1,22 +1,15 @@
 import React, { useState, useEffect } from 'react';
 import { 
   Truck, Calendar, ArrowRight,
-  CheckCircle, MessageCircle, FileInput, Printer
+  CheckCircle, MessageCircle, FileInput, Printer, User, MapPin, Package
 } from 'lucide-react';
-import { 
-  CustomerSearch, 
-  ProductSearchSimple, 
-  ProductCreationModal, 
-  CustomerCreationModal,
-  ProceedToReviewComponent,
-  ItemsTable, // Using global ItemsTable
-  NotesSection, // Using global NotesSection
-  ModuleHeader // Using global ModuleHeader
-} from '../global';
+import { ModuleHeader, CustomerSearch, ProductSearchSimple, ItemsTable, DocumentFooter, CustomerCreationModal, ProductCreationModal, NotesSection } from '../global';
+import CustomerCreationB2B from '../global/ui/forms/CustomerCreationB2B';
 // NotesSection is now imported from global
 import ChallanPreview from './components/ChallanPreview';
 import ImportFromInvoiceModal from './components/ImportFromInvoiceModal';
-import { challansApi } from '../../services/api';
+import { challansApi } from '../../services/api/modules/challans.api';
+import { apiClient } from '../../services/api';
 
 const ModularChallanCreatorV5 = ({ open = true, onClose }) => {
   const [challan, setChallan] = useState({
@@ -60,6 +53,7 @@ const ModularChallanCreatorV5 = ({ open = true, onClose }) => {
   const [showImportModal, setShowImportModal] = useState(false);
   const [sameAsBilling, setSameAsBilling] = useState(true);
   const [newProductName, setNewProductName] = useState('');
+  const [fetchingAddress, setFetchingAddress] = useState(false);
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -81,6 +75,7 @@ const ModularChallanCreatorV5 = ({ open = true, onClose }) => {
             break;
           case 'n':
             e.preventDefault();
+            console.log('Keyboard shortcut Ctrl+N pressed - opening customer creation');
             setShowCreateCustomer(true);
             break;
           case 'i':
@@ -115,12 +110,71 @@ const ModularChallanCreatorV5 = ({ open = true, onClose }) => {
     generateChallanNumber();
   }, []);
 
+  // Function to fetch customer addresses separately if not in view
+  const fetchCustomerAddress = async (customerId) => {
+    try {
+      // Use the new customer addresses endpoint
+      const response = await apiClient.get(`/customers/${customerId}/addresses`);
+      
+      if (response.data?.success && response.data.data?.length > 0) {
+        const addresses = response.data.data;
+        
+        // Prioritize billing, then shipping, then any default address
+        const billingAddr = addresses.find(addr => addr.address_type === 'billing' && addr.is_default);
+        const shippingAddr = addresses.find(addr => addr.address_type === 'shipping' && addr.is_default);
+        const anyDefaultAddr = addresses.find(addr => addr.is_default);
+        
+        const preferredAddr = billingAddr || shippingAddr || anyDefaultAddr || addresses[0];
+        
+        console.log('Found address data:', {
+          total: addresses.length,
+          types: addresses.map(a => a.address_type),
+          selected: preferredAddr.address_type,
+          address: preferredAddr
+        });
+        
+        return {
+          address: preferredAddr.address_line1 || '',
+          city: preferredAddr.city || '',
+          state: preferredAddr.state_name || '',
+          pincode: preferredAddr.pincode || ''
+        };
+      }
+      
+      console.warn(`Customer ${customerId} has no addresses in database`);
+      return null;
+      
+    } catch (error) {
+      console.error('Error fetching customer addresses:', error);
+      return null;
+    }
+  };
+
   const generateChallanNumber = async () => {
-    // Frontend generation for now - backend will assign actual number
-    setChallan(prev => ({ 
-      ...prev, 
-      challan_number: `DC-TEMP-${Date.now()}`
-    }));
+    // Generate a proper document-style number instead of timestamp
+    try {
+      // Try to get a proper number from backend (if endpoint exists)
+      // For now, generate a more professional format
+      const today = new Date();
+      const year = today.getFullYear().toString().slice(-2);
+      const month = String(today.getMonth() + 1).padStart(2, '0');
+      const day = String(today.getDate()).padStart(2, '0');
+      const serial = Math.floor(Math.random() * 9999).toString().padStart(4, '0');
+      
+      const challanNumber = `DC${year}${month}${day}${serial}`;
+      
+      setChallan(prev => ({ 
+        ...prev, 
+        challan_number: challanNumber
+      }));
+    } catch (error) {
+      // Fallback to simple format
+      const serial = Math.floor(Math.random() * 9999).toString().padStart(4, '0');
+      setChallan(prev => ({ 
+        ...prev, 
+        challan_number: `DC-${serial}`
+      }));
+    }
   };
 
   // Handle import from invoice/order
@@ -155,7 +209,7 @@ const ModularChallanCreatorV5 = ({ open = true, onClose }) => {
   };
 
   // Handle customer selection - Auto-populate billing address
-  const handleCustomerSelect = (customer) => {
+  const handleCustomerSelect = async (customer) => {
     setSelectedCustomer(customer);
     
     // Handle null customer (when removing selection)
@@ -176,21 +230,86 @@ const ModularChallanCreatorV5 = ({ open = true, onClose }) => {
       return;
     }
     
-    const billingAddress = `${customer.address || ''}, ${customer.city || ''}, ${customer.state || ''} ${customer.pincode || ''}`.trim();
+    // Enhanced address building with fallbacks based on actual schema
+    // The customer view only returns billing addresses, but some customers only have shipping addresses
+    let address = customer.address || customer.address_line1 || ''; 
+    let city = customer.city || '';
+    let state = customer.state || customer.state_name || '';
+    let pincode = customer.pincode || customer.pin_code || customer.postal_code || '';
+    const phone = customer.phone || customer.primary_phone || customer.mobile || customer.contact_number || '';
+    
+    // Build clean billing address
+    let addressParts = [address, city, state, pincode].filter(part => part && part.trim());
+    let billingAddress = addressParts.join(', ');
+    
+    // Debug log to see what customer data we're getting
+    console.log('Customer data received:', {
+      customerId: customer.customer_id,
+      hasAddress: !!address,
+      hasCity: !!city,
+      hasState: !!state,
+      hasPhone: !!phone,
+      fullAddress: billingAddress,
+      rawCustomer: customer
+    });
+    
+    // If no address data, fetch addresses separately
+    // This happens when customers only have shipping addresses (not billing)
+    if (!address && !city && customer.customer_id) {
+      console.warn(`Customer ${customer.customer_id} has no address in view - fetching addresses separately`);
+      
+      setFetchingAddress(true);
+      
+      // Fetch address data separately
+      const addressData = await fetchCustomerAddress(customer.customer_id);
+      if (addressData) {
+        // Update the parsed values with fetched address data
+        address = addressData.address;
+        city = addressData.city;
+        state = addressData.state;
+        pincode = addressData.pincode;
+        
+        // Rebuild billing address with fetched data
+        const newAddressParts = [address, city, state, pincode].filter(part => part && part.trim());
+        billingAddress = newAddressParts.join(', ');
+        
+        // Update the customer object with fetched address data
+        customer = {
+          ...customer,
+          address: address,
+          city: city,
+          state: state,
+          pincode: pincode
+        };
+        
+        console.log('Fetched address data:', addressData);
+        
+        // Update selectedCustomer state so UI shows the fetched address
+        setSelectedCustomer(customer);
+      }
+      setFetchingAddress(false);
+    }
     
     setChallan(prev => ({
       ...prev,
-      customer_id: customer.customer_id,
-      customer_name: customer.customer_name,
-      customer_details: customer,
+      customer_id: customer.customer_id || customer.id,
+      customer_name: customer.customer_name || customer.name,
+      customer_details: {
+        ...customer,
+        address: address,
+        city: city,
+        state: state,
+        pincode: pincode,
+        phone: phone
+      },
       billing_address: billingAddress,
       // Auto-populate delivery address same as billing if checkbox is checked
-      delivery_address: sameAsBilling ? (customer.address || customer.address_line1 || '') : prev.delivery_address,
-      delivery_city: sameAsBilling ? (customer.city || '') : prev.delivery_city,
-      delivery_state: sameAsBilling ? (customer.state || '') : prev.delivery_state,
-      delivery_pincode: sameAsBilling ? (customer.pincode || '') : prev.delivery_pincode,
-      delivery_contact_person: sameAsBilling ? (customer.contact_person || customer.customer_name) : prev.delivery_contact_person,
-      delivery_contact_phone: sameAsBilling ? (customer.phone || '') : prev.delivery_contact_phone
+      delivery_address: sameAsBilling ? address : prev.delivery_address,
+      delivery_city: sameAsBilling ? city : prev.delivery_city,
+      delivery_state: sameAsBilling ? state : prev.delivery_state,
+      delivery_pincode: sameAsBilling ? pincode : prev.delivery_pincode,
+      delivery_contact_person: sameAsBilling ? (customer.contact_person || customer.customer_name || customer.name) : prev.delivery_contact_person,
+      delivery_contact_phone: sameAsBilling ? phone : prev.delivery_contact_phone
     }));
   };
 
@@ -202,16 +321,24 @@ const ModularChallanCreatorV5 = ({ open = true, onClose }) => {
       // Increase quantity if product already exists
       updateItemQuantity(existingItem.id, existingItem.quantity + 1);
     } else {
-      // Add new item
+      // Add new item with proper unit and total calculation
+      const quantity = 1;
+      const unitPrice = product.sale_price || product.mrp || 0;
+      const total = quantity * unitPrice;
+      
       const newItem = {
         id: Date.now(),
         product_id: product.product_id,
         product_name: product.product_name,
         hsn_code: product.hsn_code,
-        quantity: 1,
-        unit: product.unit || 'NOS',
+        quantity: quantity,
+        unit: product.unit || product.base_uom || product.uom_code || '', // Get from backend
         mrp: product.mrp || 0,
-        unit_price: product.sale_price || product.mrp || 0,
+        unit_price: unitPrice,
+        rate: unitPrice, // For ItemsTable compatibility
+        sale_price: unitPrice, // For ItemsTable compatibility
+        total: total, // Pre-calculated total
+        line_total: total, // For ItemsTable compatibility
         gst_percent: product.gst_percent || 18,
         manufacturer: product.manufacturer,
         category: product.category
@@ -247,11 +374,16 @@ const ModularChallanCreatorV5 = ({ open = true, onClose }) => {
       if (i === index) {
         const updatedItem = { ...item, [field]: value };
         
-        // Recalculate if quantity changes
-        if (field === 'quantity') {
-          const quantity = parseFloat(value) || 0;
-          const unitPrice = parseFloat(item.unit_price) || 0;
-          updatedItem.total = quantity * unitPrice;
+        // Recalculate total when quantity or price changes
+        if (field === 'quantity' || field === 'unit_price' || field === 'rate') {
+          const quantity = parseFloat(field === 'quantity' ? value : item.quantity) || 0;
+          const unitPrice = parseFloat(field === 'unit_price' || field === 'rate' ? value : (item.unit_price || item.rate)) || 0;
+          const total = quantity * unitPrice;
+          
+          updatedItem.total = total;
+          updatedItem.line_total = total;
+          updatedItem.unit_price = unitPrice;
+          updatedItem.rate = unitPrice;
         }
         
         return updatedItem;
@@ -272,8 +404,12 @@ const ModularChallanCreatorV5 = ({ open = true, onClose }) => {
 
   // Recalculate totals
   const recalculateTotals = (items) => {
-    const totalQuantity = items.reduce((sum, item) => sum + item.quantity, 0);
-    const totalAmount = items.reduce((sum, item) => sum + (item.quantity * item.unit_price), 0);
+    const totalQuantity = items.reduce((sum, item) => sum + (parseFloat(item.quantity) || 0), 0);
+    const totalAmount = items.reduce((sum, item) => {
+      const quantity = parseFloat(item.quantity) || 0;
+      const unitPrice = parseFloat(item.unit_price || item.rate || item.sale_price) || 0;
+      return sum + (quantity * unitPrice);
+    }, 0);
     
     setChallan(prev => ({
       ...prev,
@@ -301,14 +437,18 @@ const ModularChallanCreatorV5 = ({ open = true, onClose }) => {
         expiry_date: item.expiry_date || null
       }));
 
-      // Prepare challan data
+      // Prepare challan data with complete delivery address
       const challanData = {
         challan_number: challan.challan_number,
         challan_date: challan.challan_date,
         expected_delivery_date: challan.expected_delivery_date,
         customer_id: challan.customer_id,
         customer_name: challan.customer_name,
-        delivery_address: challan.delivery_address,
+        // Complete delivery address data
+        delivery_address: challan.delivery_address || '',
+        delivery_city: challan.delivery_city || '',
+        delivery_state: challan.delivery_state || '',
+        delivery_pincode: challan.delivery_pincode || '',
         items: apiItems,
         transport_company: challan.transport_company,
         vehicle_number: challan.vehicle_number,
@@ -442,11 +582,19 @@ Expected Delivery: ${challan.expected_delivery_date}
 
               {/* Customer Section */}
               <div className="mb-6">
-                <h3 className="text-xs font-semibold text-blue-700 uppercase tracking-wider mb-3">CUSTOMER</h3>
+                <h3 className="text-xs font-semibold text-blue-700 uppercase tracking-wider mb-3 flex items-center">
+                  <User className="w-4 h-4 mr-2" />
+                  CUSTOMER
+                </h3>
                 <CustomerSearch
                   value={selectedCustomer}
                   onChange={handleCustomerSelect}
-                  onCreateNew={() => setShowCreateCustomer(true)}
+                  onCreateNew={() => {
+                    console.log('Opening customer creation - user can choose B2B or B2C');
+                    // Let the component handle the type selection with toggle
+                    setShowCreateCustomer(true);
+                    console.log('State updated - showCreateCustomer:', true);
+                  }}
                   displayMode="inline"
                   placeholder="Search customer by name, phone, or code..."
                   required
@@ -457,7 +605,10 @@ Expected Delivery: ${challan.expected_delivery_date}
               {selectedCustomer && (
                 <div className="mb-4 p-3 bg-blue-50 rounded-lg border border-blue-200">
                   <div className="flex items-center justify-between mb-2">
-                    <h3 className="text-xs font-semibold text-blue-700 uppercase tracking-wider">DELIVERY ADDRESS</h3>
+                    <h3 className="text-xs font-semibold text-blue-700 uppercase tracking-wider flex items-center">
+                      <MapPin className="w-4 h-4 mr-2" />
+                      DELIVERY ADDRESS
+                    </h3>
                     <label className="flex items-center text-xs">
                       <input
                         type="checkbox"
@@ -486,7 +637,15 @@ Expected Delivery: ${challan.expected_delivery_date}
                   {/* Show full address if same as billing, otherwise show editable fields */}
                   {sameAsBilling && selectedCustomer ? (
                     <div className="text-sm text-gray-600">
-                      <p className="truncate">{selectedCustomer.customer_name} - {selectedCustomer.address || ''}, {selectedCustomer.city || ''}, {selectedCustomer.state || ''} {selectedCustomer.pincode || ''}</p>
+                      {fetchingAddress ? (
+                        <p className="truncate text-blue-600">
+                          {selectedCustomer.customer_name} - Fetching address...
+                        </p>
+                      ) : (
+                        <p className="truncate">
+                          {selectedCustomer.customer_name} - {selectedCustomer.address || 'No address'}, {selectedCustomer.city || ''}, {selectedCustomer.state || ''} {selectedCustomer.pincode || ''}
+                        </p>
+                      )}
                     </div>
                   ) : (
                     <div className="grid grid-cols-2 gap-2">
@@ -532,7 +691,10 @@ Expected Delivery: ${challan.expected_delivery_date}
 
               {/* Products Section */}
               <div className="mb-6">
-                <h3 className="text-sm font-semibold text-blue-700 uppercase tracking-wider mb-3">PRODUCTS</h3>
+                <h3 className="text-sm font-semibold text-blue-700 uppercase tracking-wider mb-3 flex items-center">
+                  <Package className="w-4 h-4 mr-2" />
+                  PRODUCTS
+                </h3>
                 <ProductSearchSimple
                   onAddItem={handleProductSelect}
                   onCreateProduct={(productName) => {
@@ -547,6 +709,10 @@ Expected Delivery: ${challan.expected_delivery_date}
               {/* Items Table - Using Global Component */}
               {challan.items.length > 0 && (
                 <div className="mb-6">
+                  <h3 className="text-sm font-semibold text-blue-700 uppercase tracking-wider mb-3 flex items-center">
+                    <Package className="w-4 h-4 mr-2" />
+                    CHALLAN ITEMS
+                  </h3>
                   <ItemsTable
                     items={challan.items}
                     onUpdateItem={updateItem}
@@ -554,7 +720,7 @@ Expected Delivery: ${challan.expected_delivery_date}
                     showPricing={true}
                     showGST={false} // Simplified for delivery
                     editable={true}
-                    columns={['product', 'quantity', 'unit', 'price', 'total', 'actions']}
+                    columns={['product', 'quantity', 'unit', 'rate', 'total']}
                   />
                 </div>
               )}
@@ -563,43 +729,26 @@ Expected Delivery: ${challan.expected_delivery_date}
           </div>
 
           {/* Footer */}
-          <div className="border-t border-blue-200 bg-white px-6 py-4">
-            <div className="flex justify-between items-center">
-              <div className="flex items-center gap-4 text-sm">
-                <span className="text-gray-600">Items: <strong>{challan.total_quantity}</strong></span>
-                <span className="text-gray-600">Amount: <strong>₹{challan.total_amount.toFixed(2)}</strong></span>
-                {challan.freight_amount > 0 && (
-                  <span className="text-gray-600">Freight: <strong>₹{challan.freight_amount.toFixed(2)}</strong></span>
-                )}
-              </div>
-              
-              <div className="flex items-center gap-3">
-                <button
-                  onClick={onClose}
-                  className="px-6 py-2 text-blue-700 hover:bg-gray-100 rounded-lg transition-colors"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={() => setCurrentStep(2)}
-                  disabled={!challan.customer_id || challan.items.length === 0}
-                  className="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors flex items-center gap-2 disabled:opacity-50"
-                >
-                  Continue
-                  <ArrowRight className="w-4 h-4" />
-                </button>
-              </div>
-            </div>
-          </div>
+          <DocumentFooter
+            totalItems={challan.total_quantity}
+            totalAmount={challan.total_amount}
+            additionalInfo={challan.freight_amount > 0 ? `Freight: ₹${challan.freight_amount.toFixed(2)}` : null}
+            onCancel={onClose}
+            onContinue={() => setCurrentStep(2)}
+            cancelLabel="Cancel"
+            continueLabel="Continue"
+            continueDisabled={!challan.customer_id || challan.items.length === 0}
+            continueButtonColor="blue"
+          />
 
         </div>
 
-        {/* Modals */}
+        {/* Customer Creation Modal */}
         {showCreateCustomer && (
-          <CustomerCreationModal
-            show={showCreateCustomer}
+          <CustomerCreationB2B
             onClose={() => setShowCreateCustomer(false)}
             onCustomerCreated={(customer) => {
+              console.log('Customer created:', customer);
               handleCustomerSelect(customer);
               setShowCreateCustomer(false);
             }}

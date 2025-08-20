@@ -16,7 +16,7 @@ const ItemsTable = ({
   showActions = true,
   showTotals = true,
   currencySymbol = '₹',
-  columns = ['product', 'quantity', 'mrp', 'rate', 'discount', 'free', 'tax', 'total'],
+  columns = ['product', 'quantity', 'unit', 'mrp', 'rate', 'discount', 'free', 'tax', 'total'],
   customColumns = {},
   className = '',
   title = 'Items'
@@ -124,6 +124,17 @@ const ItemsTable = ({
           min="0"
         />
       )
+    },
+    unit: {
+      label: 'Unit',
+      align: 'center',
+      render: (item) => {
+        // Get unit from backend data - no hardcoding
+        const unit = item.unit || item.base_uom || item.uom_code || '';
+        // Only clean obvious typos, don't force to 'Strip'
+        const cleanUnit = unit.replace(/NOC/gi, 'NOS'); // Fix common typo
+        return <span>{cleanUnit || 'Unit'}</span>;
+      }
     },
     tax: {
       label: 'Tax %',

@@ -100,18 +100,59 @@ export const CustomerSearch = forwardRef<CustomerSearchRef, CustomerSearchProps>
     onChange(null);
   };
 
-  // Default customer info renderer - Compact version
+  // Default customer info renderer - Enhanced for B2B with contact person
   const defaultRenderCustomerInfo = (customer: Customer) => (
     <div className="flex items-center justify-between">
       <div className="flex-1">
-        <p className="font-medium text-gray-900">{customer.customer_name}</p>
-        <div className="text-sm text-gray-600 space-y-0.5 mt-1">
-          {/* Mobile Number */}
-          {(customer.phone || customer.contact_info?.primary_phone) && (
+        {/* Business/Party Name */}
+        <div className="flex items-center gap-2 mb-1">
+          <Building className="w-4 h-4 text-blue-600" />
+          <p className="font-medium text-gray-900">{customer.customer_name}</p>
+          {customer.customer_type === 'B2B' && (
+            <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded">B2B</span>
+          )}
+        </div>
+        
+        <div className="text-sm text-gray-600 space-y-0.5 ml-6">
+          {/* Contact Person - for B2B customers */}
+          {(customer as any).contact_person_name && (
             <p className="flex items-center gap-1">
-              <Phone className="w-3 h-3" /> {customer.phone || customer.contact_info?.primary_phone}
+              <User className="w-3 h-3" /> 
+              <span className="font-medium">Contact:</span> {(customer as any).contact_person_name}
             </p>
           )}
+          
+          {/* Mobile Number - prioritize contact person phone for B2B */}
+          {(() => {
+            const phoneNumber = (customer as any).contact_person_phone || 
+                               customer.phone || 
+                               customer.contact_info?.primary_phone ||
+                               (customer as any).primary_phone;
+            if (phoneNumber) {
+              return (
+                <p className="flex items-center gap-1">
+                  <Phone className="w-3 h-3" /> {phoneNumber}
+                </p>
+              );
+            }
+            return null;
+          })()}
+          
+          {/* Email */}
+          {(() => {
+            const email = (customer as any).contact_person_email || 
+                         customer.email || 
+                         (customer as any).primary_email;
+            if (email) {
+              return (
+                <p className="flex items-center gap-1">
+                  <Mail className="w-3 h-3" /> {email}
+                </p>
+              );
+            }
+            return null;
+          })()}
+          
           {/* Compact Address - City, State only */}
           {(() => {
             // Try to get city and state from multiple possible sources
@@ -137,7 +178,7 @@ export const CustomerSearch = forwardRef<CustomerSearchRef, CustomerSearchProps>
       
       {/* GST Status Badge */}
       <div className="ml-3">
-        {(customer.gstin || customer.gst_number) ? (
+        {(customer.gstin || customer.gst_number || (customer as any).gst_number) ? (
           <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-700">
             ✓ GST Verified
           </span>
@@ -172,16 +213,46 @@ export const CustomerSearch = forwardRef<CustomerSearchRef, CustomerSearchProps>
             >
               <div className="flex justify-between items-start">
                 <div className="flex-1">
-                  <p className="font-medium text-gray-900">{customer.customer_name}</p>
+                  {/* Business/Party Name */}
+                  <div className="flex items-center gap-2 mb-1">
+                    <p className="font-medium text-gray-900">{customer.customer_name}</p>
+                    {customer.customer_type === 'B2B' && (
+                      <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded">B2B</span>
+                    )}
+                  </div>
+                  
                   <div className="text-sm text-gray-600 mt-1 space-y-0.5">
+                    {/* Contact Person for B2B */}
+                    {(customer as any).contact_person_name && (
+                      <p className="flex items-center gap-1">
+                        <User className="w-3 h-3" />
+                        <span className="font-medium">Contact:</span> {(customer as any).contact_person_name}
+                      </p>
+                    )}
+                    
+                    {/* Phone */}
+                    {(() => {
+                      const phone = (customer as any).contact_person_phone || 
+                                   customer.phone || 
+                                   (customer as any).primary_phone;
+                      if (phone) {
+                        return (
+                          <p className="flex items-center gap-1">
+                            <Phone className="w-3 h-3" /> {phone}
+                          </p>
+                        );
+                      }
+                      return null;
+                    })()}
+                    
                     {customer.customer_code && <p>Code: {customer.customer_code}</p>}
                     {(customer.billing_address?.city || customer.address_info?.billing_city) && (
                       <p>City: {customer.billing_address?.city || customer.address_info?.billing_city}</p>
                     )}
                   </div>
                 </div>
-                {customer.gstin && (
-                  <span className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded">
+                {(customer.gstin || (customer as any).gst_number) && (
+                  <span className="text-xs bg-green-100 text-green-700 px-2 py-1 rounded">
                     GST Registered
                   </span>
                 )}

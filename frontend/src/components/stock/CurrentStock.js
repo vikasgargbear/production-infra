@@ -884,7 +884,10 @@ const CurrentStock = ({ open = true, onClose }) => {
           <div className="bg-white rounded-lg shadow-xl w-full max-w-2xl max-h-[90vh] overflow-hidden">
             <div className="p-6 border-b border-gray-200">
               <div className="flex items-center justify-between">
-                <h2 className="text-xl font-semibold text-gray-900">Stock Details</h2>
+                <h2 className="text-xl font-semibold text-gray-900 flex items-center">
+                  <Package className="w-5 h-5 mr-2 text-blue-600" />
+                  Stock Details
+                </h2>
                 <button
                   onClick={() => setShowDetails(false)}
                   className="text-gray-500 hover:text-gray-700"

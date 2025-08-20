@@ -4,7 +4,7 @@ import {
   Phone, Mail, MapPin, AlertTriangle, CheckCircle, 
   Star, Building2, Calendar, TrendingUp, CreditCard,
   Shield, Clock, User, X, ChevronRight, FileText,
-  AlertCircle, MessageCircle, Banknote, Award
+  AlertCircle, MessageCircle, Banknote, Award, Building
 } from 'lucide-react';
 import { Card, Button, Badge, DataTable, BaseModal, GlobalLayout, ContentCard, StatsGrid } from '../global';
 import { theme, classes } from '../../config/theme.config';
@@ -205,7 +205,7 @@ const SupplierMaster: React.FC = () => {
       <StatsGrid stats={statsData} />
 
       {/* Filters and Search */}
-      <ContentCard title="Search & Filter" subtitle={null} actions={null}>
+      <ContentCard title="Search & Filter" subtitle={null} actions={null} icon={Search}>
         <div className="flex flex-col md:flex-row gap-4">
           {/* Search */}
           <div className="flex-1">
@@ -241,7 +241,7 @@ const SupplierMaster: React.FC = () => {
       </ContentCard>
 
       {/* Supplier List */}
-      <ContentCard title="Supplier List" subtitle={null} actions={null} className="overflow-hidden">
+      <ContentCard title="Supplier List" subtitle={null} actions={null} className="overflow-hidden" icon={Building}>
           {loading ? (
             <div className="p-8 text-center">
               <div className="inline-flex items-center text-gray-600">

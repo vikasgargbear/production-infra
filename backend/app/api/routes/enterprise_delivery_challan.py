@@ -128,17 +128,20 @@ class EnterpriseChallanService:
             # Generate challan number
             challan_number = self._generate_challan_number()
             
-            # Create challan record WITH org_id
+            # Get branch_id from order or use default
+            branch_id = order.branch_id if order.branch_id else 1  # Default branch_id = 1
+            
+            # Create challan record WITH org_id and branch_id
             challan_result = self.db.execute(
                 text("""
                     INSERT INTO sales.delivery_challans (
-                        org_id, order_id, customer_id, challan_number,
+                        org_id, branch_id, order_id, customer_id, challan_number,
                         challan_date, dispatch_date, challan_status,
                         vehicle_number, transporter_name, lr_number, 
                         freight_charges, total_quantity, total_amount,
                         delivery_status, notes, created_by
                     ) VALUES (
-                        :org_id, :order_id, :customer_id, :challan_number,
+                        :org_id, :branch_id, :order_id, :customer_id, :challan_number,
                         :challan_date, :dispatch_date, :challan_status,
                         :vehicle_number, :transporter_name, :lr_number,
                         :freight_charges, :total_quantity, :total_amount,
@@ -148,6 +151,7 @@ class EnterpriseChallanService:
                 """),
                 {
                     "org_id": self.org_id,
+                    "branch_id": branch_id,
                     "order_id": request.order_id,
                     "customer_id": request.customer_id,
                     "challan_number": challan_number,

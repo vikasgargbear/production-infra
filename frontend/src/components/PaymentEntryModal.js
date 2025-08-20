@@ -361,7 +361,7 @@ const PaymentEntryModal = ({ open, onClose }) => {
 
           {/* Customer Selection */}
           <div className="bg-white rounded-xl border border-gray-200 p-6">
-            <h3 className="text-lg font-semibold mb-4">Customer Details</h3>
+            <h3 className="text-lg font-semibold mb-4">CUSTOMER</h3>
             
             <div className="mb-4">
               <label className="block text-sm font-medium text-gray-700 mb-2">

@@ -7,6 +7,7 @@ import {
 import { customersApi } from '../../services/api/modules/customers.api';
 import { productsApi } from '../../services/api/modules/products.api';
 import { invoicesApi } from '../../services/api/modules/invoices.api';
+import offlineStorage from '../../services/offlineStorage';
 
 interface Customer {
   id?: string | number;
@@ -88,19 +89,24 @@ const InvoiceFlowBalanced: React.FC<InvoiceFlowBalancedProps> = ({ onClose }) =>
       console.error('Error loading data:', err);
       setError(err instanceof Error ? err.message : 'Failed to load data');
       
-      // Fallback to mock data for development
-      setCustomers([
-        { id: 1, name: 'Apollo Pharmacy', phone: '9876543210', gstin: '27AABCA1234B1Z5', address: 'Mumbai, Maharashtra' },
-        { id: 2, name: 'MedPlus Healthcare', phone: '9876543211', gstin: '27AABCB1234B1Z6', address: 'Pune, Maharashtra' },
-        { id: 3, name: 'Wellness Forever', phone: '9876543212', gstin: '27AABCC1234B1Z7', address: 'Nashik, Maharashtra' },
-      ]);
-
-      setProducts([
-        { id: 1, name: 'Paracetamol 500mg', price: 10, stock: 1000, hsn: '3004', unit: 'Strip' },
-        { id: 2, name: 'Amoxicillin 250mg', price: 25, stock: 500, hsn: '3004', unit: 'Strip' },
-        { id: 3, name: 'Vitamin C 100mg', price: 15, stock: 800, hsn: '3004', unit: 'Bottle' },
-        { id: 4, name: 'Cetirizine 10mg', price: 18, stock: 600, hsn: '3004', unit: 'Strip' },
-      ]);
+      // Try to load from offline storage instead of using mock data
+      try {
+        const [offlineCustomers, offlineProducts] = await Promise.all([
+          offlineStorage.getOffline('customers', { persistent: true }),
+          offlineStorage.getOffline('products', { persistent: true })
+        ]);
+        
+        if (offlineCustomers && offlineCustomers.data) {
+          setCustomers(offlineCustomers.data);
+        }
+        if (offlineProducts && offlineProducts.data) {
+          setProducts(offlineProducts.data);
+        }
+      } catch (offlineError) {
+        console.error('Error loading from offline storage:', offlineError);
+        // No offline data available - show proper error instead of mock data
+        setError('Unable to load data. Please check your connection and try again.');
+      }
     } finally {
       setIsLoading(false);
     }
