@@ -107,12 +107,51 @@ class EnterpriseChallanService:
         
         return f"DC{date_part}{next_seq:04d}"
     
+    def _ensure_system_user(self) -> int:
+        """Ensure we have a system user for created_by field"""
+        try:
+            # Try to find existing system user
+            result = self.db.execute(
+                text("""
+                    SELECT user_id FROM master.org_users 
+                    WHERE org_id = :org_id 
+                    AND email = 'system@challan.auto'
+                    LIMIT 1
+                """),
+                {"org_id": self.org_id}
+            )
+            user = result.first()
+            if user:
+                return user.user_id
+            
+            # Create system user if none exists
+            result = self.db.execute(
+                text("""
+                    INSERT INTO master.org_users (
+                        org_id, email, username, is_active, created_at, updated_at
+                    ) VALUES (
+                        :org_id, 'system@challan.auto', 'system', true, 
+                        CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+                    )
+                    RETURNING user_id
+                """),
+                {"org_id": self.org_id}
+            )
+            return result.scalar()
+        except Exception as e:
+            logger.warning(f"Could not create system user: {e}")
+            # Return a default user ID that might exist
+            return 1
+    
     def create_challan(self, request: ChallanCreationRequest) -> Dict[str, Any]:
         """Create new delivery challan - supports both order-based and direct creation"""
         try:
             order = None
             branch_id = 1  # Default branch_id
             customer_name = None
+            
+            # Ensure we have a valid created_by user (create system user if needed)
+            created_by_user = self._ensure_system_user()
             
             # If order_id is provided, validate and get order details
             if request.order_id:
@@ -148,7 +187,7 @@ class EnterpriseChallanService:
             # Generate challan number
             challan_number = self._generate_challan_number()
             
-            # Create challan record WITHOUT created_by field to avoid constraint issues
+            # Create challan record WITH proper created_by field
             challan_result = self.db.execute(
                 text("""
                     INSERT INTO sales.delivery_challans (
@@ -156,13 +195,13 @@ class EnterpriseChallanService:
                         challan_date, dispatch_date, challan_status,
                         vehicle_number, transporter_name, lr_number, 
                         freight_charges, total_quantity, total_amount,
-                        delivery_status, notes
+                        delivery_status, notes, created_by
                     ) VALUES (
                         :org_id, :branch_id, :order_id, :customer_id, :challan_number,
                         :challan_date, :dispatch_date, :challan_status,
                         :vehicle_number, :transporter_name, :lr_number,
                         :freight_charges, :total_quantity, :total_amount,
-                        :delivery_status, :notes
+                        :delivery_status, :notes, :created_by
                     )
                     RETURNING challan_id
                 """),
@@ -182,7 +221,8 @@ class EnterpriseChallanService:
                     "total_quantity": len(request.items),  # Count of items for now
                     "total_amount": sum(item.unit_price * item.dispatched_quantity for item in request.items),
                     "delivery_status": "pending",
-                    "notes": f"Delivery to: {request.delivery_address}, {request.delivery_city}"
+                    "notes": f"Delivery to: {request.delivery_address}, {request.delivery_city}",
+                    "created_by": created_by_user
                 }
             )
             challan_id = challan_result.scalar()

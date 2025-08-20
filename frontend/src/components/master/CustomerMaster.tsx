@@ -9,7 +9,7 @@ import {
 import { Card, Button, Badge, DataTable, BaseModal, GlobalLayout, ContentCard, StatsGrid } from '../global';
 import { theme, classes } from '../../config/theme.config';
 import { customersApi } from '../../services/api';
-import CustomerCreationModal from '../global/modals/CustomerCreationModal';
+import CustomerCreationB2B from '../global/ui/forms/CustomerCreationB2B';
 import { useToast } from '../global/ui/feedback/Toast';
 
 interface Customer {
@@ -408,7 +408,7 @@ const CustomerMaster: React.FC = () => {
 
       {/* Create/Edit Modal */}
       {showCreateModal && (
-        <CustomerCreationModal
+        <CustomerCreationB2B
           show={showCreateModal}
           onClose={() => {
             setShowCreateModal(false);

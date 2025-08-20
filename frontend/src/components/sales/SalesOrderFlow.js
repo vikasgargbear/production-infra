@@ -15,6 +15,7 @@ import {
   ModuleHeader,
   DocumentFooter
 } from '../global';
+import CustomerCreationB2B from '../global/ui/forms/CustomerCreationB2B';
 import { ordersApi, salesApi, api } from '../../services/api';
 import salesOrdersAPI from '../../services/api/modules/salesOrders.api';
 import { invoicesApi as invoicesApiModule } from '../../services/api/modules/invoices.api';
@@ -738,7 +739,7 @@ Expected Delivery: ${order.expected_delivery_date}
 
         {/* Modals */}
         {showCustomerModal && (
-          <CustomerCreationModal
+          <CustomerCreationB2B
             show={showCustomerModal}
             onClose={() => setShowCustomerModal(false)}
             onCustomerCreated={(customer) => {

@@ -11,7 +11,8 @@ import PaymentDetails from './components/PaymentDetails';
 import PaymentSummary from './components/PaymentSummary';
 
 // Import global components
-import { CustomerSearch, ProductSearchSimple, GSTCalculator, ProductCreationModal, CustomerCreationModal, ProceedToReviewComponent, ViewHistoryButton, ModuleHeader } from '../global';
+import { CustomerSearch, ProductSearchSimple, GSTCalculator, ProductCreationModal, ProceedToReviewComponent, ViewHistoryButton, ModuleHeader } from '../global';
+import CustomerCreationB2B from '../global/ui/forms/CustomerCreationB2B';
 
 interface PaymentEntryContentProps {
   onClose: () => void;
