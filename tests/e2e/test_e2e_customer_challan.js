@@ -100,6 +100,30 @@ async function testB2BCustomerCreation() {
 async function testDirectChallanCreation(customerId) {
     console.log('\n========== TEST 2: Direct Challan Creation (No Order) ==========');
     
+    // First, get available products
+    let productIds = [];
+    try {
+        const productsResponse = await fetch(`${API_BASE_URL}/products?limit=5`, {
+            headers: { 'Authorization': AUTH_TOKEN }
+        });
+        if (productsResponse.ok) {
+            const products = await productsResponse.json();
+            if (products && products.length > 0) {
+                productIds = products.slice(0, 2).map(p => ({
+                    id: p.product_id,
+                    name: p.product_name
+                }));
+                console.log('Found products:', productIds.map(p => `${p.id}: ${p.name}`).join(', '));
+            }
+        }
+    } catch (error) {
+        console.log('Could not fetch products, using fallback IDs');
+    }
+    
+    // Use found products or fallback to known working IDs
+    const item1 = productIds[0] || { id: 115, name: 'AirPods' };
+    const item2 = productIds[1] || { id: 114, name: 'iPhone' };
+    
     const challanData = {
         // No order_id - this is a direct challan
         customer_id: customerId || 37, // Use created customer or fallback
@@ -118,8 +142,8 @@ async function testDirectChallanCreation(customerId) {
         notes: 'Direct challan without order - Testing',
         items: [
             {
-                product_id: 1,
-                product_name: 'Paracetamol 500mg',
+                product_id: item1.id,
+                product_name: item1.name,
                 batch_number: 'BATCH-2025-001',
                 expiry_date: '2026-12-31',
                 dispatched_quantity: 100,
@@ -128,8 +152,8 @@ async function testDirectChallanCreation(customerId) {
                 packages_count: 10
             },
             {
-                product_id: 2,
-                product_name: 'Amoxicillin 250mg',
+                product_id: item2.id,
+                product_name: item2.name,
                 batch_number: 'BATCH-2025-002',
                 expiry_date: '2026-06-30',
                 dispatched_quantity: 50,
