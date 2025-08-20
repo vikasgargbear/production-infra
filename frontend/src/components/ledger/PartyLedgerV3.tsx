@@ -485,7 +485,7 @@ const PartyLedgerV3: React.FC<PartyLedgerV3Props> = ({
             />
           ) : (
             <SupplierSearch
-              onSupplierSelect={setSelectedParty}
+              onChange={setSelectedParty}
               placeholder="Search supplier by name or ID"
             />
           )}

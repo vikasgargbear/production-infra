@@ -283,7 +283,7 @@ const PartyLedgerV2: React.FC<PartyLedgerV2Props> = ({
             />
           ) : (
             <SupplierSearch
-              onSupplierSelect={handlePartySelect}
+              onChange={handlePartySelect}
               placeholder="Search supplier by name or ID"
             />
           )}

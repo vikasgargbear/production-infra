@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Invoice Calculation Test</title>
+    <style>
+        body { font-family: monospace; padding: 20px; }
+        .test { margin: 20px 0; padding: 15px; border: 1px solid #ddd; }
+        .pass { background: #d4fdd4; }
+        .fail { background: #fdd4d4; }
+        h2 { color: #333; }
+        .result { margin: 10px 0; }
+        .expected { color: #666; }
+        .actual { color: #000; font-weight: bold; }
+    </style>
+</head>
+<body>
+    <h1>Invoice Calculation Test Suite</h1>
+    <div id="results"></div>
+    
+    <script type="module">
+        // Import the calculator
+        import EnterpriseCalculator from '/src/services/enterpriseCalculator.js';
+        
+        const results = document.getElementById('results');
+        let passCount = 0;
+        let failCount = 0;
+        
+        function runTest(name, test) {
+            const div = document.createElement('div');
+            div.className = 'test';
+            
+            try {
+                const result = test();
+                if (result.pass) {
+                    div.className += ' pass';
+                    passCount++;
+                    div.innerHTML = `
+                        <h2>✓ ${name}</h2>
+                        <div class="result">${result.message}</div>
+                    `;
+                } else {
+                    div.className += ' fail';
+                    failCount++;
+                    div.innerHTML = `
+                        <h2>✗ ${name}</h2>
+                        <div class="result">${result.message}</div>
+                        <div class="expected">Expected: ${result.expected}</div>
+                        <div class="actual">Actual: ${result.actual}</div>
+                    `;
+                }
+            } catch (error) {
+                div.className += ' fail';
+                failCount++;
+                div.innerHTML = `
+                    <h2>✗ ${name}</h2>
+                    <div class="result">Error: ${error.message}</div>
+                `;
+            }
+            
+            results.appendChild(div);
+        }
+        
+        // Test 1: Base + Free Quantity
+        runTest('Base + Free Quantity Calculation', () => {
+            const result = EnterpriseCalculator.calculateInvoice({
+                items: [{
+                    base_quantity: 3,
+                    free_quantity: 2,
+                    rate: 30,
+                    discount_percent: 0,
+                    gst_percent: 12
+                }]
+            });
+            
+            const item = result.items[0];
+            const expectedTotal = 100.8; // 90 + 10.8 GST
+            
+            return {
+                pass: Math.abs(result.totals.final_amount - expectedTotal) < 0.01,
+                message: `3 base @ ₹30 + 2 free, 0% discount, 12% GST`,
+                expected: `₹${expectedTotal}`,
+                actual: `₹${result.totals.final_amount}`
+            };
+        });
+        
+        // Test 2: With Discount
+        runTest('With Discount', () => {
+            const result = EnterpriseCalculator.calculateInvoice({
+                items: [{
+                    base_quantity: 5,
+                    free_quantity: 0,
+                    rate: 100,
+                    discount_percent: 10,
+                    gst_percent: 18
+                }]
+            });
+            
+            const expectedTotal = 531; // 500 - 50 disc + 81 GST
+            
+            return {
+                pass: Math.abs(result.totals.final_amount - expectedTotal) < 0.01,
+                message: `5 units @ ₹100, 10% discount, 18% GST`,
+                expected: `₹${expectedTotal}`,
+                actual: `₹${result.totals.final_amount}`
+            };
+        });
+        
+        // Test 3: Multiple Products
+        runTest('Multiple Products', () => {
+            const result = EnterpriseCalculator.calculateInvoice({
+                items: [
+                    { base_quantity: 2, free_quantity: 1, rate: 50, discount_percent: 5, gst_percent: 12 },
+                    { base_quantity: 3, free_quantity: 0, rate: 100, discount_percent: 10, gst_percent: 18 },
+                    { base_quantity: 1, free_quantity: 2, rate: 200, discount_percent: 15, gst_percent: 28 }
+                ]
+            });
+            
+            return {
+                pass: result.items.length === 3 && result.totals.final_amount > 0,
+                message: `3 products with different configs`,
+                expected: `Positive total`,
+                actual: `₹${result.totals.final_amount}`
+            };
+        });
+        
+        // Test 4: Only Free Items
+        runTest('Only Free Items (No Charge)', () => {
+            const result = EnterpriseCalculator.calculateInvoice({
+                items: [{
+                    base_quantity: 0,
+                    free_quantity: 10,
+                    rate: 100,
+                    discount_percent: 10,
+                    gst_percent: 12
+                }]
+            });
+            
+            return {
+                pass: result.totals.final_amount === 0,
+                message: `0 base + 10 free @ ₹100`,
+                expected: `₹0`,
+                actual: `₹${result.totals.final_amount}`
+            };
+        });
+        
+        // Test 5: IGST vs CGST/SGST
+        runTest('IGST Calculation', () => {
+            const result = EnterpriseCalculator.calculateInvoice({
+                items: [{
+                    base_quantity: 10,
+                    rate: 100,
+                    discount_percent: 0,
+                    gst_percent: 18
+                }],
+                gst_type: 'IGST'
+            });
+            
+            const hasIGST = result.totals.igst_amount > 0;
+            const noCGST = result.totals.cgst_amount === 0;
+            const noSGST = result.totals.sgst_amount === 0;
+            
+            return {
+                pass: hasIGST && noCGST && noSGST,
+                message: `IGST should be applied, not CGST/SGST`,
+                expected: `IGST: ₹180, CGST: ₹0, SGST: ₹0`,
+                actual: `IGST: ₹${result.totals.igst_amount}, CGST: ₹${result.totals.cgst_amount}, SGST: ₹${result.totals.sgst_amount}`
+            };
+        });
+        
+        // Test 6: Delivery Charges
+        runTest('With Delivery Charges', () => {
+            const result = EnterpriseCalculator.calculateInvoice({
+                items: [{
+                    base_quantity: 1,
+                    rate: 100,
+                    discount_percent: 0,
+                    gst_percent: 12
+                }],
+                delivery_charges: 50
+            });
+            
+            const expectedTotal = 162; // 100 + 12 GST + 50 delivery
+            
+            return {
+                pass: Math.abs(result.totals.final_amount - expectedTotal) < 0.01,
+                message: `₹100 item + ₹50 delivery`,
+                expected: `₹${expectedTotal}`,
+                actual: `₹${result.totals.final_amount}`
+            };
+        });
+        
+        // Summary
+        setTimeout(() => {
+            const summary = document.createElement('div');
+            summary.className = 'test';
+            summary.style.marginTop = '40px';
+            summary.innerHTML = `
+                <h2>Test Summary</h2>
+                <div class="result">
+                    <span style="color: green">Passed: ${passCount}</span> | 
+                    <span style="color: red">Failed: ${failCount}</span> | 
+                    <span>Total: ${passCount + failCount}</span>
+                </div>
+            `;
+            results.appendChild(summary);
+        }, 100);
+    </script>
+</body>
+</html>

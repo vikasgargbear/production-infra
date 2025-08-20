@@ -672,7 +672,7 @@ const BusinessSalesEntry = ({ open, onClose }) => {
                 <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center mr-2">
                   <User className="w-4 h-4 text-white" />
                 </div>
-                <h3 className="text-lg font-bold text-gray-900">CUSTOMER</h3>
+                <h3 className="text-xl font-bold text-gray-900">CUSTOMER</h3>
               </div>
               
               {!invoice.customerId ? (
@@ -834,11 +834,11 @@ const BusinessSalesEntry = ({ open, onClose }) => {
 
             {/* Quick Product Search */}
             <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border-2 border-blue-200 rounded-xl p-6 mb-4">
-              <div className="flex items-center mb-4">
-                <div className="w-10 h-10 bg-blue-600 rounded-lg flex items-center justify-center mr-3">
-                  <Plus className="w-6 h-6 text-white" />
+              <div className="flex items-center mb-2">
+                <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center mr-2">
+                  <Package className="w-4 h-4 text-white" />
                 </div>
-                <h3 className="text-lg font-bold text-gray-900">Add Products to Invoice</h3>
+                <h3 className="text-xl font-bold text-gray-900">PRODUCTS</h3>
               </div>
               
               <div className="relative">

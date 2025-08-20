@@ -8,7 +8,7 @@ export { CustomerSearch } from './search/CustomerSearch';
 // ProductSearch.tsx removed - was broken (batch selection not implemented)
 export { default as ProductSearchSimple } from './search/ProductSearchSimple';
 export { default as PartySearch } from './search/PartySearch';
-export { default as SupplierSearch } from './SupplierSearch';
+export { default as SupplierSearch } from './search/SupplierSearch';
 export { default as PurchaseProductSearch } from './PurchaseProductSearch';
 export { default as InvoiceSearch } from './search/InvoiceSearch';
 export { default as PurchaseSearch } from './search/PurchaseSearch';
@@ -65,6 +65,9 @@ export {
   ChallanFlow
 } from './layout/GlobalDocumentFlow';
 
+// Enhanced Document Flow - NEW
+export { default as EnhancedGlobalDocumentFlow } from './layout/EnhancedGlobalDocumentFlow';
+
 // UI Components - NEW
 export * from './ui';
 export { 
@@ -88,9 +91,14 @@ export {
   Badge,
   BadgeGroup,
   SimpleStatusBadge,
+  DocumentFooter,
+  DocumentSummaryTop,
+  PDFUploadCard,
   // Layout
   ModuleHeader,
   ViewHistoryButton,
+  AddressSelector,
+  AddressFormEnhanced,
   // Feedback
   Toast,
   ToastProvider,

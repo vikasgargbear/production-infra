@@ -36,6 +36,7 @@ import settingsApi from './modules/settings.api';
 import utilsApi, { apiUtils } from './modules/utils.api';
 import organizationsApi from './modules/organizations.api';
 import partyLedgerApi from './partyLedgerApi';
+import { companyAPI, DEFAULT_COMPANY_INFO } from './company.api';
 
 // Re-export everything for easy access
 export {
@@ -73,6 +74,8 @@ export {
   apiUtils,
   organizationsApi,
   partyLedgerApi,
+  companyAPI,
+  DEFAULT_COMPANY_INFO,
   
   // Aliases for backward compatibility
   customerAPI as customersApi,

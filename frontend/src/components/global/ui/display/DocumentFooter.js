@@ -69,48 +69,39 @@ const DocumentFooter = ({
           </div>
           
           <div className="flex items-center gap-3">
-            {onSave && (
-              <button
-                onClick={onSave}
-                disabled={isSaving}
-                className="px-6 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                <Save className="w-4 h-4" />
-                {isSaving ? 'Saving...' : 'Save Order'}
-              </button>
-            )}
-            
+            {/* Print button first (left) */}
             {onPrint && (
               <button
                 onClick={onPrint}
-                className="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors flex items-center gap-2"
+                className="px-6 py-2 bg-gray-600 hover:bg-gray-700 text-white rounded-lg transition-colors flex items-center gap-2"
               >
                 <Printer className="w-4 h-4" />
                 Print
               </button>
             )}
             
-            {onWhatsApp && customerPhone && (
+            {/* Generate Invoice button (right, primary) */}
+            {onSave && (
               <button
-                onClick={onWhatsApp}
-                className="px-6 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg transition-colors flex items-center gap-2"
+                onClick={onSave}
+                disabled={isSaving}
+                className="px-8 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed font-medium shadow-sm"
               >
-                <MessageCircle className="w-4 h-4" />
-                WhatsApp
+                <Save className="w-5 h-5" />
+                {isSaving ? 'Generating...' : 'Generate Invoice'}
               </button>
             )}
           </div>
         </div>
       ) : (
-        // Standard layout for create/edit pages
+        // Standard layout for create/edit pages - optimized for speed
         <div className="flex justify-between items-center">
           <div className="flex items-center gap-4 text-sm">
-            <span className="text-gray-600">
-              Items: <strong>{totalItems}</strong>
-            </span>
-            <span className="text-gray-600">
-              Amount: <strong>₹{totalAmount.toFixed(2)}</strong>
-            </span>
+            {totalItems > 0 && (
+              <span className="text-gray-600">
+                <strong>{totalItems}</strong> {totalItems === 1 ? 'item' : 'items'} added
+              </span>
+            )}
             {additionalInfo && (
               <span className="text-gray-600">
                 {additionalInfo}

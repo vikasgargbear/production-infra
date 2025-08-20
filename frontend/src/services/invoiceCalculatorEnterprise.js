@@ -6,6 +6,8 @@
 import { useState, useCallback } from 'react';
 import api from './api';
 import { buildUrl } from '../config/api.config';
+import EnterpriseCalculator from './enterpriseCalculator';
+import OfflineCalculator from './offlineCalculator';
 
 class InvoiceCalculatorEnterprise {
   static debounceTimeouts = new Map();
@@ -18,11 +20,12 @@ class InvoiceCalculatorEnterprise {
   static async calculateInvoice(invoiceData) {
     try {
       // Use the existing backend calculation API
-      const response = await api.post('/calculations/invoice', {
+      const response = await api.post('/invoices/calculate', {
         customer_id: invoiceData.customer_id,
         items: invoiceData.items.map(item => ({
           product_id: item.product_id,
           quantity: parseFloat(item.quantity || item.base_quantity) || 0,
+          base_quantity: parseFloat(item.base_quantity || item.quantity) || 0,
           free_quantity: parseFloat(item.free_quantity) || 0,
           unit_price: parseFloat(item.rate || item.sale_price || item.unit_price) || 0,
           discount_percent: parseFloat(item.discount_percent) || 0,
@@ -49,12 +52,12 @@ class InvoiceCalculatorEnterprise {
       
       // Fallback to local calculation if API fails
       try {
-        const { totals, lineItems } = this.calculateLocally(invoiceData);
+        const result = EnterpriseCalculator.calculateInvoice(invoiceData);
         
         return {
           success: true,
-          line_items: lineItems,
-          totals: totals,
+          line_items: result.items,
+          totals: result.totals,
           timestamp: new Date().toISOString(),
           fallback: true
         };
@@ -77,62 +80,18 @@ class InvoiceCalculatorEnterprise {
   }
 
   /**
-   * Calculate invoice item with proper free quantity business logic
-   * @param {Object} item - Invoice item
-   * @param {String} gstType - 'CGST/SGST' or 'IGST'
-   * @returns {Object} Calculated values
-   */
-  static calculateItem(item, gstType = 'CGST/SGST') {
-    const quantity = parseFloat(item.quantity) || 0;
-    const rate = parseFloat(item.sale_price || item.rate || item.selling_price) || 0;
-    const discountPercent = parseFloat(item.discount_percent) || 0;
-    const gstPercent = parseFloat(item.gst_percent) || 12;
-    
-    // CRITICAL FIX: Use base_quantity for billing calculations (not total quantity)
-    // base_quantity = billable items only, quantity = total delivered (includes free items)
-    const baseQuantity = parseFloat(item.base_quantity || item.baseQuantity || quantity);
-
-    // Base calculations using billable quantity only
-    const subtotal = rate * baseQuantity;
-    const discountAmount = (subtotal * discountPercent) / 100;
-    const taxableAmount = subtotal - discountAmount;
-    const gstAmount = (taxableAmount * gstPercent) / 100;
-    const totalAmount = taxableAmount + gstAmount;
-
-    return {
-      // Original fields preserved
-      ...item,
-      
-      // Calculated fields matching original calculator
-      subtotal: this.round(subtotal),
-      discountAmount: this.round(discountAmount),
-      discount_amount: this.round(discountAmount), // Alias for compatibility
-      taxableAmount: this.round(taxableAmount),
-      taxable_amount: this.round(taxableAmount), // Alias for compatibility
-      gstAmount: this.round(gstAmount),
-      tax_amount: this.round(gstAmount), // Alias for compatibility
-      cgst: this.round(gstAmount / 2), // Original field name
-      sgst: this.round(gstAmount / 2), // Original field name
-      cgst_amount: this.round(gstType === 'CGST/SGST' ? gstAmount / 2 : 0),
-      sgst_amount: this.round(gstType === 'CGST/SGST' ? gstAmount / 2 : 0),
-      igst_amount: this.round(gstType === 'IGST' ? gstAmount : 0),
-      totalAmount: this.round(totalAmount),
-      line_total: this.round(totalAmount),
-      calculated_total: this.round(totalAmount), // For ItemsTable compatibility
-      
-      // Quantity fields for clarity
-      base_quantity: baseQuantity,
-      total_quantity: quantity,
-      billable_quantity: baseQuantity // Alias for clarity
-    };
-  }
-
-  /**
-   * Calculate locally using enterprise business logic
+   * Calculate locally - delegates to EnterpriseCalculator
    * @param {Object} invoiceData - Invoice data with items
-   * @returns {Object} Calculation results
+   * @returns {Object} Complete calculation results
    */
   static calculateLocally(invoiceData) {
+    return EnterpriseCalculator.calculateInvoice(invoiceData);
+  }
+  
+  /**
+   * DEPRECATED - Use EnterpriseCalculator directly
+   */
+  static _calculateLocallyOld(invoiceData) {
     const items = invoiceData.items || [];
     const gstType = invoiceData.gst_type || 'CGST/SGST';
     
@@ -145,43 +104,103 @@ class InvoiceCalculatorEnterprise {
     let igstTotal = 0;
     
     const calculatedLineItems = items.map(item => {
-      const calculatedItem = this.calculateItem(item, gstType);
+      // Parse all values once
+      const quantity = parseFloat(item.quantity) || 0;
+      const freeQuantity = parseFloat(item.free_quantity) || 0;
+      const rate = parseFloat(item.sale_price || item.rate || item.selling_price) || 0;
+      const discountPercent = parseFloat(item.discount_percent) || 0;
+      const gstPercent = parseFloat(item.gst_percent || item.tax_rate) || 12;
       
-      grossAmount += calculatedItem.subtotal;
-      totalDiscount += calculatedItem.discount_amount;
-      taxableAmount += calculatedItem.taxable_amount;
-      totalTax += calculatedItem.tax_amount;
-      cgstTotal += calculatedItem.cgst_amount;
-      sgstTotal += calculatedItem.sgst_amount;
-      igstTotal += calculatedItem.igst_amount;
+      // Business logic: base_quantity is what customer pays for
+      const baseQuantity = parseFloat(item.base_quantity || item.baseQuantity || quantity);
+      const totalQuantity = baseQuantity + freeQuantity;
       
-      return calculatedItem;
+      // Calculate amounts on base quantity only
+      const subtotal = rate * baseQuantity;
+      const discountAmount = (subtotal * discountPercent) / 100;
+      const taxableAmt = subtotal - discountAmount;
+      const gstAmount = (taxableAmt * gstPercent) / 100;
+      const cgstAmt = gstType === 'CGST/SGST' ? gstAmount / 2 : 0;
+      const sgstAmt = gstType === 'CGST/SGST' ? gstAmount / 2 : 0;
+      const igstAmt = gstType === 'IGST' ? gstAmount : 0;
+      const totalAmount = taxableAmt + gstAmount;
+      
+      // Accumulate totals
+      grossAmount += subtotal;
+      totalDiscount += discountAmount;
+      taxableAmount += taxableAmt;
+      totalTax += gstAmount;
+      cgstTotal += cgstAmt;
+      sgstTotal += sgstAmt;
+      igstTotal += igstAmt;
+      
+      // Return calculated item with all necessary fields
+      return {
+        ...item,
+        // Core calculations
+        subtotal: this.round(subtotal),
+        discount_amount: this.round(discountAmount),
+        taxable_amount: this.round(taxableAmt),
+        tax_amount: this.round(gstAmount),
+        cgst_amount: this.round(cgstAmt),
+        sgst_amount: this.round(sgstAmt),
+        igst_amount: this.round(igstAmt),
+        line_total: this.round(totalAmount),
+        calculated_total: this.round(totalAmount),
+        
+        // Quantity fields
+        base_quantity: baseQuantity,
+        free_quantity: freeQuantity,
+        total_quantity: totalQuantity,
+        
+        // Legacy field support
+        discountAmount: this.round(discountAmount),
+        taxableAmount: this.round(taxableAmt),
+        gstAmount: this.round(gstAmount),
+        totalAmount: this.round(totalAmount),
+        cgst: this.round(cgstAmt),
+        sgst: this.round(sgstAmt),
+        igst: this.round(igstAmt)
+      };
     });
     
-    // Add delivery charges to final amount
+    // Calculate final totals
     const deliveryCharges = parseFloat(invoiceData.delivery_charges) || 0;
     const netAmount = taxableAmount + totalTax + deliveryCharges;
     const roundOff = Math.round(netAmount) - netAmount;
     const finalAmount = Math.round(netAmount);
     
-    const totals = {
-      gross_amount: this.round(grossAmount),
-      total_discount: this.round(totalDiscount),
-      taxable_amount: this.round(taxableAmount),
-      total_tax: this.round(totalTax),
-      cgst_amount: this.round(cgstTotal),
-      sgst_amount: this.round(sgstTotal),
-      igst_amount: this.round(igstTotal),
-      delivery_charges: this.round(deliveryCharges),
-      net_amount: finalAmount,
-      round_off: this.round(roundOff),
-      final_amount: finalAmount
-    };
-    
     return {
-      totals,
+      totals: {
+        gross_amount: this.round(grossAmount),
+        total_discount: this.round(totalDiscount),
+        taxable_amount: this.round(taxableAmount),
+        total_tax: this.round(totalTax),
+        cgst_amount: this.round(cgstTotal),
+        sgst_amount: this.round(sgstTotal),
+        igst_amount: this.round(igstTotal),
+        delivery_charges: this.round(deliveryCharges),
+        net_amount: this.round(netAmount),
+        round_off: this.round(roundOff),
+        final_amount: finalAmount,
+        
+        // Legacy field support
+        subtotal_amount: this.round(taxableAmount),
+        discount_amount: this.round(totalDiscount),
+        tax_amount: this.round(totalTax)
+      },
       lineItems: calculatedLineItems
     };
+  }
+  
+  /**
+   * Calculate single item - delegates to EnterpriseCalculator
+   * @param {Object} item - Invoice item
+   * @param {String} gstType - 'CGST/SGST' or 'IGST'
+   * @returns {Object} Calculated values
+   */
+  static calculateItem(item, gstType = 'CGST/SGST') {
+    return EnterpriseCalculator.calculateItem(item, { gst_type: gstType });
   }
 
   /**
@@ -216,29 +235,54 @@ class InvoiceCalculatorEnterprise {
   }
   
   /**
-   * Debounced calculation for real-time updates
-   * Prevents excessive API calls during rapid typing
+   * Debounced calculation for real-time updates with instant local feedback
+   * Shows local calculation immediately, then updates with backend result
    */
   static calculateDebounced(invoiceData, callback, delay = 500) {
     const key = 'invoice_calc';
     
-    // Clear previous timeout
+    // INSTANT: Calculate locally first for immediate UI feedback
+    try {
+      const localResult = EnterpriseCalculator.calculateInvoice(invoiceData);
+      callback(null, {
+        success: true,
+        line_items: localResult.items,
+        totals: localResult.totals,
+        timestamp: new Date().toISOString(),
+        isLocal: true // Flag to indicate this is local calculation
+      });
+    } catch (localError) {
+      console.error('Local calculation failed:', localError);
+    }
+    
+    // Clear previous backend call timeout
     if (this.debounceTimeouts.has(key)) {
       clearTimeout(this.debounceTimeouts.get(key));
     }
     
-    // Set new timeout
+    // Set new timeout for backend calculation
     const timeoutId = setTimeout(async () => {
       try {
         const result = await this.calculateInvoice(invoiceData);
+        // Update with backend result (source of truth)
         callback(null, result);
       } catch (error) {
-        callback(error, null);
+        // If backend fails, keep using local calculation
+        console.error('Backend calculation failed, using local:', error);
       }
       this.debounceTimeouts.delete(key);
     }, delay);
     
     this.debounceTimeouts.set(key, timeoutId);
+  }
+  
+  /**
+   * Instant calculation for immediate UI updates (no debounce)
+   * Uses offline-first approach like SAP/Oracle
+   */
+  static calculateInstant(invoiceData) {
+    // Always use OfflineCalculator for instant results
+    return OfflineCalculator.calculate(invoiceData);
   }
   
   /**

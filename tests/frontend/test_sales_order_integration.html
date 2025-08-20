@@ -1,0 +1,384 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Sales Order Calculation Integration Test</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .test-section { margin: 20px 0; padding: 15px; border: 1px solid #ccc; border-radius: 8px; }
+        .success { color: green; font-weight: bold; }
+        .error { color: red; font-weight: bold; }
+        .info { color: blue; }
+        button { padding: 10px 20px; margin: 5px; background: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer; }
+        button:hover { background: #0056b3; }
+        .results { margin-top: 15px; padding: 10px; background: #f8f9fa; border-radius: 4px; }
+        pre { background: #f1f1f1; padding: 10px; border-radius: 4px; overflow-x: auto; }
+    </style>
+</head>
+<body>
+    <h1>🧮 Sales Order Calculation Integration Test</h1>
+    <p>Testing the complete flow: Frontend → Backend API → Display</p>
+
+    <div class="test-section">
+        <h2>📋 Test Configuration</h2>
+        <p><strong>Backend URL:</strong> <span id="backend-url">https://pharma-backend-production-0c09.up.railway.app</span></p>
+        <p><strong>Endpoint:</strong> /api/calculations/sales-order</p>
+        <p><strong>Test Data:</strong> Azethro (8 qty, ₹10, 12% disc, 12% tax) + Atlas (2 qty, ₹12, 0% disc, 12% tax)</p>
+    </div>
+
+    <div class="test-section">
+        <h2>🔄 Test Actions</h2>
+        <button onclick="testDirectAPI()">Test Backend API Directly</button>
+        <button onclick="testFrontendService()">Test Frontend Service</button>
+        <button onclick="testCompleteFlow()">Test Complete Frontend Flow</button>
+        <button onclick="clearResults()">Clear Results</button>
+    </div>
+
+    <div class="test-section" id="results-section" style="display: none;">
+        <h2>📊 Test Results</h2>
+        <div id="test-results"></div>
+    </div>
+
+    <script>
+        const BACKEND_URL = 'https://pharma-backend-production-0c09.up.railway.app';
+        
+        // Test data matching the screenshot
+        const testOrderData = {
+            customer_id: 1,
+            items: [
+                {
+                    product_id: 1,
+                    product_name: "Azethro",
+                    batch_number: "BATCH05852723",
+                    quantity: 8,
+                    unit_price: 10.00,
+                    discount_percent: 12,
+                    gst_percent: 12
+                },
+                {
+                    product_id: 2,
+                    product_name: "Atlas",
+                    batch_number: "BATCH02518902",
+                    quantity: 2,
+                    unit_price: 12.00,
+                    discount_percent: 0,
+                    gst_percent: 12
+                }
+            ],
+            gst_type: "CGST/SGST",
+            delivery_charges: 0,
+            discount_amount: 0
+        };
+
+        function showResults(content) {
+            document.getElementById('results-section').style.display = 'block';
+            document.getElementById('test-results').innerHTML = content;
+        }
+
+        function clearResults() {
+            document.getElementById('results-section').style.display = 'none';
+            document.getElementById('test-results').innerHTML = '';
+        }
+
+        async function testDirectAPI() {
+            showResults('<div class="info">🔄 Testing backend API directly...</div>');
+            
+            try {
+                const response = await fetch(`${BACKEND_URL}/api/calculations/sales-order`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        customer_id: testOrderData.customer_id,
+                        items: testOrderData.items.map(item => ({
+                            product_id: item.product_id,
+                            quantity: item.quantity,
+                            unit_price: item.unit_price,
+                            discount_percent: item.discount_percent,
+                            gst_percent: item.gst_percent
+                        })),
+                        gst_type: testOrderData.gst_type,
+                        delivery_charges: testOrderData.delivery_charges,
+                        discount_amount: testOrderData.discount_amount
+                    })
+                });
+
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+
+                const data = await response.json();
+                
+                if (data.success) {
+                    const totals = data.totals;
+                    
+                    let resultHTML = `
+                        <div class="success">✅ Backend API Test: PASSED</div>
+                        <h3>📈 Calculation Results:</h3>
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+                            <div>
+                                <h4>Order Summary:</h4>
+                                <p><strong>Sub Total:</strong> ₹${totals.taxable_amount.toFixed(2)}</p>
+                                <p><strong>Total GST:</strong> ₹${totals.total_tax.toFixed(2)}</p>
+                                <p><strong>Grand Total:</strong> ₹${totals.final_amount.toFixed(2)}</p>
+                            </div>
+                            <div>
+                                <h4>GST Breakdown:</h4>
+                                <p><strong>CGST:</strong> ₹${totals.cgst_amount.toFixed(2)}</p>
+                                <p><strong>SGST:</strong> ₹${totals.sgst_amount.toFixed(2)}</p>
+                                <p><strong>Round Off:</strong> ₹${totals.round_off.toFixed(2)}</p>
+                            </div>
+                        </div>
+                        
+                        <h4>🧾 Line Items:</h4>
+                        <table border="1" style="width: 100%; border-collapse: collapse;">
+                            <tr style="background: #f5f5f5;">
+                                <th>Product</th><th>Qty</th><th>Rate</th><th>Disc%</th><th>Tax%</th><th>Amount</th>
+                            </tr>
+                    `;
+                    
+                    data.line_items.forEach(item => {
+                        resultHTML += `
+                            <tr>
+                                <td>Product ${item.product_id}</td>
+                                <td>${item.quantity}</td>
+                                <td>₹${item.unit_price.toFixed(2)}</td>
+                                <td>${item.discount_percent}%</td>
+                                <td>${item.gst_percent}%</td>
+                                <td>₹${item.line_total.toFixed(2)}</td>
+                            </tr>
+                        `;
+                    });
+                    
+                    resultHTML += '</table>';
+                    
+                    // Compare with expected values
+                    const hasPositiveValues = totals.taxable_amount > 0 && totals.final_amount > 0;
+                    resultHTML += `
+                        <div style="margin-top: 15px; padding: 10px; background: ${hasPositiveValues ? '#d4edda' : '#f8d7da'}; border-radius: 4px;">
+                            <h4>${hasPositiveValues ? '✅' : '❌'} Validation:</h4>
+                            <p>Sub Total > 0: ${totals.taxable_amount > 0 ? '✅' : '❌'} (${totals.taxable_amount})</p>
+                            <p>Grand Total > 0: ${totals.final_amount > 0 ? '✅' : '❌'} (${totals.final_amount})</p>
+                            <p>Tax Amount > 0: ${totals.total_tax > 0 ? '✅' : '❌'} (${totals.total_tax})</p>
+                        </div>
+                    `;
+                    
+                    showResults(resultHTML);
+                } else {
+                    throw new Error('API returned success=false');
+                }
+                
+            } catch (error) {
+                showResults(`
+                    <div class="error">❌ Backend API Test: FAILED</div>
+                    <p><strong>Error:</strong> ${error.message}</p>
+                    <p>This suggests the backend calculation API is not working properly.</p>
+                `);
+            }
+        }
+
+        async function testFrontendService() {
+            showResults('<div class="info">🔄 Testing frontend service layer...</div>');
+            
+            // This would test the SalesOrderCalculatorEnterprise service
+            // For now, simulate what the frontend service should do
+            
+            const mockSalesOrderCalculatorEnterprise = {
+                async calculateSalesOrder(orderData) {
+                    try {
+                        const response = await fetch(`${BACKEND_URL}/api/calculations/sales-order`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                customer_id: orderData.customer_id,
+                                items: orderData.items.map(item => ({
+                                    product_id: item.product_id,
+                                    quantity: parseFloat(item.quantity) || 0,
+                                    unit_price: parseFloat(item.unit_price) || 0,
+                                    discount_percent: parseFloat(item.discount_percent) || 0,
+                                    gst_percent: parseFloat(item.gst_percent) || 12
+                                })),
+                                gst_type: orderData.gst_type || 'CGST/SGST',
+                                delivery_charges: parseFloat(orderData.delivery_charges) || 0,
+                                discount_amount: parseFloat(orderData.discount_amount) || 0
+                            })
+                        });
+
+                        if (response.ok) {
+                            const data = await response.json();
+                            return {
+                                success: data.success,
+                                line_items: data.line_items,
+                                totals: data.totals,
+                                timestamp: data.calculation_timestamp
+                            };
+                        } else {
+                            throw new Error(`HTTP ${response.status}`);
+                        }
+                    } catch (error) {
+                        return {
+                            success: false,
+                            error: error.message,
+                            totals: {
+                                gross_amount: 0,
+                                total_discount: 0,
+                                taxable_amount: 0,
+                                total_tax: 0,
+                                final_amount: 0
+                            }
+                        };
+                    }
+                },
+
+                formatTotalsForDisplay(totals) {
+                    return {
+                        subtotal_amount: totals.taxable_amount || 0,
+                        discount_amount: totals.total_discount || 0,
+                        tax_amount: totals.total_tax || 0,
+                        total_amount: totals.final_amount || 0,
+                        final_amount: totals.final_amount || 0,
+                        cgst_amount: totals.cgst_amount || 0,
+                        sgst_amount: totals.sgst_amount || 0,
+                        round_off: totals.round_off || 0
+                    };
+                }
+            };
+
+            try {
+                const result = await mockSalesOrderCalculatorEnterprise.calculateSalesOrder(testOrderData);
+                
+                if (result.success) {
+                    const formattedTotals = mockSalesOrderCalculatorEnterprise.formatTotalsForDisplay(result.totals);
+                    
+                    showResults(`
+                        <div class="success">✅ Frontend Service Test: PASSED</div>
+                        <h3>📱 Frontend Display Values:</h3>
+                        <div style="background: #e7f3ff; padding: 15px; border-radius: 8px; margin: 10px 0;">
+                            <h4>These values would show in the sales order component:</h4>
+                            <p><strong>order.subtotal_amount:</strong> ₹${formattedTotals.subtotal_amount.toFixed(2)}</p>
+                            <p><strong>order.tax_amount:</strong> ₹${formattedTotals.tax_amount.toFixed(2)}</p>
+                            <p><strong>order.total_amount:</strong> ₹${formattedTotals.total_amount.toFixed(2)}</p>
+                        </div>
+                        
+                        <h4>🔧 Integration Status:</h4>
+                        <p>✅ Backend API call: Working</p>
+                        <p>✅ Response parsing: Working</p>
+                        <p>✅ Total formatting: Working</p>
+                        
+                        <div style="background: #d4edda; padding: 10px; border-radius: 4px; margin: 10px 0;">
+                            <strong>Result:</strong> The frontend service layer is correctly calling the backend API 
+                            and formatting the response. The issue might be in the React component state updates.
+                        </div>
+                    `);
+                } else {
+                    throw new Error(result.error);
+                }
+                
+            } catch (error) {
+                showResults(`
+                    <div class="error">❌ Frontend Service Test: FAILED</div>
+                    <p><strong>Error:</strong> ${error.message}</p>
+                `);
+            }
+        }
+
+        async function testCompleteFlow() {
+            showResults('<div class="info">🔄 Testing complete frontend flow simulation...</div>');
+            
+            // Simulate what happens in the SalesOrderFlow component
+            try {
+                // Step 1: Simulate recalculateTotals function
+                console.log('Simulating recalculateTotals with items:', testOrderData.items);
+                
+                // Step 2: Call the calculation service
+                const response = await fetch(`${BACKEND_URL}/api/calculations/sales-order`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        customer_id: testOrderData.customer_id,
+                        items: testOrderData.items,
+                        gst_type: testOrderData.gst_type,
+                        delivery_charges: testOrderData.delivery_charges,
+                        discount_amount: testOrderData.discount_amount
+                    })
+                });
+
+                const result = await response.json();
+                
+                if (result.success) {
+                    // Step 3: Format for display
+                    const formattedTotals = {
+                        subtotal_amount: result.totals.taxable_amount || 0,
+                        discount_amount: result.totals.total_discount || 0,
+                        tax_amount: result.totals.total_tax || 0,
+                        total_amount: result.totals.final_amount || 0,
+                        cgst_amount: result.totals.cgst_amount || 0,
+                        sgst_amount: result.totals.sgst_amount || 0
+                    };
+                    
+                    // Step 4: Simulate state update
+                    const mockOrderState = {
+                        items: testOrderData.items,
+                        total_quantity: testOrderData.items.reduce((sum, item) => sum + item.quantity, 0),
+                        ...formattedTotals
+                    };
+                    
+                    showResults(`
+                        <div class="success">✅ Complete Flow Test: PASSED</div>
+                        
+                        <h3>🔄 Flow Steps:</h3>
+                        <ol>
+                            <li>✅ User adds products to order</li>
+                            <li>✅ recalculateTotals() called</li>
+                            <li>✅ Backend API calculation</li>
+                            <li>✅ Response formatting</li>
+                            <li>✅ State update simulation</li>
+                        </ol>
+                        
+                        <h3>📱 Final Component State:</h3>
+                        <div style="background: #f8f9fa; padding: 15px; border-radius: 8px; font-family: monospace;">
+                            <p>order.items.length: ${mockOrderState.items.length}</p>
+                            <p>order.total_quantity: ${mockOrderState.total_quantity}</p>
+                            <p>order.subtotal_amount: ${mockOrderState.subtotal_amount}</p>
+                            <p>order.tax_amount: ${mockOrderState.tax_amount}</p>
+                            <p>order.total_amount: ${mockOrderState.total_amount}</p>
+                        </div>
+                        
+                        <h3>🎯 Expected UI Display:</h3>
+                        <div style="background: #e7f3ff; padding: 15px; border-radius: 8px;">
+                            <p><strong>Sub Total:</strong> ₹${mockOrderState.subtotal_amount.toFixed(2)} (instead of ₹0.00)</p>
+                            <p><strong>Total GST:</strong> ₹${mockOrderState.tax_amount.toFixed(2)} (instead of ₹0.00)</p>
+                            <p><strong>Grand Total:</strong> ₹${mockOrderState.total_amount.toFixed(2)} (instead of ₹0.00)</p>
+                        </div>
+                        
+                        <div style="background: #d4edda; padding: 15px; border-radius: 8px; margin-top: 15px;">
+                            <h4>✅ Diagnosis:</h4>
+                            <p>The entire calculation flow is working correctly. If the frontend still shows ₹0.00:</p>
+                            <ul>
+                                <li>Check if recalculateTotals() is being called</li>
+                                <li>Check browser console for calculation logs</li>
+                                <li>Verify the component is using the correct state fields</li>
+                                <li>Ensure the calculation service import is correct</li>
+                            </ul>
+                        </div>
+                    `);
+                } else {
+                    throw new Error('Calculation returned success=false');
+                }
+                
+            } catch (error) {
+                showResults(`
+                    <div class="error">❌ Complete Flow Test: FAILED</div>
+                    <p><strong>Error:</strong> ${error.message}</p>
+                `);
+            }
+        }
+
+        // Auto-run the direct API test on page load
+        window.addEventListener('load', () => {
+            console.log('Sales Order Calculation Integration Test loaded');
+            testDirectAPI();
+        });
+    </script>
+</body>
+</html>

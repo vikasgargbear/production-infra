@@ -3,9 +3,9 @@ import {
   ShoppingBag, FileText, Package, ShoppingCart, List
 } from 'lucide-react';
 import { ModuleHub } from '../global';
-import SimplifiedPurchaseEntry from './SimplifiedPurchaseEntry';
-import PurchaseOrderFlow from './PurchaseOrderFlow';
-import GRNFlow from './GRNFlow';
+import EnhancedPurchaseEntry from './EnhancedPurchaseEntry';
+import EnhancedPurchaseOrderFlow from './EnhancedPurchaseOrderFlow';
+import EnhancedGRNFlow from './EnhancedGRNFlow';
 import PurchaseListHistory from './PurchaseListHistory';
 import { PurchaseProvider } from '../../contexts/PurchaseContext';
 
@@ -33,7 +33,7 @@ const PurchaseHub: React.FC<PurchaseHubProps> = ({ open = true, onClose }) => {
       description: 'Record purchases',
       icon: ShoppingBag,
       color: 'indigo',
-      component: SimplifiedPurchaseEntry
+      component: EnhancedPurchaseEntry
     },
     {
       id: 'purchase-order',
@@ -42,7 +42,7 @@ const PurchaseHub: React.FC<PurchaseHubProps> = ({ open = true, onClose }) => {
       description: 'Create POs',
       icon: FileText,
       color: 'indigo',
-      component: PurchaseOrderFlow
+      component: EnhancedPurchaseOrderFlow
     },
     {
       id: 'grn',
@@ -51,7 +51,7 @@ const PurchaseHub: React.FC<PurchaseHubProps> = ({ open = true, onClose }) => {
       description: 'Receive goods',
       icon: Package,
       color: 'green',
-      component: GRNFlow
+      component: EnhancedGRNFlow
     },
     {
       id: 'purchase-history',

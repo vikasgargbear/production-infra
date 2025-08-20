@@ -275,6 +275,7 @@ export const CustomerSearch = forwardRef<CustomerSearchRef, CustomerSearchProps>
               size="sm"
               disabled={false}
               className="mt-4"
+              showIcon={true}
             />
           )}
         </div>
@@ -290,11 +291,6 @@ export const CustomerSearch = forwardRef<CustomerSearchRef, CustomerSearchProps>
   if (displayMode === 'inline') {
     return (
       <div className={`bg-white rounded-lg shadow-sm p-4 ${className}`}>
-        <h3 className="text-sm font-medium text-gray-700 mb-3 flex items-center">
-          <User className="w-4 h-4 mr-2" />
-          Customer Details
-        </h3>
-        
         {!value ? (
           <div className="space-y-3">
             <div className="relative">
@@ -304,6 +300,13 @@ export const CustomerSearch = forwardRef<CustomerSearchRef, CustomerSearchProps>
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Escape') {
+                    e.stopPropagation(); // Stop ESC from bubbling up to parent
+                    setSearchQuery('');
+                    setShowDropdown(false);
+                  }
+                }}
                 placeholder={placeholder}
                 className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 disabled={disabled}
@@ -343,6 +346,13 @@ export const CustomerSearch = forwardRef<CustomerSearchRef, CustomerSearchProps>
               onChange={(e) => {
                 setSearchQuery(e.target.value);
                 setShowDropdown(true);
+              }}
+              onKeyDown={(e) => {
+                if (e.key === 'Escape') {
+                  e.stopPropagation(); // Stop ESC from bubbling up to parent
+                  setSearchQuery('');
+                  setShowDropdown(false);
+                }
               }}
               onFocus={() => setShowDropdown(true)}
               placeholder={placeholder}
@@ -444,6 +454,13 @@ export const CustomerSearch = forwardRef<CustomerSearchRef, CustomerSearchProps>
                   type="text"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Escape') {
+                      e.stopPropagation(); // Stop ESC from bubbling up to parent
+                      setSearchQuery('');
+                      setShowSearch(false);
+                    }
+                  }}
                   placeholder={placeholder}
                   className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   autoFocus

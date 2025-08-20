@@ -5,7 +5,7 @@ import PurchaseErrorBoundary from './PurchaseErrorBoundary';
 import { purchasesApi } from '../../services/api';
 import { PURCHASE_CONFIG } from '../../config/purchase.config';
 import { validatePurchaseForm } from '../../utils/purchaseValidation';
-import { ProductCreationModal, MonthYearPicker, SupplierCreationModal, ViewHistoryButton, GlobalLayout, ContentCard, ModuleHeader, DocumentFooter } from '../global';
+import { ProductCreationModal, MonthYearPicker, SupplierCreationModal, ViewHistoryButton, GlobalLayout, ContentCard, ModuleHeader, DocumentFooter, SupplierSearch, ProductSearchSimple } from '../global';
 import PDFUploadModal from '../PDFUploadModal';
 import PurchaseSummary from './components/PurchaseSummary';
 import { searchCache } from '../../utils/searchCache';
@@ -261,86 +261,54 @@ const SimplifiedPurchaseContent = ({ onClose }) => {
           </div>
         </ContentCard>
             
-        {/* Supplier Section */}
-        <ContentCard title="Supplier" subtitle={null} className="mb-6" actions={
-          <AddNewButton
-            label="New Supplier"
-            onClick={() => setShowAddSupplier(true)}
-            variant="primary"
-            size="sm"
+        {/* Supplier Section - Using Global Component */}
+        <div className="mb-6">
+          <SupplierSearch
+            value={purchase.supplier_id ? { supplier_id: purchase.supplier_id, supplier_name: purchase.supplier_name } : null}
+            onChange={(supplier) => {
+              if (supplier) {
+                setPurchaseField('supplier_id', supplier.supplier_id);
+                setPurchaseField('supplier_name', supplier.supplier_name);
+                setSupplier(supplier);
+              } else {
+                setPurchaseField('supplier_id', '');
+                setPurchaseField('supplier_name', '');
+              }
+            }}
+            onCreateNew={() => setShowAddSupplier(true)}
+            displayMode="inline"
+            placeholder="Search supplier by name, phone, or code..."
+            required={true}
+            clearable={true}
+            buttonLabel="Create Supplier"
           />
-        }>
-          <div className="relative">
-            {purchase.supplier_id ? (
-              <div className="p-3 bg-blue-50 rounded-md border border-blue-200">
-                <div className="flex justify-between items-center">
-                  <div>
-                    <p className="font-medium">{purchase.supplier_name}</p>
-                    <p className="text-sm text-gray-600">ID: {purchase.supplier_id}</p>
-                  </div>
-                  <button
-                    onClick={() => {
-                      setPurchaseField('supplier_id', '');
-                      setPurchaseField('supplier_name', '');
-                    }}
-                    className="text-sm text-indigo-600 hover:text-indigo-700"
-                  >
-                    Change
-                  </button>
-                </div>
-              </div>
-            ) : (
-              <>
-                <input
-                  type="text"
-                  value={supplierSearch}
-                  onChange={(e) => {
-                    setSupplierSearch(e.target.value);
-                    searchSuppliers(e.target.value);
-                    setShowSupplierDropdown(true);
-                  }}
-                  onFocus={() => setShowSupplierDropdown(true)}
-                  placeholder="Search suppliers..."
-                  className="w-full px-4 py-3 border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500"
-                />
-                {showSupplierDropdown && supplierResults.length > 0 && (
-                  <div className="absolute z-10 w-full mt-1 bg-white border border-blue-200 rounded-md shadow-lg max-h-48 overflow-y-auto">
-                    {supplierResults.map(supplier => (
-                      <div
-                        key={supplier.supplier_id}
-                        onClick={() => handleSupplierSelect(supplier)}
-                        className="px-4 py-3 hover:bg-blue-50 cursor-pointer border-b last:border-0"
-                      >
-                        <p className="font-medium">{supplier.supplier_name}</p>
-                        <p className="text-sm text-gray-600">{supplier.phone} • {supplier.city}</p>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </>
-            )}
-          </div>
-        </ContentCard>
+        </div>
             
-        {/* Products Section */}
-        <ContentCard title="Products" subtitle={null} className="mb-6" actions={
-          <AddNewButton
-            label="Add New Product"
-            onClick={() => setShowAddProduct(true)}
-            variant="primary"
-            size="sm"
+        {/* Products Section - Using Global Component */}
+        <div className="mb-6">
+          <ProductSearchSimple
+            onAddItem={(product) => {
+              // Add product to purchase items
+              const newItem = {
+                product_id: product.product_id,
+                product_name: product.product_name,
+                hsn_code: product.hsn_code || '',
+                batch_no: product.batch_number || product.batch_no || '',
+                expiry_date: product.expiry_date || '',
+                quantity: 1,
+                free_quantity: 0,
+                mrp: product.mrp || 0,
+                purchase_price: product.purchase_price || (product.mrp || 0) * 0.7,
+                selling_price: product.sale_price || product.mrp || 0,
+                discount_percent: 0,
+                tax_percent: product.gst_percent || product.tax_rate || 12
+              };
+              addItem(newItem);
+            }}
+            onCreateProduct={() => setShowAddProduct(true)}
+            showBatchSelection={false}  // No batch selection for purchase entry
           />
-        }>
-          {/* Product Search */}
-          <div className="relative mb-4">
-            <input
-              type="text"
-              placeholder="Search products..."
-              className="w-full px-4 py-3 border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500"
-              onFocus={handleAddItem}
-            />
-          </div>
-        </ContentCard>
+        </div>
 
         {/* Items Table */}
         {purchase.items.length > 0 && (

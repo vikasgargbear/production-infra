@@ -3,7 +3,7 @@ import {
   FileText, User, Search, Package, Calendar, X, Trash2, 
   ChevronRight, AlertCircle, CheckCircle, Printer, Share2, Plus,
   Save, Calculator, History, ArrowLeft, ArrowRight, FileInput, MessageCircle,
-  Loader2, RefreshCw
+  Loader2, RefreshCw, Clock
 } from 'lucide-react';
 import { customerAPI, productAPI, invoiceAPI, ordersAPI, salesOrdersAPI, apiClient } from '../../services/api';
 import { searchCache, smartSearch } from '../../utils/searchCache';
@@ -16,8 +16,9 @@ import InvoiceValidator from '../../services/invoiceValidator';
 import DataTransformer from '../../services/dataTransformer';
 import DateFormatter from '../../services/dateFormatter';
 import InvoiceApiService from '../../services/invoiceApiService';
-import { ProductSearchSimple, ItemsTable, ModuleHeader, CustomerSearch, ProductCreationModal, ViewHistoryButton, GSTCalculator, DocumentFooter, GenericSuccessModal } from '../global';
+import { ProductSearchSimple, ItemsTable, ModuleHeader, CustomerSearch, ProductCreationModal, ViewHistoryButton, GSTCalculator, DocumentFooter, GenericSuccessModal, AddressFormEnhanced } from '../global';
 import CustomerCreationB2B from '../global/ui/forms/CustomerCreationB2B';
+import { useCompany } from '../../contexts/CompanyContext';
 // import InvoiceSuccessModal from './InvoiceSuccessModal'; // Replaced with GenericSuccessModal
 import InvoiceSummaryTop from './components/InvoiceSummaryTop';
 import Toast from '../common/Toast';
@@ -28,10 +29,8 @@ import ImportDocumentModal from './components/ImportDocumentModal';
 // Removed testBackendConnection - already tested in App.tsx
 import { useToast } from '../global/ui/feedback/Toast';
 
-// Default org ID for development
-const DEFAULT_ORG_ID = 'ad808530-1ddb-4377-ab20-67bef145d80d';
-
 const InvoiceFlow = ({ onClose, prefilledData = null }) => {
+  const { companyInfo, getOrgId } = useCompany();
   const toast = useToast();
   const [currentStep, setCurrentStep] = useState(1);
   const [showCustomerModal, setShowCustomerModal] = useState(false);
@@ -43,6 +42,7 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
   const [createdInvoiceData, setCreatedInvoiceData] = useState(null);
   const [message, setMessage] = useState('');
   const [messageType, setMessageType] = useState('');
+  const [sameAsShipping, setSameAsShipping] = useState(true);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
   const [refreshing, setRefreshing] = useState(false);
@@ -353,13 +353,38 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
       return item;
     });
     
-    setInvoice(prev => ({ ...prev, items: updatedItems }));
+    // INSTANT: Calculate locally immediately for instant UI feedback
+    try {
+      const instantResult = InvoiceCalculatorEnterprise.calculateInstant({ 
+        ...invoice, 
+        items: updatedItems 
+      });
+      
+      // Merge calculated values back into items for immediate display
+      const itemsWithCalculations = updatedItems.map((item, i) => ({
+        ...item,
+        ...instantResult.line_items[i] // Merge calculated values
+      }));
+      
+      // Update UI instantly with local calculation
+      const formattedTotals = InvoiceCalculatorEnterprise.formatTotalsForDisplay(instantResult.totals);
+      setInvoice(prev => ({
+        ...prev,
+        items: itemsWithCalculations, // Use items with calculations
+        ...formattedTotals,
+        calculatedLineItems: instantResult.line_items
+      }));
+    } catch (error) {
+      console.error('Instant calculation failed:', error);
+      setInvoice(prev => ({ ...prev, items: updatedItems }));
+    }
     
-    // Use debounced calculation to prevent flickering
+    // Backend calculation for verification (non-blocking)
     InvoiceCalculatorEnterprise.calculateDebounced(
       { ...invoice, items: updatedItems },
       (error, result) => {
-        if (!error && result.success) {
+        if (!error && result.success && !result.isLocal) {
+          // Only update if this is backend result
           const formattedTotals = InvoiceCalculatorEnterprise.formatTotalsForDisplay(result.totals);
           setInvoice(prev => ({
             ...prev,
@@ -368,33 +393,133 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
           }));
         }
       },
-      300 // 300ms delay to prevent rapid calls
+      800 // Longer delay since we have instant feedback
     );
   };
 
   const handleRemoveItem = (index) => {
     const updatedItems = invoice.items.filter((_, i) => i !== index);
-    setInvoice(prev => ({ ...prev, items: updatedItems }));
-    calculateInvoiceTotals(updatedItems);
+    
+    // INSTANT: Calculate locally for immediate feedback
+    try {
+      const instantResult = InvoiceCalculatorEnterprise.calculateInstant({ 
+        ...invoice, 
+        items: updatedItems 
+      });
+      
+      // Merge calculated values back into remaining items
+      const itemsWithCalculations = updatedItems.map((item, i) => ({
+        ...item,
+        ...instantResult.line_items[i]
+      }));
+      
+      const formattedTotals = InvoiceCalculatorEnterprise.formatTotalsForDisplay(instantResult.totals);
+      setInvoice(prev => ({
+        ...prev,
+        items: itemsWithCalculations,
+        ...formattedTotals,
+        calculatedLineItems: instantResult.line_items
+      }));
+    } catch (error) {
+      console.error('Instant calculation failed:', error);
+      setInvoice(prev => ({ ...prev, items: updatedItems }));
+    }
+    
+    // Backend calculation for verification
+    if (updatedItems.length > 0) {
+      InvoiceCalculatorEnterprise.calculateDebounced(
+        { ...invoice, items: updatedItems },
+        (error, result) => {
+          if (!error && result.success && !result.isLocal) {
+            const formattedTotals = InvoiceCalculatorEnterprise.formatTotalsForDisplay(result.totals);
+            setInvoice(prev => ({
+              ...prev,
+              ...formattedTotals,
+              calculatedLineItems: result.line_items
+            }));
+          }
+        },
+        800
+      );
+    }
   };
 
   // ENTERPRISE CALCULATION: Real-time frontend calculations with backend validation
 
-  const handleCustomerSelect = (customer) => {
+  const handleCustomerSelect = async (customer) => {
     console.log('handleCustomerSelect called with:', customer);
     setSelectedCustomer(customer);
     if (customer) {
-      const companyState = localStorage.getItem('companyState') || 'Gujarat';
+      const companyState = companyInfo.state || 'Gujarat';
       const customerState = customer.state || '';
       const isInterstate = customerState && customerState.toLowerCase() !== companyState.toLowerCase();
       
+      // Build address properly with null checks
+      const addressParts = [];
+      if (customer.address) addressParts.push(customer.address);
+      if (customer.city) addressParts.push(customer.city);
+      if (customer.state) addressParts.push(customer.state);
+      if (customer.pincode) addressParts.push(customer.pincode);
+      let fullAddress = addressParts.filter(Boolean).join(', ');
+      
+      // Fetch customer addresses separately if address is missing
+      if (!fullAddress && customer.customer_id) {
+        try {
+          const response = await apiClient.get(`/customers/${customer.customer_id}/addresses`);
+          
+          if (response.data?.success && response.data.data?.length > 0) {
+            const addresses = response.data.data;
+            
+            // Prioritize billing, then shipping, then any default address
+            const billingAddr = addresses.find(addr => addr.address_type === 'billing' && addr.is_default);
+            const shippingAddr = addresses.find(addr => addr.address_type === 'shipping' && addr.is_default);
+            const anyDefaultAddr = addresses.find(addr => addr.is_default);
+            
+            const preferredAddr = billingAddr || shippingAddr || anyDefaultAddr || addresses[0];
+            
+            console.log('Found address data:', {
+              total: addresses.length,
+              types: addresses.map(a => a.address_type),
+              selected: preferredAddr.address_type,
+              address: preferredAddr
+            });
+            
+            // Build full address from fetched data
+            const fetchedParts = [];
+            if (preferredAddr.address_line1) fetchedParts.push(preferredAddr.address_line1);
+            if (preferredAddr.address_line2) fetchedParts.push(preferredAddr.address_line2);
+            if (preferredAddr.city) fetchedParts.push(preferredAddr.city);
+            if (preferredAddr.state || preferredAddr.state_name) fetchedParts.push(preferredAddr.state || preferredAddr.state_name);
+            if (preferredAddr.pincode || preferredAddr.pin_code || preferredAddr.postal_code) {
+              fetchedParts.push(preferredAddr.pincode || preferredAddr.pin_code || preferredAddr.postal_code);
+            }
+            fullAddress = fetchedParts.filter(Boolean).join(', ');
+            
+            // Update customer object with address data
+            customer = {
+              ...customer,
+              address: preferredAddr.address_line1 || '',
+              address2: preferredAddr.address_line2 || '',
+              city: preferredAddr.city || '',
+              state: preferredAddr.state || preferredAddr.state_name || '',
+              pincode: preferredAddr.pincode || preferredAddr.pin_code || preferredAddr.postal_code || ''
+            };
+            
+            // Update selectedCustomer with full address data
+            setSelectedCustomer(customer);
+          }
+        } catch (error) {
+          console.error('Failed to fetch customer addresses:', error);
+        }
+      }
+      
       setInvoice(prev => ({
         ...prev,
-        customer_id: customer.customer_id,
-        customer_name: customer.customer_name,
+        customer_id: customer.customer_id || customer.id,
+        customer_name: customer.customer_name || customer.name,
         customer_details: customer,
-        billing_address: `${customer.address}, ${customer.city}, ${customer.state}`,
-        shipping_address: `${customer.address}, ${customer.city}, ${customer.state}`,
+        billing_address: fullAddress,
+        shipping_address: fullAddress, // Initially same as billing
         place_of_supply: customerState || companyState,  // NEW: Set place of supply for GST
         gst_type: isInterstate ? 'IGST' : 'CGST/SGST'
       }));
@@ -454,22 +579,51 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
         available_quantity: product.available_quantity || product.quantity_available || 0
       };
       
-      // Calculate amounts properly considering quantity
-      const quantity = 1;
-      const rate = newItem.rate || newItem.sale_price || 0;
-      const discountAmount = (quantity * rate * newItem.discount_percent) / 100;
-      const baseAmount = (quantity * rate) - discountAmount;
-      const taxAmount = (baseAmount * newItem.gst_percent) / 100;
+      const updatedItems = [...invoice.items, newItem];
       
-      newItem.amount = baseAmount;
-      newItem.tax_amount = taxAmount;
-      newItem.final_amount = baseAmount + taxAmount;
-      newItem.total = baseAmount + taxAmount;
+      // INSTANT: Calculate locally for immediate feedback
+      try {
+        const instantResult = InvoiceCalculatorEnterprise.calculateInstant({ 
+          ...invoice, 
+          items: updatedItems 
+        });
+        
+        // Merge calculated values back into items
+        const itemsWithCalculations = updatedItems.map((item, i) => ({
+          ...item,
+          ...instantResult.line_items[i]
+        }));
+        
+        const formattedTotals = InvoiceCalculatorEnterprise.formatTotalsForDisplay(instantResult.totals);
+        setInvoice(prev => ({
+          ...prev,
+          items: itemsWithCalculations,
+          ...formattedTotals,
+          calculatedLineItems: instantResult.line_items
+        }));
+      } catch (error) {
+        console.error('Instant calculation failed:', error);
+        setInvoice(prev => ({
+          ...prev,
+          items: updatedItems
+        }));
+      }
       
-      setInvoice(prev => ({
-        ...prev,
-        items: [...prev.items, newItem]
-      }));
+      // Backend calculation for verification
+      InvoiceCalculatorEnterprise.calculateDebounced(
+        { ...invoice, items: updatedItems },
+        (error, result) => {
+          if (!error && result.success && !result.isLocal) {
+            const formattedTotals = InvoiceCalculatorEnterprise.formatTotalsForDisplay(result.totals);
+            setInvoice(prev => ({
+              ...prev,
+              ...formattedTotals,
+              calculatedLineItems: result.line_items
+            }));
+          }
+        },
+        800
+      );
     }
   };
 
@@ -514,7 +668,7 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
     setSaving(true);
     try {
       // Get org_id as UUID
-      const orgId = localStorage.getItem('orgId') || DEFAULT_ORG_ID;
+      const orgId = getOrgId();
       
       // Map payment_mode to payment_terms for backend
       const paymentTermsMap = {
@@ -756,69 +910,216 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
   };
 
   const handlePrint = () => {
-    // Create a print-specific layout
+    // Create a new window with the full invoice preview and trigger print
     const printWindow = window.open('', '_blank');
     if (printWindow) {
+      const invoiceContent = document.createElement('div');
+      
+      // We'll use React to render the full InvoicePreview with addresses
+      // For now, create print content programmatically
       printWindow.document.write(`
+        <!DOCTYPE html>
         <html>
           <head>
-            <title>Invoice ${createdInvoiceData?.invoiceNumber || invoice.invoice_no}</title>
+            <title>Invoice ${invoice.invoice_no}</title>
             <style>
-              body { font-family: Arial, sans-serif; padding: 20px; }
-              .invoice-header { text-align: center; margin-bottom: 30px; }
-              .invoice-details { margin-bottom: 20px; }
-              .items-table { width: 100%; border-collapse: collapse; }
-              .items-table th, .items-table td { border: 1px solid #ddd; padding: 8px; text-align: left; }
-              .total-section { text-align: right; margin-top: 20px; }
+              body { 
+                font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+                margin: 0;
+                padding: 20px;
+                line-height: 1.4;
+              }
               @media print {
-                body { margin: 0; }
-                .no-print { display: none; }
+                body { margin: 0; padding: 15px; }
+                .no-print { display: none !important; }
+              }
+              .invoice-header {
+                text-align: center;
+                border-bottom: 2px solid #333;
+                padding-bottom: 20px;
+                margin-bottom: 30px;
+              }
+              .company-info h1 {
+                margin: 0;
+                color: #333;
+                font-size: 28px;
+              }
+              .company-info p {
+                margin: 5px 0;
+                color: #666;
+              }
+              .addresses {
+                display: grid;
+                grid-template-columns: 1fr 1fr 1fr;
+                gap: 20px;
+                margin-bottom: 30px;
+              }
+              .address-section {
+                background: #f9f9f9;
+                padding: 15px;
+                border-radius: 8px;
+              }
+              .address-section h3 {
+                margin: 0 0 10px 0;
+                font-size: 12px;
+                color: #666;
+                text-transform: uppercase;
+                letter-spacing: 1px;
+              }
+              .address-section p {
+                margin: 3px 0;
+                font-size: 14px;
+                color: #333;
+              }
+              .invoice-table {
+                width: 100%;
+                border-collapse: collapse;
+                margin-bottom: 30px;
+              }
+              .invoice-table th,
+              .invoice-table td {
+                border: 1px solid #ddd;
+                padding: 8px;
+                text-align: left;
+                font-size: 12px;
+              }
+              .invoice-table th {
+                background: #f5f5f5;
+                font-weight: 600;
+              }
+              .text-right { text-align: right; }
+              .text-center { text-align: center; }
+              .totals {
+                display: flex;
+                justify-content: flex-end;
+                margin-top: 20px;
+              }
+              .totals-table {
+                width: 300px;
+              }
+              .totals-table td {
+                padding: 5px 10px;
+                border: none;
+                border-bottom: 1px solid #eee;
+              }
+              .totals-table .total-row {
+                font-weight: bold;
+                border-top: 2px solid #333;
               }
             </style>
           </head>
           <body>
             <div class="invoice-header">
-              <h1>INVOICE</h1>
-              <p>Invoice #${createdInvoiceData?.invoiceNumber || invoice.invoice_no}</p>
-              <p>Date: ${new Date().toLocaleDateString('en-IN')}</p>
+              <div class="company-info">
+                <h1>${companyInfo.name}</h1>
+                <p>${companyInfo.address}</p>
+                <p>Phone: ${companyInfo.phone} | Email: ${companyInfo.email}</p>
+                <p>GST: ${companyInfo.gst}</p>
+              </div>
             </div>
-            <div class="invoice-details">
-              <h3>Bill To:</h3>
-              <p>${createdInvoiceData?.customerName || selectedCustomer?.customer_name || 'Customer'}</p>
-              ${selectedCustomer?.phone ? `<p>Phone: ${selectedCustomer.phone}</p>` : ''}
-              ${selectedCustomer?.address ? `<p>Address: ${selectedCustomer.address}</p>` : ''}
+
+            <div style="display: flex; justify-content: space-between; margin-bottom: 30px;">
+              <div>
+                <h2 style="margin: 0;">INVOICE</h2>
+                <p><strong>Invoice No:</strong> ${invoice.invoice_no}</p>
+                <p><strong>Date:</strong> ${new Date().toLocaleDateString('en-IN')}</p>
+              </div>
             </div>
-            <table class="items-table">
+
+            <div class="addresses">
+              <div class="address-section">
+                <h3>Bill To</h3>
+                <p><strong>${invoice.customer_name || selectedCustomer?.customer_name || 'Customer'}</strong></p>
+                ${invoice.billing_address ? `<p>${invoice.billing_address}</p>` : ''}
+                ${selectedCustomer?.phone ? `<p>Ph: ${selectedCustomer.phone}</p>` : ''}
+              </div>
+
+              <div class="address-section">
+                <h3>Ship To</h3>
+                ${sameAsShipping ? `
+                  <p style="color: #16a34a; font-size: 12px;">✓ Same as billing</p>
+                  <p><strong>${invoice.customer_name || selectedCustomer?.customer_name || 'Customer'}</strong></p>
+                  ${invoice.billing_address ? `<p>${invoice.billing_address}</p>` : ''}
+                ` : `
+                  <p><strong>${invoice.customer_name || selectedCustomer?.customer_name || 'Customer'}</strong></p>
+                  ${invoice.shipping_address ? `<p>${invoice.shipping_address}</p>` : ''}
+                `}
+              </div>
+
+              <div class="address-section">
+                <h3>Transport</h3>
+                ${invoice.delivery_type ? `<p>Type: <strong>${invoice.delivery_type}</strong></p>` : ''}
+                ${invoice.transport_company ? `<p>Company: <strong>${invoice.transport_company}</strong></p>` : ''}
+                ${invoice.vehicle_number ? `<p>Vehicle: <strong>${invoice.vehicle_number}</strong></p>` : ''}
+                ${invoice.lr_number ? `<p>LR No: <strong>${invoice.lr_number}</strong></p>` : ''}
+                ${(!invoice.delivery_type && !invoice.transport_company) ? '<p style="color: #999; text-align: center;">No transport details</p>' : ''}
+              </div>
+            </div>
+
+            <table class="invoice-table">
               <thead>
                 <tr>
-                  <th>Item</th>
-                  <th>Quantity</th>
-                  <th>Rate</th>
-                  <th>Amount</th>
+                  <th>#</th>
+                  <th>Product</th>
+                  <th class="text-center">HSN</th>
+                  <th class="text-center">Batch</th>
+                  <th class="text-center">Exp</th>
+                  <th class="text-center">Qty</th>
+                  <th class="text-right">MRP</th>
+                  <th class="text-right">Rate</th>
+                  <th class="text-center">Disc%</th>
+                  <th class="text-center">Free</th>
+                  <th class="text-center">GST%</th>
+                  <th class="text-right">CGST</th>
+                  <th class="text-right">SGST</th>
+                  <th class="text-right">Amount</th>
                 </tr>
               </thead>
               <tbody>
-                ${(invoice.items || []).map(item => `
+                ${(invoice.items || []).map((item, index) => `
                   <tr>
-                    <td>${item.product_name || item.item_name}</td>
-                    <td>${item.quantity}</td>
-                    <td>₹${item.rate || item.sale_price}</td>
-                    <td>₹${((item.quantity || 0) * (item.rate || item.sale_price || 0)).toFixed(2)}</td>
+                    <td class="text-center">${index + 1}</td>
+                    <td>${item.product_name || item.name || 'N/A'}</td>
+                    <td class="text-center">${item.hsn_code || '-'}</td>
+                    <td class="text-center">${item.batch_number || '-'}</td>
+                    <td class="text-center">${item.expiry_date || '-'}</td>
+                    <td class="text-center">${item.quantity || 0}</td>
+                    <td class="text-right">₹${(item.mrp || 0).toFixed(2)}</td>
+                    <td class="text-right">₹${(item.rate || item.sale_price || 0).toFixed(2)}</td>
+                    <td class="text-center">${item.discount_percent || 0}%</td>
+                    <td class="text-center">${item.free_quantity || 0}</td>
+                    <td class="text-center">${item.gst_percent || item.tax_rate || 0}%</td>
+                    <td class="text-right">₹${((item.calculated_total || 0) * (item.gst_percent || 0) / 200).toFixed(2)}</td>
+                    <td class="text-right">₹${((item.calculated_total || 0) * (item.gst_percent || 0) / 200).toFixed(2)}</td>
+                    <td class="text-right">₹${(item.calculated_total || item.total_amount || 0).toFixed(2)}</td>
                   </tr>
                 `).join('')}
               </tbody>
             </table>
-            <div class="total-section">
-              <h3>Total: ₹${createdInvoiceData?.totalAmount?.toFixed(2) || invoice.net_amount?.toFixed(2) || '0.00'}</h3>
+
+            <div class="totals">
+              <table class="totals-table">
+                <tr><td>Subtotal:</td><td class="text-right">₹${(invoice.subtotal_amount || 0).toFixed(2)}</td></tr>
+                <tr><td>Tax Amount:</td><td class="text-right">₹${(invoice.tax_amount || 0).toFixed(2)}</td></tr>
+                ${invoice.delivery_charges ? `<tr><td>Delivery Charges:</td><td class="text-right">₹${invoice.delivery_charges.toFixed(2)}</td></tr>` : ''}
+                ${invoice.discount_amount ? `<tr><td>Discount:</td><td class="text-right">-₹${invoice.discount_amount.toFixed(2)}</td></tr>` : ''}
+                <tr><td>Round Off:</td><td class="text-right">₹${(invoice.round_off || 0).toFixed(2)}</td></tr>
+                <tr class="total-row"><td><strong>Net Amount:</strong></td><td class="text-right"><strong>₹${(invoice.net_amount || 0).toFixed(2)}</strong></td></tr>
+              </table>
             </div>
           </body>
         </html>
       `);
+      
       printWindow.document.close();
       printWindow.focus();
+      
+      // Small delay to ensure content loads, then print
       setTimeout(() => {
         printWindow.print();
-      }, 250);
+        // Close the window after printing (optional)
+        printWindow.onafterprint = () => printWindow.close();
+      }, 500);
     }
   };
 
@@ -876,7 +1177,7 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
       `Your invoice ${invoice.invoice_no} dated ${new Date(invoice.invoice_date).toLocaleDateString('en-IN')} ` +
       `for amount ₹${totalAmount.toFixed(2)} has been generated.\n\n` +
       `Thank you for your business!\n\n` +
-      `Regards,\nAASO Pharma`
+      `Regards,\n${companyInfo.name}`
     );
 
     // Note: WhatsApp Web doesn't support file attachments via URL
@@ -1069,6 +1370,7 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
               />
             </div>
 
+
             {/* Products Section */}
             <div className="mb-6">
               <h3 className="text-sm font-semibold text-blue-700 uppercase tracking-wider mb-3 flex items-center">
@@ -1187,22 +1489,11 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
           historyType="invoice"
           additionalActions={[
             {
-              label: "Back to Edit",
+              label: "← Back to Edit",
               onClick: () => setCurrentStep(1),
-              icon: ArrowLeft,
-              variant: "default"
-            },
-            {
-              label: "Print",
-              onClick: handlePrint,
-              icon: Printer,
-              variant: "default"
-            },
-            {
-              label: "WhatsApp",
-              onClick: handleWhatsAppShare,
-              icon: MessageCircle,
-              variant: "success"
+              icon: null,
+              variant: "default",
+              className: "bg-white border border-gray-300 text-gray-700 hover:bg-gray-50 font-medium px-4 py-2 rounded-lg shadow-sm"
             }
           ]}
         />
@@ -1238,17 +1529,44 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
             onInvoiceUpdate={(updates) => setInvoice(prev => ({ ...prev, ...updates }))}
           />
 
+          {/* Address Section - Enhanced forms with dropdowns and multi-field input */}
+          {selectedCustomer && (
+            <div className="max-w-6xl mx-auto mb-6">
+              <div className="grid grid-cols-2 gap-4">
+                <AddressFormEnhanced
+                  customer={selectedCustomer}
+                  addressData={invoice.billing_address_data}
+                  addressType="billing"
+                  onChange={(address) => setInvoice(prev => ({ ...prev, billing_address: address }))}
+                  onSave={(addressData) => setInvoice(prev => ({ ...prev, billing_address_data: addressData }))}
+                />
+                <AddressFormEnhanced
+                  customer={selectedCustomer}
+                  addressData={invoice.shipping_address_data}
+                  addressType="shipping"
+                  sameAsBilling={sameAsShipping}
+                  onSameAsBillingChange={(same) => {
+                    setSameAsShipping(same);
+                    if (same) {
+                      setInvoice(prev => ({ 
+                        ...prev, 
+                        shipping_address: prev.billing_address,
+                        shipping_address_data: prev.billing_address_data 
+                      }));
+                    }
+                  }}
+                  onChange={(address) => setInvoice(prev => ({ ...prev, shipping_address: address }))}
+                  onSave={(addressData) => setInvoice(prev => ({ ...prev, shipping_address_data: addressData }))}
+                />
+              </div>
+            </div>
+          )}
+
           <InvoicePreview
             invoice={invoice}
             customer={selectedCustomer}
-            companyInfo={{
-              name: 'AASO Pharma',
-              address: '123 Business Street, City, State',
-              phone: '+91 98765 43210',
-              email: 'info@aasopharma.com',
-              gst: '07AABCU9603R1ZN',
-              logo: null
-            }}
+            showAddresses={false}  // Hide addresses in PDF preview since we show them above
+            companyInfo={companyInfo}
           />
 
           {/* Notes */}

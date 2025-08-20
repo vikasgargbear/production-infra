@@ -487,7 +487,7 @@ const OutstandingBills: React.FC<OutstandingBillsProps> = ({
                 />
               ) : (
                 <SupplierSearch
-                  onSupplierSelect={setSelectedParty}
+                  onChange={setSelectedParty}
                   placeholder="Search supplier"
                 />
               )}

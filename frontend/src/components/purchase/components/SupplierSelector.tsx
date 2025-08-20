@@ -64,7 +64,7 @@ const SupplierSelector: React.FC<SupplierSelectorProps> = () => {
         </div>
       ) : (
         <SupplierSearch
-          onSupplierSelect={handleSelectSupplier}
+          onChange={handleSelectSupplier}
           placeholder="Search suppliers by name, phone, or GSTIN..."
         />
       )}

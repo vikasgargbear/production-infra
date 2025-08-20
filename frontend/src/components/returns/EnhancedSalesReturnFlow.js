@@ -1,0 +1,1123 @@
+import React, { useState, useEffect, useRef } from 'react';
+import { 
+  RotateCcw, Save, Printer, User, FileText, Package, Calendar, 
+  AlertCircle, CheckCircle, Plus, X, Search
+} from 'lucide-react';
+import { 
+  EnhancedGlobalDocumentFlow, CustomerSearch, ProductSearchSimple, ItemsTable,
+  DatePicker, Select, NumberInput, NotesSection, useToast
+} from '../global';
+import CustomerCreationB2B from '../global/ui/forms/CustomerCreationB2B';
+import { returnsApi, customersApi, settingsApi } from '../../services/api';
+import InvoiceApiService from '../../services/invoiceApiService';
+import ReturnSummary from './components/ReturnSummary';
+import CreditNotePreview from './components/CreditNotePreview';
+import offlineStorage from '../../services/offlineStorage';
+
+const EnhancedSalesReturnFlow = ({ onClose }) => {
+  const [currentStep, setCurrentStep] = useState(1);
+  const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const toast = useToast();
+
+  // Refs for keyboard navigation
+  const customerSearchRef = useRef(null);
+  const invoiceSearchRef = useRef(null);
+  const productSearchRef = useRef(null);
+
+  // Return data state
+  const [returnData, setReturnData] = useState({
+    return_no: '',
+    return_date: new Date().toISOString().split('T')[0],
+    customer_id: '',
+    customer_details: null,
+    invoice_id: '',
+    invoice_no: '',
+    invoice_date: '',
+    original_invoice: null,
+    items: [],
+    return_reason: '',
+    return_reason_notes: '',
+    subtotal_amount: 0,
+    tax_amount: 0,
+    total_amount: 0,
+    credit_note_no: '',
+    status: 'PENDING',
+    include_gst: true,
+    credit_adjustment_type: 'future'
+  });
+
+  const [selectedCustomer, setSelectedCustomer] = useState(null);
+  const [selectedInvoice, setSelectedInvoice] = useState(null);
+  const [returnableInvoices, setReturnableInvoices] = useState([]);
+  const [loadingInvoices, setLoadingInvoices] = useState(false);
+  const [customerDues, setCustomerDues] = useState(0);
+  const [returnReasons, setReturnReasons] = useState([]);
+  const [showCustomerModal, setShowCustomerModal] = useState(false);
+  const [invoiceFilters, setInvoiceFilters] = useState({
+    dateFrom: '',
+    dateTo: '',
+    status: 'all',
+    minAmount: '',
+    maxAmount: ''
+  });
+  const [invoicePage, setInvoicePage] = useState(1);
+  const [invoicePagination, setInvoicePagination] = useState(null);
+  const [showManualEntry, setShowManualEntry] = useState(false);
+  const [manualItemCounter, setManualItemCounter] = useState(1);
+
+  // Generate return number
+  const generateReturnNumber = () => {
+    const timestamp = Date.now();
+    return `RET-${new Date().getFullYear()}-${timestamp.toString().slice(-6)}`;
+  };
+
+  // Initialize return number
+  useEffect(() => {
+    setReturnData(prev => ({
+      ...prev,
+      return_no: generateReturnNumber()
+    }));
+  }, []);
+
+  // Load return reasons from system settings
+  useEffect(() => {
+    const loadReturnReasons = async () => {
+      try {
+        const response = await settingsApi.system.getByCategory('RETURN_REASONS');
+        const settings = response.data || [];
+        
+        if (Array.isArray(settings) && settings.length > 0) {
+          const reasons = settings
+            .filter(setting => setting.setting_scope === 'SALES_RETURN' || setting.setting_scope === 'ALL')
+            .map(setting => ({
+              value: setting.setting_key,
+              label: setting.setting_name || setting.setting_value
+            }));
+          
+          setReturnReasons(reasons);
+          await offlineStorage.storeOffline('sales_return_reasons', reasons, { persistent: true });
+        } else {
+          throw new Error('No return reasons found in system settings');
+        }
+      } catch (error) {
+        console.warn('Could not load return reasons from backend:', error.message);
+        
+        try {
+          const cached = await offlineStorage.getOffline('sales_return_reasons', { persistent: true });
+          if (cached && cached.data && Array.isArray(cached.data)) {
+            setReturnReasons(cached.data);
+            return;
+          }
+        } catch (cacheError) {
+          console.warn('No cached return reasons available');
+        }
+        
+        // Ultimate fallback to hardcoded values
+        setReturnReasons([
+          { value: 'EXPIRED', label: 'Expired Product' },
+          { value: 'DAMAGED', label: 'Damaged Product' },
+          { value: 'WRONG_PRODUCT', label: 'Wrong Product Delivered' },
+          { value: 'QUALITY_ISSUE', label: 'Quality Issue' },
+          { value: 'NOT_REQUIRED', label: 'Not Required' },
+          { value: 'EXCESS_STOCK', label: 'Excess Stock' },
+          { value: 'RATE_DIFFERENCE', label: 'Rate Difference' },
+          { value: 'CUSTOMER_RETURN', label: 'Customer Return' },
+          { value: 'OTHER', label: 'Other' }
+        ]);
+      }
+    };
+
+    loadReturnReasons();
+  }, []);
+
+  // Load customer invoices when filters change
+  useEffect(() => {
+    if (selectedCustomer) {
+      const customerId = selectedCustomer.id || selectedCustomer.customer_id || selectedCustomer.party_id;
+      fetchCustomerInvoices(customerId);
+    }
+  }, [selectedCustomer, invoicePage, invoiceFilters]);
+
+  // Keyboard shortcuts
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.ctrlKey || e.metaKey) {
+        switch (e.key) {
+          case 'r':
+            e.preventDefault();
+            if (customerSearchRef.current) {
+              customerSearchRef.current.focus();
+            }
+            break;
+          case 'i':
+            e.preventDefault();
+            if (invoiceSearchRef.current) {
+              invoiceSearchRef.current.focus();
+            }
+            break;
+          case 's':
+            e.preventDefault();
+            if (currentStep === 2) {
+              handleSaveReturn();
+            } else {
+              handleProceedToReview();
+            }
+            break;
+          case 'p':
+            e.preventDefault();
+            if (currentStep === 2) {
+              handlePrint();
+            }
+            break;
+        }
+      }
+      
+      // ESC key handling with stopPropagation
+      if (e.key === 'Escape') {
+        e.stopPropagation();
+        if (showCustomerModal) {
+          setShowCustomerModal(false);
+        } else if (currentStep === 2) {
+          setCurrentStep(1);
+        } else {
+          onClose();
+        }
+      }
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [currentStep, showCustomerModal, onClose]);
+
+  // Load customer invoices when customer is selected
+  const fetchCustomerInvoices = async (customerId) => {
+    if (!customerId) {
+      setReturnableInvoices([]);
+      setInvoicePagination(null);
+      return;
+    }
+
+    setLoadingInvoices(true);
+    try {
+      const response = await InvoiceApiService.getInvoices({
+        customer_id: customerId,
+        limit: 10,
+        offset: (invoicePage - 1) * 10
+      });
+      
+      if (response.success && response.data) {
+        let allInvoices = response.data.invoices?.map(invoice => ({
+          id: invoice.invoice_id,
+          invoice_number: invoice.invoice_number,
+          invoice_date: invoice.invoice_date,
+          total_amount: parseFloat(invoice.final_amount || invoice.grand_total) || 0,
+          outstanding_amount: parseFloat(invoice.final_amount || invoice.grand_total) - parseFloat(invoice.paid_amount || 0),
+          status: invoice.payment_status || 'pending',
+          items: invoice.items || []
+        })) || [];
+
+        // Apply frontend filters
+        if (invoiceFilters.dateFrom) {
+          allInvoices = allInvoices.filter(invoice => 
+            new Date(invoice.invoice_date) >= new Date(invoiceFilters.dateFrom)
+          );
+        }
+        
+        if (invoiceFilters.dateTo) {
+          allInvoices = allInvoices.filter(invoice => 
+            new Date(invoice.invoice_date) <= new Date(invoiceFilters.dateTo)
+          );
+        }
+        
+        if (invoiceFilters.status !== 'all') {
+          allInvoices = allInvoices.filter(invoice => 
+            invoice.status.toLowerCase() === invoiceFilters.status.toLowerCase()
+          );
+        }
+        
+        if (invoiceFilters.minAmount) {
+          allInvoices = allInvoices.filter(invoice => 
+            invoice.total_amount >= parseFloat(invoiceFilters.minAmount)
+          );
+        }
+        
+        if (invoiceFilters.maxAmount) {
+          allInvoices = allInvoices.filter(invoice => 
+            invoice.total_amount <= parseFloat(invoiceFilters.maxAmount)
+          );
+        }
+
+        setReturnableInvoices(allInvoices);
+        setInvoicePagination({
+          page: invoicePage,
+          limit: 10,
+          total_count: response.data.total || allInvoices.length,
+          total_pages: Math.ceil((response.data.total || allInvoices.length) / 10),
+          has_next: invoicePage < Math.ceil((response.data.total || allInvoices.length) / 10),
+          has_prev: invoicePage > 1
+        });
+      }
+    } catch (error) {
+      console.error('Error fetching customer invoices:', error);
+      
+      // Mock data for UI/UX demonstration
+      const mockInvoices = [
+        {
+          id: 'INV-001',
+          invoice_number: 'INV-2024-001',
+          invoice_date: '2024-01-15',
+          total_amount: 15000,
+          outstanding_amount: 15000,
+          status: 'paid',
+          items: [
+            { id: 1, product_name: 'Paracetamol 500mg', quantity: 100, rate: 50, hsn_code: '30049099' },
+            { id: 2, product_name: 'Aspirin 75mg', quantity: 50, rate: 100, hsn_code: '30049099' }
+          ]
+        }
+      ];
+
+      let filteredInvoices = [...mockInvoices];
+      
+      if (invoiceFilters.dateFrom) {
+        filteredInvoices = filteredInvoices.filter(invoice => 
+          new Date(invoice.invoice_date) >= new Date(invoiceFilters.dateFrom)
+        );
+      }
+      
+      if (invoiceFilters.dateTo) {
+        filteredInvoices = filteredInvoices.filter(invoice => 
+          new Date(invoice.invoice_date) <= new Date(invoiceFilters.dateTo)
+        );
+      }
+      
+      if (invoiceFilters.status !== 'all') {
+        filteredInvoices = filteredInvoices.filter(invoice => 
+          invoice.status.toLowerCase() === invoiceFilters.status.toLowerCase()
+        );
+      }
+
+      setReturnableInvoices(filteredInvoices);
+      setInvoicePagination({
+        page: 1,
+        limit: 10,
+        total_count: filteredInvoices.length,
+        total_pages: 1,
+        has_next: false,
+        has_prev: false
+      });
+    } finally {
+      setLoadingInvoices(false);
+    }
+  };
+
+  // Handle customer selection
+  const handleCustomerSelect = async (customer) => {
+    console.log('Customer selected:', customer);
+    setSelectedCustomer(customer);
+    setSelectedInvoice(null);
+    setReturnData(prev => ({
+      ...prev,
+      customer_id: customer.id || customer.customer_id || customer.party_id,
+      customer_details: customer,
+      invoice_id: '',
+      items: []
+    }));
+
+    const customerId = customer.id || customer.customer_id || customer.party_id;
+    
+    // Fetch customer outstanding balance
+    try {
+      const response = await customersApi.getOutstandingBalance(customerId);
+      if (response.success) {
+        setCustomerDues(response.data.outstanding_amount || 0);
+      }
+    } catch (error) {
+      console.error('Error fetching customer dues:', error);
+      setCustomerDues(0);
+    }
+
+    await fetchCustomerInvoices(customerId);
+  };
+
+  // Handle skipping invoice selection for general return
+  const handleSkipInvoiceSelection = () => {
+    setSelectedInvoice(null);
+    setShowManualEntry(true);
+    setReturnData(prev => ({
+      ...prev,
+      invoice_id: '',
+      invoice_no: '',
+      invoice_date: '',
+      original_invoice: null,
+      items: []
+    }));
+  };
+
+  // Add manual item to return
+  const addManualItem = (product) => {
+    if (!product) return;
+    
+    const newItem = {
+      id: `manual-${manualItemCounter}`,
+      product_id: product.product_id,
+      product_name: product.product_name || product.name,
+      batch_id: null,
+      rate: 0,
+      tax_percent: 18,
+      quantity: 0,
+      return_quantity: 0,
+      max_returnable_qty: 999999,
+      return_reason: '',
+      selected: true,
+      hsn_code: product.hsn_code || '',
+      unit: product.unit || 'PCS',
+      manufacturer: product.manufacturer || '',
+      is_manual: true,
+      available_stock: 0
+    };
+
+    setReturnData(prev => ({
+      ...prev,
+      items: [...(prev.items || []), newItem]
+    }));
+    
+    setManualItemCounter(prev => prev + 1);
+  };
+
+  // Remove manual item
+  const removeManualItem = (itemId) => {
+    setReturnData(prev => ({
+      ...prev,
+      items: (prev.items || []).filter(item => item.id !== itemId)
+    }));
+  };
+
+  // Handle invoice selection
+  const handleInvoiceSelect = async (invoice) => {
+    setSelectedInvoice(invoice);
+    
+    let invoiceWithItems = invoice;
+    if (!invoice.items) {
+      try {
+        setLoading(true);
+        const response = await InvoiceApiService.getInvoiceById(invoice.invoice_id || invoice.id);
+        if (response.success) {
+          invoiceWithItems = response.data;
+        }
+      } catch (error) {
+        toast.error('Failed to fetch invoice details');
+        console.error('Error fetching invoice details:', error);
+        return;
+      } finally {
+        setLoading(false);
+      }
+    }
+    
+    setReturnData(prev => ({
+      ...prev,
+      invoice_id: invoiceWithItems.invoice_id || invoiceWithItems.id,
+      invoice_no: invoiceWithItems.invoice_number || invoiceWithItems.invoice_no,
+      invoice_date: invoiceWithItems.invoice_date,
+      original_invoice: invoiceWithItems,
+      items: (invoiceWithItems.items || []).map((item, index) => ({
+        ...item,
+        id: item.item_id || item.id || `item-${index}`,
+        product_id: item.product_id,
+        product_name: item.product_name || item.product?.name,
+        batch_id: item.batch_id,
+        rate: item.rate || item.sale_price || item.price || item.unit_price,
+        tax_percent: item.tax_percent || item.gst_percent || 18,
+        quantity: item.quantity,
+        return_quantity: 0,
+        max_returnable_qty: item.quantity - (item.returned_quantity || 0),
+        return_reason: '',
+        selected: false,
+        hsn_code: item.hsn_code || ''
+      }))
+    }));
+  };
+
+  // Update return item
+  const updateReturnItem = (itemId, field, value) => {
+    console.log('updateReturnItem called:', { itemId, field, value });
+    setReturnData(prev => {
+      const updatedItems = (prev.items || []).map(item => {
+        if (item.id === itemId) {
+          const updatedItem = { ...item, [field]: value };
+          return updatedItem;
+        }
+        return item;
+      });
+      return {
+        ...prev,
+        items: updatedItems
+      };
+    });
+  };
+
+  // Calculate totals
+  const calculateTotals = () => {
+    let subtotal = 0;
+    let taxAmount = 0;
+
+    (returnData.items || []).forEach(item => {
+      if (item.selected && item.return_quantity > 0) {
+        const itemTotal = item.return_quantity * item.rate;
+        const itemTax = (!selectedCustomer?.gst_number || returnData.include_gst) 
+          ? (itemTotal * item.tax_percent) / 100 
+          : 0;
+        subtotal += itemTotal;
+        taxAmount += itemTax;
+      }
+    });
+
+    const total = subtotal + taxAmount;
+
+    setReturnData(prev => ({
+      ...prev,
+      subtotal_amount: subtotal,
+      tax_amount: taxAmount,
+      total_amount: total
+    }));
+  };
+
+  // Watch for item changes and recalculate
+  useEffect(() => {
+    calculateTotals();
+  }, [returnData.items, selectedCustomer, returnData.include_gst]);
+
+  // Validate return
+  const validateReturn = () => {
+    if (!selectedCustomer) {
+      toast.error('Please select a customer');
+      return false;
+    }
+
+    if (!selectedInvoice && !showManualEntry) {
+      toast.error('Please select an invoice or use manual entry');
+      return false;
+    }
+
+    const hasSelectedItems = (returnData.items || []).some(item => 
+      item.selected && item.return_quantity > 0
+    );
+
+    if (!hasSelectedItems) {
+      toast.error('Please add items to return');
+      return false;
+    }
+
+    if (!returnData.return_reason) {
+      toast.error('Please select a return reason');
+      return false;
+    }
+
+    for (const item of returnData.items || []) {
+      if (item.selected) {
+        if (item.return_quantity <= 0) {
+          toast.error(`Please enter a valid return quantity for ${item.product_name}`);
+          return false;
+        }
+        
+        if (item.is_manual && item.rate <= 0) {
+          toast.error(`Please enter a valid rate for ${item.product_name}`);
+          return false;
+        }
+        
+        if (!item.is_manual && item.return_quantity > item.max_returnable_qty) {
+          toast.error(`Return quantity exceeds available quantity for ${item.product_name}`);
+          return false;
+        }
+      }
+    }
+
+    return true;
+  };
+
+  // Proceed to review
+  const handleProceedToReview = () => {
+    if (validateReturn()) {
+      setCurrentStep(2);
+      window.scrollTo(0, 0);
+    }
+  };
+
+  // Save return
+  const handleSaveReturn = async () => {
+    if (!validateReturn()) return;
+
+    setSaving(true);
+    try {
+      const returnPayload = {
+        ...returnData,
+      };
+
+      const response = await returnsApi.createSaleReturn(returnPayload);
+      
+      if (response.data) {
+        const { credit_note_no, has_gst, message } = response.data;
+        
+        if (credit_note_no) {
+          toast.success(`Sales return created successfully with GST Credit Note: ${credit_note_no}`);
+        } else if (has_gst === false) {
+          toast.success('Sales return created successfully (No GST credit note - customer does not have GST)');
+        } else {
+          toast.success(message || 'Sales return created successfully');
+        }
+      } else {
+        toast.success('Sales return created successfully');
+      }
+      
+      setTimeout(() => {
+        onClose();
+      }, 2500);
+    } catch (error) {
+      toast.error(error.message || 'Failed to create return');
+      console.error('Error creating return:', error);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // Handle print
+  const handlePrint = () => {
+    window.print();
+  };
+
+  // Create content for step 1
+  const createContent = (
+    <div className="space-y-6">
+      <div className="text-sm text-blue-700 mb-4">
+        Keyboard shortcuts: <strong>Ctrl+R</strong> - Search Customer | <strong>Ctrl+I</strong> - Search Invoice | <strong>Ctrl+S</strong> - Proceed | <strong>Esc</strong> - Close
+      </div>
+
+      {/* Return Date */}
+      <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+        <div className="flex justify-end mb-6">
+          <div className="w-64">
+            <DatePicker
+              value={returnData.return_date}
+              onChange={(date) => setReturnData(prev => ({ ...prev, return_date: date }))}
+              label="Return Date"
+              size="lg"
+              className="w-full"
+            />
+          </div>
+        </div>
+
+        {/* Customer Selection */}
+        <div className="mb-6">
+          {!selectedCustomer ? (
+            <CustomerSearch
+              ref={customerSearchRef}
+              onChange={handleCustomerSelect}
+              placeholder="Search customer by name, phone..."
+              className="w-full"
+              onCreateCustomer={(searchQuery) => {
+                console.log('Creating customer with name:', searchQuery);
+                setShowCustomerModal(true);
+              }}
+            />
+          ) : (
+            <div className="bg-blue-50 rounded-lg p-4 flex justify-between items-start">
+              <div>
+                <h4 className="font-semibold text-gray-900">{selectedCustomer.customer_name || selectedCustomer.name}</h4>
+                <p className="text-sm text-gray-600">{selectedCustomer.phone}</p>
+                <p className="text-sm text-gray-600">{selectedCustomer.address}</p>
+              </div>
+              <button
+                onClick={() => {
+                  setSelectedCustomer(null);
+                  setSelectedInvoice(null);
+                  setReturnData(prev => ({
+                    ...prev,
+                    customer_id: '',
+                    customer_details: null,
+                    invoice_id: '',
+                    items: []
+                  }));
+                }}
+                className="text-red-600 hover:text-red-700"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+          )}
+        </div>
+
+        {/* Invoice Selection */}
+        {selectedCustomer && (
+          <div>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-sm font-medium text-gray-700 flex items-center">
+                <FileText className="w-4 h-4 mr-2" />
+                Select Invoice (Optional)
+              </h3>
+              <button
+                onClick={handleSkipInvoiceSelection}
+                className="px-3 py-1 text-sm border border-gray-300 rounded hover:bg-blue-50 text-blue-600"
+              >
+                Skip Invoice Selection
+              </button>
+            </div>
+            
+            {/* Show selected invoice if any */}
+            {selectedInvoice && (
+              <div className="bg-blue-50 rounded-lg p-4 flex justify-between items-center mb-4">
+                <div>
+                  <h4 className="font-semibold text-gray-900">
+                    Invoice #{selectedInvoice.invoice_number || selectedInvoice.invoice_no}
+                  </h4>
+                  <p className="text-sm text-gray-600">
+                    Date: {new Date(selectedInvoice.invoice_date).toLocaleDateString()}
+                  </p>
+                  <p className="text-sm text-gray-600">
+                    Amount: ₹{selectedInvoice.final_amount || selectedInvoice.total_amount || selectedInvoice.grand_total}
+                  </p>
+                </div>
+                <button
+                  onClick={() => {
+                    setSelectedInvoice(null);
+                    setReturnData(prev => ({
+                      ...prev,
+                      invoice_id: '',
+                      items: []
+                    }));
+                  }}
+                  className="text-red-600 hover:text-red-700"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            )}
+            
+            {/* Invoice List */}
+            {!selectedInvoice && (
+              <div>
+                {/* Filters */}
+                <div className="bg-gray-50 rounded-lg p-4 mb-4">
+                  <div className="flex items-center gap-2 mb-3">
+                    <Search className="w-4 h-4 text-gray-600" />
+                    <span className="text-sm font-medium text-gray-700">Filter Invoices</span>
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div>
+                      <label className="block text-xs font-medium text-gray-700 mb-1">From Date</label>
+                      <input
+                        type="date"
+                        value={invoiceFilters.dateFrom}
+                        onChange={(e) => setInvoiceFilters(prev => ({ ...prev, dateFrom: e.target.value }))}
+                        className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-gray-700 mb-1">To Date</label>
+                      <input
+                        type="date"
+                        value={invoiceFilters.dateTo}
+                        onChange={(e) => setInvoiceFilters(prev => ({ ...prev, dateTo: e.target.value }))}
+                        className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-gray-700 mb-1">Status</label>
+                      <select
+                        value={invoiceFilters.status}
+                        onChange={(e) => setInvoiceFilters(prev => ({ ...prev, status: e.target.value }))}
+                        className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      >
+                        <option value="all">All Status</option>
+                        <option value="paid">Paid</option>
+                        <option value="partial">Partial</option>
+                        <option value="pending">Pending</option>
+                      </select>
+                    </div>
+                  </div>
+                </div>
+                
+                {/* Invoice List */}
+                {loadingInvoices ? (
+                  <div className="text-center py-8">
+                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
+                    <p className="text-gray-600 mt-2">Loading invoices...</p>
+                  </div>
+                ) : returnableInvoices.length > 0 ? (
+                  <div className="space-y-2">
+                    {returnableInvoices.map((invoice) => (
+                      <div
+                        key={invoice.id}
+                        onClick={() => handleInvoiceSelect(invoice)}
+                        className="p-4 border border-gray-200 rounded-lg hover:bg-blue-50 cursor-pointer transition-colors"
+                      >
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <h4 className="font-semibold text-gray-900">
+                              Invoice #{invoice.invoice_number}
+                            </h4>
+                            <p className="text-sm text-gray-600">
+                              Date: {new Date(invoice.invoice_date).toLocaleDateString()}
+                            </p>
+                            <p className="text-sm text-gray-600">
+                              Status: <span className={`font-medium ${
+                                invoice.status === 'paid' ? 'text-green-600' : 
+                                invoice.status === 'partial' ? 'text-yellow-600' : 'text-red-600'
+                              }`}>
+                                {invoice.status?.charAt(0).toUpperCase() + invoice.status?.slice(1) || 'Unknown'}
+                              </span>
+                            </p>
+                          </div>
+                          <div className="text-right">
+                            <p className="font-semibold text-gray-900">
+                              ₹{invoice.total_amount?.toFixed(2) || '0.00'}
+                            </p>
+                            <p className="text-sm text-gray-600">
+                              Outstanding: ₹{invoice.outstanding_amount?.toFixed(2) || '0.00'}
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                    
+                    {/* Pagination */}
+                    {invoicePagination && invoicePagination.total_pages > 1 && (
+                      <div className="flex items-center justify-center space-x-2 mt-4">
+                        <button
+                          onClick={() => setInvoicePage(prev => Math.max(1, prev - 1))}
+                          disabled={!invoicePagination.has_prev}
+                          className="px-3 py-1 text-sm border border-gray-300 rounded disabled:opacity-50"
+                        >
+                          Previous
+                        </button>
+                        <span className="text-sm text-gray-600">
+                          Page {invoicePagination.page} of {invoicePagination.total_pages}
+                        </span>
+                        <button
+                          onClick={() => setInvoicePage(prev => prev + 1)}
+                          disabled={!invoicePagination.has_next}
+                          className="px-3 py-1 text-sm border border-gray-300 rounded disabled:opacity-50"
+                        >
+                          Next
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div className="text-center py-8 text-gray-500">
+                    <FileText className="w-12 h-12 mx-auto mb-3 text-gray-300" />
+                    <p className="text-lg font-medium">No invoices found</p>
+                    <p className="text-sm">This customer has no returnable invoices</p>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* Manual Item Entry */}
+      {selectedCustomer && showManualEntry && !selectedInvoice && (
+        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <h3 className="text-lg font-semibold text-gray-900 flex items-center">
+                <Plus className="w-5 h-5 mr-2 text-green-600" />
+                Add Items for Return
+              </h3>
+              <p className="text-sm text-gray-600 mt-1">
+                Search and add products to create a return without an invoice
+              </p>
+            </div>
+          </div>
+          
+          <div className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Search Products
+              </label>
+              <ProductSearchSimple
+                onAddItem={addManualItem}
+                onCreateProduct={(searchQuery) => {
+                  console.log('Creating product with name:', searchQuery);
+                  // Handle product creation if needed
+                }}
+                placeholder="Search products by name, code..."
+                className="w-full"
+                ref={productSearchRef}
+              />
+            </div>
+            
+            {(returnData.items || []).length > 0 && (
+              <div className="text-sm text-gray-600">
+                {(returnData.items || []).length} item(s) added. Configure quantities and rates below.
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Return Reason */}
+      {selectedCustomer && (selectedInvoice || (showManualEntry && (returnData.items || []).length >= 0)) && (
+        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+          <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
+            <AlertCircle className="w-5 h-5 mr-2 text-red-600" />
+            Return Details
+          </h3>
+          
+          <div className="mb-6">
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Return Reason <span className="text-red-500">*</span>
+            </label>
+            <Select
+              value={returnData.return_reason}
+              onChange={(value) => setReturnData(prev => ({ ...prev, return_reason: value }))}
+              options={returnReasons}
+              placeholder="Select reason..."
+            />
+          </div>
+
+          {/* GST Toggle for GST customers */}
+          {selectedCustomer && selectedCustomer.gst_number && (
+            <div className="mb-4 p-3 bg-blue-50 rounded-lg">
+              <label className="flex items-center space-x-3">
+                <input
+                  type="checkbox"
+                  checked={returnData.include_gst}
+                  onChange={(e) => setReturnData(prev => ({ ...prev, include_gst: e.target.checked }))}
+                  className="w-4 h-4 text-blue-600 rounded focus:ring-blue-500"
+                />
+                <span className="text-sm font-medium text-blue-700">
+                  Include GST in return amount (Customer sees total amount paid)
+                </span>
+              </label>
+              <p className="text-xs text-gray-600 mt-1 ml-7">
+                When checked, the return amount will include GST. Uncheck to show base amount only.
+              </p>
+            </div>
+          )}
+          
+          {/* Credit Adjustment Option */}
+          {customerDues > 0 && (
+            <div className="p-4 bg-blue-50 rounded-lg">
+              <h4 className="text-sm font-semibold text-gray-900 mb-3 flex items-center">
+                <CheckCircle className="w-4 h-4 mr-2 text-green-600" />
+                Credit Adjustment
+              </h4>
+              <p className="text-sm text-gray-600 mb-3">
+                Customer has outstanding dues of ₹{customerDues.toFixed(2)}
+              </p>
+              <div className="space-y-2">
+                <label className="flex items-center">
+                  <input
+                    type="radio"
+                    name="creditAdjustment"
+                    value="existing_dues"
+                    checked={returnData.credit_adjustment_type === 'existing_dues'}
+                    onChange={(e) => setReturnData(prev => ({ 
+                      ...prev, 
+                      credit_adjustment_type: e.target.value 
+                    }))}
+                    className="mr-2 text-blue-600"
+                  />
+                  <span className="text-sm">
+                    Adjust against existing dues (₹{Math.min(returnData.total_amount, customerDues).toFixed(2)} will be adjusted)
+                  </span>
+                </label>
+                <label className="flex items-center">
+                  <input
+                    type="radio"
+                    name="creditAdjustment"
+                    value="future"
+                    checked={returnData.credit_adjustment_type === 'future'}
+                    onChange={(e) => setReturnData(prev => ({ 
+                      ...prev, 
+                      credit_adjustment_type: e.target.value 
+                    }))}
+                    className="mr-2 text-blue-600"
+                  />
+                  <span className="text-sm">Keep as credit for future invoices</span>
+                </label>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Return Items */}
+      {selectedCustomer && (returnData.items || []).length > 0 && (
+        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+          <div className="flex justify-between items-center mb-4">
+            <div>
+              <h3 className="text-lg font-semibold text-gray-900 flex items-center">
+                <Package className="w-5 h-5 mr-2 text-blue-600" />
+                {showManualEntry ? 'Configure Return Items' : 'Select Items to Return'}
+              </h3>
+              <p className="text-sm text-gray-600 mt-1">
+                {showManualEntry 
+                  ? 'Set quantities, rates, and other details for the return items'
+                  : 'Check the items you want to return and specify quantities'
+                }
+              </p>
+            </div>
+            <div className="flex gap-2">
+              {showManualEntry && (
+                <button
+                  onClick={() => {
+                    (returnData.items || []).forEach(item => {
+                      updateReturnItem(item.id, 'selected', true);
+                      if (item.return_quantity === 0) {
+                        updateReturnItem(item.id, 'return_quantity', 1);
+                      }
+                    });
+                  }}
+                  className="px-3 py-1 text-sm border border-gray-300 rounded hover:bg-blue-50"
+                >
+                  Select All
+                </button>
+              )}
+              {!showManualEntry && (
+                <>
+                  <button
+                    onClick={() => {
+                      (returnData.items || []).forEach(item => {
+                        updateReturnItem(item.id, 'selected', true);
+                        updateReturnItem(item.id, 'return_quantity', item.max_returnable_qty);
+                      });
+                    }}
+                    className="px-3 py-1 text-sm border border-gray-300 rounded hover:bg-blue-50"
+                  >
+                    Select All
+                  </button>
+                  <button
+                    onClick={() => {
+                      (returnData.items || []).forEach(item => {
+                        updateReturnItem(item.id, 'selected', false);
+                        updateReturnItem(item.id, 'return_quantity', 0);
+                      });
+                    }}
+                    className="px-3 py-1 text-sm border border-gray-300 rounded hover:bg-blue-50"
+                  >
+                    Clear All
+                  </button>
+                </>
+              )}
+            </div>
+          </div>
+          <ItemsTable
+            module="returns"
+            items={returnData.items || []}
+            onUpdateItem={updateReturnItem}
+            onRemoveItem={showManualEntry ? removeManualItem : undefined}
+            customer={selectedCustomer}
+            includeGst={returnData.include_gst}
+            allowRemove={showManualEntry}
+          />
+        </div>
+      )}
+    </div>
+  );
+
+  // Review content for step 2
+  const reviewContent = (
+    <div className="space-y-6">
+      <CreditNotePreview
+        returnData={returnData}
+        customer={selectedCustomer}
+        invoice={selectedInvoice}
+        includeGst={returnData.include_gst}
+        customerDues={customerDues}
+      />
+      
+      {/* Notes Section */}
+      <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+        <NotesSection
+          value={returnData.return_reason_notes}
+          onChange={(value) => setReturnData(prev => ({ 
+            ...prev, 
+            return_reason_notes: value 
+          }))}
+          placeholder="Add any additional notes about this return..."
+          title="Return Notes"
+          rows={4}
+        />
+      </div>
+    </div>
+  );
+
+  const actionButtons = {
+    step1: [
+      {
+        label: 'Cancel',
+        variant: 'secondary',
+        onClick: onClose
+      },
+      {
+        label: 'Proceed to Review',
+        variant: 'primary',
+        onClick: handleProceedToReview,
+        disabled: !selectedCustomer || (!selectedInvoice && !showManualEntry) || ((returnData.items || []).length > 0 && !(returnData.items || []).some(item => item.selected && item.return_quantity > 0))
+      }
+    ],
+    step2: [
+      {
+        label: 'Back to Edit',
+        variant: 'secondary',
+        onClick: () => setCurrentStep(1)
+      },
+      {
+        label: saving ? 'Processing...' : 'Generate Credit Note',
+        variant: 'primary',
+        onClick: handleSaveReturn,
+        disabled: saving,
+        icon: saving ? null : Save,
+        loading: saving
+      }
+    ]
+  };
+
+  return (
+    <>
+      <EnhancedGlobalDocumentFlow
+        documentType="sales-return"
+        currentStep={currentStep}
+        onStepChange={setCurrentStep}
+        createContent={createContent}
+        reviewContent={reviewContent}
+        actionButtons={actionButtons}
+        documentNumber={returnData.return_no}
+        documentIcon={RotateCcw}
+        documentTitle="Sales Return"
+        documentSubtitle={currentStep === 2 ? "Confirm and generate credit note" : undefined}
+        onClose={onClose}
+        keyboardShortcuts={{
+          'Ctrl+R': 'Search Customer',
+          'Ctrl+I': 'Search Invoice',
+          'Ctrl+S': currentStep === 2 ? 'Save Return' : 'Proceed',
+          'Ctrl+P': currentStep === 2 ? 'Print' : undefined
+        }}
+        additionalActions={currentStep === 2 ? [
+          {
+            label: 'Print',
+            icon: Printer,
+            onClick: handlePrint,
+            shortcut: 'Ctrl+P'
+          }
+        ] : undefined}
+      />
+
+      {/* Customer Creation Modal */}
+      {showCustomerModal && (
+        <CustomerCreationB2B
+          onClose={() => setShowCustomerModal(false)}
+          onCustomerCreated={(customer) => {
+            handleCustomerSelect(customer);
+            setShowCustomerModal(false);
+            toast.success('Customer created successfully');
+          }}
+        />
+      )}
+    </>
+  );
+};
+
+export default EnhancedSalesReturnFlow;

@@ -1,4 +1,4 @@
-import { apiHelpers } from '../apiClient';
+import apiClient, { apiHelpers } from '../apiClient';
 import { API_CONFIG } from '../../../config/api.config';
 import { cleanData } from '../utils/dataUtils';
 import { purchaseDataTransformer } from '../utils/purchaseDataTransformer';
@@ -47,7 +47,11 @@ export const purchasesApi = {
   
   // Parse invoice PDF
   parseInvoice: async (formData) => {
-    const response = await apiHelpers.upload(ENDPOINTS.PDF_PARSE, formData);
+    const response = await apiClient.post(ENDPOINTS.PDF_PARSE, formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    });
     
     // Transform parsed data to frontend format
     if (response.data && response.data.extracted_data) {

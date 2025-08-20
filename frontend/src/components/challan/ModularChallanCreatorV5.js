@@ -582,7 +582,7 @@ Expected Delivery: ${challan.expected_delivery_date}
 
               {/* Customer Section */}
               <div className="mb-6">
-                <h3 className="text-xs font-semibold text-blue-700 uppercase tracking-wider mb-3 flex items-center">
+                <h3 className="text-sm font-semibold text-blue-700 uppercase tracking-wider mb-3 flex items-center">
                   <User className="w-4 h-4 mr-2" />
                   CUSTOMER
                 </h3>

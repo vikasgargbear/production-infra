@@ -304,7 +304,7 @@ const PartyStatement: React.FC<PartyStatementProps> = ({
                     />
                   ) : (
                     <SupplierSearch
-                      onSupplierSelect={setSelectedParty}
+                      onChange={setSelectedParty}
                       placeholder="Search supplier by name or ID"
                     />
                   )}

@@ -8,7 +8,7 @@ import StockMovement from '../stock/StockMovement';
 import StockTransfer from '../stock/StockTransfer';
 import CurrentStock from '../stock/CurrentStock';
 import BatchTracking from '../stock/BatchTracking';
-import StockAdjustment from '../stock/StockAdjustment';
+import EnhancedStockAdjustmentFlow from '../stock/EnhancedStockAdjustmentFlow';
 import StockReport from '../stock/StockReport';
 import LowStockAlert from '../stock/LowStockAlert';
 import StockListHistory from './StockListHistory';
@@ -46,7 +46,7 @@ const StockHub: React.FC<StockHubProps> = ({ open = true, onClose }) => {
       description: 'Adjust inventory',
       icon: ArrowUpFromLine,
       color: 'amber',
-      component: StockAdjustment
+      component: EnhancedStockAdjustmentFlow
     },
     {
       id: 'batch-tracking',

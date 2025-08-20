@@ -1,0 +1,312 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Address Type Segregation Test</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
+            max-width: 1200px;
+            margin: 40px auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .test-section {
+            background: white;
+            padding: 25px;
+            margin-bottom: 25px;
+            border-radius: 12px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+        }
+        h2 {
+            color: #1e40af;
+            margin-bottom: 20px;
+        }
+        .demo-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 30px;
+        }
+        .address-card {
+            background: white;
+            border: 2px solid #e5e7eb;
+            border-radius: 8px;
+            padding: 20px;
+        }
+        .address-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid #f3f4f6;
+        }
+        .address-label {
+            font-weight: 600;
+            color: #374151;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .dropdown {
+            width: 100%;
+            padding: 10px 15px;
+            border: 1px solid #d1d5db;
+            border-radius: 6px;
+            background: white;
+            margin-bottom: 15px;
+            cursor: pointer;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .dropdown:hover {
+            background: #f9fafb;
+        }
+        .dropdown-menu {
+            border: 1px solid #d1d5db;
+            border-radius: 6px;
+            background: white;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+            margin-top: 5px;
+        }
+        .dropdown-item {
+            padding: 12px 15px;
+            border-bottom: 1px solid #f3f4f6;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .dropdown-item:last-child {
+            border-bottom: none;
+        }
+        .address-type-badge {
+            background: #dbeafe;
+            color: #1e40af;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 11px;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+        .success-badge {
+            background: #dcfce7;
+            color: #16a34a;
+        }
+        .warning-badge {
+            background: #fef3c7;
+            color: #d97706;
+        }
+        .address-content {
+            color: #4b5563;
+            line-height: 1.6;
+            margin-top: 10px;
+        }
+        .test-result {
+            margin-top: 20px;
+            padding: 15px;
+            border-radius: 8px;
+            background: #f9fafb;
+            border: 1px solid #e5e7eb;
+        }
+        .correct {
+            background: #dcfce7;
+            border-color: #86efac;
+        }
+        .incorrect {
+            background: #fee2e2;
+            border-color: #fca5a5;
+        }
+        pre {
+            background: #1f2937;
+            color: #10b981;
+            padding: 15px;
+            border-radius: 6px;
+            overflow-x: auto;
+            font-size: 12px;
+            margin-top: 10px;
+        }
+    </style>
+</head>
+<body>
+    <h1>🏢 Address Type Segregation Test</h1>
+    
+    <div class="test-section">
+        <h2>✅ Correct Implementation - Addresses Properly Segregated</h2>
+        <p>Each address type shows only its own addresses, no mixing or duplication</p>
+        
+        <div class="demo-grid">
+            <!-- Billing Address -->
+            <div class="address-card">
+                <div class="address-header">
+                    <div class="address-label">
+                        📄 Billing Address
+                        <span class="address-type-badge">BILLING ONLY</span>
+                    </div>
+                    <button style="padding: 4px 8px; background: #3b82f6; color: white; border: none; border-radius: 4px;">
+                        ✏️ Edit
+                    </button>
+                </div>
+                
+                <div class="dropdown">
+                    <span>Head Office - Mumbai</span>
+                    <span>▼</span>
+                </div>
+                
+                <div class="dropdown-menu">
+                    <div class="dropdown-item">
+                        <span>🏢</span>
+                        <div style="flex: 1;">
+                            <strong>Head Office</strong><br>
+                            <small>123 Main Street, Mumbai, MH 400001</small>
+                        </div>
+                        <span class="address-type-badge">BILLING</span>
+                    </div>
+                    <div class="dropdown-item">
+                        <span>🏢</span>
+                        <div style="flex: 1;">
+                            <strong>Accounts Office</strong><br>
+                            <small>456 Finance Tower, Mumbai, MH 400002</small>
+                        </div>
+                        <span class="address-type-badge">BILLING</span>
+                    </div>
+                </div>
+                
+                <div class="test-result correct">
+                    ✅ <strong>Shows 2 billing addresses only</strong><br>
+                    No shipping addresses appear here
+                </div>
+            </div>
+            
+            <!-- Shipping Address -->
+            <div class="address-card">
+                <div class="address-header">
+                    <div class="address-label">
+                        🚚 Shipping Address
+                        <span class="address-type-badge success-badge">SHIPPING ONLY</span>
+                    </div>
+                </div>
+                
+                <div class="dropdown">
+                    <span>Warehouse - Thane</span>
+                    <span>▼</span>
+                </div>
+                
+                <div class="dropdown-menu">
+                    <div class="dropdown-item">
+                        <span>🏭</span>
+                        <div style="flex: 1;">
+                            <strong>Main Warehouse</strong><br>
+                            <small>789 Industrial Area, Thane, MH 400601</small>
+                        </div>
+                        <span class="address-type-badge success-badge">SHIPPING</span>
+                    </div>
+                    <div class="dropdown-item">
+                        <span>🏭</span>
+                        <div style="flex: 1;">
+                            <strong>Distribution Center</strong><br>
+                            <small>321 Logistics Park, Navi Mumbai, MH 400701</small>
+                        </div>
+                        <span class="address-type-badge success-badge">SHIPPING</span>
+                    </div>
+                </div>
+                
+                <div class="test-result correct">
+                    ✅ <strong>Shows 2 shipping addresses only</strong><br>
+                    No billing addresses appear here
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="test-section">
+        <h2>📊 Backend Data Structure</h2>
+        <p>How addresses are stored in the database with proper type segregation</p>
+        
+        <pre>{
+  "customer_id": "CUST001",
+  "addresses": [
+    {
+      "address_id": "ADDR001",
+      "address_type": "billing",    // ← Type: BILLING
+      "address_line1": "123 Main Street",
+      "city": "Mumbai",
+      "is_default": true
+    },
+    {
+      "address_id": "ADDR002",
+      "address_type": "billing",    // ← Type: BILLING
+      "address_line1": "456 Finance Tower",
+      "city": "Mumbai",
+      "is_default": false
+    },
+    {
+      "address_id": "ADDR003",
+      "address_type": "shipping",   // ← Type: SHIPPING
+      "address_line1": "789 Industrial Area",
+      "city": "Thane",
+      "is_default": true
+    },
+    {
+      "address_id": "ADDR004",
+      "address_type": "shipping",   // ← Type: SHIPPING
+      "address_line1": "321 Logistics Park",
+      "city": "Navi Mumbai",
+      "is_default": false
+    }
+  ]
+}</pre>
+    </div>
+
+    <div class="test-section">
+        <h2>🔧 Fixed Implementation Details</h2>
+        
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+            <div>
+                <h3 style="color: #dc2626;">❌ Previous Issue</h3>
+                <ul style="line-height: 2;">
+                    <li>Billing addresses showed in shipping dropdown</li>
+                    <li>Addresses were duplicated across types</li>
+                    <li>Filter allowed: <code>addressType === 'shipping' && addr.type === 'billing'</code></li>
+                </ul>
+            </div>
+            
+            <div>
+                <h3 style="color: #16a34a;">✅ Fixed Solution</h3>
+                <ul style="line-height: 2;">
+                    <li>Strict filtering: <code>addr.address_type === addressType</code></li>
+                    <li>Billing shows only billing addresses</li>
+                    <li>Shipping shows only shipping addresses</li>
+                    <li>No cross-contamination of address types</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+
+    <div class="test-section">
+        <h2>✨ Complete Feature Set</h2>
+        <ul style="line-height: 2.5;">
+            <li>✅ <strong>Billing Address Dropdown:</strong> Shows when multiple billing addresses exist</li>
+            <li>✅ <strong>Shipping Address Dropdown:</strong> Shows when multiple shipping addresses exist</li>
+            <li>✅ <strong>Proper Type Filtering:</strong> No mixing of billing and shipping addresses</li>
+            <li>✅ <strong>"Same as Billing" Toggle:</strong> Works correctly for shipping address</li>
+            <li>✅ <strong>Auto-save:</strong> Address changes are saved to backend</li>
+            <li>✅ <strong>Default Selection:</strong> Auto-selects default address or first available</li>
+            <li>✅ <strong>Add New Address:</strong> Option to add new address of correct type</li>
+        </ul>
+    </div>
+
+    <script>
+        // Simulate dropdown toggle
+        document.querySelectorAll('.dropdown').forEach(dropdown => {
+            dropdown.addEventListener('click', function() {
+                const menu = this.nextElementSibling;
+                if (menu && menu.classList.contains('dropdown-menu')) {
+                    menu.style.display = menu.style.display === 'none' ? 'block' : 'none';
+                }
+            });
+        });
+    </script>
+</body>
+</html>

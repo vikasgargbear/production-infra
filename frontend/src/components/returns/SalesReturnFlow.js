@@ -180,8 +180,11 @@ const SalesReturnFlow = ({ onClose }) => {
         }
       }
       
+      // Escape to close modals or go back - Enterprise pattern
       if (e.key === 'Escape') {
-        onClose();
+        if (showCustomerModal) setShowCustomerModal(false);
+        else if (currentStep === 2) setCurrentStep(1);
+        else onClose();
       }
     };
 

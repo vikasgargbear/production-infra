@@ -16,11 +16,16 @@ export { default as ItemsTable } from './display/ItemsTable';
 export { default as Card, CardSection } from './Card';
 export { default as Badge, BadgeGroup, SimpleStatusBadge } from './Badge';
 export { default as DocumentFooter } from './display/DocumentFooter';
+export { default as DocumentSummaryTop } from './display/DocumentSummaryTop';
+export { default as PDFUploadCard } from './PDFUploadCard';
 
 // Layout Components
 export { default as ModuleHeader } from './ModuleHeader';
 export { default as ViewHistoryButton } from './ViewHistoryButton';
 export { default as HistoryTable } from './HistoryTable';
+export { default as AddressSelector } from './AddressSelector';
+export { default as AddressForm } from './AddressForm';
+export { default as AddressFormEnhanced } from './AddressFormEnhanced';
 
 // Feedback Components
 export { default as Toast, ToastProvider, useToast } from './feedback/Toast';

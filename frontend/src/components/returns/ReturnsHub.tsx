@@ -1,8 +1,8 @@
 import React from 'react';
 import { RotateCcw, ShoppingCart, Package, List } from 'lucide-react';
 import { ModuleHub } from '../global';
-import SalesReturnFlow from './SalesReturnFlow';
-import PurchaseReturnFlow from './PurchaseReturnFlow';
+import EnhancedSalesReturnFlow from './EnhancedSalesReturnFlow';
+import EnhancedPurchaseReturnFlow from './EnhancedPurchaseReturnFlow';
 import ReturnsListHistory from './ReturnsListHistory';
 
 interface ReturnsHubProps {
@@ -29,7 +29,7 @@ const ReturnsHub: React.FC<ReturnsHubProps> = ({ open = true, onClose }) => {
       description: 'Process customer returns',
       icon: ShoppingCart,
       color: 'red',
-      component: SalesReturnFlow
+      component: EnhancedSalesReturnFlow
     },
     {
       id: 'purchase-return',
@@ -38,7 +38,7 @@ const ReturnsHub: React.FC<ReturnsHubProps> = ({ open = true, onClose }) => {
       description: 'Return to suppliers',
       icon: Package,
       color: 'orange',
-      component: PurchaseReturnFlow
+      component: EnhancedPurchaseReturnFlow
     },
     {
       id: 'returns-history',

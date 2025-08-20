@@ -119,7 +119,9 @@ const ProductSearchSimple = forwardRef(({ onAddItem, onCreateProduct, showBatchS
 
   const handleKeyDown = (e) => {
     if (e.key === 'Escape') {
+      e.stopPropagation(); // Stop ESC from bubbling up to parent
       setShowDropdown(false);
+      setSearchQuery(''); // Clear search term
     }
   };
 
@@ -177,11 +179,11 @@ const ProductSearchSimple = forwardRef(({ onAddItem, onCreateProduct, showBatchS
                         </div>
                       </div>
                     ))}
-                    {/* Always show "Add New Product" option when onCreateProduct is available */}
+                    {/* Always show "Create Product" option when onCreateProduct is available */}
                     {onCreateProduct && searchQuery.length >= 2 && (
                       <div className="px-4 py-3 border-t border-gray-200 bg-gray-50">
                         <AddNewButton
-                          label={`Add "${searchQuery}" as New Product`}
+                          label={`Create Product "${searchQuery}"`}
                           onClick={(e) => {
                             e.preventDefault();
                             e.stopPropagation();
@@ -190,7 +192,7 @@ const ProductSearchSimple = forwardRef(({ onAddItem, onCreateProduct, showBatchS
                               onCreateProduct(searchQuery);
                             }
                           }}
-                          variant="primary"
+                          variant="ghost"
                           size="sm"
                           className="w-full"
                         />
@@ -205,11 +207,11 @@ const ProductSearchSimple = forwardRef(({ onAddItem, onCreateProduct, showBatchS
                     </div>
                     {onCreateProduct && (
                       <AddNewButton
-                        label={`Add "${searchQuery}" as New Product`}
+                        label={`Create Product "${searchQuery}"`}
                         onClick={(e) => {
                           e.preventDefault();
                           e.stopPropagation();
-                          console.log('Add new product clicked:', searchQuery);
+                          console.log('Create product clicked:', searchQuery);
                           console.log('onCreateProduct type:', typeof onCreateProduct);
                           setShowDropdown(false);
                           // Pass the search query to pre-fill product name

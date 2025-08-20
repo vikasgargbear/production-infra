@@ -79,10 +79,13 @@ const PurchaseEntryContent = ({ onClose, initialShowPDFUpload = false }) => {
         e.preventDefault();
         setCurrentStep(0);
       }
-      // Esc to close
+      // Escape to go back or close - Enterprise pattern
       if (e.key === 'Escape') {
         e.preventDefault();
-        onClose();
+        if (currentStep === 1.5) setCurrentStep(1);
+        else if (currentStep === 2) setCurrentStep(1);
+        else if (currentStep === 1) setCurrentStep(0);
+        else onClose();
       }
     };
 

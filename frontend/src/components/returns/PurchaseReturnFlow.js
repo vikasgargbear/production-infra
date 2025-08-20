@@ -162,8 +162,10 @@ const PurchaseReturnFlow = ({ onClose }) => {
         }
       }
       
+      // Escape to go back or close - Enterprise pattern
       if (e.key === 'Escape') {
-        onClose();
+        if (currentStep === 2) setCurrentStep(1);
+        else onClose();
       }
     };
 

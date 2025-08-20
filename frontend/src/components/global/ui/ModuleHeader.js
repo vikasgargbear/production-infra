@@ -116,17 +116,17 @@ const ModuleHeader = ({
           {historyType && (
             <ViewHistoryButton 
               historyType={historyType}
-              className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg transition-colors flex items-center gap-2 ml-2"
+              className="px-4 py-2 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-lg transition-colors flex items-center gap-2 ml-2 font-medium border border-blue-200 shadow-sm"
               buttonText="History"
             />
           )}
           
           <button 
             onClick={onClose} 
-            className="p-2 hover:bg-gray-100 rounded-lg ml-2 transition-colors"
+            className="p-2.5 hover:bg-red-50 rounded-full ml-3 transition-all hover:rotate-90 duration-200 group"
             title="Close (Esc)"
           >
-            <X className="w-5 h-5 text-gray-400 hover:text-gray-600" />
+            <X className="w-5 h-5 text-gray-400 group-hover:text-red-500 transition-colors" />
           </button>
         </div>
       </div>

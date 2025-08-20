@@ -82,9 +82,10 @@ const GRNFlow = ({ onClose }) => {
         }
       }
       
-      // Escape to close
+      // Escape to go back or close - Enterprise pattern
       if (e.key === 'Escape') {
-        onClose();
+        if (currentStep === 2) setCurrentStep(1);
+        else onClose();
       }
     };
 

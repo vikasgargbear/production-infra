@@ -5,7 +5,8 @@ import InvoiceCalculatorEnterprise from '../../../services/invoiceCalculatorEnte
 const InvoicePreviewEnterprise = ({ 
   invoice, 
   onInvoiceUpdate,
-  companyInfo 
+  companyInfo,
+  showAddresses = true // Control whether to show Bill To/Ship To sections
 }) => {
   const [calculatedTotals, setCalculatedTotals] = useState(null);
   const [isCalculating, setIsCalculating] = useState(false);
@@ -217,11 +218,12 @@ const InvoicePreviewEnterprise = ({
         </div>
 
         {/* Customer & Transport Section - Below header */}
-        <div className="mb-4">
-          <div className="grid grid-cols-3 gap-3">
-            {/* Bill To */}
-            <div className="bg-gray-50 rounded-xl p-3 print-border print-bg-gray">
-              <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">Bill To</h3>
+        {showAddresses && (
+          <div className="mb-4">
+            <div className="grid grid-cols-3 gap-3">
+              {/* Bill To */}
+              <div className="bg-gray-50 rounded-xl p-3 print-border print-bg-gray">
+                <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">Bill To</h3>
               <p className="font-semibold text-gray-900 text-sm">{invoice.customer_name}</p>
               {invoice.customer_details && (
                 <>
@@ -282,6 +284,7 @@ const InvoicePreviewEnterprise = ({
             </div>
           </div>
         </div>
+        )}
 
         {/* Items Table */}
         <div className="mb-8 rounded-lg overflow-hidden border border-gray-200">
