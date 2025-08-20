@@ -2,22 +2,23 @@ import React, { useState, useEffect } from 'react';
 import { X, Save, Upload, Building2 } from 'lucide-react';
 import { useToast } from './global/ui/feedback/Toast';
 import { organizationsApi } from '../services/api';
+import { useCompany } from '../contexts/CompanyContext';
 
 const CompanySettings = ({ open = true, onClose }) => {
   const toast = useToast();
+  const { companyInfo, updateCompanyInfo, getOrgId } = useCompany();
   const [isLoading, setIsLoading] = useState(false);
-  const orgId = localStorage.getItem('org_id') || 'ad808530-1ddb-4377-ab20-67bef145d80d';
   const [settings, setSettings] = useState({
-    companyName: localStorage.getItem('companyName') || '',
-    companyAddress: localStorage.getItem('companyAddress') || '',
-    companyGST: localStorage.getItem('companyGST') || '',
-    companyDL: localStorage.getItem('companyDL') || '',
-    companyState: localStorage.getItem('companyState') || '',
-    companyLogo: localStorage.getItem('companyLogo') || '',
-    bankName: localStorage.getItem('bankName') || '',
-    accountNumber: localStorage.getItem('accountNumber') || '',
-    ifscCode: localStorage.getItem('ifscCode') || '',
-    digitalSignature: localStorage.getItem('digitalSignature') || ''
+    companyName: companyInfo.name || '',
+    companyAddress: companyInfo.address || '',
+    companyGST: companyInfo.gst_number || '',
+    companyDL: companyInfo.drug_license || '',
+    companyState: companyInfo.state || '',
+    companyLogo: companyInfo.logo || '',
+    bankName: companyInfo.bank_name || '',
+    accountNumber: companyInfo.account_number || '',
+    ifscCode: companyInfo.ifsc_code || '',
+    digitalSignature: companyInfo.logo || ''
   });
 
   const [logoPreview, setLogoPreview] = useState(settings.companyLogo);
@@ -26,21 +27,21 @@ const CompanySettings = ({ open = true, onClose }) => {
   useEffect(() => {
     if (open) {
       setSettings({
-        companyName: localStorage.getItem('companyName') || '',
-        companyAddress: localStorage.getItem('companyAddress') || '',
-        companyGST: localStorage.getItem('companyGST') || '',
-        companyDL: localStorage.getItem('companyDL') || '',
-        companyState: localStorage.getItem('companyState') || '',
-        companyLogo: localStorage.getItem('companyLogo') || '',
-        bankName: localStorage.getItem('bankName') || '',
-        accountNumber: localStorage.getItem('accountNumber') || '',
-        ifscCode: localStorage.getItem('ifscCode') || '',
-        digitalSignature: localStorage.getItem('digitalSignature') || ''
+        companyName: companyInfo.name || '',
+        companyAddress: companyInfo.address || '',
+        companyGST: companyInfo.gst_number || '',
+        companyDL: companyInfo.drug_license || '',
+        companyState: companyInfo.state || '',
+        companyLogo: companyInfo.logo || '',
+        bankName: companyInfo.bank_name || '',
+        accountNumber: companyInfo.account_number || '',
+        ifscCode: companyInfo.ifsc_code || '',
+        digitalSignature: companyInfo.logo || ''
       });
-      setLogoPreview(localStorage.getItem('companyLogo') || '');
-      setSignaturePreview(localStorage.getItem('digitalSignature') || '');
+      setLogoPreview(companyInfo.logo || '');
+      setSignaturePreview(companyInfo.logo || '');
     }
-  }, [open]);
+  }, [open, companyInfo]);
 
   const handleLogoUpload = (e) => {
     const file = e.target.files[0];
@@ -70,17 +71,26 @@ const CompanySettings = ({ open = true, onClose }) => {
     setIsLoading(true);
 
     try {
-      const response = await organizationsApi.update(orgId, settings);
-      
-      if (response.success) {
-        toast.saved('Company Settings');
-        setSettings(response.data);
-      } else {
-        toast.error('Failed to save settings. Please check your data and try again.');
-      }
+      const companyData = {
+        name: settings.companyName,
+        address: settings.companyAddress,
+        phone: companyInfo.phone || '',
+        email: companyInfo.email || '',
+        gst_number: settings.companyGST,
+        state: settings.companyState,
+        logo: settings.companyLogo,
+        drug_license: settings.companyDL,
+        bank_name: settings.bankName,
+        account_number: settings.accountNumber,
+        ifsc_code: settings.ifscCode,
+        upi_id: companyInfo.upi_id || ''
+      };
+
+      await updateCompanyInfo(companyData);
+      toast.saved('Company Settings');
     } catch (error) {
-      console.error('Error saving settings:', error);
-      toast.error('Network error. Please check your connection and try again.');
+      console.error('Error saving company settings:', error);
+      toast.error('Failed to save settings. Please try again later.');
     } finally {
       setIsLoading(false);
     }

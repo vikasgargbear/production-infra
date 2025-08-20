@@ -5,9 +5,11 @@ import CustomerCreationB2B from './global/ui/forms/CustomerCreationB2B';
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
 import { useToast } from './global/ui/feedback/Toast';
+import { useCompany } from '../contexts/CompanyContext';
 
 const BusinessSalesEntry = ({ open, onClose }) => {
   const toast = useToast();
+  const { companyInfo } = useCompany();
   const [invoice, setInvoice] = useState({
     invoiceNo: 'INV-' + Date.now().toString().slice(-6),
     invoiceDate: new Date().toISOString().split('T')[0],
@@ -556,7 +558,7 @@ const BusinessSalesEntry = ({ open, onClose }) => {
                 )}
                 <div>
                   <h1 className="text-xl font-semibold text-gray-900">New Sales Invoice</h1>
-                  <p className="text-xs text-gray-500">{localStorage.getItem('companyName') || 'AASO Pharmaceuticals'}</p>
+                  <p className="text-xs text-gray-500">{companyInfo.name || 'Your Company'}</p>
                 </div>
               </div>
               <span className="ml-4 text-sm text-gray-500">
@@ -1761,9 +1763,9 @@ const BusinessSalesEntry = ({ open, onClose }) => {
                 {/* Beautiful Footer */}
                 <div className="mt-8 text-center p-6 bg-gradient-to-r from-blue-600 to-blue-800 text-white rounded-b-lg">
                   <p className="text-lg font-semibold">Thank you for your business! 🙏</p>
-                  <p className="text-blue-100 mt-2">Generated with ❤️ by AASO Pharmaceuticals</p>
+                  <p className="text-blue-100 mt-2">Generated with ❤️ by {companyInfo.name || 'Your Company'}</p>
                   <div className="mt-4 pt-4 border-t border-blue-400">
-                    <p className="text-sm text-blue-100">For any queries, contact us at +91 98765 43210 or info@aasopharma.com</p>
+                    <p className="text-sm text-blue-100">For any queries, contact us at {companyInfo.phone || '+91 XXXXX XXXXX'} or {companyInfo.email || 'info@company.com'}</p>
                   </div>
                 </div>
               </div>
