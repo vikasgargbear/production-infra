@@ -226,7 +226,16 @@ class EnterpriseChallanService:
                 
                 # For order-based challans, try to link to order items
                 if request.order_id and item.order_item_id:
-                    order_item_id = item.order_item_id
+                    # Validate that the order_item_id actually exists
+                    order_item_check = self.db.execute(
+                        text("SELECT order_item_id FROM sales.order_items WHERE order_item_id = :order_item_id"),
+                        {"order_item_id": item.order_item_id}
+                    ).first()
+                    if order_item_check:
+                        order_item_id = item.order_item_id
+                    else:
+                        logger.warning(f"Invalid order_item_id {item.order_item_id}, setting to NULL")
+                        order_item_id = None
                 elif request.order_id:
                     # Check if order_item exists for this product
                     existing_order_item = existing_items_map.get(item.product_id)
