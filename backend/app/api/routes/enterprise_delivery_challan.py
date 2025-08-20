@@ -183,7 +183,7 @@ class EnterpriseChallanService:
                     "total_amount": sum(item.unit_price * item.dispatched_quantity for item in request.items),
                     "delivery_status": "pending",
                     "notes": f"Delivery to: {request.delivery_address}, {request.delivery_city}",
-                    "created_by": 1  # Default user for now
+                    "created_by": None  # Allow NULL for now until proper user management
                 }
             )
             challan_id = challan_result.scalar()

@@ -3,7 +3,7 @@ import {
   Truck, Calendar, ArrowRight,
   CheckCircle, MessageCircle, FileInput, Printer, User, MapPin, Package
 } from 'lucide-react';
-import { ModuleHeader, CustomerSearch, ProductSearchSimple, ItemsTable, DocumentFooter, CustomerCreationModal, ProductCreationModal, NotesSection } from '../global';
+import { ModuleHeader, CustomerSearch, ProductSearchSimple, ItemsTable, DocumentFooter, ProductCreationModal, NotesSection } from '../global';
 import CustomerCreationB2B from '../global/ui/forms/CustomerCreationB2B';
 // NotesSection is now imported from global
 import ChallanPreview from './components/ChallanPreview';

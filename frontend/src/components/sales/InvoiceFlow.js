@@ -13,7 +13,8 @@ import InvoiceValidator from '../../services/invoiceValidator';
 import DataTransformer from '../../services/dataTransformer';
 import DateFormatter from '../../services/dateFormatter';
 import InvoiceApiService from '../../services/invoiceApiService';
-import { ProductSearchSimple, ItemsTable, ModuleHeader, CustomerSearch, ProductCreationModal, CustomerCreationModal, ViewHistoryButton, GSTCalculator, DocumentFooter } from '../global';
+import { ProductSearchSimple, ItemsTable, ModuleHeader, CustomerSearch, ProductCreationModal, ViewHistoryButton, GSTCalculator, DocumentFooter } from '../global';
+import CustomerCreationB2B from '../global/ui/forms/CustomerCreationB2B';
 import InvoiceSuccessModal from './InvoiceSuccessModal';
 import InvoiceSummaryTop from './components/InvoiceSummaryTop';
 import Toast from '../common/Toast';
@@ -1015,7 +1016,7 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
 
         {/* Modals */}
         {showCustomerModal && (
-          <CustomerCreationModal
+          <CustomerCreationB2B
             show={showCustomerModal}
             onClose={() => setShowCustomerModal(false)}
             onCustomerCreated={(customer) => {
