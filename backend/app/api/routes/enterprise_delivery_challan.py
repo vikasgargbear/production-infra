@@ -314,7 +314,7 @@ async def list_delivery_challans(
     db: Session = Depends(get_db),
     org_id: str = DEFAULT_ORG_ID
 ):
-    """List delivery sales.delivery_challans with filters"""
+    """List delivery challans with filters"""
     try:
         query = """
             SELECT 
@@ -359,12 +359,12 @@ async def list_delivery_challans(
         params.update({"limit": limit, "skip": skip})
         
         result = db.execute(text(query), params)
-        sales.delivery_challans = [dict(row._mapping) for row in result]
+        challans = [dict(row._mapping) for row in result]
         
-        return sales.delivery_challans
+        return challans
         
     except Exception as e:
-        logger.error(f"Error listing sales.delivery_challans: {str(e)}")
+        logger.error(f"Error listing delivery challans: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/{challan_id}")
@@ -379,7 +379,7 @@ async def get_challan_details(
         challan_result = db.execute(
             text("""
                 SELECT c.*, cust.customer_name, cust.gstin as customer_gstin,
-                       cust.address as customer_address, cust.primary_phone as customer_phone
+                       cust.address_line1 as customer_address, cust.primary_phone as customer_phone
                 FROM sales.delivery_challans c
                 JOIN parties.customers cust ON c.customer_id = cust.customer_id
                 WHERE c.challan_id = :challan_id
@@ -587,7 +587,7 @@ async def get_challan_analytics(
     try:
         query = """
             SELECT 
-                COUNT(*) as total_sales.delivery_challans,
+                COUNT(*) as total_challans,
                 COUNT(CASE WHEN challan_status = 'draft' THEN 1 END) as draft_count,
                 COUNT(CASE WHEN challan_status = 'dispatched' THEN 1 END) as dispatched_count,
                 COUNT(CASE WHEN challan_status = 'delivered' THEN 1 END) as delivered_count,
@@ -650,6 +650,5 @@ async def get_legacy_delivery_challans(
     db: Session = Depends(get_db)
 ):
     """Legacy endpoint for backward compatibility"""
-    # Redirect to order-based sales.delivery_challans
-    from . import delivery_challan as legacy_router
-    return legacy_router.get_delivery_sales.delivery_challans(skip, limit, None, None, None, None, db)
+    # Redirect to main challan list endpoint
+    return await list_delivery_challans(skip, limit, None, None, None, None, db)
