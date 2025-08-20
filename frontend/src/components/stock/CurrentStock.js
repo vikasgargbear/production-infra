@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import {
-  Package, Search, Filter, Download, Eye,
-  AlertTriangle, CheckCircle, Clock, MoreVertical,
+  Package, Search, Filter, Download, Eye, Printer, MessageCircle,
+  AlertTriangle, CheckCircle, Clock, MoreVertical, Calendar, ChevronDown,
   TrendingUp, TrendingDown, Edit2, X,
   HelpCircle, Loader2, RefreshCw, AlertCircle
 } from 'lucide-react';
@@ -9,6 +9,7 @@ import { productsApi } from '../../services/api/modules/products.api';
 import { stockApi } from '../../services/api/modules/stock.api';
 import { formatCurrency } from '../../utils/formatters';
 import { DataTable, ModuleHeader } from '../global';
+import jsPDF from 'jspdf';
 
 // Enterprise-grade data validation and transformation utilities
 const ProductDataValidator = {
@@ -126,6 +127,8 @@ const CurrentStock = ({ open = true, onClose }) => {
   const [selectedLocation, setSelectedLocation] = useState('all');
   const [showLowStock, setShowLowStock] = useState(false);
   const [showExpiring, setShowExpiring] = useState(false);
+  const [selectedIds, setSelectedIds] = useState(new Set());
+  const [dateFilter, setDateFilter] = useState('all');
   const [sortConfig, setSortConfig] = useState({ key: 'product_name', direction: 'asc' });
   const [selectedProduct, setSelectedProduct] = useState(null);
   const [showDetails, setShowDetails] = useState(false);
@@ -260,6 +263,142 @@ const CurrentStock = ({ open = true, onClose }) => {
     } finally {
       setRefreshing(false);
     }
+  };
+
+  // Multi-select functionality
+  const isAllSelected = filteredData.length > 0 && filteredData.every(item => selectedIds.has(item.product_id));
+  const selectedCount = Array.from(selectedIds).filter(id => filteredData.some(f => f.product_id === id)).length;
+
+  const toggleSelect = (id) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+
+  const toggleSelectAll = () => {
+    if (isAllSelected) {
+      setSelectedIds(prev => {
+        const next = new Set(prev);
+        filteredData.forEach(item => next.delete(item.product_id));
+        return next;
+      });
+    } else {
+      setSelectedIds(prev => {
+        const next = new Set(prev);
+        filteredData.forEach(item => next.add(item.product_id));
+        return next;
+      });
+    }
+  };
+
+  const formatDate = (date) => {
+    if (!date) return 'N/A';
+    return new Date(date).toLocaleDateString('en-IN', {
+      day: 'numeric',
+      month: 'short',
+      year: 'numeric'
+    });
+  };
+
+  const exportSelectedPDF = () => {
+    const itemsToExport = selectedIds.size > 0 
+      ? filteredData.filter(item => selectedIds.has(item.product_id))
+      : filteredData;
+    
+    if (itemsToExport.length === 0) return;
+
+    try {
+      // Try to use jspdf-autotable if available
+      const autoTable = require('jspdf-autotable');
+      
+      const doc = new jsPDF();
+      doc.setFontSize(16);
+      doc.text('Current Stock Report', 20, 20);
+      
+      const tableData = itemsToExport.map(item => [
+        item.product_name || 'N/A',
+        item.product_code || 'N/A',
+        item.current_stock || 0,
+        item.unit || 'Units',
+        item.reorder_level || 0,
+        item.low_stock ? 'Low Stock' : (item.current_stock === 0 ? 'Out of Stock' : 'In Stock')
+      ]);
+
+      doc.autoTable({
+        head: [['Product', 'Code', 'Stock', 'Unit', 'Reorder Level', 'Status']],
+        body: tableData,
+        startY: 30,
+        styles: { fontSize: 10 },
+        headStyles: { fillColor: [59, 130, 246] }
+      });
+
+      doc.save('current-stock-export.pdf');
+    } catch (error) {
+      // Fallback to simple PDF
+      console.warn('jspdf-autotable not available, using simple PDF export');
+      
+      const doc = new jsPDF();
+      doc.setFontSize(16);
+      doc.text('Current Stock Report', 20, 20);
+      
+      let yPos = 40;
+      doc.setFontSize(10);
+      doc.text('Product | Code | Stock | Unit | Reorder Level | Status', 20, yPos);
+      yPos += 10;
+      
+      itemsToExport.forEach(item => {
+        const rowText = `${item.product_name || 'N/A'} | ${item.product_code || 'N/A'} | ${item.current_stock || 0} | ${item.unit || 'Units'} | ${item.reorder_level || 0} | ${item.low_stock ? 'Low Stock' : (item.current_stock === 0 ? 'Out of Stock' : 'In Stock')}`;
+        doc.text(rowText, 20, yPos);
+        yPos += 8;
+        
+        if (yPos > 270) {
+          doc.addPage();
+          yPos = 20;
+        }
+      });
+      
+      doc.save('current-stock-export.pdf');
+    }
+  };
+
+  const printSelected = () => {
+    const itemsToPrint = selectedIds.size > 0 
+      ? filteredData.filter(item => selectedIds.has(item.product_id))
+      : filteredData;
+      
+    const html = `<!DOCTYPE html><html><head><title>Print Current Stock</title>
+      <style>body{font-family:Arial,sans-serif;padding:24px;} table{width:100%;border-collapse:collapse;} th,td{padding:8px;border-bottom:1px solid #ddd;text-align:left;} th{background:#f5f5f5;}</style>
+      </head><body>
+      <h2>Current Stock Report</h2>
+      <table><thead><tr><th>Product</th><th>Code</th><th>Stock</th><th>Unit</th><th>Reorder Level</th><th>Status</th></tr></thead>
+      <tbody>
+      ${itemsToPrint.map(item => `<tr><td>${item.product_name || 'N/A'}</td><td>${item.product_code || 'N/A'}</td><td>${item.current_stock || 0}</td><td>${item.unit || 'Units'}</td><td>${item.reorder_level || 0}</td><td>${item.low_stock ? 'Low Stock' : (item.current_stock === 0 ? 'Out of Stock' : 'In Stock')}</td></tr>`).join('')}
+      </tbody></table>
+      </body></html>`;
+    const w = window.open('', '_blank');
+    if (!w) return;
+    w.document.write(html);
+    w.document.close();
+    w.focus();
+    w.print();
+  };
+
+  const whatsappSelected = () => {
+    const itemsToSend = selectedIds.size > 0 
+      ? filteredData.filter(item => selectedIds.has(item.product_id))
+      : filteredData;
+      
+    if (itemsToSend.length === 0) return;
+    
+    const message = encodeURIComponent(
+      `Current Stock Report:\n\n${itemsToSend.map(item => 
+        `${item.product_name} - ${item.current_stock} ${item.unit || 'Units'} (${item.low_stock ? 'Low Stock' : (item.current_stock === 0 ? 'Out of Stock' : 'In Stock')})`
+      ).join('\n')}`
+    );
+    
+    window.open(`https://wa.me/?text=${message}`, '_blank');
   };
 
   const filterData = () => {
@@ -486,6 +625,26 @@ const CurrentStock = ({ open = true, onClose }) => {
 
   const columns = [
     {
+      header: (
+        <input
+          type="checkbox"
+          checked={isAllSelected}
+          onChange={toggleSelectAll}
+          className="w-4 h-4 rounded border-gray-300"
+        />
+      ),
+      key: 'select',
+      render: (value, row) => (
+        <input
+          type="checkbox"
+          checked={selectedIds.has(row.product_id)}
+          onChange={() => toggleSelect(row.product_id)}
+          className="w-4 h-4 rounded border-gray-300"
+        />
+      ),
+      width: '50px',
+    },
+    {
       header: 'Product',
       key: 'product_name',
       sortable: true,
@@ -602,6 +761,63 @@ const CurrentStock = ({ open = true, onClose }) => {
           </div>
         );
       }
+    },
+    {
+      header: 'Actions',
+      key: 'actions',
+      render: (value, row) => (
+        <div className="flex items-center space-x-1">
+          <button
+            onClick={() => handleViewDetails(row)}
+            className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+            title="View Details"
+          >
+            <Eye className="w-4 h-4" />
+          </button>
+          
+          <button
+            onClick={() => {
+              setSelectedIds(new Set([row.product_id]));
+              setTimeout(() => printSelected(), 0);
+            }}
+            className="p-2 text-gray-400 hover:text-green-600 hover:bg-green-50 rounded-lg transition-colors"
+            title="Print"
+          >
+            <Printer className="w-4 h-4" />
+          </button>
+
+          <button
+            onClick={() => {
+              setSelectedIds(new Set([row.product_id]));
+              setTimeout(() => exportSelectedPDF(), 0);
+            }}
+            className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+            title="Download PDF"
+          >
+            <Download className="w-4 h-4" />
+          </button>
+          
+          <button
+            onClick={() => {
+              setSelectedIds(new Set([row.product_id]));
+              setTimeout(() => whatsappSelected(), 0);
+            }}
+            className="p-2 text-gray-400 hover:text-green-600 hover:bg-green-50 rounded-lg transition-colors"
+            title="Send WhatsApp"
+          >
+            <MessageCircle className="w-4 h-4" />
+          </button>
+          
+          <button
+            onClick={() => handleEdit(row)}
+            className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+            title="Edit"
+          >
+            <Edit2 className="w-4 h-4" />
+          </button>
+        </div>
+      ),
+      width: '200px',
     }
   ];
 
@@ -663,127 +879,196 @@ const CurrentStock = ({ open = true, onClose }) => {
         <div className="flex-1 overflow-y-auto" onScroll={handleScroll}>
           <div className="max-w-6xl mx-auto px-6 py-6">
             
-            {/* Search and Filters */}
-            <div className="bg-white rounded-lg shadow-sm border border-blue-200 p-4 mb-6">
-          <div className="flex items-center space-x-4">
-            <div className="flex-1 relative">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
-              <input
-                type="text"
-                placeholder="Search products..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-              />
-            </div>
-            <select
-              value={selectedCategory}
-              onChange={(e) => setSelectedCategory(e.target.value)}
-              className="px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-            >
-              <option value="all">All Categories</option>
-              <option value="Tablets">Tablets</option>
-              <option value="Capsules">Capsules</option>
-              <option value="Syrups">Syrups</option>
-              <option value="Injections">Injections</option>
-            </select>
-            <button 
-              onClick={() => setShowMoreFilters(!showMoreFilters)}
-              className={`flex items-center space-x-2 px-4 py-2 border rounded-lg transition-colors ${
-                showMoreFilters 
-                  ? 'bg-blue-50 border-blue-300 text-blue-700' 
-                  : 'bg-white border-gray-300 hover:bg-gray-50'
-              }`}
-            >
-              <Filter className="w-4 h-4" />
-              <span>More Filters</span>
-            </button>
-          </div>
-          
-          {/* More Filters Panel */}
-          {showMoreFilters && (
-            <div className="mt-4 p-4 bg-blue-50 rounded-lg border border-blue-200">
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Stock Status
-                  </label>
-                  <select 
+            {/* Enhanced Filter Bar */}
+            <div className="mb-6 border border-gray-200 rounded-lg bg-gray-50 p-4">
+              <div className="flex items-center space-x-4">
+                {/* Select All */}
+                <label className="inline-flex items-center space-x-2">
+                  <input
+                    type="checkbox"
+                    checked={isAllSelected}
+                    onChange={toggleSelectAll}
+                    className="w-4 h-4 rounded border-gray-300"
+                  />
+                  <span className="text-sm text-gray-600">Select All</span>
+                </label>
+
+                {/* Search */}
+                <div className="flex-1 relative">
+                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
+                  <input
+                    type="text"
+                    placeholder="Search products by name or code..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
+                  />
+                </div>
+
+                {/* Category Filter */}
+                <div className="relative">
+                  <select
+                    value={selectedCategory}
+                    onChange={(e) => setSelectedCategory(e.target.value)}
+                    className="appearance-none pl-3 pr-8 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm bg-white"
+                  >
+                    <option value="all">Category: All</option>
+                    <option value="Tablets">Tablets</option>
+                    <option value="Capsules">Capsules</option>
+                    <option value="Syrups">Syrups</option>
+                    <option value="Injections">Injections</option>
+                  </select>
+                  <ChevronDown className="absolute right-2 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
+                </div>
+
+                {/* Stock Status Filter */}
+                <div className="relative">
+                  <select
                     value={moreFilters.stockStatus}
-                    onChange={(e) => setMoreFilters({...moreFilters, stockStatus: e.target.value})}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    onChange={(e) => setMoreFilters(prev => ({...prev, stockStatus: e.target.value}))}
+                    className="appearance-none pl-3 pr-8 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm bg-white"
                   >
-                    <option value="all">All Stock</option>
-                    <option value="in-stock">In Stock Only</option>
-                    <option value="out-of-stock">Out of Stock</option>
+                    <option value="all">Stock: All</option>
+                    <option value="in-stock">In Stock</option>
                     <option value="low-stock">Low Stock</option>
+                    <option value="out-of-stock">Out of Stock</option>
                   </select>
+                  <ChevronDown className="absolute right-2 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
                 </div>
-                
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Expiry Period
-                  </label>
-                  <select 
-                    value={moreFilters.expiryPeriod}
-                    onChange={(e) => setMoreFilters({...moreFilters, expiryPeriod: e.target.value})}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+
+                {/* Bulk Actions */}
+                {selectedCount > 0 ? (
+                  <div className="flex items-center space-x-2">
+                    <span className="text-sm text-gray-700 mr-1">Selected: {selectedCount}</span>
+                    <button 
+                      onClick={exportSelectedPDF} 
+                      className="px-3 py-2 bg-gray-800 text-white rounded-lg hover:bg-gray-700 text-sm flex items-center space-x-2"
+                    >
+                      <Download className="w-4 h-4" />
+                      <span>PDF</span>
+                    </button>
+                    <button 
+                      onClick={printSelected} 
+                      className="px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm flex items-center space-x-1"
+                    >
+                      <Printer className="w-4 h-4" />
+                      <span>Print</span>
+                    </button>
+                    <button 
+                      onClick={whatsappSelected} 
+                      className="px-3 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 text-sm flex items-center space-x-1"
+                    >
+                      <MessageCircle className="w-4 h-4" />
+                      <span>WhatsApp</span>
+                    </button>
+                  </div>
+                ) : (
+                  <button 
+                    onClick={exportSelectedPDF}
+                    className="px-4 py-2 bg-gray-800 text-white rounded-lg hover:bg-gray-700 transition-colors text-sm flex items-center space-x-2"
                   >
-                    <option value="all">All Products</option>
-                    <option value="30">Expiring in 30 days</option>
-                    <option value="60">Expiring in 60 days</option>
-                    <option value="90">Expiring in 90 days</option>
-                    <option value="expired">Already Expired</option>
-                  </select>
-                </div>
-                
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Pack Type
-                  </label>
-                  <select 
-                    value={moreFilters.packType}
-                    onChange={(e) => setMoreFilters({...moreFilters, packType: e.target.value})}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  >
-                    <option value="all">All Types</option>
-                    <option value="strip">Strip</option>
-                    <option value="bottle">Bottle</option>
-                    <option value="tube">Tube</option>
-                    <option value="vial">Vial</option>
-                    <option value="sachet">Sachet</option>
-                  </select>
-                </div>
+                    <Download className="w-4 h-4" />
+                    <span>Export PDF</span>
+                  </button>
+                )}
               </div>
               
-              <div className="mt-4 flex justify-end space-x-2">
-                <button 
-                  onClick={() => {
-                    setMoreFilters({
-                      stockStatus: 'all',
-                      expiryPeriod: 'all',
-                      packType: 'all'
-                    });
-                  }}
-                  className="px-4 py-2 text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50"
-                >
-                  Clear Filters
-                </button>
-                <button 
-                  onClick={() => setShowMoreFilters(false)}
-                  className="px-4 py-2 text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50"
-                >
-                  Close
-                </button>
-                <button 
-                  onClick={() => setShowMoreFilters(false)}
-                  className="px-4 py-2 text-white bg-blue-600 rounded-lg hover:bg-blue-700"
-                >
-                  Apply
-                </button>
+              {/* Summary Stats */}
+              <div className="flex items-center justify-end gap-4 text-sm mt-2 pt-2 border-t border-gray-200">
+                <div>
+                  <span className="text-gray-500">Total Value:</span>
+                  <span className="ml-1 font-semibold">
+                    {formatCurrency(filteredData.reduce((sum, item) => sum + (item.stock_value || 0), 0))}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-gray-500">Items:</span>
+                  <span className="ml-1 font-semibold">{filteredData.length}</span>
+                </div>
               </div>
             </div>
-          )}
+
+            {/* More Filters Panel */}
+            {showMoreFilters && (
+              <div className="mt-4 p-4 bg-blue-50 rounded-lg border border-blue-200">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Expiry Period
+                    </label>
+                    <select 
+                      value={moreFilters.expiryPeriod}
+                      onChange={(e) => setMoreFilters({...moreFilters, expiryPeriod: e.target.value})}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    >
+                      <option value="all">All Products</option>
+                      <option value="30">Expiring in 30 days</option>
+                      <option value="60">Expiring in 60 days</option>
+                      <option value="90">Expiring in 90 days</option>
+                      <option value="expired">Already Expired</option>
+                    </select>
+                  </div>
+                  
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Pack Type
+                    </label>
+                    <select 
+                      value={moreFilters.packType}
+                      onChange={(e) => setMoreFilters({...moreFilters, packType: e.target.value})}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    >
+                      <option value="all">All Types</option>
+                      <option value="strip">Strip</option>
+                      <option value="bottle">Bottle</option>
+                      <option value="tube">Tube</option>
+                      <option value="vial">Vial</option>
+                      <option value="sachet">Sachet</option>
+                    </select>
+                  </div>
+                  
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Actions
+                    </label>
+                    <div className="flex space-x-2">
+                      <button 
+                        onClick={() => {
+                          setMoreFilters({
+                            stockStatus: 'all',
+                            expiryPeriod: 'all',
+                            packType: 'all'
+                          });
+                        }}
+                        className="px-3 py-2 text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 text-sm"
+                      >
+                        Clear
+                      </button>
+                      <button 
+                        onClick={() => setShowMoreFilters(false)}
+                        className="px-3 py-2 text-white bg-blue-600 rounded-lg hover:bg-blue-700 text-sm"
+                      >
+                        Apply
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* More Filters Toggle */}
+            <div className="mb-4">
+              <button 
+                onClick={() => setShowMoreFilters(!showMoreFilters)}
+                className={`flex items-center space-x-2 px-4 py-2 border rounded-lg transition-colors ${
+                  showMoreFilters 
+                    ? 'bg-blue-50 border-blue-300 text-blue-700' 
+                    : 'bg-white border-gray-300 hover:bg-gray-50'
+                }`}
+              >
+                <Filter className="w-4 h-4" />
+                <span>More Filters</span>
+              </button>
             </div>
 
             {/* Loading State */}
@@ -821,36 +1106,14 @@ const CurrentStock = ({ open = true, onClose }) => {
             </div>
           ) : filteredData.length > 0 ? (
             <DataTable
-              columns={[...columns, {
-                header: 'Actions',
-                key: 'actions',
-                render: (value, row) => (
-                  <div className="flex items-center space-x-2">
-                    <button
-                      onClick={() => handleEdit(row)}
-                      className="p-1 text-gray-600 hover:text-green-600 hover:bg-green-50 rounded"
-                      title="Edit Properties"
-                    >
-                      <Edit2 className="w-4 h-4" />
-                    </button>
-                    <button
-                      onClick={() => handleViewDetails(row)}
-                      className="p-1 text-gray-600 hover:text-blue-600 hover:bg-blue-50 rounded"
-                      title="View Details"
-                    >
-                      <Eye className="w-4 h-4" />
-                    </button>
-                    <button
-                      className="p-1 text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded"
-                      title="More Options"
-                    >
-                      <MoreVertical className="w-4 h-4" />
-                    </button>
-                  </div>
-                )
-              }]}
+              columns={columns}
               data={filteredData}
               keyField="product_id"
+              hoverable={true}
+              striped={true}
+              paginated={true}
+              pageSize={20}
+              searchable={false}
             />
           ) : (
             <div className="text-center py-12">

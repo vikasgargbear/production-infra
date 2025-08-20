@@ -20,6 +20,7 @@ export { default as DocumentFooter } from './display/DocumentFooter';
 // Layout Components
 export { default as ModuleHeader } from './ModuleHeader';
 export { default as ViewHistoryButton } from './ViewHistoryButton';
+export { default as HistoryTable } from './HistoryTable';
 
 // Feedback Components
 export { default as Toast, ToastProvider, useToast } from './feedback/Toast';

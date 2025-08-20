@@ -1,11 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import {
-  Download, Eye, Edit, Printer,
-  MoreHorizontal, Package, ShoppingBag,
+  Download, Eye, Edit, Printer, MessageCircle,
+  MoreHorizontal, Package, ShoppingBag, Search, Calendar, ChevronDown,
   X, Check, AlertCircle, RefreshCw
 } from 'lucide-react';
 import { Button, StatusBadge, DataTable, InlineFilterPanel } from '../global';
 import { purchasesApi } from '../../services/api';
+import { formatCurrency } from '../../utils/formatters';
+import jsPDF from 'jspdf';
 
 interface PurchaseListHistoryProps {
   onClose?: () => void;
@@ -70,6 +72,9 @@ const PurchaseListHistory: React.FC<PurchaseListHistoryProps> = ({ onClose }) =>
   const [searchQuery, setSearchQuery] = useState('');
   const [showFilters, setShowFilters] = useState(false);
   const [selectedPurchases, setSelectedPurchases] = useState<string[]>([]);
+  const [selectedIds, setSelectedIds] = useState(new Set<string>());
+  const [dateFilter, setDateFilter] = useState('all');
+  const [filterStatus, setFilterStatus] = useState('all');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pagination, setPagination] = useState({
@@ -203,15 +208,176 @@ const PurchaseListHistory: React.FC<PurchaseListHistoryProps> = ({ onClose }) =>
     fetchPurchases(1, { ...filters, search: searchQuery });
   };
 
-  // Handle search changes with auto-search
+  // Handle search changes with auto-search and debouncing
   const handleSearchChange = (query: string) => {
     setSearchQuery(query);
-    // Auto-search after a short delay to avoid too many API calls
+    
+    // Debounce search to avoid too many API calls
     const timeoutId = setTimeout(() => {
-      fetchPurchases(1, { search: query });
-    }, 300);
+      const searchParams = {
+        search: query,
+        po_status: filterStatus === 'all' ? undefined : filterStatus
+      };
+      fetchPurchases(1, searchParams);
+    }, 500);
     
     return () => clearTimeout(timeoutId);
+  };
+
+  // Handle status filter changes
+  const handleStatusChange = (status: string) => {
+    setFilterStatus(status);
+    const searchParams = {
+      search: searchQuery,
+      po_status: status === 'all' ? undefined : status
+    };
+    fetchPurchases(1, searchParams);
+  };
+
+  // Handle date filter changes  
+  const handleDateChange = (dateFilter: string) => {
+    setDateFilter(dateFilter);
+    const searchParams = {
+      search: searchQuery,
+      po_status: filterStatus === 'all' ? undefined : filterStatus,
+      dateFilter: dateFilter
+    };
+    fetchPurchases(1, searchParams);
+  };
+
+  // Client-side filtering for display purposes only (server-side search is handled in fetchPurchases)
+  const filteredPurchases = purchases; // Use server-filtered data directly
+
+  // Multi-select functionality
+  const isAllSelected = filteredPurchases.length > 0 && filteredPurchases.every(purchase => selectedIds.has(purchase.id));
+  const selectedCount = Array.from(selectedIds).filter(id => filteredPurchases.some(f => f.id === id)).length;
+
+  const toggleSelect = (id: string) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+
+  const toggleSelectAll = () => {
+    if (isAllSelected) {
+      setSelectedIds(prev => {
+        const next = new Set(prev);
+        filteredPurchases.forEach(purchase => next.delete(purchase.id));
+        return next;
+      });
+    } else {
+      setSelectedIds(prev => {
+        const next = new Set(prev);
+        filteredPurchases.forEach(purchase => next.add(purchase.id));
+        return next;
+      });
+    }
+  };
+
+  const formatDate = (date: string) => {
+    return new Date(date).toLocaleDateString('en-IN', {
+      day: 'numeric',
+      month: 'short',
+      year: 'numeric'
+    });
+  };
+
+  const formatCurrency = (amount: number) => {
+    return new Intl.NumberFormat('en-IN', {
+      style: 'currency',
+      currency: 'INR'
+    }).format(amount);
+  };
+
+  const exportSelectedPDF = () => {
+    const itemsToExport = filteredPurchases.filter(purchase => selectedIds.has(purchase.id));
+    if (itemsToExport.length === 0) return;
+
+    try {
+      // Try to use jspdf-autotable if available
+      const autoTable = require('jspdf-autotable');
+      
+      const doc = new jsPDF();
+      doc.setFontSize(16);
+      doc.text('Purchase Orders Report', 20, 20);
+      
+      const tableData = itemsToExport.map(purchase => [
+        purchase.po_number,
+        formatDate(purchase.po_date),
+        purchase.supplier_name || 'N/A',
+        formatCurrency(purchase.total_amount || 0),
+        purchase.po_status || 'draft'
+      ]);
+
+      (doc as any).autoTable({
+        head: [['PO #', 'Date', 'Supplier', 'Amount', 'Status']],
+        body: tableData,
+        startY: 30,
+        styles: { fontSize: 10 },
+        headStyles: { fillColor: [59, 130, 246] }
+      });
+
+      doc.save('purchase-orders-export.pdf');
+    } catch (error) {
+      // Fallback to simple PDF
+      console.warn('jspdf-autotable not available, using simple PDF export');
+      
+      const doc = new jsPDF();
+      doc.setFontSize(16);
+      doc.text('Purchase Orders Report', 20, 20);
+      
+      let yPos = 40;
+      doc.setFontSize(10);
+      doc.text('PO # | Date | Supplier | Amount | Status', 20, yPos);
+      yPos += 10;
+      
+      itemsToExport.forEach(purchase => {
+        const rowText = `${purchase.po_number} | ${formatDate(purchase.po_date)} | ${purchase.supplier_name || 'N/A'} | ${formatCurrency(purchase.total_amount || 0)} | ${purchase.po_status || 'draft'}`;
+        doc.text(rowText, 20, yPos);
+        yPos += 8;
+        
+        if (yPos > 270) {
+          doc.addPage();
+          yPos = 20;
+        }
+      });
+      
+      doc.save('purchase-orders-export.pdf');
+    }
+  };
+
+  const printSelected = () => {
+    const itemsToPrint = filteredPurchases.filter(purchase => selectedIds.has(purchase.id));
+    const html = `<!DOCTYPE html><html><head><title>Print Purchase Orders</title>
+      <style>body{font-family:Arial,sans-serif;padding:24px;} table{width:100%;border-collapse:collapse;} th,td{padding:8px;border-bottom:1px solid #ddd;text-align:left;} th{background:#f5f5f5;}</style>
+      </head><body>
+      <h2>Purchase Orders Report</h2>
+      <table><thead><tr><th>PO #</th><th>Date</th><th>Supplier</th><th>Amount</th><th>Status</th></tr></thead>
+      <tbody>
+      ${itemsToPrint.map(purchase => `<tr><td>${purchase.po_number}</td><td>${formatDate(purchase.po_date)}</td><td>${purchase.supplier_name || 'N/A'}</td><td>${formatCurrency(purchase.total_amount || 0)}</td><td>${purchase.po_status || 'draft'}</td></tr>`).join('')}
+      </tbody></table>
+      </body></html>`;
+    const w = window.open('', '_blank');
+    if (!w) return;
+    w.document.write(html);
+    w.document.close();
+    w.focus();
+    w.print();
+  };
+
+  const whatsappSelected = () => {
+    const itemsToSend = filteredPurchases.filter(purchase => selectedIds.has(purchase.id));
+    if (itemsToSend.length === 0) return;
+    
+    const message = encodeURIComponent(
+      `Purchase Orders Report:\n\n${itemsToSend.map(purchase => 
+        `${purchase.po_number} - ${formatDate(purchase.po_date)} - ${purchase.supplier_name} - ${formatCurrency(purchase.total_amount || 0)} (${purchase.po_status})`
+      ).join('\n')}`
+    );
+    
+    window.open(`https://wa.me/?text=${message}`, '_blank');
   };
 
   // Action handlers
@@ -239,19 +405,7 @@ const PurchaseListHistory: React.FC<PurchaseListHistoryProps> = ({ onClose }) =>
     alert(`More options for purchase: ${purchase.po_number}`);
   };
 
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('en-IN', {
-      style: 'currency',
-      currency: 'INR',
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 0,
-    }).format(amount);
-  };
 
-  const formatDate = (value: string) => {
-    if (!value) return 'N/A';
-    return new Date(value).toLocaleDateString('en-IN');
-  };
 
   // Helper function to get proper status text
   const getStatusText = (status: string | undefined) => {
@@ -313,12 +467,23 @@ const PurchaseListHistory: React.FC<PurchaseListHistoryProps> = ({ onClose }) =>
 
   const columns = [
     {
-      key: 'po_number',
-      header: 'PO #',
+      key: 'select',
+      header: '',
+      render: (value: any, purchase: Purchase) => (
+        <input
+          type="checkbox"
+          checked={selectedIds.has(purchase.id)}
+          onChange={() => toggleSelect(purchase.id)}
+          className="w-4 h-4 rounded border-gray-300"
+        />
+      ),
+      width: '50px',
+    },
+    {
+      key: 'po_date',
+      header: 'Date',
       render: (value: string, purchase: Purchase) => (
-        <div className="font-medium text-gray-900">
-          {purchase.po_number}
-        </div>
+        <div className="text-gray-900 font-medium">{formatDate(purchase.po_date)}</div>
       ),
       width: '120px',
     },
@@ -326,17 +491,19 @@ const PurchaseListHistory: React.FC<PurchaseListHistoryProps> = ({ onClose }) =>
       key: 'supplier_name',
       header: 'Supplier',
       render: (value: string, purchase: Purchase) => (
-        <div className="text-gray-900">{purchase.supplier_name}</div>
+        <div className="text-gray-900 font-medium">{purchase.supplier_name}</div>
       ),
       width: '200px',
     },
     {
-      key: 'po_date',
-      header: 'Date',
+      key: 'po_number',
+      header: 'PO #',
       render: (value: string, purchase: Purchase) => (
-        <div className="text-gray-600">{formatDate(purchase.po_date)}</div>
+        <div className="text-gray-600 text-sm">
+          {purchase.po_number}
+        </div>
       ),
-      width: '100px',
+      width: '120px',
     },
     {
       key: 'total_amount',
@@ -390,46 +557,58 @@ const PurchaseListHistory: React.FC<PurchaseListHistoryProps> = ({ onClose }) =>
       key: 'actions',
       header: 'Actions',
       render: (value: any, purchase: Purchase) => (
-        <div className="flex items-center space-x-2">
-          <Button 
-            variant="ghost" 
-            size="sm"
+        <div className="flex items-center space-x-1">
+          <button
             onClick={() => handleViewPurchase(purchase)}
+            className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
             title="View Purchase"
-            className="h-10 w-10 p-0 hover:bg-blue-50"
           >
-            <Eye className="w-5 h-5 text-blue-600" />
-          </Button>
-          <Button 
-            variant="ghost" 
-            size="sm"
-            onClick={() => handleEditPurchase(purchase)}
-            title="Edit Purchase"
-            className="h-10 w-10 p-0 hover:bg-green-50"
+            <Eye className="w-4 h-4" />
+          </button>
+          
+          <button
+            onClick={() => {
+              setSelectedIds(new Set([purchase.id]));
+              setTimeout(() => printSelected(), 0);
+            }}
+            className="p-2 text-gray-400 hover:text-green-600 hover:bg-green-50 rounded-lg transition-colors"
+            title="Print"
           >
-            <Edit className="w-5 h-5 text-green-600" />
-          </Button>
-          <Button 
-            variant="ghost" 
-            size="sm"
-            onClick={() => handlePrintPurchase(purchase)}
-            title="Print Purchase"
-            className="h-10 w-10 p-0 hover:bg-purple-50"
+            <Printer className="w-4 h-4" />
+          </button>
+
+          <button
+            onClick={() => {
+              setSelectedIds(new Set([purchase.id]));
+              setTimeout(() => exportSelectedPDF(), 0);
+            }}
+            className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+            title="Download PDF"
           >
-            <Printer className="w-5 h-5 text-purple-600" />
-          </Button>
-          <Button 
-            variant="ghost" 
-            size="sm"
+            <Download className="w-4 h-4" />
+          </button>
+          
+          <button
+            onClick={() => {
+              setSelectedIds(new Set([purchase.id]));
+              setTimeout(() => whatsappSelected(), 0);
+            }}
+            className="p-2 text-gray-400 hover:text-green-600 hover:bg-green-50 rounded-lg transition-colors"
+            title="Send WhatsApp"
+          >
+            <MessageCircle className="w-4 h-4" />
+          </button>
+          
+          <button
             onClick={() => handleMoreOptions(purchase)}
+            className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
             title="More Options"
-            className="h-10 w-10 p-0 hover:bg-gray-50"
           >
-            <MoreHorizontal className="w-5 h-5 text-gray-600" />
-          </Button>
+            <MoreHorizontal className="w-4 h-4" />
+          </button>
         </div>
       ),
-      width: '180px',
+      width: '200px',
     },
   ];
 
@@ -478,16 +657,114 @@ const PurchaseListHistory: React.FC<PurchaseListHistoryProps> = ({ onClose }) =>
         <div className="flex-1 overflow-y-auto">
           <div className="max-w-7xl mx-auto px-6 py-6">
             
-            {/* Global Inline Filter Panel */}
-            <div className="mb-6">
-              <InlineFilterPanel
-                filters={filterOptions}
-                onFilterChange={handleFilterChange}
-                searchQuery={searchQuery}
-                onSearchChange={handleSearchChange}
-                showFilters={showFilters}
-                onToggleFilters={setShowFilters}
-              />
+            {/* Enhanced Filter Bar */}
+            <div className="mb-6 border border-gray-200 rounded-lg bg-gray-50 p-4">
+              <div className="flex items-center space-x-4">
+                {/* Select All */}
+                <label className="inline-flex items-center space-x-2">
+                  <input
+                    type="checkbox"
+                    checked={isAllSelected}
+                    onChange={toggleSelectAll}
+                    className="w-4 h-4 rounded border-gray-300"
+                  />
+                  <span className="text-sm text-gray-600">Select All</span>
+                </label>
+
+                {/* Search */}
+                <div className="flex-1 relative">
+                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
+                  <input
+                    type="text"
+                    placeholder="Search by supplier name, PO number..."
+                    value={searchQuery}
+                    onChange={(e) => handleSearchChange(e.target.value)}
+                    className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
+                  />
+                </div>
+
+                {/* Status Filter */}
+                <div className="relative">
+                  <select
+                    value={filterStatus}
+                    onChange={(e) => handleStatusChange(e.target.value)}
+                    className="appearance-none pl-3 pr-8 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm bg-white"
+                  >
+                    <option value="all">Status: All</option>
+                    <option value="draft">Draft</option>
+                    <option value="sent">Sent</option>
+                    <option value="confirmed">Confirmed</option>
+                    <option value="received">Received</option>
+                    <option value="cancelled">Cancelled</option>
+                  </select>
+                  <ChevronDown className="absolute right-2 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
+                </div>
+
+                {/* Date Filter */}
+                <div className="relative">
+                  <select
+                    value={dateFilter}
+                    onChange={(e) => handleDateChange(e.target.value)}
+                    className="appearance-none pl-3 pr-8 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm bg-white"
+                  >
+                    <option value="all">Last 30 days</option>
+                    <option value="7">Last 7 days</option>
+                    <option value="90">Last 90 days</option>
+                    <option value="365">Last year</option>
+                  </select>
+                  <Calendar className="absolute right-2 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
+                </div>
+
+                {/* Bulk Actions */}
+                {selectedCount > 0 ? (
+                  <div className="flex items-center space-x-2">
+                    <span className="text-sm text-gray-700 mr-1">Selected: {selectedCount}</span>
+                    <button 
+                      onClick={exportSelectedPDF} 
+                      className="px-3 py-2 bg-gray-800 text-white rounded-lg hover:bg-gray-700 text-sm flex items-center space-x-2"
+                    >
+                      <Download className="w-4 h-4" />
+                      <span>PDF</span>
+                    </button>
+                    <button 
+                      onClick={printSelected} 
+                      className="px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm flex items-center space-x-1"
+                    >
+                      <Printer className="w-4 h-4" />
+                      <span>Print</span>
+                    </button>
+                    <button 
+                      onClick={whatsappSelected} 
+                      className="px-3 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 text-sm flex items-center space-x-1"
+                    >
+                      <MessageCircle className="w-4 h-4" />
+                      <span>WhatsApp</span>
+                    </button>
+                  </div>
+                ) : (
+                  <button 
+                    onClick={exportSelectedPDF}
+                    className="px-4 py-2 bg-gray-800 text-white rounded-lg hover:bg-gray-700 transition-colors text-sm flex items-center space-x-2"
+                  >
+                    <Download className="w-4 h-4" />
+                    <span>Export PDF</span>
+                  </button>
+                )}
+              </div>
+              
+              {/* Summary Stats */}
+              <div className="flex items-center justify-end gap-4 text-sm mt-2 pt-2 border-t border-gray-200">
+                <div>
+                  <span className="text-gray-500">Total:</span>
+                  <span className="ml-1 font-semibold">
+                    {formatCurrency(filteredPurchases.reduce((sum, purchase) => sum + (purchase.total_amount || 0), 0))}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-gray-500">Count:</span>
+                  <span className="ml-1 font-semibold">{filteredPurchases.length}</span>
+                </div>
+              </div>
             </div>
 
             {/* Error Display */}
@@ -517,7 +794,7 @@ const PurchaseListHistory: React.FC<PurchaseListHistoryProps> = ({ onClose }) =>
                   <p className="text-gray-600">Loading purchases...</p>
                 </div>
               </div>
-            ) : purchases.length === 0 ? (
+            ) : filteredPurchases.length === 0 ? (
               <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-8">
                 <div className="text-center">
                   <Package className="w-12 h-12 mx-auto mb-3 text-gray-300" />
@@ -546,7 +823,7 @@ const PurchaseListHistory: React.FC<PurchaseListHistoryProps> = ({ onClose }) =>
               /* Purchase Table */
               <div className="bg-white rounded-lg shadow-sm border border-gray-200">
                 <DataTable
-                  data={purchases}
+                  data={filteredPurchases}
                   columns={columns}
                   keyField="id"
                   searchable={false}
@@ -558,7 +835,7 @@ const PurchaseListHistory: React.FC<PurchaseListHistoryProps> = ({ onClose }) =>
                 {pagination.total_pages > 1 && (
                   <div className="flex items-center justify-between px-6 py-4 border-t border-gray-200">
                     <div className="text-sm text-gray-600">
-                      Showing {purchases.length} of {pagination.total} purchases
+                      Showing {filteredPurchases.length} of {pagination.total} purchases
                     </div>
                     <div className="flex items-center space-x-2">
                       <Button

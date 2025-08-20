@@ -40,15 +40,15 @@ const ViewHistoryButton = ({
       switch (historyType) {
         case 'invoice':
           try {
+            response = await invoiceAPI.search({ limit: 10 });
+          } catch (e1) {
+            console.error('Invoice API failed, trying orders as fallback:', e1);
             try {
               response = await ordersAPI.search({ limit: 10 });
-            } catch (e1) {
-              console.error('Orders API failed:', e1);
-              throw e1;
+            } catch (e2) {
+              console.error('Orders API also failed:', e2);
+              response = { data: [] };
             }
-          } catch (e2) {
-            console.log('All invoice endpoints failed, using orders as fallback');
-            response = await ordersAPI.search({ limit: 10 });
           }
           const actualResponse = response.data || response;
           const invoiceData = Array.isArray(actualResponse) ? actualResponse : 

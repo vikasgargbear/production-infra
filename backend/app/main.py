@@ -47,7 +47,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="Pharma ERP API",
     description="Enterprise Pharma ERP System API",
-    version="2.0.1",  # Auto-deploy test
+    version="2.0.2",  # Force re-deploy after schema fixes
     lifespan=lifespan
 )
 

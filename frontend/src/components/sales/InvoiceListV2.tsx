@@ -1,12 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import {
-  Download, Eye, Edit, Printer, Send,
-  FileText, MoreHorizontal,
-  X, Check, AlertCircle, RefreshCw
+  Download, Eye, Edit, Printer, Send, MessageCircle,
+  FileText, MoreHorizontal, Calendar, ChevronDown,
+  X, Check, AlertCircle, RefreshCw, Search
 } from 'lucide-react';
 import { Button, StatusBadge, DataTable, InlineFilterPanel } from '../global';
 import InvoiceApiService from '../../services/invoiceApiService';
 import debugLogger from '../../utils/debugLogger';
+import jsPDF from 'jspdf';
 
 interface InvoiceListProps {
   onClose?: () => void;
@@ -77,6 +78,9 @@ const InvoiceListV2: React.FC<InvoiceListProps> = ({ onClose }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [showFilters, setShowFilters] = useState(false);
   const [selectedInvoices, setSelectedInvoices] = useState<string[]>([]);
+  const [selectedIds, setSelectedIds] = useState(new Set<string>());
+  const [dateFilter, setDateFilter] = useState('all');
+  const [filterStatus, setFilterStatus] = useState('all');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pagination, setPagination] = useState({
@@ -88,6 +92,126 @@ const InvoiceListV2: React.FC<InvoiceListProps> = ({ onClose }) => {
 
   // State for real data
   const [invoices, setInvoices] = useState<Invoice[]>([]);
+
+  // Client-side filtering for display purposes only (server-side search is handled in fetchInvoices)
+  const filteredInvoices = invoices; // Use server-filtered data directly
+
+  // Multi-select functionality
+  const isAllSelected = filteredInvoices.length > 0 && filteredInvoices.every(invoice => selectedIds.has(invoice.id));
+  const selectedCount = Array.from(selectedIds).filter(id => filteredInvoices.some(f => f.id === id)).length;
+
+  const toggleSelect = (id: string) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+
+  const toggleSelectAll = () => {
+    if (isAllSelected) {
+      setSelectedIds(prev => {
+        const next = new Set(prev);
+        filteredInvoices.forEach(invoice => next.delete(invoice.id));
+        return next;
+      });
+    } else {
+      setSelectedIds(prev => {
+        const next = new Set(prev);
+        filteredInvoices.forEach(invoice => next.add(invoice.id));
+        return next;
+      });
+    }
+  };
+
+  const exportSelectedPDF = () => {
+    const itemsToExport = filteredInvoices.filter(invoice => selectedIds.has(invoice.id));
+    if (itemsToExport.length === 0) return;
+
+    try {
+      // Try to use jspdf-autotable if available
+      const autoTable = require('jspdf-autotable');
+      
+      const doc = new jsPDF();
+      doc.setFontSize(16);
+      doc.text('Invoices Report', 20, 20);
+      
+      const tableData = itemsToExport.map(invoice => [
+        invoice.invoice_number,
+        formatDate(invoice.invoice_date),
+        invoice.customer_name || 'N/A',
+        formatCurrency(invoice.final_amount || 0),
+        getStatusText(invoice.payment_status)
+      ]);
+
+      (doc as any).autoTable({
+        head: [['Invoice #', 'Date', 'Customer', 'Amount', 'Status']],
+        body: tableData,
+        startY: 30,
+        styles: { fontSize: 10 },
+        headStyles: { fillColor: [59, 130, 246] }
+      });
+
+      doc.save('invoices-export.pdf');
+    } catch (error) {
+      // Fallback to simple PDF
+      console.warn('jspdf-autotable not available, using simple PDF export');
+      
+      const doc = new jsPDF();
+      doc.setFontSize(16);
+      doc.text('Invoices Report', 20, 20);
+      
+      let yPos = 40;
+      doc.setFontSize(10);
+      doc.text('Invoice # | Date | Customer | Amount | Status', 20, yPos);
+      yPos += 10;
+      
+      itemsToExport.forEach(invoice => {
+        const rowText = `${invoice.invoice_number} | ${formatDate(invoice.invoice_date)} | ${invoice.customer_name || 'N/A'} | ${formatCurrency(invoice.final_amount || 0)} | ${getStatusText(invoice.payment_status)}`;
+        doc.text(rowText, 20, yPos);
+        yPos += 8;
+        
+        if (yPos > 270) {
+          doc.addPage();
+          yPos = 20;
+        }
+      });
+      
+      doc.save('invoices-export.pdf');
+    }
+  };
+
+  const printSelected = () => {
+    const itemsToPrint = filteredInvoices.filter(invoice => selectedIds.has(invoice.id));
+    const html = `<!DOCTYPE html><html><head><title>Print Invoices</title>
+      <style>body{font-family:Arial,sans-serif;padding:24px;} table{width:100%;border-collapse:collapse;} th,td{padding:8px;border-bottom:1px solid #ddd;text-align:left;} th{background:#f5f5f5;}</style>
+      </head><body>
+      <h2>Invoices Report</h2>
+      <table><thead><tr><th>Invoice #</th><th>Date</th><th>Customer</th><th>Amount</th><th>Status</th></tr></thead>
+      <tbody>
+      ${itemsToPrint.map(invoice => `<tr><td>${invoice.invoice_number}</td><td>${formatDate(invoice.invoice_date)}</td><td>${invoice.customer_name || 'N/A'}</td><td>${formatCurrency(invoice.final_amount || 0)}</td><td>${getStatusText(invoice.payment_status)}</td></tr>`).join('')}
+      </tbody></table>
+      </body></html>`;
+    const w = window.open('', '_blank');
+    if (!w) return;
+    w.document.write(html);
+    w.document.close();
+    w.focus();
+    w.print();
+  };
+
+  const whatsappSelected = () => {
+    const itemsToSend = filteredInvoices.filter(invoice => selectedIds.has(invoice.id));
+    if (itemsToSend.length === 0) return;
+    
+    const message = encodeURIComponent(
+      `Invoices Report:\n\n${itemsToSend.map(invoice => 
+        `${invoice.invoice_number} - ${formatDate(invoice.invoice_date)} - ${invoice.customer_name} - ${formatCurrency(invoice.final_amount || 0)} (${getStatusText(invoice.payment_status)})`
+      ).join('\n')}`
+    );
+    
+    window.open(`https://wa.me/?text=${message}`, '_blank');
+  };
 
   // Filter configuration for the global component
   const filterOptions = [
@@ -216,19 +340,56 @@ const InvoiceListV2: React.FC<InvoiceListProps> = ({ onClose }) => {
   // Handle filter changes with auto-search
   const handleFilterChange = (filters: any) => {
     debugLogger.debug('Filters changed:', filters);
-    // Reset to first page when filters change
-    fetchInvoices(1, { ...filters, search: searchQuery });
+    // Update local state
+    if (filters.status) setFilterStatus(filters.status);
+    if (filters.dateFilter) setDateFilter(filters.dateFilter);
+    
+    // Build search params including current search query
+    const searchParams = {
+      search: searchQuery,
+      payment_status: filterStatus === 'all' ? undefined : filterStatus,
+      ...filters
+    };
+    
+    // Reset to first page when filters change and fetch with all current filters
+    fetchInvoices(1, searchParams);
   };
 
-  // Handle search changes with auto-search
+  // Handle search changes with auto-search and debouncing
   const handleSearchChange = (query: string) => {
     setSearchQuery(query);
-    // Auto-search after a short delay to avoid too many API calls
+    
+    // Debounce search to avoid too many API calls
     const timeoutId = setTimeout(() => {
-      fetchInvoices(1, { search: query });
-    }, 300);
+      const searchParams = {
+        search: query,
+        payment_status: filterStatus === 'all' ? undefined : filterStatus
+      };
+      fetchInvoices(1, searchParams);
+    }, 500); // Increased debounce time for better UX
     
     return () => clearTimeout(timeoutId);
+  };
+
+  // Handle status filter changes
+  const handleStatusChange = (status: string) => {
+    setFilterStatus(status);
+    const searchParams = {
+      search: searchQuery,
+      payment_status: status === 'all' ? undefined : status
+    };
+    fetchInvoices(1, searchParams);
+  };
+
+  // Handle date filter changes  
+  const handleDateChange = (dateFilter: string) => {
+    setDateFilter(dateFilter);
+    const searchParams = {
+      search: searchQuery,
+      payment_status: filterStatus === 'all' ? undefined : filterStatus,
+      dateFilter: dateFilter
+    };
+    fetchInvoices(1, searchParams);
   };
 
   // Action handlers
@@ -323,12 +484,23 @@ const InvoiceListV2: React.FC<InvoiceListProps> = ({ onClose }) => {
 
   const columns = [
     {
-      key: 'invoice_number',
-      header: 'Invoice #',
+      key: 'select',
+      header: '',
+      render: (value: any, invoice: Invoice) => (
+        <input
+          type="checkbox"
+          checked={selectedIds.has(invoice.id)}
+          onChange={() => toggleSelect(invoice.id)}
+          className="w-4 h-4 rounded border-gray-300"
+        />
+      ),
+      width: '50px',
+    },
+    {
+      key: 'invoice_date',
+      header: 'Date',
       render: (value: string, invoice: Invoice) => (
-        <div className="font-medium text-gray-900">
-          {invoice.invoice_number}
-        </div>
+        <div className="text-gray-900 font-medium">{formatDate(invoice.invoice_date)}</div>
       ),
       width: '120px',
     },
@@ -336,17 +508,19 @@ const InvoiceListV2: React.FC<InvoiceListProps> = ({ onClose }) => {
       key: 'customer_name',
       header: 'Customer',
       render: (value: string, invoice: Invoice) => (
-        <div className="text-gray-900">{invoice.customer_name}</div>
+        <div className="text-gray-900 font-medium">{invoice.customer_name}</div>
       ),
       width: '200px',
     },
     {
-      key: 'invoice_date',
-      header: 'Date',
+      key: 'invoice_number',
+      header: 'Invoice #',
       render: (value: string, invoice: Invoice) => (
-        <div className="text-gray-600">{formatDate(invoice.invoice_date)}</div>
+        <div className="text-gray-600 text-sm">
+          {invoice.invoice_number}
+        </div>
       ),
-      width: '100px',
+      width: '120px',
     },
     {
       key: 'final_amount',
@@ -400,46 +574,58 @@ const InvoiceListV2: React.FC<InvoiceListProps> = ({ onClose }) => {
       key: 'actions',
       header: 'Actions',
       render: (value: any, invoice: Invoice) => (
-        <div className="flex items-center space-x-2">
-          <Button 
-            variant="ghost" 
-            size="sm"
+        <div className="flex items-center space-x-1">
+          <button
             onClick={() => handleViewInvoice(invoice)}
+            className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
             title="View Invoice"
-            className="h-10 w-10 p-0 hover:bg-blue-50"
           >
-            <Eye className="w-5 h-5 text-blue-600" />
-          </Button>
-          <Button 
-            variant="ghost" 
-            size="sm"
-            onClick={() => handleEditInvoice(invoice)}
-            title="Edit Invoice"
-            className="h-10 w-10 p-0 hover:bg-green-50"
+            <Eye className="w-4 h-4" />
+          </button>
+          
+          <button
+            onClick={() => {
+              setSelectedIds(new Set([invoice.id]));
+              setTimeout(() => printSelected(), 0);
+            }}
+            className="p-2 text-gray-400 hover:text-green-600 hover:bg-green-50 rounded-lg transition-colors"
+            title="Print"
           >
-            <Edit className="w-5 h-5 text-green-600" />
-          </Button>
-          <Button 
-            variant="ghost" 
-            size="sm"
-            onClick={() => handlePrintInvoice(invoice)}
-            title="Print Invoice"
-            className="h-10 w-10 p-0 hover:bg-purple-50"
+            <Printer className="w-4 h-4" />
+          </button>
+
+          <button
+            onClick={() => {
+              setSelectedIds(new Set([invoice.id]));
+              setTimeout(() => exportSelectedPDF(), 0);
+            }}
+            className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+            title="Download PDF"
           >
-            <Printer className="w-5 h-5 text-purple-600" />
-          </Button>
-          <Button 
-            variant="ghost" 
-            size="sm"
+            <Download className="w-4 h-4" />
+          </button>
+          
+          <button
+            onClick={() => {
+              setSelectedIds(new Set([invoice.id]));
+              setTimeout(() => whatsappSelected(), 0);
+            }}
+            className="p-2 text-gray-400 hover:text-green-600 hover:bg-green-50 rounded-lg transition-colors"
+            title="Send WhatsApp"
+          >
+            <MessageCircle className="w-4 h-4" />
+          </button>
+          
+          <button
             onClick={() => handleMoreOptions(invoice)}
+            className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
             title="More Options"
-            className="h-10 w-10 p-0 hover:bg-gray-50"
           >
-            <MoreHorizontal className="w-5 h-5 text-gray-600" />
-          </Button>
+            <MoreHorizontal className="w-4 h-4" />
+          </button>
         </div>
       ),
-      width: '180px',
+      width: '200px',
     },
   ];
 
@@ -488,16 +674,113 @@ const InvoiceListV2: React.FC<InvoiceListProps> = ({ onClose }) => {
         <div className="flex-1 overflow-y-auto">
           <div className="max-w-7xl mx-auto px-6 py-6">
             
-            {/* Global Inline Filter Panel */}
-            <div className="mb-6">
-              <InlineFilterPanel
-                filters={filterOptions}
-                onFilterChange={handleFilterChange}
-                searchQuery={searchQuery}
-                onSearchChange={handleSearchChange}
-                showFilters={showFilters}
-                onToggleFilters={setShowFilters}
-              />
+            {/* Enhanced Filter Bar */}
+            <div className="mb-6 border border-gray-200 rounded-lg bg-gray-50 p-4">
+              <div className="flex items-center space-x-4">
+                {/* Select All */}
+                <label className="inline-flex items-center space-x-2">
+                  <input
+                    type="checkbox"
+                    checked={isAllSelected}
+                    onChange={toggleSelectAll}
+                    className="w-4 h-4 rounded border-gray-300"
+                  />
+                  <span className="text-sm text-gray-600">Select All</span>
+                </label>
+
+                {/* Search */}
+                <div className="flex-1 relative">
+                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
+                  <input
+                    type="text"
+                    placeholder="Search by customer name, invoice number, or order number..."
+                    value={searchQuery}
+                    onChange={(e) => handleSearchChange(e.target.value)}
+                    className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
+                  />
+                </div>
+
+                {/* Status Filter */}
+                <div className="relative">
+                  <select
+                    value={filterStatus}
+                    onChange={(e) => handleStatusChange(e.target.value)}
+                    className="appearance-none pl-3 pr-8 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm bg-white"
+                  >
+                    <option value="all">Status: All</option>
+                    <option value="paid">Paid</option>
+                    <option value="pending">Pending</option>
+                    <option value="partial">Partial</option>
+                    <option value="cancelled">Cancelled</option>
+                  </select>
+                  <ChevronDown className="absolute right-2 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
+                </div>
+
+                {/* Date Filter */}
+                <div className="relative">
+                  <select
+                    value={dateFilter}
+                    onChange={(e) => handleDateChange(e.target.value)}
+                    className="appearance-none pl-3 pr-8 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm bg-white"
+                  >
+                    <option value="all">Last 30 days</option>
+                    <option value="7">Last 7 days</option>
+                    <option value="90">Last 90 days</option>
+                    <option value="365">Last year</option>
+                  </select>
+                  <Calendar className="absolute right-2 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
+                </div>
+
+                {/* Bulk Actions */}
+                {selectedCount > 0 ? (
+                  <div className="flex items-center space-x-2">
+                    <span className="text-sm text-gray-700 mr-1">Selected: {selectedCount}</span>
+                    <button 
+                      onClick={exportSelectedPDF} 
+                      className="px-3 py-2 bg-gray-800 text-white rounded-lg hover:bg-gray-700 text-sm flex items-center space-x-2"
+                    >
+                      <Download className="w-4 h-4" />
+                      <span>PDF</span>
+                    </button>
+                    <button 
+                      onClick={printSelected} 
+                      className="px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm flex items-center space-x-1"
+                    >
+                      <Printer className="w-4 h-4" />
+                      <span>Print</span>
+                    </button>
+                    <button 
+                      onClick={whatsappSelected} 
+                      className="px-3 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 text-sm flex items-center space-x-1"
+                    >
+                      <MessageCircle className="w-4 h-4" />
+                      <span>WhatsApp</span>
+                    </button>
+                  </div>
+                ) : (
+                  <button 
+                    onClick={exportSelectedPDF}
+                    className="px-4 py-2 bg-gray-800 text-white rounded-lg hover:bg-gray-700 transition-colors text-sm flex items-center space-x-2"
+                  >
+                    <Download className="w-4 h-4" />
+                    <span>Export PDF</span>
+                  </button>
+                )}
+              </div>
+              
+              {/* Summary Stats */}
+              <div className="flex items-center justify-end gap-4 text-sm mt-2 pt-2 border-t border-gray-200">
+                <div>
+                  <span className="text-gray-500">Total:</span>
+                  <span className="ml-1 font-semibold">
+                    {formatCurrency(filteredInvoices.reduce((sum, inv) => sum + (inv.final_amount || 0), 0))}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-gray-500">Count:</span>
+                  <span className="ml-1 font-semibold">{filteredInvoices.length}</span>
+                </div>
+              </div>
             </div>
 
             {/* Error Display */}
@@ -527,7 +810,7 @@ const InvoiceListV2: React.FC<InvoiceListProps> = ({ onClose }) => {
                   <p className="text-gray-600">Loading invoices...</p>
                 </div>
               </div>
-            ) : invoices.length === 0 ? (
+            ) : filteredInvoices.length === 0 ? (
               <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-8">
                 <div className="text-center">
                   <FileText className="w-12 h-12 mx-auto mb-3 text-gray-300" />
@@ -556,7 +839,7 @@ const InvoiceListV2: React.FC<InvoiceListProps> = ({ onClose }) => {
               /* Invoice Table */
               <div className="bg-white rounded-lg shadow-sm border border-gray-200">
                 <DataTable
-                  data={invoices}
+                  data={filteredInvoices}
                   columns={columns}
                   keyField="id"
                   searchable={false}
@@ -568,7 +851,7 @@ const InvoiceListV2: React.FC<InvoiceListProps> = ({ onClose }) => {
                 {pagination.total_pages > 1 && (
                   <div className="flex items-center justify-between px-6 py-4 border-t border-gray-200">
                     <div className="text-sm text-gray-600">
-                      Showing {invoices.length} of {pagination.total} invoices
+                      Showing {filteredInvoices.length} of {pagination.total} invoices
                     </div>
                     <div className="flex items-center space-x-2">
                       <Button

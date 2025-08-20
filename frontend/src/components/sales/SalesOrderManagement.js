@@ -1,16 +1,20 @@
 import React, { useState, useEffect } from 'react';
 import { 
   FileText, Package, Truck, Search, Filter, 
-  MoreVertical, Eye, Edit, CheckCircle, XCircle 
+  MoreVertical, Eye, Edit, CheckCircle, XCircle,
+  Download, Printer, Calendar, ChevronDown, MessageCircle
 } from 'lucide-react';
 import { salesOrdersAPI } from '../../services/api';
 import ConvertToInvoiceButton from './components/ConvertToInvoiceButton';
+import jsPDF from 'jspdf';
 
 const SalesOrderManagement = () => {
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [filterStatus, setFilterStatus] = useState('all');
+  const [dateFilter, setDateFilter] = useState('all');
+  const [selectedIds, setSelectedIds] = useState(new Set());
 
   useEffect(() => {
     loadOrders();
@@ -79,16 +83,157 @@ const SalesOrderManagement = () => {
     return badges;
   };
 
+  // Filter and multi-select functionality
   const filteredOrders = orders.filter(order => {
-    if (searchQuery) {
-      const query = searchQuery.toLowerCase();
-      return (
-        order.order_number?.toLowerCase().includes(query) ||
-        order.customer_name?.toLowerCase().includes(query)
-      );
+    const searchMatch = searchQuery === '' || 
+      order.customer_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      order.order_number?.toLowerCase().includes(searchQuery.toLowerCase());
+    
+    const statusMatch = filterStatus === 'all' || 
+      order.order_status?.toLowerCase() === filterStatus.toLowerCase();
+    
+    const orderDate = new Date(order.order_date);
+    const now = new Date();
+    let dateMatch = true;
+    if (dateFilter !== 'all') {
+      const daysAgo = parseInt(dateFilter);
+      const cutoffDate = new Date(now.getTime() - (daysAgo * 24 * 60 * 60 * 1000));
+      dateMatch = orderDate >= cutoffDate;
     }
-    return true;
+    
+    return searchMatch && statusMatch && dateMatch;
   });
+
+  const isAllSelected = filteredOrders.length > 0 && filteredOrders.every(order => selectedIds.has(order.order_id));
+  const selectedCount = Array.from(selectedIds).filter(id => filteredOrders.some(f => f.order_id === id)).length;
+
+  const toggleSelect = (id) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+
+  const toggleSelectAll = () => {
+    if (isAllSelected) {
+      setSelectedIds(prev => {
+        const next = new Set(prev);
+        filteredOrders.forEach(order => next.delete(order.order_id));
+        return next;
+      });
+    } else {
+      setSelectedIds(prev => {
+        const next = new Set(prev);
+        filteredOrders.forEach(order => next.add(order.order_id));
+        return next;
+      });
+    }
+  };
+
+  const formatCurrency = (amount) => {
+    return new Intl.NumberFormat('en-IN', {
+      style: 'currency',
+      currency: 'INR'
+    }).format(amount);
+  };
+
+  const formatDate = (date) => {
+    return new Date(date).toLocaleDateString('en-IN', {
+      day: 'numeric',
+      month: 'short',
+      year: 'numeric'
+    });
+  };
+
+  const exportSelectedPDF = () => {
+    const itemsToExport = filteredOrders.filter(order => selectedIds.has(order.order_id));
+    if (itemsToExport.length === 0) return;
+
+    try {
+      // Try to use jspdf-autotable if available
+      const autoTable = require('jspdf-autotable');
+      
+      const doc = new jsPDF();
+      doc.setFontSize(16);
+      doc.text('Sales Orders Report', 20, 20);
+      
+      const tableData = itemsToExport.map(order => [
+        order.order_number || `ORD-${order.order_id}`,
+        formatDate(order.order_date),
+        order.customer_name || 'N/A',
+        formatCurrency(order.final_amount || order.total_amount || 0),
+        order.order_status || 'pending'
+      ]);
+
+      doc.autoTable({
+        head: [['Order #', 'Date', 'Customer', 'Amount', 'Status']],
+        body: tableData,
+        startY: 30,
+        styles: { fontSize: 10 },
+        headStyles: { fillColor: [59, 130, 246] }
+      });
+
+      doc.save('sales-orders-export.pdf');
+    } catch (error) {
+      // Fallback to simple PDF
+      console.warn('jspdf-autotable not available, using simple PDF export');
+      
+      const doc = new jsPDF();
+      doc.setFontSize(16);
+      doc.text('Sales Orders Report', 20, 20);
+      
+      let yPos = 40;
+      doc.setFontSize(10);
+      doc.text('Order # | Date | Customer | Amount | Status', 20, yPos);
+      yPos += 10;
+      
+      itemsToExport.forEach(order => {
+        const rowText = `${order.order_number || `ORD-${order.order_id}`} | ${formatDate(order.order_date)} | ${order.customer_name || 'N/A'} | ${formatCurrency(order.final_amount || order.total_amount || 0)} | ${order.order_status || 'pending'}`;
+        doc.text(rowText, 20, yPos);
+        yPos += 8;
+        
+        if (yPos > 270) {
+          doc.addPage();
+          yPos = 20;
+        }
+      });
+      
+      doc.save('sales-orders-export.pdf');
+    }
+  };
+
+  const printSelected = () => {
+    const itemsToPrint = filteredOrders.filter(order => selectedIds.has(order.order_id));
+    const html = `<!DOCTYPE html><html><head><title>Print Sales Orders</title>
+      <style>body{font-family:Arial,sans-serif;padding:24px;} table{width:100%;border-collapse:collapse;} th,td{padding:8px;border-bottom:1px solid #ddd;text-align:left;} th{background:#f5f5f5;}</style>
+      </head><body>
+      <h2>Sales Orders Report</h2>
+      <table><thead><tr><th>Order #</th><th>Date</th><th>Customer</th><th>Amount</th><th>Status</th></tr></thead>
+      <tbody>
+      ${itemsToPrint.map(order => `<tr><td>${order.order_number || `ORD-${order.order_id}`}</td><td>${formatDate(order.order_date)}</td><td>${order.customer_name || 'N/A'}</td><td>${formatCurrency(order.final_amount || order.total_amount || 0)}</td><td>${order.order_status || 'pending'}</td></tr>`).join('')}
+      </tbody></table>
+      </body></html>`;
+    const w = window.open('', '_blank');
+    if (!w) return;
+    w.document.write(html);
+    w.document.close();
+    w.focus();
+    w.print();
+  };
+
+  const whatsappSelected = () => {
+    const itemsToSend = filteredOrders.filter(order => selectedIds.has(order.order_id));
+    if (itemsToSend.length === 0) return;
+    
+    const message = encodeURIComponent(
+      `Sales Orders Report:\n\n${itemsToSend.map(order => 
+        `${order.order_number || `ORD-${order.order_id}`} - ${formatDate(order.order_date)} - ${order.customer_name} - ${formatCurrency(order.final_amount || order.total_amount || 0)} (${order.order_status})`
+      ).join('\n')}`
+    );
+    
+    window.open(`https://wa.me/?text=${message}`, '_blank');
+  };
 
   if (loading) {
     return <div className="p-8 text-center">Loading sales orders...</div>;
@@ -101,31 +246,98 @@ const SalesOrderManagement = () => {
         <p className="text-gray-600">Convert sales orders to invoices or delivery challans</p>
       </div>
 
-      {/* Filters */}
-      <div className="mb-6 flex gap-4">
-        <div className="flex-1">
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
+      {/* Enhanced Filter Bar */}
+      <div className="mb-6 border border-gray-200 rounded-lg bg-gray-50 p-4">
+        <div className="flex items-center space-x-4">
+          {/* Select All */}
+          <label className="inline-flex items-center space-x-2">
+            <input
+              type="checkbox"
+              checked={isAllSelected}
+              onChange={toggleSelectAll}
+              className="w-4 h-4 rounded border-gray-300"
+            />
+            <span className="text-sm text-gray-600">Select All</span>
+          </label>
+
+          {/* Search */}
+          <div className="flex-1 relative">
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
             <input
               type="text"
               placeholder="Search orders..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-10 pr-4 py-2 w-full border rounded-lg"
+              className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
             />
           </div>
+
+          {/* Status Filter */}
+          <div className="relative">
+            <select
+              value={filterStatus}
+              onChange={(e) => setFilterStatus(e.target.value)}
+              className="appearance-none pl-3 pr-8 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm bg-white"
+            >
+              <option value="all">Status: All</option>
+              <option value="pending">Pending</option>
+              <option value="approved">Approved</option>
+              <option value="completed">Completed</option>
+            </select>
+            <ChevronDown className="absolute right-2 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
+          </div>
+
+          {/* Date Filter */}
+          <div className="relative">
+            <select
+              value={dateFilter}
+              onChange={(e) => setDateFilter(e.target.value)}
+              className="appearance-none pl-3 pr-8 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm bg-white"
+            >
+              <option value="all">Last 30 days</option>
+              <option value="7">Last 7 days</option>
+              <option value="90">Last 90 days</option>
+              <option value="365">Last year</option>
+            </select>
+            <Calendar className="absolute right-2 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
+          </div>
+
+          {/* Bulk Actions */}
+          {selectedCount > 0 ? (
+            <div className="flex items-center space-x-2">
+              <span className="text-sm text-gray-700 mr-1">Selected: {selectedCount}</span>
+              <button 
+                onClick={exportSelectedPDF} 
+                className="px-3 py-2 bg-gray-800 text-white rounded-lg hover:bg-gray-700 text-sm flex items-center space-x-2"
+              >
+                <Download className="w-4 h-4" />
+                <span>PDF</span>
+              </button>
+              <button 
+                onClick={printSelected} 
+                className="px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm flex items-center space-x-1"
+              >
+                <Printer className="w-4 h-4" />
+                <span>Print</span>
+              </button>
+              <button 
+                onClick={whatsappSelected} 
+                className="px-3 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 text-sm flex items-center space-x-1"
+              >
+                <MessageCircle className="w-4 h-4" />
+                <span>WhatsApp</span>
+              </button>
+            </div>
+          ) : (
+            <button 
+              onClick={exportSelectedPDF}
+              className="px-4 py-2 bg-gray-800 text-white rounded-lg hover:bg-gray-700 transition-colors text-sm flex items-center space-x-2"
+            >
+              <Download className="w-4 h-4" />
+              <span>Export PDF</span>
+            </button>
+          )}
         </div>
-        
-        <select
-          value={filterStatus}
-          onChange={(e) => setFilterStatus(e.target.value)}
-          className="px-4 py-2 border rounded-lg"
-        >
-          <option value="all">All Orders</option>
-          <option value="pending">Pending</option>
-          <option value="approved">Approved</option>
-          <option value="completed">Completed</option>
-        </select>
       </div>
 
       {/* Orders Table */}
@@ -133,6 +345,14 @@ const SalesOrderManagement = () => {
         <table className="w-full">
           <thead className="bg-gray-50">
             <tr>
+              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase w-12">
+                <input
+                  type="checkbox"
+                  checked={isAllSelected}
+                  onChange={toggleSelectAll}
+                  className="w-4 h-4 rounded border-gray-300"
+                />
+              </th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Order #</th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Date</th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Customer</th>
@@ -143,20 +363,28 @@ const SalesOrderManagement = () => {
           </thead>
           <tbody className="divide-y divide-gray-200">
             {filteredOrders.map((order) => (
-              <tr key={order.order_id} className="hover:bg-gray-50">
+              <tr key={order.order_id} className={`hover:bg-gray-50 ${selectedIds.has(order.order_id) ? 'bg-blue-50' : ''}`}>
+                <td className="px-4 py-4 whitespace-nowrap">
+                  <input
+                    type="checkbox"
+                    checked={selectedIds.has(order.order_id)}
+                    onChange={() => toggleSelect(order.order_id)}
+                    className="w-4 h-4 rounded border-gray-300"
+                  />
+                </td>
                 <td className="px-6 py-4 whitespace-nowrap">
                   <div className="text-sm font-medium text-gray-900">
                     {order.order_number || `ORD-${order.order_id}`}
                   </div>
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                  {new Date(order.order_date).toLocaleDateString()}
+                  {formatDate(order.order_date)}
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap">
                   <div className="text-sm text-gray-900">{order.customer_name}</div>
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                  ₹{order.final_amount || order.total_amount || 0}
+                  {formatCurrency(order.final_amount || order.total_amount || 0)}
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap">
                   <div className="flex gap-2">
@@ -168,10 +396,34 @@ const SalesOrderManagement = () => {
                     {/* View Button */}
                     <button
                       onClick={() => {/* TODO: Navigate to order view */}}
-                      className="text-gray-600 hover:text-gray-900"
+                      className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
                       title="View Order"
                     >
                       <Eye className="w-4 h-4" />
+                    </button>
+                    
+                    {/* Print Button */}
+                    <button
+                      onClick={() => {
+                        setSelectedIds(new Set([order.order_id]));
+                        setTimeout(() => printSelected(), 0);
+                      }}
+                      className="p-2 text-gray-400 hover:text-green-600 hover:bg-green-50 rounded-lg transition-colors"
+                      title="Print"
+                    >
+                      <Printer className="w-4 h-4" />
+                    </button>
+
+                    {/* Download Button */}
+                    <button
+                      onClick={() => {
+                        setSelectedIds(new Set([order.order_id]));
+                        setTimeout(() => exportSelectedPDF(), 0);
+                      }}
+                      className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+                      title="Download PDF"
+                    >
+                      <Download className="w-4 h-4" />
                     </button>
                     
                     {/* Convert to Invoice Button */}

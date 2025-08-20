@@ -2,11 +2,12 @@ import React, { useState, useEffect } from 'react';
 import { 
   FileText, Search, Filter, Calendar, Download, 
   Eye, Edit, Printer, MessageCircle, DollarSign,
-  CheckCircle, XCircle, Clock, AlertCircle
+  CheckCircle, XCircle, Clock, AlertCircle, ChevronDown
 } from 'lucide-react';
 import { invoicesApi } from '../../services/api';
 import { formatDate, formatCurrency } from '../../utils/formatters';
 import PaymentRecordingModal from './components/PaymentRecordingModal';
+import jsPDF from 'jspdf';
 
 const InvoiceManagement = () => {
   const [invoices, setInvoices] = useState([]);
@@ -19,6 +20,8 @@ const InvoiceManagement = () => {
   });
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [selectedInvoice, setSelectedInvoice] = useState(null);
+  const [selectedIds, setSelectedIds] = useState(new Set());
+  const [dateFilter, setDateFilter] = useState('all');
 
   useEffect(() => {
     loadInvoices();
@@ -160,16 +163,142 @@ const InvoiceManagement = () => {
   };
 
   const filteredInvoices = invoices.filter(invoice => {
-    if (searchQuery) {
-      const query = searchQuery.toLowerCase();
-      return (
-        invoice.invoice_number?.toLowerCase().includes(query) ||
-        invoice.customer_name?.toLowerCase().includes(query) ||
-        invoice.customer_phone?.includes(query)
-      );
+    const searchMatch = searchQuery === '' || 
+      invoice.invoice_number?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      invoice.customer_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      invoice.customer_phone?.includes(searchQuery);
+    
+    const statusMatch = filterStatus === 'all' || 
+      invoice.payment_status?.toLowerCase() === filterStatus.toLowerCase();
+
+    const invoiceDate = new Date(invoice.invoice_date);
+    const now = new Date();
+    let dateMatch = true;
+    if (dateFilter !== 'all') {
+      const daysAgo = parseInt(dateFilter);
+      const cutoffDate = new Date(now.getTime() - (daysAgo * 24 * 60 * 60 * 1000));
+      dateMatch = invoiceDate >= cutoffDate;
     }
-    return true;
+    
+    return searchMatch && statusMatch && dateMatch;
   });
+
+  // Multi-select functionality
+  const isAllSelected = filteredInvoices.length > 0 && filteredInvoices.every(invoice => selectedIds.has(invoice.invoice_id));
+  const selectedCount = Array.from(selectedIds).filter(id => filteredInvoices.some(f => f.invoice_id === id)).length;
+
+  const toggleSelect = (id) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+
+  const toggleSelectAll = () => {
+    if (isAllSelected) {
+      setSelectedIds(prev => {
+        const next = new Set(prev);
+        filteredInvoices.forEach(invoice => next.delete(invoice.invoice_id));
+        return next;
+      });
+    } else {
+      setSelectedIds(prev => {
+        const next = new Set(prev);
+        filteredInvoices.forEach(invoice => next.add(invoice.invoice_id));
+        return next;
+      });
+    }
+  };
+
+  const exportSelectedPDF = () => {
+    const itemsToExport = filteredInvoices.filter(invoice => selectedIds.has(invoice.invoice_id));
+    if (itemsToExport.length === 0) return;
+
+    try {
+      // Try to use jspdf-autotable if available
+      const autoTable = require('jspdf-autotable');
+      
+      const doc = new jsPDF();
+      doc.setFontSize(16);
+      doc.text('Invoices Report', 20, 20);
+      
+      const tableData = itemsToExport.map(invoice => [
+        invoice.invoice_number,
+        formatDate(invoice.invoice_date),
+        invoice.customer_name || 'N/A',
+        formatCurrency(invoice.final_amount || 0),
+        invoice.payment_status || 'pending'
+      ]);
+
+      doc.autoTable({
+        head: [['Invoice #', 'Date', 'Customer', 'Amount', 'Status']],
+        body: tableData,
+        startY: 30,
+        styles: { fontSize: 10 },
+        headStyles: { fillColor: [59, 130, 246] }
+      });
+
+      doc.save('invoices-export.pdf');
+    } catch (error) {
+      // Fallback to simple PDF
+      console.warn('jspdf-autotable not available, using simple PDF export');
+      
+      const doc = new jsPDF();
+      doc.setFontSize(16);
+      doc.text('Invoices Report', 20, 20);
+      
+      let yPos = 40;
+      doc.setFontSize(10);
+      doc.text('Invoice # | Date | Customer | Amount | Status', 20, yPos);
+      yPos += 10;
+      
+      itemsToExport.forEach(invoice => {
+        const rowText = `${invoice.invoice_number} | ${formatDate(invoice.invoice_date)} | ${invoice.customer_name || 'N/A'} | ${formatCurrency(invoice.final_amount || 0)} | ${invoice.payment_status || 'pending'}`;
+        doc.text(rowText, 20, yPos);
+        yPos += 8;
+        
+        if (yPos > 270) {
+          doc.addPage();
+          yPos = 20;
+        }
+      });
+      
+      doc.save('invoices-export.pdf');
+    }
+  };
+
+  const printSelected = () => {
+    const itemsToPrint = filteredInvoices.filter(invoice => selectedIds.has(invoice.invoice_id));
+    const html = `<!DOCTYPE html><html><head><title>Print Invoices</title>
+      <style>body{font-family:Arial,sans-serif;padding:24px;} table{width:100%;border-collapse:collapse;} th,td{padding:8px;border-bottom:1px solid #ddd;text-align:left;} th{background:#f5f5f5;}</style>
+      </head><body>
+      <h2>Invoices Report</h2>
+      <table><thead><tr><th>Invoice #</th><th>Date</th><th>Customer</th><th>Amount</th><th>Status</th></tr></thead>
+      <tbody>
+      ${itemsToPrint.map(invoice => `<tr><td>${invoice.invoice_number}</td><td>${formatDate(invoice.invoice_date)}</td><td>${invoice.customer_name || 'N/A'}</td><td>${formatCurrency(invoice.final_amount || 0)}</td><td>${invoice.payment_status || 'pending'}</td></tr>`).join('')}
+      </tbody></table>
+      </body></html>`;
+    const w = window.open('', '_blank');
+    if (!w) return;
+    w.document.write(html);
+    w.document.close();
+    w.focus();
+    w.print();
+  };
+
+  const whatsappSelected = () => {
+    const itemsToSend = filteredInvoices.filter(invoice => selectedIds.has(invoice.invoice_id));
+    if (itemsToSend.length === 0) return;
+    
+    const message = encodeURIComponent(
+      `Invoices Report:\n\n${itemsToSend.map(invoice => 
+        `${invoice.invoice_number} - ${formatDate(invoice.invoice_date)} - ${invoice.customer_name} - ${formatCurrency(invoice.final_amount || 0)} (${invoice.payment_status})`
+      ).join('\n')}`
+    );
+    
+    window.open(`https://wa.me/?text=${message}`, '_blank');
+  };
 
   if (loading) {
     return <div className="p-8 text-center">Loading invoices...</div>;
@@ -183,51 +312,102 @@ const InvoiceManagement = () => {
         <p className="text-gray-600">View and manage all sales invoices</p>
       </div>
 
-      {/* Filters */}
-      <div className="mb-6 grid grid-cols-1 md:grid-cols-4 gap-4">
-        {/* Search */}
-        <div className="relative">
-          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
-          <input
-            type="text"
-            placeholder="Search invoices..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="pl-10 pr-4 py-2 w-full border rounded-lg"
-          />
+      {/* Enhanced Filter Bar */}
+      <div className="mb-6 border border-gray-200 rounded-lg bg-gray-50 p-4">
+        <div className="flex items-center space-x-4">
+          {/* Select All */}
+          <label className="inline-flex items-center space-x-2">
+            <input
+              type="checkbox"
+              checked={isAllSelected}
+              onChange={toggleSelectAll}
+              className="w-4 h-4 rounded border-gray-300"
+            />
+            <span className="text-sm text-gray-600">Select All</span>
+          </label>
+
+          {/* Search */}
+          <div className="flex-1 relative">
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
+            <input
+              type="text"
+              placeholder="Search invoices..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
+            />
+          </div>
+
+          {/* Status Filter */}
+          <div className="relative">
+            <select
+              value={filterStatus}
+              onChange={(e) => setFilterStatus(e.target.value)}
+              className="appearance-none pl-3 pr-8 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm bg-white"
+            >
+              <option value="all">Status: All</option>
+              <option value="paid">Paid</option>
+              <option value="pending">Pending</option>
+              <option value="partial">Partial</option>
+              <option value="cancelled">Cancelled</option>
+            </select>
+            <ChevronDown className="absolute right-2 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
+          </div>
+
+          {/* Date Filter */}
+          <div className="relative">
+            <select
+              value={dateFilter}
+              onChange={(e) => setDateFilter(e.target.value)}
+              className="appearance-none pl-3 pr-8 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm bg-white"
+            >
+              <option value="all">Last 30 days</option>
+              <option value="7">Last 7 days</option>
+              <option value="90">Last 90 days</option>
+              <option value="365">Last year</option>
+            </select>
+            <Calendar className="absolute right-2 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
+          </div>
+
+          {/* Bulk Actions */}
+          {selectedCount > 0 ? (
+            <div className="flex items-center space-x-2">
+              <span className="text-sm text-gray-700 mr-1">Selected: {selectedCount}</span>
+              <button 
+                onClick={exportSelectedPDF} 
+                className="px-3 py-2 bg-gray-800 text-white rounded-lg hover:bg-gray-700 text-sm flex items-center space-x-2"
+              >
+                <Download className="w-4 h-4" />
+                <span>PDF</span>
+              </button>
+              <button 
+                onClick={printSelected} 
+                className="px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm flex items-center space-x-1"
+              >
+                <Printer className="w-4 h-4" />
+                <span>Print</span>
+              </button>
+              <button 
+                onClick={whatsappSelected} 
+                className="px-3 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 text-sm flex items-center space-x-1"
+              >
+                <MessageCircle className="w-4 h-4" />
+                <span>WhatsApp</span>
+              </button>
+            </div>
+          ) : (
+            <button 
+              onClick={exportSelectedPDF}
+              className="px-4 py-2 bg-gray-800 text-white rounded-lg hover:bg-gray-700 transition-colors text-sm flex items-center space-x-2"
+            >
+              <Download className="w-4 h-4" />
+              <span>Export PDF</span>
+            </button>
+          )}
         </div>
-        
-        {/* Date Range */}
-        <div className="flex gap-2">
-          <input
-            type="date"
-            value={dateRange.from}
-            onChange={(e) => setDateRange(prev => ({ ...prev, from: e.target.value }))}
-            className="px-3 py-2 border rounded-lg flex-1"
-          />
-          <input
-            type="date"
-            value={dateRange.to}
-            onChange={(e) => setDateRange(prev => ({ ...prev, to: e.target.value }))}
-            className="px-3 py-2 border rounded-lg flex-1"
-          />
-        </div>
-        
-        {/* Status Filter */}
-        <select
-          value={filterStatus}
-          onChange={(e) => setFilterStatus(e.target.value)}
-          className="px-4 py-2 border rounded-lg"
-        >
-          <option value="all">All Status</option>
-          <option value="paid">Paid</option>
-          <option value="pending">Pending</option>
-          <option value="partial">Partial</option>
-          <option value="cancelled">Cancelled</option>
-        </select>
         
         {/* Summary Stats */}
-        <div className="flex items-center justify-end gap-4 text-sm">
+        <div className="flex items-center justify-end gap-4 text-sm mt-2 pt-2 border-t border-gray-200">
           <div>
             <span className="text-gray-500">Total:</span>
             <span className="ml-1 font-semibold">
@@ -246,18 +426,33 @@ const InvoiceManagement = () => {
         <table className="w-full">
           <thead className="bg-gray-50">
             <tr>
+              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase w-12">
+                <input
+                  type="checkbox"
+                  checked={isAllSelected}
+                  onChange={toggleSelectAll}
+                  className="w-4 h-4 rounded border-gray-300"
+                />
+              </th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Invoice #</th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Date</th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Customer</th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Amount</th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Links</th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-200">
             {filteredInvoices.map((invoice) => (
-              <tr key={invoice.invoice_id} className="hover:bg-gray-50">
+              <tr key={invoice.invoice_id} className={`hover:bg-gray-50 ${selectedIds.has(invoice.invoice_id) ? 'bg-blue-50' : ''}`}>
+                <td className="px-4 py-4 whitespace-nowrap">
+                  <input
+                    type="checkbox"
+                    checked={selectedIds.has(invoice.invoice_id)}
+                    onChange={() => toggleSelect(invoice.invoice_id)}
+                    className="w-4 h-4 rounded border-gray-300"
+                  />
+                </td>
                 <td className="px-6 py-4 whitespace-nowrap">
                   <div className="flex items-center gap-2">
                     <FileText className="w-4 h-4 text-gray-400" />
@@ -289,16 +484,16 @@ const InvoiceManagement = () => {
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap">
                   {getPaymentStatusBadge(invoice.payment_status)}
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap">
-                  {getDocumentLinks(invoice)}
+                  {getDocumentLinks(invoice) && (
+                    <div className="mt-1">{getDocumentLinks(invoice)}</div>
+                  )}
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap">
                   <div className="flex gap-1">
                     {/* View */}
                     <button
                       onClick={() => {/* TODO: Navigate to invoice view */}}
-                      className="p-1 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded"
+                      className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
                       title="View Invoice"
                     >
                       <Eye className="w-4 h-4" />
@@ -306,17 +501,32 @@ const InvoiceManagement = () => {
                     
                     {/* Print */}
                     <button
-                      onClick={() => handlePrint(invoice.invoice_id)}
-                      className="p-1 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded"
-                      title="Print Invoice"
+                      onClick={() => {
+                        setSelectedIds(new Set([invoice.invoice_id]));
+                        setTimeout(() => printSelected(), 0);
+                      }}
+                      className="p-2 text-gray-400 hover:text-green-600 hover:bg-green-50 rounded-lg transition-colors"
+                      title="Print"
                     >
                       <Printer className="w-4 h-4" />
+                    </button>
+
+                    {/* Download */}
+                    <button
+                      onClick={() => {
+                        setSelectedIds(new Set([invoice.invoice_id]));
+                        setTimeout(() => exportSelectedPDF(), 0);
+                      }}
+                      className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+                      title="Download PDF"
+                    >
+                      <Download className="w-4 h-4" />
                     </button>
                     
                     {/* WhatsApp */}
                     <button
                       onClick={() => handleWhatsApp(invoice)}
-                      className="p-1 text-green-600 hover:text-green-700 hover:bg-green-50 rounded"
+                      className="p-2 text-gray-400 hover:text-green-600 hover:bg-green-50 rounded-lg transition-colors"
                       title="Send WhatsApp"
                     >
                       <MessageCircle className="w-4 h-4" />
@@ -326,21 +536,10 @@ const InvoiceManagement = () => {
                     {invoice.payment_status !== 'paid' && invoice.payment_status !== 'cancelled' && (
                       <button
                         onClick={() => handleRecordPayment(invoice)}
-                        className="p-1 text-blue-600 hover:text-blue-700 hover:bg-blue-50 rounded"
+                        className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
                         title="Record Payment"
                       >
                         <DollarSign className="w-4 h-4" />
-                      </button>
-                    )}
-                    
-                    {/* Cancel */}
-                    {invoice.payment_status !== 'cancelled' && (
-                      <button
-                        onClick={() => handleCancelInvoice(invoice)}
-                        className="p-1 text-red-600 hover:text-red-700 hover:bg-red-50 rounded"
-                        title="Cancel Invoice"
-                      >
-                        <XCircle className="w-4 h-4" />
                       </button>
                     )}
                   </div>
