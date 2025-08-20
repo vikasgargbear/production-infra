@@ -20,7 +20,6 @@ export { default as PharmaItemsTable } from './PharmaItemsTable';
 // Modal Components
 export { default as BatchSelector } from './modals/BatchSelector';
 export { default as ProductCreationModal } from './modals/ProductCreationModal';
-export { default as CustomerCreationModal } from './modals/CustomerCreationModal';
 export { default as CustomerCreationB2B } from './ui/forms/CustomerCreationB2B';
 export { default as SupplierCreationModal } from './modals/SupplierCreationModal';
 

@@ -107,40 +107,17 @@ class EnterpriseChallanService:
         
         return f"DC{date_part}{next_seq:04d}"
     
-    def _ensure_system_user(self) -> int:
-        """Ensure we have a system user for created_by field"""
+    def _get_created_by_user(self) -> int:
+        """Get created_by user - same approach as invoices API"""
         try:
-            # Try to find existing system user
-            result = self.db.execute(
-                text("""
-                    SELECT user_id FROM master.org_users 
-                    WHERE org_id = :org_id 
-                    AND email = 'system@challan.auto'
-                    LIMIT 1
-                """),
+            user_result = self.db.execute(
+                text("SELECT user_id FROM master.org_users WHERE org_id = :org_id LIMIT 1"),
                 {"org_id": self.org_id}
             )
-            user = result.first()
-            if user:
-                return user.user_id
-            
-            # Create system user if none exists
-            result = self.db.execute(
-                text("""
-                    INSERT INTO master.org_users (
-                        org_id, email, username, is_active, created_at, updated_at
-                    ) VALUES (
-                        :org_id, 'system@challan.auto', 'system', true, 
-                        CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
-                    )
-                    RETURNING user_id
-                """),
-                {"org_id": self.org_id}
-            )
-            return result.scalar()
+            user = user_result.fetchone()
+            return user[0] if user else 1
         except Exception as e:
-            logger.warning(f"Could not create system user: {e}")
-            # Return a default user ID that might exist
+            logger.warning(f"Could not get user for created_by: {e}")
             return 1
     
     def create_challan(self, request: ChallanCreationRequest) -> Dict[str, Any]:
@@ -150,8 +127,8 @@ class EnterpriseChallanService:
             branch_id = 1  # Default branch_id
             customer_name = None
             
-            # Ensure we have a valid created_by user (create system user if needed)
-            created_by_user = self._ensure_system_user()
+            # Get created_by user - same approach as invoices
+            created_by_user = self._get_created_by_user()
             
             # If order_id is provided, validate and get order details
             if request.order_id:

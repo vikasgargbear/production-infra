@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Search, Save, Printer, Plus, X, Calendar, AlertCircle, ChevronRight, ChevronLeft, Package, User, CreditCard, FileText, CheckCircle, Truck, Loader2, RefreshCw } from 'lucide-react';
 import { customersApi, productsApi, ordersApi, orderItemsApi, batchesApi } from '../services/api';
+import CustomerCreationB2B from './global/ui/forms/CustomerCreationB2B';
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
 import { useToast } from './global/ui/feedback/Toast';
@@ -51,6 +52,7 @@ const BusinessSalesEntry = ({ open, onClose }) => {
   const [companyLogo, setCompanyLogo] = useState(localStorage.getItem('companyLogo') || null);
   const [showChallanModal, setShowChallanModal] = useState(false);
   const [availableChallans, setAvailableChallans] = useState([]);
+  const [showCustomerModal, setShowCustomerModal] = useState(false);
   
   const [searchQuery, setSearchQuery] = useState('');
   const [productSearchQuery, setProductSearchQuery] = useState('');

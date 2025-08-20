@@ -409,7 +409,6 @@ const CustomerMaster: React.FC = () => {
       {/* Create/Edit Modal */}
       {showCreateModal && (
         <CustomerCreationB2B
-          show={showCreateModal}
           onClose={() => {
             setShowCreateModal(false);
             setSelectedCustomer(null);

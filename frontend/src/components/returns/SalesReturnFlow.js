@@ -7,6 +7,7 @@ import {
   CustomerSearch, ProductSearchSimple, ItemsTable, ModuleHeader,
   DatePicker, Select, NumberInput, NotesSection, useToast, InvoiceSearch, ViewHistoryButton
 } from '../global';
+import CustomerCreationB2B from '../global/ui/forms/CustomerCreationB2B';
 import { returnsApi, invoicesApi, customersApi } from '../../services/api';
 // ReturnItemsTable moved to archive - use ItemsTable from global instead
 import ReturnSummary from './components/ReturnSummary';
@@ -52,6 +53,7 @@ const SalesReturnFlow = ({ onClose }) => {
   const [returnableInvoices, setReturnableInvoices] = useState([]);
   const [customerDues, setCustomerDues] = useState(0);
   const [returnReasons, setReturnReasons] = useState([]);
+  const [showCustomerModal, setShowCustomerModal] = useState(false);
 
   // Load return reasons from backend with offline caching
   useEffect(() => {
@@ -443,6 +445,7 @@ const SalesReturnFlow = ({ onClose }) => {
                       placeholder="Search customer by name, phone..."
                       className="w-full"
                       showCreateButton={true}
+                      onCreateNew={() => setShowCustomerModal(true)}
                     />
                   ) : (
                     <div className="bg-blue-50 rounded-lg p-4 flex justify-between items-start">
@@ -777,6 +780,18 @@ const SalesReturnFlow = ({ onClose }) => {
           buttonText=""
         />
       </div>
+
+      {/* Customer Creation Modal */}
+      {showCustomerModal && (
+        <CustomerCreationB2B
+          onClose={() => setShowCustomerModal(false)}
+          onCustomerCreated={(customer) => {
+            handleCustomerSelect(customer);
+            setShowCustomerModal(false);
+            toast.success('Customer created successfully');
+          }}
+        />
+      )}
     </div>
   );
 };

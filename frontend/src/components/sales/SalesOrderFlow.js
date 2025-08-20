@@ -8,7 +8,6 @@ import {
   CustomerSearch, 
   ProductSearchSimple, 
   ProductCreationModal,
-  CustomerCreationModal,
   ProceedToReviewComponent,
   ItemsTable,
   NotesSection,
