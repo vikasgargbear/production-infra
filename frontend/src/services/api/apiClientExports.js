@@ -382,30 +382,129 @@ export const paymentAPI = {
 
 export const challansAPI = {
   search: async (query, options = {}) => {
-    const response = await apiClient.get('/pg/challans/search', {
-      params: {
-        q: query,
-        customer_id: options.customerId,
-        limit: options.limit || 50,
-        offset: options.offset || 0,
-      },
-    });
-    return response.data;
+    try {
+      // Use the main delivery challan endpoint instead of pg wrapper
+      const response = await apiClient.get('/enterprise-delivery-challan/', {
+        params: {
+          limit: options.limit || 50,
+          offset: options.offset || 0,
+          search: query?.search || query || '',
+        },
+        timeout: 10000,
+      });
+      
+      // Handle different response structures
+      const challans = response.data?.data || response.data?.challans || response.data || [];
+      
+      return {
+        success: true,
+        data: Array.isArray(challans) ? challans : [],
+        total: response.data?.total || challans.length || 0
+      };
+    } catch (error) {
+      console.error('Challan search failed:', error);
+      return {
+        success: false,
+        data: [],
+        total: 0,
+        error: error.message
+      };
+    }
+  },
+
+  /**
+   * Get challan details
+   */
+  get: async (challanId) => {
+    try {
+      const response = await apiClient.get(`/enterprise-delivery-challan/${challanId}`);
+      return {
+        success: true,
+        data: response.data
+      };
+    } catch (error) {
+      console.error('Get challan failed:', error);
+      return {
+        success: false,
+        data: null,
+        error: error.message
+      };
+    }
+  },
+
+  /**
+   * Create new challan
+   */
+  create: async (challanData) => {
+    try {
+      const response = await apiClient.post('/enterprise-delivery-challan/', challanData);
+      return {
+        success: true,
+        data: response.data
+      };
+    } catch (error) {
+      console.error('Create challan failed:', error);
+      return {
+        success: false,
+        data: null,
+        error: error.message
+      };
+    }
+  },
+
+  /**
+   * Update challan
+   */
+  update: async (challanId, challanData) => {
+    try {
+      const response = await apiClient.put(`/enterprise-delivery-challan/${challanId}`, challanData);
+      return {
+        success: true,
+        data: response.data
+      };
+    } catch (error) {
+      console.error('Update challan failed:', error);
+      return {
+        success: false,
+        data: null,
+        error: error.message
+      };
+    }
   },
 };
 
 export const salesOrdersAPI = {
   search: async (query, options = {}) => {
-    const response = await apiClient.get('/pg/sales-orders/search', {
-      params: {
-        q: query,
-        customer_id: options.customerId,
-        status: options.status,
-        limit: options.limit || 50,
-        offset: options.offset || 0,
-      },
-    });
-    return response.data;
+    try {
+      // Use the main sales orders endpoint instead of pg wrapper
+      const response = await apiClient.get('/orders/', {
+        params: {
+          search: query?.search || query || '',
+          customer_id: options.customerId,
+          status: options.status,
+          limit: options.limit || 50,
+          offset: options.offset || 0,
+        },
+        timeout: 10000,
+      });
+
+      // Handle different response structures
+      const orders = response.data?.data || response.data?.orders || response.data || [];
+      
+      return {
+        success: true,
+        data: Array.isArray(orders) ? orders : [],
+        total: response.data?.total || orders.length || 0
+      };
+    } catch (error) {
+      console.error('Sales orders search failed:', error);
+      return {
+        success: false,
+        data: [],
+        total: 0,
+        error: error.message
+      };
+    }
   },
   
   getAll: async (params = {}) => {

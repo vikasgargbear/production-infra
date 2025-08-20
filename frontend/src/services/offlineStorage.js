@@ -245,6 +245,10 @@ class OfflineStorageService {
           return await this.syncBatchUpdate(operation.data);
         case 'invoice_create':
           return await this.syncInvoiceCreate(operation.data);
+        case 'CREATE_CUSTOMER':
+          return await this.syncCustomerCreate(operation.data);
+        case 'CREATE_SUPPLIER':
+          return await this.syncSupplierCreate(operation.data);
         default:
           console.warn('Unknown operation type:', operation.type);
           return false;
@@ -266,6 +270,36 @@ class OfflineStorageService {
       return response.success;
     } catch (error) {
       console.error('Error syncing stock adjustment:', error);
+      return false;
+    }
+  }
+
+  /**
+   * Sync customer creation
+   */
+  async syncCustomerCreate(data) {
+    try {
+      // Import the customers API dynamically to avoid circular dependencies
+      const { customersApi } = await import('./api');
+      const response = await customersApi.create(data);
+      return response.success;
+    } catch (error) {
+      console.error('Error syncing customer creation:', error);
+      return false;
+    }
+  }
+
+  /**
+   * Sync supplier creation
+   */
+  async syncSupplierCreate(data) {
+    try {
+      // Import the suppliers API dynamically to avoid circular dependencies
+      const { suppliersApi } = await import('./api');
+      const response = await suppliersApi.create(data);
+      return response.success;
+    } catch (error) {
+      console.error('Error syncing supplier creation:', error);
       return false;
     }
   }
