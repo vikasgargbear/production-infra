@@ -367,10 +367,10 @@ async def get_sales_order(
     try:
         # Get order with customer details - only sales orders
         result = db.execute(text("""
-            SELECT o.*, c.customer_name, c.customer_code, c.primary_primary_phone as customer_phone
+            SELECT o.*, c.customer_name, c.customer_code, c.primary_phone as customer_phone
             FROM sales.orders o
             JOIN parties.customers c ON o.customer_id = c.customer_id
-            WHERE o.order_id = :id AND o.org_id = :org_id AND o.order_type = 'sales'
+            WHERE o.order_id = :id AND o.org_id = :org_id AND o.order_type = 'regular'
         """), {"id": order_id, "org_id": DEFAULT_ORG_ID})
         
         order = result.fetchone()
