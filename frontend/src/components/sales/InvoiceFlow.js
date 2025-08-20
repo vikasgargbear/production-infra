@@ -325,14 +325,14 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
     };
   };
 
-  // Calculate totals when items change
+  // Calculate totals when items are added/removed (not on every field change)
   React.useEffect(() => {
     if (invoice.items && invoice.items.length > 0) {
       calculateInvoiceTotals(invoice.items);
     }
-  }, [invoice.items.length, invoice.items]);
+  }, [invoice.items.length]); // Only watch length, not individual item changes
 
-  // Update item field
+  // Update item field with debounced calculation
   const handleUpdateItem = (index, field, value) => {
     const updatedItems = invoice.items.map((item, i) => {
       if (i === index) {
@@ -343,7 +343,22 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
     });
     
     setInvoice(prev => ({ ...prev, items: updatedItems }));
-    calculateInvoiceTotals(updatedItems);
+    
+    // Use debounced calculation to prevent flickering
+    InvoiceCalculatorEnterprise.calculateDebounced(
+      { ...invoice, items: updatedItems },
+      (error, result) => {
+        if (!error && result.success) {
+          const formattedTotals = InvoiceCalculatorEnterprise.formatTotalsForDisplay(result.totals);
+          setInvoice(prev => ({
+            ...prev,
+            ...formattedTotals,
+            calculatedLineItems: result.line_items
+          }));
+        }
+      },
+      300 // 300ms delay to prevent rapid calls
+    );
   };
 
   const handleRemoveItem = (index) => {
