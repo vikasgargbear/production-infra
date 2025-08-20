@@ -23,20 +23,20 @@ router = APIRouter(tags=["enterprise-delivery-challan"])
 # =============================================
 
 class ChallanItemRequest(BaseModel):
-    order_item_id: int
+    order_item_id: Optional[int] = None  # Optional for direct challan creation
     product_id: int
     product_name: str
     batch_id: Optional[int] = None
     batch_number: Optional[str] = None
     expiry_date: Optional[date] = None
-    ordered_quantity: int
+    ordered_quantity: Optional[int] = None  # Optional for direct challan
     dispatched_quantity: int
     unit_price: Decimal = Field(ge=0)
     package_type: Optional[str] = None
     packages_count: Optional[int] = None
 
 class ChallanCreationRequest(BaseModel):
-    order_id: int
+    order_id: Optional[int] = None  # Made optional for direct challan creation
     customer_id: int
     dispatch_date: Optional[date] = None
     expected_delivery_date: Optional[date] = None
@@ -108,28 +108,45 @@ class EnterpriseChallanService:
         return f"DC{date_part}{next_seq:04d}"
     
     def create_challan(self, request: ChallanCreationRequest) -> Dict[str, Any]:
-        """Create new delivery challan"""
+        """Create new delivery challan - supports both order-based and direct creation"""
         try:
-            # Validate order exists WITH org_id
-            order_result = self.db.execute(
-                text("""
-                    SELECT o.*, c.customer_name 
-                    FROM sales.orders o
-                    JOIN parties.customers c ON o.customer_id = c.customer_id
-                    WHERE o.order_id = :order_id
-                    AND o.org_id = :org_id
-                """),
-                {"order_id": request.order_id, "org_id": self.org_id}
-            )
-            order = order_result.first()
-            if not order:
-                raise HTTPException(status_code=404, detail="Order not found")
+            order = None
+            branch_id = 1  # Default branch_id
+            customer_name = None
+            
+            # If order_id is provided, validate and get order details
+            if request.order_id:
+                order_result = self.db.execute(
+                    text("""
+                        SELECT o.*, c.customer_name 
+                        FROM sales.orders o
+                        JOIN parties.customers c ON o.customer_id = c.customer_id
+                        WHERE o.order_id = :order_id
+                        AND o.org_id = :org_id
+                    """),
+                    {"order_id": request.order_id, "org_id": self.org_id}
+                )
+                order = order_result.first()
+                if not order:
+                    raise HTTPException(status_code=404, detail="Order not found")
+                branch_id = order.branch_id if order.branch_id else 1
+                customer_name = order.customer_name
+            else:
+                # For direct challan creation, get customer details
+                customer_result = self.db.execute(
+                    text("""
+                        SELECT customer_name 
+                        FROM parties.customers 
+                        WHERE customer_id = :customer_id
+                    """),
+                    {"customer_id": request.customer_id}
+                )
+                customer = customer_result.first()
+                if customer:
+                    customer_name = customer.customer_name
             
             # Generate challan number
             challan_number = self._generate_challan_number()
-            
-            # Get branch_id from order or use default
-            branch_id = order.branch_id if order.branch_id else 1  # Default branch_id = 1
             
             # Create challan record WITH org_id and branch_id
             challan_result = self.db.execute(
@@ -171,35 +188,37 @@ class EnterpriseChallanService:
             )
             challan_id = challan_result.scalar()
             
-            # Check if this order already has order_items
-            existing_order_items = self.db.execute(
-                text("""
-                    SELECT order_item_id, product_id, quantity
-                    FROM sales.order_items
-                    WHERE order_id = :order_id
-                """),
-                {"order_id": request.order_id}
-            ).fetchall()
-            
-            # Create a map of existing order items by product_id
-            existing_items_map = {item.product_id: item for item in existing_order_items}
+            # Handle order items based on whether this is order-based or direct challan
+            existing_items_map = {}
+            if request.order_id:
+                # Check if this order already has order_items
+                existing_order_items = self.db.execute(
+                    text("""
+                        SELECT order_item_id, product_id, quantity
+                        FROM sales.order_items
+                        WHERE order_id = :order_id
+                    """),
+                    {"order_id": request.order_id}
+                ).fetchall()
+                
+                # Create a map of existing order items by product_id
+                existing_items_map = {item.product_id: item for item in existing_order_items}
             
             # Create challan items
             for idx, item in enumerate(request.items):
-                # Check if order_item exists for this product
-                existing_order_item = existing_items_map.get(item.product_id)
+                order_item_id = None
                 
-                if existing_order_item:
-                    # Use existing order_item_id
-                    order_item_id = existing_order_item.order_item_id
-                else:
-                    # For items not in the original order, we need to handle differently
-                    # This shouldn't happen in normal flow
-                    logger.warning(f"Product {item.product_id} not found in order {request.order_id}")
-                    # Skip this item or handle as needed
-                    continue
+                # For order-based challans, try to link to order items
+                if request.order_id and item.order_item_id:
+                    order_item_id = item.order_item_id
+                elif request.order_id:
+                    # Check if order_item exists for this product
+                    existing_order_item = existing_items_map.get(item.product_id)
+                    if existing_order_item:
+                        order_item_id = existing_order_item.order_item_id
                 
-                pending_qty = item.ordered_quantity - item.dispatched_quantity
+                # For direct challans or items not in order, order_item_id will be NULL
+                pending_qty = item.ordered_quantity - item.dispatched_quantity if item.ordered_quantity else 0
                 
                 self.db.execute(
                     text("""
@@ -219,13 +238,13 @@ class EnterpriseChallanService:
                     """),
                     {
                         "challan_id": challan_id,
-                        "order_item_id": order_item_id,  # Use the found order_item_id
+                        "order_item_id": order_item_id,  # Can be NULL for direct challans
                         "product_id": item.product_id,
                         "product_name": item.product_name,
                         "batch_id": item.batch_id,
                         "batch_number": item.batch_number,
                         "expiry_date": item.expiry_date,
-                        "ordered_quantity": item.ordered_quantity,
+                        "ordered_quantity": item.ordered_quantity or item.dispatched_quantity,
                         "dispatched_quantity": item.dispatched_quantity,
                         "pending_quantity": pending_qty,
                         "unit_price": item.unit_price,
