@@ -29,7 +29,8 @@ const ItemsTable = ({
   // DISPLAY ONLY: Use pre-calculated values from API
   const getItemTotal = (item) => {
     // Priority: Use API-calculated values if available
-    if (item.line_total !== undefined) return item.line_total;
+    if (item.calculated_total !== undefined) return item.calculated_total; // Sales order calculation
+    if (item.line_total !== undefined) return item.line_total; // Invoice calculation
     if (item.total_amount !== undefined) return item.total_amount;
     if (item.itemTotal !== undefined) return item.itemTotal;
     
@@ -37,7 +38,7 @@ const ItemsTable = ({
     // base_quantity = what customer pays for (billable)
     // free_quantity = additional free items given with base quantity  
     // total_quantity = base_quantity + free_quantity (what customer receives)
-    const baseQuantity = parseFloat(item.base_quantity) || 0;  // What customer pays for
+    const baseQuantity = parseFloat(item.base_quantity || item.quantity) || 0;  // What customer pays for
     const rate = parseFloat(item.rate || item.sale_price || item.unit_price) || 0;
     const discount = parseFloat(item.discount || item.discount_percent) || 0;
     const tax = parseFloat(item.tax || item.tax_rate || item.gst_percent) || 0;

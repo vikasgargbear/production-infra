@@ -8,7 +8,10 @@ import {
 import { customerAPI, productAPI, invoiceAPI, ordersAPI, salesOrdersAPI, apiClient } from '../../services/api';
 import { searchCache, smartSearch } from '../../utils/searchCache';
 // MIGRATED: Using enterprise API-only calculations
+// MIGRATED: Use new enterprise calculation architecture  
 import InvoiceCalculatorEnterprise from '../../services/invoiceCalculatorEnterprise';
+import EnterpriseInvoiceCalculator from '../../services/enterpriseInvoiceCalculator';
+import { useInvoiceCalculation } from '../../hooks/useInvoiceCalculation';
 import InvoiceValidator from '../../services/invoiceValidator';
 import DataTransformer from '../../services/dataTransformer';
 import DateFormatter from '../../services/dateFormatter';

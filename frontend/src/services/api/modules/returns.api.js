@@ -63,14 +63,10 @@ export const returnsApi = {
     return apiClient.post(endpoint, data);
   },
 
-  // Get return reasons
-  getReturnReasons: async () => {
-    return apiClient.get(`${ENDPOINTS.RETURNS.BASE}/reasons`);
-  },
 
   // Get returnable items for a document
   getReturnableItems: async (documentType, documentId) => {
-    return apiClient.get(`${ENDPOINTS.RETURNS.BASE}/returnable`, {
+    return apiClient.get(ENDPOINTS.RETURNS.RETURNABLE_ITEMS, {
       params: { document_type: documentType, document_id: documentId }
     });
   },

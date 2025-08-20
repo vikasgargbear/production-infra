@@ -208,34 +208,6 @@ const BatchTracking = ({ open = true, onClose }) => {
     await loadBatchMovements(batch.batch_id);
   };
 
-  // Multi-select functionality
-  const isAllSelected = filteredBatches.length > 0 && filteredBatches.every(item => selectedIds.has(item.batch_id || item.id));
-  const selectedCount = Array.from(selectedIds).filter(id => filteredBatches.some(f => (f.batch_id || f.id) === id)).length;
-
-  const toggleSelect = (id) => {
-    setSelectedIds(prev => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id); else next.add(id);
-      return next;
-    });
-  };
-
-  const toggleSelectAll = () => {
-    if (isAllSelected) {
-      setSelectedIds(prev => {
-        const next = new Set(prev);
-        filteredBatches.forEach(item => next.delete(item.batch_id || item.id));
-        return next;
-      });
-    } else {
-      setSelectedIds(prev => {
-        const next = new Set(prev);
-        filteredBatches.forEach(item => next.add(item.batch_id || item.id));
-        return next;
-      });
-    }
-  };
-
   // Filter batches
   const filteredBatches = batches.filter(batch => {
     // Search filter
@@ -266,6 +238,34 @@ const BatchTracking = ({ open = true, onClose }) => {
 
     return true;
   });
+
+  // Multi-select functionality
+  const isAllSelected = filteredBatches.length > 0 && filteredBatches.every(item => selectedIds.has(item.batch_id || item.id));
+  const selectedCount = Array.from(selectedIds).filter(id => filteredBatches.some(f => (f.batch_id || f.id) === id)).length;
+
+  const toggleSelect = (id) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+
+  const toggleSelectAll = () => {
+    if (isAllSelected) {
+      setSelectedIds(prev => {
+        const next = new Set(prev);
+        filteredBatches.forEach(item => next.delete(item.batch_id || item.id));
+        return next;
+      });
+    } else {
+      setSelectedIds(prev => {
+        const next = new Set(prev);
+        filteredBatches.forEach(item => next.add(item.batch_id || item.id));
+        return next;
+      });
+    }
+  };
 
   // Get status color for batch
   const getBatchStatusColor = (batch) => {

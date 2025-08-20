@@ -158,11 +158,13 @@ export const API_CONFIG: APIConfig = {
     
     // Returns
     RETURNS: {
-      BASE: '/returns/',  // Added trailing slash
-      APPROVE: (id) => `/returns/${id}/approve/`,  // Added trailing slash
-      REJECT: (id) => `/returns/${id}/reject/`,  // Added trailing slash
-      CUSTOMER_RETURNS: '/returns/customer/',  // Added trailing slash
-      SUPPLIER_RETURNS: '/returns/supplier/',  // Added trailing slash
+      BASE: '/returns/',  // Restored trailing slash for proper Django URL handling
+      APPROVE: (id) => `/returns/${id}/approve/`,  // Restored trailing slash
+      REJECT: (id) => `/returns/${id}/reject/`,  // Restored trailing slash
+      CUSTOMER_RETURNS: '/returns/customer/',  // Restored trailing slash
+      SUPPLIER_RETURNS: '/returns/supplier/',  // Restored trailing slash
+      REASONS: '/returns/reasons/',  // Added explicit endpoint for reasons
+      RETURNABLE_ITEMS: '/returns/returnable/',  // Added explicit endpoint for returnable items
     },
     
     // Party Ledger

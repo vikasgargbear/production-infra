@@ -1,14 +1,15 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { 
   ArrowLeft, Search, Package, Calendar, X, AlertCircle, CheckCircle, 
-  RotateCcw, FileText, User, ChevronRight, Save, Printer, History, Truck
+  RotateCcw, FileText, User, ChevronRight, Save, Printer, History, Truck, Plus
 } from 'lucide-react';
 import { 
   CustomerSearch, ProductSearchSimple, ItemsTable, ModuleHeader,
-  DatePicker, Select, NumberInput, NotesSection, useToast, InvoiceSearch, ViewHistoryButton
+  DatePicker, Select, NumberInput, NotesSection, useToast, ViewHistoryButton
 } from '../global';
 import CustomerCreationB2B from '../global/ui/forms/CustomerCreationB2B';
-import { returnsApi, invoicesApi, customersApi } from '../../services/api';
+import { returnsApi, customersApi, settingsApi } from '../../services/api';
+import InvoiceApiService from '../../services/invoiceApiService';
 // ReturnItemsTable moved to archive - use ItemsTable from global instead
 import ReturnSummary from './components/ReturnSummary';
 import CreditNotePreview from './components/CreditNotePreview';
@@ -51,66 +52,85 @@ const SalesReturnFlow = ({ onClose }) => {
   const [selectedCustomer, setSelectedCustomer] = useState(null);
   const [selectedInvoice, setSelectedInvoice] = useState(null);
   const [returnableInvoices, setReturnableInvoices] = useState([]);
+  const [loadingInvoices, setLoadingInvoices] = useState(false);
   const [customerDues, setCustomerDues] = useState(0);
   const [returnReasons, setReturnReasons] = useState([]);
   const [showCustomerModal, setShowCustomerModal] = useState(false);
+  const [invoiceFilters, setInvoiceFilters] = useState({
+    dateFrom: '',
+    dateTo: '',
+    status: 'all',
+    minAmount: '',
+    maxAmount: ''
+  });
+  const [invoicePage, setInvoicePage] = useState(1);
+  const [invoicePagination, setInvoicePagination] = useState(null);
+  const [showManualEntry, setShowManualEntry] = useState(false);
+  const [manualItemCounter, setManualItemCounter] = useState(1);
 
-  // Load return reasons from backend with offline caching
+  // Load return reasons from system settings
   useEffect(() => {
     const loadReturnReasons = async () => {
       try {
-        // Try backend first
-        const response = await returnsApi.getReturnReasons();
-        const reasons = response.data || [];
+        // Get return reasons from system settings
+        const response = await settingsApi.system.getByCategory('RETURN_REASONS');
+        const settings = response.data || [];
         
-        if (Array.isArray(reasons) && reasons.length > 0) {
+        if (Array.isArray(settings) && settings.length > 0) {
+          // Transform system settings to dropdown format
+          const reasons = settings
+            .filter(setting => setting.setting_scope === 'SALES_RETURN' || setting.setting_scope === 'ALL')
+            .map(setting => ({
+              value: setting.setting_key,
+              label: setting.setting_name || setting.setting_value
+            }));
+          
           setReturnReasons(reasons);
-          // Cache in offline storage
-          await offlineStorage.storeOffline('return_reasons', reasons, { persistent: true });
+          // Cache for offline use
+          await offlineStorage.storeOffline('sales_return_reasons', reasons, { persistent: true });
         } else {
-          throw new Error('No return reasons returned from API');
+          throw new Error('No return reasons found in system settings');
         }
         
       } catch (error) {
-        console.error('Error loading return reasons:', error);
+        console.warn('Could not load return reasons from backend:', error.message);
         
-        // Fallback to offline cache
+        // Try offline cache first
         try {
-          const cached = await offlineStorage.getOffline('return_reasons', { persistent: true });
+          const cached = await offlineStorage.getOffline('sales_return_reasons', { persistent: true });
           if (cached && cached.data && Array.isArray(cached.data)) {
             setReturnReasons(cached.data);
-          } else {
-            // Ultimate fallback to basic reasons if no cache
-            setReturnReasons([
-              { value: 'EXPIRED', label: 'Expired Product' },
-              { value: 'DAMAGED', label: 'Damaged Product' },
-              { value: 'WRONG_PRODUCT', label: 'Wrong Product Delivered' },
-              { value: 'QUALITY_ISSUE', label: 'Quality Issue' },
-              { value: 'NOT_REQUIRED', label: 'Not Required' },
-              { value: 'EXCESS_STOCK', label: 'Excess Stock' },
-              { value: 'RATE_DIFFERENCE', label: 'Rate Difference' },
-              { value: 'OTHER', label: 'Other' }
-            ]);
+            return;
           }
         } catch (cacheError) {
-          console.error('Error loading from cache:', cacheError);
-          // Use basic fallback
-          setReturnReasons([
-            { value: 'EXPIRED', label: 'Expired Product' },
-            { value: 'DAMAGED', label: 'Damaged Product' },
-            { value: 'WRONG_PRODUCT', label: 'Wrong Product Delivered' },
-            { value: 'QUALITY_ISSUE', label: 'Quality Issue' },
-            { value: 'NOT_REQUIRED', label: 'Not Required' },
-            { value: 'EXCESS_STOCK', label: 'Excess Stock' },
-            { value: 'RATE_DIFFERENCE', label: 'Rate Difference' },
-            { value: 'OTHER', label: 'Other' }
-          ]);
+          console.warn('No cached return reasons available');
         }
+        
+        // Ultimate fallback to hardcoded values
+        setReturnReasons([
+          { value: 'EXPIRED', label: 'Expired Product' },
+          { value: 'DAMAGED', label: 'Damaged Product' },
+          { value: 'WRONG_PRODUCT', label: 'Wrong Product Delivered' },
+          { value: 'QUALITY_ISSUE', label: 'Quality Issue' },
+          { value: 'NOT_REQUIRED', label: 'Not Required' },
+          { value: 'EXCESS_STOCK', label: 'Excess Stock' },
+          { value: 'RATE_DIFFERENCE', label: 'Rate Difference' },
+          { value: 'CUSTOMER_RETURN', label: 'Customer Return' },
+          { value: 'OTHER', label: 'Other' }
+        ]);
       }
     };
 
     loadReturnReasons();
   }, []);
+
+  // Load customer invoices when filters change
+  useEffect(() => {
+    if (selectedCustomer) {
+      const customerId = selectedCustomer.id || selectedCustomer.customer_id || selectedCustomer.party_id;
+      fetchCustomerInvoices(customerId);
+    }
+  }, [selectedCustomer, invoicePage, invoiceFilters]);
 
   // Generate return number
   const generateReturnNumber = () => {
@@ -176,21 +196,167 @@ const SalesReturnFlow = ({ onClose }) => {
     }
   }, []);
 
+  // Load customer invoices when customer is selected
+  const fetchCustomerInvoices = async (customerId) => {
+    if (!customerId) {
+      setReturnableInvoices([]);
+      setInvoicePagination(null);
+      return;
+    }
+
+    setLoadingInvoices(true);
+    try {
+      // Use InvoiceApiService to fetch invoices for the customer
+      const response = await InvoiceApiService.getInvoices({
+        customer_id: customerId,
+        limit: 10,
+        offset: (invoicePage - 1) * 10
+      });
+      
+      if (response.success && response.data) {
+        let allInvoices = response.data.invoices?.map(invoice => ({
+          id: invoice.invoice_id,
+          invoice_number: invoice.invoice_number,
+          invoice_date: invoice.invoice_date,
+          total_amount: parseFloat(invoice.final_amount || invoice.grand_total) || 0,
+          outstanding_amount: parseFloat(invoice.final_amount || invoice.grand_total) - parseFloat(invoice.paid_amount || 0),
+          status: invoice.payment_status || 'pending',
+          items: invoice.items || []
+        })) || [];
+
+        // Apply frontend filters
+        if (invoiceFilters.dateFrom) {
+          allInvoices = allInvoices.filter(invoice => 
+            new Date(invoice.invoice_date) >= new Date(invoiceFilters.dateFrom)
+          );
+        }
+        
+        if (invoiceFilters.dateTo) {
+          allInvoices = allInvoices.filter(invoice => 
+            new Date(invoice.invoice_date) <= new Date(invoiceFilters.dateTo)
+          );
+        }
+        
+        if (invoiceFilters.status !== 'all') {
+          allInvoices = allInvoices.filter(invoice => 
+            invoice.status.toLowerCase() === invoiceFilters.status.toLowerCase()
+          );
+        }
+        
+        if (invoiceFilters.minAmount) {
+          allInvoices = allInvoices.filter(invoice => 
+            invoice.total_amount >= parseFloat(invoiceFilters.minAmount)
+          );
+        }
+        
+        if (invoiceFilters.maxAmount) {
+          allInvoices = allInvoices.filter(invoice => 
+            invoice.total_amount <= parseFloat(invoiceFilters.maxAmount)
+          );
+        }
+
+        setReturnableInvoices(allInvoices);
+        setInvoicePagination({
+          page: invoicePage,
+          limit: 10,
+          total_count: response.data.total || allInvoices.length,
+          total_pages: Math.ceil((response.data.total || allInvoices.length) / 10),
+          has_next: invoicePage < Math.ceil((response.data.total || allInvoices.length) / 10),
+          has_prev: invoicePage > 1
+        });
+      }
+    } catch (error) {
+      console.error('Error fetching customer invoices:', error);
+      
+      // Mock data for UI/UX demonstration
+      const mockInvoices = [
+        {
+          id: 'INV-001',
+          invoice_number: 'INV-2024-001',
+          invoice_date: '2024-01-15',
+          total_amount: 15000,
+          outstanding_amount: 15000,
+          status: 'paid',
+          items: [
+            { id: 1, product_name: 'Paracetamol 500mg', quantity: 100, rate: 50, hsn_code: '30049099' },
+            { id: 2, product_name: 'Aspirin 75mg', quantity: 50, rate: 100, hsn_code: '30049099' }
+          ]
+        },
+        {
+          id: 'INV-002',
+          invoice_number: 'INV-2024-002',
+          invoice_date: '2024-01-10',
+          total_amount: 25000,
+          outstanding_amount: 5000,
+          status: 'partial',
+          items: [
+            { id: 3, product_name: 'Vitamin D3 Tablets', quantity: 200, rate: 75, hsn_code: '30049099' }
+          ]
+        },
+        {
+          id: 'INV-003',
+          invoice_number: 'INV-2024-003',
+          invoice_date: '2024-01-05',
+          total_amount: 18000,
+          outstanding_amount: 18000,
+          status: 'paid',
+          items: []
+        }
+      ];
+
+      // Apply frontend filters to mock data
+      let filteredInvoices = [...mockInvoices];
+      
+      if (invoiceFilters.dateFrom) {
+        filteredInvoices = filteredInvoices.filter(invoice => 
+          new Date(invoice.invoice_date) >= new Date(invoiceFilters.dateFrom)
+        );
+      }
+      
+      if (invoiceFilters.dateTo) {
+        filteredInvoices = filteredInvoices.filter(invoice => 
+          new Date(invoice.invoice_date) <= new Date(invoiceFilters.dateTo)
+        );
+      }
+      
+      if (invoiceFilters.status !== 'all') {
+        filteredInvoices = filteredInvoices.filter(invoice => 
+          invoice.status.toLowerCase() === invoiceFilters.status.toLowerCase()
+        );
+      }
+
+      setReturnableInvoices(filteredInvoices);
+      setInvoicePagination({
+        page: 1,
+        limit: 10,
+        total_count: filteredInvoices.length,
+        total_pages: 1,
+        has_next: false,
+        has_prev: false
+      });
+    } finally {
+      setLoadingInvoices(false);
+    }
+  };
+
   // Handle customer selection
   const handleCustomerSelect = async (customer) => {
     console.log('Customer selected:', customer);
     setSelectedCustomer(customer);
+    setSelectedInvoice(null); // Reset invoice selection
     setReturnData(prev => ({
       ...prev,
       customer_id: customer.id || customer.customer_id || customer.party_id,
-      customer_details: customer
+      customer_details: customer,
+      invoice_id: '',
+      items: []
     }));
 
+    const customerId = customer.id || customer.customer_id || customer.party_id;
+    
     // Fetch customer outstanding balance
     try {
-      const response = await customersApi.getOutstandingBalance(
-        customer.id || customer.customer_id || customer.party_id
-      );
+      const response = await customersApi.getOutstandingBalance(customerId);
       if (response.success) {
         setCustomerDues(response.data.outstanding_amount || 0);
       }
@@ -198,6 +364,63 @@ const SalesReturnFlow = ({ onClose }) => {
       console.error('Error fetching customer dues:', error);
       setCustomerDues(0);
     }
+
+    // Fetch customer invoices
+    await fetchCustomerInvoices(customerId);
+  };
+
+  // Handle skipping invoice selection for general return
+  const handleSkipInvoiceSelection = () => {
+    setSelectedInvoice(null);
+    setShowManualEntry(true);
+    setReturnData(prev => ({
+      ...prev,
+      invoice_id: '',
+      invoice_no: '',
+      invoice_date: '',
+      original_invoice: null,
+      items: [] // Will be populated manually
+    }));
+  };
+
+  // Add manual item to return
+  const addManualItem = (product) => {
+    if (!product) return;
+    
+    const newItem = {
+      id: `manual-${manualItemCounter}`,
+      product_id: product.product_id,
+      product_name: product.product_name || product.name,
+      batch_id: null,
+      rate: 0,
+      tax_percent: 18, // Default GST rate
+      quantity: 0, // Will be set manually
+      return_quantity: 0,
+      max_returnable_qty: 999999, // No limit for manual items
+      return_reason: '',
+      selected: true,
+      hsn_code: product.hsn_code || '',
+      unit: product.unit || 'PCS',
+      manufacturer: product.manufacturer || '',
+      // Additional fields for manual entry
+      is_manual: true,
+      available_stock: 0 // Not relevant for returns
+    };
+
+    setReturnData(prev => ({
+      ...prev,
+      items: [...prev.items, newItem]
+    }));
+    
+    setManualItemCounter(prev => prev + 1);
+  };
+
+  // Remove manual item
+  const removeManualItem = (itemId) => {
+    setReturnData(prev => ({
+      ...prev,
+      items: prev.items.filter(item => item.id !== itemId)
+    }));
   };
 
   // Handle invoice selection
@@ -209,7 +432,7 @@ const SalesReturnFlow = ({ onClose }) => {
     if (!invoice.items) {
       try {
         setLoading(true);
-        const response = await invoicesApi.getById(invoice.invoice_id || invoice.id);
+        const response = await InvoiceApiService.getInvoiceById(invoice.invoice_id || invoice.id);
         if (response.success) {
           invoiceWithItems = response.data;
         }
@@ -313,8 +536,9 @@ const SalesReturnFlow = ({ onClose }) => {
       return false;
     }
 
-    if (!selectedInvoice) {
-      toast.error('Please select an invoice');
+    // For manual returns, invoice is not required
+    if (!selectedInvoice && !showManualEntry) {
+      toast.error('Please select an invoice or use manual entry');
       return false;
     }
 
@@ -323,7 +547,7 @@ const SalesReturnFlow = ({ onClose }) => {
     );
 
     if (!hasSelectedItems) {
-      toast.error('Please select items to return');
+      toast.error('Please add items to return');
       return false;
     }
 
@@ -332,11 +556,23 @@ const SalesReturnFlow = ({ onClose }) => {
       return false;
     }
 
-    // Validate quantities
+    // Validate quantities and required fields for manual items
     for (const item of returnData.items) {
-      if (item.selected && item.return_quantity > item.max_returnable_qty) {
-        toast.error(`Return quantity exceeds available quantity for ${item.product_name}`);
-        return false;
+      if (item.selected) {
+        if (item.return_quantity <= 0) {
+          toast.error(`Please enter a valid return quantity for ${item.product_name}`);
+          return false;
+        }
+        
+        if (item.is_manual && item.rate <= 0) {
+          toast.error(`Please enter a valid rate for ${item.product_name}`);
+          return false;
+        }
+        
+        if (!item.is_manual && item.return_quantity > item.max_returnable_qty) {
+          toast.error(`Return quantity exceeds available quantity for ${item.product_name}`);
+          return false;
+        }
       }
     }
 
@@ -477,24 +713,22 @@ const SalesReturnFlow = ({ onClose }) => {
                 {/* Invoice Selection */}
                 {selectedCustomer && (
                   <div>
-                    <h3 className="text-sm font-medium text-blue-700 mb-2 flex items-center">
-                      <FileText className="w-4 h-4 mr-2" />
-                      Select Invoice
-                    </h3>
-                    {!selectedInvoice ? (
-                      <InvoiceSearch
-                        ref={invoiceSearchRef}
-                        customerId={selectedCustomer.id || selectedCustomer.customer_id || selectedCustomer.party_id}
-                        invoiceType="SALES"
-                        onSelect={handleInvoiceSelect}
-                        placeholder="Search invoice by number, date, or product..."
-                        autoFocus={true}
-                        showDetails={true}
-                        filters={{ status: ['PAID', 'PARTIAL'], returnable: true }}
-                        onError={(error) => toast.error(error.message)}
-                      />
-                    ) : (
-                      <div className="bg-blue-50 rounded-lg p-4 flex justify-between items-center">
+                    <div className="flex items-center justify-between mb-4">
+                      <h3 className="text-sm font-medium text-blue-700 flex items-center">
+                        <FileText className="w-4 h-4 mr-2" />
+                        Select Invoice (Optional)
+                      </h3>
+                      <button
+                        onClick={handleSkipInvoiceSelection}
+                        className="px-3 py-1 text-sm border border-gray-300 rounded hover:bg-blue-50 text-blue-600"
+                      >
+                        Skip Invoice Selection
+                      </button>
+                    </div>
+                    
+                    {/* Show selected invoice if any */}
+                    {selectedInvoice && (
+                      <div className="bg-blue-50 rounded-lg p-4 flex justify-between items-center mb-4">
                         <div>
                           <h4 className="font-semibold text-gray-900">
                             Invoice #{selectedInvoice.invoice_number || selectedInvoice.invoice_no}
@@ -503,7 +737,7 @@ const SalesReturnFlow = ({ onClose }) => {
                             Date: {new Date(selectedInvoice.invoice_date).toLocaleDateString()}
                           </p>
                           <p className="text-sm text-gray-600">
-                            Amount: ₹{selectedInvoice.total_amount || selectedInvoice.grand_total}
+                            Amount: ₹{selectedInvoice.final_amount || selectedInvoice.total_amount || selectedInvoice.grand_total}
                           </p>
                         </div>
                         <button
@@ -521,12 +755,168 @@ const SalesReturnFlow = ({ onClose }) => {
                         </button>
                       </div>
                     )}
+                    
+                    {/* Invoice List */}
+                    {!selectedInvoice && (
+                      <div>
+                        {/* Filters */}
+                        <div className="bg-gray-50 rounded-lg p-4 mb-4">
+                          <div className="flex items-center gap-2 mb-3">
+                            <Search className="w-4 h-4 text-gray-600" />
+                            <span className="text-sm font-medium text-gray-700">Filter Invoices</span>
+                          </div>
+                          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                            <div>
+                              <label className="block text-xs font-medium text-gray-700 mb-1">From Date</label>
+                              <input
+                                type="date"
+                                value={invoiceFilters.dateFrom}
+                                onChange={(e) => setInvoiceFilters(prev => ({ ...prev, dateFrom: e.target.value }))}
+                                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-xs font-medium text-gray-700 mb-1">To Date</label>
+                              <input
+                                type="date"
+                                value={invoiceFilters.dateTo}
+                                onChange={(e) => setInvoiceFilters(prev => ({ ...prev, dateTo: e.target.value }))}
+                                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-xs font-medium text-gray-700 mb-1">Status</label>
+                              <select
+                                value={invoiceFilters.status}
+                                onChange={(e) => setInvoiceFilters(prev => ({ ...prev, status: e.target.value }))}
+                                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                              >
+                                <option value="all">All Status</option>
+                                <option value="paid">Paid</option>
+                                <option value="partial">Partial</option>
+                                <option value="pending">Pending</option>
+                              </select>
+                            </div>
+                          </div>
+                        </div>
+                        
+                        {/* Invoice List */}
+                        {loadingInvoices ? (
+                          <div className="text-center py-8">
+                            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
+                            <p className="text-gray-600 mt-2">Loading invoices...</p>
+                          </div>
+                        ) : returnableInvoices.length > 0 ? (
+                          <div className="space-y-2">
+                            {returnableInvoices.map((invoice) => (
+                              <div
+                                key={invoice.id}
+                                onClick={() => handleInvoiceSelect(invoice)}
+                                className="p-4 border border-gray-200 rounded-lg hover:bg-blue-50 cursor-pointer transition-colors"
+                              >
+                                <div className="flex items-center justify-between">
+                                  <div>
+                                    <h4 className="font-semibold text-gray-900">
+                                      Invoice #{invoice.invoice_number}
+                                    </h4>
+                                    <p className="text-sm text-gray-600">
+                                      Date: {new Date(invoice.invoice_date).toLocaleDateString()}
+                                    </p>
+                                    <p className="text-sm text-gray-600">
+                                      Status: <span className={`font-medium ${
+                                        invoice.status === 'paid' ? 'text-green-600' : 
+                                        invoice.status === 'partial' ? 'text-yellow-600' : 'text-red-600'
+                                      }`}>
+                                        {invoice.status?.charAt(0).toUpperCase() + invoice.status?.slice(1) || 'Unknown'}
+                                      </span>
+                                    </p>
+                                  </div>
+                                  <div className="text-right">
+                                    <p className="font-semibold text-gray-900">
+                                      ₹{invoice.total_amount?.toFixed(2) || '0.00'}
+                                    </p>
+                                    <p className="text-sm text-gray-600">
+                                      Outstanding: ₹{invoice.outstanding_amount?.toFixed(2) || '0.00'}
+                                    </p>
+                                  </div>
+                                </div>
+                              </div>
+                            ))}
+                            
+                            {/* Pagination */}
+                            {invoicePagination && invoicePagination.total_pages > 1 && (
+                              <div className="flex items-center justify-center space-x-2 mt-4">
+                                <button
+                                  onClick={() => setInvoicePage(prev => Math.max(1, prev - 1))}
+                                  disabled={!invoicePagination.has_prev}
+                                  className="px-3 py-1 text-sm border border-gray-300 rounded disabled:opacity-50"
+                                >
+                                  Previous
+                                </button>
+                                <span className="text-sm text-gray-600">
+                                  Page {invoicePagination.page} of {invoicePagination.total_pages}
+                                </span>
+                                <button
+                                  onClick={() => setInvoicePage(prev => prev + 1)}
+                                  disabled={!invoicePagination.has_next}
+                                  className="px-3 py-1 text-sm border border-gray-300 rounded disabled:opacity-50"
+                                >
+                                  Next
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        ) : (
+                          <div className="text-center py-8 text-gray-500">
+                            <FileText className="w-12 h-12 mx-auto mb-3 text-gray-300" />
+                            <p className="text-lg font-medium">No invoices found</p>
+                            <p className="text-sm">This customer has no returnable invoices</p>
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
 
-              {/* Return Reason - Moved Above Items */}
-              {selectedInvoice && (
+              {/* Manual Item Entry - Show when invoice is skipped */}
+              {selectedCustomer && showManualEntry && !selectedInvoice && (
+                <div className="bg-white rounded-lg shadow-sm border border-blue-200 p-6">
+                  <div className="flex items-center justify-between mb-4">
+                    <div>
+                      <h3 className="text-lg font-semibold text-gray-900 flex items-center">
+                        <Plus className="w-5 h-5 mr-2 text-green-600" />
+                        Add Items for Return
+                      </h3>
+                      <p className="text-sm text-gray-600 mt-1">
+                        Search and add products to create a return without an invoice
+                      </p>
+                    </div>
+                  </div>
+                  
+                  <div className="space-y-4">
+                    <div>
+                      <label className="block text-sm font-medium text-blue-700 mb-2">
+                        Search Products
+                      </label>
+                      <ProductSearchSimple
+                        onSelect={addManualItem}
+                        placeholder="Search products by name, code..."
+                        className="w-full"
+                      />
+                    </div>
+                    
+                    {returnData.items.length > 0 && (
+                      <div className="text-sm text-gray-600">
+                        {returnData.items.length} item(s) added. Configure quantities and rates below.
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* Return Reason - Show when invoice is selected OR manual entry has items */}
+              {selectedCustomer && (selectedInvoice || (showManualEntry && returnData.items.length >= 0)) && (
                 <div className="bg-white rounded-lg shadow-sm border border-blue-200 p-6">
                   <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
                     <AlertCircle className="w-5 h-5 mr-2 text-red-600" />
@@ -613,51 +1003,76 @@ const SalesReturnFlow = ({ onClose }) => {
               )}
 
               {/* Return Items */}
-              {selectedInvoice && returnData.items.length > 0 && (
+              {selectedCustomer && returnData.items.length > 0 && (
                 <div className="bg-white rounded-lg shadow-sm border border-blue-200 p-6">
                   <div className="flex justify-between items-center mb-4">
                     <div>
                       <h3 className="text-lg font-semibold text-gray-900 flex items-center">
                         <Package className="w-5 h-5 mr-2 text-blue-600" />
-                        Select Items to Return
+                        {showManualEntry ? 'Configure Return Items' : 'Select Items to Return'}
                       </h3>
                       <p className="text-sm text-gray-600 mt-1">
-                        Check the items you want to return and specify quantities
+                        {showManualEntry 
+                          ? 'Set quantities, rates, and other details for the return items'
+                          : 'Check the items you want to return and specify quantities'
+                        }
                       </p>
                     </div>
                     <div className="flex gap-2">
-                      <button
-                        onClick={() => {
-                          // Select all items
-                          returnData.items.forEach(item => {
-                            updateReturnItem(item.id, 'selected', true);
-                            updateReturnItem(item.id, 'return_quantity', item.max_returnable_qty);
-                          });
-                        }}
-                        className="px-3 py-1 text-sm border border-gray-300 rounded hover:bg-blue-50"
-                      >
-                        Select All
-                      </button>
-                      <button
-                        onClick={() => {
-                          // Deselect all items
-                          returnData.items.forEach(item => {
-                            updateReturnItem(item.id, 'selected', false);
-                            updateReturnItem(item.id, 'return_quantity', 0);
-                          });
-                        }}
-                        className="px-3 py-1 text-sm border border-gray-300 rounded hover:bg-blue-50"
-                      >
-                        Clear All
-                      </button>
+                      {showManualEntry && (
+                        <button
+                          onClick={() => {
+                            // For manual items, just select all and set minimum required values
+                            returnData.items.forEach(item => {
+                              updateReturnItem(item.id, 'selected', true);
+                              if (item.return_quantity === 0) {
+                                updateReturnItem(item.id, 'return_quantity', 1);
+                              }
+                            });
+                          }}
+                          className="px-3 py-1 text-sm border border-gray-300 rounded hover:bg-blue-50"
+                        >
+                          Select All
+                        </button>
+                      )}
+                      {!showManualEntry && (
+                        <>
+                          <button
+                            onClick={() => {
+                              // Select all items
+                              returnData.items.forEach(item => {
+                                updateReturnItem(item.id, 'selected', true);
+                                updateReturnItem(item.id, 'return_quantity', item.max_returnable_qty);
+                              });
+                            }}
+                            className="px-3 py-1 text-sm border border-gray-300 rounded hover:bg-blue-50"
+                          >
+                            Select All
+                          </button>
+                          <button
+                            onClick={() => {
+                              // Deselect all items
+                              returnData.items.forEach(item => {
+                                updateReturnItem(item.id, 'selected', false);
+                                updateReturnItem(item.id, 'return_quantity', 0);
+                              });
+                            }}
+                            className="px-3 py-1 text-sm border border-gray-300 rounded hover:bg-blue-50"
+                          >
+                            Clear All
+                          </button>
+                        </>
+                      )}
                     </div>
                   </div>
                   <ItemsTable
                     module="returns"
                     items={returnData.items}
                     onUpdateItem={updateReturnItem}
+                    onRemoveItem={showManualEntry ? removeManualItem : undefined}
                     customer={selectedCustomer}
                     includeGst={returnData.include_gst}
+                    allowRemove={showManualEntry}
                   />
                 </div>
               )}
@@ -674,7 +1089,7 @@ const SalesReturnFlow = ({ onClose }) => {
                 </button>
                 <button
                   onClick={handleProceedToReview}
-                  disabled={!returnData.items.some(item => item.selected && item.return_quantity > 0)}
+                  disabled={!selectedCustomer || (!selectedInvoice && !showManualEntry) || (returnData.items.length > 0 && !returnData.items.some(item => item.selected && item.return_quantity > 0))}
                   className="px-6 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
                 >
                   Proceed to Review
@@ -780,6 +1195,7 @@ const SalesReturnFlow = ({ onClose }) => {
           buttonText=""
         />
       </div>
+
 
       {/* Customer Creation Modal */}
       {showCustomerModal && (

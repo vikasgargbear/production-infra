@@ -1,3 +1,8 @@
+import { useMutation, useQuery, useQueryClient } from 'react-query';
+import { useMemo, useCallback } from 'react';
+import { debounce } from 'lodash';
+import InvoiceApiService from '../services/invoiceApiService';
+
 /**
  * DEPRECATED: Invoice Calculation Hook
  * 
@@ -12,11 +17,6 @@
  */
 
 console.warn('⚠️ DEPRECATED: useInvoiceCalculation hook is deprecated. Use InvoiceCalculatorEnterprise directly.');
-
-import { useMutation, useQuery, useQueryClient } from 'react-query';
-import { useMemo, useCallback } from 'react';
-import { debounce } from 'lodash';
-import InvoiceApiService from '../services/invoiceApiService';
 
 /**
  * Hook for real-time invoice calculations

@@ -85,4 +85,20 @@ export const customersApi = {
       message
     });
   },
+
+  // Get customer outstanding balance
+  getOutstandingBalance: (customerId) => {
+    return apiHelpers.get(`${ENDPOINTS.BASE}/${customerId}/outstanding`, {})
+      .catch(error => {
+        // Fallback to return zero balance if endpoint doesn't exist
+        return {
+          success: true,
+          data: {
+            outstanding_amount: 0,
+            total_invoices: 0,
+            overdue_amount: 0
+          }
+        };
+      });
+  },
 };

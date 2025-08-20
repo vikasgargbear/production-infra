@@ -7,7 +7,7 @@ import {
   SupplierSearch, ProductSearchSimple, ItemsTable, ModuleHeader,
   DatePicker, Select, NumberInput, NotesSection, useToast, PurchaseSearch, ViewHistoryButton
 } from '../global';
-import { returnsApi, purchasesApi, suppliersApi } from '../../services/api';
+import { returnsApi, purchasesApi, suppliersApi, settingsApi } from '../../services/api';
 import PurchaseInvoiceSelector from './components/PurchaseInvoiceSelector';
 // ReturnItemsTable moved to archive - use ItemsTable from global instead
 import ReturnSummary from './components/ReturnSummary';
@@ -57,59 +57,57 @@ const PurchaseReturnFlow = ({ onClose }) => {
   const [returnablePurchases, setReturnablePurchases] = useState([]);
   const [returnReasons, setReturnReasons] = useState([]);
 
-  // Load return reasons from backend with offline caching
+  // Load return reasons from system settings
   useEffect(() => {
     const loadReturnReasons = async () => {
       try {
-        // Try backend first
-        const response = await returnsApi.getReturnReasons();
-        const reasons = response.data || [];
+        // Get return reasons from system settings
+        const response = await settingsApi.system.getByCategory('RETURN_REASONS');
+        const settings = response.data || [];
         
-        if (Array.isArray(reasons) && reasons.length > 0) {
+        if (Array.isArray(settings) && settings.length > 0) {
+          // Transform system settings to dropdown format
+          const reasons = settings
+            .filter(setting => setting.setting_scope === 'PURCHASE_RETURN' || setting.setting_scope === 'ALL')
+            .map(setting => ({
+              value: setting.setting_key,
+              label: setting.setting_name || setting.setting_value
+            }));
+          
           setReturnReasons(reasons);
-          // Cache in offline storage
-          await offlineStorage.storeOffline('return_reasons', reasons, { persistent: true });
+          // Cache for offline use
+          await offlineStorage.storeOffline('purchase_return_reasons', reasons, { persistent: true });
         } else {
-          throw new Error('No return reasons returned from API');
+          throw new Error('No return reasons found in system settings');
         }
         
       } catch (error) {
-        console.error('Error loading return reasons:', error);
+        console.warn('Could not load return reasons from backend:', error.message);
         
-        // Fallback to offline cache
+        // Try offline cache first
         try {
-          const cached = await offlineStorage.getOffline('return_reasons', { persistent: true });
+          const cached = await offlineStorage.getOffline('purchase_return_reasons', { persistent: true });
           if (cached && cached.data && Array.isArray(cached.data)) {
             setReturnReasons(cached.data);
-          } else {
-            // Ultimate fallback to basic reasons if no cache
-            setReturnReasons([
-              { value: 'EXPIRED', label: 'Expired Product' },
-              { value: 'DAMAGED', label: 'Damaged/Defective Product' },
-              { value: 'WRONG_PRODUCT', label: 'Wrong Product Received' },
-              { value: 'QUALITY_ISSUE', label: 'Quality Issue' },
-              { value: 'EXCESS_ORDER', label: 'Excess Order' },
-              { value: 'NEAR_EXPIRY', label: 'Near Expiry' },
-              { value: 'RATE_DISPUTE', label: 'Rate Dispute' },
-              { value: 'SCHEME_ISSUE', label: 'Scheme/Discount Issue' },
-              { value: 'OTHER', label: 'Other' }
-            ]);
+            return;
           }
         } catch (cacheError) {
-          console.error('Error loading from cache:', cacheError);
-          // Use basic fallback
-          setReturnReasons([
-            { value: 'EXPIRED', label: 'Expired Product' },
-            { value: 'DAMAGED', label: 'Damaged/Defective Product' },
-            { value: 'WRONG_PRODUCT', label: 'Wrong Product Received' },
-            { value: 'QUALITY_ISSUE', label: 'Quality Issue' },
-            { value: 'EXCESS_ORDER', label: 'Excess Order' },
-            { value: 'NEAR_EXPIRY', label: 'Near Expiry' },
-            { value: 'RATE_DISPUTE', label: 'Rate Dispute' },
-            { value: 'SCHEME_ISSUE', label: 'Scheme/Discount Issue' },
-            { value: 'OTHER', label: 'Other' }
-          ]);
+          console.warn('No cached return reasons available');
         }
+        
+        // Ultimate fallback to hardcoded values
+        setReturnReasons([
+          { value: 'EXPIRED', label: 'Expired Product' },
+          { value: 'DAMAGED', label: 'Damaged/Defective Product' },
+          { value: 'WRONG_PRODUCT', label: 'Wrong Product Received' },
+          { value: 'QUALITY_ISSUE', label: 'Quality Issue' },
+          { value: 'EXCESS_ORDER', label: 'Excess Order' },
+          { value: 'NEAR_EXPIRY', label: 'Near Expiry' },
+          { value: 'RATE_DISPUTE', label: 'Rate Dispute' },
+          { value: 'SCHEME_ISSUE', label: 'Scheme/Discount Issue' },
+          { value: 'SUPPLIER_ISSUE', label: 'Supplier Issue' },
+          { value: 'OTHER', label: 'Other' }
+        ]);
       }
     };
 

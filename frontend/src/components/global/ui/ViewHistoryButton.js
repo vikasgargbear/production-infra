@@ -352,12 +352,12 @@ const ViewHistoryButton = ({
       {/* History Button */}
       <button
         onClick={handleOpenHistory}
-        className={className || `flex items-center space-x-2 px-4 py-2.5 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors`}
+        className={className || `flex items-center space-x-2 px-4 py-2.5 bg-blue-50 border border-blue-200 rounded-lg hover:bg-blue-100 hover:border-blue-300 transition-colors shadow-sm`}
         title={`View ${getHistoryTitle()}`}
         style={className ? { background: '', border: '' } : {}}
       >
-        <History className="w-4 h-4" style={{ color: className?.includes('text-white') ? 'white' : '#4B5563' }} />
-        {buttonText && <span className={`text-sm font-medium ${className?.includes('text-white') ? 'text-white' : 'text-gray-700'}`}>{buttonText}</span>}
+        <History className="w-4 h-4 text-blue-600" />
+        {buttonText && <span className="text-sm font-medium text-blue-700">{buttonText}</span>}
       </button>
 
       {/* History Modal */}

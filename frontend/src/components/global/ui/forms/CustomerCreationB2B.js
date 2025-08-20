@@ -26,7 +26,7 @@ const CustomerCreationB2B = ({ onClose, onCustomerCreated }) => {
   const [formData, setFormData] = useState({
     // Basic Details (aligned with schema)
     customer_name: '',
-    customer_type: customerType === 'B2B' ? 'business' : 'individual',
+    customer_type: customerType === 'B2B' ? 'wholesale' : 'retail', // Map to backend values
     business_type: '',
     
     // Contact Information
@@ -207,7 +207,7 @@ const CustomerCreationB2B = ({ onClose, onCustomerCreated }) => {
     setCustomerType(type);
     setFormData(prev => ({
       ...prev,
-      customer_type: type,
+      customer_type: type === 'B2B' ? 'wholesale' : 'retail', // Map to backend values
       // Clear B2B specific fields when switching to B2C
       ...(type === 'B2C' ? {
         contact_person_name: '',
@@ -255,31 +255,24 @@ const CustomerCreationB2B = ({ onClose, onCustomerCreated }) => {
     setLoading(true);
     setMessage('');
 
-    try {
-      const customerData = {
-        customer_code: generateCustomerCode(),
+    const customerData = {
         org_id: localStorage.getItem('org_id') || 'ad808530-1ddb-4377-ab20-67bef145d80d',
         customer_name: formData.customer_name,
-        customer_type: customerType === 'B2B' ? 'business' : 'individual',
-        business_type: formData.business_type || null,
+        customer_type: customerType === 'B2B' ? 'wholesale' : 'retail', // Map to backend validation values
         primary_phone: formData.primary_phone.replace(/\D/g, ''),
-        primary_email: formData.primary_email || null,
-        whatsapp_number: formData.whatsapp_number ? formData.whatsapp_number.replace(/\D/g, '') : null,
-        contact_person_name: formData.contact_person_name || null,
-        contact_person_phone: formData.contact_person_phone ? formData.contact_person_phone.replace(/\D/g, '') : null,
-        contact_person_email: formData.contact_person_email || null,
-        gst_number: formData.gst_number || null,
+        email: formData.primary_email || null, // Backend expects 'email' not 'primary_email'
+        secondary_phone: formData.whatsapp_number ? formData.whatsapp_number.replace(/\D/g, '') : null,
+        contact_person: formData.contact_person_name || null, // Backend expects 'contact_person' not 'contact_person_name'
+        gstin: formData.gst_number || null, // Backend expects 'gstin' not 'gst_number'
         pan_number: formData.pan_number || null,
         drug_license_number: formData.drug_license_number || null,
-        drug_license_validity: formData.drug_license_validity || null,
         credit_limit: formData.credit_limit ? parseFloat(formData.credit_limit) : 50000,
         credit_days: formData.credit_days ? parseInt(formData.credit_days) : 30,
-        credit_rating: formData.credit_rating || 'B',
-        payment_terms: formData.payment_terms || 'Credit',
-        customer_category: formData.customer_category || 'Regular',
+        notes: `${customerType} customer. Business Type: ${formData.business_type || 'Not specified'}`,
         is_active: true
       };
 
+    try {
       // If offline, queue operation and exit gracefully
       if (!navigator.onLine) {
         offlineStorage.queueOfflineOperation({
@@ -297,7 +290,7 @@ const CustomerCreationB2B = ({ onClose, onCustomerCreated }) => {
       const response = await customersApi.create(customerData);
       
       if (response.data) {
-        setMessage('B2B Customer created successfully!');
+        setMessage(`${customerType} Customer created successfully!`);
         setMessageType('success');
         
         // Call the callback with the created customer
@@ -325,10 +318,7 @@ const CustomerCreationB2B = ({ onClose, onCustomerCreated }) => {
       offlineStorage.queueOfflineOperation({
         type: 'CREATE_CUSTOMER',
         endpoint: 'customers.create',
-        payload: {
-          ...formData,
-          customer_code: generateCustomerCode()
-        },
+        payload: customerData,
         priority: 'high'
       });
       
@@ -446,14 +436,27 @@ const CustomerCreationB2B = ({ onClose, onCustomerCreated }) => {
                     onChange={(e) => handleInputChange('business_type', e.target.value)}
                     className="w-full px-3 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all"
                   >
-                    <option value="">Select Business Type</option>
-                    <option value="Pharmacy">Pharmacy</option>
-                    <option value="Hospital">Hospital</option>
-                    <option value="Clinic">Clinic</option>
-                    <option value="Distributor">Distributor</option>
-                    <option value="Wholesaler">Wholesaler</option>
-                    <option value="Retailer">Retailer</option>
-                    <option value="Other">Other</option>
+                    <option value="">{customerType === 'B2B' ? 'Select Business Type' : 'Customer Category'}</option>
+                    {customerType === 'B2B' ? (
+                      <>
+                        <option value="Pharmacy">Pharmacy</option>
+                        <option value="Hospital">Hospital</option>
+                        <option value="Clinic">Clinic</option>
+                        <option value="Distributor">Distributor</option>
+                        <option value="Wholesaler">Wholesaler</option>
+                        <option value="Medical Store">Medical Store</option>
+                        <option value="Nursing Home">Nursing Home</option>
+                        <option value="Other Business">Other Business</option>
+                      </>
+                    ) : (
+                      <>
+                        <option value="Individual">Individual Customer</option>
+                        <option value="Consumer">Consumer</option>
+                        <option value="Walk-in">Walk-in Customer</option>
+                        <option value="Regular">Regular Customer</option>
+                        <option value="Other">Other</option>
+                      </>
+                    )}
                   </select>
                 </div>
               </div>

@@ -22,6 +22,7 @@ export { default as BatchSelector } from './modals/BatchSelector';
 export { default as ProductCreationModal } from './modals/ProductCreationModal';
 export { default as CustomerCreationB2B } from './ui/forms/CustomerCreationB2B';
 export { default as SupplierCreationModal } from './modals/SupplierCreationModal';
+export { default as GenericSuccessModal } from './modals/GenericSuccessModal';
 
 // Calculator Components
 export { default as GSTCalculator } from './calculators/GSTCalculator';

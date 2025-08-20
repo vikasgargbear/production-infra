@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { 
-  ShoppingCart, Calendar, ArrowRight,
+  ShoppingCart, Calendar, ArrowRight, ArrowLeft,
   CheckCircle, MessageCircle, FileInput, Printer,
   X, AlertCircle, FileText, Truck, User, Package
 } from 'lucide-react';
@@ -12,7 +12,8 @@ import {
   ItemsTable,
   NotesSection,
   ModuleHeader,
-  DocumentFooter
+  DocumentFooter,
+  GenericSuccessModal
 } from '../global';
 import CustomerCreationB2B from '../global/ui/forms/CustomerCreationB2B';
 import { ordersApi, salesApi, api } from '../../services/api';
@@ -93,7 +94,7 @@ const numberToWords = (num) => {
   return words;
 };
 
-const SalesOrderFlowV2 = ({ open = true, onClose }) => {
+const SalesOrderFlow = ({ open = true, onClose }) => {
   const [currentStep, setCurrentStep] = useState(1);
   const [showCustomerModal, setShowCustomerModal] = useState(false);
   const [showProductModal, setShowProductModal] = useState(false);
@@ -102,6 +103,9 @@ const SalesOrderFlowV2 = ({ open = true, onClose }) => {
   const [message, setMessage] = useState('');
   const [newProductName, setNewProductName] = useState('');
   const [messageType, setMessageType] = useState('');
+  const [employees, setEmployees] = useState([]);
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
+  const [createdOrderData, setCreatedOrderData] = useState(null);
 
   // Generate order number
   const generateOrderNumber = () => {
@@ -140,6 +144,40 @@ const SalesOrderFlowV2 = ({ open = true, onClose }) => {
 
   const [selectedCustomer, setSelectedCustomer] = useState(null);
   const [sameAsBilling, setSameAsBilling] = useState(true);
+
+  // Load employees for Created By dropdown
+  useEffect(() => {
+    const loadEmployees = async () => {
+      try {
+        const response = await api.get('/sales-orders/employees');
+        if (response.data && Array.isArray(response.data)) {
+          setEmployees(response.data);
+          // Set default created_by to first employee if not set
+          if (!order.created_by && response.data.length > 0) {
+            setOrder(prev => ({
+              ...prev,
+              created_by: response.data[0].user_id,
+              created_by_name: response.data[0].full_name
+            }));
+          }
+        }
+      } catch (error) {
+        console.error('Error loading employees:', error);
+        // Fallback to default
+        setEmployees([{
+          user_id: 1,
+          full_name: localStorage.getItem('userName') || 'Admin User',
+          email: 'admin@company.com'
+        }]);
+      }
+    };
+
+    loadEmployees();
+  }, []);
+
+  // REMOVED: useEffect for calculation - following invoice component pattern
+  // Instead, calculations are triggered directly in event handlers when items change
+  // This prevents unnecessary recalculations and follows the proven invoice pattern
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -245,12 +283,13 @@ const SalesOrderFlowV2 = ({ open = true, onClose }) => {
       const quantity = 1;
       const unitPrice = product.sale_price || product.mrp || 0;
       const discountPercent = 0;
-      const gstPercent = product.gst_percent || 18;
+      const gstPercent = product.gst_percent || 12;
       
       const subtotal = quantity * unitPrice;
       const discountAmount = (subtotal * discountPercent) / 100;
       const taxableAmount = subtotal - discountAmount;
       const taxAmount = (taxableAmount * gstPercent) / 100;
+      const finalAmount = taxableAmount + taxAmount;
       
       const newItem = {
         id: Date.now(),
@@ -269,17 +308,19 @@ const SalesOrderFlowV2 = ({ open = true, onClose }) => {
         gst_percent: gstPercent,
         tax_amount: taxAmount,
         subtotal: subtotal,
-        total: taxableAmount + taxAmount,
+        total: finalAmount,
         manufacturer: product.manufacturer,
         category: product.category
       };
 
+      const updatedItems = [...order.items, newItem];
       setOrder(prev => ({
         ...prev,
-        items: [...prev.items, newItem]
+        items: updatedItems
       }));
       
-      recalculateTotals([...order.items, newItem]);
+      // Immediate calculation to update totals
+      recalculateTotals(updatedItems);
     }
   };
 
@@ -305,20 +346,22 @@ const SalesOrderFlowV2 = ({ open = true, onClose }) => {
         const updatedItem = { ...item, [field]: value };
         
         // Recalculate amounts if needed
-        if (field === 'quantity' || field === 'unit_price' || field === 'discount_percent') {
+        if (field === 'quantity' || field === 'unit_price' || field === 'discount_percent' || field === 'gst_percent') {
           const quantity = parseFloat(updatedItem.quantity) || 0;
           const unitPrice = parseFloat(updatedItem.unit_price) || 0;
           const discountPercent = parseFloat(updatedItem.discount_percent) || 0;
+          const gstPercent = parseFloat(updatedItem.gst_percent) || 12;
           
           const subtotal = quantity * unitPrice;
           const discountAmount = (subtotal * discountPercent) / 100;
           const taxableAmount = subtotal - discountAmount;
-          const gstAmount = (taxableAmount * (updatedItem.gst_percent || 0)) / 100;
+          const gstAmount = (taxableAmount * gstPercent) / 100;
+          const finalAmount = taxableAmount + gstAmount;
           
           updatedItem.subtotal = subtotal;
           updatedItem.discount_amount = discountAmount;
           updatedItem.tax_amount = gstAmount;
-          updatedItem.total = taxableAmount + gstAmount;
+          updatedItem.total = finalAmount;
         }
         
         return updatedItem;
@@ -337,7 +380,7 @@ const SalesOrderFlowV2 = ({ open = true, onClose }) => {
     recalculateTotals(updatedItems);
   };
 
-  // Recalculate totals using enterprise API
+  // Recalculate totals using corrected calculation logic
   const recalculateTotals = async (items) => {
     if (!items || items.length === 0) {
       setOrder(prev => ({
@@ -363,18 +406,90 @@ const SalesOrderFlowV2 = ({ open = true, onClose }) => {
       if (result.success && result.totals) {
         const formattedTotals = SalesOrderCalculatorEnterprise.formatTotalsForDisplay(result.totals);
         
+        console.log('Calculation result:', result);
+        console.log('Formatted totals:', formattedTotals);
+        
+        // Update items with calculated line totals from backend
+        const updatedItems = items.map((item, index) => {
+          const calculatedLineItem = result.line_items && result.line_items[index];
+          if (calculatedLineItem) {
+            return {
+              ...item,
+              // Update with backend calculated values
+              subtotal: calculatedLineItem.subtotal || calculatedLineItem.line_subtotal,
+              discount_amount: calculatedLineItem.discount_amount,
+              tax_amount: calculatedLineItem.total_tax || calculatedLineItem.tax_amount,
+              total: calculatedLineItem.line_total,
+              calculated_total: calculatedLineItem.line_total, // Add explicit field for display
+              taxable_amount: calculatedLineItem.taxable_amount
+            };
+          }
+          return item;
+        });
+        
         setOrder(prev => ({
           ...prev,
+          items: updatedItems, // Update items with calculated values
           total_quantity: items.reduce((sum, item) => sum + (parseFloat(item.quantity) || 0), 0),
           ...formattedTotals,
           calculatedLineItems: result.line_items
         }));
       } else {
         console.error('Sales order calculation failed:', result.error);
+        // Fallback calculation if the enterprise calculator fails
+        const fallbackTotals = calculateFallbackTotals(items);
+        setOrder(prev => ({
+          ...prev,
+          total_quantity: items.reduce((sum, item) => sum + (parseFloat(item.quantity) || 0), 0),
+          ...fallbackTotals
+        }));
       }
     } catch (error) {
       console.error('Error calculating sales order totals:', error);
+      // Fallback calculation on error
+      const fallbackTotals = calculateFallbackTotals(items);
+      setOrder(prev => ({
+        ...prev,
+        total_quantity: items.reduce((sum, item) => sum + (parseFloat(item.quantity) || 0), 0),
+        ...fallbackTotals
+      }));
     }
+  };
+
+  // Fallback calculation function
+  const calculateFallbackTotals = (items) => {
+    let subtotal = 0;
+    let totalDiscount = 0;
+    let totalTax = 0;
+    
+    items.forEach(item => {
+      const quantity = parseFloat(item.quantity) || 0;
+      const unitPrice = parseFloat(item.unit_price) || 0;
+      const discountPercent = parseFloat(item.discount_percent) || 0;
+      const gstPercent = parseFloat(item.gst_percent) || 12;
+      
+      const lineSubtotal = quantity * unitPrice;
+      const itemDiscount = (lineSubtotal * discountPercent) / 100;
+      const taxableAmount = lineSubtotal - itemDiscount;
+      const taxAmount = (taxableAmount * gstPercent) / 100;
+      
+      subtotal += lineSubtotal;
+      totalDiscount += itemDiscount;
+      totalTax += taxAmount;
+    });
+    
+    const taxableTotal = subtotal - totalDiscount;
+    const finalTotal = taxableTotal + totalTax;
+    
+    return {
+      subtotal_amount: taxableTotal,
+      discount_amount: totalDiscount,
+      tax_amount: totalTax,
+      total_amount: finalTotal,
+      final_amount: finalTotal,
+      cgst_amount: totalTax / 2,
+      sgst_amount: totalTax / 2
+    };
   };
 
   // Save order using enterprise API
@@ -499,19 +614,23 @@ const SalesOrderFlowV2 = ({ open = true, onClose }) => {
       
       debugLogger.debug('Sales order data to send:', salesOrderData);
       
-      // Direct API call to sales-orders endpoint
-      const response = await api.post('/sales-orders/', salesOrderData);
+      // Use enterprise orders endpoint (same as invoice/challan pattern)  
+      const response = await api.post('/enterprise-orders/', salesOrderData);
       
       if (response?.data) {
         const createdOrderId = response.data.order_id || response.data.id;
         const createdOrderNumber = response.data.order_number || response.data.order_no || `ORD-${createdOrderId}`;
         
-        setMessage(`Sales order ${createdOrderNumber} created successfully!`);
-        setMessageType('success');
+        // Store order data for success modal
+        setCreatedOrderData({
+          orderId: createdOrderId,
+          orderNumber: createdOrderNumber,
+          customerName: selectedCustomer?.customer_name || order.customer_name,
+          totalAmount: order.total_amount || 0
+        });
         
-        setTimeout(() => {
-          onClose();
-        }, 2000);
+        // Show success modal instead of message
+        setShowSuccessModal(true);
       } else {
         throw new Error('Invalid response from server');
       }
@@ -579,11 +698,13 @@ Expected Delivery: ${order.expected_delivery_date}
 
   if (!open) return null;
 
-  // Step 1: Create Order
-  if (currentStep === 1) {
-    return (
-      <div className="h-full bg-blue-50">
-        <div className="h-full flex flex-col">
+  // Main component render
+  return (
+    <>
+      {/* Step 1: Create Order */}
+      {currentStep === 1 && (
+        <div className="h-full bg-blue-50">
+          <div className="h-full flex flex-col">
           
           {/* Header */}
           <ModuleHeader
@@ -772,14 +893,13 @@ Expected Delivery: ${order.expected_delivery_date}
           />
         )}
 
-      </div>
-    );
-  }
+        </div>
+      )}
 
-  // Step 2: Review and Confirm
-  return (
-    <div className="h-full bg-blue-50">
-      <div className="h-full flex flex-col">
+      {/* Step 2: Review and Confirm */}
+      {currentStep === 2 && (
+        <div className="h-full bg-blue-50">
+          <div className="h-full flex flex-col">
         
         {/* Header */}
         <ModuleHeader
@@ -807,6 +927,18 @@ Expected Delivery: ${order.expected_delivery_date}
         {/* Content */}
         <div className="flex-1 overflow-y-auto">
           <div className="max-w-4xl mx-auto p-6">
+            
+            {/* Review Page Header */}
+            <div className="flex justify-between items-center mb-6">
+              <h2 className="text-xl font-semibold text-gray-900">Review Sales Order</h2>
+              <button
+                onClick={() => setCurrentStep(1)}
+                className="px-4 py-2 text-blue-600 hover:text-blue-700 hover:bg-blue-50 rounded-lg transition-colors flex items-center gap-2"
+              >
+                <ArrowLeft className="w-4 h-4" />
+                Back to Edit
+              </button>
+            </div>
             
             {/* Message Display */}
             {message && (
@@ -934,13 +1066,25 @@ Expected Delivery: ${order.expected_delivery_date}
                 </div>
                 <div>
                   <p className="text-xs text-gray-600">Created By</p>
-                  <input
-                    type="text"
-                    value={order.created_by || localStorage.getItem('userName') || 'Admin'}
-                    onChange={(e) => setOrder(prev => ({ ...prev, created_by: e.target.value }))}
-                    className="text-sm font-semibold bg-transparent border-b border-gray-300 focus:border-purple-500 focus:outline-none"
-                    placeholder="Created by"
-                  />
+                  <select
+                    value={order.created_by || ''}
+                    onChange={(e) => {
+                      const selectedEmployee = employees.find(emp => emp.user_id == e.target.value);
+                      setOrder(prev => ({ 
+                        ...prev, 
+                        created_by: e.target.value,
+                        created_by_name: selectedEmployee?.full_name || 'Unknown'
+                      }));
+                    }}
+                    className="text-sm font-semibold bg-transparent border-b border-gray-300 focus:border-purple-500 focus:outline-none min-w-[120px]"
+                  >
+                    <option value="">Select Employee</option>
+                    {employees.map(employee => (
+                      <option key={employee.user_id} value={employee.user_id}>
+                        {employee.full_name}
+                      </option>
+                    ))}
+                  </select>
                 </div>
                 <div>
                   <p className="text-xs text-gray-600">Created On</p>
@@ -996,11 +1140,15 @@ Expected Delivery: ${order.expected_delivery_date}
                         const rate = parseFloat(item.unit_price) || 0;
                         const discount = parseFloat(item.discount_percent) || 0;
                         const gst = parseFloat(item.gst_percent) || 0;
-                        const amount = quantity * rate;
-                        const discountAmount = (amount * discount) / 100;
-                        const taxableAmount = amount - discountAmount;
-                        const gstAmount = (taxableAmount * gst) / 100;
-                        const totalAmount = taxableAmount + gstAmount;
+                        
+                        // Use calculated values from backend if available, otherwise calculate locally
+                        const totalAmount = item.calculated_total || item.total || (() => {
+                          const amount = quantity * rate;
+                          const discountAmount = (amount * discount) / 100;
+                          const taxableAmount = amount - discountAmount;
+                          const gstAmount = (taxableAmount * gst) / 100;
+                          return taxableAmount + gstAmount;
+                        })();
                         
                         return (
                           <tr key={index} className="border-b hover:bg-blue-50">
@@ -1133,6 +1281,7 @@ Expected Delivery: ${order.expected_delivery_date}
 
         {/* Footer */}
         <DocumentFooter
+          totalItems={order.total_quantity}
           totalAmount={order.total_amount}
           subtotalAmount={order.subtotal_amount}
           taxAmount={order.tax_amount}
@@ -1142,11 +1291,40 @@ Expected Delivery: ${order.expected_delivery_date}
           onSave={saveOrder}
           onWhatsApp={shareOnWhatsApp}
           isSaving={saving}
-          customerPhone={order.customer_details?.phone}
+          customerPhone={selectedCustomer?.phone || order.customer_details?.phone}
+          showActionButtons={true}
         />
 
-      </div>
-    </div>
+        </div>
+        </div>
+      )}
+
+      {/* Success Modal - Rendered at component level */}
+      {showSuccessModal && (
+        <GenericSuccessModal
+          isOpen={showSuccessModal}
+          onClose={() => {
+            setShowSuccessModal(false);
+            onClose();
+          }}
+          title="Sales Order Created!"
+          documentNumber={createdOrderData?.orderNumber}
+          documentId={createdOrderData?.orderId}
+          documentType="sales-order"
+          customerName={createdOrderData?.customerName}
+          totalAmount={createdOrderData?.totalAmount}
+          onPrint={() => {
+            printOrder();
+            setShowSuccessModal(false);
+          }}
+          onWhatsApp={() => {
+            shareOnWhatsApp();
+            setShowSuccessModal(false);
+          }}
+          showCopy={true}
+        />
+      )}
+    </>
   );
 };
 
@@ -1398,4 +1576,4 @@ const ImportFromDocumentModal = ({ isOpen, onClose, onImport }) => {
   );
 };
 
-export default SalesOrderFlowV2;
+export default SalesOrderFlow;
