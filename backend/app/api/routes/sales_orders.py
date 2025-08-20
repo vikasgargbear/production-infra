@@ -65,7 +65,7 @@ async def create_sales_order(
         
         # Validate customer exists
         customer = db.execute(text("""
-            SELECT customer_id, customer_name, primary_phone, discount_percent 
+            SELECT customer_id, customer_name, primary_phone, discount_percentage 
             FROM parties.customers 
             WHERE customer_id = :id AND org_id = :org_id
         """), {"id": order.customer_id, "org_id": org_id}).fetchone()
@@ -73,7 +73,7 @@ async def create_sales_order(
         if not customer:
             raise HTTPException(status_code=404, detail="Customer not found")
         
-        customer_discount = customer.discount_percent or Decimal("0")
+        customer_discount = customer.discount_percentage or Decimal("0")
         
         # Validate products exist (but don't check inventory yet)
         items_dict = [item.dict() for item in order.items]

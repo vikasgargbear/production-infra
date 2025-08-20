@@ -158,7 +158,7 @@ async function testSalesOrderCreation(customerId, createdByUserId, products) {
         org_id: 'ad808530-1ddb-4377-ab20-67bef145d80d',
         customer_id: customerId,
         order_date: new Date().toISOString().split('T')[0],
-        order_type: 'standard',
+        order_type: 'regular',
         delivery_date: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0], // 7 days from now
         payment_terms: 'credit',
         notes: 'End-to-end test order with complete calculations',
