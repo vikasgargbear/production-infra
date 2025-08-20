@@ -196,11 +196,17 @@ class OrderService:
                 subtotal += line_subtotal
                 total_tax += tax_amount
         
+        # Calculate final amounts correctly
+        gross_total = subtotal  # This is the sum of (quantity * unit_price) for all items
+        taxable_total = gross_total - total_discount  # Amount after discount
+        final_total = taxable_total + total_tax  # Final amount including tax
+        
         return {
-            "subtotal": subtotal,
+            "subtotal": taxable_total,  # Frontend expects this to be taxable amount (after discount)
             "discount": total_discount,
             "tax": total_tax,
-            "total": subtotal - total_discount + total_tax
+            "total": final_total,
+            "gross_amount": gross_total  # Keep gross for reference
         }
     
     @staticmethod
