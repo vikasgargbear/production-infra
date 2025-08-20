@@ -24,6 +24,27 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/sales-orders", tags=["sales-orders"])
 
+@router.get("/employees")
+async def get_employees_for_created_by(
+    db: Session = Depends(get_db),
+    org_id: str = DEFAULT_ORG_ID
+):
+    """Get list of employees for 'Created By' dropdown"""
+    try:
+        result = db.execute(text("""
+            SELECT user_id, full_name, email, role, is_active
+            FROM master.org_users 
+            WHERE org_id = :org_id AND is_active = true
+            ORDER BY full_name
+        """), {"org_id": org_id})
+        
+        employees = [dict(row._mapping) for row in result]
+        return employees
+        
+    except Exception as e:
+        logger.error(f"Error fetching employees: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 @router.post("/", response_model=OrderResponse)
 async def create_sales_order(
     order: OrderCreate,
@@ -100,6 +121,15 @@ async def create_sales_order(
         if not order_data.get("payment_terms"):
             order_data["payment_terms"] = "credit"
         
+        # Get a valid user ID for created_by field
+        user_result = db.execute(text("""
+            SELECT user_id FROM master.org_users 
+            WHERE org_id = :org_id AND is_active = true 
+            LIMIT 1
+        """), {"org_id": org_id})
+        user = user_result.fetchone()
+        created_by_user = user.user_id if user else 1
+        
         # Insert sales order
         result = db.execute(text("""
             INSERT INTO sales.orders (
@@ -113,7 +143,7 @@ async def create_sales_order(
                 :tax_amount, :total_amount, :order_status, :fulfillment_status, :payment_status,
                 :notes, :created_by, :created_at, :updated_at
             ) RETURNING order_id
-        """), {**order_data, "created_by": 1})
+        """), {**order_data, "created_by": created_by_user})
         
         order_id = result.scalar()
         
@@ -122,39 +152,101 @@ async def create_sales_order(
             item_data = item.dict()
             item_data["order_id"] = order_id
             
-            # Calculate proper amounts
-            quantity = item_data["quantity"]
-            unit_price = item_data["unit_price"]
-            discount_amount = (quantity * unit_price * item_data.get("discount_percent", 0)) / 100
-            taxable_amount = (quantity * unit_price) - discount_amount
-            tax_amount = (taxable_amount * item_data.get("tax_percent", 0)) / 100
+            # Get product details including HSN code
+            product_details = db.execute(text("""
+                SELECT product_name, hsn_code FROM inventory.products 
+                WHERE product_id = :product_id AND org_id = :org_id
+            """), {"product_id": item_data["product_id"], "org_id": org_id}).fetchone()
             
-            # Calculate GST components
-            gst_rate = item_data.get("tax_percent", 18) / 2  # Split into CGST/SGST
-            cgst_amount = (taxable_amount * gst_rate) / 100
-            sgst_amount = (taxable_amount * gst_rate) / 100
+            # Enhanced calculation logic - consistent with frontend
+            quantity = Decimal(str(item_data["quantity"]))
+            unit_price = Decimal(str(item_data["unit_price"]))
+            discount_percent = Decimal(str(item_data.get("discount_percent", 0)))
+            tax_percent = Decimal(str(item_data.get("tax_percent", 18)))
+            free_quantity = Decimal(str(item_data.get("free_quantity", 0)))
             
-            item_data.update({
-                "product_name": f"Product {item_data['product_id']}",
-                "discount_amount": discount_amount,
-                "line_total": taxable_amount,
-                "cgst_rate": gst_rate,
-                "sgst_rate": gst_rate,
-                "cgst_amount": cgst_amount,
-                "sgst_amount": sgst_amount
-            })
+            # Step 1: Base amount calculation
+            gross_amount = quantity * unit_price
+            
+            # Step 2: Discount calculation
+            discount_amount = (gross_amount * discount_percent) / 100
+            
+            # Step 3: Taxable amount (after discount)
+            taxable_amount = gross_amount - discount_amount
+            
+            # Step 4: Tax calculations (GST components)
+            # For intra-state: CGST + SGST, for inter-state: IGST
+            cgst_percent = tax_percent / 2
+            sgst_percent = tax_percent / 2 
+            igst_percent = Decimal("0")  # Assume intra-state for now
+            
+            cgst_amount = (taxable_amount * cgst_percent) / 100
+            sgst_amount = (taxable_amount * sgst_percent) / 100
+            igst_amount = (taxable_amount * igst_percent) / 100
+            
+            tax_amount = cgst_amount + sgst_amount + igst_amount
+            
+            # Step 5: Final line total
+            line_total = taxable_amount + tax_amount
+            
+            # Ensure no zero calculations
+            if line_total <= 0:
+                logger.warning(f"Line total is zero for product {item_data['product_id']}: qty={quantity}, price={unit_price}")
+                line_total = Decimal("0.01")  # Minimum value to prevent zero
+            
+            # Build complete item data with all required fields - ensure proper decimal conversion
+            complete_item_data = {
+                "order_id": order_id,
+                "product_id": item_data["product_id"],
+                "product_name": product_details.product_name if product_details else f"Product {item_data['product_id']}",
+                "hsn_code": product_details.hsn_code if product_details else None,
+                "quantity": float(quantity),
+                "uom": item_data.get("uom", "PCS"),
+                "pack_type": item_data.get("pack_type", "Strip"),
+                "pack_size": item_data.get("pack_size", 1),
+                "base_quantity": float(quantity),  # Same as quantity for now
+                "unit_price": float(unit_price),
+                "mrp": item_data.get("mrp", float(unit_price * Decimal("1.2"))),  # Default MRP calculation
+                "discount_percent": float(discount_percent),
+                "discount_amount": float(discount_amount),
+                "scheme_discount_percent": item_data.get("scheme_discount_percent", 0),
+                "scheme_discount_amount": item_data.get("scheme_discount_amount", 0),
+                "free_quantity": float(free_quantity),
+                "scheme_code": item_data.get("scheme_code"),
+                "taxable_amount": float(taxable_amount),
+                "tax_percent": float(tax_percent),
+                "tax_amount": float(tax_amount),
+                "igst_percent": float(igst_percent),
+                "cgst_percent": float(cgst_percent),
+                "sgst_percent": float(sgst_percent),
+                "cess_percent": item_data.get("cess_percent", 0),
+                "line_total": float(line_total)
+            }
+            
+            # Logging for debugging calculations
+            logger.info(f"Item {item_data['product_id']}: Qty={quantity}, Price={unit_price}, "
+                       f"Gross={gross_amount}, Discount={discount_amount}, "
+                       f"Taxable={taxable_amount}, Tax={tax_amount}, Total={line_total}")
             
             db.execute(text("""
                 INSERT INTO sales.order_items (
-                    order_id, product_id, product_name, quantity,
-                    unit_price, discount_percent, discount_amount, line_total,
-                    cgst_rate, sgst_rate, cgst_amount, sgst_amount
+                    order_id, product_id, product_name, hsn_code,
+                    quantity, uom, pack_type, pack_size, base_quantity,
+                    unit_price, mrp, discount_percent, discount_amount,
+                    scheme_discount_percent, scheme_discount_amount, free_quantity, scheme_code,
+                    taxable_amount, tax_percent, tax_amount,
+                    igst_percent, cgst_percent, sgst_percent, cess_percent,
+                    line_total
                 ) VALUES (
-                    :order_id, :product_id, :product_name, :quantity,
-                    :unit_price, :discount_percent, :discount_amount, :line_total,
-                    :cgst_rate, :sgst_rate, :cgst_amount, :sgst_amount
+                    :order_id, :product_id, :product_name, :hsn_code,
+                    :quantity, :uom, :pack_type, :pack_size, :base_quantity,
+                    :unit_price, :mrp, :discount_percent, :discount_amount,
+                    :scheme_discount_percent, :scheme_discount_amount, :free_quantity, :scheme_code,
+                    :taxable_amount, :tax_percent, :tax_amount,
+                    :igst_percent, :cgst_percent, :sgst_percent, :cess_percent,
+                    :line_total
                 )
-            """), item_data)
+            """), complete_item_data)
         
         # NO inventory allocation for sales orders - that happens on approval
         
