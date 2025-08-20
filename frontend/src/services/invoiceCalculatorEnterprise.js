@@ -83,55 +83,47 @@ class InvoiceCalculatorEnterprise {
    * @returns {Object} Calculated values
    */
   static calculateItem(item, gstType = 'CGST/SGST') {
-    // Parse quantities - handle different field names
-    const totalQuantity = parseFloat(item.quantity || item.total_quantity) || 0;
-    const freeQuantity = parseFloat(item.free_quantity) || 0;
-    
-    // CRITICAL BUSINESS LOGIC: base_quantity is what customer pays for
-    // total_quantity = base_quantity + free_quantity (what customer receives)
-    const baseQuantity = Math.max(0, totalQuantity - freeQuantity);
-    
-    const unitPrice = parseFloat(item.rate || item.sale_price || item.unit_price) || 0;
+    const quantity = parseFloat(item.quantity) || 0;
+    const rate = parseFloat(item.sale_price || item.rate || item.selling_price) || 0;
     const discountPercent = parseFloat(item.discount_percent) || 0;
-    const gstPercent = parseFloat(item.gst_percent || item.tax_rate) || 12;
+    const gstPercent = parseFloat(item.gst_percent) || 12;
+    
+    // CRITICAL FIX: Use base_quantity for billing calculations (not total quantity)
+    // base_quantity = billable items only, quantity = total delivered (includes free items)
+    const baseQuantity = parseFloat(item.base_quantity || item.baseQuantity || quantity);
 
-    // Base calculations - ONLY charge for base quantity (not free items)
-    const subtotal = baseQuantity * unitPrice;
+    // Base calculations using billable quantity only
+    const subtotal = rate * baseQuantity;
     const discountAmount = (subtotal * discountPercent) / 100;
     const taxableAmount = subtotal - discountAmount;
     const gstAmount = (taxableAmount * gstPercent) / 100;
-    
-    // Split GST based on type
-    let cgstAmount = 0, sgstAmount = 0, igstAmount = 0;
-    if (gstType === 'CGST/SGST') {
-      cgstAmount = gstAmount / 2;
-      sgstAmount = gstAmount / 2;
-    } else {
-      igstAmount = gstAmount;
-    }
-    
-    const lineTotal = taxableAmount + gstAmount;
+    const totalAmount = taxableAmount + gstAmount;
 
     return {
-      // Original fields
+      // Original fields preserved
       ...item,
-      base_quantity: baseQuantity,
-      total_quantity: totalQuantity,
-      free_quantity: freeQuantity,
       
-      // Calculated fields
+      // Calculated fields matching original calculator
       subtotal: this.round(subtotal),
-      discount_amount: this.round(discountAmount),
-      taxable_amount: this.round(taxableAmount),
-      tax_amount: this.round(gstAmount),
-      cgst_amount: this.round(cgstAmount),
-      sgst_amount: this.round(sgstAmount),
-      igst_amount: this.round(igstAmount),
-      line_total: this.round(lineTotal),
-      calculated_total: this.round(lineTotal), // For ItemsTable compatibility
+      discountAmount: this.round(discountAmount),
+      discount_amount: this.round(discountAmount), // Alias for compatibility
+      taxableAmount: this.round(taxableAmount),
+      taxable_amount: this.round(taxableAmount), // Alias for compatibility
+      gstAmount: this.round(gstAmount),
+      tax_amount: this.round(gstAmount), // Alias for compatibility
+      cgst: this.round(gstAmount / 2), // Original field name
+      sgst: this.round(gstAmount / 2), // Original field name
+      cgst_amount: this.round(gstType === 'CGST/SGST' ? gstAmount / 2 : 0),
+      sgst_amount: this.round(gstType === 'CGST/SGST' ? gstAmount / 2 : 0),
+      igst_amount: this.round(gstType === 'IGST' ? gstAmount : 0),
+      totalAmount: this.round(totalAmount),
+      line_total: this.round(totalAmount),
+      calculated_total: this.round(totalAmount), // For ItemsTable compatibility
       
-      // Additional info
-      effective_rate: baseQuantity > 0 ? this.round(lineTotal / totalQuantity) : 0 // Rate per total item received
+      // Quantity fields for clarity
+      base_quantity: baseQuantity,
+      total_quantity: quantity,
+      billable_quantity: baseQuantity // Alias for clarity
     };
   }
 

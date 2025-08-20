@@ -332,11 +332,19 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
     }
   }, [invoice.items.length]); // Only watch length, not individual item changes
 
-  // Update item field with debounced calculation
+  // Update item field with debounced calculation  
   const handleUpdateItem = (index, field, value) => {
     const updatedItems = invoice.items.map((item, i) => {
       if (i === index) {
         const updatedItem = { ...item, [field]: value };
+        
+        // CRITICAL: Ensure base_quantity is correctly set for billing
+        if (field === 'quantity') {
+          // When quantity is updated, set base_quantity to the same value
+          // This assumes quantity field represents what customer pays for
+          updatedItem.base_quantity = parseFloat(value) || 0;
+        }
+        
         return updatedItem;
       }
       return item;
@@ -431,8 +439,8 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
         batch_number: product.batch_number || product.batch_no,
         hsn_code: product.hsn_code,
         expiry_date: product.expiry_date || product.batch_expiry_date,
-        base_quantity: 1,  // Customer pays for 1
-        quantity: 1,       // Total quantity (will be base + free)
+        base_quantity: 1,  // Customer pays for 1 
+        quantity: 1,       // What customer pays for (same as base_quantity)
         mrp: product.mrp || product.sale_price || 0,
         rate: product.rate || product.sale_price || 0,
         sale_price: product.sale_price || 0,
