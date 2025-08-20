@@ -3,6 +3,7 @@ import {
   Receipt, Save, Calendar, Filter, Calculator, AlertCircle, CheckCircle, Users, FileText, FileInput
 } from 'lucide-react';
 import { CustomerSearch, Select, Card, DatePicker, Button } from '../../global';
+import CustomerCreationB2B from '../../global/ui/forms/CustomerCreationB2B';
 import { notesApi } from '../../../services/api/modules/notes.api';
 import offlineStorage from '../../../services/offlineStorage';
 
@@ -30,6 +31,7 @@ const DebitNoteFlow: React.FC<DebitNoteFlowProps> = ({ onClose }) => {
   const [noteItems, setNoteItems] = useState<NoteItem[]>([]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [showCustomerModal, setShowCustomerModal] = useState(false);
   
   // Pagination and filter state
   const [invoicePage, setInvoicePage] = useState(1);
@@ -354,6 +356,7 @@ const DebitNoteFlow: React.FC<DebitNoteFlowProps> = ({ onClose }) => {
                   <CustomerSearch
                     value={selectedCustomer}
                     onChange={setSelectedCustomer}
+                    onCreateNew={() => setShowCustomerModal(true)}
                     placeholder="Search customer by name, phone, or GST number..."
                     className="w-full"
                   />
@@ -471,6 +474,18 @@ const DebitNoteFlow: React.FC<DebitNoteFlowProps> = ({ onClose }) => {
           </div>
         </div>
       </div>
+
+      {/* Customer Creation Modal */}
+      {showCustomerModal && (
+        <CustomerCreationB2B
+          onClose={() => setShowCustomerModal(false)}
+          onCustomerCreated={(customer) => {
+            setSelectedCustomer(customer);
+            setShowCustomerModal(false);
+            // You can add toast notification here if needed
+          }}
+        />
+      )}
     </div>
   );
 };

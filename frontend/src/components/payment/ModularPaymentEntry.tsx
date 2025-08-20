@@ -60,6 +60,7 @@ const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) =>
   } = usePayment();
 
   const [showGSTCalculator, setShowGSTCalculator] = React.useState<boolean>(false);
+  const [showCustomerModal, setShowCustomerModal] = React.useState<boolean>(false);
   
   // API data states
   const [isLoading, setIsLoading] = React.useState(false);
@@ -385,7 +386,7 @@ const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) =>
                   <CustomerSearch
                     value={selectedCustomer}
                     onChange={handleCustomerSelect}
-                    onCreateNew={() => {/* Handle create new */}}
+                    onCreateNew={() => setShowCustomerModal(true)}
                     displayMode="inline"
                     placeholder="Search customer by name, phone, or code..."
                     required
@@ -441,6 +442,18 @@ const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) =>
           onCalculate={() => {}}
           companyGSTIN=""
           customerGSTIN=""
+        />
+      )}
+
+      {/* Customer Creation Modal */}
+      {showCustomerModal && (
+        <CustomerCreationB2B
+          onClose={() => setShowCustomerModal(false)}
+          onCustomerCreated={(customer) => {
+            setCustomer(customer);
+            setShowCustomerModal(false);
+            // You can add toast notification here if needed
+          }}
         />
       )}
     </div>

@@ -19,6 +19,7 @@ import {
 
 // Import global components
 import { CustomerSearch, OutstandingInvoicesTable } from '../global';
+import CustomerCreationB2B from '../global/ui/forms/CustomerCreationB2B';
 import { paymentsApi } from '../../services/api/modules/payments.api';
 
 interface EnterprisePaymentEntryProps {
@@ -128,6 +129,7 @@ const EnterprisePaymentEntry: React.FC<EnterprisePaymentEntryProps> = ({ open, o
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [allocationMethod, setAllocationMethod] = useState<'fifo' | 'manual'>('fifo');
   const [showPaymentHistory, setShowPaymentHistory] = useState(false);
+  const [showCustomerCreationModal, setShowCustomerCreationModal] = useState(false);
 
   // Check for locally stored payments
   const checkLocalPayments = () => {
@@ -447,6 +449,7 @@ const EnterprisePaymentEntry: React.FC<EnterprisePaymentEntryProps> = ({ open, o
         <CustomerSearch
           value={formData.party as any}
           onChange={handlePartySelect}
+          onCreateNew={() => setShowCustomerCreationModal(true)}
           displayMode="dropdown"
           placeholder="Search customer by name, phone, or code..."
           required
@@ -774,6 +777,18 @@ const EnterprisePaymentEntry: React.FC<EnterprisePaymentEntryProps> = ({ open, o
           </div>
         </div>
       </div>
+
+      {/* Customer Creation Modal */}
+      {showCustomerCreationModal && (
+        <CustomerCreationB2B
+          onClose={() => setShowCustomerCreationModal(false)}
+          onCustomerCreated={(customer) => {
+            handlePartySelect(customer);
+            setShowCustomerCreationModal(false);
+            // You can add toast notification here if needed
+          }}
+        />
+      )}
     </div>
   );
 };

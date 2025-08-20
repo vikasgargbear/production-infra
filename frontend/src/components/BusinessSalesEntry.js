@@ -739,15 +739,24 @@ const BusinessSalesEntry = ({ open, onClose }) => {
                               : 'No customers available in the system'
                             }
                           </p>
-                          {!searchQuery && (
+                          <div className="flex flex-col gap-2">
+                            {!searchQuery && (
+                              <button
+                                onClick={handleRefresh}
+                                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 inline-flex items-center justify-center"
+                              >
+                                <RefreshCw className="w-4 h-4 mr-2" />
+                                Refresh Data
+                              </button>
+                            )}
                             <button
-                              onClick={handleRefresh}
-                              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 inline-flex items-center"
+                              onClick={() => setShowCustomerModal(true)}
+                              className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 inline-flex items-center justify-center"
                             >
-                              <RefreshCw className="w-4 h-4 mr-2" />
-                              Refresh Data
+                              <Plus className="w-4 h-4 mr-2" />
+                              Create New Customer
                             </button>
-                          )}
+                          </div>
                         </div>
                       )}
                     </div>
@@ -1854,6 +1863,27 @@ const BusinessSalesEntry = ({ open, onClose }) => {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Customer Creation Modal */}
+      {showCustomerModal && (
+        <CustomerCreationB2B
+          onClose={() => setShowCustomerModal(false)}
+          onCustomerCreated={(customer) => {
+            // Add the new customer to the local state
+            setCustomers(prev => [...prev, customer]);
+            // Select the newly created customer
+            setInvoice(prev => ({
+              ...prev,
+              customerId: customer.id || customer.customer_id || customer.party_id,
+              customerCode: customer.customer_code || customer.code || '',
+              customerName: customer.customer_name || customer.name || '',
+              customerDetails: customer
+            }));
+            setShowCustomerModal(false);
+            toast.success('Customer created successfully');
+          }}
+        />
       )}
     </div>
   );

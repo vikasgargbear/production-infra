@@ -239,61 +239,46 @@ class EnterpriseChallanService:
                 self.db.execute(
                     text("""
                         INSERT INTO sales.delivery_challan_items (
-                            challan_id, order_item_id, product_id,
-                            product_name, batch_id, batch_number,
-                            expiry_date, ordered_quantity, dispatched_quantity,
-                            pending_quantity, unit_price, package_type,
-                            packages_count
+                            challan_id, order_item_id, product_id, batch_id,
+                            ordered_quantity, dispatched_quantity, delivered_quantity,
+                            returned_quantity, damaged_quantity, uom, pack_type,
+                            item_status, item_notes, display_order
                         ) VALUES (
-                            :challan_id, :order_item_id, :product_id,
-                            :product_name, :batch_id, :batch_number,
-                            :expiry_date, :ordered_quantity, :dispatched_quantity,
-                            :pending_quantity, :unit_price, :package_type,
-                            :packages_count
+                            :challan_id, :order_item_id, :product_id, :batch_id,
+                            :ordered_quantity, :dispatched_quantity, :delivered_quantity,
+                            :returned_quantity, :damaged_quantity, :uom, :pack_type,
+                            :item_status, :item_notes, :display_order
                         )
                     """),
                     {
                         "challan_id": challan_id,
                         "order_item_id": order_item_id,  # Can be NULL for direct challans
                         "product_id": item.product_id,
-                        "product_name": item.product_name,
                         "batch_id": item.batch_id,
-                        "batch_number": item.batch_number,
-                        "expiry_date": item.expiry_date,
                         "ordered_quantity": item.ordered_quantity or item.dispatched_quantity,
                         "dispatched_quantity": item.dispatched_quantity,
-                        "pending_quantity": pending_qty,
-                        "unit_price": item.unit_price,
-                        "package_type": item.package_type,
-                        "packages_count": item.packages_count
+                        "delivered_quantity": None,  # Will be updated when delivered
+                        "returned_quantity": 0,
+                        "damaged_quantity": 0,
+                        "uom": "PCS",  # Default unit, could be from product or item data
+                        "pack_type": item.package_type or "Strip",  # Use package_type from request
+                        "item_status": "dispatched",
+                        "item_notes": f"Product: {item.product_name}",  # Store product name in notes
+                        "display_order": idx + 1
                     }
                 )
             
-            # Add initial tracking entry
-            self.db.execute(
-                text("""
-                    INSERT INTO challan_tracking (
-                        challan_id, location, status, remarks, timestamp
-                    ) VALUES (
-                        :challan_id, :location, :status, :remarks, :timestamp
-                    )
-                """),
-                {
-                    "challan_id": challan_id,
-                    "location": "Warehouse",
-                    "challan_status": "draft",
-                    "remarks": "Challan created",
-                    "timestamp": datetime.now()
-                }
-            )
+            # Note: Tracking table not implemented yet, status is tracked in delivery_challans table
             
             self.db.commit()
             
             return {
                 "challan_id": challan_id,
                 "challan_number": challan_number,
-                "customer_name": order.customer_name,
-                "status": "draft"
+                "customer_name": customer_name,
+                "status": "draft",
+                "total_amount": sum(item.unit_price * item.dispatched_quantity for item in request.items),
+                "items": len(request.items)
             }
             
         except HTTPException:
@@ -417,16 +402,8 @@ async def get_challan_details(
         )
         items = [dict(row._mapping) for row in items_result]
         
-        # Get tracking history
-        tracking_result = db.execute(
-            text("""
-                SELECT * FROM challan_tracking
-                WHERE challan_id = :challan_id
-                ORDER BY timestamp DESC
-            """),
-            {"challan_id": challan_id}
-        )
-        tracking = [dict(row._mapping) for row in tracking_result]
+        # Get tracking history - tracking table not implemented yet
+        tracking = []
         
         return {
             **dict(challan._mapping),
@@ -480,23 +457,7 @@ async def dispatch_challan(
         if not result.scalar():
             raise HTTPException(status_code=404, detail="Challan not found or already dispatched")
         
-        # Add tracking entry
-        db.execute(
-            text("""
-                INSERT INTO challan_tracking (
-                    challan_id, location, status, remarks, timestamp
-                ) VALUES (
-                    :challan_id, :location, :status, :remarks, :timestamp
-                )
-            """),
-            {
-                "challan_id": challan_id,
-                "location": dispatch_data.get("dispatch_location", "Warehouse"),
-                "status": "dispatched",
-                "remarks": dispatch_data.get("remarks", "Challan dispatched"),
-                "timestamp": datetime.now()
-            }
-        )
+        # Note: Tracking entry would go here when tracking table is implemented
         
         # Update order delivery status
         db.execute(
@@ -552,27 +513,7 @@ async def deliver_challan(
         if not row:
             raise HTTPException(status_code=404, detail="Challan not found or not dispatched")
         
-        # Add tracking entry
-        db.execute(
-            text("""
-                INSERT INTO challan_tracking (
-                    challan_id, location, status, remarks, timestamp,
-                    latitude, longitude
-                ) VALUES (
-                    :challan_id, :location, :status, :remarks, :timestamp,
-                    :latitude, :longitude
-                )
-            """),
-            {
-                "challan_id": challan_id,
-                "location": delivery_data.get("delivery_location", "Customer location"),
-                "status": "delivered",
-                "remarks": delivery_data.get("remarks", "Challan delivered"),
-                "timestamp": datetime.now(),
-                "latitude": delivery_data.get("latitude"),
-                "longitude": delivery_data.get("longitude")
-            }
-        )
+        # Note: Tracking entry would go here when tracking table is implemented
         
         # Update order delivery status
         db.execute(
@@ -622,27 +563,7 @@ async def add_tracking_update(
         if not check_result.first():
             raise HTTPException(status_code=404, detail="Challan not found")
         
-        # Add tracking entry
-        db.execute(
-            text("""
-                INSERT INTO challan_tracking (
-                    challan_id, location, status, remarks, 
-                    latitude, longitude, timestamp
-                ) VALUES (
-                    :challan_id, :location, :status, :remarks,
-                    :latitude, :longitude, :timestamp
-                )
-            """),
-            {
-                "challan_id": challan_id,
-                "location": tracking.location,
-                "status": tracking.status,
-                "remarks": tracking.remarks,
-                "latitude": tracking.latitude,
-                "longitude": tracking.longitude,
-                "timestamp": datetime.now()
-            }
-        )
+        # Note: Tracking entry would go here when tracking table is implemented
         
         db.commit()
         return {"message": "Tracking update added successfully"}
