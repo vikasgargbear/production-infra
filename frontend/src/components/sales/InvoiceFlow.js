@@ -13,9 +13,9 @@ import InvoiceValidator from '../../services/invoiceValidator';
 import DataTransformer from '../../services/dataTransformer';
 import DateFormatter from '../../services/dateFormatter';
 import InvoiceApiService from '../../services/invoiceApiService';
-import { ProductSearchSimple, ItemsTable, ModuleHeader, CustomerSearch, ProductCreationModal, ViewHistoryButton, GSTCalculator, DocumentFooter } from '../global';
+import { ProductSearchSimple, ItemsTable, ModuleHeader, CustomerSearch, ProductCreationModal, ViewHistoryButton, GSTCalculator, DocumentFooter, GenericSuccessModal } from '../global';
 import CustomerCreationB2B from '../global/ui/forms/CustomerCreationB2B';
-import InvoiceSuccessModal from './InvoiceSuccessModal';
+// import InvoiceSuccessModal from './InvoiceSuccessModal'; // Replaced with GenericSuccessModal
 import InvoiceSummaryTop from './components/InvoiceSummaryTop';
 import Toast from '../common/Toast';
 // import BillSummary from './components/BillSummary';
@@ -225,13 +225,134 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
   // Backend handles all calculations when invoice is created
   // Frontend only collects user inputs and displays results
 
-  // ENTERPRISE STRUCTURE: Frontend never calculates
-  // All calculations handled by backend when invoice is saved
-  // Frontend only displays "Estimated" totals until backend processes
+  // Calculate invoice totals using enterprise calculator
+  const calculateInvoiceTotals = async (items) => {
+    if (!items || items.length === 0) {
+      setInvoice(prev => ({
+        ...prev,
+        subtotal_amount: 0,
+        tax_amount: 0,
+        round_off: 0,
+        net_amount: 0,
+        items: []
+      }));
+      return;
+    }
 
-  // Use backend calculation API for security
-  // REMOVED: calculateTotalsBackend() - redundant function
-  // Using only InvoiceCalculatorEnterprise for single source of truth
+    try {
+      const invoiceData = {
+        ...invoice,
+        items,
+        customer_id: selectedCustomer?.customer_id
+      };
+
+      const result = await InvoiceCalculatorEnterprise.calculateInvoice(invoiceData);
+      
+      if (result.success && result.totals) {
+        const formattedTotals = InvoiceCalculatorEnterprise.formatTotalsForDisplay(result.totals);
+        
+        console.log('Invoice calculation result:', result);
+
+        // Update items with calculated values from backend
+        const updatedItems = items.map((item, index) => {
+          const calculatedItem = result.line_items?.[index];
+          if (calculatedItem) {
+            return {
+              ...item,
+              calculated_total: calculatedItem.line_total,
+              tax_amount: calculatedItem.tax_amount,
+              discount_amount: calculatedItem.discount_amount
+            };
+          }
+          return item;
+        });
+
+        setInvoice(prev => ({
+          ...prev,
+          items: updatedItems,
+          ...formattedTotals,
+          calculatedLineItems: result.line_items
+        }));
+      } else {
+        console.error('Invoice calculation failed:', result.error);
+        // Fallback calculation if the enterprise calculator fails
+        const fallbackTotals = calculateFallbackTotals(items);
+        setInvoice(prev => ({
+          ...prev,
+          ...fallbackTotals
+        }));
+      }
+    } catch (error) {
+      console.error('Error calculating invoice totals:', error);
+      // Fallback calculation on error
+      const fallbackTotals = calculateFallbackTotals(items);
+      setInvoice(prev => ({
+        ...prev,
+        ...fallbackTotals
+      }));
+    }
+  };
+
+  // Fallback calculation method (frontend-only)
+  const calculateFallbackTotals = (items) => {
+    let subtotal = 0;
+    let totalTax = 0;
+
+    items.forEach(item => {
+      const quantity = parseFloat(item.quantity) || 0;
+      const rate = parseFloat(item.rate || item.sale_price) || 0;
+      const discountPercent = parseFloat(item.discount_percentage) || 0;
+      const taxPercent = parseFloat(item.tax_percentage) || 0;
+
+      const lineTotal = quantity * rate;
+      const discountAmount = (lineTotal * discountPercent) / 100;
+      const taxableAmount = lineTotal - discountAmount;
+      const taxAmount = (taxableAmount * taxPercent) / 100;
+
+      subtotal += taxableAmount;
+      totalTax += taxAmount;
+    });
+
+    const grossTotal = subtotal + totalTax;
+    const roundOff = Math.round(grossTotal) - grossTotal;
+    const netAmount = grossTotal + roundOff;
+
+    return {
+      subtotal_amount: subtotal,
+      tax_amount: totalTax,
+      round_off: roundOff,
+      net_amount: netAmount
+    };
+  };
+
+  // Calculate totals when items change
+  React.useEffect(() => {
+    if (invoice.items && invoice.items.length > 0) {
+      calculateInvoiceTotals(invoice.items);
+    }
+  }, [invoice.items.length, invoice.items]);
+
+  // Update item field
+  const handleUpdateItem = (index, field, value) => {
+    const updatedItems = invoice.items.map((item, i) => {
+      if (i === index) {
+        const updatedItem = { ...item, [field]: value };
+        return updatedItem;
+      }
+      return item;
+    });
+    
+    setInvoice(prev => ({ ...prev, items: updatedItems }));
+    calculateInvoiceTotals(updatedItems);
+  };
+
+  const handleRemoveItem = (index) => {
+    const updatedItems = invoice.items.filter((_, i) => i !== index);
+    setInvoice(prev => ({ ...prev, items: updatedItems }));
+    calculateInvoiceTotals(updatedItems);
+  };
+
+  // ENTERPRISE CALCULATION: Real-time frontend calculations with backend validation
 
   const handleCustomerSelect = (customer) => {
     console.log('handleCustomerSelect called with:', customer);
@@ -324,48 +445,6 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
         items: [...prev.items, newItem]
       }));
     }
-  };
-
-  const handleUpdateItem = (index, field, value) => {
-    setInvoice(prev => ({
-      ...prev,
-      items: prev.items.map((item, i) => {
-        if (i === index) {
-          // Handle field updates
-          const updatedItem = { ...item };
-          
-          if (field === 'quantity' || field === 'discount_percent' || field === 'free_quantity') {
-            updatedItem[field] = parseFloat(value) || 0;
-            
-            // Recalculate totals using InvoiceCalculator
-            const quantity = field === 'quantity' ? parseFloat(value) || 0 : updatedItem.quantity || 0;
-            const rate = updatedItem.rate || updatedItem.sale_price || 0;
-            const discount = field === 'discount_percent' ? parseFloat(value) || 0 : updatedItem.discount_percent || 0;
-            
-            const discountAmount = (quantity * rate * discount) / 100;
-            const amount = (quantity * rate) - discountAmount;
-            const taxAmount = (amount * (updatedItem.gst_percent || updatedItem.tax_rate || 12)) / 100;
-            
-            updatedItem.amount = amount;
-            updatedItem.tax_amount = taxAmount;
-            updatedItem.final_amount = amount + taxAmount;
-            updatedItem.total = amount + taxAmount;
-          } else {
-            updatedItem[field] = value;
-          }
-          
-          return updatedItem;
-        }
-        return item;
-      })
-    }));
-  };
-
-  const handleRemoveItem = (index) => {
-    setInvoice(prev => ({
-      ...prev,
-      items: prev.items.filter((_, i) => i !== index)
-    }));
   };
 
   const validateInvoice = (checkPayment = false) => {
@@ -1265,81 +1344,18 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
 
         {/* Footer */}
         <DocumentFooter
-          onSaveDraft={() => {
-            console.log('Save draft clicked');
-            // TODO: Implement save draft
-          }}
-          onPrint={handlePrint}
-          onWhatsAppShare={handleWhatsAppShare}
-          onBack={() => setCurrentStep(1)}
-          onNext={handleProceedToReview}
-          onSaveInvoice={handleSaveInvoice}
-          isSaving={saving}
+          totalItems={invoice.items.length}
           totalAmount={invoice.net_amount}
-          invoiceNumber={createdInvoiceData?.invoiceNumber || invoice.invoice_no}
-          customerName={selectedCustomer?.customer_name || invoice.customer_name}
-          invoiceId={createdInvoiceData?.invoiceId || null}
-          onDownload={() => {
-            // Generate PDF content
-            const pdfContent = `
-INVOICE #${createdInvoiceData?.invoiceNumber || invoice.invoice_no}
-Date: ${new Date().toLocaleDateString('en-IN')}
-
-Bill To:
-${selectedCustomer?.customer_name || invoice.customer_name}
-${selectedCustomer?.phone ? 'Phone: ' + selectedCustomer.phone : ''}
-${selectedCustomer?.address ? 'Address: ' + selectedCustomer.address : ''}
-
-Items:
-${(invoice.items || []).map(item => 
-  `${item.product_name || item.item_name} - Qty: ${item.quantity} × ₹${item.rate || item.sale_price} = ₹${((item.quantity || 0) * (item.rate || item.sale_price || 0)).toFixed(2)}`
-).join('\n')}
-
-Total Amount: ₹${createdInvoiceData?.totalAmount?.toFixed(2) || invoice.net_amount?.toFixed(2) || '0.00'}
-`;
-            
-            // Create a blob and download
-            const blob = new Blob([pdfContent], { type: 'text/plain' });
-            const url = window.URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = `Invoice_${createdInvoiceData?.invoiceNumber || invoice.invoice_no}.txt`;
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-            window.URL.revokeObjectURL(url);
-            
-            toast.success('Invoice downloaded as text file');
-          }}
-          onShare={() => {
-            // Use customer phone from the invoice/selected customer
-            const customerPhone = selectedCustomer?.phone || createdInvoiceData?.customerPhone;
-            
-            if (!customerPhone) {
-              toast.error('Customer phone number not available');
-              return;
-            }
-            
-            // Format phone number
-            let phoneNumber = customerPhone.replace(/\s+/g, '');
-            if (!phoneNumber.startsWith('+')) {
-              phoneNumber = '+91' + phoneNumber; // India code
-            }
-            
-            // Create WhatsApp message
-            const message = encodeURIComponent(
-              `Dear ${selectedCustomer?.customer_name || invoice.customer_name},\n\n` +
-              `Your invoice #${createdInvoiceData?.invoiceNumber || invoice.invoice_no} dated ${new Date().toLocaleDateString('en-IN')} ` +
-              `for amount ₹${createdInvoiceData?.totalAmount?.toFixed(2) || invoice.net_amount?.toFixed(2) || '0.00'} has been generated.\n\n` +
-              `Thank you for your business!\n\n` +
-              `Regards,\nAASO Pharma`
-            );
-            
-            // Open WhatsApp
-            window.open(`https://wa.me/${phoneNumber}?text=${message}`, '_blank');
-            toast.info('WhatsApp opened. Please attach the invoice PDF manually before sending.');
-            setShowSuccessModal(false);
-          }}
+          subtotalAmount={invoice.subtotal_amount}
+          taxAmount={invoice.tax_amount}
+          roundOffAmount={invoice.round_off}
+          grandTotal={invoice.net_amount}
+          onSave={handleSaveInvoice}
+          onPrint={handlePrint}
+          onWhatsApp={handleWhatsAppShare}
+          isSaving={saving}
+          customerPhone={selectedCustomer?.phone || invoice.customer_details?.phone}
+          showActionButtons={true}
         />
 
       </div>
@@ -1360,78 +1376,21 @@ Total Amount: ₹${createdInvoiceData?.totalAmount?.toFixed(2) || invoice.net_am
       
       {/* Success Modal */}
       {showSuccessModal && createdInvoiceData && (
-        <InvoiceSuccessModal
+        <GenericSuccessModal
           isOpen={showSuccessModal}
           onClose={() => {
             setShowSuccessModal(false);
             onClose();
           }}
-          invoiceNumber={createdInvoiceData.invoiceNumber}
-          invoiceId={createdInvoiceData.invoiceId}
+          title="Invoice Created!"
+          documentNumber={createdInvoiceData.invoiceNumber}
+          documentId={createdInvoiceData.invoiceId}
+          documentType="invoice"
           customerName={createdInvoiceData.customerName}
           totalAmount={createdInvoiceData.totalAmount}
           onPrint={handlePrint}
-          onDownload={() => {
-            // Generate PDF content
-            const pdfContent = `
-INVOICE #${createdInvoiceData.invoiceNumber}
-Date: ${new Date().toLocaleDateString('en-IN')}
-
-Bill To:
-${createdInvoiceData.customerName}
-${selectedCustomer?.phone ? 'Phone: ' + selectedCustomer.phone : ''}
-${selectedCustomer?.address ? 'Address: ' + selectedCustomer.address : ''}
-
-Items:
-${(invoice.items || []).map(item => 
-  `${item.product_name || item.item_name} - Qty: ${item.quantity} × ₹${item.rate || item.sale_price} = ₹${((item.quantity || 0) * (item.rate || item.sale_price || 0)).toFixed(2)}`
-).join('\n')}
-
-Total Amount: ₹${createdInvoiceData.totalAmount?.toFixed(2) || '0.00'}
-`;
-            
-            // Create a blob and download
-            const blob = new Blob([pdfContent], { type: 'text/plain' });
-            const url = window.URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = `Invoice_${createdInvoiceData.invoiceNumber}.txt`;
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-            window.URL.revokeObjectURL(url);
-            
-            toast.success('Invoice downloaded as text file');
-          }}
-          onShare={() => {
-            // Use customer phone from the invoice/selected customer
-            const customerPhone = selectedCustomer?.phone || createdInvoiceData?.customerPhone;
-            
-            if (!customerPhone) {
-              toast.error('Customer phone number not available');
-              return;
-            }
-            
-            // Format phone number
-            let phoneNumber = customerPhone.replace(/\s+/g, '');
-            if (!phoneNumber.startsWith('+')) {
-              phoneNumber = '+91' + phoneNumber; // India code
-            }
-            
-            // Create WhatsApp message
-            const message = encodeURIComponent(
-              `Dear ${createdInvoiceData.customerName},\n\n` +
-              `Your invoice #${createdInvoiceData.invoiceNumber} dated ${new Date().toLocaleDateString('en-IN')} ` +
-              `for amount ₹${createdInvoiceData.totalAmount?.toFixed(2) || '0.00'} has been generated.\n\n` +
-              `Thank you for your business!\n\n` +
-              `Regards,\nAASO Pharma`
-            );
-            
-            // Open WhatsApp
-            window.open(`https://wa.me/${phoneNumber}?text=${message}`, '_blank');
-            toast.info('WhatsApp opened. Please attach the invoice PDF manually before sending.');
-            setShowSuccessModal(false);
-          }}
+          onWhatsApp={handleWhatsAppShare}
+          showCopy={true}
         />
       )}
     </div>
