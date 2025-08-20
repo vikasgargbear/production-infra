@@ -8,9 +8,12 @@ from pydantic import BaseModel, EmailStr
 from typing import Optional
 import logging
 from datetime import datetime
+from sqlalchemy.orm import Session
+from sqlalchemy import text
+import json
 
-from app.core.database import get_db_connection
-from app.api.routes.api_wrapper import create_api_response
+from ...core.database import get_db
+from ..routes.api_wrapper import create_api_response
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -41,25 +44,20 @@ class CompanySettings(BaseModel):
     notification_settings: Optional[dict] = {}
 
 @router.get("/info")
-async def get_company_info():
+async def get_company_info(db: Session = Depends(get_db)):
     """Get company information"""
     try:
-        connection = get_db_connection()
-        cursor = connection.cursor(dictionary=True)
-        
         # Check if company info exists
-        cursor.execute("""
+        result = db.execute(text("""
             SELECT name, address, phone, email, gst_number, state, logo, 
                    drug_license, bank_name, account_number, ifsc_code, upi_id,
                    created_at, updated_at
             FROM company_info 
             ORDER BY updated_at DESC 
             LIMIT 1
-        """)
+        """))
         
-        company = cursor.fetchone()
-        cursor.close()
-        connection.close()
+        company = result.fetchone()
         
         if not company:
             # Return default company info if none exists
@@ -79,57 +77,58 @@ async def get_company_info():
             }
             return create_api_response(True, "Default company info returned", default_company)
         
-        return create_api_response(True, "Company info retrieved successfully", company)
+        # Convert row to dictionary
+        company_dict = dict(company._mapping) if hasattr(company, '_mapping') else dict(zip(result.keys(), company))
+        
+        return create_api_response(True, "Company info retrieved successfully", company_dict)
         
     except Exception as e:
         logger.error(f"Error getting company info: {e}")
         return create_api_response(False, f"Error getting company info: {str(e)}")
 
 @router.put("/info")
-async def update_company_info(company_info: CompanyInfo):
+async def update_company_info(company_info: CompanyInfo, db: Session = Depends(get_db)):
     """Update company information"""
     try:
-        connection = get_db_connection()
-        cursor = connection.cursor()
-        
         # Check if company info exists
-        cursor.execute("SELECT id FROM company_info LIMIT 1")
-        existing = cursor.fetchone()
+        result = db.execute(text("SELECT id FROM company_info LIMIT 1"))
+        existing = result.fetchone()
         
         if existing:
             # Update existing record
-            cursor.execute("""
+            db.execute(text("""
                 UPDATE company_info 
-                SET name = %s, address = %s, phone = %s, email = %s, 
-                    gst_number = %s, state = %s, logo = %s, drug_license = %s,
-                    bank_name = %s, account_number = %s, ifsc_code = %s, upi_id = %s,
-                    updated_at = %s
-                WHERE id = %s
-            """, (
-                company_info.name, company_info.address, company_info.phone, 
-                company_info.email, company_info.gst_number, company_info.state,
-                company_info.logo, company_info.drug_license, company_info.bank_name,
-                company_info.account_number, company_info.ifsc_code, company_info.upi_id,
-                datetime.now(), existing[0]
-            ))
+                SET name = :name, address = :address, phone = :phone, email = :email, 
+                    gst_number = :gst_number, state = :state, logo = :logo, drug_license = :drug_license,
+                    bank_name = :bank_name, account_number = :account_number, ifsc_code = :ifsc_code, 
+                    upi_id = :upi_id, updated_at = :updated_at
+                WHERE id = :id
+            """), {
+                "name": company_info.name, "address": company_info.address, "phone": company_info.phone, 
+                "email": company_info.email, "gst_number": company_info.gst_number, "state": company_info.state,
+                "logo": company_info.logo, "drug_license": company_info.drug_license, 
+                "bank_name": company_info.bank_name, "account_number": company_info.account_number, 
+                "ifsc_code": company_info.ifsc_code, "upi_id": company_info.upi_id,
+                "updated_at": datetime.now(), "id": existing[0]
+            })
         else:
             # Create new record
-            cursor.execute("""
+            db.execute(text("""
                 INSERT INTO company_info 
                 (name, address, phone, email, gst_number, state, logo, drug_license,
                  bank_name, account_number, ifsc_code, upi_id, created_at, updated_at)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-            """, (
-                company_info.name, company_info.address, company_info.phone, 
-                company_info.email, company_info.gst_number, company_info.state,
-                company_info.logo, company_info.drug_license, company_info.bank_name,
-                company_info.account_number, company_info.ifsc_code, company_info.upi_id,
-                datetime.now(), datetime.now()
-            ))
+                VALUES (:name, :address, :phone, :email, :gst_number, :state, :logo, :drug_license,
+                         :bank_name, :account_number, :ifsc_code, :upi_id, :created_at, :updated_at)
+            """), {
+                "name": company_info.name, "address": company_info.address, "phone": company_info.phone, 
+                "email": company_info.email, "gst_number": company_info.gst_number, "state": company_info.state,
+                "logo": company_info.logo, "drug_license": company_info.drug_license, 
+                "bank_name": company_info.bank_name, "account_number": company_info.account_number, 
+                "ifsc_code": company_info.ifsc_code, "upi_id": company_info.upi_id,
+                "created_at": datetime.now(), "updated_at": datetime.now()
+            })
         
-        connection.commit()
-        cursor.close()
-        connection.close()
+        db.commit()
         
         return create_api_response(True, "Company info updated successfully", company_info.dict())
         
@@ -138,20 +137,15 @@ async def update_company_info(company_info: CompanyInfo):
         return create_api_response(False, f"Error updating company info: {str(e)}")
 
 @router.get("/org-id")
-async def get_organization_id():
+async def get_organization_id(db: Session = Depends(get_db)):
     """Get organization ID"""
     try:
-        connection = get_db_connection()
-        cursor = connection.cursor(dictionary=True)
-        
         # Get org ID from settings or generate default
-        cursor.execute("SELECT org_id FROM organization_settings LIMIT 1")
-        result = cursor.fetchone()
-        cursor.close()
-        connection.close()
+        result = db.execute(text("SELECT org_id FROM organization_settings LIMIT 1"))
+        row = result.fetchone()
         
-        if result and result.get('org_id'):
-            org_id = result['org_id']
+        if row and row[0]:
+            org_id = row[0]
         else:
             # Use default org ID if none exists
             org_id = "ad808530-1ddb-4377-ab20-67bef145d80d"
@@ -165,23 +159,18 @@ async def get_organization_id():
         return create_api_response(True, "Default org ID returned", {"org_id": default_org_id})
 
 @router.get("/settings")
-async def get_company_settings():
+async def get_company_settings(db: Session = Depends(get_db)):
     """Get company settings"""
     try:
-        connection = get_db_connection()
-        cursor = connection.cursor(dictionary=True)
-        
-        cursor.execute("""
+        result = db.execute(text("""
             SELECT currency, timezone, financial_year_start, default_gst_rate,
                    auto_backup, notification_settings
             FROM company_settings 
             ORDER BY updated_at DESC 
             LIMIT 1
-        """)
+        """))
         
-        settings = cursor.fetchone()
-        cursor.close()
-        connection.close()
+        settings = result.fetchone()
         
         if not settings:
             # Return default settings
@@ -195,52 +184,54 @@ async def get_company_settings():
             }
             return create_api_response(True, "Default settings returned", default_settings)
         
-        return create_api_response(True, "Settings retrieved successfully", settings)
+        # Convert row to dictionary
+        settings_dict = dict(settings._mapping) if hasattr(settings, '_mapping') else dict(zip(result.keys(), settings))
+        
+        return create_api_response(True, "Settings retrieved successfully", settings_dict)
         
     except Exception as e:
         logger.error(f"Error getting company settings: {e}")
         return create_api_response(False, f"Error getting settings: {str(e)}")
 
 @router.put("/settings")
-async def update_company_settings(settings: CompanySettings):
+async def update_company_settings(settings: CompanySettings, db: Session = Depends(get_db)):
     """Update company settings"""
     try:
-        connection = get_db_connection()
-        cursor = connection.cursor()
-        
         # Check if settings exist
-        cursor.execute("SELECT id FROM company_settings LIMIT 1")
-        existing = cursor.fetchone()
+        result = db.execute(text("SELECT id FROM company_settings LIMIT 1"))
+        existing = result.fetchone()
         
         if existing:
             # Update existing record
-            cursor.execute("""
+            db.execute(text("""
                 UPDATE company_settings 
-                SET currency = %s, timezone = %s, financial_year_start = %s,
-                    default_gst_rate = %s, auto_backup = %s, notification_settings = %s,
-                    updated_at = %s
-                WHERE id = %s
-            """, (
-                settings.currency, settings.timezone, settings.financial_year_start,
-                settings.default_gst_rate, settings.auto_backup, 
-                settings.notification_settings, datetime.now(), existing[0]
-            ))
+                SET currency = :currency, timezone = :timezone, financial_year_start = :fys,
+                    default_gst_rate = :gst_rate, auto_backup = :auto_backup, 
+                    notification_settings = :notif_settings, updated_at = :updated_at
+                WHERE id = :id
+            """), {
+                "currency": settings.currency, "timezone": settings.timezone, 
+                "fys": settings.financial_year_start, "gst_rate": settings.default_gst_rate, 
+                "auto_backup": settings.auto_backup, 
+                "notif_settings": json.dumps(settings.notification_settings) if settings.notification_settings else None,
+                "updated_at": datetime.now(), "id": existing[0]
+            })
         else:
             # Create new record
-            cursor.execute("""
+            db.execute(text("""
                 INSERT INTO company_settings 
                 (currency, timezone, financial_year_start, default_gst_rate,
                  auto_backup, notification_settings, created_at, updated_at)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
-            """, (
-                settings.currency, settings.timezone, settings.financial_year_start,
-                settings.default_gst_rate, settings.auto_backup,
-                settings.notification_settings, datetime.now(), datetime.now()
-            ))
+                VALUES (:currency, :timezone, :fys, :gst_rate, :auto_backup, :notif_settings, :created_at, :updated_at)
+            """), {
+                "currency": settings.currency, "timezone": settings.timezone, 
+                "fys": settings.financial_year_start, "gst_rate": settings.default_gst_rate,
+                "auto_backup": settings.auto_backup, 
+                "notif_settings": json.dumps(settings.notification_settings) if settings.notification_settings else None,
+                "created_at": datetime.now(), "updated_at": datetime.now()
+            })
         
-        connection.commit()
-        cursor.close()
-        connection.close()
+        db.commit()
         
         return create_api_response(True, "Settings updated successfully", settings.dict())
         
@@ -249,14 +240,12 @@ async def update_company_settings(settings: CompanySettings):
         return create_api_response(False, f"Error updating settings: {str(e)}")
 
 @router.post("/initialize")
-async def initialize_company_data():
+async def initialize_company_data(db: Session = Depends(get_db)):
     """Initialize company data with default values"""
     try:
-        connection = get_db_connection()
-        cursor = connection.cursor()
         
         # Create company_info table if it doesn't exist
-        cursor.execute("""
+        db.execute(text("""
             CREATE TABLE IF NOT EXISTS company_info (
                 id INT AUTO_INCREMENT PRIMARY KEY,
                 name VARCHAR(255) NOT NULL,
@@ -274,10 +263,10 @@ async def initialize_company_data():
                 created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
                 updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
             )
-        """)
+        """))
         
         # Create company_settings table if it doesn't exist
-        cursor.execute("""
+        db.execute(text("""
             CREATE TABLE IF NOT EXISTS company_settings (
                 id INT AUTO_INCREMENT PRIMARY KEY,
                 currency VARCHAR(3) DEFAULT 'INR',
@@ -289,34 +278,37 @@ async def initialize_company_data():
                 created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
                 updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
             )
-        """)
+        """))
         
         # Insert default company info if none exists
-        cursor.execute("SELECT id FROM company_info LIMIT 1")
-        if not cursor.fetchone():
-            cursor.execute("""
+        result = db.execute(text("SELECT id FROM company_info LIMIT 1"))
+        if not result.fetchone():
+            db.execute(text("""
                 INSERT INTO company_info (name, address, phone, email, gst_number, state)
-                VALUES (%s, %s, %s, %s, %s, %s)
-            """, (
-                "Your Company Name",
-                "Company Address",
-                "+91 00000 00000",
-                "info@company.com",
-                "GST_NUMBER",
-                "Gujarat"
-            ))
+                VALUES (:name, :address, :phone, :email, :gst_number, :state)
+            """), {
+                "name": "Your Company Name",
+                "address": "Company Address",
+                "phone": "+91 00000 00000",
+                "email": "info@company.com",
+                "gst_number": "GST_NUMBER",
+                "state": "Gujarat"
+            })
         
         # Insert default settings if none exist
-        cursor.execute("SELECT id FROM company_settings LIMIT 1")
-        if not cursor.fetchone():
-            cursor.execute("""
+        result = db.execute(text("SELECT id FROM company_settings LIMIT 1"))
+        if not result.fetchone():
+            db.execute(text("""
                 INSERT INTO company_settings (currency, timezone, financial_year_start, default_gst_rate)
-                VALUES (%s, %s, %s, %s)
-            """, ("INR", "Asia/Kolkata", "04-01", 18.00))
+                VALUES (:currency, :timezone, :fys, :gst_rate)
+            """), {
+                "currency": "INR", 
+                "timezone": "Asia/Kolkata", 
+                "fys": "04-01", 
+                "gst_rate": 18.00
+            })
         
-        connection.commit()
-        cursor.close()
-        connection.close()
+        db.commit()
         
         return create_api_response(True, "Company data initialized successfully")
         
