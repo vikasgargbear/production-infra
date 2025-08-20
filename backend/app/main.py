@@ -34,6 +34,8 @@ from .api.routes import enterprise_api_complete
 from .api.routes import invoice_calculation, enterprise_calculations
 # Import simple company API (no database dependencies)
 from .api.routes import company_simple
+# Import master data API
+from .api.routes import master_data
 # All temporary endpoints removed - using main endpoints only
 
 # Lifecycle management
@@ -153,6 +155,9 @@ api.include_router(enterprise_calculations.router, tags=["Enterprise Calculation
 
 # Register simple company API
 api.include_router(company_simple.router, tags=["Company"])
+
+# Register master data API
+api.include_router(master_data.router, prefix="/master", tags=["Master Data"])
 
 # All endpoints consolidated - no temporary workarounds
 
