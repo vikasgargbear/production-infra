@@ -148,7 +148,7 @@ class EnterpriseChallanService:
             # Generate challan number
             challan_number = self._generate_challan_number()
             
-            # Create challan record WITH org_id and branch_id
+            # Create challan record WITHOUT created_by field to avoid constraint issues
             challan_result = self.db.execute(
                 text("""
                     INSERT INTO sales.delivery_challans (
@@ -156,13 +156,13 @@ class EnterpriseChallanService:
                         challan_date, dispatch_date, challan_status,
                         vehicle_number, transporter_name, lr_number, 
                         freight_charges, total_quantity, total_amount,
-                        delivery_status, notes, created_by
+                        delivery_status, notes
                     ) VALUES (
                         :org_id, :branch_id, :order_id, :customer_id, :challan_number,
                         :challan_date, :dispatch_date, :challan_status,
                         :vehicle_number, :transporter_name, :lr_number,
                         :freight_charges, :total_quantity, :total_amount,
-                        :delivery_status, :notes, :created_by
+                        :delivery_status, :notes
                     )
                     RETURNING challan_id
                 """),
@@ -182,8 +182,7 @@ class EnterpriseChallanService:
                     "total_quantity": len(request.items),  # Count of items for now
                     "total_amount": sum(item.unit_price * item.dispatched_quantity for item in request.items),
                     "delivery_status": "pending",
-                    "notes": f"Delivery to: {request.delivery_address}, {request.delivery_city}",
-                    "created_by": None  # Allow NULL for now until proper user management
+                    "notes": f"Delivery to: {request.delivery_address}, {request.delivery_city}"
                 }
             )
             challan_id = challan_result.scalar()
