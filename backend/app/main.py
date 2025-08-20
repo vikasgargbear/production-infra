@@ -32,6 +32,8 @@ from .api.routes import master_settings, schemes_discounts, loyalty_points, comp
 from .api.routes import enterprise_api_complete
 # Import enterprise calculation service
 from .api.routes import invoice_calculation, enterprise_calculations
+# Import company API
+from .api.routes import company
 # All temporary endpoints removed - using main endpoints only
 
 # Lifecycle management
@@ -148,6 +150,9 @@ api.include_router(enterprise_api_complete.router, tags=["Enterprise ERP Complet
 # Register enterprise calculation service
 api.include_router(invoice_calculation.router, tags=["Invoice Calculations"])
 api.include_router(enterprise_calculations.router, tags=["Enterprise Calculations"])
+
+# Register company API
+api.include_router(company.router, tags=["Company"])
 
 # All endpoints consolidated - no temporary workarounds
 

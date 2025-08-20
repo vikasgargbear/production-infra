@@ -17,6 +17,7 @@ import CreditDebitNoteFlow from './components/notes/CreditDebitNoteFlow';
 import GSTHub from './components/gst/GSTHub';
 import MasterHub from './components/master/MasterHub';
 import testBackendConnection from './utils/testBackendConnection';
+import { CompanyProvider } from './contexts/CompanyContext';
 // import ReceivablesCollectionCenter from './components/receivables/ReceivablesCollectionCenter';
 
 // Lazy load components for better performance and code splitting
@@ -209,15 +210,17 @@ function App(): JSX.Element {
 
   return (
     <QueryClientProvider client={queryClient}>
-      <ToastProvider>
-        <ErrorBoundary>
-          <div className="min-h-screen bg-gray-50">
-            <Suspense fallback={<LoadingSpinner />}>
-              {renderActiveComponent()}
-            </Suspense>
-          </div>
-        </ErrorBoundary>
-      </ToastProvider>
+      <CompanyProvider>
+        <ToastProvider>
+          <ErrorBoundary>
+            <div className="min-h-screen bg-gray-50">
+              <Suspense fallback={<LoadingSpinner />}>
+                {renderActiveComponent()}
+              </Suspense>
+            </div>
+          </ErrorBoundary>
+        </ToastProvider>
+      </CompanyProvider>
     </QueryClientProvider>
   );
 }

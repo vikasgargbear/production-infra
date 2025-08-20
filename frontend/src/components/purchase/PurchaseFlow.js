@@ -6,11 +6,10 @@ import { ProductCreationModal, MonthYearPicker, ViewHistoryButton, ItemsTable, S
 import PurchaseSummaryTop from './components/PurchaseSummaryTop';
 import documentNumberService from '../../services/documentNumberService';
 import PurchaseCalculatorEnterprise from '../../services/purchaseCalculatorEnterprise';
-
-// Default org ID for development
-const DEFAULT_ORG_ID = 'ad808530-1ddb-4377-ab20-67bef145d80d';
+import { useCompany } from '../../contexts/CompanyContext';
 
 const PurchaseFlow = ({ onClose }) => {
+  const { companyInfo, getOrgId } = useCompany();
   const [currentStep, setCurrentStep] = useState(1);
   const [showSupplierModal, setShowSupplierModal] = useState(false);
   const [showProductModal, setShowProductModal] = useState(false);
@@ -85,8 +84,12 @@ const PurchaseFlow = ({ onClose }) => {
         }
       }
       
+      // Escape to close modals or go back - Enterprise pattern
       if (e.key === 'Escape') {
-        onClose();
+        if (showSupplierModal) setShowSupplierModal(false);
+        else if (showProductModal) setShowProductModal(false);
+        else if (currentStep === 2) setCurrentStep(1);
+        else onClose();
       }
     };
 
@@ -244,7 +247,7 @@ const PurchaseFlow = ({ onClose }) => {
     setSaving(true);
     try {
       const purchasePayload = {
-        org_id: localStorage.getItem('orgId') || DEFAULT_ORG_ID,
+        org_id: getOrgId(),
         supplier_id: parseInt(purchase.supplier_id),
         invoice_number: purchase.invoice_number,
         invoice_date: purchase.invoice_date,
@@ -707,8 +710,8 @@ const SupplierSearchWrapper = React.forwardRef(({ onSupplierSelect, onCreateSupp
         </h3>
         <AddNewButton
           onClick={onCreateSupplier}
-          label="Add New Supplier"
-          variant="primary"
+          label="Create Supplier"
+          variant="secondary"
           size="sm"
           ref={ref}
         />

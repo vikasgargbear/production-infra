@@ -22,9 +22,7 @@ import { invoicesApi as invoicesApiModule } from '../../services/api/modules/inv
 import { challansApi as challansApiModule } from '../../services/api/modules/challans.api';
 import debugLogger from '../../utils/debugLogger';
 import SalesOrderCalculatorEnterprise from '../../services/salesOrderCalculatorEnterprise';
-
-// Default org ID for development
-const DEFAULT_ORG_ID = 'ad808530-1ddb-4377-ab20-67bef145d80d';
+import { useCompany } from '../../contexts/CompanyContext';
 
 // Function to convert number to words
 const numberToWords = (num) => {
@@ -95,6 +93,7 @@ const numberToWords = (num) => {
 };
 
 const SalesOrderFlow = ({ open = true, onClose }) => {
+  const { companyInfo, getOrgId } = useCompany();
   const [currentStep, setCurrentStep] = useState(1);
   const [showCustomerModal, setShowCustomerModal] = useState(false);
   const [showProductModal, setShowProductModal] = useState(false);
@@ -556,7 +555,7 @@ const SalesOrderFlow = ({ open = true, onClose }) => {
         notes: order.notes || '',
         
         // Organization
-        org_id: localStorage.getItem('orgId') || DEFAULT_ORG_ID
+        org_id: getOrgId()
       };
 
       debugLogger.debug('ORDER CREATION DEBUG - Raw order state:', order);
@@ -566,7 +565,7 @@ const SalesOrderFlow = ({ open = true, onClose }) => {
       // Create sales order data matching the backend OrderCreate schema
       const salesOrderData = {
         // Required org_id as UUID
-        org_id: localStorage.getItem('orgId') || DEFAULT_ORG_ID,
+        org_id: getOrgId(),
         
         // Customer info
         customer_id: parseInt(order.customer_id),
@@ -1026,7 +1025,7 @@ Expected Delivery: ${order.expected_delivery_date}
                     <ShoppingCart className="w-8 h-8 text-white" />
                   </div>
                 </div>
-                <h1 className="text-3xl font-bold text-gray-900 mb-2">AASO Pharma</h1>
+                <h1 className="text-3xl font-bold text-gray-900 mb-2">{companyInfo.name || 'Your Company'}</h1>
                 <h2 className="text-xl font-semibold text-purple-600">SALES ORDER</h2>
                 <p className="text-gray-600 mt-1">{order.order_number}</p>
                 <p className="text-sm text-gray-500">Date: {new Date(order.order_date).toLocaleDateString()}</p>
@@ -1249,7 +1248,7 @@ Expected Delivery: ${order.expected_delivery_date}
                   <div className="text-center">
                     <div className="h-16 border-b border-gray-300"></div>
                     <p className="text-sm text-gray-600 mt-2">Authorized Signatory</p>
-                    <p className="text-xs text-gray-500">For AASO Pharma</p>
+                    <p className="text-xs text-gray-500">For {companyInfo.name || 'Your Company'}</p>
                   </div>
                 </div>
               </div>
@@ -1258,7 +1257,7 @@ Expected Delivery: ${order.expected_delivery_date}
               <div className="mt-8 pt-6 border-t border-blue-200 text-center">
                 <p className="text-sm text-gray-600">Thank you for your business!</p>
                 <p className="text-xs text-gray-500 mt-2">
-                  AASO Pharma | Your trusted healthcare partner
+                  {companyInfo.name || 'Your Company'} | Your trusted healthcare partner
                 </p>
                 <p className="text-xs text-purple-600 mt-1">
                   Powered by AASO ERP
@@ -1296,8 +1295,8 @@ Expected Delivery: ${order.expected_delivery_date}
         />
 
         </div>
-        </div>
-      )}
+      </div>
+    )}
 
       {/* Success Modal - Rendered at component level */}
       {showSuccessModal && (

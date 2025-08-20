@@ -1,22 +1,44 @@
 import React, { useState, useEffect } from 'react';
 import { Upload, Image, X, Save, Building, Phone, Mail, MapPin, CreditCard, FileText, Shield } from 'lucide-react';
 import { useToast } from './global/ui/feedback/Toast';
+import { useCompany } from '../contexts/CompanyContext';
 
 const Profile = () => {
   const toast = useToast();
-  const [companyLogo, setCompanyLogo] = useState(localStorage.getItem('companyLogo') || null);
+  const { companyInfo, updateCompanyInfo } = useCompany();
   const [companyData, setCompanyData] = useState({
-    name: localStorage.getItem('companyName') || 'AASO PHARMACEUTICALS',
-    address: localStorage.getItem('companyAddress') || 'Gangapur City, Rajasthan',
-    phone: localStorage.getItem('companyPhone') || '+91 98765 43210',
-    email: localStorage.getItem('companyEmail') || 'info@aasopharma.com',
-    gst: localStorage.getItem('companyGST') || '08AAXCA4042N1Z2',
-    drugLicense: localStorage.getItem('companyDrugLicense') || 'DL-RJ-GPC-2024-001',
-    bankName: localStorage.getItem('companyBankName') || '',
-    accountNumber: localStorage.getItem('companyAccountNumber') || '',
-    ifscCode: localStorage.getItem('companyIfscCode') || '',
-    upiId: localStorage.getItem('companyUpiId') || ''
+    name: companyInfo.name || '',
+    address: companyInfo.address || '',
+    phone: companyInfo.phone || '',
+    email: companyInfo.email || '',
+    gst_number: companyInfo.gst_number || '',
+    state: companyInfo.state || 'Gujarat',
+    drug_license: companyInfo.drug_license || '',
+    bank_name: companyInfo.bank_name || '',
+    account_number: companyInfo.account_number || '',
+    ifsc_code: companyInfo.ifsc_code || '',
+    upi_id: companyInfo.upi_id || '',
+    logo: companyInfo.logo || ''
   });
+  
+  // Update local state when company context changes
+  useEffect(() => {
+    setCompanyData(prev => ({
+      ...prev,
+      name: companyInfo.name || '',
+      address: companyInfo.address || '',
+      phone: companyInfo.phone || '',
+      email: companyInfo.email || '',
+      gst_number: companyInfo.gst_number || '',
+      state: companyInfo.state || 'Gujarat',
+      drug_license: companyInfo.drug_license || '',
+      bank_name: companyInfo.bank_name || '',
+      account_number: companyInfo.account_number || '',
+      ifsc_code: companyInfo.ifsc_code || '',
+      upi_id: companyInfo.upi_id || '',
+      logo: companyInfo.logo || ''
+    }));
+  }, [companyInfo]);
 
   const handleLogoUpload = async (event) => {
     const file = event.target.files[0];
@@ -24,35 +46,23 @@ const Profile = () => {
       const reader = new FileReader();
       reader.onload = async (e) => {
         const logoUrl = e.target.result;
-        setCompanyLogo(logoUrl);
-        localStorage.setItem('companyLogo', logoUrl);
+        setCompanyData(prev => ({ ...prev, logo: logoUrl }));
+        
+        // Update company info with new logo
+        await updateCompanyInfo({ ...companyData, logo: logoUrl });
       };
       reader.readAsDataURL(file);
     }
   };
 
-  const handleSave = () => {
-    localStorage.setItem('companyName', companyData.name);
-    localStorage.setItem('companyAddress', companyData.address);
-    localStorage.setItem('companyPhone', companyData.phone);
-    localStorage.setItem('companyEmail', companyData.email);
-    localStorage.setItem('companyGST', companyData.gst);
-    localStorage.setItem('companyDrugLicense', companyData.drugLicense);
-    localStorage.setItem('companyBankName', companyData.bankName);
-    localStorage.setItem('companyAccountNumber', companyData.accountNumber);
-    localStorage.setItem('companyIfscCode', companyData.ifscCode);
-    localStorage.setItem('companyUpiId', companyData.upiId);
-    
-    toast.updated('Company Profile', 4000, {
-      action: (
-        <button 
-          onClick={() => window.location.reload()}
-          className="text-sm font-medium text-green-700 hover:text-green-800 underline"
-        >
-          Refresh Page
-        </button>
-      )
-    });
+  const handleSave = async () => {
+    try {
+      await updateCompanyInfo(companyData);
+      toast.updated('Company Profile', 4000);
+    } catch (error) {
+      toast.error('Failed to save company profile', 4000);
+      console.error('Error saving company profile:', error);
+    }
   };
 
   const handleInputChange = (field, value) => {
@@ -88,17 +98,17 @@ const Profile = () => {
               </h2>
 
               <div className="space-y-4">
-                {companyLogo ? (
+                {companyData.logo ? (
                   <div className="relative">
                     <img 
-                      src={companyLogo} 
+                      src={companyData.logo} 
                       alt="Company Logo" 
                       className="w-full h-48 object-contain rounded-lg border-2 border-gray-200 bg-gray-50"
                     />
                     <button
-                      onClick={() => {
-                        setCompanyLogo(null);
-                        localStorage.removeItem('companyLogo');
+                      onClick={async () => {
+                        setCompanyData(prev => ({ ...prev, logo: '' }));
+                        await updateCompanyInfo({ ...companyData, logo: '' });
                       }}
                       className="absolute top-2 right-2 p-2 bg-white rounded-full shadow-md hover:bg-red-50 transition-colors"
                     >
@@ -121,7 +131,7 @@ const Profile = () => {
                   />
                   <div className="w-full px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors cursor-pointer text-center">
                     <Upload className="w-4 h-4 inline mr-2" />
-                    {companyLogo ? 'Change Logo' : 'Upload Logo'}
+                    {companyData.logo ? 'Change Logo' : 'Upload Logo'}
                   </div>
                 </label>
                 <p className="text-xs text-gray-500 text-center">PNG or JPG, max 2MB</p>
@@ -153,8 +163,8 @@ const Profile = () => {
                   <label className="block text-sm font-medium text-gray-700 mb-1">GST Number</label>
                   <input
                     type="text"
-                    value={companyData.gst}
-                    onChange={(e) => handleInputChange('gst', e.target.value)}
+                    value={companyData.gst_number}
+                    onChange={(e) => handleInputChange('gst_number', e.target.value)}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   />
                 </div>
@@ -193,8 +203,8 @@ const Profile = () => {
                   <label className="block text-sm font-medium text-gray-700 mb-1">Drug License Number</label>
                   <input
                     type="text"
-                    value={companyData.drugLicense}
-                    onChange={(e) => handleInputChange('drugLicense', e.target.value)}
+                    value={companyData.drug_license}
+                    onChange={(e) => handleInputChange('drug_license', e.target.value)}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   />
                 </div>
@@ -213,8 +223,8 @@ const Profile = () => {
                   <label className="block text-sm font-medium text-gray-700 mb-1">Bank Name</label>
                   <input
                     type="text"
-                    value={companyData.bankName}
-                    onChange={(e) => handleInputChange('bankName', e.target.value)}
+                    value={companyData.bank_name}
+                    onChange={(e) => handleInputChange('bank_name', e.target.value)}
                     placeholder="State Bank of India"
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   />
@@ -224,8 +234,8 @@ const Profile = () => {
                   <label className="block text-sm font-medium text-gray-700 mb-1">Account Number</label>
                   <input
                     type="text"
-                    value={companyData.accountNumber}
-                    onChange={(e) => handleInputChange('accountNumber', e.target.value)}
+                    value={companyData.account_number}
+                    onChange={(e) => handleInputChange('account_number', e.target.value)}
                     placeholder="1234567890"
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   />
@@ -235,8 +245,8 @@ const Profile = () => {
                   <label className="block text-sm font-medium text-gray-700 mb-1">IFSC Code</label>
                   <input
                     type="text"
-                    value={companyData.ifscCode}
-                    onChange={(e) => handleInputChange('ifscCode', e.target.value)}
+                    value={companyData.ifsc_code}
+                    onChange={(e) => handleInputChange('ifsc_code', e.target.value)}
                     placeholder="SBIN0001234"
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   />
@@ -246,8 +256,8 @@ const Profile = () => {
                   <label className="block text-sm font-medium text-gray-700 mb-1">UPI ID</label>
                   <input
                     type="text"
-                    value={companyData.upiId}
-                    onChange={(e) => handleInputChange('upiId', e.target.value)}
+                    value={companyData.upi_id}
+                    onChange={(e) => handleInputChange('upi_id', e.target.value)}
                     placeholder="business@upi"
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   />
