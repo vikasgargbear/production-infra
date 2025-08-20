@@ -102,15 +102,13 @@ async def create_sales_order(
         order_data.update({
             "order_number": order_number,
             "order_status": "draft",  # Match schema values
-            "order_type": "regular",  # Match schema pattern
-            "customer_name": customer.customer_name,
-            "customer_phone": customer.primary_phone,
+            "branch_id": 1,  # Default branch
             "subtotal_amount": totals["subtotal"],
             "discount_amount": totals["discount"],
             "tax_amount": totals["tax"],
-            "total_amount": totals["total"],
+            "final_amount": totals["total"],
             "fulfillment_status": "pending",
-            "payment_status": "unpaid",
+            "payment_status": "pending",  # Match schema enum
             "created_at": datetime.now(),
             "updated_at": datetime.now()
         })
@@ -130,17 +128,17 @@ async def create_sales_order(
         user = user_result.fetchone()
         created_by_user = user.user_id if user else 1
         
-        # Insert sales order
+        # Insert sales order with correct schema columns
         result = db.execute(text("""
             INSERT INTO sales.orders (
-                org_id, order_number, order_date, customer_id, customer_name, customer_phone,
+                org_id, branch_id, order_number, order_date, customer_id,
                 order_type, delivery_date, payment_terms, subtotal_amount, discount_amount,
-                tax_amount, total_amount, order_status, fulfillment_status, payment_status,
+                tax_amount, final_amount, order_status, fulfillment_status, payment_status,
                 notes, created_by, created_at, updated_at
             ) VALUES (
-                :org_id, :order_number, :order_date, :customer_id, :customer_name, :customer_phone,
+                :org_id, :branch_id, :order_number, :order_date, :customer_id,
                 :order_type, :delivery_date, :payment_terms, :subtotal_amount, :discount_amount,
-                :tax_amount, :total_amount, :order_status, :fulfillment_status, :payment_status,
+                :tax_amount, :final_amount, :order_status, :fulfillment_status, :payment_status,
                 :notes, :created_by, :created_at, :updated_at
             ) RETURNING order_id
         """), {**order_data, "created_by": created_by_user})
