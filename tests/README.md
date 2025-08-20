@@ -1,5 +1,23 @@
 # Test Directory Structure
 
+## Quick Start
+```bash
+# Run all end-to-end tests
+./run_e2e_tests.sh
+
+# Run specific e2e test
+cd e2e && node test_e2e_customer_challan.js
+```
+
+## Test Categories
+
+## `/e2e/` ⭐ **NEW**
+End-to-end business workflow tests:
+- `test_e2e_customer_challan.js` - Customer creation & challan flow testing
+- Tests complete frontend-to-backend-to-database workflows
+- Validates Indian pharma business flows (direct challan creation)
+- Comprehensive schema compliance and data storage verification
+
 ## `/database-fixes/`
 Database fix and validation tests:
 - `test_comprehensive_fix.py` - Comprehensive database fix testing
