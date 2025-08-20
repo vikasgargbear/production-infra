@@ -16,7 +16,7 @@ import {
   GenericSuccessModal
 } from '../global';
 import CustomerCreationB2B from '../global/ui/forms/CustomerCreationB2B';
-import { ordersApi, salesApi, api } from '../../services/api';
+import { ordersApi, salesApi, api, apiClient, usersApi } from '../../services/api';
 import salesOrdersAPI from '../../services/api/modules/salesOrders.api';
 import { invoicesApi as invoicesApiModule } from '../../services/api/modules/invoices.api';
 import { challansApi as challansApiModule } from '../../services/api/modules/challans.api';
@@ -148,31 +148,50 @@ const SalesOrderFlow = ({ open = true, onClose }) => {
   useEffect(() => {
     const loadEmployees = async () => {
       try {
-        const response = await api.get('/sales-orders/employees');
-        if (response.data && Array.isArray(response.data)) {
-          setEmployees(response.data);
+        // Use usersApi which should be properly configured
+        const response = await usersApi.getAll({
+          limit: 20,
+          role: 'sales'
+        });
+        
+        const users = response.data?.data || response.data?.users || response.data || [];
+        
+        if (Array.isArray(users) && users.length > 0) {
+          setEmployees(users);
           // Set default created_by to first employee if not set
-          if (!order.created_by && response.data.length > 0) {
+          if (!order.created_by && users.length > 0) {
             setOrder(prev => ({
               ...prev,
-              created_by: response.data[0].user_id,
-              created_by_name: response.data[0].full_name
+              created_by: users[0].user_id || users[0].id,
+              created_by_name: users[0].full_name || users[0].name || 'User'
             }));
           }
+        } else {
+          // Use fallback if no users returned
+          throw new Error('No users returned');
         }
       } catch (error) {
         console.error('Error loading employees:', error);
-        // Fallback to default
-        setEmployees([{
+        // Fallback to default - use company context if available
+        const defaultUser = {
           user_id: 1,
-          full_name: localStorage.getItem('userName') || 'Admin User',
-          email: 'admin@company.com'
-        }]);
+          full_name: companyInfo.name ? `${companyInfo.name} Admin` : 'Admin User',
+          email: companyInfo.email || 'admin@company.com'
+        };
+        setEmployees([defaultUser]);
+        
+        if (!order.created_by) {
+          setOrder(prev => ({
+            ...prev,
+            created_by: defaultUser.user_id,
+            created_by_name: defaultUser.full_name
+          }));
+        }
       }
     };
 
     loadEmployees();
-  }, []);
+  }, [companyInfo]);
 
   // REMOVED: useEffect for calculation - following invoice component pattern
   // Instead, calculations are triggered directly in event handlers when items change
@@ -779,7 +798,7 @@ Expected Delivery: ${order.expected_delivery_date}
 
               {/* Customer Section */}
               <div className="mb-6">
-                <h3 className="text-xs font-semibold text-blue-700 uppercase tracking-wider mb-3 flex items-center">
+                <h3 className="text-sm font-semibold text-blue-700 uppercase tracking-wider mb-3 flex items-center">
                   <User className="w-4 h-4 mr-2" />
                   CUSTOMER
                 </h3>

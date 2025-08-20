@@ -267,16 +267,69 @@ export const invoiceAPI = {
 
 export const ordersAPI = {
   search: async (query, options = {}) => {
-    const response = await apiClient.get('/orders', {
-      params: {
-        q: query,
-        customer_id: options.customerId,
-        status: options.status,
-        limit: options.limit || 50,
-        offset: options.offset || 0,
-      },
-    });
-    return response.data;
+    try {
+      const response = await apiClient.get('/orders/', {
+        params: {
+          search: query?.search || query || '',
+          customer_id: options.customerId,
+          status: options.status,
+          limit: options.limit || 50,
+          offset: options.offset || 0,
+        },
+        timeout: 10000,
+      });
+      
+      // Handle different response structures
+      const orders = response.data?.data || response.data?.orders || response.data || [];
+      
+      return {
+        success: true,
+        data: Array.isArray(orders) ? orders : [],
+        total: response.data?.total || orders.length || 0
+      };
+    } catch (error) {
+      console.error('Orders search failed:', error);
+      return {
+        success: false,
+        data: [],
+        total: 0,
+        error: error.message
+      };
+    }
+  },
+  
+  get: async (orderId) => {
+    try {
+      const response = await apiClient.get(`/orders/${orderId}`);
+      return {
+        success: true,
+        data: response.data
+      };
+    } catch (error) {
+      console.error('Get order failed:', error);
+      return {
+        success: false,
+        data: null,
+        error: error.message
+      };
+    }
+  },
+  
+  create: async (orderData) => {
+    try {
+      const response = await apiClient.post('/orders/', orderData);
+      return {
+        success: true,
+        data: response.data
+      };
+    } catch (error) {
+      console.error('Create order failed:', error);
+      return {
+        success: false,
+        data: null,
+        error: error.message
+      };
+    }
   },
 };
 
