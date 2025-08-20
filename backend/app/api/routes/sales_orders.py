@@ -32,7 +32,7 @@ async def get_employees_for_created_by(
     """Get list of employees for 'Created By' dropdown"""
     try:
         result = db.execute(text("""
-            SELECT user_id, full_name, email, role, is_active
+            SELECT user_id, full_name, email, role_id, is_active
             FROM master.org_users 
             WHERE org_id = :org_id AND is_active = true
             ORDER BY full_name
