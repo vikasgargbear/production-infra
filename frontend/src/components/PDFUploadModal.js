@@ -31,16 +31,22 @@ const PDFUploadModal = ({ isOpen, onClose, onDataExtracted }) => {
       const response = await purchasesApi.parseInvoice(formData);
       console.log('PDF Parse Response:', response.data);
       
-      if (response.data.success || response.data.extracted_data) {
+      // Always show the extracted data, even if it's just a template
+      if (response.data && response.data.extracted_data) {
         console.log('Setting extracted data:', response.data.extracted_data);
+        console.log('Items in extracted data:', response.data.extracted_data.items);
         setExtractedData(response.data.extracted_data);
         setEditedData(response.data.extracted_data);
         
-        // Show message if parsing failed but template returned
-        if (!response.data.success && response.data.message) {
-          setError(response.data.message);
+        // Show message about the extraction status
+        if (response.data.success) {
+          console.log('Extraction successful with', response.data.extracted_data.items?.length || 0, 'items');
+        } else if (response.data.message) {
+          // Show as info, not error - user can still fill in manually
+          console.log('Parse message:', response.data.message);
         }
       } else {
+        console.error('No extracted_data in response:', response.data);
         setError('Failed to extract data from PDF');
       }
     } catch (error) {
@@ -52,8 +58,12 @@ const PDFUploadModal = ({ isOpen, onClose, onDataExtracted }) => {
   };
 
   const handleItemEdit = (index, field, value) => {
+    if (!editedData || !editedData.items) return;
     const newItems = [...editedData.items];
-    newItems[index][field] = value;
+    newItems[index] = {
+      ...newItems[index],
+      [field]: value !== undefined ? value : ''
+    };
     setEditedData({ ...editedData, items: newItems });
   };
 
@@ -77,7 +87,9 @@ const PDFUploadModal = ({ isOpen, onClose, onDataExtracted }) => {
     isOpen, 
     hasFile: !!file, 
     hasExtractedData: !!extractedData,
-    extractedDataLength: extractedData?.items?.length || 0
+    extractedDataLength: extractedData?.items?.length || 0,
+    extractedData: extractedData,
+    editedData: editedData
   });
 
   return (
@@ -258,11 +270,26 @@ const PDFUploadModal = ({ isOpen, onClose, onDataExtracted }) => {
             <div className="bg-gray-50 p-4 rounded-lg">
               <h5 className="font-medium mb-3">Items ({editedData.items?.length || 0})</h5>
               <div className="space-y-4">
-                {editedData.items && editedData.items.map((item, index) => (
+                {editedData.items && editedData.items.map((item, index) => {
+                  // Ensure item exists and has all required properties
+                  const safeItem = {
+                    product_name: '',
+                    hsn_code: '',
+                    batch_number: '',
+                    expiry_date: '',
+                    quantity: 0,
+                    mrp: 0,
+                    cost_price: 0,
+                    rate: 0,
+                    tax_percent: 12,
+                    amount: 0,
+                    ...item
+                  };
+                  return (
                   <div key={index} className="bg-white p-4 rounded-lg border shadow-sm">
                     <div className="mb-3 flex items-center justify-between">
                       <h6 className="font-medium text-gray-700">Item {index + 1}</h6>
-                      <span className="text-sm text-gray-500">Amount: ₹{item.amount || 0}</span>
+                      <span className="text-sm text-gray-500">Amount: ₹{safeItem.amount || 0}</span>
                     </div>
                     
                     {/* Product Name - Full Width */}
@@ -270,7 +297,7 @@ const PDFUploadModal = ({ isOpen, onClose, onDataExtracted }) => {
                       <label className="text-xs text-gray-600">Product Name</label>
                       <input
                         type="text"
-                        value={item.product_name || ''}
+                        value={safeItem.product_name}
                         onChange={(e) => handleItemEdit(index, 'product_name', e.target.value)}
                         className="w-full mt-1 p-2 border rounded text-sm"
                       />
@@ -282,7 +309,7 @@ const PDFUploadModal = ({ isOpen, onClose, onDataExtracted }) => {
                         <label className="text-xs text-gray-600">HSN Code</label>
                         <input
                           type="text"
-                          value={item.hsn_code || ''}
+                          value={safeItem.hsn_code || ''}
                           onChange={(e) => handleItemEdit(index, 'hsn_code', e.target.value)}
                           className="w-full mt-1 p-2 border rounded text-sm"
                         />
@@ -291,7 +318,7 @@ const PDFUploadModal = ({ isOpen, onClose, onDataExtracted }) => {
                         <label className="text-xs text-gray-600">Batch (Auto if empty)</label>
                         <input
                           type="text"
-                          value={item.batch_number || ''}
+                          value={safeItem.batch_number || ''}
                           onChange={(e) => handleItemEdit(index, 'batch_number', e.target.value)}
                           className="w-full mt-1 p-2 border rounded text-sm"
                           placeholder="AUTO-GENERATED"
@@ -301,7 +328,7 @@ const PDFUploadModal = ({ isOpen, onClose, onDataExtracted }) => {
                         <label className="text-xs text-gray-600">Expiry (Auto if empty)</label>
                         <input
                           type="date"
-                          value={item.expiry_date || ''}
+                          value={safeItem.expiry_date || ''}
                           onChange={(e) => handleItemEdit(index, 'expiry_date', e.target.value)}
                           className="w-full mt-1 p-2 border rounded text-sm"
                           placeholder="2 years default"
@@ -315,7 +342,7 @@ const PDFUploadModal = ({ isOpen, onClose, onDataExtracted }) => {
                         <label className="text-xs text-gray-600">Quantity</label>
                         <input
                           type="number"
-                          value={item.quantity || ''}
+                          value={safeItem.quantity || ''}
                           onChange={(e) => handleItemEdit(index, 'quantity', e.target.value)}
                           className="w-full mt-1 p-2 border rounded text-sm"
                         />
@@ -324,7 +351,7 @@ const PDFUploadModal = ({ isOpen, onClose, onDataExtracted }) => {
                         <label className="text-xs text-gray-600">MRP</label>
                         <input
                           type="number"
-                          value={item.mrp || ''}
+                          value={safeItem.mrp || ''}
                           onChange={(e) => handleItemEdit(index, 'mrp', e.target.value)}
                           className="w-full mt-1 p-2 border rounded text-sm"
                           step="0.01"
@@ -334,7 +361,7 @@ const PDFUploadModal = ({ isOpen, onClose, onDataExtracted }) => {
                         <label className="text-xs text-gray-600">Cost Price</label>
                         <input
                           type="number"
-                          value={item.cost_price || item.rate || ''}
+                          value={safeItem.cost_price || safeItem.rate || 0}
                           onChange={(e) => handleItemEdit(index, 'cost_price', e.target.value)}
                           className="w-full mt-1 p-2 border rounded text-sm"
                           step="0.01"
@@ -344,7 +371,7 @@ const PDFUploadModal = ({ isOpen, onClose, onDataExtracted }) => {
                         <label className="text-xs text-gray-600">Tax %</label>
                         <input
                           type="number"
-                          value={item.tax_percent || 12}
+                          value={safeItem.tax_percent || 12}
                           onChange={(e) => handleItemEdit(index, 'tax_percent', e.target.value)}
                           className="w-full mt-1 p-2 border rounded text-sm"
                           step="0.01"
@@ -352,7 +379,8 @@ const PDFUploadModal = ({ isOpen, onClose, onDataExtracted }) => {
                       </div>
                     </div>
                   </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
 
