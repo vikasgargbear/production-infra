@@ -116,7 +116,7 @@ def create_supplier(supplier_data: SupplierCreate, db: Session = Depends(get_db)
                 org_id, supplier_code, supplier_name, supplier_type,
                 gst_number, pan_number, drug_license_number, drug_license_validity,
                 primary_phone, secondary_phone, primary_email, contact_person_name,
-                contact_person_phone, contact_person_email, bank_name, account_number, ifsc_code, account_holder_name,
+                contact_person_phone, bank_name, account_number, ifsc_code, account_holder_name,
                 payment_days, quality_rating, delivery_rating, compliance_rating,
                 internal_notes, is_active,
                 created_at, updated_at
@@ -124,7 +124,7 @@ def create_supplier(supplier_data: SupplierCreate, db: Session = Depends(get_db)
                 :org_id, :supplier_code, :supplier_name, :supplier_type,
                 :gst_number, :pan_number, :drug_license_number, :drug_license_validity,
                 :phone, :secondary_phone, :email, :contact_person,
-                :whatsapp_number, :contact_person_email, :bank_name, :account_number, :ifsc_code, :account_holder_name,
+                :whatsapp_number, :bank_name, :account_number, :ifsc_code, :account_holder_name,
                 :payment_days, :quality_rating, :delivery_rating, :compliance_rating,
                 :internal_notes, :is_active,
                 CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
@@ -143,7 +143,6 @@ def create_supplier(supplier_data: SupplierCreate, db: Session = Depends(get_db)
             "whatsapp_number": supplier_data.contact_person_phone or supplier_data.whatsapp_number or supplier_data.phone,  # Contact phone for WhatsApp
             "email": supplier_data.email,
             "contact_person": supplier_data.contact_person,
-            "contact_person_email": supplier_data.contact_person_email,
             "bank_name": supplier_data.bank_name,
             "account_number": supplier_data.account_number,
             "ifsc_code": supplier_data.ifsc_code,
