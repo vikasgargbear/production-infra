@@ -23,7 +23,7 @@ import {
 import { ledgerApi } from '../../services/api/modules/ledger.api';
 import { DataTable, StatusBadge, Select, ModuleHeader } from '../global';
 import { formatCurrency } from '../../utils/formatters';
-import { useNavigate } from 'react-router-dom';
+// import { useNavigate } from 'react-router-dom'; // Commented out to avoid Router context issues
 
 interface PartyBalanceProps {
   partyType?: 'customer' | 'supplier' | 'all';
@@ -67,7 +67,7 @@ const PartyBalance: React.FC<PartyBalanceProps> = ({
   onPartyClick,
   onClose
 }) => {
-  const navigate = useNavigate();
+  // const navigate = useNavigate(); // Commented out to avoid Router context issues
   const [filters, setFilters] = useState({
     balanceType: 'all', // all, receivable, payable, zero
     status: 'all',
@@ -142,7 +142,8 @@ const PartyBalance: React.FC<PartyBalanceProps> = ({
     if (onPartyClick) {
       onPartyClick(party);
     } else {
-      navigate(`/ledger/party/${party.party_id}`);
+      // Fallback when no onPartyClick handler and navigate is unavailable
+      console.log('Party clicked:', party.party_name);
     }
   };
 

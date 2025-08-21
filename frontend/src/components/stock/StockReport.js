@@ -201,7 +201,7 @@ const StockReport = ({ open = true, onClose }) => {
           title="Low Stock Items"
           value={summaryData.lowStockItems}
           icon={TrendingDown}
-          color="orange"
+          color="amber"
         />
         <SummaryCard
           title="Expiring Soon"
@@ -219,7 +219,7 @@ const StockReport = ({ open = true, onClose }) => {
           title="Fast Moving"
           value={summaryData.fastMoving}
           icon={TrendingUp}
-          color="purple"
+          color="blue"
         />
       </div>
 
@@ -348,7 +348,7 @@ const StockReport = ({ open = true, onClose }) => {
               <div className="font-medium">{expiryDate.toLocaleDateString()}</div>
               <div className={`text-sm ${
                 daysToExpiry <= 0 ? 'text-red-600' :
-                daysToExpiry <= 30 ? 'text-orange-600' :
+                daysToExpiry <= 30 ? 'text-amber-600' :
                 daysToExpiry <= 90 ? 'text-yellow-600' :
                 'text-gray-600'
               }`}>

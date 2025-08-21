@@ -18,9 +18,11 @@ import { useToast } from './ui';
  * 5. Bulk create products for purchase
  */
 const BulkProductUpload = ({ 
-  onProductsAdded, 
+  onProductsAdded,
+  onUpload, // Alternative prop name for compatibility
   onClose,
-  mode = 'purchase' // 'purchase' or 'inventory'
+  mode = 'purchase', // 'purchase' or 'inventory'
+  createInDatabase = false // If true, creates products in DB. If false, just returns data
 }) => {
   const toast = useToast();
   const fileInputRef = useRef(null);
@@ -36,15 +38,17 @@ const BulkProductUpload = ({
     { field: 'generic_name', header: 'Generic Name', required: false, example: 'Paracetamol' },
     { field: 'manufacturer', header: 'Manufacturer', required: false, example: 'Cipla Ltd' },
     { field: 'hsn_code', header: 'HSN Code', required: false, example: '3004' },
-    { field: 'batch_number', header: 'Batch No*', required: true, example: 'BATCH001' },
+    { field: 'batch_number', header: 'Batch No', required: false, example: 'BATCH001' }, // Made optional - will auto-generate
     { field: 'expiry_date', header: 'Expiry (MM/YYYY)*', required: true, example: '12/2025' },
     { field: 'quantity', header: 'Quantity*', required: true, example: '100' },
     { field: 'free_quantity', header: 'Free Qty', required: false, example: '10' },
-    { field: 'pack_size', header: 'Pack Size', required: false, example: '10' },
-    { field: 'pack_type', header: 'Pack Type', required: false, example: 'STRIP' },
     { field: 'mrp', header: 'MRP*', required: true, example: '120.00' },
     { field: 'cost_price', header: 'Cost Price*', required: true, example: '80.00' },
     { field: 'sale_price', header: 'Sale Price', required: false, example: '100.00' },
+    { field: 'pack_type', header: 'Pack Type', required: false, example: 'STRIP' },
+    { field: 'pack_size', header: 'Units per Pack', required: false, example: '10' },
+    { field: 'number_of_packs', header: 'Number of Packs', required: false, example: '10' },
+    { field: 'loose_quantity', header: 'Loose Units', required: false, example: '0' },
     { field: 'gst_percent', header: 'GST %', required: false, example: '12' },
     { field: 'discount_percent', header: 'Discount %', required: false, example: '5' },
     { field: 'schedule_type', header: 'Schedule', required: false, example: 'H' },
@@ -67,13 +71,19 @@ const BulkProductUpload = ({
       ['BULK PRODUCT UPLOAD TEMPLATE'],
       [''],
       ['Instructions:'],
-      ['1. Fill in product details in the Data sheet'],
-      ['2. Required fields are marked with *'],
-      ['3. Date format: MM/YYYY (e.g., 12/2025)'],
-      ['4. Pack Types: STRIP, BOX, BOTTLE, VIAL, TUBE'],
-      ['5. GST % options: 0, 5, 12, 18, 28'],
-      ['6. Schedule Types: H, H1, X, G, J (leave empty for OTC)'],
-      ['7. You can copy-paste data from PDFs'],
+      ['1. Switch to the "Data" sheet tab to enter products'],
+      ['2. Enter one product per row, starting from row 2'],
+      ['3. Required fields are marked with * (Product Name, Expiry, Quantity, MRP, Cost Price)'],
+      ['4. Batch No: Auto-generated if left empty (format: AUTO-YYYYMMDD-XXX)'],
+      ['5. Empty rows will be automatically skipped'],
+      ['6. Date format: MM/YYYY (e.g., 12/2025)'],
+      ['7. Pack Types: STRIP, BOX, BOTTLE, VIAL, TUBE, SACHET, INJECTION'],
+      ['8. Pack Size: Number of units in each pack (e.g., 10 tablets per strip)'],
+      ['9. Number of Packs: How many packs you are purchasing'],
+      ['10. GST % options: 0, 5, 12, 18, 28 (defaults to 12% if left empty)'],
+      ['11. Schedule Types: H, H1, X, G, J (leave empty for OTC)'],
+      ['12. You can copy-paste data from PDFs directly into the cells'],
+      ['13. Save the file and upload it back to import products'],
       [''],
       ['Field Descriptions:'],
       ...templateColumns.map(col => [
@@ -86,8 +96,8 @@ const BulkProductUpload = ({
     const instructionsSheet = XLSX.utils.aoa_to_sheet(instructionsData);
     XLSX.utils.book_append_sheet(wb, instructionsSheet, 'Instructions');
     
-    // Create data sheet with headers and example
-    const dataSheet = XLSX.utils.aoa_to_sheet([headers, exampleRow]);
+    // Create data sheet with headers only (no example row to avoid confusion)
+    const dataSheet = XLSX.utils.aoa_to_sheet([headers]);
     
     // Set column widths
     const colWidths = templateColumns.map(col => ({ wch: Math.max(col.header.length, 15) }));
@@ -139,12 +149,39 @@ const BulkProductUpload = ({
           setUploading(false);
           return;
         }
+        
+        // Filter out empty rows and example rows first
+        const filteredData = jsonData.filter(row => {
+          const hasAnyData = Object.values(row).some(val => val && val.toString().trim());
+          const isExampleRow = row['Product Name*'] === 'Paracetamol 500mg' && 
+                               row['Batch No*'] === 'BATCH001';
+          return hasAnyData && !isExampleRow;
+        });
+        
+        if (filteredData.length === 0) {
+          toast.error('No valid product data found. Please add product details to the template.');
+          setUploading(false);
+          return;
+        }
 
         // Process and validate data
         const processedProducts = [];
         const validationErrors = [];
         
-        jsonData.forEach((row, index) => {
+        filteredData.forEach((row, index) => {
+          // Skip completely empty rows
+          const hasAnyData = Object.values(row).some(val => val && val.toString().trim());
+          if (!hasAnyData) {
+            return; // Skip empty row
+          }
+          
+          // Skip if it's the example row (check if it matches our example data)
+          const isExampleRow = row['Product Name*'] === 'Paracetamol 500mg' && 
+                              row['Batch No*'] === 'BATCH001';
+          if (isExampleRow) {
+            return; // Skip example row
+          }
+          
           const product = {};
           const rowErrors = [];
           
@@ -163,6 +200,8 @@ const BulkProductUpload = ({
                 case 'quantity':
                 case 'free_quantity':
                 case 'pack_size':
+                case 'number_of_packs':
+                case 'loose_quantity':
                   product[col.field] = parseInt(value) || 0;
                   break;
                 case 'mrp':
@@ -185,13 +224,29 @@ const BulkProductUpload = ({
               }
             } else if (col.field === 'gst_percent') {
               product[col.field] = 12; // Default GST
+            } else if (col.field === 'sale_price' && !value) {
+              // Default sale price to MRP if not provided
+              product[col.field] = product.mrp || 0;
             }
           });
           
           // Auto-generate batch if not provided
-          if (!product.batch_number) {
-            product.batch_number = `AUTO-${Date.now()}-${index}`;
+          if (!product.batch_number || product.batch_number.trim() === '') {
+            const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+            product.batch_number = `AUTO-${dateStr}-${(index + 1).toString().padStart(3, '0')}`;
           }
+          
+          // Calculate total quantity from packs if provided
+          if (product.number_of_packs && product.pack_size) {
+            const totalFromPacks = product.number_of_packs * product.pack_size;
+            const looseQty = product.loose_quantity || 0;
+            product.quantity = totalFromPacks + looseQty;
+          }
+          
+          // Set defaults for common fields
+          if (!product.pack_type) product.pack_type = 'STRIP';
+          if (!product.pack_size) product.pack_size = 10;
+          if (!product.storage_condition) product.storage_condition = 'Cool & Dry';
           
           // Calculate amount
           product.amount = (product.quantity || 0) * (product.cost_price || 0);
@@ -262,6 +317,29 @@ const BulkProductUpload = ({
       return;
     }
 
+    // If not creating in database, just pass the products to parent
+    if (!createInDatabase) {
+      const callback = onUpload || onProductsAdded;
+      if (callback) {
+        // Format products for purchase use
+        const formattedProducts = products.map(product => ({
+          ...product,
+          product_id: product.product_id || null,
+          batch_no: product.batch_number,
+          purchase_price: product.cost_price,
+          selling_price: product.sale_price || product.mrp,
+          tax_percent: product.gst_percent
+        }));
+        callback(formattedProducts);
+      }
+      toast.success(`Added ${products.length} products to purchase`);
+      setProducts([]);
+      if (onClose) {
+        onClose();
+      }
+      return;
+    }
+
     setSaving(true);
     const results = {
       success: [],
@@ -301,8 +379,9 @@ const BulkProductUpload = ({
         toast.success(`Successfully created ${results.success.length} products`);
         
         // Pass created products to parent
-        if (onProductsAdded) {
-          onProductsAdded(results.success);
+        const callback = onUpload || onProductsAdded;
+        if (callback) {
+          callback(results.success);
         }
       }
       
@@ -449,6 +528,11 @@ const BulkProductUpload = ({
                           {product.manufacturer && (
                             <p className="text-xs text-gray-500">{product.manufacturer}</p>
                           )}
+                          {product.pack_type && (
+                            <p className="text-xs text-gray-400">
+                              {product.pack_type} × {product.pack_size || 10}
+                            </p>
+                          )}
                         </div>
                       )}
                     </td>
@@ -577,7 +661,7 @@ const BulkProductUpload = ({
                   ) : (
                     <>
                       <CheckCircle className="w-4 h-4" />
-                      <span>Save All Products</span>
+                      <span>{createInDatabase ? 'Create Products' : 'Add to Purchase'}</span>
                     </>
                   )}
                 </button>

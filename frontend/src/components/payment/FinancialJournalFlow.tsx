@@ -4,6 +4,7 @@ import {
   Calculator, X, Search, Calendar, Loader2, RefreshCw
 } from 'lucide-react';
 import { ModuleHeader } from '../global';
+import { journalApi } from '../../services/api';
 
 interface FinancialJournalFlowProps {
   onClose?: () => void;
@@ -33,15 +34,8 @@ const FinancialJournalFlow: React.FC<FinancialJournalFlowProps> = ({ onClose }) 
   const [error, setError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
 
-  // Accounts for selection - will be loaded from API
-  const [accounts, setAccounts] = useState([
-    { code: '1101', name: 'Cash in Hand' },
-    { code: '1102', name: 'Bank - HDFC Current' },
-    { code: '1201', name: 'Accounts Receivable' },
-    { code: '2101', name: 'Accounts Payable' },
-    { code: '4001', name: 'Sales Revenue' },
-    { code: '5001', name: 'Purchase Expense' }
-  ]);
+  // Accounts for selection - loaded from API
+  const [accounts, setAccounts] = useState([]);
 
   useEffect(() => {
     // Load initial data
@@ -53,14 +47,22 @@ const FinancialJournalFlow: React.FC<FinancialJournalFlowProps> = ({ onClose }) 
       setIsLoading(true);
       setError(null);
       
-      // Here you would load accounts from the API
-      // For now, we'll keep the default accounts
-      // const accountsResponse = await accountsApi.getAll();
-      // setAccounts(accountsResponse.data || []);
+      // Load chart of accounts
+      const accountsResponse = await journalApi.getChartOfAccounts();
+      setAccounts(accountsResponse.accounts || []);
       
     } catch (error) {
       console.error('Error loading initial data:', error);
-      setError('Failed to load initial data');
+      setError('Failed to load chart of accounts');
+      // Fallback accounts
+      setAccounts([
+        { account_code: '1101', account_name: 'Cash in Hand' },
+        { account_code: '1102', account_name: 'Bank - Current Account' },
+        { account_code: '1201', account_name: 'Accounts Receivable' },
+        { account_code: '2101', account_name: 'Accounts Payable' },
+        { account_code: '4001', account_name: 'Sales Revenue' },
+        { account_code: '5001', account_name: 'Purchase Expense' }
+      ]);
     } finally {
       setIsLoading(false);
     }
@@ -157,14 +159,24 @@ const FinancialJournalFlow: React.FC<FinancialJournalFlowProps> = ({ onClose }) 
         }
       }
       
-      // Here you would call the actual API to save the journal entry
-      // For now, we'll just log it
-      console.log('Saving journal entry:', { journalDate, narration, lines });
+      // Prepare journal entry data for API
+      const journalData = {
+        journal_date: journalDate,
+        reference_number: '', // Could add reference field
+        narration: narration,
+        lines: lines.map(line => ({
+          account_code: line.account_code,
+          account_name: line.account_name,
+          debit_amount: line.debit_amount,
+          credit_amount: line.credit_amount,
+          narration: line.narration
+        }))
+      };
       
-      // Simulate API call
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      // Call the actual API to save the journal entry
+      const response = await journalApi.create(journalData);
       
-      alert('Journal entry saved successfully!');
+      alert(`Journal entry saved successfully! Journal Number: ${response.data?.journal_number}`);
       
       // Reset form after successful save
       setLines([
@@ -185,7 +197,7 @@ const FinancialJournalFlow: React.FC<FinancialJournalFlowProps> = ({ onClose }) 
   const totalCredit = lines.reduce((sum, line) => sum + (line.credit_amount || 0), 0);
 
   return (
-    <div className="h-full bg-green-50">
+    <div className="h-full bg-blue-50">
       <div className="h-full flex flex-col">
         {/* Header */}
         <ModuleHeader
@@ -215,19 +227,19 @@ const FinancialJournalFlow: React.FC<FinancialJournalFlowProps> = ({ onClose }) 
         />
 
         {/* Keyboard Shortcuts Help */}
-        <div className="bg-green-50 px-4 py-2 text-xs text-green-700 border-b border-green-200">
+        <div className="bg-blue-50 px-4 py-2 text-xs text-blue-700 border-b border-blue-200">
           Keyboard shortcuts: <strong>Ctrl+S</strong> - Post Entry | <strong>Ctrl+A</strong> - Add Line | <strong>Esc</strong> - Close
         </div>
 
         {/* Content */}
-        <div className="flex-1 overflow-y-auto bg-green-50">
+        <div className="flex-1 overflow-y-auto bg-blue-50">
           <div className="max-w-6xl mx-auto px-6 py-6 space-y-6">
             
             {/* Loading State */}
             {isLoading && (
-              <div className="bg-white rounded-lg shadow-sm border border-green-200 p-8 mb-6">
+              <div className="bg-white rounded-lg shadow-sm border border-blue-200 p-8 mb-6">
                 <div className="text-center">
-                  <Loader2 className="w-8 h-8 animate-spin mx-auto mb-4 text-green-600" />
+                  <Loader2 className="w-8 h-8 animate-spin mx-auto mb-4 text-blue-600" />
                   <p className="text-gray-600">Loading journal entry form...</p>
                 </div>
               </div>
@@ -314,16 +326,16 @@ const FinancialJournalFlow: React.FC<FinancialJournalFlowProps> = ({ onClose }) 
                           <select
                             value={line.account_code}
                             onChange={(e) => {
-                              const account = accounts.find(acc => acc.code === e.target.value);
+                              const account = accounts.find(acc => acc.account_code === e.target.value);
                               updateLine(line.id, 'account_code', e.target.value);
-                              updateLine(line.id, 'account_name', account?.name || '');
+                              updateLine(line.id, 'account_name', account?.account_name || '');
                             }}
                             className="w-48 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
                           >
                             <option value="">Select account...</option>
                             {accounts.map(account => (
-                              <option key={account.code} value={account.code}>
-                                {account.code} - {account.name}
+                              <option key={account.account_code} value={account.account_code}>
+                                {account.account_code} - {account.account_name}
                               </option>
                             ))}
                           </select>

@@ -525,7 +525,7 @@ const BatchTracking = ({ open = true, onClose }) => {
               setSelectedIds(new Set([batch.batch_id || batch.id]));
               setTimeout(() => printSelected(), 0);
             }}
-            className="p-2 text-gray-400 hover:text-green-600 hover:bg-green-50 rounded-lg transition-colors"
+            className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
             title="Print"
           >
             <Printer className="w-4 h-4" />
@@ -547,7 +547,7 @@ const BatchTracking = ({ open = true, onClose }) => {
               setSelectedIds(new Set([batch.batch_id || batch.id]));
               setTimeout(() => whatsappSelected(), 0);
             }}
-            className="p-2 text-gray-400 hover:text-green-600 hover:bg-green-50 rounded-lg transition-colors"
+            className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
             title="Send WhatsApp"
           >
             <MessageCircle className="w-4 h-4" />

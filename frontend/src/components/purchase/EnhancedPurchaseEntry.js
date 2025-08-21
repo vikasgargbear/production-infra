@@ -19,7 +19,7 @@ import documentNumberService from '../../services/documentNumberService';
 import { PURCHASE_CONFIG } from '../../config/purchase.config';
 import PDFUploadModal from '../PDFUploadModal';
 import PDFUploadCard from '../global/ui/PDFUploadCard';
-import BulkProductUpload from '../global/BulkProductUpload';
+import BulkUploadInline from './BulkUploadInline';
 
 /**
  * EnhancedPurchaseEntry - Purchase Entry using the full global document system
@@ -38,7 +38,6 @@ const EnhancedPurchaseEntry = ({ onClose, prefilledData = null }) => {
   const [showProductModal, setShowProductModal] = useState(false);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [showPDFUpload, setShowPDFUpload] = useState(false);
-  const [showBulkUpload, setShowBulkUpload] = useState(false);
   const [createdPurchaseData, setCreatedPurchaseData] = useState(null);
   const [saving, setSaving] = useState(false);
   const [errors, setErrors] = useState({});
@@ -215,7 +214,6 @@ const EnhancedPurchaseEntry = ({ onClose, prefilledData = null }) => {
       items: [...(prev.items || []), ...newItems]
     }));
     
-    setShowBulkUpload(false);
     toast.success(`Added ${products.length} products from bulk upload`);
   };
 
@@ -392,62 +390,54 @@ const EnhancedPurchaseEntry = ({ onClose, prefilledData = null }) => {
         </div>
       </div>
 
-      {/* Supplier Invoice Details - Label Outside */}
-      <div className="mb-6">
-        <div className="flex items-center gap-2 mb-3">
-          <FileText className="w-5 h-5 text-gray-600" />
-          <h3 className="text-sm font-semibold text-gray-700">SUPPLIER INVOICE DETAILS</h3>
-        </div>
-        <ContentCard title={null} subtitle={null} actions={null}>
-          <div className="grid grid-cols-3 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-600 mb-1">
-                Supplier Invoice Number <span className="text-red-500">*</span>
-              </label>
-              <input
-                type="text"
-                value={purchase.supplier_invoice_number}
-                onChange={(e) => setPurchase(prev => ({ ...prev, supplier_invoice_number: e.target.value }))}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500"
-                placeholder="Supplier's invoice number"
-                required
-              />
-              {errors.invoice_number && (
-                <p className="text-red-500 text-xs mt-1">{errors.invoice_number}</p>
-              )}
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-600 mb-1">Invoice Date</label>
-              <div className="relative">
-                <Calendar className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
-                <input
-                  type="date"
-                  value={purchase.invoice_date}
-                  onChange={(e) => setPurchase(prev => ({ ...prev, invoice_date: e.target.value }))}
-                  className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500"
-                />
-              </div>
-            </div>
-            <div>
 
-              <label className="block text-sm font-medium text-gray-600 mb-1">Payment Mode</label>
-              <select
-                value={purchase.payment_mode}
-                onChange={(e) => setPurchase(prev => ({ ...prev, payment_mode: e.target.value }))}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500"
-              >
-                <option value="Cash">Cash</option>
-                <option value="Credit">Credit</option>
-                <option value="UPI">UPI</option>
-                <option value="Bank Transfer">Bank Transfer</option>
-                <option value="Cheque">Cheque</option>
-              </select>
-            </div>
+      {/* Invoice Details - Direct like CreateInvoice */}
+      <div className="grid grid-cols-3 gap-4 mb-6">
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">
+            Supplier Invoice Number <span className="text-red-500">*</span>
+          </label>
+          <input
+            type="text"
+            value={purchase.supplier_invoice_number}
+            onChange={(e) => setPurchase(prev => ({ ...prev, supplier_invoice_number: e.target.value }))}
+            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+            placeholder="Invoice number"
+            required
+          />
+          {errors.invoice_number && (
+            <p className="text-red-500 text-xs mt-1">{errors.invoice_number}</p>
+          )}
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Invoice Date</label>
+          <div className="relative">
+            <Calendar className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
+            <input
+              type="date"
+              value={purchase.invoice_date}
+              onChange={(e) => setPurchase(prev => ({ ...prev, invoice_date: e.target.value }))}
+              className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+            />
           </div>
-        </ContentCard>
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Payment Mode</label>
+          <select
+            value={purchase.payment_mode}
+            onChange={(e) => setPurchase(prev => ({ ...prev, payment_mode: e.target.value }))}
+            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+          >
+            <option value="Cash">Cash</option>
+            <option value="Credit">Credit</option>
+            <option value="UPI">UPI</option>
+            <option value="Bank Transfer">Bank Transfer</option>
+            <option value="Cheque">Cheque</option>
+          </select>
+        </div>
       </div>
 
-      {/* Supplier Section - With Label and Create Button Outside */}
+      {/* Supplier Section - Clean and Separate */}
       <div className="mb-6">
         <div className="flex items-center justify-between mb-3">
           <div className="flex items-center gap-2">
@@ -461,16 +451,18 @@ const EnhancedPurchaseEntry = ({ onClose, prefilledData = null }) => {
             Create Supplier
           </button>
         </div>
-        <SupplierSearch
-          value={selectedSupplier}
-          onChange={handleSupplierSelect}
-          displayMode="compact"
-          placeholder="Search supplier by name, phone, or code..."
-          clearable={true}
-        />
-        {errors.supplier && (
-          <p className="text-red-500 text-xs mt-1">{errors.supplier}</p>
-        )}
+        <ContentCard title={null} subtitle={null} actions={null}>
+          <SupplierSearch
+            value={selectedSupplier}
+            onChange={handleSupplierSelect}
+            displayMode="compact"
+            placeholder="Search supplier by name, phone, or code..."
+            clearable={true}
+          />
+          {errors.supplier && (
+            <p className="text-red-500 text-xs mt-1">{errors.supplier}</p>
+          )}
+        </ContentCard>
       </div>
 
       {/* Products Section - With Label and Create Button Outside */}
@@ -481,13 +473,9 @@ const EnhancedPurchaseEntry = ({ onClose, prefilledData = null }) => {
             <h3 className="text-sm font-semibold text-gray-700">PRODUCTS</h3>
           </div>
           <div className="flex gap-2">
-            <button
-              onClick={() => setShowBulkUpload(true)}
-              className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg transition-colors text-sm font-medium flex items-center gap-2"
-            >
-              <Upload className="w-4 h-4" />
-              Bulk Upload
-            </button>
+            <BulkUploadInline 
+              onProductsUploaded={handleBulkUpload}
+            />
             <button
               onClick={() => setShowProductModal(true)}
               className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors text-sm font-medium"
@@ -509,9 +497,13 @@ const EnhancedPurchaseEntry = ({ onClose, prefilledData = null }) => {
         />
       </div>
 
-      {/* Items Table */}
+      {/* Items Table - With Label Outside */}
       {purchase.items && purchase.items.length > 0 && (
-        <ContentCard title="Purchase Items" subtitle={null} actions={null} className="mb-6">
+        <>
+          <div className="flex items-center gap-2 mb-3">
+            <Package className="w-5 h-5 text-gray-600" />
+            <h3 className="text-sm font-semibold text-gray-700">PURCHASE ITEMS</h3>
+          </div>
           <ItemsTable
             items={purchase.items.map(item => ({
               ...item,
@@ -530,37 +522,204 @@ const EnhancedPurchaseEntry = ({ onClose, prefilledData = null }) => {
             }}
             onRemoveItem={handleRemoveItem}
             showTotals={false}
-            columns={['product', 'batch', 'expiry', 'quantity', 'unit', 'mrp', 'rate', 'discount', 'free', 'tax', 'total']}
+            title=""
+            columns={['product', 'pack_type', 'pack_config', 'expiry', 'qty', 'free', 'mrp', 'cost', 'rate', 'disc', 'tax', 'total']}
             customColumns={{
-              batch: {
-                label: 'Batch',
+              pack_type: {
+                label: 'Pack',
                 align: 'center',
                 render: (item, index) => (
-                  <input
-                    type="text"
-                    value={item.batch_number || item.batch_no || ''}
-                    onChange={(e) => handleUpdateItem(index, 'batch_no', e.target.value)}
-                    className="w-20 text-center border-0 bg-transparent focus:ring-2 focus:ring-blue-500 rounded-md"
-                    placeholder="Batch"
-                  />
+                  <select
+                    value={item.pack_type || 'STRIP'}
+                    onChange={(e) => handleUpdateItem(index, 'pack_type', e.target.value)}
+                    className="w-16 text-xs border-0 bg-transparent focus:ring-2 focus:ring-blue-500 rounded-md"
+                  >
+                    <option value="STRIP">STRIP</option>
+                    <option value="BOX">BOX</option>
+                    <option value="BOTTLE">BOTTLE</option>
+                    <option value="VIAL">VIAL</option>
+                    <option value="TUBE">TUBE</option>
+                  </select>
+                )
+              },
+              pack_config: {
+                label: 'Pack Type',
+                align: 'center',
+                render: (item, index) => (
+                  <div className="flex gap-1">
+                    <input
+                      type="number"
+                      value={item.pack_size || 10}
+                      onChange={(e) => handleUpdateItem(index, 'pack_size', parseInt(e.target.value) || 1)}
+                      className="w-8 text-xs text-center border-0 bg-transparent focus:ring-2 focus:ring-blue-500 rounded-md [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                      placeholder="U"
+                      title="Units per pack"
+                    />
+                    <span className="text-xs text-gray-400">×</span>
+                    <input
+                      type="number"
+                      value={item.strips_per_box || 10}
+                      onChange={(e) => handleUpdateItem(index, 'strips_per_box', parseInt(e.target.value) || 1)}
+                      className="w-8 text-xs text-center border-0 bg-transparent focus:ring-2 focus:ring-blue-500 rounded-md [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                      placeholder="P"
+                      title="Packs per box"
+                    />
+                  </div>
                 )
               },
               expiry: {
                 label: 'Expiry',
                 align: 'center',
+                render: (item, index) => {
+                  // Convert date to MM/YY format for display
+                  const formatDateToMonthYearShort = (dateStr) => {
+                    if (!dateStr) return '';
+                    const date = new Date(dateStr);
+                    const month = String(date.getMonth() + 1).padStart(2, '0');
+                    const year = String(date.getFullYear()).slice(-2); // Last 2 digits
+                    return `${month}/${year}`;
+                  };
+                  
+                  const handleExpiryChange = (e) => {
+                    const value = e.target.value;
+                    if (!value) return;
+                    // value comes as 'YYYY-MM' from month input
+                    const date = new Date(value + '-01');
+                    handleUpdateItem(index, 'expiry_date', date.toISOString().split('T')[0]);
+                  };
+                  
+                  // Show MM/YY format but use month picker
+                  const displayValue = formatDateToMonthYearShort(item.expiry_date);
+                  
+                  return (
+                    <div className="relative">
+                      {/* Hidden month picker */}
+                      <input
+                        type="month"
+                        value={item.expiry_date ? item.expiry_date.substring(0, 7) : ''}
+                        onChange={(e) => handleExpiryChange(e)}
+                        className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                        title="Click to select expiry month/year"
+                      />
+                      {/* Display overlay showing MM/YY format */}
+                      <div className="w-20 text-xs text-center py-1 border-0 bg-transparent focus-within:ring-2 focus-within:ring-blue-500 rounded-md pointer-events-none">
+                        {displayValue || 'MM/YY'}
+                      </div>
+                    </div>
+                  );
+                }
+              },
+              qty: {
+                label: 'Qty',
+                align: 'center',
                 render: (item, index) => (
                   <input
-                    type="date"
-                    value={item.expiry_date || ''}
-                    onChange={(e) => handleUpdateItem(index, 'expiry_date', e.target.value)}
-                    className="w-28 text-center border-0 bg-transparent focus:ring-2 focus:ring-blue-500 rounded-md"
+                    type="number"
+                    value={item.quantity || 1}
+                    onChange={(e) => handleUpdateItem(index, 'quantity', parseInt(e.target.value) || 0)}
+                    className="w-12 text-center border-0 bg-transparent focus:ring-2 focus:ring-blue-500 rounded-md [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                    min="1"
                   />
                 )
+              },
+              free: {
+                label: 'Free',
+                align: 'center',
+                render: (item, index) => (
+                  <input
+                    type="number"
+                    value={item.free_quantity || 0}
+                    onChange={(e) => handleUpdateItem(index, 'free_quantity', parseInt(e.target.value) || 0)}
+                    className="w-10 text-center border-0 bg-transparent focus:ring-2 focus:ring-blue-500 rounded-md [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                    min="0"
+                  />
+                )
+              },
+              mrp: {
+                label: 'MRP',
+                align: 'right',
+                render: (item, index) => (
+                  <input
+                    type="number"
+                    value={item.mrp || 0}
+                    onChange={(e) => handleUpdateItem(index, 'mrp', parseFloat(e.target.value) || 0)}
+                    className="w-16 text-right border-0 bg-transparent focus:ring-2 focus:ring-blue-500 rounded-md [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                    step="0.01"
+                    min="0"
+                  />
+                )
+              },
+              cost: {
+                label: 'Cost',
+                align: 'right',
+                render: (item, index) => (
+                  <input
+                    type="number"
+                    value={item.purchase_price || 0}
+                    onChange={(e) => handleUpdateItem(index, 'purchase_price', parseFloat(e.target.value) || 0)}
+                    className="w-16 text-right border-0 bg-transparent focus:ring-2 focus:ring-blue-500 rounded-md [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                    step="0.01"
+                    min="0"
+                  />
+                )
+              },
+              rate: {
+                label: 'Rate',
+                align: 'right',
+                render: (item, index) => (
+                  <input
+                    type="number"
+                    value={item.sale_price || item.mrp || 0}
+                    onChange={(e) => handleUpdateItem(index, 'sale_price', parseFloat(e.target.value) || 0)}
+                    className="w-16 text-right border-0 bg-transparent focus:ring-2 focus:ring-blue-500 rounded-md [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                    step="0.01"
+                    min="0"
+                  />
+                )
+              },
+              disc: {
+                label: 'Disc%',
+                align: 'center',
+                render: (item, index) => (
+                  <input
+                    type="number"
+                    value={item.discount_percent || 0}
+                    onChange={(e) => handleUpdateItem(index, 'discount_percent', parseFloat(e.target.value) || 0)}
+                    className="w-12 text-center border-0 bg-transparent focus:ring-2 focus:ring-blue-500 rounded-md [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                    step="0.1"
+                    min="0"
+                    max="100"
+                  />
+                )
+              },
+              tax: {
+                label: 'Tax%',
+                align: 'center',
+                render: (item, index) => (
+                  <select
+                    value={item.tax_percent || 12}
+                    onChange={(e) => handleUpdateItem(index, 'tax_percent', parseFloat(e.target.value))}
+                    className="w-12 text-xs text-center border-0 bg-transparent focus:ring-2 focus:ring-blue-500 rounded-md"
+                  >
+                    <option value="0">0%</option>
+                    <option value="5">5%</option>
+                    <option value="12">12%</option>
+                    <option value="18">18%</option>
+                    <option value="28">28%</option>
+                  </select>
+                )
+              },
+              total: {
+                label: 'Total',
+                align: 'right',
+                render: (item) => {
+                  const total = (item.quantity || 0) * (item.purchase_price || 0) * (1 + (item.tax_percent || 0) / 100);
+                  return <span className="font-medium">₹{total.toFixed(2)}</span>;
+                }
               }
             }}
-            title="Purchase Items"
           />
-        </ContentCard>
+        </>
       )}
       {errors.items && (
         <p className="text-red-500 text-xs mt-1">{errors.items}</p>
@@ -851,14 +1010,6 @@ const EnhancedPurchaseEntry = ({ onClose, prefilledData = null }) => {
             
             toast.success('PDF data extracted successfully! Review the details below.');
           }}
-        />
-      )}
-
-      {/* Bulk Upload Modal */}
-      {showBulkUpload && (
-        <BulkProductUpload
-          onClose={() => setShowBulkUpload(false)}
-          onUpload={handleBulkUpload}
         />
       )}
 

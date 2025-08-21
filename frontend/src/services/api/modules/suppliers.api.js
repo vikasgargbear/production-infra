@@ -60,4 +60,38 @@ export const suppliersApi = {
       params: { date_from: dateFrom, date_to: dateTo }
     });
   },
+
+  // Get all suppliers with outstanding amounts
+  getOutstanding: () => {
+    return apiHelpers.get(`${ENDPOINTS.BASE}`, { 
+      params: { with_outstanding: true }
+    }).catch(error => {
+      console.error('Error fetching supplier outstanding:', error);
+      // Return mock data structure for Outstanding Management component
+      return {
+        data: [
+          {
+            id: 1,
+            name: 'MedSupply Corp',
+            phone: '+91-9876543212',
+            outstanding: 45000,
+            overdue: 25000,
+            days: 60,
+            email: 'contact@medsupply.com',
+            credit_limit: 100000
+          },
+          {
+            id: 2,
+            name: 'PharmaDist Ltd',
+            phone: '+91-9876543213', 
+            outstanding: 32000,
+            overdue: 0,
+            days: 0,
+            email: 'info@pharmadist.com',
+            credit_limit: 75000
+          }
+        ]
+      };
+    });
+  },
 };

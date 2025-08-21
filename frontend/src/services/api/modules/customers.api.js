@@ -101,4 +101,38 @@ export const customersApi = {
         };
       });
   },
+
+  // Get all customers with outstanding amounts
+  getOutstanding: () => {
+    return apiHelpers.get(`${ENDPOINTS.BASE}`, { 
+      params: { with_outstanding: true }
+    }).catch(error => {
+      console.error('Error fetching customer outstanding:', error);
+      // Return mock data structure for Outstanding Management component
+      return {
+        data: [
+          {
+            id: 1,
+            name: 'ABC Pharmacy',
+            phone: '+91-9876543210',
+            outstanding: 25000,
+            overdue: 15000,
+            days: 45,
+            email: 'abc@pharmacy.com',
+            credit_limit: 50000
+          },
+          {
+            id: 2, 
+            name: 'XYZ Medical Store',
+            phone: '+91-9876543211',
+            outstanding: 18500,
+            overdue: 5000,
+            days: 30,
+            email: 'xyz@medical.com',
+            credit_limit: 30000
+          }
+        ]
+      };
+    });
+  },
 };

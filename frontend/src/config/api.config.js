@@ -110,6 +110,16 @@ export const API_CONFIG = {
       RECEIVE_ITEMS: (id) => `/purchases/${id}/receive`,
       GENERATE_NUMBER: '/purchases/generate-number'
     },
+
+    // GRN (Goods Receipt Notes)
+    GRN: {
+      BASE: '/grn',
+      CREATE: '/grn',
+      UPDATE: (id) => `/grn/${id}`,
+      DETAILS: (id) => `/grn/${id}`,
+      APPROVE: (id) => `/grn/${id}/approve`,
+      GENERATE_NUMBER: '/grn/generate-number'
+    },
     
     // Stock Management
     STOCK: {

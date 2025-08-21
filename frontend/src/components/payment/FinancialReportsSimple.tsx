@@ -91,8 +91,7 @@ const FinancialReportsSimple: React.FC<FinancialReportsSimpleProps> = ({ onClose
       // Call the actual API to generate the report based on type
       switch (reportId) {
         case 'trial_balance':
-          // Backend doesn't expose trial balance; approximate via balance sheet
-          reportResponse = await reportsApi.financial.balanceSheet({ period: selectedPeriod });
+          reportResponse = await reportsApi.financial.trialBalance({ period: selectedPeriod });
           break;
         case 'profit_loss':
           reportResponse = await reportsApi.financial.profitLoss({ period: selectedPeriod });
@@ -157,7 +156,7 @@ const FinancialReportsSimple: React.FC<FinancialReportsSimpleProps> = ({ onClose
   }, []);
 
   return (
-    <div className="h-full bg-green-50">
+    <div className="h-full bg-blue-50">
       <div className="h-full flex flex-col">
         {/* Header */}
         <ModuleHeader
@@ -165,7 +164,7 @@ const FinancialReportsSimple: React.FC<FinancialReportsSimpleProps> = ({ onClose
           documentNumber={`RPT-${new Date().getFullYear()}`}
           status={`Period: ${selectedPeriod.replace('_', ' ').toUpperCase()}`}
           icon={TrendingUp}
-          iconColor="text-purple-600"
+          iconColor="text-blue-600"
           onClose={onClose}
           historyType="reports"
           onSaveDraft={() => {}}
@@ -186,19 +185,19 @@ const FinancialReportsSimple: React.FC<FinancialReportsSimpleProps> = ({ onClose
         />
 
         {/* Keyboard Shortcuts Help */}
-        <div className="bg-green-50 px-4 py-2 text-xs text-green-700 border-b border-green-200">
+        <div className="bg-blue-50 px-4 py-2 text-xs text-blue-700 border-b border-blue-200">
           Keyboard shortcuts: <strong>Ctrl+G</strong> - Generate Report | <strong>Ctrl+D</strong> - Download | <strong>Esc</strong> - Close
         </div>
 
         {/* Content */}
-        <div className="flex-1 overflow-y-auto bg-green-50">
+        <div className="flex-1 overflow-y-auto bg-blue-50">
           <div className="max-w-6xl mx-auto px-6 py-6 space-y-6">
             
             {/* Loading State */}
             {isLoading && (
-              <div className="bg-white rounded-lg shadow-sm border border-green-200 p-8 mb-6">
+              <div className="bg-white rounded-lg shadow-sm border border-blue-200 p-8 mb-6">
                 <div className="text-center">
-                  <Loader2 className="w-8 h-8 animate-spin mx-auto mb-4 text-green-600" />
+                  <Loader2 className="w-8 h-8 animate-spin mx-auto mb-4 text-blue-600" />
                   <p className="text-gray-600">Loading financial reports...</p>
                 </div>
               </div>

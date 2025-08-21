@@ -1,7 +1,7 @@
 import React from 'react';
 import { 
   Package, ArrowDownToLine, ArrowUpFromLine, 
-  BarChart3, AlertTriangle, ArrowRightLeft, Archive, List
+  BarChart3, ArrowRightLeft, Archive, List
 } from 'lucide-react';
 import { ModuleHub } from '../global';
 import StockMovement from '../stock/StockMovement';
@@ -10,8 +10,6 @@ import CurrentStock from '../stock/CurrentStock';
 import BatchTracking from '../stock/BatchTracking';
 import EnhancedStockAdjustmentFlow from '../stock/EnhancedStockAdjustmentFlow';
 import StockReport from '../stock/StockReport';
-import LowStockAlert from '../stock/LowStockAlert';
-import StockListHistory from './StockListHistory';
 
 interface StockHubProps {
   open?: boolean;
@@ -59,10 +57,10 @@ const StockHub: React.FC<StockHubProps> = ({ open = true, onClose }) => {
     },
     {
       id: 'stock-movement',
-      label: 'Movement',
-      fullLabel: 'Stock Movement',
-      description: 'Receive/Issue stock',
-      icon: ArrowDownToLine,
+      label: 'Movements',
+      fullLabel: 'Stock Movements',
+      description: 'View all movement history',
+      icon: List,
       color: 'teal',
       component: StockMovement
     },
@@ -76,15 +74,6 @@ const StockHub: React.FC<StockHubProps> = ({ open = true, onClose }) => {
       component: StockTransfer
     },
     {
-      id: 'low-stock',
-      label: 'Alerts',
-      fullLabel: 'Low Stock Alert',
-      description: 'Reorder management',
-      icon: AlertTriangle,
-      color: 'red',
-      component: LowStockAlert
-    },
-    {
       id: 'stock-report',
       label: 'Report',
       fullLabel: 'Stock Report',
@@ -92,15 +81,6 @@ const StockHub: React.FC<StockHubProps> = ({ open = true, onClose }) => {
       icon: BarChart3,
       color: 'purple',
       component: StockReport
-    },
-    {
-      id: 'stock-history',
-      label: 'All Movements',
-      fullLabel: 'Stock Movement History',
-      description: 'View movement history',
-      icon: List,
-      color: 'gray',
-      component: StockListHistory
     }
   ];
 

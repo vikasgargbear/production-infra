@@ -23,6 +23,7 @@ export const reportsApi = {
   financial: {
     profitLoss: (filters) => apiClient.get('/reports/financial/profit-loss', { params: filters }),
     balanceSheet: (filters) => apiClient.get('/reports/financial/balance-sheet', { params: filters }),
+    trialBalance: (filters) => apiClient.get('/reports/financial/trial-balance', { params: filters }),
     cashFlow: (filters) => apiClient.get('/reports/financial/cash-flow', { params: filters }),
     receivables: (filters) => apiClient.get('/reports/financial/receivables', { params: filters }),
     payables: (filters) => apiClient.get('/reports/financial/payables', { params: filters }),

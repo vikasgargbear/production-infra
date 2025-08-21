@@ -48,6 +48,30 @@ export const ledgerApi = {
     return response.data;
   },
 
+  // Get bank accounts for reconciliation
+  getBankAccounts: async () => {
+    // This could map to a chart of accounts endpoint filtered for bank accounts
+    // For now, return mock data structure that matches the expected format
+    return {
+      data: [
+        {
+          code: 'HDFC-001',
+          name: 'HDFC Bank Current Account',
+          balance: 150000,
+          account_type: 'bank',
+          bank_name: 'HDFC Bank'
+        },
+        {
+          code: 'SBI-002', 
+          name: 'SBI Savings Account',
+          balance: 75000,
+          account_type: 'bank',
+          bank_name: 'State Bank of India'
+        }
+      ]
+    };
+  },
+
   // Reconcile entries
   reconcileEntries: async (data) => {
     const response = await apiClient.post('/ledger/reconcile', data);

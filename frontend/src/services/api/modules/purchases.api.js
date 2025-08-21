@@ -186,4 +186,31 @@ export const purchasesApi = {
   cancelPurchaseOrder: (id, reason) => {
     return apiHelpers.post(`${ENDPOINTS.BASE}/purchase-orders/${id}/cancel`, { reason });
   },
+
+  // GRN (Goods Receipt Note) methods
+  generateGRNNumber: () => {
+    return apiHelpers.get('/api/grn/generate-number');
+  },
+
+  createGRN: (data) => {
+    const cleanedData = cleanData(data);
+    return apiHelpers.post('/api/grn', cleanedData);
+  },
+
+  getGRNs: (params = {}) => {
+    return apiHelpers.get('/api/grn', { params });
+  },
+
+  getGRNById: (id) => {
+    return apiHelpers.get(`/api/grn/${id}`);
+  },
+
+  updateGRN: (id, data) => {
+    const cleanedData = cleanData(data);
+    return apiHelpers.put(`/api/grn/${id}`, cleanedData);
+  },
+
+  approveGRN: (id, approvalData = {}) => {
+    return apiHelpers.post(`/api/grn/${id}/approve`, approvalData);
+  },
 };

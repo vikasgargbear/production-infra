@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Receipt, Plus, Calendar, X, Loader2, RefreshCw, AlertCircle, User } from 'lucide-react';
 import { ModuleHeader } from '../global';
+import { expensesApi } from '../../services/api';
 
 interface ExpenseClaimsFlowProps {
   onClose?: () => void;
@@ -29,16 +30,8 @@ const ExpenseClaimsFlow: React.FC<ExpenseClaimsFlowProps> = ({ onClose }) => {
   const [error, setError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
 
-  const expenseTypes = [
-    'Travel',
-    'Accommodation', 
-    'Meals',
-    'Office Supplies',
-    'Communication',
-    'Medical',
-    'Training',
-    'Other'
-  ];
+  // Expense types loaded from API
+  const [expenseTypes, setExpenseTypes] = useState([]);
 
   useEffect(() => {
     // Load any initial data if needed
@@ -50,13 +43,27 @@ const ExpenseClaimsFlow: React.FC<ExpenseClaimsFlowProps> = ({ onClose }) => {
       setIsLoading(true);
       setError(null);
       
-      // Load employee data or other necessary data
-      // For now, we'll just set a default employee name
+      // Load expense types from API
+      const expenseTypesResponse = await expensesApi.getExpenseTypes();
+      setExpenseTypes(expenseTypesResponse.expense_types || []);
+      
+      // Set default employee name (in real app, get from auth context)
       setEmployeeName('Current User');
       
     } catch (error) {
       console.error('Error loading initial data:', error);
-      setError('Failed to load initial data');
+      setError('Failed to load expense types');
+      // Fallback expense types
+      setExpenseTypes([
+        {code: 'TRAVEL', name: 'Travel'},
+        {code: 'ACCOMMODATION', name: 'Accommodation'},
+        {code: 'MEALS', name: 'Meals'},
+        {code: 'OFFICE_SUPPLIES', name: 'Office Supplies'},
+        {code: 'COMMUNICATION', name: 'Communication'},
+        {code: 'MEDICAL', name: 'Medical'},
+        {code: 'TRAINING', name: 'Training'},
+        {code: 'OTHER', name: 'Other'}
+      ]);
     } finally {
       setIsLoading(false);
     }
@@ -118,14 +125,24 @@ const ExpenseClaimsFlow: React.FC<ExpenseClaimsFlowProps> = ({ onClose }) => {
         }
       }
       
-      // Here you would call the actual API to save the expense claim
-      // For now, we'll just log it
-      console.log('Saving expense claim:', { claimDate, employeeName, purpose, expenses });
+      // Prepare expense claim data for API
+      const claimData = {
+        employee_name: employeeName,
+        claim_date: claimDate,
+        purpose: purpose,
+        expenses: expenses.map(expense => ({
+          expense_type: expense.expense_type,
+          description: expense.description,
+          amount: expense.amount,
+          expense_date: expense.date,
+          receipt_attached: expense.receipt_attached
+        }))
+      };
       
-      // Simulate API call
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      // Call the actual API to save the expense claim
+      const response = await expensesApi.create(claimData);
       
-      alert('Expense claim saved successfully!');
+      alert(`Expense claim saved successfully! Claim Number: ${response.data?.claim_number}`);
       
       // Reset form after successful save
       setExpenses([{ id: '1', expense_type: '', description: '', amount: 0, date: new Date().toISOString().split('T')[0], receipt_attached: false }]);
@@ -288,7 +305,7 @@ const ExpenseClaimsFlow: React.FC<ExpenseClaimsFlowProps> = ({ onClose }) => {
                           >
                             <option value="">Select type...</option>
                             {expenseTypes.map(type => (
-                              <option key={type} value={type}>{type}</option>
+                              <option key={type.code} value={type.code}>{type.name}</option>
                             ))}
                           </select>
                         </td>

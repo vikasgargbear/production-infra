@@ -55,8 +55,10 @@ def generate_purchase_number(db: Session = Depends(get_db)):
         else:
             sequence = 1
         
-        # Generate new purchase number
-        new_number = f"PO-{current_year}-{sequence:04d}"
+        # Generate new purchase number with larger starting sequence
+        # Start from 1000 to make numbers appear larger
+        display_sequence = 1000 + sequence - 1
+        new_number = f"PO-{current_year}-{display_sequence:04d}"
         
         return {"po_number": new_number}
         

@@ -265,33 +265,8 @@ const CurrentStock = ({ open = true, onClose }) => {
     }
   };
 
-  // Multi-select functionality
-  const isAllSelected = filteredData.length > 0 && filteredData.every(item => selectedIds.has(item.product_id));
+  // Multi-select functionality - Now handled by DataTable component
   const selectedCount = Array.from(selectedIds).filter(id => filteredData.some(f => f.product_id === id)).length;
-
-  const toggleSelect = (id) => {
-    setSelectedIds(prev => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id); else next.add(id);
-      return next;
-    });
-  };
-
-  const toggleSelectAll = () => {
-    if (isAllSelected) {
-      setSelectedIds(prev => {
-        const next = new Set(prev);
-        filteredData.forEach(item => next.delete(item.product_id));
-        return next;
-      });
-    } else {
-      setSelectedIds(prev => {
-        const next = new Set(prev);
-        filteredData.forEach(item => next.add(item.product_id));
-        return next;
-      });
-    }
-  };
 
   const formatDate = (date) => {
     if (!date) return 'N/A';
@@ -625,26 +600,6 @@ const CurrentStock = ({ open = true, onClose }) => {
 
   const columns = [
     {
-      header: (
-        <input
-          type="checkbox"
-          checked={isAllSelected}
-          onChange={toggleSelectAll}
-          className="w-4 h-4 rounded border-gray-300"
-        />
-      ),
-      key: 'select',
-      render: (value, row) => (
-        <input
-          type="checkbox"
-          checked={selectedIds.has(row.product_id)}
-          onChange={() => toggleSelect(row.product_id)}
-          className="w-4 h-4 rounded border-gray-300"
-        />
-      ),
-      width: '50px',
-    },
-    {
       header: 'Product',
       key: 'product_name',
       sortable: true,
@@ -789,7 +744,7 @@ const CurrentStock = ({ open = true, onClose }) => {
           <button
             onClick={() => {
               setSelectedIds(new Set([row.product_id]));
-              setTimeout(() => exportSelectedPDF(), 0);
+              setTimeout(() => handleExport(), 0);
             }}
             className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
             title="Download PDF"
@@ -834,35 +789,8 @@ const CurrentStock = ({ open = true, onClose }) => {
           icon={Package}
           iconColor="text-blue-600"
           onClose={onClose}
-          historyType="stock"
           additionalActions={[
             {
-              label: "Refresh",
-              onClick: handleRefresh,
-              variant: "default",
-              icon: refreshing ? Loader2 : RefreshCw,
-              disabled: refreshing
-            },
-            {
-              label: showLowStock ? "Hide Low Stock" : "Low Stock",
-              onClick: () => setShowLowStock(!showLowStock),
-              variant: showLowStock ? "primary" : "default",
-              icon: AlertTriangle
-            },
-            {
-              label: showExpiring ? "Hide Expiring" : "Expiring",
-              onClick: () => setShowExpiring(!showExpiring),
-              variant: showExpiring ? "primary" : "default",
-              icon: Clock
-            },
-            {
-              label: "Export",
-              onClick: handleExport,
-              variant: "default",
-              icon: Download
-            },
-            {
-              label: "Help",
               onClick: () => setShowHelpModal(true),
               variant: "default",
               icon: HelpCircle
@@ -880,9 +808,11 @@ const CurrentStock = ({ open = true, onClose }) => {
           <div className="max-w-6xl mx-auto px-6 py-6">
             
             {/* Enhanced Filter Bar */}
-            <div className="mb-6 border border-gray-200 rounded-lg bg-white shadow-sm p-4">
-              <div className="flex items-center space-x-4">
-                {/* Search - Now first */}
+            <div className={`border border-gray-200 bg-white shadow-sm p-4 ${
+              showMoreFilters ? 'rounded-t-lg' : 'rounded-lg mb-6'
+            }`}>
+              <div className="flex items-center space-x-3">
+                {/* Search - First */}
                 <div className="flex-1 relative">
                   <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
                   <input
@@ -894,171 +824,196 @@ const CurrentStock = ({ open = true, onClose }) => {
                   />
                 </div>
 
-                {/* Category Filter */}
-                <div className="relative">
-                  <select
-                    value={selectedCategory}
-                    onChange={(e) => setSelectedCategory(e.target.value)}
-                    className="appearance-none pl-3 pr-8 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm bg-white"
-                  >
-                    <option value="all">Category: All</option>
-                    <option value="Tablets">Tablets</option>
-                    <option value="Capsules">Capsules</option>
-                    <option value="Syrups">Syrups</option>
-                    <option value="Injections">Injections</option>
-                  </select>
-                  <ChevronDown className="absolute right-2 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
-                </div>
+                {/* Low Stock Quick Filter - Professional Design */}
+                <button
+                  onClick={() => setShowLowStock(!showLowStock)}
+                  className={`
+                    px-3 py-2 rounded-lg text-sm transition-all duration-200
+                    flex items-center space-x-1.5 border
+                    ${showLowStock 
+                      ? 'bg-amber-50 border-amber-300 text-amber-700' 
+                      : 'bg-white border-gray-300 hover:border-amber-300 hover:bg-amber-50 text-gray-600 hover:text-amber-600'
+                    }
+                  `}
+                  title={showLowStock ? 'Showing low stock items' : 'Filter low stock items'}
+                >
+                  <AlertTriangle className="w-4 h-4" />
+                  <span>Low Stock</span>
+                  {showLowStock && (
+                    <span className="ml-1 text-xs font-semibold">
+                      ({filteredData.filter(item => item.low_stock).length})
+                    </span>
+                  )}
+                </button>
 
-                {/* Stock Status Filter */}
-                <div className="relative">
-                  <select
-                    value={moreFilters.stockStatus}
-                    onChange={(e) => setMoreFilters(prev => ({...prev, stockStatus: e.target.value}))}
-                    className="appearance-none pl-3 pr-8 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm bg-white"
-                  >
-                    <option value="all">Stock: All</option>
-                    <option value="in-stock">In Stock</option>
-                    <option value="low-stock">Low Stock</option>
-                    <option value="out-of-stock">Out of Stock</option>
-                  </select>
-                  <ChevronDown className="absolute right-2 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
-                </div>
+                {/* Expiring Soon Quick Filter - Professional Design */}
+                <button
+                  onClick={() => setShowExpiring(!showExpiring)}
+                  className={`
+                    px-3 py-2 rounded-lg text-sm transition-all duration-200
+                    flex items-center space-x-1.5 border
+                    ${showExpiring 
+                      ? 'bg-red-50 border-red-300 text-red-700' 
+                      : 'bg-white border-gray-300 hover:border-red-300 hover:bg-red-50 text-gray-600 hover:text-red-600'
+                    }
+                  `}
+                  title={showExpiring ? 'Showing expiring items' : 'Filter expiring items'}
+                >
+                  <Clock className="w-4 h-4" />
+                  <span>Expiring</span>
+                  {showExpiring && (
+                    <span className="ml-1 text-xs font-semibold">
+                      ({filteredData.filter(item => item.expiry_alert).length})
+                    </span>
+                  )}
+                </button>
 
-                {/* Bulk Actions */}
-                {selectedCount > 0 ? (
-                  <div className="flex items-center space-x-2">
-                    <span className="text-sm text-gray-700 mr-1">Selected: {selectedCount}</span>
+                {/* Filter Divider */}
+                <div className="h-8 w-px bg-gray-300"></div>
+
+                {/* Global Refresh Button */}
+                <button
+                  onClick={handleRefresh}
+                  disabled={refreshing}
+                  className={`
+                    p-2 rounded-xl transition-all duration-300 border
+                    ${refreshing 
+                      ? 'bg-blue-50 border-blue-300' 
+                      : 'bg-white border-gray-300 hover:bg-gray-50 hover:border-gray-400'
+                    }
+                  `}
+                  title="Refresh data"
+                >
+                  <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin text-blue-600' : 'text-gray-600'}`} />
+                </button>
+
+                {/* Global Export Button */}
+                <button
+                  onClick={handleExport}
+                  className="p-2 rounded-xl bg-white border border-gray-300 hover:bg-gray-50 hover:border-gray-400 transition-all duration-200"
+                  title="Export to CSV"
+                >
+                  <Download className="w-4 h-4 text-gray-600" />
+                </button>
+
+                {/* Advanced Filters Toggle Button */}
+                <button 
+                  onClick={() => setShowMoreFilters(!showMoreFilters)}
+                  className={`
+                    p-2 rounded-xl transition-all duration-200 border
+                    ${showMoreFilters 
+                      ? 'bg-indigo-50 border-indigo-300' 
+                      : 'bg-white border-gray-300 hover:bg-gray-50 hover:border-gray-400'
+                    }
+                  `}
+                  title={showMoreFilters ? 'Hide filters' : 'More filters'}
+                >
+                  <Filter className={`w-4 h-4 transition-transform duration-300 ${
+                    showMoreFilters ? 'rotate-180 text-indigo-600' : 'text-gray-600'
+                  }`} />
+                </button>
+
+                {/* Bulk Actions - Only show when items selected */}
+                {selectedCount > 0 && (
+                  <div className="flex items-center space-x-2 ml-2 pl-2 border-l border-gray-300">
+                    <span className="text-sm text-gray-600">({selectedCount})</span>
                     <button 
-                      onClick={exportSelectedPDF} 
-                      className="px-3 py-2 bg-gray-800 text-white rounded-lg hover:bg-gray-700 text-sm flex items-center space-x-2"
+                      onClick={handleExport} 
+                      className="p-2 bg-gray-700 text-white rounded-lg hover:bg-gray-800"
+                      title="Export selected items to CSV"
                     >
                       <Download className="w-4 h-4" />
-                      <span>PDF</span>
                     </button>
                     <button 
                       onClick={printSelected} 
-                      className="px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm flex items-center space-x-1"
+                      className="p-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                      title="Print selected items"
                     >
                       <Printer className="w-4 h-4" />
-                      <span>Print</span>
-                    </button>
-                    <button 
-                      onClick={whatsappSelected} 
-                      className="px-3 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 text-sm flex items-center space-x-1"
-                    >
-                      <MessageCircle className="w-4 h-4" />
-                      <span>WhatsApp</span>
                     </button>
                   </div>
-                ) : (
-                  <button 
-                    onClick={exportSelectedPDF}
-                    className="px-4 py-2 bg-gray-800 text-white rounded-lg hover:bg-gray-700 transition-colors text-sm flex items-center space-x-2"
-                  >
-                    <Download className="w-4 h-4" />
-                    <span>Export PDF</span>
-                  </button>
                 )}
-              </div>
-              
-              {/* Summary Stats */}
-              <div className="flex items-center justify-end gap-4 text-sm mt-2 pt-2 border-t border-gray-200">
-                <div>
-                  <span className="text-gray-500">Total Value:</span>
-                  <span className="ml-1 font-semibold">
-                    {formatCurrency(filteredData.reduce((sum, item) => sum + (item.stock_value || 0), 0))}
-                  </span>
-                </div>
-                <div>
-                  <span className="text-gray-500">Items:</span>
-                  <span className="ml-1 font-semibold">{filteredData.length}</span>
-                </div>
               </div>
             </div>
 
-            {/* More Filters Panel */}
+            {/* Advanced Filters Panel - Category and Stock Status moved here */}
             {showMoreFilters && (
-              <div className="mt-4 p-4 bg-blue-50 rounded-lg border border-blue-200">
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Expiry Period
-                    </label>
+              <div className="border-l border-r border-b border-gray-200 bg-white rounded-b-lg px-4 pb-4 mb-6">
+                <div className="border-t border-gray-200 mx-[-16px] mt-4 mb-4"></div>
+                <div className="grid grid-cols-4 gap-4">
+                    {/* 1. Stock Status Filter - Priority 1 */}
+                    <select
+                      value={moreFilters.stockStatus}
+                      onChange={(e) => setMoreFilters(prev => ({...prev, stockStatus: e.target.value}))}
+                      className="px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                    >
+                      <option value="all">Stock Status</option>
+                      <option value="in-stock">In Stock</option>
+                      <option value="low-stock">Low Stock</option>
+                      <option value="out-of-stock">Out of Stock</option>
+                    </select>
+                    
+                    {/* 2. Expiry Period Filter - Priority 2 */}
                     <select 
                       value={moreFilters.expiryPeriod}
                       onChange={(e) => setMoreFilters({...moreFilters, expiryPeriod: e.target.value})}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className="px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
                     >
-                      <option value="all">All Products</option>
-                      <option value="30">Expiring in 30 days</option>
-                      <option value="60">Expiring in 60 days</option>
-                      <option value="90">Expiring in 90 days</option>
+                      <option value="all">Expiry Period</option>
+                      <option value="30">30 Days</option>
+                      <option value="60">60 Days</option>
+                      <option value="90">90 Days</option>
                       <option value="expired">Already Expired</option>
                     </select>
-                  </div>
-                  
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Pack Type
-                    </label>
+                    
+                    {/* 3. Category Filter - Priority 3 */}
+                    <select
+                      value={selectedCategory}
+                      onChange={(e) => setSelectedCategory(e.target.value)}
+                      className="px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                    >
+                      <option value="all">Category</option>
+                      <option value="Tablets">Tablet</option>
+                      <option value="Capsules">Capsule</option>
+                      <option value="Syrups">Syrup</option>
+                      <option value="Injections">Injection</option>
+                      <option value="Ointments">Ointment</option>
+                      <option value="Drops">Drops</option>
+                    </select>
+                    
+                    {/* 4. Pack Type Filter - Priority 4 */}
                     <select 
                       value={moreFilters.packType}
                       onChange={(e) => setMoreFilters({...moreFilters, packType: e.target.value})}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className="px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
                     >
-                      <option value="all">All Types</option>
+                      <option value="all">Pack Type</option>
                       <option value="strip">Strip</option>
                       <option value="bottle">Bottle</option>
                       <option value="tube">Tube</option>
                       <option value="vial">Vial</option>
                       <option value="sachet">Sachet</option>
                     </select>
-                  </div>
-                  
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Actions
-                    </label>
-                    <div className="flex space-x-2">
-                      <button 
-                        onClick={() => {
-                          setMoreFilters({
-                            stockStatus: 'all',
-                            expiryPeriod: 'all',
-                            packType: 'all'
-                          });
-                        }}
-                        className="px-3 py-2 text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 text-sm"
-                      >
-                        Clear
-                      </button>
-                      <button 
-                        onClick={() => setShowMoreFilters(false)}
-                        className="px-3 py-2 text-white bg-blue-600 rounded-lg hover:bg-blue-700 text-sm"
-                      >
-                        Apply
-                      </button>
-                    </div>
-                  </div>
+                </div>
+                
+                <div className="mt-3 flex justify-end">
+                  <button 
+                    onClick={() => {
+                      setSelectedCategory('all');
+                      setMoreFilters({
+                        stockStatus: 'all',
+                        expiryPeriod: 'all',
+                        packType: 'all'
+                      });
+                    }}
+                    className="px-3 py-1.5 text-xs text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
+                  >
+                    Clear Filters
+                  </button>
                 </div>
               </div>
             )}
 
-            {/* More Filters Toggle */}
-            <div className="mb-4">
-              <button 
-                onClick={() => setShowMoreFilters(!showMoreFilters)}
-                className={`flex items-center space-x-2 px-4 py-2 border rounded-lg transition-colors ${
-                  showMoreFilters 
-                    ? 'bg-blue-50 border-blue-300 text-blue-700' 
-                    : 'bg-white border-gray-300 hover:bg-gray-50'
-                }`}
-              >
-                <Filter className="w-4 h-4" />
-                <span>More Filters</span>
-              </button>
-            </div>
 
             {/* Loading State */}
             {isLoading && stockData.length === 0 && (
@@ -1103,6 +1058,13 @@ const CurrentStock = ({ open = true, onClose }) => {
               paginated={true}
               pageSize={20}
               searchable={false}
+              selectable={true}
+              selectedRows={Array.from(selectedIds).map(id => 
+                filteredData.find(item => item.product_id === id)
+              ).filter(Boolean)}
+              onSelectionChange={(selected) => {
+                setSelectedIds(new Set(selected.map(item => item.product_id)));
+              }}
             />
           ) : (
             <div className="text-center py-12">

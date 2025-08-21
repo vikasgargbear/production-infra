@@ -49,6 +49,70 @@ async def get_payments_overview(db: Session = Depends(get_db)):
             "payments_count": 0
         }
 
+@router.get("/generate-receipt-number")
+async def generate_receipt_number(
+    payment_type: str = Query("receipt", description="Type: receipt or payment"),
+    db: Session = Depends(get_db)
+):
+    """
+    Generate unique receipt/payment number
+    
+    Uses atomic sequence to prevent duplicates
+    Format: RCT-YYYYMMDD-NNNN or PAY-YYYYMMDD-NNNN
+    """
+    try:
+        current_date = date.today()
+        prefix = "RCT" if payment_type == "receipt" else "PAY"
+        date_part = current_date.strftime("%Y%m%d")
+        
+        # Get next sequence number atomically
+        seq_query = """
+            SELECT COALESCE(MAX(
+                CASE 
+                    WHEN payment_number ~ :pattern THEN 
+                        CAST(SUBSTRING(payment_number FROM :extract_pattern) AS INTEGER)
+                    ELSE 0 
+                END
+            ), 0) + 1 as next_number
+            FROM financial.payments 
+            WHERE org_id = :org_id
+                AND payment_date = :payment_date
+                AND payment_number LIKE :like_pattern
+        """
+        
+        pattern = f"^{prefix}-{date_part}-[0-9]+$"
+        extract_pattern = f"{prefix}-{date_part}-([0-9]+)$"
+        like_pattern = f"{prefix}-{date_part}-%"
+        
+        result = db.execute(text(seq_query), {
+            "org_id": DEFAULT_ORG_ID,
+            "payment_date": current_date,
+            "pattern": pattern,
+            "extract_pattern": extract_pattern,
+            "like_pattern": like_pattern
+        }).fetchone()
+        
+        next_number = str(result.next_number).zfill(4)
+        receipt_number = f"{prefix}-{date_part}-{next_number}"
+        
+        return {
+            "receipt_number": receipt_number,
+            "payment_type": payment_type,
+            "generated_at": datetime.now().isoformat()
+        }
+        
+    except Exception as e:
+        logger.error(f"Error generating receipt number: {str(e)}")
+        # Fallback to timestamp-based generation
+        timestamp = int(datetime.now().timestamp())
+        fallback_number = f"{prefix}-{date_part}-{str(timestamp)[-4:]}"
+        return {
+            "receipt_number": fallback_number,
+            "payment_type": payment_type,
+            "generated_at": datetime.now().isoformat(),
+            "fallback": True
+        }
+
 class PaymentCreate(BaseModel):
     """Schema for recording a payment"""
     invoice_id: int

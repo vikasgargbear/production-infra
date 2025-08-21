@@ -157,31 +157,65 @@ const StockMovement = ({ open = true, onClose }) => {
     setFilteredMovements(filtered);
   };
 
-  // Multi-select functionality
-  const isAllSelected = filteredMovements.length > 0 && filteredMovements.every(item => selectedIds.has(item.id));
+  // Selection count for display
   const selectedCount = Array.from(selectedIds).filter(id => filteredMovements.some(f => f.id === id)).length;
 
-  const toggleSelect = (id) => {
-    setSelectedIds(prev => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id); else next.add(id);
-      return next;
-    });
-  };
+  const exportSelectedCSV = () => {
+    const itemsToExport = selectedIds.size > 0 
+      ? filteredMovements.filter(item => selectedIds.has(item.id))
+      : filteredMovements;
+    
+    if (itemsToExport.length === 0) return;
 
-  const toggleSelectAll = () => {
-    if (isAllSelected) {
-      setSelectedIds(prev => {
-        const next = new Set(prev);
-        filteredMovements.forEach(item => next.delete(item.id));
-        return next;
-      });
-    } else {
-      setSelectedIds(prev => {
-        const next = new Set(prev);
-        filteredMovements.forEach(item => next.add(item.id));
-        return next;
-      });
+    try {
+      // Prepare CSV data
+      const csvHeaders = [
+        'Movement No',
+        'Product Name', 
+        'Movement Type',
+        'Quantity',
+        'Total Value',
+        'Reference',
+        'Movement Date',
+        'Location From',
+        'Location To',
+        'Status'
+      ];
+
+      const csvData = itemsToExport.map(item => [
+        item.movement_no || '',
+        item.product_name || '',
+        getMovementTypeLabel(item.movement_type) || '',
+        item.quantity || 0,
+        item.total_value || 0,
+        item.reference_no || '',
+        new Date(item.movement_date).toLocaleDateString() || '',
+        item.location_from || '',
+        item.location_to || '',
+        item.status || ''
+      ]);
+
+      // Convert to CSV format
+      const csvContent = [
+        csvHeaders.join(','),
+        ...csvData.map(row => row.map(cell => `"${cell}"`).join(','))
+      ].join('\\n');
+
+      // Create and download file
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const link = document.createElement('a');
+      const url = URL.createObjectURL(blob);
+      link.setAttribute('href', url);
+      link.setAttribute('download', `stock_movements_${new Date().toISOString().split('T')[0]}.csv`);
+      link.style.visibility = 'hidden';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      
+      alert(`Successfully exported ${itemsToExport.length} movements to CSV`);
+    } catch (error) {
+      console.error('CSV Export error:', error);
+      alert('Failed to export movements. Please try again.');
     }
   };
 
@@ -292,13 +326,15 @@ const StockMovement = ({ open = true, onClose }) => {
     }
   };
 
-  const getMovementTypeIcon = (type) => {
+  const getMovementTypeIcon = (type, quantity = 0) => {
     switch (type) {
-      case 'receive': return <ArrowDownToLine className="w-4 h-4 text-success-600" />;
-      case 'issue': return <ArrowUpFromLine className="w-4 h-4 text-danger-600" />;
-      case 'transfer': return <ArrowRightLeft className="w-4 h-4 text-primary-600" />;
-      case 'adjustment': return <Package className="w-4 h-4 text-warning-600" />;
-      default: return <Package className="w-4 h-4 text-app-600" />;
+      case 'receive': return <ArrowDownToLine className="w-4 h-4 text-green-700" />; // Stock In - Dark Green
+      case 'issue': return <ArrowUpFromLine className="w-4 h-4 text-red-600" />; // Stock Out - Red  
+      case 'transfer': return <ArrowRightLeft className="w-4 h-4 text-blue-600" />; // Transfer - Blue
+      case 'adjustment': 
+        // Positive adjustment = Light Green, Negative = Light Red
+        return <Package className={`w-4 h-4 ${quantity >= 0 ? 'text-green-500' : 'text-red-400'}`} />;
+      default: return <Package className="w-4 h-4 text-gray-600" />;
     }
   };
 
@@ -312,37 +348,32 @@ const StockMovement = ({ open = true, onClose }) => {
     }
   };
 
-  const getMovementTypeColor = (type) => {
+  const getMovementTypeColor = (type, quantity = 0) => {
     switch (type) {
-      case 'receive': return 'text-success-600';
-      case 'issue': return 'text-danger-600';
-      case 'transfer': return 'text-primary-600';
-      case 'adjustment': return 'text-warning-600';
-      default: return 'text-app-600';
+      case 'receive': return 'text-green-700'; // Stock In - Dark Green
+      case 'issue': return 'text-red-600'; // Stock Out - Red
+      case 'transfer': return 'text-blue-600'; // Transfer - Blue  
+      case 'adjustment': 
+        // Positive adjustment = Light Green, Negative = Light Red
+        return quantity >= 0 ? 'text-green-500' : 'text-red-400';
+      default: return 'text-gray-600';
+    }
+  };
+
+  const getMovementRowBackground = (type, quantity = 0) => {
+    switch (type) {
+      case 'receive': return 'bg-green-50 border-l-4 border-green-600'; // Stock In
+      case 'issue': return 'bg-red-50 border-l-4 border-red-600'; // Stock Out  
+      case 'transfer': return 'bg-blue-50 border-l-4 border-blue-600'; // Transfer
+      case 'adjustment': 
+        return quantity >= 0 
+          ? 'bg-green-50 border-l-4 border-green-400' // Positive adjustment
+          : 'bg-red-50 border-l-4 border-red-400'; // Negative adjustment
+      default: return 'bg-white';
     }
   };
 
   const columns = [
-    {
-      header: (
-        <input
-          type="checkbox"
-          checked={isAllSelected}
-          onChange={toggleSelectAll}
-          className="w-4 h-4 rounded border-gray-300"
-        />
-      ),
-      key: 'select',
-      render: (value, row) => (
-        <input
-          type="checkbox"
-          checked={selectedIds.has(row.id)}
-          onChange={() => toggleSelect(row.id)}
-          className="w-4 h-4 rounded border-gray-300"
-        />
-      ),
-      width: '50px',
-    },
     {
       header: 'Date',
       key: 'movement_date',
@@ -355,10 +386,10 @@ const StockMovement = ({ open = true, onClose }) => {
       sortable: true,
       render: (_, movement) => (
         <div className="flex items-center gap-2">
-          {getMovementTypeIcon(movement.movement_type)}
+          {getMovementTypeIcon(movement.movement_type, movement.movement_type === 'issue' ? -movement.quantity : movement.quantity)}
           <div>
             <div className="font-medium text-app-900">{movement.movement_no}</div>
-            <div className={`text-sm ${getMovementTypeColor(movement.movement_type)}`}>
+            <div className={`text-sm ${getMovementTypeColor(movement.movement_type, movement.movement_type === 'issue' ? -movement.quantity : movement.quantity)}`}>
               {getMovementTypeLabel(movement.movement_type)}
             </div>
           </div>
@@ -384,7 +415,7 @@ const StockMovement = ({ open = true, onClose }) => {
       align: 'center',
       sortable: true,
       render: (value, movement) => (
-        <span className={`font-medium ${getMovementTypeColor(movement.movement_type)}`}>
+        <span className={`font-medium ${getMovementTypeColor(movement.movement_type, movement.movement_type === 'issue' ? -value : value)}`}>
           {movement.movement_type === 'issue' ? '-' : '+'}{value}
         </span>
       ),
@@ -499,19 +530,10 @@ const StockMovement = ({ open = true, onClose }) => {
           <div className="max-w-6xl mx-auto px-6 py-6">
             
             {/* Enhanced Filter Bar */}
-            <div className="mb-6 border border-gray-200 rounded-lg bg-gray-50 p-4">
+            <div className={`border border-gray-200 bg-white shadow-sm p-4 ${
+              showMoreFilters ? 'rounded-t-lg' : 'rounded-lg mb-6'
+            }`}>
               <div className="flex items-center space-x-4">
-                {/* Select All */}
-                <label className="inline-flex items-center space-x-2">
-                  <input
-                    type="checkbox"
-                    checked={isAllSelected}
-                    onChange={toggleSelectAll}
-                    className="w-4 h-4 rounded border-gray-300"
-                  />
-                  <span className="text-sm text-gray-600">Select All</span>
-                </label>
-
                 {/* Search */}
                 <div className="flex-1 relative">
                   <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
@@ -524,71 +546,104 @@ const StockMovement = ({ open = true, onClose }) => {
                   />
                 </div>
 
-                {/* Type Filter */}
-                <div className="relative">
-                  <select
-                    value={selectedType}
-                    onChange={(e) => setSelectedType(e.target.value)}
-                    className="appearance-none pl-3 pr-8 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm bg-white"
-                  >
-                    <option value="all">Type: All</option>
-                    <option value="receive">Stock In</option>
-                    <option value="issue">Stock Out</option>
-                    <option value="transfer">Transfer</option>
-                    <option value="adjustment">Adjustment</option>
-                  </select>
-                  <ChevronDown className="absolute right-2 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
-                </div>
 
-                {/* Status Filter */}
-                <div className="relative">
-                  <select
-                    value={selectedStatus}
-                    onChange={(e) => setSelectedStatus(e.target.value)}
-                    className="appearance-none pl-3 pr-8 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm bg-white"
-                  >
-                    <option value="all">Status: All</option>
-                    <option value="pending">Pending</option>
-                    <option value="completed">Completed</option>
-                    <option value="cancelled">Cancelled</option>
-                  </select>
-                  <ChevronDown className="absolute right-2 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
-                </div>
+                {/* Stock In Quick Filter */}
+                <button
+                  onClick={() => setSelectedType(selectedType === 'receive' ? 'all' : 'receive')}
+                  className={`
+                    px-3 py-2 rounded-lg text-sm transition-all duration-200
+                    flex items-center space-x-1.5 border
+                    ${
+                      selectedType === 'receive'
+                        ? 'bg-green-50 border-green-300 text-green-700' 
+                        : 'bg-white border-gray-300 hover:border-green-300 hover:bg-green-50 text-gray-600 hover:text-green-600'
+                    }
+                  `}
+                  title={selectedType === 'receive' ? 'Showing stock in movements' : 'Filter stock in movements'}
+                >
+                  <ArrowDownToLine className="w-4 h-4" />
+                  <span>Stock In</span>
+                </button>
 
-                {/* Bulk Actions */}
-                {selectedCount > 0 ? (
-                  <div className="flex items-center space-x-2">
-                    <span className="text-sm text-gray-700 mr-1">Selected: {selectedCount}</span>
-                    <button 
-                      onClick={exportSelectedPDF} 
-                      className="px-3 py-2 bg-gray-800 text-white rounded-lg hover:bg-gray-700 text-sm flex items-center space-x-2"
-                    >
-                      <Download className="w-4 h-4" />
-                      <span>PDF</span>
-                    </button>
+                {/* Stock Out Quick Filter */}
+                <button
+                  onClick={() => setSelectedType(selectedType === 'issue' ? 'all' : 'issue')}
+                  className={`
+                    px-3 py-2 rounded-lg text-sm transition-all duration-200
+                    flex items-center space-x-1.5 border
+                    ${
+                      selectedType === 'issue'
+                        ? 'bg-red-50 border-red-300 text-red-700' 
+                        : 'bg-white border-gray-300 hover:border-red-300 hover:bg-red-50 text-gray-600 hover:text-red-600'
+                    }
+                  `}
+                  title={selectedType === 'issue' ? 'Showing stock out movements' : 'Filter stock out movements'}
+                >
+                  <ArrowUpFromLine className="w-4 h-4" />
+                  <span>Stock Out</span>
+                </button>
+
+                {/* Filter Divider */}
+                <div className="h-8 w-px bg-gray-300"></div>
+
+                {/* Global Refresh Button */}
+                <button
+                  onClick={() => {
+                    setRefreshing(true);
+                    loadStockMovements().finally(() => setRefreshing(false));
+                  }}
+                  disabled={refreshing || loading}
+                  className={`relative p-2.5 rounded-xl transition-all duration-300 ease-out ${
+                    refreshing
+                      ? 'bg-gradient-to-r from-blue-500 to-indigo-500 border-2 border-blue-400 shadow-lg transform scale-105'
+                      : 'bg-white border-2 border-gray-300 hover:border-blue-400 hover:bg-blue-50 hover:shadow-md hover:scale-105'
+                  }`}
+                  title="Refresh movements"
+                >
+                  <RefreshCw className={`w-5 h-5 transition-all duration-500 ${
+                    refreshing ? 'animate-spin text-white' : 'text-gray-600 hover:text-blue-600'
+                  }`} />
+                </button>
+
+                {/* Global Export Button */}
+                <button
+                  onClick={exportSelectedCSV}
+                  className="p-2 rounded-xl bg-white border border-gray-300 hover:bg-gray-50 hover:border-gray-400 transition-all duration-200"
+                  title="Export to CSV"
+                >
+                  <Download className="w-4 h-4 text-gray-600" />
+                </button>
+
+                {/* Advanced Filters Toggle Button */}
+                <button 
+                  onClick={() => setShowMoreFilters(!showMoreFilters)}
+                  className={`
+                    p-2 rounded-xl transition-all duration-200 border
+                    ${
+                      showMoreFilters 
+                        ? 'bg-indigo-50 border-indigo-300' 
+                        : 'bg-white border-gray-300 hover:bg-gray-50 hover:border-gray-400'
+                    }
+                  `}
+                  title={showMoreFilters ? 'Hide filters' : 'More filters'}
+                >
+                  <Filter className={`w-4 h-4 transition-transform duration-300 ${
+                    showMoreFilters ? 'rotate-180 text-indigo-600' : 'text-gray-600'
+                  }`} />
+                </button>
+
+                {/* Bulk Actions - Only show when items selected */}
+                {selectedCount > 0 && (
+                  <div className="flex items-center space-x-2 ml-2 pl-2 border-l border-gray-300">
+                    <span className="text-sm text-gray-600">({selectedCount})</span>
                     <button 
                       onClick={printSelected} 
-                      className="px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm flex items-center space-x-1"
+                      className="p-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                      title="Print selected items"
                     >
                       <Printer className="w-4 h-4" />
-                      <span>Print</span>
-                    </button>
-                    <button 
-                      onClick={whatsappSelected} 
-                      className="px-3 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 text-sm flex items-center space-x-1"
-                    >
-                      <MessageCircle className="w-4 h-4" />
-                      <span>WhatsApp</span>
                     </button>
                   </div>
-                ) : (
-                  <button 
-                    onClick={exportSelectedPDF}
-                    className="px-4 py-2 bg-gray-800 text-white rounded-lg hover:bg-gray-700 transition-colors text-sm flex items-center space-x-2"
-                  >
-                    <Download className="w-4 h-4" />
-                    <span>Export PDF</span>
-                  </button>
                 )}
               </div>
               
@@ -607,68 +662,65 @@ const StockMovement = ({ open = true, onClose }) => {
               </div>
             </div>
 
-            {/* More Filters Panel */}
+            {/* Advanced Filters Panel */}
             {showMoreFilters && (
-              <div className="mb-4 p-4 bg-blue-50 rounded-lg border border-blue-200">
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Date Period
-                    </label>
+              <div className="border-l border-r border-b border-gray-200 bg-white rounded-b-lg px-4 pb-4 mb-6">
+                <div className="border-t border-gray-200 mx-[-16px] mt-4 mb-4"></div>
+                <div className="grid grid-cols-3 gap-4">
+                    {/* Movement Type Filter */}
+                    <select
+                      value={selectedType}
+                      onChange={(e) => setSelectedType(e.target.value)}
+                      className="px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                    >
+                      <option value="all">Movement Type</option>
+                      <option value="receive">Stock In</option>
+                      <option value="issue">Stock Out</option>
+                      <option value="transfer">Transfer</option>
+                      <option value="adjustment">Adjustment</option>
+                    </select>
+                    
+                    {/* Status Filter */}
+                    <select
+                      value={selectedStatus}
+                      onChange={(e) => setSelectedStatus(e.target.value)}
+                      className="px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                    >
+                      <option value="all">Status</option>
+                      <option value="pending">Pending</option>
+                      <option value="completed">Completed</option>
+                      <option value="cancelled">Cancelled</option>
+                    </select>
+                    
+                    {/* Date Period Filter */}
                     <select 
                       value={dateFilter}
                       onChange={(e) => setDateFilter(e.target.value)}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className="px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
                     >
-                      <option value="all">All Time</option>
-                      <option value="7">Last 7 days</option>
-                      <option value="30">Last 30 days</option>
-                      <option value="90">Last 90 days</option>
+                      <option value="all">Date Period</option>
+                      <option value="7">Last 7 Days</option>
+                      <option value="30">Last 30 Days</option>
+                      <option value="90">Last 90 Days</option>
                     </select>
-                  </div>
-                  
-                  <div className="col-span-2">
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Actions
-                    </label>
-                    <div className="flex space-x-2">
-                      <button 
-                        onClick={() => {
-                          setSearchQuery('');
-                          setSelectedType('all');
-                          setSelectedStatus('all');
-                          setDateFilter('all');
-                        }}
-                        className="px-3 py-2 text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 text-sm"
-                      >
-                        Clear Filters
-                      </button>
-                      <button 
-                        onClick={() => setShowMoreFilters(false)}
-                        className="px-3 py-2 text-white bg-blue-600 rounded-lg hover:bg-blue-700 text-sm"
-                      >
-                        Apply
-                      </button>
-                    </div>
-                  </div>
+                </div>
+                
+                <div className="mt-3 flex justify-end">
+                  <button 
+                    onClick={() => {
+                      setSearchQuery('');
+                      setSelectedType('all');
+                      setSelectedStatus('all');
+                      setDateFilter('all');
+                    }}
+                    className="px-3 py-1.5 text-xs text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
+                  >
+                    Clear Filters
+                  </button>
                 </div>
               </div>
             )}
 
-            {/* More Filters Toggle */}
-            <div className="mb-4">
-              <button 
-                onClick={() => setShowMoreFilters(!showMoreFilters)}
-                className={`flex items-center space-x-2 px-4 py-2 border rounded-lg transition-colors ${
-                  showMoreFilters 
-                    ? 'bg-blue-50 border-blue-300 text-blue-700' 
-                    : 'bg-white border-gray-300 hover:bg-gray-50'
-                }`}
-              >
-                <Filter className="w-4 h-4" />
-                <span>More Filters</span>
-              </button>
-            </div>
 
             {/* Data Table */}
             <div className="bg-white rounded-lg shadow-sm border border-gray-200">
@@ -695,10 +747,17 @@ const StockMovement = ({ open = true, onClose }) => {
                   emptyMessage="No stock movements found"
                   emptyIcon={<Package className="w-12 h-12 text-gray-400" />}
                   hoverable={true}
-                  striped={true}
+                  striped={false}
                   paginated={true}
                   pageSize={20}
                   searchable={false}
+                  selectable={true}
+                  selectedRows={Array.from(selectedIds)}
+                  onSelectionChange={(newSelection) => setSelectedIds(new Set(newSelection))}
+                  rowClassName={(row) => getMovementRowBackground(
+                    row.movement_type, 
+                    row.movement_type === 'issue' ? -row.quantity : row.quantity
+                  )}
                 />
               )}
             </div>

@@ -71,6 +71,12 @@ export const paymentsApi = {
     return response.data;
   },
 
+  // Get outstanding invoices
+  getOutstanding: async (params) => {
+    const response = await apiClient.get('/payments/outstanding', { params });
+    return response.data;
+  },
+
   // Get payment methods
   getPaymentMethods: async () => {
     const response = await apiClient.get('/payments/methods');
@@ -100,6 +106,38 @@ export const paymentsApi = {
     const response = await apiClient.get(`/payments/${id}/receipt`, {
       responseType: 'blob'
     });
+    return response.data;
+  },
+
+  // Generate receipt number
+  generateReceiptNumber: async (paymentType = 'receipt') => {
+    const response = await apiClient.get('/payments/generate-receipt-number', {
+      params: { payment_type: paymentType }
+    });
+    return response.data;
+  },
+
+  // Bank reconciliation methods
+  createBankReconciliation: async (reconciliationData) => {
+    const response = await apiClient.post('/payments/bank-reconciliation', reconciliationData);
+    return response.data;
+  },
+
+  getUnreconciledTransactions: async (params = {}) => {
+    // This maps to outstanding payments/transactions for reconciliation
+    const response = await apiClient.get('/payments/outstanding', { params });
+    return response.data;
+  },
+
+  // Aging report
+  getAgingReport: async (params = {}) => {
+    const response = await apiClient.get('/payments/aging-report', { params });
+    return response.data;
+  },
+
+  // Payment allocation
+  allocatePayment: async (allocationData) => {
+    const response = await apiClient.post('/payments/payment-allocation', allocationData);
     return response.data;
   }
 };

@@ -159,7 +159,7 @@ const ItemsTable = ({
   return (
     <div className={`bg-white rounded-lg shadow-sm ${className}`}>
       {/* Header */}
-      <div className="px-6 py-4 border-b border-gray-200">
+      <div className="px-2 py-4 border-b border-gray-200">
         <h3 className="text-sm font-semibold text-gray-600 uppercase tracking-wider">{title}</h3>
       </div>
 
@@ -168,16 +168,18 @@ const ItemsTable = ({
         <table className="w-full">
           <thead className="bg-gray-50 border-b">
             <tr>
-              {visibleColumns.map(col => (
+              {visibleColumns.map((col, index) => (
                 <th 
                   key={col} 
-                  className={`px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider text-${columnConfig[col].align}`}
+                  className={`px-2 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider text-${columnConfig[col].align} ${
+                    index !== visibleColumns.length - 1 ? 'border-r border-gray-200' : ''
+                  }`}
                 >
                   {columnConfig[col].label}
                 </th>
               ))}
               {showActions && !readOnly && (
-                <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-2 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
                   
                 </th>
               )}
@@ -186,7 +188,7 @@ const ItemsTable = ({
           <tbody className="bg-white divide-y divide-gray-200">
             {items.length === 0 ? (
               <tr>
-                <td colSpan={visibleColumns.length + (showActions ? 1 : 0)} className="px-6 py-16 text-center">
+                <td colSpan={visibleColumns.length + (showActions ? 1 : 0)} className="px-2 py-16 text-center">
                   <div className="text-gray-400">
                     <p className="text-sm">No items added yet</p>
                     <p className="text-xs mt-1">Search and add products to create {title.toLowerCase()}</p>
@@ -199,13 +201,13 @@ const ItemsTable = ({
                   {visibleColumns.map(col => (
                     <td 
                       key={col} 
-                      className={`px-6 py-4 whitespace-nowrap text-sm text-${columnConfig[col].align}`}
+                      className={`px-2 py-4 whitespace-nowrap text-sm text-${columnConfig[col].align}`}
                     >
                       {columnConfig[col].render(item, index)}
                     </td>
                   ))}
                   {showActions && !readOnly && (
-                    <td className="px-6 py-4 whitespace-nowrap text-center text-sm">
+                    <td className="px-2 py-4 whitespace-nowrap text-center text-sm">
                       <button
                         onClick={() => onRemoveItem(index)}
                         className="text-red-600 hover:text-red-900 hover:bg-red-50 p-1 rounded transition-colors"
@@ -224,7 +226,7 @@ const ItemsTable = ({
 
       {/* Totals Section */}
       {showTotals && items.length > 0 && totals && (
-        <div className="px-6 py-6 border-t border-gray-200 bg-gray-50">
+        <div className="px-2 py-6 border-t border-gray-200 bg-gray-50">
           <div className="flex items-center justify-between">
             <div className="text-sm text-gray-600">
               <span className="uppercase tracking-wider">Total Amount</span>
@@ -238,7 +240,7 @@ const ItemsTable = ({
 
       {/* Add Item Button */}
       {!readOnly && onAddItem && (
-        <div className="px-6 py-4 border-t border-gray-200">
+        <div className="px-2 py-4 border-t border-gray-200">
           <button
             onClick={onAddItem}
             className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-blue-600 hover:text-blue-700 hover:bg-blue-50 rounded-lg transition-colors"

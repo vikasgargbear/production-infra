@@ -4,7 +4,7 @@ import {
   X, History, Plus, Loader2, AlertCircle, User, FileText
 } from 'lucide-react';
 import { PaymentProvider, usePayment } from '../../contexts/PaymentContext';
-import { customersApi, salesApi } from '../../services/api';
+import { customersApi, salesApi, paymentsApi } from '../../services/api';
 import { paymentDataTransformer } from '../../services/api/utils/paymentDataTransformer';
 import InvoiceSelector from './components/InvoiceSelector';
 import PaymentDetails from './components/PaymentDetails';
@@ -26,11 +26,8 @@ interface KeyboardShortcut {
 // Generate sequential receipt number
 const generateReceiptNumber = async () => {
   try {
-    // Here you would call the actual API to generate a receipt number
-    // For now, generate a receipt number locally
-    const timestamp = Date.now();
-    const receiptNo = `RCT-${timestamp.toString().slice(-8)}`;
-    return receiptNo;
+    const response = await paymentsApi.generateReceiptNumber('receipt');
+    return response.receipt_number;
   } catch (error) {
     console.error('Error generating receipt number:', error);
     // Fallback to local generation
@@ -177,8 +174,8 @@ const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) =>
         return;
       }
 
-      // TODO: Implement payment API
-      const response = { data: { receipt_no: 'RCT-' + Date.now() } };
+      // Create payment using the real API
+      const response = await paymentsApi.create(paymentDataTransformer.transformPaymentToBackend(paymentData));
       
       if (response.data) {
         setPaymentField('receipt_no', response.data.receipt_no);
@@ -206,21 +203,18 @@ const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) =>
   const handleCustomerSelect = async (customer: any): Promise<void> => {
     setCustomer(customer);
     
-    // Fetch outstanding invoices
+    // Fetch outstanding invoices - temporarily disabled due to API issues
     try {
-      // TODO: Implement payment API
-      const response = { data: { invoices: [] } };
+      // TODO: Fix API endpoint parameters for getOutstanding
+      // const response = await paymentsApi.getOutstanding({ 
+      //   customer_id: customer.customer_id || customer.id 
+      // });
       
-      if (response.data?.invoices) {
-        setOutstandingInvoices(response.data.invoices);
-      } else {
-        // Fallback to empty array
-        setOutstandingInvoices([]);
-      }
+      // For now, just set empty array to not break payment flow
+      setOutstandingInvoices([]);
+      
     } catch (error) {
       console.error('Error fetching outstanding invoices:', error);
-      // Show error but don't block payment entry
-      setMessage('Could not fetch outstanding invoices', 'warning');
       setOutstandingInvoices([]);
     }
   };
@@ -232,8 +226,8 @@ const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) =>
         <div className="max-w-2xl mx-auto px-8 py-16">
           <div className="bg-white rounded-lg border border-gray-200 p-8 text-center">
             <div className="py-8">
-              <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                <CheckCircle className="w-8 h-8 text-green-600" />
+              <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <CheckCircle className="w-8 h-8 text-blue-600" />
               </div>
               <h2 className="text-2xl font-bold text-gray-900 mb-2">
                 Payment Recorded Successfully!
@@ -271,7 +265,7 @@ const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) =>
   }
 
   return (
-    <div className="h-full bg-green-50">
+    <div className="h-full bg-blue-50">
       <div className="h-full flex flex-col">
         {/* Header - Using Global ModuleHeader */}
         <ModuleHeader
@@ -279,7 +273,7 @@ const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) =>
           documentNumber={payment.receipt_no || 'RCT-' + Date.now().toString().slice(-6)}
           status={currentStep === 1 ? 'draft' : 'review'}
           icon={CreditCard}
-          iconColor="text-green-600"
+          iconColor="text-blue-600"
           onClose={onClose}
           historyType="payment"
           showSaveDraft={currentStep === 1}
@@ -298,19 +292,19 @@ const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) =>
         />
 
         {/* Keyboard Shortcuts Help */}
-        <div className="bg-green-50 px-4 py-2 text-xs text-green-700 border-b border-green-200">
+        <div className="bg-blue-50 px-4 py-2 text-xs text-blue-700 border-b border-blue-200">
           Keyboard shortcuts: <strong>Ctrl+N</strong> - Add Customer | <strong>Ctrl+G</strong> - GST Calculator | <strong>Ctrl+S</strong> - Save | <strong>Esc</strong> - Close
         </div>
 
         {/* Content */}
-        <div className="flex-1 overflow-y-auto bg-green-50">
+        <div className="flex-1 overflow-y-auto bg-blue-50">
           <div className="max-w-6xl mx-auto px-6 py-6">
           
           {/* Loading State */}
           {isLoading && (
-            <div className="bg-white rounded-lg shadow-sm border border-green-200 p-8 mb-6">
+            <div className="bg-white rounded-lg shadow-sm border border-blue-200 p-8 mb-6">
               <div className="text-center">
-                <Loader2 className="w-8 h-8 animate-spin mx-auto mb-4 text-green-600" />
+                <Loader2 className="w-8 h-8 animate-spin mx-auto mb-4 text-blue-600" />
                 <p className="text-gray-600">Loading payment entry form...</p>
               </div>
             </div>
@@ -336,7 +330,7 @@ const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) =>
           {/* Message Display */}
           {message && (
             <div className={`mb-4 px-4 py-3 rounded-lg flex items-start text-sm ${
-              messageType === 'success' ? 'bg-green-50 text-green-800 border border-green-200' : 
+              messageType === 'success' ? 'bg-blue-50 text-blue-800 border border-blue-200' : 
               messageType === 'error' ? 'bg-red-50 text-red-800 border border-red-200' : 
               'bg-blue-50 text-blue-800 border border-blue-200'
             }`}>

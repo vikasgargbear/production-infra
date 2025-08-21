@@ -14,7 +14,7 @@ const StockTransfer = ({ open = true, onClose }) => {
           title="Stock Transfer"
           subtitle="Inter-branch transfers"
           icon={ArrowRightLeft}
-          iconColor="text-purple-600"
+          iconColor="text-blue-600"
           onClose={onClose}
           historyType="stock"
         />
@@ -40,9 +40,9 @@ const StockTransfer = ({ open = true, onClose }) => {
               <span>Under Development</span>
             </div>
             
-            <div className="mt-12 p-6 bg-purple-50 rounded-lg text-left max-w-2xl mx-auto">
-              <h3 className="font-semibold text-purple-900 mb-3">What to expect:</h3>
-              <ul className="space-y-2 text-purple-800">
+            <div className="mt-12 p-6 bg-blue-50 rounded-lg text-left max-w-2xl mx-auto">
+              <h3 className="font-semibold text-blue-900 mb-3">What to expect:</h3>
+              <ul className="space-y-2 text-blue-800">
                 <li className="flex items-start">
                   <span className="mr-2">•</span>
                   <span>Transfer stock between branches/warehouses</span>

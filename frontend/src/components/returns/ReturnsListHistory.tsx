@@ -4,7 +4,7 @@ import {
   MoreHorizontal, Package, RotateCcw,
   X, Check, AlertCircle, RefreshCw
 } from 'lucide-react';
-import { Button, StatusBadge, DataTable, InlineFilterPanel } from '../global';
+import { Button, StatusBadge, DataTable, InlineFilterPanel, ModuleHeader } from '../global';
 import { returnsApi } from '../../services/api';
 
 interface ReturnsListHistoryProps {
@@ -463,56 +463,33 @@ const ReturnsListHistory: React.FC<ReturnsListHistoryProps> = ({ onClose }) => {
   ];
 
   return (
-    <div className="h-full bg-white">
+    <div className="h-full bg-blue-50">
       <div className="h-full flex flex-col">
         
-        {/* Header - Simplified */}
-        <div className="bg-white border-b border-gray-200 px-6 py-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-3">
-              <RotateCcw className="w-6 h-6 text-blue-600" />
-              <div>
-                <h1 className="text-2xl font-bold text-gray-900">
-                  Returns History
-                </h1>
-                <p className="text-sm text-gray-600">
-                  View and manage all your returns
-                </p>
-              </div>
-            </div>
-            <div className="flex items-center space-x-3">
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={handleRefresh}
-                disabled={loading}
-                title="Refresh data"
-              >
-                <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
-                Refresh
-              </Button>
-              <Button
-                variant="outline"
-                onClick={() => console.log('Export all returns')}
-                icon={<Download className="w-4 h-4" />}
-                iconPosition="left"
-              >
-                Export All
-              </Button>
-              {onClose && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={onClose}
-                  className="text-gray-500 hover:text-gray-700 hover:bg-gray-100 p-2 rounded-lg transition-colors"
-                  title="Close (Esc)"
-                >
-                  <X className="w-5 h-5" />
-                </Button>
-              )}
-            </div>
-          </div>
-        </div>
+        {/* Header - Using Global ModuleHeader */}
+        <ModuleHeader
+          title="Returns History"
+          subtitle="View and manage all your returns"
+          icon={RotateCcw}
+          iconColor="text-blue-600"
+          onClose={onClose}
+          historyType="return"
+          additionalActions={[
+            {
+              label: "Refresh",
+              onClick: handleRefresh,
+              variant: "default",
+              icon: loading ? RefreshCw : RefreshCw,
+              disabled: loading
+            },
+            {
+              label: "Export All",
+              onClick: () => console.log('Export all returns'),
+              variant: "default",
+              icon: Download
+            }
+          ]}
+        />
 
         {/* Content */}
         <div className="flex-1 overflow-y-auto">

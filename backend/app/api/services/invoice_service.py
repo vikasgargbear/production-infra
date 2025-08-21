@@ -175,7 +175,9 @@ class InvoiceService:
         """), {"prefix": prefix})
         
         next_num = result.scalar() or 1
-        return f"{prefix}-{next_num:05d}"
+        # Start from 10000 to make numbers appear larger
+        display_num = 10000 + next_num - 1
+        return f"{prefix}-{display_num:05d}"
     
     @staticmethod
     def format_address(customer_row) -> str:
