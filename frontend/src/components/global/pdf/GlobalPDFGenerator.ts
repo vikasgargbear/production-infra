@@ -798,28 +798,213 @@ class GlobalPDFGenerator {
   }
 
   /**
+   * Add enhanced items table with all details
+   */
+  addEnhancedItemsTable(items: ItemDetails[], showBatchInfo: boolean = true): number {
+    const colors = this.colors[this.theme];
+    const startY = this.currentY || 100;
+    
+    // Table headers
+    const headers = ['S.No', 'Product'];
+    if (showBatchInfo) headers.push('HSN');
+    headers.push('Qty', 'Rate', 'Tax%', 'Amount');
+    
+    // Prepare table rows
+    const rows = items.map((item, index) => {
+      const row = [
+        String(item.srNo || index + 1),
+        item.name.length > 30 ? item.name.substring(0, 30) + '...' : item.name
+      ];
+      if (showBatchInfo) row.push(item.hsn || '');
+      row.push(
+        `${item.quantity}${item.unit ? ' ' + item.unit : ''}`,
+        `₹${item.unitPrice.toFixed(2)}`,
+        `${item.taxPercent || 0}%`,
+        `₹${item.lineTotal.toFixed(2)}`
+      );
+      return row;
+    });
+    
+    // Add batch/expiry info as additional rows if needed
+    const bodyRows: any[] = [];
+    items.forEach((item, index) => {
+      bodyRows.push(rows[index]);
+      if (showBatchInfo && (item.batch || item.expiry)) {
+        const batchRow = ['', `  Batch: ${item.batch || 'N/A'} | Exp: ${item.expiry || 'N/A'}`, ''];
+        if (showBatchInfo) batchRow.push('');
+        batchRow.push('', '', '', '');
+        bodyRows.push(batchRow);
+      }
+    });
+    
+    autoTable(this.doc, {
+      startY,
+      head: [headers],
+      body: bodyRows,
+      theme: this.theme === 'print' ? 'plain' : 'grid',
+      headStyles: {
+        fillColor: this.theme === 'print' ? colors.white : colors.primary,
+        textColor: this.theme === 'print' ? colors.text : colors.white,
+        fontSize: 10,
+        fontStyle: 'bold',
+        halign: 'left'
+      },
+      bodyStyles: {
+        textColor: colors.text,
+        fontSize: 9,
+        cellPadding: 3
+      },
+      alternateRowStyles: this.theme !== 'print' ? {
+        fillColor: colors.light
+      } : {},
+      columnStyles: {
+        0: { cellWidth: 15, halign: 'center' },
+        1: { cellWidth: 'auto' },
+        2: { cellWidth: 20, halign: 'center' },
+        3: { cellWidth: 20, halign: 'right' },
+        4: { cellWidth: 25, halign: 'right' },
+        5: { cellWidth: 20, halign: 'center' },
+        6: { cellWidth: 30, halign: 'right' }
+      },
+      margin: { left: this.margin.left, right: this.margin.right },
+      didDrawPage: () => {
+        this.addPageNumber();
+      }
+    } as any);
+    
+    this.currentY = (this.doc as any).lastAutoTable.finalY;
+    return this.currentY;
+  }
+
+  /**
+   * Add bank details section
+   */
+  addBankDetails(bankDetails: BankDetails, yPos?: number): number {
+    const colors = this.colors[this.theme];
+    const startY = yPos || this.currentY || 150;
+    
+    this.checkNewPage(40);
+    
+    this.doc.setFontSize(10);
+    this.doc.setFont('helvetica', 'bold');
+    this.applyColor('setTextColor', colors.text);
+    this.doc.text('Bank Details:', this.margin.left, startY);
+    
+    this.doc.setFont('helvetica', 'normal');
+    this.doc.setFontSize(9);
+    let currentY = startY + 6;
+    
+    if (bankDetails.bankName) {
+      this.doc.text(`Bank: ${bankDetails.bankName}`, this.margin.left, currentY);
+      currentY += 5;
+    }
+    if (bankDetails.accountNumber) {
+      this.doc.text(`A/C: ${bankDetails.accountNumber}`, this.margin.left, currentY);
+      currentY += 5;
+    }
+    if (bankDetails.ifscCode) {
+      this.doc.text(`IFSC: ${bankDetails.ifscCode}`, this.margin.left, currentY);
+      currentY += 5;
+    }
+    if (bankDetails.branch) {
+      this.doc.text(`Branch: ${bankDetails.branch}`, this.margin.left, currentY);
+      currentY += 5;
+    }
+    if (bankDetails.upiId) {
+      this.doc.text(`UPI: ${bankDetails.upiId}`, this.margin.left, currentY);
+      currentY += 5;
+    }
+    
+    this.currentY = currentY + 5;
+    return this.currentY;
+  }
+
+  /**
+   * Add terms and conditions
+   */
+  addTermsAndConditions(terms: string, yPos?: number): number {
+    const colors = this.colors[this.theme];
+    const startY = yPos || this.currentY || 180;
+    
+    this.checkNewPage(30);
+    
+    this.doc.setFont('helvetica', 'bold');
+    this.doc.setFontSize(10);
+    this.applyColor('setTextColor', colors.text);
+    this.doc.text('Terms & Conditions:', this.margin.left, startY);
+    
+    this.doc.setFont('helvetica', 'normal');
+    this.doc.setFontSize(8);
+    this.applyColor('setTextColor', colors.textLight);
+    const termsLines = this.doc.splitTextToSize(terms, this.pageWidth - this.margin.left - this.margin.right);
+    this.doc.text(termsLines, this.margin.left, startY + 6);
+    
+    this.currentY = startY + 6 + (termsLines.length * 4) + 5;
+    return this.currentY;
+  }
+
+  /**
+   * Download PDF directly
+   */
+  download(filename: string): void {
+    const blob = this.getBlob();
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filename.endsWith('.pdf') ? filename : `${filename}.pdf`;
+    link.click();
+    URL.revokeObjectURL(url);
+  }
+
+  /**
+   * Get PDF as base64 string
+   */
+  async getBase64(): Promise<string> {
+    const blob = this.getBlob();
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        const base64 = reader.result?.toString().split(',')[1] || '';
+        resolve(base64);
+      };
+      reader.onerror = reject;
+      reader.readAsDataURL(blob);
+    });
+  }
+
+  /**
    * Save or preview the PDF
    */
-  save(filename) {
-    this.addFooter();
+  save(filename: string): void {
     this.doc.save(filename);
   }
 
   /**
    * Get PDF as blob for preview
    */
-  getBlob() {
-    this.addFooter();
+  getBlob(): Blob {
     return this.doc.output('blob');
   }
 
   /**
    * Open PDF in new window
    */
-  preview() {
-    this.addFooter();
+  preview(): void {
     const pdfUrl = this.doc.output('bloburl');
     window.open(pdfUrl, '_blank');
+  }
+
+  /**
+   * Print PDF directly
+   */
+  print(): void {
+    const pdfUrl = this.doc.output('bloburl');
+    const printWindow = window.open(pdfUrl, '_blank');
+    if (printWindow) {
+      printWindow.onload = () => {
+        printWindow.print();
+      };
+    }
   }
 }
 

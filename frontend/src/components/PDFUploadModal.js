@@ -8,6 +8,7 @@ const PDFUploadModal = ({ isOpen, onClose, onDataExtracted }) => {
   const [extractedData, setExtractedData] = useState(null);
   const [error, setError] = useState('');
   const [editedData, setEditedData] = useState(null);
+  const [forceRender, setForceRender] = useState(0);
   
   // Debug state changes
   useEffect(() => {
@@ -17,6 +18,18 @@ const PDFUploadModal = ({ isOpen, onClose, onDataExtracted }) => {
   useEffect(() => {
     console.log('📝 State Update - editedData:', editedData);
   }, [editedData]);
+  
+  // Reset state only when modal is opened fresh (not when closing)
+  useEffect(() => {
+    if (isOpen) {
+      console.log('🔓 Modal opened, current extractedData:', extractedData);
+      // Don't reset if we have extracted data to show
+      if (!extractedData && !file) {
+        console.log('🧹 Resetting state for fresh modal open');
+        setError('');
+      }
+    }
+  }, [isOpen]);
 
   const handleFileSelect = (e) => {
     const selectedFile = e.target.files[0];
@@ -112,12 +125,13 @@ const PDFUploadModal = ({ isOpen, onClose, onDataExtracted }) => {
   };
   
   const handleClose = () => {
-    console.log('❌ Closing modal, resetting state');
-    // Reset all state when closing
-    setFile(null);
-    setExtractedData(null);
-    setEditedData(null);
-    setError('');
+    console.log('❌ Closing modal');
+    // Don't reset extracted data when closing - keep it for review
+    // Only reset if user hasn't extracted data yet
+    if (!extractedData) {
+      setFile(null);
+      setError('');
+    }
     onClose();
   };
 
@@ -159,6 +173,36 @@ const PDFUploadModal = ({ isOpen, onClose, onDataExtracted }) => {
           </div>
         )}
 
+        {/* Debug: Show current state */}
+        <div className="mb-2 p-2 bg-yellow-50 text-xs border border-yellow-300">
+          <div>Debug: extractedData is {extractedData ? 'SET' : 'NULL'}, items: {extractedData?.items?.length || 0}</div>
+          <div>Force render count: {forceRender}</div>
+          <button 
+            onClick={() => {
+              console.log('Force render clicked, current extractedData:', extractedData);
+              setForceRender(prev => prev + 1);
+            }}
+            className="mt-1 px-2 py-1 bg-blue-500 text-white text-xs rounded mr-2"
+          >
+            Force Re-render
+          </button>
+          <button 
+            onClick={() => {
+              console.log('Setting test data');
+              const testData = {
+                supplier_name: 'TEST SUPPLIER',
+                invoice_number: 'TEST-001',
+                items: [{product_name: 'Test Product', quantity: 1, cost_price: 100}]
+              };
+              setExtractedData(testData);
+              setEditedData(testData);
+            }}
+            className="mt-1 px-2 py-1 bg-green-500 text-white text-xs rounded"
+          >
+            Set Test Data
+          </button>
+        </div>
+        
         {!extractedData ? (
           <div className="space-y-4">
             <div className="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center">

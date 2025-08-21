@@ -6,8 +6,6 @@ import {
   Share2, Copy, MoreVertical
 } from 'lucide-react';
 import { Button, StatusBadge, DataTable, InlineFilterPanel } from '../global';
-import GlobalPDFGenerator from '../global/pdf/GlobalPDFGenerator';
-import { generateAndDownloadPDF } from '../../utils/pdfHelpers';
 import InvoiceApiService from '../../services/invoiceApiService';
 import debugLogger from '../../utils/debugLogger';
 
@@ -126,54 +124,36 @@ const InvoiceListV2: React.FC<InvoiceListProps> = ({ onClose }) => {
     }
   };
 
-  const exportSelectedPDF = (theme: 'digital' | 'print' = 'digital') => {
+  const exportSelectedPDF = async () => {
     const itemsToExport = filteredInvoices.filter(invoice => selectedIds.has(invoice.id));
     if (itemsToExport.length === 0) return;
 
-    const pdfGenerator = new GlobalPDFGenerator(theme);
-    const doc = pdfGenerator.doc;
-    
-    // Add header
-    pdfGenerator.addHeader('Invoices Report');
-    
-    // If single invoice, add customer details
+    // If single invoice, download the actual invoice PDF
     if (itemsToExport.length === 1) {
-      const invoice = itemsToExport[0];
-      pdfGenerator.addPartyDetails({
-        name: invoice.customer_name || 'N/A',
-        phone: '', // Add if available in invoice data
-        address: '', // Add if available in invoice data
-        gst: '' // Add if available in invoice data
-      }, 'customer');
+      await handlePrintInvoice(itemsToExport[0]);
+      return;
     }
-    
-    // Prepare table data
+
+    // For multiple invoices, export as CSV
     const headers = ['Invoice #', 'Date', 'Customer', 'Amount', 'Status'];
-    const rows = itemsToExport.map(invoice => [
-      invoice.invoice_number,
-      formatDate(invoice.invoice_date),
-      invoice.customer_name || 'N/A',
-      formatCurrency(invoice.final_amount || 0),
-      getStatusText(invoice.payment_status)
-    ]);
+    const csvContent = [
+      headers.join(','),
+      ...itemsToExport.map(invoice => [
+        invoice.invoice_number,
+        formatDate(invoice.invoice_date),
+        `"${invoice.customer_name || 'N/A'}"`,
+        invoice.final_amount || 0,
+        getStatusText(invoice.payment_status)
+      ].join(','))
+    ].join('\n');
     
-    // Add table
-    pdfGenerator.addTable(headers, rows, 'customer');
-    
-    // Add summary
-    const totalAmount = itemsToExport.reduce((sum, invoice) => sum + (invoice.final_amount || 0), 0);
-    pdfGenerator.addSummary({
-      subtotal: totalAmount,
-      tax: 0, // Calculate from invoice data if available
-      discount: 0, // Calculate from invoice data if available
-      total: totalAmount
-    });
-    
-    // Add footer
-    pdfGenerator.addFooter();
-    
-    // Save the PDF
-    doc.save(`invoices-report-${new Date().getTime()}.pdf`);
+    const blob = new Blob([csvContent], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `invoices-${new Date().getTime()}.csv`;
+    link.click();
+    URL.revokeObjectURL(url);
   };
 
   const printSelected = () => {
@@ -400,34 +380,21 @@ const InvoiceListV2: React.FC<InvoiceListProps> = ({ onClose }) => {
 
   const handlePrintInvoice = async (invoice: Invoice) => {
     try {
-      // Fetch full invoice details if needed
+      // Fetch full invoice details
       const response = await InvoiceApiService.getInvoiceById(invoice.invoice_id || invoice.id);
       
       if (response.success && response.data) {
-        // Generate and download PDF
-        await generateAndDownloadPDF(
-          response.data,
-          `${invoice.invoice_number}.pdf`,
-          {
-            theme: 'modern',
-            documentType: 'invoice',
-            watermark: invoice.invoice_status === 'draft' || invoice.status === 'draft' ? 'DRAFT' : undefined
-          }
-        );
+        const fullInvoice = response.data;
+        
+        // Use the original invoice PDF generator
+        const { downloadInvoicePDF } = await import('../../utils/invoicePdfGenerator');
+        downloadInvoicePDF(fullInvoice);
       } else {
-        // Fallback: use existing invoice data
-        await generateAndDownloadPDF(
-          invoice,
-          `${invoice.invoice_number}.pdf`,
-          {
-            theme: 'modern',
-            documentType: 'invoice'
-          }
-        );
+        alert('Failed to load invoice details. Please try again.');
       }
     } catch (error) {
-      console.error('Error generating PDF:', error);
-      alert('Failed to generate PDF. Please try again.');
+      console.error('Error downloading invoice:', error);
+      alert('Failed to download invoice. Please try again.');
     }
   };
 
@@ -618,10 +585,7 @@ const InvoiceListV2: React.FC<InvoiceListProps> = ({ onClose }) => {
           </button>
 
           <button
-            onClick={() => {
-              setSelectedIds(new Set([invoice.id]));
-              setTimeout(() => exportSelectedPDF(), 0);
-            }}
+            onClick={() => handlePrintInvoice(invoice)}
             className="p-2 text-purple-500 hover:text-purple-700 hover:bg-purple-50 rounded-lg transition-colors"
             title="Download PDF"
           >

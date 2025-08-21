@@ -5,8 +5,6 @@ import {
   X, Check, AlertCircle, RefreshCw
 } from 'lucide-react';
 import { Button, StatusBadge, DataTable, InlineFilterPanel } from '../global';
-import GlobalPDFGenerator from '../global/pdf/GlobalPDFGenerator';
-import { generateAndDownloadPDF } from '../../utils/pdfHelpers';
 import { purchasesApi } from '../../services/api';
 import { formatCurrency } from '../../utils/formatters';
 
@@ -292,61 +290,30 @@ const PurchaseListHistory: React.FC<PurchaseListHistoryProps> = ({ onClose }) =>
     }).format(amount);
   };
 
-  const exportSelectedPDF = async (theme: 'modern' | 'print' | 'digital' | 'classic' = 'modern') => {
+  const exportSelectedPDF = () => {
     const itemsToExport = filteredPurchases.filter(purchase => selectedIds.has(purchase.id));
     if (itemsToExport.length === 0) return;
 
-    try {
-      if (itemsToExport.length === 1) {
-        // Single purchase - generate detailed PDF
-        const purchase = itemsToExport[0];
-        await generateAndDownloadPDF(
-          purchase,
-          `${purchase.po_number}.pdf`,
-          {
-            theme: theme as any,
-            documentType: 'purchase',
-            watermark: purchase.po_status === 'draft' ? 'DRAFT' : undefined
-          }
-        );
-      } else {
-        // Multiple purchases - generate summary report
-        const pdfGenerator = new GlobalPDFGenerator(theme as any, 'purchase');
-        await pdfGenerator.init(theme as any, 'purchase');
-        
-        // Add header
-        pdfGenerator.addHeader('Purchase Orders Report');
-        
-        // Prepare table data
-        const headers = ['PO #', 'Date', 'Supplier', 'Amount', 'Status'];
-        const rows = itemsToExport.map(purchase => [
-          purchase.po_number,
-          formatDate(purchase.po_date),
-          purchase.supplier_name || 'N/A',
-          formatCurrency(purchase.total_amount || 0),
-          purchase.po_status || 'draft'
-        ]);
-        
-        // Add table
-        pdfGenerator.addTable(headers, rows, 'supplier');
-        
-        // Add summary
-        const totalAmount = itemsToExport.reduce((sum, purchase) => sum + (purchase.total_amount || 0), 0);
-        pdfGenerator.addSummary({
-          subtotal: totalAmount,
-          total: totalAmount
-        });
-        
-        // Add footer
-        pdfGenerator.addFooter();
-        
-        // Download the PDF
-        pdfGenerator.download(`purchase-orders-${new Date().getTime()}.pdf`);
-      }
-    } catch (error) {
-      console.error('Error generating PDF:', error);
-      alert('Failed to generate PDF. Please try again.');
-    }
+    // Export as CSV
+    const headers = ['PO #', 'Date', 'Supplier', 'Amount', 'Status'];
+    const csvContent = [
+      headers.join(','),
+      ...itemsToExport.map(purchase => [
+        purchase.po_number,
+        formatDate(purchase.po_date),
+        `"${purchase.supplier_name || 'N/A'}"`,
+        purchase.total_amount || 0,
+        purchase.po_status || 'draft'
+      ].join(','))
+    ].join('\n');
+    
+    const blob = new Blob([csvContent], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `purchase-orders-${new Date().getTime()}.csv`;
+    link.click();
+    URL.revokeObjectURL(url);
   };
 
   const printSelected = () => {
@@ -394,22 +361,10 @@ const PurchaseListHistory: React.FC<PurchaseListHistoryProps> = ({ onClose }) =>
     alert(`Editing purchase: ${purchase.po_number}`);
   };
 
-  const handlePrintPurchase = async (purchase: Purchase) => {
+  const handlePrintPurchase = (purchase: Purchase) => {
     console.log('Printing purchase:', purchase.po_number);
-    try {
-      await generateAndDownloadPDF(
-        purchase,
-        `${purchase.po_number}.pdf`,
-        {
-          theme: 'modern',
-          documentType: 'purchase',
-          watermark: purchase.po_status === 'draft' ? 'DRAFT' : undefined
-        }
-      );
-    } catch (error) {
-      console.error('Error generating PDF:', error);
-      alert('Failed to generate PDF. Please try again.');
-    }
+    // For now, just alert until proper purchase print is implemented
+    alert(`Print functionality for purchase ${purchase.po_number} will be implemented soon.`);
   };
 
   const handleMoreOptions = (purchase: Purchase) => {
@@ -591,24 +546,29 @@ const PurchaseListHistory: React.FC<PurchaseListHistoryProps> = ({ onClose }) =>
           </button>
 
           <button
-            onClick={async () => {
-              try {
-                await generateAndDownloadPDF(
-                  purchase,
-                  `${purchase.po_number}.pdf`,
-                  {
-                    theme: 'modern',
-                    documentType: 'purchase',
-                    watermark: purchase.po_status === 'draft' ? 'DRAFT' : undefined
-                  }
-                );
-              } catch (error) {
-                console.error('Error generating PDF:', error);
-                alert('Failed to generate PDF');
-              }
+            onClick={() => {
+              // For now, export as CSV until proper purchase PDF is implemented
+              const csvContent = [
+                ['PO Number', 'Date', 'Supplier', 'Amount', 'Status'].join(','),
+                [
+                  purchase.po_number,
+                  formatDate(purchase.po_date),
+                  `"${purchase.supplier_name}"`,
+                  purchase.total_amount || 0,
+                  purchase.po_status
+                ].join(',')
+              ].join('\n');
+              
+              const blob = new Blob([csvContent], { type: 'text/csv' });
+              const url = URL.createObjectURL(blob);
+              const link = document.createElement('a');
+              link.href = url;
+              link.download = `${purchase.po_number}.csv`;
+              link.click();
+              URL.revokeObjectURL(url);
             }}
             className="p-2 text-purple-500 hover:text-purple-700 hover:bg-purple-50 rounded-lg transition-colors"
-            title="Download PDF"
+            title="Download CSV"
           >
             <Download className="w-4 h-4" />
           </button>
