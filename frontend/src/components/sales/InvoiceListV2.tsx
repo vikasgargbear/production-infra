@@ -1004,19 +1004,6 @@ const InvoiceListV2: React.FC<InvoiceListProps> = ({ onClose }) => {
                 )}
               </div>
               
-              {/* Summary Stats */}
-              <div className="flex items-center justify-end gap-4 text-sm mt-2 pt-2 border-t border-gray-200">
-                <div>
-                  <span className="text-gray-500">Total:</span>
-                  <span className="ml-1 font-semibold">
-                    {formatCurrency(filteredInvoices.reduce((sum, inv) => sum + (inv.final_amount || 0), 0))}
-                  </span>
-                </div>
-                <div>
-                  <span className="text-gray-500">Count:</span>
-                  <span className="ml-1 font-semibold">{filteredInvoices.length}</span>
-                </div>
-              </div>
             </div>
 
             {/* Error Display */}

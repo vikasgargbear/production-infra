@@ -406,19 +406,6 @@ const InvoiceManagement = () => {
           )}
         </div>
         
-        {/* Summary Stats */}
-        <div className="flex items-center justify-end gap-4 text-sm mt-2 pt-2 border-t border-gray-200">
-          <div>
-            <span className="text-gray-500">Total:</span>
-            <span className="ml-1 font-semibold">
-              ₹{filteredInvoices.reduce((sum, inv) => sum + (inv.final_amount || 0), 0).toFixed(2)}
-            </span>
-          </div>
-          <div>
-            <span className="text-gray-500">Count:</span>
-            <span className="ml-1 font-semibold">{filteredInvoices.length}</span>
-          </div>
-        </div>
       </div>
 
       {/* Invoices Table */}

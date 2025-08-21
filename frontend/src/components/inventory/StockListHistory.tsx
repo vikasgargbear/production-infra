@@ -358,10 +358,12 @@ const StockListHistory: React.FC<StockListHistoryProps> = ({ onClose }) => {
           Keyboard shortcuts: <strong>Ctrl+F</strong> - Search | <strong>Esc</strong> - Close
         </div>
 
-        {/* Info Notice */}
-        <div className="bg-amber-50 px-4 py-2 text-xs text-amber-700 border-b border-amber-200">
-          📊 Stock movements are derived from purchase and sales transactions. For dedicated stock tracking, backend stock management endpoints will be implemented.
-        </div>
+        {/* Info Notice - Only show when using derived data */}
+        {movements.length > 0 && movements[0].id?.startsWith('purchase-') && (
+          <div className="bg-amber-50 px-4 py-2 text-xs text-amber-700 border-b border-amber-200">
+            📊 Stock movements are derived from purchase and sales transactions. Direct stock tracking data will be available once inventory movements are recorded.
+          </div>
+        )}
 
         {/* Content */}
         <div className="flex-1 overflow-y-auto">
