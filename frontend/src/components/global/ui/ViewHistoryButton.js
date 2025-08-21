@@ -1,8 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   History, Eye, Edit, Download, Printer, X, Search, Filter, Calendar, 
   ChevronDown, CheckSquare, MoreVertical, Mail, MessageSquare, FileText,
-  Share2, Copy, Trash2, RefreshCw, Send
+  Share2, Copy, Trash2, RefreshCw, Send, Clock, Sparkles
 } from 'lucide-react';
 import GlobalPDFGenerator from '../pdf/GlobalPDFGenerator';
 import { ordersAPI, purchasesAPI, paymentAPI, challansAPI, invoiceAPI, salesOrdersAPI, purchasesApi, returnsApi, stockApi } from '../../../services/api';
@@ -22,6 +22,8 @@ const ViewHistoryButton = ({
   const [dateFilter, setDateFilter] = useState('all');
   const [selectedIds, setSelectedIds] = useState(new Set());
   const [showMoreMenu, setShowMoreMenu] = useState(false);
+  const [isHovered, setIsHovered] = useState(false);
+  const [loadSuccess, setLoadSuccess] = useState(false);
 
   const getHistoryTitle = () => {
     switch (historyType) {
@@ -227,9 +229,12 @@ const ViewHistoryButton = ({
     }
   };
 
-  const handleOpenHistory = () => {
+  const handleOpenHistory = async () => {
     setShowHistory(true);
-    loadHistory();
+    setLoading(true);
+    await loadHistory();
+    setLoadSuccess(true);
+    setTimeout(() => setLoadSuccess(false), 2000);
   };
 
   const formatDate = (date) => {
@@ -483,15 +488,96 @@ const ViewHistoryButton = ({
 
   return (
     <>
-      {/* History Button */}
+      {/* Modern Animated History Button */}
+      <style>{`
+        @keyframes timeline-pulse {
+          0%, 100% { transform: scale(1); opacity: 1; }
+          50% { transform: scale(1.1); opacity: 0.8; }
+        }
+        
+        @keyframes sparkle {
+          0% { transform: scale(0) rotate(0deg); opacity: 0; }
+          50% { transform: scale(1) rotate(180deg); opacity: 1; }
+          100% { transform: scale(0) rotate(360deg); opacity: 0; }
+        }
+        
+        .history-icon-animated {
+          animation: timeline-pulse 2s ease-in-out infinite;
+        }
+        
+        .sparkle-effect {
+          position: absolute;
+          inset: -8px;
+          pointer-events: none;
+        }
+        
+        .sparkle-effect::before {
+          content: '';
+          position: absolute;
+          top: 50%;
+          left: 50%;
+          width: 20px;
+          height: 20px;
+          transform: translate(-50%, -50%);
+          background: radial-gradient(circle, rgba(99, 102, 241, 0.6) 0%, transparent 70%);
+          animation: sparkle 1.5s ease-in-out;
+        }
+      `}</style>
+      
       <button
         onClick={handleOpenHistory}
-        className={className || `flex items-center space-x-2 px-4 py-2.5 bg-blue-50 border border-blue-200 rounded-lg hover:bg-blue-100 hover:border-blue-300 transition-colors shadow-sm`}
+        onMouseEnter={() => setIsHovered(true)}
+        onMouseLeave={() => setIsHovered(false)}
+        className={className || `
+          relative px-4 py-2.5 rounded-xl transition-all duration-300 ease-out
+          flex items-center space-x-2.5
+          ${loadSuccess 
+            ? 'bg-gradient-to-r from-purple-400 to-pink-400 text-white shadow-lg shadow-purple-200/50' 
+            : isHovered
+              ? 'bg-gradient-to-r from-indigo-50 to-purple-50 border border-indigo-300 shadow-md'
+              : 'bg-white hover:bg-gradient-to-r hover:from-indigo-50 hover:to-purple-50 border border-gray-200 hover:border-indigo-300 hover:shadow-md text-gray-700'
+          }
+          group transform hover:scale-105 active:scale-95
+          font-medium text-sm cursor-pointer
+        `}
         title={`View ${getHistoryTitle()}`}
-        style={className ? { background: '', border: '' } : {}}
+        style={className ? {} : {}}
       >
-        <History className="w-4 h-4 text-blue-600" />
-        {buttonText && <span className="text-sm font-medium text-blue-700">{buttonText}</span>}
+        {/* Sparkle effect on hover */}
+        {isHovered && <div className="sparkle-effect" />}
+        
+        {/* Modern animated icon */}
+        <div className="relative">
+          {loadSuccess ? (
+            <Sparkles className="w-4 h-4 text-white animate-pulse" />
+          ) : (
+            <History className={`w-4 h-4 transition-all duration-500 ${
+              isHovered 
+                ? 'text-indigo-600 history-icon-animated' 
+                : 'text-gray-600 group-hover:text-indigo-600'
+            }`} />
+          )}
+          
+          {/* Modern ripple effect */}
+          {isHovered && (
+            <div className="absolute inset-0 -m-2">
+              <div className="w-8 h-8 rounded-full bg-indigo-400 opacity-20 animate-ping" />
+            </div>
+          )}
+        </div>
+        
+        {/* Text label with gradient on hover */}
+        {buttonText && (
+          <span className={`relative ${
+            loadSuccess 
+              ? 'text-white' 
+              : isHovered 
+                ? 'bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent font-semibold' 
+                : 'text-gray-700'
+          }`}>
+            {buttonText}
+          </span>
+        )}
       </button>
 
       {/* History Modal */}

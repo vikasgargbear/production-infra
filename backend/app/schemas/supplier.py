@@ -22,6 +22,7 @@ class SupplierBase(BaseModel):
     pincode: Optional[str] = None
     phone: Optional[str] = None
     secondary_phone: Optional[str] = None
+    whatsapp_number: Optional[str] = None
     email: Optional[str] = None
     contact_person: Optional[str] = None
     website: Optional[str] = None
@@ -30,6 +31,12 @@ class SupplierBase(BaseModel):
     ifsc_code: Optional[str] = None
     account_holder_name: Optional[str] = None
     payment_days: Optional[int] = None
+    payment_terms: Optional[int] = None
+    quality_rating: Optional[float] = None
+    delivery_rating: Optional[float] = None
+    compliance_rating: Optional[str] = None
+    notes: Optional[str] = None
+    internal_notes: Optional[str] = None
 
 class SupplierCreate(SupplierBase):
     """Schema for creating supplier"""

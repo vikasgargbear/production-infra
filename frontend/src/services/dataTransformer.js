@@ -325,6 +325,7 @@ class DataTransformer {
       contact_person: supplierData.contact_person || null,
       phone: supplierData.phone || supplierData.primary_phone || null,
       secondary_phone: supplierData.alternate_phone || supplierData.secondary_phone || null,
+      whatsapp_number: supplierData.whatsapp_number || null,
       email: supplierData.email || supplierData.primary_email || null,
       website: supplierData.website || null,
       address: supplierData.address_line1 || supplierData.address || null,
@@ -345,6 +346,13 @@ class DataTransformer {
       payment_terms: supplierData.payment_terms || null,
       payment_days: parseInt(supplierData.payment_terms || 30),
       credit_days: parseInt(supplierData.credit_days || 0),
+      // Performance ratings
+      quality_rating: supplierData.quality_rating || 4,
+      delivery_rating: supplierData.delivery_rating || 4,
+      compliance_rating: supplierData.compliance_rating || 'good',
+      // Notes
+      notes: supplierData.notes || null,
+      internal_notes: supplierData.notes || null,
       org_id: supplierData.org_id
     };
     

@@ -82,36 +82,126 @@ const StockListHistory: React.FC<StockListHistoryProps> = ({ onClose }) => {
       setLoading(true);
       setError(null);
 
-      // Fetch stock movements
-      const response = await stockApi.getMovements({
-        limit: 100,
-        sort: 'movement_date',
-        order: 'desc'
-      });
+      // Try to fetch from stock movements endpoint first
+      try {
+        const response = await stockApi.getMovements({
+          limit: 100,
+          sort: 'movement_date',
+          order: 'desc'
+        });
 
-      // Transform data to match interface
-      const movementsData: StockMovement[] = (response.data?.movements || response.data || []).map((movement: any) => ({
-        id: movement.id,
-        movement_no: movement.movement_no || movement.transaction_id || `STK-${movement.id}`,
-        product_name: movement.product_name || movement.product?.product_name || 'Unknown Product',
-        movement_type: movement.movement_type || movement.type || 'adjustment',
-        quantity: Math.abs(parseFloat(movement.quantity) || 0),
-        reference_no: movement.reference_no || movement.reference_document || movement.invoice_no,
-        movement_date: movement.movement_date || movement.transaction_date || movement.created_at,
-        reason: movement.reason || movement.notes,
-        batch_no: movement.batch_no || movement.batch_number,
-        location_from: movement.location_from || movement.from_location,
-        location_to: movement.location_to || movement.to_location,
-        created_by: movement.created_by || movement.user_name,
-        status: movement.status || 'completed'
-      }));
+        // Transform data to match interface
+        const movementsData: StockMovement[] = (response.data?.movements || response.data || []).map((movement: any) => ({
+          id: movement.id,
+          movement_no: movement.movement_no || movement.transaction_id || `STK-${movement.id}`,
+          product_name: movement.product_name || movement.product?.product_name || 'Unknown Product',
+          movement_type: movement.movement_type || movement.type || 'adjustment',
+          quantity: Math.abs(parseFloat(movement.quantity) || 0),
+          reference_no: movement.reference_no || movement.reference_document || movement.invoice_no,
+          movement_date: movement.movement_date || movement.transaction_date || movement.created_at,
+          reason: movement.reason || movement.notes,
+          batch_no: movement.batch_no || movement.batch_number,
+          location_from: movement.location_from || movement.from_location,
+          location_to: movement.location_to || movement.to_location,
+          created_by: movement.created_by || movement.user_name,
+          status: movement.status || 'completed'
+        }));
 
-      setMovements(movementsData);
+        setMovements(movementsData);
+        return;
+      } catch (stockApiError) {
+        console.warn('Stock movements endpoint not available, deriving from transactions...');
+      }
+
+      // Fallback: Derive stock movements from existing transaction data
+      const derivedMovements = await deriveStockMovementsFromTransactions();
+      setMovements(derivedMovements);
+
     } catch (err) {
       console.error('Error loading stock movements:', err);
-      setError('Failed to load stock movement history');
+      setError('Failed to load stock movement history. Backend stock tracking may not be fully configured.');
     } finally {
       setLoading(false);
+    }
+  };
+
+  // Derive stock movements from purchases, sales, and adjustments
+  const deriveStockMovementsFromTransactions = async (): Promise<StockMovement[]> => {
+    const movements: StockMovement[] = [];
+    
+    try {
+      // Import APIs dynamically to avoid circular dependencies
+      const { purchasesApi } = await import('../../services/api');
+      const { invoicesApi } = await import('../../services/api');
+      
+      // Get recent purchases (stock-in movements)
+      try {
+        const purchasesResponse = await purchasesApi.getAll({ limit: 50 });
+        const purchases = purchasesResponse.data?.purchases || purchasesResponse.data || [];
+        
+        purchases.forEach((purchase: any, index: number) => {
+          if (purchase.items && Array.isArray(purchase.items)) {
+            purchase.items.forEach((item: any, itemIndex: number) => {
+              movements.push({
+                id: `purchase-${purchase.id || index}-${itemIndex}`,
+                movement_no: `STK-IN-${purchase.purchase_number || purchase.po_number || (Date.now() + index)}`,
+                product_name: item.product_name || 'Unknown Product',
+                movement_type: 'receive',
+                quantity: Math.abs(parseFloat(item.quantity) || 0),
+                reference_no: purchase.purchase_number || purchase.po_number || purchase.supplier_invoice_number,
+                movement_date: purchase.invoice_date || purchase.po_date || purchase.created_at || new Date().toISOString(),
+                reason: `Purchase from ${purchase.supplier_name || 'Supplier'}`,
+                batch_no: item.batch_number || item.batch_no || 'N/A',
+                location_from: purchase.supplier_name || 'Supplier',
+                location_to: 'Main Warehouse',
+                created_by: 'System',
+                status: 'completed'
+              });
+            });
+          }
+        });
+      } catch (purchaseError) {
+        console.warn('Could not fetch purchases for stock movements');
+      }
+
+      // Get recent sales (stock-out movements)
+      try {
+        const invoicesResponse = await invoicesApi.getAll({ limit: 50 });
+        const invoices = invoicesResponse.data?.invoices || invoicesResponse.data || [];
+        
+        invoices.forEach((invoice: any, index: number) => {
+          if (invoice.items && Array.isArray(invoice.items)) {
+            invoice.items.forEach((item: any, itemIndex: number) => {
+              movements.push({
+                id: `sale-${invoice.id || index}-${itemIndex}`,
+                movement_no: `STK-OUT-${invoice.invoice_number || (Date.now() + index + 1000)}`,
+                product_name: item.product_name || 'Unknown Product',
+                movement_type: 'issue',
+                quantity: Math.abs(parseFloat(item.quantity) || 0),
+                reference_no: invoice.invoice_number || invoice.invoice_no,
+                movement_date: invoice.invoice_date || invoice.created_at || new Date().toISOString(),
+                reason: `Sale to ${invoice.customer_name || 'Customer'}`,
+                batch_no: item.batch_number || item.batch_no || 'N/A',
+                location_from: 'Main Warehouse',
+                location_to: invoice.customer_name || 'Customer',
+                created_by: 'System',
+                status: 'completed'
+              });
+            });
+          }
+        });
+      } catch (invoiceError) {
+        console.warn('Could not fetch invoices for stock movements');
+      }
+
+      // Sort by date (newest first)
+      movements.sort((a, b) => new Date(b.movement_date).getTime() - new Date(a.movement_date).getTime());
+      
+      return movements.slice(0, 100); // Limit to 100 most recent
+      
+    } catch (error) {
+      console.error('Error deriving stock movements:', error);
+      return [];
     }
   };
 
@@ -266,6 +356,11 @@ const StockListHistory: React.FC<StockListHistoryProps> = ({ onClose }) => {
         {/* Keyboard Shortcuts Help */}
         <div className="bg-blue-50 px-4 py-2 text-xs text-blue-700 border-b border-blue-200">
           Keyboard shortcuts: <strong>Ctrl+F</strong> - Search | <strong>Esc</strong> - Close
+        </div>
+
+        {/* Info Notice */}
+        <div className="bg-amber-50 px-4 py-2 text-xs text-amber-700 border-b border-amber-200">
+          📊 Stock movements are derived from purchase and sales transactions. For dedicated stock tracking, backend stock management endpoints will be implemented.
         </div>
 
         {/* Content */}

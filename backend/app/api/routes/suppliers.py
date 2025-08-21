@@ -116,15 +116,17 @@ def create_supplier(supplier_data: SupplierCreate, db: Session = Depends(get_db)
                 org_id, supplier_code, supplier_name, supplier_type,
                 gst_number, pan_number, drug_license_number, drug_license_validity,
                 primary_phone, secondary_phone, primary_email, contact_person_name,
-                website, bank_name, account_number, ifsc_code, account_holder_name,
-                payment_days, is_active,
+                contact_person_phone, bank_name, account_number, ifsc_code, account_holder_name,
+                payment_days, quality_rating, delivery_rating, compliance_rating,
+                internal_notes, is_active,
                 created_at, updated_at
             ) VALUES (
                 :org_id, :supplier_code, :supplier_name, :supplier_type,
                 :gst_number, :pan_number, :drug_license_number, :drug_license_validity,
                 :phone, :secondary_phone, :email, :contact_person,
-                :website, :bank_name, :account_number, :ifsc_code, :account_holder_name,
-                :payment_days, :is_active,
+                :whatsapp_number, :bank_name, :account_number, :ifsc_code, :account_holder_name,
+                :payment_days, :quality_rating, :delivery_rating, :compliance_rating,
+                :internal_notes, :is_active,
                 CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
             ) RETURNING supplier_id, created_at
         """), {
@@ -138,14 +140,18 @@ def create_supplier(supplier_data: SupplierCreate, db: Session = Depends(get_db)
             "drug_license_validity": supplier_data.drug_license_validity,
             "phone": supplier_data.phone or "N/A",  # Database requires non-null phone
             "secondary_phone": supplier_data.secondary_phone,
+            "whatsapp_number": supplier_data.whatsapp_number or supplier_data.phone,  # Default to primary phone
             "email": supplier_data.email,
             "contact_person": supplier_data.contact_person,
-            "website": supplier_data.website,
             "bank_name": supplier_data.bank_name,
             "account_number": supplier_data.account_number,
             "ifsc_code": supplier_data.ifsc_code,
             "account_holder_name": supplier_data.account_holder_name,
-            "payment_days": supplier_data.payment_days or 30,
+            "payment_days": supplier_data.payment_days or supplier_data.payment_terms or 30,
+            "quality_rating": supplier_data.quality_rating or 4.0,
+            "delivery_rating": supplier_data.delivery_rating or 4.0,
+            "compliance_rating": supplier_data.compliance_rating or 'good',
+            "internal_notes": supplier_data.notes or supplier_data.internal_notes,
             "is_active": True
         })
         

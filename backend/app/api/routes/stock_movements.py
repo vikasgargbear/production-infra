@@ -16,7 +16,7 @@ from ...core.config import DEFAULT_ORG_ID
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/stock-movements", tags=["stock-movements"])
+router = APIRouter(tags=["stock-movements"])
 
 @router.get("/")
 def get_inventory_movements(

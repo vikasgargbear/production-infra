@@ -3,7 +3,7 @@ import {
   Download, Eye, Edit, Printer, Send, MessageCircle,
   FileText, MoreHorizontal, Calendar, ChevronDown,
   X, Check, AlertCircle, RefreshCw, Search, Mail,
-  Share2, Copy, MoreVertical
+  Share2, Copy, MoreVertical, CheckCircle, Clock
 } from 'lucide-react';
 import { Button, StatusBadge, DataTable, InlineFilterPanel } from '../global';
 import InvoiceApiService from '../../services/invoiceApiService';
@@ -89,6 +89,12 @@ const InvoiceListV2: React.FC<InvoiceListProps> = ({ onClose }) => {
     per_page: 25,
     total_pages: 0
   });
+
+  // Enhanced UX states
+  const [refreshing, setRefreshing] = useState(false);
+  const [exporting, setExporting] = useState(false);
+  const [refreshSuccess, setRefreshSuccess] = useState(false);
+  const [exportSuccess, setExportSuccess] = useState(false);
 
   // State for real data
   const [invoices, setInvoices] = useState<Invoice[]>([]);
@@ -319,9 +325,91 @@ const InvoiceListV2: React.FC<InvoiceListProps> = ({ onClose }) => {
     fetchInvoices();
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Refresh invoices
-  const handleRefresh = () => {
-    fetchInvoices(pagination.page);
+  // Enhanced refresh with better UX
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    setRefreshSuccess(false);
+    
+    try {
+      await fetchInvoices(pagination.page);
+      
+      // Show success feedback
+      setRefreshSuccess(true);
+      setTimeout(() => setRefreshSuccess(false), 2000);
+    } catch (error) {
+      debugLogger.error('Failed to refresh invoices:', error);
+    } finally {
+      setRefreshing(false);
+    }
+  };
+
+  // Enhanced export with better UX
+  const handleExportAll = async () => {
+    setExporting(true);
+    setExportSuccess(false);
+    
+    try {
+      // Generate CSV data from invoices
+      const csvData = generateCSVData(invoices);
+      downloadCSV(csvData, `invoices-export-${new Date().toISOString().split('T')[0]}.csv`);
+      
+      // Show success feedback
+      setExportSuccess(true);
+      setTimeout(() => setExportSuccess(false), 3000);
+    } catch (error) {
+      debugLogger.error('Failed to export invoices:', error);
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  // Generate CSV data from invoices
+  const generateCSVData = (data: Invoice[]) => {
+    const headers = [
+      'Invoice Number',
+      'Customer Name', 
+      'Date',
+      'Due Date',
+      'Amount',
+      'Status',
+      'Payment Status'
+    ];
+    
+    const rows = data.map(invoice => [
+      invoice.invoice_number || invoice.invoiceNo || '',
+      invoice.customer_name || invoice.customerName || '',
+      invoice.invoice_date || invoice.date || '',
+      invoice.dueDate || '',
+      invoice.final_amount || invoice.amount || 0,
+      invoice.invoice_status || invoice.status || '',
+      invoice.payment_status || invoice.paymentStatus || ''
+    ]);
+    
+    return [headers, ...rows];
+  };
+
+  // Download CSV file
+  const downloadCSV = (data: any[][], filename: string) => {
+    const csvContent = data.map(row => 
+      row.map(field => 
+        typeof field === 'string' && field.includes(',') 
+          ? `"${field}"` 
+          : field
+      ).join(',')
+    ).join('\n');
+    
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    
+    if (link.download !== undefined) {
+      const url = URL.createObjectURL(blob);
+      link.setAttribute('href', url);
+      link.setAttribute('download', filename);
+      link.style.visibility = 'hidden';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    }
   };
 
   // Handle filter changes with auto-search
@@ -651,6 +739,40 @@ const InvoiceListV2: React.FC<InvoiceListProps> = ({ onClose }) => {
 
   return (
     <div className="h-full bg-white">
+      {/* Modern Animations */}
+      <style>{`
+        @keyframes bounce {
+          0%, 100% { transform: translateY(0); }
+          50% { transform: translateY(-4px); }
+        }
+        
+        .animation-delay-0 { animation-delay: 0ms; }
+        .animation-delay-200 { animation-delay: 200ms; }
+        .animation-delay-400 { animation-delay: 400ms; }
+        
+        @keyframes pulse {
+          0%, 100% { opacity: 1; }
+          50% { opacity: 0.5; }
+        }
+        
+        @keyframes ping {
+          75%, 100% {
+            transform: scale(2);
+            opacity: 0;
+          }
+        }
+        
+        @keyframes spin {
+          from { transform: rotate(0deg); }
+          to { transform: rotate(360deg); }
+        }
+        
+        .animate-bounce { animation: bounce 1s infinite; }
+        .animate-pulse { animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite; }
+        .animate-ping { animation: ping 1s cubic-bezier(0, 0, 0.2, 1) infinite; }
+        .animate-spin { animation: spin 1s linear infinite; }
+      `}</style>
+      
       <div className="h-full flex flex-col">
         
         {/* Header - Simplified */}
@@ -668,24 +790,105 @@ const InvoiceListV2: React.FC<InvoiceListProps> = ({ onClose }) => {
               </div>
             </div>
             <div className="flex items-center space-x-3">
-              <Button
-                variant="ghost"
-                size="sm"
+              {/* Modern Refresh Button */}
+              <button
                 onClick={handleRefresh}
-                disabled={loading}
-                title="Refresh data"
+                disabled={refreshing || loading}
+                className={`
+                  relative p-2.5 rounded-xl transition-all duration-300 ease-out
+                  ${refreshSuccess 
+                    ? 'bg-gradient-to-r from-green-400 to-emerald-400 shadow-lg shadow-green-200/50' 
+                    : refreshing
+                      ? 'bg-gradient-to-r from-blue-400 to-indigo-400 shadow-lg shadow-blue-200/50'
+                      : 'bg-white hover:bg-gradient-to-r hover:from-gray-50 hover:to-gray-100 border border-gray-200 hover:border-gray-300 hover:shadow-md'
+                  }
+                  ${refreshing || loading ? 'cursor-not-allowed' : 'cursor-pointer'}
+                  group transform hover:scale-105 active:scale-95
+                `}
+                title={refreshSuccess ? "Successfully refreshed!" : refreshing ? "Refreshing data..." : "Refresh data"}
               >
-                <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
-                Refresh
-              </Button>
-              <Button
-                variant="outline"
-                onClick={() => {/* TODO: Export all invoices */}}
-                icon={<Download className="w-4 h-4" />}
-                iconPosition="left"
+                <div className="relative">
+                  {refreshSuccess ? (
+                    <CheckCircle className="w-5 h-5 text-white" />
+                  ) : (
+                    <RefreshCw className={`w-5 h-5 transition-all duration-500 ${
+                      refreshing 
+                        ? 'animate-spin text-white' 
+                        : 'text-gray-600 group-hover:text-gray-800 group-hover:rotate-180'
+                    }`} />
+                  )}
+                  
+                  {/* Modern ripple effect */}
+                  {(refreshing || refreshSuccess) && (
+                    <div className="absolute inset-0 -m-2">
+                      <div className="w-9 h-9 rounded-full bg-white opacity-30 animate-ping" />
+                    </div>
+                  )}
+                </div>
+              </button>
+
+              {/* Modern Export Button */}
+              <button
+                onClick={handleExportAll}
+                disabled={exporting || invoices.length === 0}
+                className={`
+                  relative px-4 py-2.5 rounded-xl transition-all duration-300 ease-out
+                  flex items-center space-x-2.5
+                  ${exportSuccess 
+                    ? 'bg-gradient-to-r from-green-400 to-emerald-400 text-white shadow-lg shadow-green-200/50' 
+                    : exporting
+                      ? 'bg-gradient-to-r from-blue-400 to-indigo-400 text-white shadow-lg shadow-blue-200/50'
+                      : 'bg-white hover:bg-gradient-to-r hover:from-blue-50 hover:to-indigo-50 border border-gray-200 hover:border-blue-300 hover:shadow-md text-gray-700 hover:text-blue-700'
+                  }
+                  ${exporting || invoices.length === 0 ? 'cursor-not-allowed opacity-75' : 'cursor-pointer'}
+                  group transform hover:scale-105 active:scale-95
+                  font-medium text-sm
+                `}
+                title={
+                  invoices.length === 0 
+                    ? "No invoices to export" 
+                    : exportSuccess 
+                      ? "Successfully exported!" 
+                      : "Export all invoices to CSV"
+                }
               >
-                Export All
-              </Button>
+                {/* Modern icon with animation */}
+                <div className="relative">
+                  {exportSuccess ? (
+                    <CheckCircle className="w-4 h-4" />
+                  ) : exporting ? (
+                    <div className="relative">
+                      <Download className="w-4 h-4 animate-pulse" />
+                      <div className="absolute inset-0">
+                        <div className="w-4 h-4 rounded-full border-2 border-transparent border-t-white animate-spin" />
+                      </div>
+                    </div>
+                  ) : (
+                    <Download className={`w-4 h-4 transition-transform duration-300 ${
+                      invoices.length > 0 ? 'group-hover:translate-y-1' : ''
+                    }`} />
+                  )}
+                </div>
+                
+                {/* Text label */}
+                <span className="relative">
+                  {exporting 
+                    ? 'Exporting' 
+                    : exportSuccess 
+                      ? 'Exported' 
+                      : 'Export All'
+                  }
+                  
+                  {/* Modern dots animation for loading */}
+                  {exporting && (
+                    <span className="inline-flex ml-1">
+                      <span className="animate-bounce animation-delay-0">.</span>
+                      <span className="animate-bounce animation-delay-200">.</span>
+                      <span className="animate-bounce animation-delay-400">.</span>
+                    </span>
+                  )}
+                </span>
+              </button>
               {onClose && (
                 <Button
                   variant="ghost"
