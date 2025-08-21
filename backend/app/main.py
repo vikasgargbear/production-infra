@@ -51,7 +51,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="Pharma ERP API",
     description="Enterprise Pharma ERP System API",
-    version="2.0.3",  # Force re-deploy after company.py database fixes
+    version="2.0.4",  # Force re-deploy with purchase routes fix
     lifespan=lifespan
 )
 

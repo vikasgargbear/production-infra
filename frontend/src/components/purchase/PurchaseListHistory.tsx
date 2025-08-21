@@ -5,9 +5,9 @@ import {
   X, Check, AlertCircle, RefreshCw
 } from 'lucide-react';
 import { Button, StatusBadge, DataTable, InlineFilterPanel } from '../global';
+import GlobalPDFGenerator from '../global/pdf/GlobalPDFGenerator';
 import { purchasesApi } from '../../services/api';
 import { formatCurrency } from '../../utils/formatters';
-import jsPDF from 'jspdf';
 
 interface PurchaseListHistoryProps {
   onClose?: () => void;
@@ -291,61 +291,54 @@ const PurchaseListHistory: React.FC<PurchaseListHistoryProps> = ({ onClose }) =>
     }).format(amount);
   };
 
-  const exportSelectedPDF = () => {
+  const exportSelectedPDF = (theme = 'digital') => {
     const itemsToExport = filteredPurchases.filter(purchase => selectedIds.has(purchase.id));
     if (itemsToExport.length === 0) return;
 
-    try {
-      // Try to use jspdf-autotable if available
-      const autoTable = require('jspdf-autotable');
-      
-      const doc = new jsPDF();
-      doc.setFontSize(16);
-      doc.text('Purchase Orders Report', 20, 20);
-      
-      const tableData = itemsToExport.map(purchase => [
-        purchase.po_number,
-        formatDate(purchase.po_date),
-        purchase.supplier_name || 'N/A',
-        formatCurrency(purchase.total_amount || 0),
-        purchase.po_status || 'draft'
-      ]);
-
-      (doc as any).autoTable({
-        head: [['PO #', 'Date', 'Supplier', 'Amount', 'Status']],
-        body: tableData,
-        startY: 30,
-        styles: { fontSize: 10 },
-        headStyles: { fillColor: [59, 130, 246] }
-      });
-
-      doc.save('purchase-orders-export.pdf');
-    } catch (error) {
-      // Fallback to simple PDF
-      console.warn('jspdf-autotable not available, using simple PDF export');
-      
-      const doc = new jsPDF();
-      doc.setFontSize(16);
-      doc.text('Purchase Orders Report', 20, 20);
-      
-      let yPos = 40;
-      doc.setFontSize(10);
-      doc.text('PO # | Date | Supplier | Amount | Status', 20, yPos);
-      yPos += 10;
-      
-      itemsToExport.forEach(purchase => {
-        const rowText = `${purchase.po_number} | ${formatDate(purchase.po_date)} | ${purchase.supplier_name || 'N/A'} | ${formatCurrency(purchase.total_amount || 0)} | ${purchase.po_status || 'draft'}`;
-        doc.text(rowText, 20, yPos);
-        yPos += 8;
-        
-        if (yPos > 270) {
-          doc.addPage();
-          yPos = 20;
-        }
-      });
-      
-      doc.save('purchase-orders-export.pdf');
+    const pdfGenerator = new GlobalPDFGenerator(theme);
+    const doc = pdfGenerator.doc;
+    
+    // Add header
+    pdfGenerator.addHeader('Purchase Orders Report');
+    
+    // If single purchase order, add supplier details
+    if (itemsToExport.length === 1) {
+      const purchase = itemsToExport[0];
+      pdfGenerator.addPartyDetails({
+        name: purchase.supplier_name || 'N/A',
+        phone: '', // Add if available in purchase data
+        address: '', // Add if available in purchase data
+        gst: '' // Add if available in purchase data
+      }, 'supplier');
     }
+    
+    // Prepare table data
+    const headers = ['PO #', 'Date', 'Supplier', 'Amount', 'Status'];
+    const rows = itemsToExport.map(purchase => [
+      purchase.po_number,
+      formatDate(purchase.po_date),
+      purchase.supplier_name || 'N/A',
+      formatCurrency(purchase.total_amount || 0),
+      purchase.po_status || 'draft'
+    ]);
+    
+    // Add table
+    pdfGenerator.addTable(headers, rows, 'supplier');
+    
+    // Add summary
+    const totalAmount = itemsToExport.reduce((sum, purchase) => sum + (purchase.total_amount || 0), 0);
+    pdfGenerator.addSummary({
+      subtotal: totalAmount,
+      tax: 0, // Calculate from purchase data if available
+      discount: 0, // Calculate from purchase data if available
+      total: totalAmount
+    });
+    
+    // Add footer
+    pdfGenerator.addFooter();
+    
+    // Save the PDF
+    doc.save(`purchase-orders-${new Date().getTime()}.pdf`);
   };
 
   const printSelected = () => {

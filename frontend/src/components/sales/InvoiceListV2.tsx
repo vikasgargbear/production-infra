@@ -6,9 +6,9 @@ import {
   Share2, Copy, MoreVertical
 } from 'lucide-react';
 import { Button, StatusBadge, DataTable, InlineFilterPanel } from '../global';
+import GlobalPDFGenerator from '../global/pdf/GlobalPDFGenerator';
 import InvoiceApiService from '../../services/invoiceApiService';
 import debugLogger from '../../utils/debugLogger';
-import jsPDF from 'jspdf';
 
 interface InvoiceListProps {
   onClose?: () => void;
@@ -125,61 +125,54 @@ const InvoiceListV2: React.FC<InvoiceListProps> = ({ onClose }) => {
     }
   };
 
-  const exportSelectedPDF = () => {
+  const exportSelectedPDF = (theme = 'digital') => {
     const itemsToExport = filteredInvoices.filter(invoice => selectedIds.has(invoice.id));
     if (itemsToExport.length === 0) return;
 
-    try {
-      // Try to use jspdf-autotable if available
-      const autoTable = require('jspdf-autotable');
-      
-      const doc = new jsPDF();
-      doc.setFontSize(16);
-      doc.text('Invoices Report', 20, 20);
-      
-      const tableData = itemsToExport.map(invoice => [
-        invoice.invoice_number,
-        formatDate(invoice.invoice_date),
-        invoice.customer_name || 'N/A',
-        formatCurrency(invoice.final_amount || 0),
-        getStatusText(invoice.payment_status)
-      ]);
-
-      (doc as any).autoTable({
-        head: [['Invoice #', 'Date', 'Customer', 'Amount', 'Status']],
-        body: tableData,
-        startY: 30,
-        styles: { fontSize: 10 },
-        headStyles: { fillColor: [59, 130, 246] }
-      });
-
-      doc.save('invoices-export.pdf');
-    } catch (error) {
-      // Fallback to simple PDF
-      console.warn('jspdf-autotable not available, using simple PDF export');
-      
-      const doc = new jsPDF();
-      doc.setFontSize(16);
-      doc.text('Invoices Report', 20, 20);
-      
-      let yPos = 40;
-      doc.setFontSize(10);
-      doc.text('Invoice # | Date | Customer | Amount | Status', 20, yPos);
-      yPos += 10;
-      
-      itemsToExport.forEach(invoice => {
-        const rowText = `${invoice.invoice_number} | ${formatDate(invoice.invoice_date)} | ${invoice.customer_name || 'N/A'} | ${formatCurrency(invoice.final_amount || 0)} | ${getStatusText(invoice.payment_status)}`;
-        doc.text(rowText, 20, yPos);
-        yPos += 8;
-        
-        if (yPos > 270) {
-          doc.addPage();
-          yPos = 20;
-        }
-      });
-      
-      doc.save('invoices-export.pdf');
+    const pdfGenerator = new GlobalPDFGenerator(theme);
+    const doc = pdfGenerator.doc;
+    
+    // Add header
+    pdfGenerator.addHeader('Invoices Report');
+    
+    // If single invoice, add customer details
+    if (itemsToExport.length === 1) {
+      const invoice = itemsToExport[0];
+      pdfGenerator.addPartyDetails({
+        name: invoice.customer_name || 'N/A',
+        phone: '', // Add if available in invoice data
+        address: '', // Add if available in invoice data
+        gst: '' // Add if available in invoice data
+      }, 'customer');
     }
+    
+    // Prepare table data
+    const headers = ['Invoice #', 'Date', 'Customer', 'Amount', 'Status'];
+    const rows = itemsToExport.map(invoice => [
+      invoice.invoice_number,
+      formatDate(invoice.invoice_date),
+      invoice.customer_name || 'N/A',
+      formatCurrency(invoice.final_amount || 0),
+      getStatusText(invoice.payment_status)
+    ]);
+    
+    // Add table
+    pdfGenerator.addTable(headers, rows, 'customer');
+    
+    // Add summary
+    const totalAmount = itemsToExport.reduce((sum, invoice) => sum + (invoice.final_amount || 0), 0);
+    pdfGenerator.addSummary({
+      subtotal: totalAmount,
+      tax: 0, // Calculate from invoice data if available
+      discount: 0, // Calculate from invoice data if available
+      total: totalAmount
+    });
+    
+    // Add footer
+    pdfGenerator.addFooter();
+    
+    // Save the PDF
+    doc.save(`invoices-report-${new Date().getTime()}.pdf`);
   };
 
   const printSelected = () => {

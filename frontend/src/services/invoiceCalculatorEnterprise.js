@@ -5,7 +5,7 @@
 
 import { useState, useCallback } from 'react';
 import api from './api';
-import { buildUrl } from '../config/api.config';
+import { getApiUrl } from '../config/api.config';
 import EnterpriseCalculator from './enterpriseCalculator';
 import OfflineCalculator from './offlineCalculator';
 
@@ -344,7 +344,7 @@ class InvoiceCalculatorEnterprise {
    */
   static async calculateBatch(invoices) {
     try {
-      const response = await fetch(buildUrl('/invoices/calculate/batch'), {
+      const response = await fetch(getApiUrl('/invoices/calculate/batch'), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'

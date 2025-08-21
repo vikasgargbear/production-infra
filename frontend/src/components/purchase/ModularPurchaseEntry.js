@@ -527,14 +527,6 @@ const PurchaseEntryContent = ({ onClose, initialShowPDFUpload = false }) => {
             </div>
             <div className="flex items-center space-x-3">
               <button
-                onClick={togglePDFUpload}
-                className="px-4 py-2 text-blue-700 bg-white border border-gray-300 rounded-md hover:bg-blue-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-colors flex items-center"
-              >
-                <Upload className="w-4 h-4 mr-2" />
-                Upload PDF
-              </button>
-              
-              <button
                 onClick={toggleGSTCalculator}
                 className="px-4 py-2 text-blue-700 bg-white border border-gray-300 rounded-md hover:bg-blue-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-colors flex items-center"
               >

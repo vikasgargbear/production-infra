@@ -4,8 +4,7 @@ import {
   ChevronDown, CheckSquare, MoreVertical, Mail, MessageSquare, FileText,
   Share2, Copy, Trash2, RefreshCw, Send
 } from 'lucide-react';
-import jsPDF from 'jspdf';
-import 'jspdf-autotable';
+import GlobalPDFGenerator from '../pdf/GlobalPDFGenerator';
 import { ordersAPI, purchasesAPI, paymentAPI, challansAPI, invoiceAPI, salesOrdersAPI, purchasesApi, returnsApi, stockApi } from '../../../services/api';
 
 const ViewHistoryButton = ({ 
@@ -339,27 +338,33 @@ const ViewHistoryButton = ({
   };
 
   // Generate beautiful PDF
-  const printPDF = () => {
+  const printPDF = (theme = 'digital') => {
     const itemsToPrint = selectedIds.size > 0 
       ? filteredItems.filter(item => selectedIds.has(item.id))
       : filteredItems;
     
     if (itemsToPrint.length === 0) return;
     
-    const doc = new jsPDF();
+    const pdfGenerator = new GlobalPDFGenerator(theme);
+    const doc = pdfGenerator.doc;
     
     // Add header
-    doc.setFontSize(20);
-    doc.text(getHistoryTitle(), 14, 22);
+    pdfGenerator.addHeader(getHistoryTitle());
     
-    // Add date
-    doc.setFontSize(10);
-    doc.setTextColor(100);
-    doc.text(`Generated on: ${new Date().toLocaleDateString('en-IN')}`, 14, 30);
+    // Add party summary if single item
+    if (itemsToPrint.length === 1) {
+      const item = itemsToPrint[0];
+      pdfGenerator.addPartyDetails({
+        name: item.customerName,
+        phone: item.customerPhone || '',
+        address: item.address || '',
+        gst: item.gst || ''
+      }, historyType === 'purchase' ? 'supplier' : 'customer');
+    }
     
     // Prepare table data
-    const tableColumn = ['Date', 'Customer', 'Number', 'Amount', 'Status'];
-    const tableRows = itemsToPrint.map(item => [
+    const headers = ['Date', 'Customer/Supplier', 'Document No.', 'Amount', 'Status'];
+    const rows = itemsToPrint.map(item => [
       formatDate(item.date),
       item.customerName,
       item.number,
@@ -368,14 +373,21 @@ const ViewHistoryButton = ({
     ]);
     
     // Add table
-    doc.autoTable({
-      head: [tableColumn],
-      body: tableRows,
-      startY: 40,
-      theme: 'striped',
-      headStyles: { fillColor: [59, 130, 246] },
-      styles: { fontSize: 10 }
-    });
+    pdfGenerator.addTable(headers, rows, historyType === 'purchase' ? 'supplier' : 'customer');
+    
+    // Add summary for financial documents
+    if (['invoice', 'purchase', 'challan', 'payment'].includes(historyType)) {
+      const totalAmount = itemsToPrint.reduce((sum, item) => sum + (item.amount || 0), 0);
+      pdfGenerator.addSummary({
+        subtotal: totalAmount,
+        tax: 0,
+        discount: 0,
+        total: totalAmount
+      });
+    }
+    
+    // Add footer
+    pdfGenerator.addFooter();
     
     // Save the PDF
     doc.save(`${historyType}-history-${new Date().getTime()}.pdf`);

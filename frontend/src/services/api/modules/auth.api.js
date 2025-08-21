@@ -1,5 +1,5 @@
 import { apiHelpers } from '../apiClient';
-import { API_CONFIG, setAuthToken } from '../../../config/api.config';
+import { API_CONFIG } from '../../../config/api.config';
 
 const ENDPOINTS = API_CONFIG.ENDPOINTS.AUTH;
 
@@ -10,11 +10,11 @@ export const authApi = {
     
     // Store token if login successful
     if (response.data.token) {
-      setAuthToken(response.data.token);
+      localStorage.setItem('authToken', response.data.token);
       
       // Store user data if provided
       if (response.data.user) {
-        localStorage.setItem(API_CONFIG.AUTH.USER_KEY, JSON.stringify(response.data.user));
+        localStorage.setItem('user', JSON.stringify(response.data.user));
       }
     }
     
@@ -53,7 +53,7 @@ export const authApi = {
     });
     
     if (response.data.token) {
-      setAuthToken(response.data.token);
+      localStorage.setItem('authToken', response.data.token);
     }
     
     return response;
