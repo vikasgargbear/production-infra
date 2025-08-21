@@ -21,119 +21,107 @@ router = APIRouter(prefix="/stock-movements", tags=["stock-movements"])
 @router.get("/")
 def get_inventory_movements(
     skip: int = Query(0, ge=0),
-    limit: int = Query(20, ge=1, le=100),
-    movement_type: Optional[str] = Query(None, description="receive/issue"),
-    product_id: Optional[str] = None,
-    from_date: Optional[str] = None,
-    to_date: Optional[str] = None,
-    reason: Optional[str] = None,
+    limit: int = Query(100, ge=1, le=500),
+    movement_type: Optional[str] = Query(None, description="Movement type filter"),
+    product_id: Optional[int] = Query(None, description="Product ID filter"),
+    batch_id: Optional[int] = Query(None, description="Batch ID filter"),
+    location_id: Optional[int] = Query(None, description="Location ID filter"),
+    from_date: Optional[str] = Query(None, description="Start date (YYYY-MM-DD)"),
+    to_date: Optional[str] = Query(None, description="End date (YYYY-MM-DD)"),
     db: Session = Depends(get_db)
 ):
     """
-    Get list of stock movements from actual transaction tables
+    Get inventory movements using the database API function
     """
     try:
-        # Build union query from actual transaction tables
-        queries = []
-        params = {"skip": skip, "limit": limit}
+        # Prepare parameters for the database API function
+        api_params = []
         
-        # Sales movements (outgoing)
-        sales_query = """
-            SELECT 
-                'sale' as movement_type,
-                'out' as movement_direction,
-                oi.product_id,
-                p.product_name,
-                p.hsn_code,
-                oi.quantity,
-                o.order_date as movement_date,
-                o.order_number as reference_number,
-                'sales_order' as reference_type,
-                o.order_id as reference_id,
-                c.customer_name as party_name,
-                'Sale to customer' as notes
-            FROM sales.order_items oi
-            JOIN sales.orders o ON oi.order_id = o.order_id
-            JOIN inventory.products p ON oi.product_id = p.product_id
-            LEFT JOIN parties.customers c ON o.customer_id = c.customer_id
-            WHERE o.order_status != 'cancelled'
-        """
-        
-        # Purchase movements (incoming)
-        purchase_query = """
-            SELECT 
-                'purchase' as movement_type,
-                'in' as movement_direction,
-                poi.product_id,
-                p.product_name,
-                p.hsn_code,
-                poi.ordered_quantity as quantity,
-                po.po_date as movement_date,
-                po.po_number as reference_number,
-                'purchase_order' as reference_type,
-                po.purchase_order_id as reference_id,
-                s.supplier_name as party_name,
-                'Purchase from supplier' as notes
-            FROM procurement.purchase_order_items poi
-            JOIN procurement.purchase_orders po ON poi.purchase_order_id = po.purchase_order_id
-            JOIN inventory.products p ON poi.product_id = p.product_id
-            LEFT JOIN parties.suppliers s ON po.supplier_id = s.supplier_id
-            WHERE po.po_status != 'cancelled'
-        """
-        
-        # Add filters
-        filters = []
-        if product_id:
-            filters.append("product_id = :product_id")
-            params["product_id"] = product_id
+        # Convert parameter format for PostgreSQL function call
+        if product_id is not None:
+            api_params.append(f"p_product_id => {product_id}")
+        else:
+            api_params.append("p_product_id => NULL")
+            
+        if batch_id is not None:
+            api_params.append(f"p_batch_id => {batch_id}")
+        else:
+            api_params.append("p_batch_id => NULL")
+            
+        if location_id is not None:
+            api_params.append(f"p_location_id => {location_id}")
+        else:
+            api_params.append("p_location_id => NULL")
+            
+        if movement_type:
+            api_params.append(f"p_movement_type => '{movement_type}'")
+        else:
+            api_params.append("p_movement_type => NULL")
+            
         if from_date:
-            filters.append("movement_date >= :from_date")
-            params["from_date"] = from_date
+            api_params.append(f"p_from_date => '{from_date}'::date")
+        else:
+            api_params.append("p_from_date => (CURRENT_DATE - INTERVAL '30 days')::date")
+            
         if to_date:
-            filters.append("movement_date <= :to_date")
-            params["to_date"] = to_date
+            api_params.append(f"p_to_date => '{to_date}'::date")
+        else:
+            api_params.append("p_to_date => CURRENT_DATE::date")
             
-        if filters:
-            filter_clause = " AND " + " AND ".join(filters)
-            sales_query += filter_clause.replace("product_id", "oi.product_id").replace("movement_date", "o.order_date")
-            purchase_query += filter_clause.replace("product_id", "poi.product_id").replace("movement_date", "po.po_date")
+        api_params.append(f"p_limit => {limit}")
         
-        # Combine queries
-        if not movement_type or movement_type == 'issue':
-            queries.append(sales_query)
-        if not movement_type or movement_type == 'receive':
-            queries.append(purchase_query)
-            
-        if not queries:
-            return {"total": 0, "movements": []}
-            
-        combined_query = " UNION ALL ".join(queries)
-        final_query = f"""
-            SELECT * FROM (
-                {combined_query}
-            ) movements
-            ORDER BY movement_date DESC
-            LIMIT :limit OFFSET :skip
-        """
+        # Call the database API function
+        query = f"SELECT api.get_inventory_movements({', '.join(api_params)})"
         
-        movements = db.execute(text(final_query), params).fetchall()
+        result = db.execute(text(query)).scalar()
         
-        # Get total count
-        count_query = f"""
-            SELECT COUNT(*) FROM (
-                {combined_query}
-            ) movements
-        """
-        total = db.execute(text(count_query), params).scalar()
+        if result is None:
+            return {
+                "success": True,
+                "data": {
+                    "movements": [],
+                    "total": 0
+                }
+            }
+        
+        # Extract movements from the JSON result
+        movements_data = result.get('movements', [])
+        
+        # Apply client-side pagination if needed
+        total_movements = len(movements_data)
+        paginated_movements = movements_data[skip:skip + limit] if skip > 0 else movements_data
+        
+        # Transform the data to match frontend expectations
+        transformed_movements = []
+        for movement in paginated_movements:
+            transformed_movement = {
+                "id": movement.get("movement_id", ""),
+                "movement_no": f"MOV-{movement.get('movement_id', '')}",
+                "product_name": movement.get("product_name", ""),
+                "movement_type": movement.get("movement_type", ""),
+                "quantity": movement.get("quantity", 0),
+                "reference_no": movement.get("reference_number", ""),
+                "movement_date": movement.get("movement_date", ""),
+                "reason": movement.get("narration", ""),
+                "batch_no": movement.get("batch_number", ""),
+                "location_from": "",
+                "location_to": movement.get("location_name", ""),
+                "created_by": movement.get("created_by", ""),
+                "status": "completed"
+            }
+            transformed_movements.append(transformed_movement)
         
         return {
-            "total": total or 0,
-            "movements": [dict(m._mapping) for m in movements]
+            "success": True,
+            "data": {
+                "movements": transformed_movements,
+                "total": total_movements
+            }
         }
         
     except Exception as e:
-        logger.error(f"Error fetching stock movements: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"Error fetching inventory movements: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to fetch inventory movements: {str(e)}")
 
 @router.get("/reasons")
 def get_movement_reasons():
