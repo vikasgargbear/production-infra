@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback, forwardRef, useImperativeHandle } from 'react';
-import { Search, Building2, Plus, Trash2, Loader2, Phone, MapPin } from 'lucide-react';
+import { Search, Building2, Plus, Trash2, Loader2, Phone, MapPin, UserPlus } from 'lucide-react';
 import { supplierAPI } from '../../../services/api';
 import { AddNewButton } from '../ui';
 import DataTransformer from '../../../services/dataTransformer';
@@ -346,7 +346,7 @@ const SupplierSearch = forwardRef(({
                   {/* Contact Person */}
                   {selectedSupplier.contact_person_name && (
                     <p className="flex items-center gap-1">
-                      <User className="w-3 h-3" /> 
+                      <UserPlus className="w-3 h-3" /> 
                       <span className="font-medium">Contact:</span> {selectedSupplier.contact_person_name}
                     </p>
                   )}

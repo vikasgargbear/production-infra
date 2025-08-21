@@ -8,6 +8,10 @@ export { default as SearchBar } from './SearchBar';
 export { default as AddNewButton } from './AddNewButton';
 export { default as CustomerCreationB2B } from './forms/CustomerCreationB2B';
 
+// Enhanced Input Components
+export { default as NumericInput } from './inputs/NumericInput';
+export { default as MonthYearPicker } from './inputs/MonthYearPicker';
+
 // Display Components
 export { DataTable } from './display/DataTable';
 export { StatusBadge } from './display/StatusBadge';

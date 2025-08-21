@@ -13,7 +13,9 @@ import {
   ProductCreationModal,
   GenericSuccessModal,
   ContentCard,
-  useToast
+  useToast,
+  NumericInput,
+  MonthYearPicker
 } from '../global';
 import documentNumberService from '../../services/documentNumberService';
 import { PURCHASE_CONFIG } from '../../config/purchase.config';
@@ -176,7 +178,8 @@ const EnhancedPurchaseEntry = ({ onClose, prefilledData = null }) => {
       free_quantity: 0,
       mrp: product.mrp || 0,
       purchase_price: product.purchase_price || (product.mrp || 0) * 0.7, // Default 30% discount
-      selling_price: product.sale_price || product.mrp || 0,
+      selling_price: product.sale_price || product.selling_price || product.mrp || 0,
+      sale_price: product.sale_price || product.selling_price || product.mrp || 0,
       discount_percent: 0,
       tax_percent: product.gst_percent || product.tax_rate || 12,
       tax_amount: 0
@@ -570,55 +573,27 @@ const EnhancedPurchaseEntry = ({ onClose, prefilledData = null }) => {
               expiry: {
                 label: 'Expiry',
                 align: 'center',
-                render: (item, index) => {
-                  // Convert date to MM/YY format for display
-                  const formatDateToMonthYearShort = (dateStr) => {
-                    if (!dateStr) return '';
-                    const date = new Date(dateStr);
-                    const month = String(date.getMonth() + 1).padStart(2, '0');
-                    const year = String(date.getFullYear()).slice(-2); // Last 2 digits
-                    return `${month}/${year}`;
-                  };
-                  
-                  const handleExpiryChange = (e) => {
-                    const value = e.target.value;
-                    if (!value) return;
-                    // value comes as 'YYYY-MM' from month input
-                    const date = new Date(value + '-01');
-                    handleUpdateItem(index, 'expiry_date', date.toISOString().split('T')[0]);
-                  };
-                  
-                  // Show MM/YY format but use month picker
-                  const displayValue = formatDateToMonthYearShort(item.expiry_date);
-                  
-                  return (
-                    <div className="relative">
-                      {/* Hidden month picker */}
-                      <input
-                        type="month"
-                        value={item.expiry_date ? item.expiry_date.substring(0, 7) : ''}
-                        onChange={(e) => handleExpiryChange(e)}
-                        className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-                        title="Click to select expiry month/year"
-                      />
-                      {/* Display overlay showing MM/YY format */}
-                      <div className="w-20 text-xs text-center py-1 border-0 bg-transparent focus-within:ring-2 focus-within:ring-blue-500 rounded-md pointer-events-none">
-                        {displayValue || 'MM/YY'}
-                      </div>
-                    </div>
-                  );
-                }
+                render: (item, index) => (
+                  <MonthYearPicker
+                    value={item.expiry_date}
+                    onChange={(value) => handleUpdateItem(index, 'expiry_date', value)}
+                    width="w-20"
+                    className="text-xs"
+                  />
+                )
               },
               qty: {
                 label: 'Qty',
                 align: 'center',
                 render: (item, index) => (
-                  <input
-                    type="number"
-                    value={item.quantity || 1}
-                    onChange={(e) => handleUpdateItem(index, 'quantity', parseInt(e.target.value) || 0)}
-                    className="w-12 text-center border-0 bg-transparent focus:ring-2 focus:ring-blue-500 rounded-md [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                    min="1"
+                  <NumericInput
+                    value={item.quantity}
+                    onChange={(value) => handleUpdateItem(index, 'quantity', value)}
+                    min={0}
+                    defaultValue={1}
+                    width="w-12"
+                    align="center"
+                    clearable={true}
                   />
                 )
               },
@@ -626,54 +601,65 @@ const EnhancedPurchaseEntry = ({ onClose, prefilledData = null }) => {
                 label: 'Free',
                 align: 'center',
                 render: (item, index) => (
-                  <input
-                    type="number"
-                    value={item.free_quantity || 0}
-                    onChange={(e) => handleUpdateItem(index, 'free_quantity', parseInt(e.target.value) || 0)}
-                    className="w-10 text-center border-0 bg-transparent focus:ring-2 focus:ring-blue-500 rounded-md [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                    min="0"
+                  <NumericInput
+                    value={item.free_quantity}
+                    onChange={(value) => handleUpdateItem(index, 'free_quantity', value)}
+                    min={0}
+                    defaultValue={0}
+                    width="w-10"
+                    align="center"
+                    clearable={true}
                   />
                 )
               },
               mrp: {
                 label: 'MRP',
-                align: 'right',
+                align: 'center',
                 render: (item, index) => (
-                  <input
-                    type="number"
-                    value={item.mrp || 0}
-                    onChange={(e) => handleUpdateItem(index, 'mrp', parseFloat(e.target.value) || 0)}
-                    className="w-16 text-right border-0 bg-transparent focus:ring-2 focus:ring-blue-500 rounded-md [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                    step="0.01"
-                    min="0"
+                  <NumericInput
+                    value={item.mrp}
+                    onChange={(value) => handleUpdateItem(index, 'mrp', value)}
+                    min={0}
+                    defaultValue={0}
+                    decimalPlaces={2}
+                    width="w-16"
+                    align="center"
+                    clearable={true}
+                    prefix="₹"
                   />
                 )
               },
               cost: {
                 label: 'Cost',
-                align: 'right',
+                align: 'center',
                 render: (item, index) => (
-                  <input
-                    type="number"
-                    value={item.purchase_price || 0}
-                    onChange={(e) => handleUpdateItem(index, 'purchase_price', parseFloat(e.target.value) || 0)}
-                    className="w-16 text-right border-0 bg-transparent focus:ring-2 focus:ring-blue-500 rounded-md [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                    step="0.01"
-                    min="0"
+                  <NumericInput
+                    value={item.purchase_price}
+                    onChange={(value) => handleUpdateItem(index, 'purchase_price', value)}
+                    min={0}
+                    defaultValue={0}
+                    decimalPlaces={2}
+                    width="w-16"
+                    align="center"
+                    clearable={true}
+                    prefix="₹"
                   />
                 )
               },
               rate: {
                 label: 'Rate',
-                align: 'right',
+                align: 'center',
                 render: (item, index) => (
-                  <input
-                    type="number"
-                    value={item.sale_price || item.mrp || 0}
-                    onChange={(e) => handleUpdateItem(index, 'sale_price', parseFloat(e.target.value) || 0)}
-                    className="w-16 text-right border-0 bg-transparent focus:ring-2 focus:ring-blue-500 rounded-md [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                    step="0.01"
-                    min="0"
+                  <NumericInput
+                    value={item.sale_price || item.selling_price}
+                    onChange={(value) => handleUpdateItem(index, 'sale_price', value)}
+                    min={0}
+                    defaultValue={item.mrp || 0}
+                    decimalPlaces={2}
+                    width="w-16"
+                    align="center"
+                    clearable={true}
+                    prefix="₹"
                   />
                 )
               },
@@ -681,14 +667,17 @@ const EnhancedPurchaseEntry = ({ onClose, prefilledData = null }) => {
                 label: 'Disc%',
                 align: 'center',
                 render: (item, index) => (
-                  <input
-                    type="number"
-                    value={item.discount_percent || 0}
-                    onChange={(e) => handleUpdateItem(index, 'discount_percent', parseFloat(e.target.value) || 0)}
-                    className="w-12 text-center border-0 bg-transparent focus:ring-2 focus:ring-blue-500 rounded-md [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                    step="0.1"
-                    min="0"
-                    max="100"
+                  <NumericInput
+                    value={item.discount_percent}
+                    onChange={(value) => handleUpdateItem(index, 'discount_percent', value)}
+                    min={0}
+                    max={100}
+                    defaultValue={0}
+                    decimalPlaces={1}
+                    width="w-12"
+                    align="center"
+                    clearable={true}
+                    suffix="%"
                   />
                 )
               },
@@ -713,7 +702,12 @@ const EnhancedPurchaseEntry = ({ onClose, prefilledData = null }) => {
                 label: 'Total',
                 align: 'right',
                 render: (item) => {
-                  const total = (item.quantity || 0) * (item.purchase_price || 0) * (1 + (item.tax_percent || 0) / 100);
+                  const qty = parseFloat(item.quantity) || 0;
+                  const price = parseFloat(item.purchase_price) || 0;
+                  const taxPercent = parseFloat(item.tax_percent) || 0;
+                  const subtotal = qty * price;
+                  const tax = subtotal * (taxPercent / 100);
+                  const total = subtotal + tax;
                   return <span className="font-medium">₹{total.toFixed(2)}</span>;
                 }
               }

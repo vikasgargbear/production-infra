@@ -67,6 +67,7 @@ const SalesReturnFlow = ({ onClose }) => {
   const [invoicePage, setInvoicePage] = useState(1);
   const [invoicePagination, setInvoicePagination] = useState(null);
   const [showManualEntry, setShowManualEntry] = useState(false);
+  const [showInvoiceSection, setShowInvoiceSection] = useState(true);
   const [manualItemCounter, setManualItemCounter] = useState(1);
 
   // Load return reasons from system settings
@@ -380,6 +381,8 @@ const SalesReturnFlow = ({ onClose }) => {
     if (!customer) {
       setSelectedCustomer(null);
       setSelectedInvoice(null);
+      setShowInvoiceSection(true); // Reset to show invoice section
+      setShowManualEntry(false); // Reset manual entry
       setReturnData(prev => ({
         ...prev,
         customer_id: '',
@@ -392,6 +395,8 @@ const SalesReturnFlow = ({ onClose }) => {
     
     setSelectedCustomer(customer);
     setSelectedInvoice(null); // Reset invoice selection
+    setShowInvoiceSection(true); // Show invoice section for new customer
+    setShowManualEntry(false); // Reset manual entry
     setReturnData(prev => ({
       ...prev,
       customer_id: customer.id || customer.customer_id || customer.party_id,
@@ -421,6 +426,7 @@ const SalesReturnFlow = ({ onClose }) => {
   const handleSkipInvoiceSelection = () => {
     setSelectedInvoice(null);
     setShowManualEntry(true);
+    setShowInvoiceSection(false); // Hide invoice section to avoid clutter
     setReturnData(prev => ({
       ...prev,
       invoice_id: '',
@@ -802,8 +808,24 @@ const SalesReturnFlow = ({ onClose }) => {
                   />
                 </div>
 
-                {/* Invoice Section - Always visible */}
-                {selectedCustomer && (
+                {/* Show option to select invoice if skipped */}
+                {selectedCustomer && !showInvoiceSection && showManualEntry && (
+                  <div className="mb-4">
+                    <button
+                      onClick={() => {
+                        setShowInvoiceSection(true);
+                        setShowManualEntry(false);
+                        setReturnData(prev => ({ ...prev, items: [] }));
+                      }}
+                      className="text-sm text-blue-600 hover:text-blue-700 font-medium"
+                    >
+                      ← Back to Invoice Selection
+                    </button>
+                  </div>
+                )}
+
+                {/* Invoice Section - Show only when not skipped */}
+                {selectedCustomer && showInvoiceSection && (
                 <div>
                     <div className="flex items-center justify-between mb-4">
                       <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wider flex items-center">

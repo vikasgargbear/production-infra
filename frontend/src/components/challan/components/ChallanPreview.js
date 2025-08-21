@@ -115,30 +115,32 @@ const ChallanPreview = ({
         <div className="mb-8 grid grid-cols-2 gap-8">
           <div>
             <h3 className="text-xs font-medium text-gray-500 uppercase mb-2">Bill To:</h3>
-            <h4 className="font-semibold text-gray-900">{challan.customer_name}</h4>
+            <h4 className="font-semibold text-gray-900">{challan.customer_name || 'N/A'}</h4>
             {challan.customer_details && (
               <>
-                <p className="text-gray-600">{challan.customer_details.address}</p>
-                <p className="text-gray-600">{challan.customer_details.city}, {challan.customer_details.state}</p>
-                <p className="text-gray-600">Phone: {challan.customer_details.phone}</p>
+                <p className="text-gray-600">{challan.customer_details.address || ''}</p>
+                <p className="text-gray-600">{challan.customer_details.city || ''}, {challan.customer_details.state || ''}</p>
+                {challan.customer_details.phone && <p className="text-gray-600">Phone: {challan.customer_details.phone}</p>}
               </>
             )}
           </div>
           <div>
             <h3 className="text-xs font-medium text-gray-500 uppercase mb-2">Ship To:</h3>
-            {challan.delivery_address ? (
+            {(challan.delivery_address && challan.delivery_address.trim()) ? (
               <div className="text-gray-600">
-                <p className="font-medium">{challan.delivery_contact_person || challan.customer_name}</p>
+                <p className="font-medium">{challan.delivery_contact_person || challan.customer_name || 'N/A'}</p>
                 <p>{challan.delivery_address}</p>
-                <p>{challan.delivery_city}, {challan.delivery_state} {challan.delivery_pincode}</p>
+                <p>{[challan.delivery_city, challan.delivery_state, challan.delivery_pincode].filter(Boolean).join(', ')}</p>
                 {challan.delivery_contact_phone && <p>Phone: {challan.delivery_contact_phone}</p>}
               </div>
             ) : (
               <div className="text-gray-600">
-                <p className="font-medium">{challan.customer_name}</p>
-                <p>{challan.customer_details?.address}</p>
-                <p>{challan.customer_details?.city}, {challan.customer_details?.state} {challan.customer_details?.pincode}</p>
-                {challan.customer_details?.phone && <p>Phone: {challan.customer_details?.phone}</p>}
+                <p className="font-medium">{challan.customer_name || 'N/A'}</p>
+                {challan.customer_details?.address && <p>{challan.customer_details.address}</p>}
+                {(challan.customer_details?.city || challan.customer_details?.state || challan.customer_details?.pincode) && (
+                  <p>{[challan.customer_details?.city, challan.customer_details?.state, challan.customer_details?.pincode].filter(Boolean).join(', ')}</p>
+                )}
+                {challan.customer_details?.phone && <p>Phone: {challan.customer_details.phone}</p>}
               </div>
             )}
           </div>
