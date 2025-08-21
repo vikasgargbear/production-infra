@@ -13,10 +13,29 @@ import uuid
 
 from ...core.database import get_db
 from ...core.config import DEFAULT_ORG_ID
+from ..services.document_number_service import DocumentNumberService
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/sale-returns", tags=["sale-returns"])
+
+@router.get("/generate-number")
+async def generate_sales_return_number(
+    db: Session = Depends(get_db),
+    org_id: str = DEFAULT_ORG_ID
+):
+    """Generate next sales return number using unified service"""
+    try:
+        # Use unified document number service
+        new_number = DocumentNumberService.generate_number(db, "sales_return", org_id)
+        return {"return_number": new_number}
+    except Exception as e:
+        logger.error(f"Failed to generate sales return number: {e}")
+        # Use service's fallback mechanism  
+        current_year = datetime.now().year % 100
+        timestamp = int(datetime.now().timestamp() * 1000) % 1000000
+        fallback_number = f"SRN-{current_year:02d}{timestamp:06d}"
+        return {"return_number": fallback_number}
 
 @router.get("/")
 async def get_sale_returns(
@@ -250,9 +269,9 @@ async def create_sale_return(
                 detail="At least one item must be returned"
             )
             
-        # Generate return number with invoice reference
+        # Generate return number using unified service
         invoice_id = return_data.get("invoice_id", "")
-        return_number = f"SR-{datetime.now().strftime('%Y%m%d-%H%M%S')}-INV{invoice_id}"
+        return_number = DocumentNumberService.generate_number(db, "sales_return", org_id)
         
         # Get customer details to check for GST
         customer = db.execute(

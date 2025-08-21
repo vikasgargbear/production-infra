@@ -12,6 +12,7 @@ from datetime import date
 from ...core.database import get_db
 from ...models import Purchase
 from ...core.crud_base import create_crud
+from ..services.document_number_service import DocumentNumberService
 
 logger = logging.getLogger(__name__)
 
@@ -22,51 +23,19 @@ purchase_crud = create_crud(Purchase)
 
 @router.get("/generate-number")
 def generate_purchase_number(db: Session = Depends(get_db)):
-    """Generate next purchase number"""
+    """Generate next purchase number using unified service"""
     try:
-        # Get current year
-        from datetime import datetime
-        current_year = datetime.now().year
-        
-        # Get the latest purchase number for this year
-        result = db.execute(
-            text("""
-                SELECT po_number 
-                FROM procurement.purchase_orders 
-                WHERE po_number LIKE :pattern
-                ORDER BY purchase_order_id DESC 
-                LIMIT 1
-            """),
-            {"pattern": f"PO-{current_year}-%"}
-        )
-        
-        latest = result.first()
-        
-        if latest and latest[0]:
-            # Extract sequence number and increment
-            parts = latest[0].split('-')
-            if len(parts) == 3:
-                try:
-                    sequence = int(parts[2]) + 1
-                except ValueError:
-                    sequence = 1
-            else:
-                sequence = 1
-        else:
-            sequence = 1
-        
-        # Generate new purchase number with larger starting sequence
-        # Start from 1000 to make numbers appear larger
-        display_sequence = 1000 + sequence - 1
-        new_number = f"PO-{current_year}-{display_sequence:04d}"
-        
+        # Use unified document number service
+        new_number = DocumentNumberService.generate_number(db, "purchase_order")
         return {"po_number": new_number}
-        
     except Exception as e:
         logger.error(f"Error generating purchase number: {str(e)}")
-        # Fallback number generation
+        # Use service's fallback mechanism
+        from datetime import datetime
         import time
-        fallback_number = f"PO-{current_year}-{int(time.time()) % 10000:04d}"
+        current_year = datetime.now().year % 100
+        timestamp = int(time.time() * 1000) % 1000000
+        fallback_number = f"PO-{current_year:02d}{timestamp:06d}"
         return {"po_number": fallback_number}
 
 @router.get("/")

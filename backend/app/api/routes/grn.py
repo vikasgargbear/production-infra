@@ -13,6 +13,7 @@ from uuid import UUID
 from ...core.database import get_db
 from ...core.config import DEFAULT_ORG_ID
 from ...dependencies import get_current_org_id, get_current_user_id
+from ..services.document_number_service import DocumentNumberService
 
 logger = logging.getLogger(__name__)
 
@@ -23,48 +24,17 @@ def generate_grn_number(
     db: Session = Depends(get_db),
     org_id: str = Depends(get_current_org_id)
 ):
-    """Generate next GRN number"""
+    """Generate next GRN number using unified service"""
     try:
-        # Get current year
-        current_year = datetime.now().year
-        
-        # Get the latest GRN number for this year and organization
-        result = db.execute(
-            text("""
-                SELECT grn_number 
-                FROM procurement.goods_receipt_notes 
-                WHERE org_id = :org_id 
-                AND grn_number LIKE :pattern
-                ORDER BY grn_id DESC 
-                LIMIT 1
-            """),
-            {"org_id": org_id, "pattern": f"GRN-{current_year}-%"}
-        )
-        
-        latest = result.first()
-        
-        if latest and latest[0]:
-            # Extract sequence number and increment
-            parts = latest[0].split('-')
-            if len(parts) == 3:
-                try:
-                    sequence = int(parts[2]) + 1
-                    # Start from 100000 to make numbers appear larger
-                    display_sequence = 100000 + sequence - 1
-                    new_number = f"GRN-{current_year}-{display_sequence:06d}"
-                    return {"grn_number": new_number}
-                except ValueError:
-                    pass
-        
-        # Start with first number for the year (starting from 100000)
-        new_number = f"GRN-{current_year}-100000"
+        # Use unified document number service
+        new_number = DocumentNumberService.generate_number(db, "grn", org_id)
         return {"grn_number": new_number}
-        
     except Exception as e:
         logger.error(f"Failed to generate GRN number: {e}")
-        # Fallback to timestamp-based generation
+        # Use service's fallback mechanism
+        current_year = datetime.now().year % 100
         timestamp = int(datetime.now().timestamp() * 1000) % 1000000
-        fallback_number = f"GRN-{current_year}-{timestamp:06d}"
+        fallback_number = f"GRN-{current_year:02d}{timestamp:06d}"
         return {"grn_number": fallback_number}
 
 @router.post("")

@@ -12,6 +12,7 @@ import logging
 
 from ...core.database import get_db
 from ...core.config import DEFAULT_ORG_ID
+from ..services.document_number_service import DocumentNumberService
 from ..schemas.order import (
     OrderCreate, OrderResponse, OrderListResponse, InvoiceRequest,
     InvoiceResponse, DeliveryUpdate, OrderUpdate
@@ -23,6 +24,24 @@ from ..services.invoice_service import InvoiceService
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/sales-orders", tags=["sales-orders"])
+
+@router.get("/generate-number")
+async def generate_sales_order_number(
+    db: Session = Depends(get_db),
+    org_id: str = DEFAULT_ORG_ID
+):
+    """Generate next sales order number using unified service"""
+    try:
+        # Use unified document number service
+        new_number = DocumentNumberService.generate_number(db, "sales_order", org_id)
+        return {"order_number": new_number}
+    except Exception as e:
+        logger.error(f"Failed to generate sales order number: {e}")
+        # Use service's fallback mechanism
+        current_year = datetime.now().year % 100
+        timestamp = int(datetime.now().timestamp() * 1000) % 1000000
+        fallback_number = f"SO-{current_year:02d}{timestamp:06d}"
+        return {"order_number": fallback_number}
 
 @router.get("/employees")
 async def get_employees_for_created_by(

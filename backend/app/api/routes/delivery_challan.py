@@ -10,10 +10,28 @@ import logging
 from datetime import date, datetime
 
 from ...core.database import get_db
+from ..services.document_number_service import DocumentNumberService
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/delivery-challan", tags=["delivery-challan"])
+
+@router.get("/generate-number")
+def generate_delivery_challan_number(
+    db: Session = Depends(get_db)
+):
+    """Generate next delivery challan number using unified service"""
+    try:
+        # Use unified document number service
+        new_number = DocumentNumberService.generate_number(db, "delivery_challan")
+        return {"challan_number": new_number}
+    except Exception as e:
+        logger.error(f"Failed to generate challan number: {e}")
+        # Use service's fallback mechanism
+        current_year = datetime.now().year % 100
+        timestamp = int(datetime.now().timestamp() * 1000) % 1000000
+        fallback_number = f"DC-{current_year:02d}{timestamp:06d}"
+        return {"challan_number": fallback_number}
 
 @router.get("/")
 def get_delivery_challans(

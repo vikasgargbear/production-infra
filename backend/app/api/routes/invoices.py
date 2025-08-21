@@ -10,11 +10,29 @@ import time
 from typing import Optional
 
 from ...core.database import get_db
+from ..services.document_number_service import DocumentNumberService
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/invoices", tags=["Invoices"])
 
 ACTUAL_ORG_ID = "ad808530-1ddb-4377-ab20-67bef145d80d"
+
+@router.get("/generate-number")
+async def generate_invoice_number(
+    db: Session = Depends(get_db)
+):
+    """Generate next invoice number using unified service"""
+    try:
+        # Use unified document number service
+        new_number = DocumentNumberService.generate_number(db, "invoice", ACTUAL_ORG_ID)
+        return {"invoice_number": new_number}
+    except Exception as e:
+        logger.error(f"Failed to generate invoice number: {e}")
+        # Use service's fallback mechanism
+        current_year = datetime.now().year % 100
+        timestamp = int(datetime.now().timestamp() * 1000) % 1000000
+        fallback_number = f"INV-{current_year:02d}{timestamp:06d}"
+        return {"invoice_number": fallback_number}
 
 @router.post("/simple")
 async def create_invoice_simple(
@@ -177,14 +195,8 @@ async def create_invoice(
         })
         order_id = order_create.scalar()
         
-        # Step 5: Generate invoice number
-        inv_result = db.execute(text("""
-            SELECT COALESCE(MAX(CAST(SUBSTRING(invoice_number FROM '[0-9]+') AS INTEGER)), 0) + 1
-            FROM sales.invoices
-            WHERE org_id = :org_id
-        """), {"org_id": ACTUAL_ORG_ID})
-        inv_num = inv_result.scalar() or 1
-        invoice_number = f"INV-{inv_num:06d}"
+        # Step 5: Generate invoice number using unified service
+        invoice_number = DocumentNumberService.generate_number(db, "invoice", ACTUAL_ORG_ID)
         
         # Step 6: Get customer name for invoice
         cust_result = db.execute(text("""

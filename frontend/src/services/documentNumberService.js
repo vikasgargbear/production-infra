@@ -90,11 +90,11 @@ class DocumentNumberService {
   }
 
   /**
-   * Generate Return Number
+   * Generate Return Number (for generic returns)
    */
   async generateReturnNumber() {
     try {
-      const response = await apiClient.get('/returns/generate-number');
+      const response = await apiClient.get('/sale-returns/generate-number');
       if (response?.data?.return_number) {
         return response.data.return_number;
       }
@@ -104,8 +104,8 @@ class DocumentNumberService {
     
     // Fallback to client-side generation
     const timestamp = Date.now();
-    const year = new Date().getFullYear();
-    return `RET-${year}-${timestamp.toString().slice(-6)}`;
+    const year = new Date().getFullYear() % 100;
+    return `SRN-${year.toString().padStart(2, '0')}${timestamp.toString().slice(-6)}`;
   }
 
   /**
@@ -113,7 +113,7 @@ class DocumentNumberService {
    */
   async generateSalesReturnNumber() {
     try {
-      const response = await apiClient.get('/sales-returns/generate-number');
+      const response = await apiClient.get('/sale-returns/generate-number');
       if (response?.data?.return_number) {
         return response.data.return_number;
       }
@@ -123,8 +123,8 @@ class DocumentNumberService {
     
     // Fallback to client-side generation
     const timestamp = Date.now();
-    const year = new Date().getFullYear();
-    return `SRN-${year}-${timestamp.toString().slice(-6)}`;
+    const year = new Date().getFullYear() % 100;
+    return `SRN-${year.toString().padStart(2, '0')}${timestamp.toString().slice(-6)}`;
   }
 
   /**
@@ -132,7 +132,7 @@ class DocumentNumberService {
    */
   async generateChallanNumber() {
     try {
-      const response = await apiClient.get('/challans/generate-number');
+      const response = await apiClient.get('/delivery-challan/generate-number');
       if (response?.data?.challan_number) {
         return response.data.challan_number;
       }
@@ -142,8 +142,8 @@ class DocumentNumberService {
     
     // Fallback to client-side generation
     const timestamp = Date.now();
-    const year = new Date().getFullYear();
-    return `DC-${year}-${timestamp.toString().slice(-6)}`;
+    const year = new Date().getFullYear() % 100;
+    return `DC-${year.toString().padStart(2, '0')}${timestamp.toString().slice(-6)}`;
   }
 
   /**
