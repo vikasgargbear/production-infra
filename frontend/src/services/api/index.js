@@ -24,6 +24,7 @@ import { batchesApi } from './modules/batches.api';
 import { deliveryApi } from './modules/delivery.api';
 import { ledgerApi } from './modules/ledger.api';
 import { notesApi } from './modules/notes.api';
+import { purchasesApi } from './modules/purchases.api';
 import { returnsApi } from './modules/returns.api';
 import { stockApi } from './modules/stock.api';
 import { salesApi } from './modules/sales.api';
@@ -61,6 +62,7 @@ export {
   deliveryApi,
   ledgerApi,
   notesApi,
+  purchasesApi,
   returnsApi,
   stockApi,
   salesApi,
@@ -82,7 +84,7 @@ export {
   productAPI as productsApi,
   supplierAPI as suppliersApi,
   invoiceAPI as invoicesApi,
-  purchasesAPI as purchasesApi,
+  purchasesAPI as purchasesAPIAlias,  // Renamed to avoid conflict with modules/purchases.api
   purchasesAPI as purchaseApi,
   ordersAPI as ordersApi,
   paymentAPI as paymentsApi,
