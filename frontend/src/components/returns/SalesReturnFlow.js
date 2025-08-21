@@ -768,67 +768,64 @@ const SalesReturnFlow = ({ onClose }) => {
                 </div>
               </div>
 
-              {/* Customer Selection */}
+              {/* Customer & Invoice Selection */}
               <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-                <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wider mb-4 flex items-center">
-                  <User className="w-4 h-4 mr-2" />
-                  CUSTOMER
-                </h3>
-                {!selectedCustomer ? (
-                  <CustomerSearch
-                    ref={customerSearchRef}
-                    onChange={handleCustomerSelect}
-                    placeholder="Search customer by name, phone..."
-                    className="w-full"
-                    showCreateButton={true}
-                    onCreateNew={() => setShowCustomerModal(true)}
-                  />
-                ) : (
-                  <div className="bg-gray-50 rounded-lg p-4 flex justify-between items-start border border-gray-200">
-                    <div>
-                      <h4 className="font-semibold text-gray-900">{selectedCustomer.customer_name || selectedCustomer.name}</h4>
-                      <p className="text-sm text-gray-600">{selectedCustomer.phone}</p>
-                      <p className="text-sm text-gray-600">{selectedCustomer.address}</p>
+                {/* Customer Section */}
+                <div className="mb-6">
+                  <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wider mb-4 flex items-center">
+                    <User className="w-4 h-4 mr-2" />
+                    CUSTOMER
+                  </h3>
+                  {!selectedCustomer ? (
+                    <CustomerSearch
+                      ref={customerSearchRef}
+                      onChange={handleCustomerSelect}
+                      placeholder="Search customer by name, phone..."
+                      className="w-full"
+                      showCreateButton={true}
+                      onCreateNew={() => setShowCustomerModal(true)}
+                    />
+                  ) : (
+                    <div className="bg-gray-50 rounded-lg p-4 flex justify-between items-start border border-gray-200">
+                      <div>
+                        <h4 className="font-semibold text-gray-900">{selectedCustomer.customer_name || selectedCustomer.name}</h4>
+                        <p className="text-sm text-gray-600">{selectedCustomer.phone}</p>
+                        <p className="text-sm text-gray-600">{selectedCustomer.address}</p>
+                      </div>
+                      <button
+                        onClick={() => {
+                          setSelectedCustomer(null);
+                          setSelectedInvoice(null);
+                          setReturnData(prev => ({
+                            ...prev,
+                            customer_id: '',
+                            customer_details: null,
+                            invoice_id: '',
+                            items: []
+                          }));
+                        }}
+                        className="text-red-600 hover:text-red-700"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
                     </div>
-                    <button
-                      onClick={() => {
-                        setSelectedCustomer(null);
-                        setSelectedInvoice(null);
-                        setReturnData(prev => ({
-                          ...prev,
-                          customer_id: '',
-                          customer_details: null,
-                          invoice_id: '',
-                          items: []
-                        }));
-                      }}
-                      className="text-red-600 hover:text-red-700"
-                    >
-                      <X className="w-4 h-4" />
-                    </button>
-                  </div>
-                )}
-              </div>
+                  )}
+                </div>
 
-              {/* Invoice Selection */}
-              {selectedCustomer && (
-                <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+                {/* Invoice Section - Always visible */}
+                {selectedCustomer && (
+                <div>
                     <div className="flex items-center justify-between mb-4">
                       <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wider flex items-center">
                         <FileText className="w-4 h-4 mr-2" />
                         SELECT INVOICE
                       </h3>
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs text-gray-500">or</span>
-                        <button
-                          onClick={handleSkipInvoiceSelection}
-                          className="px-4 py-2 text-sm font-medium text-gray-600 bg-gray-100 border border-gray-300 rounded-lg hover:bg-gray-200 hover:text-gray-700 transition-colors flex items-center gap-2"
-                          title="Create a return without selecting an invoice"
-                        >
-                          <Plus className="w-4 h-4" />
-                          Manual Return Entry
-                        </button>
-                      </div>
+                      <button
+                        onClick={handleSkipInvoiceSelection}
+                        className="px-4 py-2 text-sm font-medium text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+                      >
+                        Skip Invoice Selection
+                      </button>
                     </div>
                     
                     {/* Show selected invoice if any */}
@@ -866,9 +863,23 @@ const SalesReturnFlow = ({ onClose }) => {
                       <div>
                         {/* Filters */}
                         <div className="bg-gray-50 rounded-lg p-4 mb-4">
-                          <div className="flex items-center gap-2 mb-3">
-                            <Search className="w-4 h-4 text-gray-600" />
-                            <span className="text-sm font-medium text-gray-700">Filter Invoices</span>
+                          <div className="flex items-center justify-between mb-3">
+                            <div className="flex items-center gap-2">
+                              <Search className="w-4 h-4 text-gray-600" />
+                              <span className="text-sm font-medium text-gray-700">Filter Invoices</span>
+                            </div>
+                            <button
+                              onClick={() => setInvoiceFilters({
+                                dateFrom: '',
+                                dateTo: '',
+                                status: 'all',
+                                minAmount: '',
+                                maxAmount: ''
+                              })}
+                              className="px-3 py-1 text-sm text-gray-600 border border-gray-300 rounded hover:bg-white transition-colors"
+                            >
+                              Clear Filters
+                            </button>
                           </div>
                           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                             <div>
@@ -1019,13 +1030,13 @@ const SalesReturnFlow = ({ onClose }) => {
                   </div>
                 </div>
               )}
-
+              </div>
 
               {/* Return Items - Show when invoice is selected or manual entry */}
-              {selectedCustomer && (selectedInvoice || showManualEntry) && (
+              {(selectedInvoice || showManualEntry) && (
                 <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
                   {/* GST and Credit Options - Compact Bar */}
-                  {returnData.items.length > 0 && returnData.items.some(item => item.selected) && (
+                  {returnData.items && returnData.items.length > 0 && (
                     <div className="mb-4 p-3 bg-gray-50 rounded-lg border border-gray-200">
                       <div className="flex items-center justify-between">
                         {/* GST Toggle */}

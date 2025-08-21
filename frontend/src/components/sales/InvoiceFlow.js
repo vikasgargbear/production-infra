@@ -16,7 +16,7 @@ import InvoiceValidator from '../../services/invoiceValidator';
 import DataTransformer from '../../services/dataTransformer';
 import DateFormatter from '../../services/dateFormatter';
 import InvoiceApiService from '../../services/invoiceApiService';
-import { ProductSearchSimple, ItemsTable, ModuleHeader, CustomerSearch, ProductCreationModal, ViewHistoryButton, GSTCalculator, DocumentFooter, GenericSuccessModal, AddressFormEnhanced } from '../global';
+import { ProductSearchSimple, ItemsTable, ModuleHeader, CustomerSearch, ProductCreationModal, ViewHistoryButton, GSTCalculator, DocumentFooter, GenericSuccessModal, AddressForm, NotesSection } from '../global';
 import CustomerCreationB2B from '../global/ui/forms/CustomerCreationB2B';
 import { useCompany } from '../../contexts/CompanyContext';
 // import InvoiceSuccessModal from './InvoiceSuccessModal'; // Replaced with GenericSuccessModal
@@ -1531,17 +1531,17 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
           {selectedCustomer && (
             <div className="max-w-6xl mx-auto mb-6">
               <div className="grid grid-cols-2 gap-4">
-                <AddressFormEnhanced
-                  customer={selectedCustomer}
-                  addressData={invoice.billing_address_data}
+                <AddressForm
+                  title="Billing Address"
                   addressType="billing"
-                  onChange={(address) => setInvoice(prev => ({ ...prev, billing_address: address }))}
-                  onSave={(addressData) => setInvoice(prev => ({ ...prev, billing_address_data: addressData }))}
-                />
-                <AddressFormEnhanced
                   customer={selectedCustomer}
-                  addressData={invoice.shipping_address_data}
+                  readonly={true}
+                  className=""
+                />
+                <AddressForm
+                  title="Shipping Address"
                   addressType="shipping"
+                  customer={selectedCustomer}
                   sameAsBilling={sameAsShipping}
                   onSameAsBillingChange={(same) => {
                     setSameAsShipping(same);

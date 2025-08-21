@@ -38,6 +38,20 @@ class SearchCache {
     });
   }
 
+  // Set preloaded items (alias for createIndex + storing in preloadedData)
+  setItems(type, data) {
+    if (!data || !Array.isArray(data)) return;
+    
+    // Store in preloaded data
+    this.preloadedData.set(type, data);
+    
+    // Create search index
+    this.createIndex(type, data);
+    
+    // Also cache as "all" for quick access
+    this.set(type, 'all', data);
+  }
+
   // Create search index for fast client-side search
   createIndex(type, data) {
     const index = new Map();

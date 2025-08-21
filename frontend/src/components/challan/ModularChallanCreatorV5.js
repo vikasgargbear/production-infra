@@ -3,7 +3,7 @@ import {
   Truck, Calendar, ArrowRight,
   CheckCircle, MessageCircle, FileInput, Printer, User, MapPin, Package
 } from 'lucide-react';
-import { ModuleHeader, CustomerSearch, ProductSearchSimple, ItemsTable, DocumentFooter, ProductCreationModal, NotesSection } from '../global';
+import { ModuleHeader, CustomerSearch, ProductSearchSimple, ItemsTable, DocumentFooter, ProductCreationModal, NotesSection, AddressForm } from '../global';
 import CustomerCreationB2B from '../global/ui/forms/CustomerCreationB2B';
 // NotesSection is now imported from global
 import ChallanPreview from './components/ChallanPreview';
@@ -609,93 +609,7 @@ Expected Delivery: ${challan.expected_delivery_date}
                 />
               </div>
 
-              {/* Compact Address Section - Only show after customer selection */}
-              {selectedCustomer && (
-                <div className="mb-4 p-3 bg-blue-50 rounded-lg border border-blue-200">
-                  <div className="flex items-center justify-between mb-2">
-                    <h3 className="text-xs font-semibold text-blue-700 uppercase tracking-wider flex items-center">
-                      <MapPin className="w-4 h-4 mr-2" />
-                      DELIVERY ADDRESS
-                    </h3>
-                    <label className="flex items-center text-xs">
-                      <input
-                        type="checkbox"
-                        checked={sameAsBilling}
-                        onChange={(e) => {
-                          setSameAsBilling(e.target.checked);
-                          if (e.target.checked && selectedCustomer) {
-                            // Copy billing address to delivery
-                            setChallan(prev => ({
-                              ...prev,
-                              delivery_address: selectedCustomer.address || '',
-                              delivery_city: selectedCustomer.city || '',
-                              delivery_state: selectedCustomer.state || '',
-                              delivery_pincode: selectedCustomer.pincode || '',
-                              delivery_contact_person: selectedCustomer.contact_person || selectedCustomer.customer_name,
-                              delivery_contact_phone: selectedCustomer.phone || ''
-                            }));
-                          }
-                        }}
-                        className="mr-2 h-3 w-3 text-blue-600"
-                      />
-                      <span className="text-gray-600">Same as billing address</span>
-                    </label>
-                  </div>
-                  
-                  {/* Show full address if same as billing, otherwise show editable fields */}
-                  {sameAsBilling && selectedCustomer ? (
-                    <div className="text-sm text-gray-600">
-                      {fetchingAddress ? (
-                        <p className="truncate text-blue-600">
-                          {selectedCustomer.customer_name} - Fetching address...
-                        </p>
-                      ) : (
-                        <p className="truncate">
-                          {selectedCustomer.customer_name} - {selectedCustomer.address || 'No address'}, {selectedCustomer.city || ''}, {selectedCustomer.state || ''} {selectedCustomer.pincode || ''}
-                        </p>
-                      )}
-                    </div>
-                  ) : (
-                    <div className="grid grid-cols-2 gap-2">
-                      <input
-                        type="text"
-                        value={challan.delivery_address}
-                        onChange={(e) => setChallan(prev => ({ ...prev, delivery_address: e.target.value }))}
-                        className="col-span-2 px-2 py-1.5 text-sm border border-gray-300 rounded"
-                        placeholder="Street address"
-                      />
-                      <input
-                        type="text"
-                        value={challan.delivery_city}
-                        onChange={(e) => setChallan(prev => ({ ...prev, delivery_city: e.target.value }))}
-                        className="px-2 py-1.5 text-sm border border-gray-300 rounded"
-                        placeholder="City"
-                      />
-                      <input
-                        type="text"
-                        value={challan.delivery_state}
-                        onChange={(e) => setChallan(prev => ({ ...prev, delivery_state: e.target.value }))}
-                        className="px-2 py-1.5 text-sm border border-gray-300 rounded"
-                        placeholder="State"
-                      />
-                      <input
-                        type="text"
-                        value={challan.delivery_pincode}
-                        onChange={(e) => setChallan(prev => ({ ...prev, delivery_pincode: e.target.value }))}
-                        className="px-2 py-1.5 text-sm border border-gray-300 rounded"
-                        placeholder="PIN"
-                      />
-                      <input
-                        type="tel"
-                        value={challan.delivery_contact_phone}
-                        onChange={(e) => setChallan(prev => ({ ...prev, delivery_contact_phone: e.target.value }))}
-                        className="px-2 py-1.5 text-sm border border-gray-300 rounded"
-                        placeholder="Phone"
-                      />
-                    </div>
-                  )}
-                </div>
-              )}
+              {/* Address will now be shown in review step like invoice flow */}
 
               {/* Products Section */}
               <div className="mb-6">
@@ -892,6 +806,67 @@ Expected Delivery: ${challan.expected_delivery_date}
               </div>
             </div>
             
+            {/* Address Section - Now shown in review step like invoice flow */}
+            {selectedCustomer && (
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+                {/* Billing Address */}
+                <AddressForm
+                  title="Billing Address"
+                  addressType="billing"
+                  customer={selectedCustomer}
+                  readonly={true}
+                  className=""
+                />
+                
+                {/* Delivery Address */}
+                <AddressForm
+                  title="Delivery Address"
+                  addressType="shipping"
+                  customer={selectedCustomer}
+                  sameAsBilling={sameAsBilling}
+                  onSameAsBillingChange={(checked) => {
+                    setSameAsBilling(checked);
+                    if (checked && selectedCustomer) {
+                      // Copy billing address to delivery
+                      setChallan(prev => ({
+                        ...prev,
+                        delivery_address: selectedCustomer.address || '',
+                        delivery_city: selectedCustomer.city || '',
+                        delivery_state: selectedCustomer.state || '',
+                        delivery_pincode: selectedCustomer.pincode || '',
+                        delivery_contact_person: selectedCustomer.contact_person || selectedCustomer.customer_name,
+                        delivery_contact_phone: selectedCustomer.phone || ''
+                      }));
+                    }
+                  }}
+                  addressData={{
+                    address_line1: challan.delivery_address,
+                    city: challan.delivery_city,
+                    state: challan.delivery_state,
+                    pincode: challan.delivery_pincode,
+                    contact_person: challan.delivery_contact_person,
+                    contact_phone: challan.delivery_contact_phone
+                  }}
+                  onChange={(addressString) => {
+                    // Parse the address string back to individual fields if needed
+                    // For now, just store the complete address
+                    setChallan(prev => ({ ...prev, delivery_address: addressString }));
+                  }}
+                  onSave={(addressData) => {
+                    setChallan(prev => ({
+                      ...prev,
+                      delivery_address: addressData.address_line1,
+                      delivery_city: addressData.city,
+                      delivery_state: addressData.state,
+                      delivery_pincode: addressData.pincode,
+                      delivery_contact_person: addressData.contact_person,
+                      delivery_contact_phone: addressData.contact_phone
+                    }));
+                  }}
+                />
+              </div>
+            )}
+            
             <ChallanPreview 
               challan={challan}
               companyInfo={{
@@ -905,14 +880,16 @@ Expected Delivery: ${challan.expected_delivery_date}
               }}
             />
             
-            {/* Notes Section - Moved to bottom */}
-            <div className="bg-white rounded-lg border border-blue-200 p-4 mt-6">
+            {/* Notes Section - Using compact global component */}
+            <div className="bg-white rounded-lg border border-gray-200 p-4 mt-6">
               <NotesSection
                 value={challan.notes}
                 onChange={(value) => setChallan(prev => ({ ...prev, notes: value }))}
                 placeholder="Add delivery instructions or special notes..."
                 rows={2}
-                label="Notes"
+                title="Notes"
+                compact={true}
+                className=""
               />
             </div>
           </div>

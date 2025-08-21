@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback, forwardRef, useImperativeHandle } from 'react';
-import { Search, Building2, Plus, X, Loader2 } from 'lucide-react';
+import { Search, Building2, Plus, X, Loader2, User, Phone, Mail, MapPin } from 'lucide-react';
 import { supplierAPI } from '../../../services/api';
 import { AddNewButton } from '../ui';
 import DataTransformer from '../../../services/dataTransformer';
@@ -180,7 +180,7 @@ const SupplierSearch = forwardRef(({
           </div>
         ) : (
           <div className="flex items-center justify-between p-2 bg-green-50 rounded-lg border border-green-200">
-            <span className="text-sm font-medium text-green-900">{selectedSupplier.supplier_name}</span>
+            <span className="text-sm font-medium text-green-900">{selectedSupplier.supplier_name || selectedSupplier.name}</span>
             {clearable && (
               <button onClick={handleClearSupplier} className="text-green-600 hover:text-green-700">
                 <X className="w-4 h-4" />
@@ -289,23 +289,70 @@ const SupplierSearch = forwardRef(({
             />
           </div>
         ) : (
-          <div className="p-3 bg-green-50 rounded-lg border border-green-200">
+          <div className="bg-gray-50 rounded-lg p-4">
             <div className="flex justify-between items-start">
-              <div>
-                <p className="font-medium text-green-900">{selectedSupplier.supplier_name}</p>
-                {selectedSupplier.phone && <p className="text-sm text-green-700">Phone: {selectedSupplier.phone}</p>}
-                {selectedSupplier.gst_number && <p className="text-sm text-green-700">GST: {selectedSupplier.gst_number}</p>}
-                {selectedSupplier.address && <p className="text-sm text-green-700">{selectedSupplier.address}</p>}
+              <div className="flex-1">
+                {/* Business/Supplier Name */}
+                <div className="flex items-center gap-2 mb-1">
+                  <Building2 className="w-4 h-4 text-blue-600" />
+                  <p className="font-medium text-gray-900">{selectedSupplier.supplier_name || selectedSupplier.name}</p>
+                </div>
+                
+                <div className="text-sm text-gray-600 space-y-0.5 ml-6">
+                  {/* Contact Person */}
+                  {selectedSupplier.contact_person && (
+                    <p className="flex items-center gap-1">
+                      <User className="w-3 h-3" /> 
+                      <span className="font-medium">Contact:</span> {selectedSupplier.contact_person}
+                    </p>
+                  )}
+                  
+                  {/* Phone Number */}
+                  {(selectedSupplier.phone || selectedSupplier.contact_phone) && (
+                    <p className="flex items-center gap-1">
+                      <Phone className="w-3 h-3" /> {selectedSupplier.phone || selectedSupplier.contact_phone}
+                    </p>
+                  )}
+                  
+                  {/* Email */}
+                  {selectedSupplier.email && (
+                    <p className="flex items-center gap-1">
+                      <Mail className="w-3 h-3" /> {selectedSupplier.email}
+                    </p>
+                  )}
+                  
+                  {/* Compact Address - City, State only */}
+                  {(selectedSupplier.city || selectedSupplier.state) && (
+                    <p className="flex items-center gap-1">
+                      <MapPin className="w-3 h-3" /> 
+                      {selectedSupplier.city}{selectedSupplier.state ? `, ${selectedSupplier.state}` : ''}
+                    </p>
+                  )}
+                </div>
               </div>
-              {clearable && (
-                <button
-                  onClick={handleClearSupplier}
-                  className="text-green-600 hover:text-green-700"
-                >
-                  <X className="w-4 h-4" />
-                </button>
-              )}
+              
+              {/* GST Status Badge */}
+              <div className="ml-3">
+                {selectedSupplier.gst_number ? (
+                  <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-700">
+                    ✓ GST Verified
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-600">
+                    No GST
+                  </span>
+                )}
+              </div>
             </div>
+            {clearable && (
+              <button
+                type="button"
+                onClick={handleClearSupplier}
+                className="mt-3 text-sm text-red-600 hover:text-red-700 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-opacity-50 rounded px-2 py-1"
+              >
+                Remove Supplier
+              </button>
+            )}
           </div>
         )}
 
