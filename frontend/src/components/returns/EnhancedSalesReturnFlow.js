@@ -608,6 +608,20 @@ const EnhancedSalesReturnFlow = ({ onClose }) => {
 
         {/* Customer Selection */}
         <div className="mb-6">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wider flex items-center">
+              <User className="w-4 h-4 mr-2" />
+              CUSTOMER
+            </h3>
+            {!selectedCustomer && (
+              <button
+                onClick={() => setShowCustomerModal(true)}
+                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors text-sm font-medium"
+              >
+                Create Customer
+              </button>
+            )}
+          </div>
           {!selectedCustomer ? (
             <CustomerSearch
               ref={customerSearchRef}
@@ -832,9 +846,17 @@ const EnhancedSalesReturnFlow = ({ onClose }) => {
           
           <div className="space-y-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Search Products
-              </label>
+              <div className="flex items-center justify-between mb-2">
+                <label className="block text-sm font-medium text-gray-700">
+                  Search Products
+                </label>
+                <button
+                  onClick={() => console.log('Product creation not yet implemented')}
+                  className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors text-sm font-medium"
+                >
+                  Create Product
+                </button>
+              </div>
               <ProductSearchSimple
                 onAddItem={addManualItem}
                 onCreateProduct={(searchQuery) => {

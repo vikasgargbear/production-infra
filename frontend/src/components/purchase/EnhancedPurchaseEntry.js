@@ -331,8 +331,8 @@ const EnhancedPurchaseEntry = ({ onClose, prefilledData = null }) => {
         toast.success('PDF data extracted successfully!');
       }
     } catch (error) {
-      console.error('Error extracting PDF:', error);
-      toast.error('Failed to extract PDF data. Please enter manually.');
+      console.error('Error uploading PDF:', error);
+      toast.error('Failed to parse PDF. Please try again.');
     }
   };
 
@@ -350,25 +350,12 @@ const EnhancedPurchaseEntry = ({ onClose, prefilledData = null }) => {
             </div>
           </div>
           <div>
-            <input
-              type="file"
-              accept="application/pdf"
-              onChange={async (e) => {
-                const file = e.target.files[0];
-                if (file) {
-                  await handlePDFUpload(file);
-                }
-                e.target.value = ''; // Reset input
-              }}
-              className="hidden"
-              id="pdf-upload-input"
-            />
-            <label
-              htmlFor="pdf-upload-input"
-              className="px-4 py-2 bg-purple-600 text-white text-sm rounded-lg hover:bg-purple-700 transition-colors cursor-pointer inline-block"
+            <button
+              onClick={() => setShowPDFUpload(true)}
+              className="px-4 py-2 bg-purple-600 text-white text-sm rounded-lg hover:bg-purple-700 transition-colors"
             >
               Upload PDF
-            </label>
+            </button>
           </div>
         </div>
       </div>
@@ -653,13 +640,7 @@ const EnhancedPurchaseEntry = ({ onClose, prefilledData = null }) => {
         reviewContent={reviewContent}
         
         // Additional actions for header
-        additionalActions={[
-          {
-            label: "Upload PDF",
-            onClick: () => setShowPDFUpload(true),
-            variant: "default"
-          }
-        ]}
+        additionalActions={[]}
         
         // Validation & Actions
         canProceedToReview={() => {
@@ -733,13 +714,39 @@ const EnhancedPurchaseEntry = ({ onClose, prefilledData = null }) => {
           isOpen={showPDFUpload}
           onClose={() => setShowPDFUpload(false)}
           onDataExtracted={(data) => {
+            console.log('📥 Received extracted data:', data);
+            
             // Handle PDF data extraction
             if (data.invoice_number) {
               setPurchase(prev => ({ ...prev, supplier_invoice_number: data.invoice_number }));
             }
+            
+            if (data.invoice_date) {
+              setPurchase(prev => ({ ...prev, invoice_date: data.invoice_date }));
+            }
+            
+            // Handle supplier information
             if (data.supplier_name) {
               setPurchase(prev => ({ ...prev, supplier_name: data.supplier_name }));
+              // If supplier exists in the system, set it
+              if (data.supplier_exists && data.supplier_id) {
+                setSelectedSupplier({
+                  supplier_id: data.supplier_id,
+                  supplier_name: data.supplier_name,
+                  gstin: data.supplier_gstin
+                });
+              } else {
+                // New supplier - just set the name for now
+                setSelectedSupplier(null);
+                setPurchase(prev => ({ 
+                  ...prev, 
+                  supplier_name: data.supplier_name,
+                  supplier_gstin: data.supplier_gstin 
+                }));
+              }
             }
+            
+            // Handle items
             if (data.items && data.items.length > 0) {
               // Map extracted items to the format expected by the component
               const mappedItems = data.items.map(item => ({
@@ -758,9 +765,19 @@ const EnhancedPurchaseEntry = ({ onClose, prefilledData = null }) => {
               }));
               setPurchase(prev => ({ ...prev, items: mappedItems }));
             }
-            // Don't close the modal here - let the user confirm in the modal
-            // setShowPDFUpload(false); // REMOVED - modal closes itself after confirm
-            toast.success('PDF data extracted - review and confirm');
+            
+            // Update totals if provided
+            if (data.grand_total) {
+              setPurchase(prev => ({ ...prev, final_amount: data.grand_total }));
+            }
+            if (data.subtotal) {
+              setPurchase(prev => ({ ...prev, gross_amount: data.subtotal }));
+            }
+            if (data.tax_amount) {
+              setPurchase(prev => ({ ...prev, tax_amount: data.tax_amount }));
+            }
+            
+            toast.success('PDF data extracted successfully! Review the details below.');
           }}
         />
       )}

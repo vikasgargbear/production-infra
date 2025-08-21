@@ -68,13 +68,15 @@ export const generateInvoicePDF = (invoiceData) => {
   yPosition += 5;
   
   // Split address into multiple lines if needed
-  const addressLines = invoiceData.billing_address.split('\n');
-  addressLines.forEach(line => {
-    if (line.trim()) {
-      doc.text(line.trim(), 20, yPosition);
-      yPosition += 5;
-    }
-  });
+  if (invoiceData.billing_address) {
+    const addressLines = invoiceData.billing_address.split('\n');
+    addressLines.forEach(line => {
+      if (line.trim()) {
+        doc.text(line.trim(), 20, yPosition);
+        yPosition += 5;
+      }
+    });
+  }
   
   if (invoiceData.customer_gstin) {
     doc.text(`GSTIN: ${invoiceData.customer_gstin}`, 20, yPosition);

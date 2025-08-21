@@ -1355,10 +1355,18 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
 
             {/* Customer Section */}
             <div className="mb-6">
-              <h3 className="text-sm font-semibold text-blue-700 uppercase tracking-wider mb-3 flex items-center">
-                <User className="w-4 h-4 mr-2" />
-                CUSTOMER
-              </h3>
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="text-sm font-semibold text-blue-700 uppercase tracking-wider flex items-center">
+                  <User className="w-4 h-4 mr-2" />
+                  CUSTOMER
+                </h3>
+                <button
+                  onClick={() => setShowCustomerModal(true)}
+                  className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors text-sm font-medium"
+                >
+                  Create Customer
+                </button>
+              </div>
               <CustomerSearch
                 value={invoice?.customer_details || null}
                 onChange={handleCustomerSelect}
@@ -1373,10 +1381,18 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
 
             {/* Products Section */}
             <div className="mb-6">
-              <h3 className="text-sm font-semibold text-blue-700 uppercase tracking-wider mb-3 flex items-center">
-                <Package className="w-4 h-4 mr-2" />
-                PRODUCTS
-              </h3>
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="text-sm font-semibold text-blue-700 uppercase tracking-wider flex items-center">
+                  <Package className="w-4 h-4 mr-2" />
+                  PRODUCTS
+                </h3>
+                <button
+                  onClick={() => setShowProductModal(true)}
+                  className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors text-sm font-medium"
+                >
+                  Create Product
+                </button>
+              </div>
               <ProductSearchSimple
                 onAddItem={handleAddItem}
                 onCreateProduct={() => setShowProductModal(true)}
