@@ -25,7 +25,7 @@ const AddressForm = ({
     country: 'India'
   });
 
-  // Initialize form data from customer or addressData
+  // Initialize form data from customer or addressData - PREVENT INFINITE LOOP
   useEffect(() => {
     if (customer || addressData) {
       const source = addressData || customer;
@@ -38,20 +38,10 @@ const AddressForm = ({
         country: source.country || 'India'
       });
       
-      // Build and send complete address string
-      const addressString = buildAddressString({
-        address_line1: source.address || source.address_line1 || '',
-        address_line2: source.address2 || source.address_line2 || '',
-        city: source.city || '',
-        state: source.state || source.state_name || '',
-        pincode: source.pincode || source.pin_code || source.postal_code || ''
-      });
-      
-      if (addressString && onChange) {
-        onChange(addressString);
-      }
+      // DON'T automatically call onChange to prevent infinite loops
+      // Only call onChange when user explicitly edits
     }
-  }, [customer, addressData]);
+  }, [customer]);  // Remove addressData from deps to prevent loops
 
   const buildAddressString = (data) => {
     const parts = [];

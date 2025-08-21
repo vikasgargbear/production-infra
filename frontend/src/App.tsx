@@ -24,7 +24,6 @@ import { EscapeKeyProvider } from './contexts/EscapeKeyContext';
 // Lazy load components for better performance and code splitting
 const Dashboard = lazy(() => import('./components/Dashboard'));
 const Products = lazy(() => import('./components/Products'));
-const Customers = lazy(() => import('./components/Customers'));
 const Orders = lazy(() => import('./components/Orders'));
 const BatchesInventory = lazy(() => import('./components/BatchesInventory'));
 const PaymentTracking = lazy(() => import('./components/PaymentTracking'));
@@ -149,7 +148,7 @@ function App(): JSX.Element {
       case 'products':
         return <Products key="products" />;
       case 'customers':
-        return <Customers key="customers" />;
+        return <MasterHub key="customers" defaultModule="customer-master" />;
       case 'orders':
         return <Orders key="orders" />;
       case 'batches':

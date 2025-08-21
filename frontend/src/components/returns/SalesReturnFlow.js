@@ -776,40 +776,27 @@ const SalesReturnFlow = ({ onClose }) => {
                     <User className="w-4 h-4 mr-2" />
                     CUSTOMER
                   </h3>
-                  {!selectedCustomer ? (
-                    <CustomerSearch
-                      ref={customerSearchRef}
-                      onChange={handleCustomerSelect}
-                      placeholder="Search customer by name, phone..."
-                      className="w-full"
-                      showCreateButton={true}
-                      onCreateNew={() => setShowCustomerModal(true)}
-                    />
-                  ) : (
-                    <div className="bg-gray-50 rounded-lg p-4 flex justify-between items-start border border-gray-200">
-                      <div>
-                        <h4 className="font-semibold text-gray-900">{selectedCustomer.customer_name || selectedCustomer.name}</h4>
-                        <p className="text-sm text-gray-600">{selectedCustomer.phone}</p>
-                        <p className="text-sm text-gray-600">{selectedCustomer.address}</p>
-                      </div>
-                      <button
-                        onClick={() => {
-                          setSelectedCustomer(null);
-                          setSelectedInvoice(null);
-                          setReturnData(prev => ({
-                            ...prev,
-                            customer_id: '',
-                            customer_details: null,
-                            invoice_id: '',
-                            items: []
-                          }));
-                        }}
-                        className="text-red-600 hover:text-red-700"
-                      >
-                        <X className="w-4 h-4" />
-                      </button>
-                    </div>
-                  )}
+                  <CustomerSearch
+                    ref={customerSearchRef}
+                    value={selectedCustomer}
+                    onChange={handleCustomerSelect}
+                    placeholder="Search customer by name, phone..."
+                    className="w-full"
+                    showCreateButton={true}
+                    onCreateNew={() => setShowCustomerModal(true)}
+                    clearable={true}
+                    onClear={() => {
+                      setSelectedCustomer(null);
+                      setSelectedInvoice(null);
+                      setReturnData(prev => ({
+                        ...prev,
+                        customer_id: '',
+                        customer_details: null,
+                        invoice_id: '',
+                        items: []
+                      }));
+                    }}
+                  />
                 </div>
 
                 {/* Invoice Section - Always visible */}

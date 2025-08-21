@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback, forwardRef, useImperativeHandle } from 'react';
-import { Search, Building2, Plus, X, Loader2, User, Phone, MapPin } from 'lucide-react';
+import { Search, Building2, Plus, Trash2, Loader2, Phone, MapPin } from 'lucide-react';
 import { supplierAPI } from '../../../services/api';
 import { AddNewButton } from '../ui';
 import DataTransformer from '../../../services/dataTransformer';
@@ -179,63 +179,53 @@ const SupplierSearch = forwardRef(({
             />
           </div>
         ) : (
-          <div className="bg-gray-50 rounded-lg p-4">
-            <div className="flex justify-between items-start">
-              <div className="flex-1">
-                {/* Business/Supplier Name */}
-                <div className="flex items-center gap-2 mb-1">
-                  <Building2 className="w-4 h-4 text-blue-600" />
-                  <p className="font-medium text-gray-900">{selectedSupplier.supplier_name || selectedSupplier.name}</p>
-                </div>
-                
-                <div className="text-sm text-gray-600 space-y-0.5 ml-6">
-                  {/* Contact Person */}
-                  {selectedSupplier.contact_person_name && (
-                    <p className="flex items-center gap-1">
-                      <User className="w-3 h-3" /> 
-                      <span className="font-medium">Contact:</span> {selectedSupplier.contact_person_name}
-                    </p>
-                  )}
-                  
-                  {/* Phone Number */}
-                  {(selectedSupplier.primary_phone || selectedSupplier.contact_person_phone || selectedSupplier.phone) && (
-                    <p className="flex items-center gap-1">
-                      <Phone className="w-3 h-3" /> {selectedSupplier.primary_phone || selectedSupplier.contact_person_phone || selectedSupplier.phone}
-                    </p>
-                  )}
-                  
-                  {/* Compact Address - City, State only */}
-                  {(selectedSupplier.city || selectedSupplier.state) && (
-                    <p className="flex items-center gap-1">
-                      <MapPin className="w-3 h-3" /> 
-                      {selectedSupplier.city}{selectedSupplier.state ? `, ${selectedSupplier.state}` : ''}
-                    </p>
-                  )}
-                </div>
-              </div>
-              
-              {/* GST Status Badge */}
-              <div className="ml-3">
-                {selectedSupplier.gst_number ? (
-                  <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-700">
-                    ✓ GST Verified
-                  </span>
-                ) : (
-                  <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-600">
-                    No GST
-                  </span>
-                )}
-              </div>
-            </div>
+          <div className="relative bg-gray-50 rounded-lg p-2">
+            {/* Delete Icon - Top Right */}
             {clearable && (
               <button
                 type="button"
                 onClick={handleClearSupplier}
-                className="mt-3 text-sm text-red-600 hover:text-red-700 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-opacity-50 rounded px-2 py-1"
+                className="absolute top-1 right-1 p-1 hover:bg-gray-200 rounded-full text-gray-400 hover:text-red-500 transition-colors"
+                title="Remove supplier"
               >
-                Remove Supplier
+                <Trash2 className="w-3 h-3" />
               </button>
             )}
+            
+            <div className="flex items-center gap-2 pr-6">
+              <Building2 className="w-4 h-4 text-blue-600" />
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2">
+                  <p className="font-medium text-gray-900 truncate">{selectedSupplier.supplier_name || selectedSupplier.name}</p>
+                  {/* GST Status Badge */}
+                  {selectedSupplier.gst_number ? (
+                    <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-green-100 text-green-700 shrink-0">
+                      GST
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-600 shrink-0">
+                      No GST
+                    </span>
+                  )}
+                </div>
+                <div className="flex items-center gap-3 text-xs text-gray-600 mt-0.5">
+                  {/* Phone Number */}
+                  {(selectedSupplier.primary_phone || selectedSupplier.contact_person_phone || selectedSupplier.phone) && (
+                    <span className="flex items-center gap-1">
+                      <Phone className="w-3 h-3" /> {selectedSupplier.primary_phone || selectedSupplier.contact_person_phone || selectedSupplier.phone}
+                    </span>
+                  )}
+                  
+                  {/* Compact Address - City, State only */}
+                  {(selectedSupplier.city || selectedSupplier.state) && (
+                    <span className="flex items-center gap-1">
+                      <MapPin className="w-3 h-3" /> 
+                      {selectedSupplier.city}{selectedSupplier.state ? `, ${selectedSupplier.state}` : ''}
+                    </span>
+                  )}
+                </div>
+              </div>
+            </div>
           </div>
         )}
 
