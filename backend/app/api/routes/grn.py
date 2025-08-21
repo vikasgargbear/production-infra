@@ -12,6 +12,7 @@ from uuid import UUID
 
 from ...core.database import get_db
 from ...core.config import DEFAULT_ORG_ID
+from ...dependencies import get_current_org_id, get_current_user_id
 
 logger = logging.getLogger(__name__)
 
@@ -19,7 +20,8 @@ router = APIRouter(tags=["goods-receipt-notes"])
 
 @router.get("/generate-number")
 def generate_grn_number(
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_current_org_id)
 ):
     """Generate next GRN number"""
     try:
@@ -36,7 +38,7 @@ def generate_grn_number(
                 ORDER BY grn_id DESC 
                 LIMIT 1
             """),
-            {"org_id": DEFAULT_ORG_ID, "pattern": f"GRN-{current_year}-%"}
+            {"org_id": org_id, "pattern": f"GRN-{current_year}-%"}
         )
         
         latest = result.first()
@@ -69,6 +71,8 @@ def generate_grn_number(
 async def create_grn(
     grn_data: Dict[str, Any],
     db: Session = Depends(get_db),
+    org_id: str = Depends(get_current_org_id),
+    user_id: Optional[int] = Depends(get_current_user_id)
 ):
     """Create a new Goods Receipt Note"""
     try:
@@ -85,7 +89,7 @@ async def create_grn(
             "supplier_invoice_date": grn_data.get("supplier_invoice_date"),
             "supplier_challan_number": grn_data.get("challan_number"),
             "supplier_challan_date": grn_data.get("challan_date"),
-            "received_by": 1,  # Default user ID
+            "received_by": user_id if user_id else None,
             "received_at": datetime.now(),
             "transport_mode": grn_data.get("transport_mode", "Road"),
             "vehicle_number": grn_data.get("vehicle_no"),
@@ -248,6 +252,7 @@ def get_grns(
     date_from: Optional[date] = Query(None, description="Filter from date"),
     date_to: Optional[date] = Query(None, description="Filter to date"),
     db: Session = Depends(get_db),
+    org_id: str = Depends(get_current_org_id),
 ):
     """Get list of GRNs with filtering and pagination"""
     try:
@@ -338,6 +343,7 @@ def get_grns(
 def get_grn_details(
     grn_id: int,
     db: Session = Depends(get_db),
+    org_id: str = Depends(get_current_org_id),
 ):
     """Get detailed GRN information"""
     try:
@@ -397,6 +403,8 @@ def update_grn(
     grn_id: int,
     grn_data: Dict[str, Any],
     db: Session = Depends(get_db),
+    org_id: str = Depends(get_current_org_id),
+    user_id: Optional[int] = Depends(get_current_user_id)
 ):
     """Update GRN details"""
     try:
@@ -439,6 +447,8 @@ def approve_grn(
     grn_id: int,
     approval_data: Dict[str, Any],
     db: Session = Depends(get_db),
+    org_id: str = Depends(get_current_org_id),
+    user_id: Optional[int] = Depends(get_current_user_id)
 ):
     """Approve GRN and update stock if not already done"""
     try:
@@ -463,7 +473,7 @@ def approve_grn(
         
         db.execute(text(approve_sql), {
             "grn_id": grn_id,
-            "user_id": 1,  # Default user ID
+            "user_id": user_id if user_id else None,
             "now": datetime.now()
         })
         
