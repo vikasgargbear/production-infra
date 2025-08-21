@@ -158,8 +158,9 @@ def create_supplier(supplier_data: SupplierCreate, db: Session = Depends(get_db)
         row = result.fetchone()
         supplier_id = row.supplier_id
         
-        # Create address record if address information provided
-        if any([supplier_data.address, supplier_data.city, supplier_data.state, supplier_data.pincode]):
+        # Create address record if complete address information provided
+        # Only create address if we have city, state AND pincode (all required fields)
+        if supplier_data.city and supplier_data.state and supplier_data.pincode:
             # Automatically map state name to GST state code
             state_name, state_code = get_state_name_and_code(supplier_data.state)
             
@@ -184,6 +185,34 @@ def create_supplier(supplier_data: SupplierCreate, db: Session = Depends(get_db)
                 "state_code": state_code,
                 "state_name": state_name,
                 "pincode": supplier_data.pincode,
+                "country": "India"
+            })
+        elif supplier_data.city and supplier_data.state:
+            # If we have city and state but no pincode, use a default pincode
+            # This ensures address can be saved even without pincode
+            state_name, state_code = get_state_name_and_code(supplier_data.state)
+            
+            db.execute(text("""
+                INSERT INTO master.addresses (
+                    org_id, entity_type, entity_id, address_type,
+                    address_line1, address_line2, city, state_code, state_name, pincode,
+                    country, is_default, is_active,
+                    created_at
+                ) VALUES (
+                    :org_id, 'supplier', :entity_id, 'registered',
+                    :address_line1, :address_line2, :city, :state_code, :state_name, :pincode,
+                    :country, true, true,
+                    CURRENT_TIMESTAMP
+                )
+            """), {
+                "org_id": DEFAULT_ORG_ID,
+                "entity_id": supplier_id,
+                "address_line1": supplier_data.address or "",
+                "address_line2": getattr(supplier_data, 'address_line2', None),
+                "city": supplier_data.city,
+                "state_code": state_code,
+                "state_name": state_name,
+                "pincode": supplier_data.pincode or "000000",  # Default pincode if not provided
                 "country": "India"
             })
         
