@@ -15,7 +15,7 @@ from ...core.crud_base import create_crud
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/purchases", tags=["purchases"])
+router = APIRouter(tags=["purchases"])
 
 # Create CRUD instance
 purchase_crud = create_crud(Purchase)

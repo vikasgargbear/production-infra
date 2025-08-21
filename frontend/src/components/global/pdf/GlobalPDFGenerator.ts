@@ -8,7 +8,7 @@ interface CompanyInfo {
   phone: string;
   email: string;
   gst: string;
-  website?: string;
+  website: string;
 }
 
 interface PartyDetails {
@@ -42,14 +42,16 @@ class GlobalPDFGenerator {
   constructor(theme: Theme = 'digital') {
     this.doc = new jsPDF();
     this.theme = theme; // 'print' or 'digital'
+    // Will be loaded from backend via init() or loadCompanyInfo()
     this.companyInfo = {
-      name: 'Your Company Name',
-      address: '123 Business Street, City, State 12345',
-      phone: '+91 98765 43210',
-      email: 'info@company.com',
-      gst: '29ABCDE1234F1Z5',
-      website: 'www.company.com'
+      name: '',
+      address: '',
+      phone: '',
+      email: '',
+      gst: '',
+      website: ''
     };
+    this.loadCompanyInfo();
     this.colors = {
       digital: {
         primary: [59, 130, 246], // Blue
@@ -88,34 +90,36 @@ class GlobalPDFGenerator {
   }
 
   /**
+   * Load company info from backend
+   */
+  private async loadCompanyInfo(): Promise<void> {
+    try {
+      const response = await companyAPI.getCompanyInfo();
+      if (response && response.data) {
+        this.companyInfo = {
+          name: response.data.name || '',
+          address: response.data.address || '',
+          phone: response.data.phone || '',
+          email: response.data.email || '',
+          gst: response.data.gst || '',
+          website: response.data.website || ''
+        };
+      }
+    } catch (error) {
+      console.error('Error loading company info from backend:', error);
+      // Company info stays empty if backend fails
+    }
+  }
+
+  /**
    * Initialize PDF with company info
    */
   async init(theme: Theme = 'digital', orientation: 'portrait' | 'landscape' = 'portrait'): Promise<this> {
     this.theme = theme;
     this.doc = new jsPDF(orientation);
     
-    // Load company info
-    try {
-      const response = await companyAPI.getCompanyInfo();
-      this.companyInfo = response.data || {
-        name: 'Your Company Name',
-        address: 'Your Address',
-        phone: 'Your Phone',
-        email: 'your@email.com',
-        gst: 'Your GST Number',
-        website: 'www.yourcompany.com'
-      };
-    } catch (error) {
-      console.error('Error loading company info:', error);
-      this.companyInfo = {
-        name: 'Your Company Name',
-        address: '123 Business Street, City, State 12345',
-        phone: '+91 98765 43210',
-        email: 'info@company.com',
-        gst: '29ABCDE1234F1Z5',
-        website: 'www.company.com'
-      };
-    }
+    // Ensure company info is loaded
+    await this.loadCompanyInfo();
     
     return this;
   }
@@ -159,7 +163,7 @@ class GlobalPDFGenerator {
       const contactInfo = [
         this.companyInfo.phone,
         this.companyInfo.email,
-        this.companyInfo.website
+        this.companyInfo.website || ''
       ];
       
       let yPos = 15;
@@ -516,9 +520,11 @@ class GlobalPDFGenerator {
       this.doc.text(thankYou, (pageWidth - thankYouWidth) / 2, pageHeight - 12);
       
       // Website
-      this.doc.setFont('helvetica', 'bold');
-      const websiteWidth = this.doc.getTextWidth(this.companyInfo.website);
-      this.doc.text(this.companyInfo.website, (pageWidth - websiteWidth) / 2, pageHeight - 6);
+      if (this.companyInfo.website) {
+        this.doc.setFont('helvetica', 'bold');
+        const websiteWidth = this.doc.getTextWidth(this.companyInfo.website);
+        this.doc.text(this.companyInfo.website, (pageWidth - websiteWidth) / 2, pageHeight - 6);
+      }
       
       // Social icons placeholder
       this.applyColor('setFillColor', colors.white);
