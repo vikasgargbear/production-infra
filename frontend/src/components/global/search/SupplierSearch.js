@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback, forwardRef, useImperativeHandle } from 'react';
-import { Search, Building2, Plus, X, Loader2, User, Phone, Mail, MapPin } from 'lucide-react';
+import { Search, Building2, Plus, X, Loader2, User, Phone, MapPin } from 'lucide-react';
 import { supplierAPI } from '../../../services/api';
 import { AddNewButton } from '../ui';
 import DataTransformer from '../../../services/dataTransformer';
@@ -300,24 +300,17 @@ const SupplierSearch = forwardRef(({
                 
                 <div className="text-sm text-gray-600 space-y-0.5 ml-6">
                   {/* Contact Person */}
-                  {selectedSupplier.contact_person && (
+                  {selectedSupplier.contact_person_name && (
                     <p className="flex items-center gap-1">
                       <User className="w-3 h-3" /> 
-                      <span className="font-medium">Contact:</span> {selectedSupplier.contact_person}
+                      <span className="font-medium">Contact:</span> {selectedSupplier.contact_person_name}
                     </p>
                   )}
                   
                   {/* Phone Number */}
-                  {(selectedSupplier.phone || selectedSupplier.contact_phone) && (
+                  {(selectedSupplier.primary_phone || selectedSupplier.contact_person_phone || selectedSupplier.phone) && (
                     <p className="flex items-center gap-1">
-                      <Phone className="w-3 h-3" /> {selectedSupplier.phone || selectedSupplier.contact_phone}
-                    </p>
-                  )}
-                  
-                  {/* Email */}
-                  {selectedSupplier.email && (
-                    <p className="flex items-center gap-1">
-                      <Mail className="w-3 h-3" /> {selectedSupplier.email}
+                      <Phone className="w-3 h-3" /> {selectedSupplier.primary_phone || selectedSupplier.contact_person_phone || selectedSupplier.phone}
                     </p>
                   )}
                   
