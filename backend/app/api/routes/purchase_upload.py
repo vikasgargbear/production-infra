@@ -171,6 +171,7 @@ async def check_supplier(
         logger.error(f"Error checking supplier: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+@router.post("/parse-pdf")
 @router.post("/parse-invoice-safe")
 async def parse_purchase_invoice_safe(
     file: UploadFile = File(...),
@@ -179,6 +180,7 @@ async def parse_purchase_invoice_safe(
     """
     Parse a purchase invoice PDF with better error handling
     Falls back to template structure if parsing fails
+    Accessible via both /parse-pdf and /parse-invoice-safe
     """
     try:
         # Validate file type
