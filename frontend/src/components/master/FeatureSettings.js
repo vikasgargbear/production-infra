@@ -343,6 +343,58 @@ const FeatureSettings = ({ open, onClose }) => {
             </div>
           </div>
 
+          {/* Purchase Features */}
+          <div className="bg-white rounded-lg border border-gray-200 p-6">
+            <h2 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
+              <Package className="w-5 h-5 mr-2" />
+              Purchase Features
+            </h2>
+            
+            <div className="space-y-4">
+              <FeatureToggle
+                name="GRN Workflow"
+                enabled="grnWorkflow"
+                description="Enable Goods Receipt Note workflow for purchases"
+                icon={FileText}
+              />
+              
+              <div className="py-3 border-b border-gray-100">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-start space-x-3">
+                    <Shield className="w-5 h-5 text-gray-500 mt-0.5" />
+                    <div>
+                      <h4 className="text-sm font-medium text-gray-900">Purchase Approval Limit</h4>
+                      <p className="text-xs text-gray-500 mt-0.5">Require approval for purchases above this amount</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <span className="text-sm text-gray-500">₹</span>
+                    <input
+                      type="number"
+                      value={features.purchaseApprovalLimit}
+                      onChange={(e) => handleInputChange('purchaseApprovalLimit', parseInt(e.target.value) || 0)}
+                      className="w-24 px-2 py-1 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm"
+                    />
+                  </div>
+                </div>
+              </div>
+              
+              <FeatureToggle
+                name="Auto Generate Purchase Order"
+                enabled="autoGeneratePurchaseOrder"
+                description="Automatically generate purchase orders based on reorder levels"
+                icon={Package}
+              />
+              
+              <FeatureToggle
+                name="Vendor Rating System"
+                enabled="vendorRatingSystem"
+                description="Enable vendor performance tracking and ratings"
+                icon={CreditCard}
+              />
+            </div>
+          </div>
+
           {/* E-Way Bill Settings */}
           <div className="bg-white rounded-lg border border-gray-200 p-6">
             <h2 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
@@ -385,6 +437,41 @@ const FeatureSettings = ({ open, onClose }) => {
             </div>
           </div>
 
+          {/* GST Features */}
+          <div className="bg-white rounded-lg border border-gray-200 p-6">
+            <h2 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
+              <FileText className="w-5 h-5 mr-2" />
+              GST & Tax Features
+            </h2>
+            
+            <div className="space-y-1">
+              <FeatureToggle
+                name="GST Round Off"
+                enabled="gstRoundOff"
+                description="Enable automatic rounding of GST amounts"
+                icon={CreditCard}
+              />
+              <FeatureToggle
+                name="Reverse Charge Applicable"
+                enabled="reverseChargeApplicable"
+                description="Enable reverse charge mechanism for specific transactions"
+                icon={CreditCard}
+              />
+              <FeatureToggle
+                name="Composition Scheme"
+                enabled="compositionScheme"
+                description="Enable if registered under GST composition scheme"
+                icon={CreditCard}
+              />
+              <FeatureToggle
+                name="TCS Applicable"
+                enabled="tcsApplicable"
+                description="Enable Tax Collection at Source"
+                icon={CreditCard}
+              />
+            </div>
+          </div>
+
           {/* Payment Features */}
           <div className="bg-white rounded-lg border border-gray-200 p-6">
             <h2 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
@@ -409,6 +496,53 @@ const FeatureSettings = ({ open, onClose }) => {
                 name="Payment Reminders"
                 enabled="paymentReminders"
                 description="Send automatic payment reminders"
+                icon={AlertTriangle}
+              />
+            </div>
+          </div>
+
+          {/* General Features */}
+          <div className="bg-white rounded-lg border border-gray-200 p-6">
+            <h2 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
+              <Cog className="w-5 h-5 mr-2" />
+              General Features
+            </h2>
+            
+            <div className="space-y-1">
+              <FeatureToggle
+                name="Multi-Currency Support"
+                enabled="multiCurrency"
+                description="Enable transactions in multiple currencies"
+                icon={CreditCard}
+              />
+              <FeatureToggle
+                name="Multi-Location Management"
+                enabled="multiLocation"
+                description="Manage inventory across multiple locations"
+                icon={Package}
+              />
+              <FeatureToggle
+                name="Barcode Scanner Integration"
+                enabled="barcodeScannerIntegration"
+                description="Enable barcode scanning for products"
+                icon={Package}
+              />
+              <FeatureToggle
+                name="SMS Notifications"
+                enabled="smsNotifications"
+                description="Send SMS alerts for important events"
+                icon={AlertTriangle}
+              />
+              <FeatureToggle
+                name="Email Notifications"
+                enabled="emailNotifications"
+                description="Send email alerts and invoices"
+                icon={AlertTriangle}
+              />
+              <FeatureToggle
+                name="WhatsApp Notifications"
+                enabled="whatsappNotifications"
+                description="Send WhatsApp messages for orders and payments"
                 icon={AlertTriangle}
               />
             </div>
@@ -500,6 +634,41 @@ const FeatureSettings = ({ open, onClose }) => {
                   </label>
                 </div>
               </div>
+            </div>
+          </div>
+
+          {/* Workflow Features */}
+          <div className="bg-white rounded-lg border border-gray-200 p-6">
+            <h2 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
+              <Shield className="w-5 h-5 mr-2" />
+              Workflow & Approvals
+            </h2>
+            
+            <div className="space-y-1">
+              <FeatureToggle
+                name="Purchase Workflow"
+                enabled="purchaseWorkflow"
+                description="Enable multi-step approval for purchase orders"
+                icon={FileText}
+              />
+              <FeatureToggle
+                name="Sales Workflow"
+                enabled="salesWorkflow"
+                description="Enable approval process for sales orders"
+                icon={FileText}
+              />
+              <FeatureToggle
+                name="Payment Approval"
+                enabled="paymentApproval"
+                description="Require approval for payment entries"
+                icon={CreditCard}
+              />
+              <FeatureToggle
+                name="Return Approval"
+                enabled="returnApproval"
+                description="Require approval for sales and purchase returns"
+                icon={RotateCcw}
+              />
             </div>
           </div>
 
