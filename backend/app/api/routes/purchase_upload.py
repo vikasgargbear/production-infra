@@ -30,14 +30,16 @@ except ImportError:
 # Try to import custom parser at module level
 try:
     from ...parsers import InvoiceParserFactory
+    FACTORY_PARSER_AVAILABLE = True
+except ImportError:
+    FACTORY_PARSER_AVAILABLE = False
+
+# Fallback to simple parser if factory not available
+try:
+    from .pharma_invoice_parser import parse_pharma_invoice
     CUSTOM_PARSER_AVAILABLE = True
 except ImportError:
-    # Fallback to old parser if new one not available
-    try:
-        from .pharma_invoice_parser import parse_pharma_invoice
-        CUSTOM_PARSER_AVAILABLE = True
-    except ImportError:
-        CUSTOM_PARSER_AVAILABLE = False
+    CUSTOM_PARSER_AVAILABLE = False
 
 logger = logging.getLogger(__name__)
 
@@ -248,29 +250,39 @@ async def parse_purchase_invoice_safe(
                             logger.warning(f"Error processing item: {e}")
                             continue
                 
-                # If no items found, try our custom parser
-                if not items_found and CUSTOM_PARSER_AVAILABLE:
-                    logger.info("Bill parser found no items, trying custom pharma parser...")
-                    try:
-                        # Use new modular parser if available
-                        if 'InvoiceParserFactory' in globals():
-                            custom_result = InvoiceParserFactory.parse_invoice(tmp_path)
-                        else:
-                            # Fallback to old parser
+                # If no items found, try our parsers in order
+                if not items_found:
+                    # Try factory parser first
+                    if FACTORY_PARSER_AVAILABLE:
+                        logger.info("Bill parser found no items, trying factory parser...")
+                        try:
+                            factory_result = InvoiceParserFactory.parse_invoice(tmp_path)
+                            if factory_result["success"] and factory_result["extracted_data"]["items"]:
+                                logger.info(f"Factory parser found {len(factory_result['extracted_data']['items'])} items")
+                                # Check for existing supplier
+                                _check_supplier_in_result(factory_result["extracted_data"], db)
+                                return factory_result
+                        except Exception as factory_err:
+                            logger.warning(f"Factory parser failed: {factory_err}")
+                    
+                    # Then try custom parser
+                    if CUSTOM_PARSER_AVAILABLE:
+                        logger.info("Trying custom pharma parser...")
+                        try:
                             custom_result = parse_pharma_invoice(tmp_path)
-                        
-                        if custom_result["success"] and custom_result["extracted_data"]["items"]:
-                            logger.info(f"Custom parser found {len(custom_result['extracted_data']['items'])} items")
-                            # Merge results - keep bill_parser supplier info if available
-                            if supplier_found:
-                                custom_result["extracted_data"]["supplier_name"] = invoice_data.supplier_name
-                                custom_result["extracted_data"]["supplier_gstin"] = invoice_data.supplier_gstin
                             
-                            # Check for existing supplier
-                            _check_supplier_in_result(custom_result["extracted_data"], db)
-                            return custom_result
-                    except Exception as custom_err:
-                        logger.warning(f"Custom parser failed: {custom_err}")
+                            if custom_result["success"] and custom_result["extracted_data"]["items"]:
+                                logger.info(f"Custom parser found {len(custom_result['extracted_data']['items'])} items")
+                                # Merge results - keep bill_parser supplier info if available
+                                if supplier_found:
+                                    custom_result["extracted_data"]["supplier_name"] = invoice_data.supplier_name
+                                    custom_result["extracted_data"]["supplier_gstin"] = invoice_data.supplier_gstin
+                                
+                                # Check for existing supplier
+                                _check_supplier_in_result(custom_result["extracted_data"], db)
+                                return custom_result
+                        except Exception as custom_err:
+                            logger.warning(f"Custom parser failed: {custom_err}")
                     
                     # If still no items, provide partial extraction message
                     if supplier_found:
@@ -284,16 +296,25 @@ async def parse_purchase_invoice_safe(
             except Exception as parse_error:
                 logger.warning(f"Bill parser failed: {parse_error}")
                 
-                # Try our custom parser before giving up
+                # Try our parsers before giving up
+                # Try factory parser first
+                if FACTORY_PARSER_AVAILABLE:
+                    try:
+                        logger.info("Trying factory parser as primary fallback...")
+                        factory_result = InvoiceParserFactory.parse_invoice(tmp_path)
+                        
+                        if factory_result["success"] and factory_result["extracted_data"]["items"]:
+                            # Check for existing supplier
+                            _check_supplier_in_result(factory_result["extracted_data"], db)
+                            return factory_result
+                    except Exception as factory_err:
+                        logger.error(f"Factory parser failed: {factory_err}")
+                
+                # Then try custom parser
                 if CUSTOM_PARSER_AVAILABLE:
                     try:
-                        logger.info("Trying custom pharma parser as fallback...")
-                        # Use new modular parser if available
-                        if 'InvoiceParserFactory' in globals():
-                            custom_result = InvoiceParserFactory.parse_invoice(tmp_path)
-                        else:
-                            # Fallback to old parser
-                            custom_result = parse_pharma_invoice(tmp_path)
+                        logger.info("Trying custom pharma parser as secondary fallback...")
+                        custom_result = parse_pharma_invoice(tmp_path)
                             
                         if custom_result["success"]:
                             # Check for existing supplier

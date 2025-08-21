@@ -4,30 +4,16 @@ Factory for selecting appropriate invoice parser
 import pdfplumber
 import logging
 from typing import Dict, Any, Optional
-from datetime import datetime
+from .base_parser import BaseInvoiceParser
+from .parsers import (
+    ArpiiHealthCareParser,
+    PharmaBiologicalParser,
+    PolestarParser,
+    GenericPharmaParser
+)
+from .enhanced_parser import EnhancedFlexibleParser
 
 logger = logging.getLogger(__name__)
-
-# Import the comprehensive parser components
-try:
-    from .parsers_complete.base_parser import BaseInvoiceParser
-    from .parsers_complete.parsers import (
-        ArpiiHealthCareParser,
-        PharmaBiologicalParser,
-        PolestarParser,
-        GenericPharmaParser
-    )
-    from .parsers_complete.enhanced_parser import EnhancedFlexibleParser
-    PARSERS_AVAILABLE = True
-except ImportError as e:
-    logger.warning(f"Could not import specialized parsers: {e}")
-    PARSERS_AVAILABLE = False
-    BaseInvoiceParser = None
-    ArpiiHealthCareParser = None
-    PharmaBiologicalParser = None
-    PolestarParser = None
-    GenericPharmaParser = None
-    EnhancedFlexibleParser = None
 
 class InvoiceParserFactory:
     """
@@ -35,14 +21,10 @@ class InvoiceParserFactory:
     """
     
     @staticmethod
-    def get_parser(pdf_path: str):
+    def get_parser(pdf_path: str) -> BaseInvoiceParser:
         """
         Analyze PDF and return appropriate parser
         """
-        if not PARSERS_AVAILABLE:
-            logger.warning("Specialized parsers not available, returning None")
-            return None
-            
         try:
             # Extract text to identify invoice type
             text = ""
@@ -74,56 +56,15 @@ class InvoiceParserFactory:
         except Exception as e:
             logger.error(f"Error identifying parser: {e}")
             # Default to generic parser
-            if PARSERS_AVAILABLE:
-                return GenericPharmaParser()
-            return None
+            return GenericPharmaParser()
     
     @staticmethod
     def parse_invoice(pdf_path: str, use_enhanced_fallback: bool = True) -> Dict[str, Any]:
         """
         Parse invoice using appropriate parser
         """
-        if not PARSERS_AVAILABLE:
-            logger.warning("Parsers not available, returning template")
-            return {
-                "success": False,
-                "message": "Specialized parsers not available",
-                "extracted_data": {
-                    "invoice_number": "",
-                    "invoice_date": datetime.now().isoformat()[:10],
-                    "supplier_name": "",
-                    "supplier_gstin": "",
-                    "supplier_address": "",
-                    "drug_license": "",
-                    "subtotal": 0,
-                    "tax_amount": 0,
-                    "discount_amount": 0,
-                    "grand_total": 0,
-                    "items": []
-                }
-            }
-            
         try:
             parser = InvoiceParserFactory.get_parser(pdf_path)
-            if not parser:
-                return {
-                    "success": False,
-                    "message": "Could not initialize parser",
-                    "extracted_data": {
-                        "invoice_number": "",
-                        "invoice_date": datetime.now().isoformat()[:10],
-                        "supplier_name": "",
-                        "supplier_gstin": "",
-                        "supplier_address": "",
-                        "drug_license": "",
-                        "subtotal": 0,
-                        "tax_amount": 0,
-                        "discount_amount": 0,
-                        "grand_total": 0,
-                        "items": []
-                    }
-                }
-                
             result = parser.parse(pdf_path)
             
             # Add parser info to result
@@ -150,7 +91,7 @@ class InvoiceParserFactory:
                 "error": str(e),
                 "extracted_data": {
                     "invoice_number": "",
-                    "invoice_date": datetime.now().isoformat()[:10],
+                    "invoice_date": "",
                     "supplier_name": "",
                     "supplier_gstin": "",
                     "supplier_address": "",
@@ -162,20 +103,3 @@ class InvoiceParserFactory:
                     "items": []
                 }
             }
-
-    @staticmethod
-    def create_parser(vendor_name: str):
-        """Create parser for specific vendor - backward compatibility"""
-        if not PARSERS_AVAILABLE:
-            return None
-            
-        vendor_upper = vendor_name.upper() if vendor_name else ""
-        
-        if "ARPII" in vendor_upper:
-            return ArpiiHealthCareParser()
-        elif "PHARMA BIO" in vendor_upper:
-            return PharmaBiologicalParser()
-        elif "POLESTAR" in vendor_upper:
-            return PolestarParser()
-        else:
-            return GenericPharmaParser()
