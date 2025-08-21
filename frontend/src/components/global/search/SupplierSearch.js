@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useRef, useCallback, forwardRef, useImperativeHandle } from 'react';
 import { Search, Building2, Plus, X, Loader2 } from 'lucide-react';
-import { suppliersApi } from '../../../services/api';
+import { supplierAPI } from '../../../services/api';
 import { AddNewButton } from '../ui';
 import DataTransformer from '../../../services/dataTransformer';
-import { searchCache, smartSearch } from '../../../utils/searchCache';
+import searchCache, { smartSearch } from '../../../utils/searchCache';
 import { debounce } from '../../../utils/debounce';
 
 /**
@@ -49,6 +49,32 @@ const SupplierSearch = forwardRef(({
     setSelectedSupplier(value);
   }, [value]);
 
+  // Preload suppliers on mount for ultra-fast search
+  useEffect(() => {
+    const preloadSuppliers = async () => {
+      try {
+        // Check if we already have suppliers in cache
+        const cached = searchCache.get('suppliers', 'all');
+        if (cached && cached.length > 0) {
+          return; // Already cached
+        }
+
+        // Load recent suppliers for quick access
+        const response = await supplierAPI.list({ limit: 100 });
+        const suppliers = response?.data || response || [];
+        
+        if (suppliers.length > 0) {
+          searchCache.setItems('suppliers', suppliers);
+          searchCache.set('suppliers', 'all', suppliers);
+        }
+      } catch (error) {
+        console.error('Error preloading suppliers:', error);
+      }
+    };
+
+    preloadSuppliers();
+  }, []);
+
   // Debounced search function with smart cache integration
   const searchSuppliers = useCallback(
     debounce(async (query) => {
@@ -59,28 +85,32 @@ const SupplierSearch = forwardRef(({
 
       setLoading(true);
       try {
-        // First try smart cache search for ultra-fast response
-        const cachedResults = await smartSearch('suppliers', query, { limit: 20 });
-        
-        if (cachedResults.length > 0) {
-          setSearchResults(cachedResults);
-          setLoading(false);
-          return;
-        }
-        
-        // Fallback to API search if no cache results
-        const response = await suppliersApi.search(query);
-        const results = response?.data || response || [];
-        
-        // Cache the API results for next time
-        if (results.length > 0) {
-          searchCache.preloadItems('suppliers', results);
-        }
+        // Use smartSearch with the supplier API search function
+        const results = await smartSearch(
+          'suppliers', 
+          query, 
+          supplierAPI.search.bind(supplierAPI),
+          { limit: 20 }
+        );
         
         setSearchResults(results);
       } catch (error) {
         console.error('Error searching suppliers:', error);
-        setSearchResults([]);
+        
+        // Fallback to direct API search if smartSearch fails
+        try {
+          const response = await supplierAPI.search(query);
+          const results = response?.data || response || [];
+          setSearchResults(results);
+          
+          // Cache the results for next time
+          if (results.length > 0) {
+            searchCache.setItems('suppliers', results);
+          }
+        } catch (apiError) {
+          console.error('API search also failed:', apiError);
+          setSearchResults([]);
+        }
       } finally {
         setLoading(false);
       }
