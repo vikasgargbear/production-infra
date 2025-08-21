@@ -323,9 +323,11 @@ class DataTransformer {
       code: supplierData.supplier_code || null,
       supplier_type: supplierData.supplier_type || 'distributor',
       contact_person: supplierData.contact_person || null,
+      contact_person_phone: supplierData.contact_person_phone || null,
+      contact_person_email: supplierData.contact_person_email || null,
       phone: supplierData.phone || supplierData.primary_phone || null,
       secondary_phone: supplierData.alternate_phone || supplierData.secondary_phone || null,
-      whatsapp_number: supplierData.whatsapp_number || null,
+      whatsapp_number: supplierData.whatsapp_number || supplierData.phone || null,
       email: supplierData.email || supplierData.primary_email || null,
       website: supplierData.website || null,
       address: supplierData.address_line1 || supplierData.address || null,
@@ -342,9 +344,11 @@ class DataTransformer {
       account_number: supplierData.bank_account_no || null,
       ifsc_code: supplierData.bank_ifsc_code || null,
       account_holder_name: supplierData.account_holder_name || null,
-      // Payment terms
+      // Payment terms - handle dropdown or custom value
       payment_terms: supplierData.payment_terms || null,
-      payment_days: parseInt(supplierData.payment_terms || 30),
+      payment_days: supplierData.payment_terms === 'custom' 
+        ? parseInt(supplierData.payment_days || 30)
+        : parseInt(supplierData.payment_terms || 30),
       credit_days: parseInt(supplierData.credit_days || 0),
       // Performance ratings
       quality_rating: supplierData.quality_rating || 4,

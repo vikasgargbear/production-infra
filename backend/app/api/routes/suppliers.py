@@ -124,7 +124,7 @@ def create_supplier(supplier_data: SupplierCreate, db: Session = Depends(get_db)
                 :org_id, :supplier_code, :supplier_name, :supplier_type,
                 :gst_number, :pan_number, :drug_license_number, :drug_license_validity,
                 :phone, :secondary_phone, :email, :contact_person,
-                :whatsapp_number, :bank_name, :account_number, :ifsc_code, :account_holder_name,
+                :whatsapp_number, :contact_person_email, :bank_name, :account_number, :ifsc_code, :account_holder_name,
                 :payment_days, :quality_rating, :delivery_rating, :compliance_rating,
                 :internal_notes, :is_active,
                 CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
@@ -140,9 +140,10 @@ def create_supplier(supplier_data: SupplierCreate, db: Session = Depends(get_db)
             "drug_license_validity": supplier_data.drug_license_validity,
             "phone": supplier_data.phone or "N/A",  # Database requires non-null phone
             "secondary_phone": supplier_data.secondary_phone,
-            "whatsapp_number": supplier_data.whatsapp_number or supplier_data.phone,  # Default to primary phone
+            "whatsapp_number": supplier_data.contact_person_phone or supplier_data.whatsapp_number or supplier_data.phone,  # Contact phone for WhatsApp
             "email": supplier_data.email,
             "contact_person": supplier_data.contact_person,
+            "contact_person_email": supplier_data.contact_person_email,
             "bank_name": supplier_data.bank_name,
             "account_number": supplier_data.account_number,
             "ifsc_code": supplier_data.ifsc_code,

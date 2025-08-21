@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, Building2, Phone, Mail, MapPin, CreditCard, FileText, Save, Shield, Calendar, Banknote, MessageCircle, AlertCircle } from 'lucide-react';
+import { X, Building2, Phone, Mail, MapPin, CreditCard, FileText, Save, Shield, Calendar, Banknote, MessageCircle, AlertCircle, User, Clock, Star, Package, Hash, Globe, Briefcase, Check } from 'lucide-react';
 import { supplierAPI } from '../../../services/api';
 import { searchCache } from '../../../utils/searchCache';
 import { useToast } from '../ui';
@@ -38,16 +38,20 @@ const SupplierCreationModal = ({
   const toast = useToast();
   const [activeSection, setActiveSection] = useState('all');
   const [saving, setSaving] = useState(false);
+  const [useBusinessPhoneForWhatsApp, setUseBusinessPhoneForWhatsApp] = useState(false);
+  const [useBusinessContactForPerson, setUseBusinessContactForPerson] = useState(false);
   
   const [formData, setFormData] = useState({
     // Basic Information
     supplier_name: '',
     supplier_code: '',
     contact_person: '',
-    phone: '',
-    whatsapp_number: '',  // NEW: Critical for communication
+    contact_person_phone: '',  // Contact person's direct phone
+    contact_person_email: '',  // Contact person's email
+    phone: '',  // Business phone
+    whatsapp_number: '',  // WhatsApp (can be same as phone)
     alternate_phone: '',
-    email: '',
+    email: '',  // Business email
     website: '',
     
     // Address Information
@@ -97,6 +101,24 @@ const SupplierCreationModal = ({
       setFormData(prev => ({ ...prev, supplier_code: code }));
     }
   }, [formData.supplier_name]);
+
+  // Handle copying business phone to WhatsApp
+  useEffect(() => {
+    if (useBusinessPhoneForWhatsApp && formData.phone) {
+      setFormData(prev => ({ ...prev, whatsapp_number: prev.phone }));
+    }
+  }, [useBusinessPhoneForWhatsApp, formData.phone]);
+
+  // Handle copying business contact to contact person
+  useEffect(() => {
+    if (useBusinessContactForPerson) {
+      setFormData(prev => ({
+        ...prev,
+        contact_person_phone: prev.phone,
+        contact_person_email: prev.email
+      }));
+    }
+  }, [useBusinessContactForPerson, formData.phone, formData.email]);
 
   // Validate GSTIN format
   const validateGSTIN = (gstin) => {
@@ -293,84 +315,195 @@ const SupplierCreationModal = ({
                 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
+                    <Briefcase className="w-4 h-4 inline mr-1" />
                     Supplier Type
                   </label>
                   <select
                     value={formData.supplier_type}
                     onChange={(e) => handleInputChange('supplier_type', e.target.value)}
-                    className="w-full px-4 py-3 text-base border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    className="w-full px-4 py-3 text-base border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                   >
                     <option value="manufacturer">Manufacturer</option>
                     <option value="distributor">Distributor</option>
                     <option value="stockist">Stockist</option>
+                    <option value="wholesaler">Wholesaler</option>
                     <option value="importer">Importer</option>
+                    <option value="trader">Trader</option>
+                    <option value="authorized_dealer">Authorized Dealer</option>
                   </select>
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    <Phone className="w-4 h-4 inline mr-1" />
-                    Phone Number *
-                  </label>
-                  <input
-                    type="tel"
-                    value={formData.phone}
-                    onChange={(e) => handleInputChange('phone', e.target.value)}
-                    className={`w-full px-4 py-3 text-base border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
-                      errors.phone ? 'border-red-300' : 'border-gray-300'
-                    }`}
-                    placeholder="10-digit mobile number"
-                  />
-                  {errors.phone && (
-                    <p className="mt-1 text-sm text-red-600">{errors.phone}</p>
-                  )}
+              {/* Business Contact Section */}
+              <div className="bg-blue-50 p-4 rounded-xl mb-4">
+                <h4 className="text-sm font-semibold text-blue-900 mb-3 flex items-center">
+                  <Building2 className="w-4 h-4 mr-2" />
+                  Business Contact Information
+                </h4>
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                  <div className="relative">
+                    <Phone className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
+                    <input
+                      type="tel"
+                      value={formData.phone}
+                      onChange={(e) => handleInputChange('phone', e.target.value)}
+                      className={`w-full pl-11 pr-3 py-3 border rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
+                        errors.phone ? 'border-red-300 bg-red-50' : 'border-gray-200 bg-white'
+                      }`}
+                      placeholder="Business Phone *"
+                    />
+                    {errors.phone && (
+                      <p className="mt-1 text-sm text-red-600">{errors.phone}</p>
+                    )}
+                  </div>
+                  
+                  <div className="relative">
+                    <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
+                    <input
+                      type="email"
+                      value={formData.email}
+                      onChange={(e) => handleInputChange('email', e.target.value)}
+                      className={`w-full pl-11 pr-3 py-3 border rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
+                        errors.email ? 'border-red-300 bg-red-50' : 'border-gray-200 bg-white'
+                      }`}
+                      placeholder="Business Email"
+                    />
+                    {errors.email && (
+                      <p className="mt-1 text-sm text-red-600">{errors.email}</p>
+                    )}
+                  </div>
                 </div>
-                
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Alternate Phone
-                  </label>
-                  <input
-                    type="tel"
-                    value={formData.alternate_phone}
-                    onChange={(e) => handleInputChange('alternate_phone', e.target.value)}
-                    className="w-full px-4 py-3 text-base border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                    placeholder="Secondary contact"
-                  />
+
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mt-4">
+                  <div className="relative">
+                    <div className="flex items-center justify-between mb-2">
+                      <label className="text-sm text-gray-700">
+                        <MessageCircle className="w-4 h-4 inline mr-1" />
+                        WhatsApp Number
+                      </label>
+                      <div className="flex items-center gap-2">
+                        <input
+                          id="sameAsPhone"
+                          type="checkbox"
+                          checked={useBusinessPhoneForWhatsApp}
+                          onChange={(e) => setUseBusinessPhoneForWhatsApp(e.target.checked)}
+                          className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500"
+                        />
+                        <label htmlFor="sameAsPhone" className="text-xs text-gray-600 cursor-pointer select-none">
+                          Same as phone
+                        </label>
+                      </div>
+                    </div>
+                    <div className="relative">
+                      <MessageCircle className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
+                      <input
+                        type="tel"
+                        value={formData.whatsapp_number}
+                        onChange={(e) => handleInputChange('whatsapp_number', e.target.value)}
+                        disabled={useBusinessPhoneForWhatsApp}
+                        className={`w-full pl-11 pr-3 py-3 border rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
+                          useBusinessPhoneForWhatsApp ? 'bg-gray-100 text-gray-500' : 'bg-white'
+                        } border-gray-200`}
+                        placeholder="WhatsApp Number"
+                      />
+                    </div>
+                  </div>
+                  
+                  <div className="relative">
+                    <label className="block text-sm text-gray-700 mb-2">
+                      <Phone className="w-4 h-4 inline mr-1" />
+                      Alternate Phone
+                    </label>
+                    <div className="relative">
+                      <Phone className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
+                      <input
+                        type="tel"
+                        value={formData.alternate_phone}
+                        onChange={(e) => handleInputChange('alternate_phone', e.target.value)}
+                        className="w-full pl-11 pr-3 py-3 border border-gray-200 bg-white rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                        placeholder="Secondary contact"
+                      />
+                    </div>
+                  </div>
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    <Mail className="w-4 h-4 inline mr-1" />
-                    Email
-                  </label>
-                  <input
-                    type="email"
-                    value={formData.email}
-                    onChange={(e) => handleInputChange('email', e.target.value)}
-                    className={`w-full px-4 py-3 text-base border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
-                      errors.email ? 'border-red-300' : 'border-gray-300'
-                    }`}
-                    placeholder="supplier@example.com"
-                  />
-                  {errors.email && (
-                    <p className="mt-1 text-sm text-red-600">{errors.email}</p>
-                  )}
+              {/* Contact Person Section */}
+              <div className="bg-purple-50 p-4 rounded-xl">
+                <div className="flex items-center justify-between mb-3">
+                  <h4 className="text-sm font-semibold text-purple-900 flex items-center">
+                    <User className="w-4 h-4 mr-2" />
+                    Contact Person Details
+                  </h4>
+                  <div className="flex items-center gap-2">
+                    <input
+                      id="useBusinessContact"
+                      type="checkbox"
+                      checked={useBusinessContactForPerson}
+                      onChange={(e) => setUseBusinessContactForPerson(e.target.checked)}
+                      className="w-4 h-4 text-purple-600 bg-gray-100 border-gray-300 rounded focus:ring-purple-500"
+                    />
+                    <label htmlFor="useBusinessContact" className="text-xs text-gray-600 cursor-pointer select-none">
+                      Use business contact info
+                    </label>
+                  </div>
                 </div>
                 
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Website
-                  </label>
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+                  <div className="relative">
+                    <User className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
+                    <input
+                      type="text"
+                      value={formData.contact_person}
+                      onChange={(e) => handleInputChange('contact_person', e.target.value)}
+                      className="w-full pl-11 pr-3 py-3 border border-gray-200 bg-white rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+                      placeholder="Contact Person Name"
+                    />
+                  </div>
+                  
+                  <div className="relative">
+                    <Phone className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
+                    <input
+                      type="tel"
+                      value={formData.contact_person_phone}
+                      onChange={(e) => handleInputChange('contact_person_phone', e.target.value)}
+                      disabled={useBusinessContactForPerson}
+                      className={`w-full pl-11 pr-3 py-3 border rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-purple-500 ${
+                        useBusinessContactForPerson ? 'bg-gray-100 text-gray-500' : 'bg-white'
+                      } border-gray-200`}
+                      placeholder="Contact Person Phone"
+                    />
+                  </div>
+                  
+                  <div className="relative">
+                    <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
+                    <input
+                      type="email"
+                      value={formData.contact_person_email}
+                      onChange={(e) => handleInputChange('contact_person_email', e.target.value)}
+                      disabled={useBusinessContactForPerson}
+                      className={`w-full pl-11 pr-3 py-3 border rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-purple-500 ${
+                        useBusinessContactForPerson ? 'bg-gray-100 text-gray-500' : 'bg-white'
+                      } border-gray-200`}
+                      placeholder="Contact Person Email"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Website */}
+              <div className="mt-4">
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  <Globe className="w-4 h-4 inline mr-1" />
+                  Website
+                </label>
+                <div className="relative">
+                  <Globe className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
                   <input
                     type="url"
                     value={formData.website}
                     onChange={(e) => handleInputChange('website', e.target.value)}
-                    className="w-full px-4 py-3 text-base border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    className="w-full pl-11 pr-3 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                     placeholder="https://www.example.com"
                   />
                 </div>
@@ -572,16 +705,33 @@ const SupplierCreationModal = ({
             <div className="space-y-6">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Payment Terms (Days)
+                  <Clock className="w-4 h-4 inline mr-1" />
+                  Payment Terms
                 </label>
-                <input
-                  type="number"
+                <select
                   value={formData.payment_terms}
                   onChange={(e) => handleInputChange('payment_terms', e.target.value)}
-                  className="w-full px-4 py-3 text-base border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  min="0"
-                  placeholder="30"
-                />
+                  className="w-full px-4 py-3 text-base border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                >
+                  <option value="0">Immediate Payment</option>
+                  <option value="7">7 Days</option>
+                  <option value="15">15 Days</option>
+                  <option value="30">30 Days (Standard)</option>
+                  <option value="45">45 Days</option>
+                  <option value="60">60 Days</option>
+                  <option value="90">90 Days</option>
+                  <option value="custom">Custom Terms</option>
+                </select>
+                {formData.payment_terms === 'custom' && (
+                  <input
+                    type="number"
+                    value={formData.payment_days || ''}
+                    onChange={(e) => handleInputChange('payment_days', e.target.value)}
+                    className="mt-2 w-full px-4 py-3 text-base border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    min="0"
+                    placeholder="Enter custom days"
+                  />
+                )}
               </div>
 
               <div className="border-t pt-4">
