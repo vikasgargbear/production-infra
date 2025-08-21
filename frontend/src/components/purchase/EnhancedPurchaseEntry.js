@@ -701,7 +701,7 @@ const EnhancedPurchaseEntry = ({ onClose, prefilledData = null }) => {
       {/* Modals */}
       {showSupplierModal && (
         <SupplierCreationModal
-          open={showSupplierModal}
+          isOpen={showSupplierModal}
           onClose={() => setShowSupplierModal(false)}
           onSupplierCreated={(supplier) => {
             handleSupplierSelect(supplier);
@@ -714,7 +714,7 @@ const EnhancedPurchaseEntry = ({ onClose, prefilledData = null }) => {
 
       {showProductModal && (
         <ProductCreationModal
-          open={showProductModal}
+          show={showProductModal}
           onClose={() => setShowProductModal(false)}
           onProductCreated={(product) => {
             setShowProductModal(false);
@@ -730,18 +730,37 @@ const EnhancedPurchaseEntry = ({ onClose, prefilledData = null }) => {
 
       {showPDFUpload && (
         <PDFUploadModal
-          show={showPDFUpload}
+          isOpen={showPDFUpload}
           onClose={() => setShowPDFUpload(false)}
-          onUploadSuccess={(data) => {
+          onDataExtracted={(data) => {
             // Handle PDF data extraction
-            if (data.supplier_invoice_number) {
-              setPurchase(prev => ({ ...prev, supplier_invoice_number: data.supplier_invoice_number }));
+            if (data.invoice_number) {
+              setPurchase(prev => ({ ...prev, supplier_invoice_number: data.invoice_number }));
             }
-            if (data.items) {
-              setPurchase(prev => ({ ...prev, items: data.items }));
+            if (data.supplier_name) {
+              setPurchase(prev => ({ ...prev, supplier_name: data.supplier_name }));
             }
-            setShowPDFUpload(false);
-            toast.success('PDF data extracted successfully');
+            if (data.items && data.items.length > 0) {
+              // Map extracted items to the format expected by the component
+              const mappedItems = data.items.map(item => ({
+                product_id: item.product_id || '',
+                product_name: item.product_name || '',
+                hsn_code: item.hsn_code || '',
+                batch_number: item.batch_number || '',
+                expiry_date: item.expiry_date || '',
+                quantity: item.quantity || 0,
+                purchase_price: item.cost_price || item.rate || 0,
+                selling_price: item.mrp || 0,
+                mrp: item.mrp || 0,
+                discount_percent: item.discount_percent || 0,
+                tax_percent: item.tax_percent || 12,
+                amount: item.amount || 0
+              }));
+              setPurchase(prev => ({ ...prev, items: mappedItems }));
+            }
+            // Don't close the modal here - let the user confirm in the modal
+            // setShowPDFUpload(false); // REMOVED - modal closes itself after confirm
+            toast.success('PDF data extracted - review and confirm');
           }}
         />
       )}

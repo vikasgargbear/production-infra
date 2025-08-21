@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { X, FileText, Loader, Upload, CheckCircle, AlertCircle } from 'lucide-react';
 import { purchasesApi } from '../services/api';
 
@@ -8,6 +8,15 @@ const PDFUploadModal = ({ isOpen, onClose, onDataExtracted }) => {
   const [extractedData, setExtractedData] = useState(null);
   const [error, setError] = useState('');
   const [editedData, setEditedData] = useState(null);
+  
+  // Debug state changes
+  useEffect(() => {
+    console.log('📊 State Update - extractedData:', extractedData);
+  }, [extractedData]);
+  
+  useEffect(() => {
+    console.log('📝 State Update - editedData:', editedData);
+  }, [editedData]);
 
   const handleFileSelect = (e) => {
     const selectedFile = e.target.files[0];
@@ -29,28 +38,52 @@ const PDFUploadModal = ({ isOpen, onClose, onDataExtracted }) => {
 
     try {
       const response = await purchasesApi.parseInvoice(formData);
-      console.log('PDF Parse Response:', response.data);
+      console.log('Full API Response:', response);
+      console.log('Response data:', response.data);
+      console.log('Response status:', response.status);
       
       // Always show the extracted data, even if it's just a template
-      if (response.data && response.data.extracted_data) {
+      if (response && response.data && response.data.extracted_data) {
         console.log('Setting extracted data:', response.data.extracted_data);
         console.log('Items in extracted data:', response.data.extracted_data.items);
-        setExtractedData(response.data.extracted_data);
-        setEditedData(response.data.extracted_data);
+        
+        // Set the extracted data to show the review UI
+        const extractedInfo = response.data.extracted_data;
+        console.log('📋 About to set state with:', extractedInfo);
+        
+        // Force state update with new object references
+        setExtractedData(prevData => {
+          console.log('Previous extractedData:', prevData);
+          console.log('New extractedData:', extractedInfo);
+          return extractedInfo;
+        });
+        
+        setEditedData(prevData => {
+          console.log('Previous editedData:', prevData);
+          const newData = {...extractedInfo};
+          console.log('New editedData:', newData);
+          return newData;
+        });
+        
+        // Log state after setting
+        setTimeout(() => {
+          console.log('State after setting - extractedData:', extractedData);
+          console.log('State after setting - editedData:', editedData);
+        }, 100);
         
         // Show message about the extraction status
         if (response.data.success) {
-          console.log('Extraction successful with', response.data.extracted_data.items?.length || 0, 'items');
+          console.log('✅ Extraction successful with', response.data.extracted_data.items?.length || 0, 'items');
         } else if (response.data.message) {
           // Show as info, not error - user can still fill in manually
-          console.log('Parse message:', response.data.message);
+          console.log('ℹ️ Parse message:', response.data.message);
         }
       } else {
-        console.error('No extracted_data in response:', response.data);
-        setError('Failed to extract data from PDF');
+        console.error('❌ No extracted_data in response:', response);
+        setError('Failed to extract data from PDF - no data returned');
       }
     } catch (error) {
-      console.error('Upload failed:', error);
+      console.error('❌ Upload failed:', error);
       setError(error.response?.data?.detail || 'Failed to upload PDF');
     } finally {
       setLoading(false);
@@ -68,6 +101,7 @@ const PDFUploadModal = ({ isOpen, onClose, onDataExtracted }) => {
   };
 
   const handleConfirm = () => {
+    console.log('🚀 Confirming with data:', editedData);
     onDataExtracted(editedData);
     onClose();
     // Reset state
@@ -75,6 +109,16 @@ const PDFUploadModal = ({ isOpen, onClose, onDataExtracted }) => {
     setExtractedData(null);
     setEditedData(null);
     setError('');
+  };
+  
+  const handleClose = () => {
+    console.log('❌ Closing modal, resetting state');
+    // Reset all state when closing
+    setFile(null);
+    setExtractedData(null);
+    setEditedData(null);
+    setError('');
+    onClose();
   };
 
   const handleReset = () => {
@@ -101,7 +145,7 @@ const PDFUploadModal = ({ isOpen, onClose, onDataExtracted }) => {
             Upload Purchase Invoice
           </h3>
           <button 
-            onClick={onClose}
+            onClick={handleClose}
             className="p-1 hover:bg-gray-100 rounded"
           >
             <X size={24} />
@@ -422,7 +466,7 @@ const PDFUploadModal = ({ isOpen, onClose, onDataExtracted }) => {
                 Create Purchase Order
               </button>
               <button
-                onClick={onClose}
+                onClick={handleClose}
                 className="px-6 py-3 border border-gray-300 rounded-lg hover:bg-gray-50"
               >
                 Cancel

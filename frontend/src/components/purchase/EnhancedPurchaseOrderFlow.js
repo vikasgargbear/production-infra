@@ -559,7 +559,7 @@ const EnhancedPurchaseOrderFlow = ({ onClose, prefilledData = null }) => {
       {/* Modals */}
       {showSupplierModal && (
         <SupplierCreationModal
-          open={showSupplierModal}
+          isOpen={showSupplierModal}
           onClose={() => setShowSupplierModal(false)}
           onSupplierCreated={(supplier) => {
             handleSupplierSelect(supplier);
@@ -572,7 +572,7 @@ const EnhancedPurchaseOrderFlow = ({ onClose, prefilledData = null }) => {
 
       {showProductModal && (
         <ProductCreationModal
-          open={showProductModal}
+          show={showProductModal}
           onClose={() => setShowProductModal(false)}
           onProductCreated={(product) => {
             setShowProductModal(false);

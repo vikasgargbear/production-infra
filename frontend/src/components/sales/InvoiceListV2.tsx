@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import { Button, StatusBadge, DataTable, InlineFilterPanel } from '../global';
 import GlobalPDFGenerator from '../global/pdf/GlobalPDFGenerator';
+import { generateAndDownloadPDF } from '../../utils/pdfHelpers';
 import InvoiceApiService from '../../services/invoiceApiService';
 import debugLogger from '../../utils/debugLogger';
 
@@ -125,7 +126,7 @@ const InvoiceListV2: React.FC<InvoiceListProps> = ({ onClose }) => {
     }
   };
 
-  const exportSelectedPDF = (theme = 'digital') => {
+  const exportSelectedPDF = (theme: 'digital' | 'print' = 'digital') => {
     const itemsToExport = filteredInvoices.filter(invoice => selectedIds.has(invoice.id));
     if (itemsToExport.length === 0) return;
 
@@ -397,9 +398,37 @@ const InvoiceListV2: React.FC<InvoiceListProps> = ({ onClose }) => {
     alert(`Editing invoice: ${invoice.invoice_number}`);
   };
 
-  const handlePrintInvoice = (invoice: Invoice) => {
-    // TODO: Open print dialog or generate PDF
-    alert(`Printing invoice: ${invoice.invoice_number}`);
+  const handlePrintInvoice = async (invoice: Invoice) => {
+    try {
+      // Fetch full invoice details if needed
+      const response = await InvoiceApiService.getInvoiceById(invoice.invoice_id || invoice.id);
+      
+      if (response.success && response.data) {
+        // Generate and download PDF
+        await generateAndDownloadPDF(
+          response.data,
+          `${invoice.invoice_number}.pdf`,
+          {
+            theme: 'modern',
+            documentType: 'invoice',
+            watermark: invoice.invoice_status === 'draft' || invoice.status === 'draft' ? 'DRAFT' : undefined
+          }
+        );
+      } else {
+        // Fallback: use existing invoice data
+        await generateAndDownloadPDF(
+          invoice,
+          `${invoice.invoice_number}.pdf`,
+          {
+            theme: 'modern',
+            documentType: 'invoice'
+          }
+        );
+      }
+    } catch (error) {
+      console.error('Error generating PDF:', error);
+      alert('Failed to generate PDF. Please try again.');
+    }
   };
 
   const handleMoreOptions = (invoice: Invoice) => {
@@ -732,7 +761,7 @@ const InvoiceListV2: React.FC<InvoiceListProps> = ({ onClose }) => {
                   <div className="flex items-center space-x-2">
                     <span className="text-sm text-gray-700 mr-1">Selected: {selectedCount}</span>
                     <button 
-                      onClick={exportSelectedPDF} 
+                      onClick={() => exportSelectedPDF()} 
                       className="px-3 py-2 bg-gray-700 text-white rounded-lg hover:bg-gray-800 transition-colors text-sm flex items-center space-x-2 shadow-sm"
                     >
                       <Download className="w-4 h-4" />
@@ -757,7 +786,7 @@ const InvoiceListV2: React.FC<InvoiceListProps> = ({ onClose }) => {
                   </div>
                 ) : (
                   <button 
-                    onClick={exportSelectedPDF}
+                    onClick={() => exportSelectedPDF()}
                     className="px-4 py-2 bg-gray-800 text-white rounded-lg hover:bg-gray-700 transition-colors text-sm flex items-center space-x-2"
                   >
                     <Download className="w-4 h-4" />

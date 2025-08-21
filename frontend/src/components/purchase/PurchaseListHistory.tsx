@@ -6,6 +6,7 @@ import {
 } from 'lucide-react';
 import { Button, StatusBadge, DataTable, InlineFilterPanel } from '../global';
 import GlobalPDFGenerator from '../global/pdf/GlobalPDFGenerator';
+import { generateAndDownloadPDF } from '../../utils/pdfHelpers';
 import { purchasesApi } from '../../services/api';
 import { formatCurrency } from '../../utils/formatters';
 
@@ -291,54 +292,61 @@ const PurchaseListHistory: React.FC<PurchaseListHistoryProps> = ({ onClose }) =>
     }).format(amount);
   };
 
-  const exportSelectedPDF = (theme = 'digital') => {
+  const exportSelectedPDF = async (theme: 'modern' | 'print' | 'digital' | 'classic' = 'modern') => {
     const itemsToExport = filteredPurchases.filter(purchase => selectedIds.has(purchase.id));
     if (itemsToExport.length === 0) return;
 
-    const pdfGenerator = new GlobalPDFGenerator(theme);
-    const doc = pdfGenerator.doc;
-    
-    // Add header
-    pdfGenerator.addHeader('Purchase Orders Report');
-    
-    // If single purchase order, add supplier details
-    if (itemsToExport.length === 1) {
-      const purchase = itemsToExport[0];
-      pdfGenerator.addPartyDetails({
-        name: purchase.supplier_name || 'N/A',
-        phone: '', // Add if available in purchase data
-        address: '', // Add if available in purchase data
-        gst: '' // Add if available in purchase data
-      }, 'supplier');
+    try {
+      if (itemsToExport.length === 1) {
+        // Single purchase - generate detailed PDF
+        const purchase = itemsToExport[0];
+        await generateAndDownloadPDF(
+          purchase,
+          `${purchase.po_number}.pdf`,
+          {
+            theme: theme as any,
+            documentType: 'purchase',
+            watermark: purchase.po_status === 'draft' ? 'DRAFT' : undefined
+          }
+        );
+      } else {
+        // Multiple purchases - generate summary report
+        const pdfGenerator = new GlobalPDFGenerator(theme as any, 'purchase');
+        await pdfGenerator.init(theme as any, 'purchase');
+        
+        // Add header
+        pdfGenerator.addHeader('Purchase Orders Report');
+        
+        // Prepare table data
+        const headers = ['PO #', 'Date', 'Supplier', 'Amount', 'Status'];
+        const rows = itemsToExport.map(purchase => [
+          purchase.po_number,
+          formatDate(purchase.po_date),
+          purchase.supplier_name || 'N/A',
+          formatCurrency(purchase.total_amount || 0),
+          purchase.po_status || 'draft'
+        ]);
+        
+        // Add table
+        pdfGenerator.addTable(headers, rows, 'supplier');
+        
+        // Add summary
+        const totalAmount = itemsToExport.reduce((sum, purchase) => sum + (purchase.total_amount || 0), 0);
+        pdfGenerator.addSummary({
+          subtotal: totalAmount,
+          total: totalAmount
+        });
+        
+        // Add footer
+        pdfGenerator.addFooter();
+        
+        // Download the PDF
+        pdfGenerator.download(`purchase-orders-${new Date().getTime()}.pdf`);
+      }
+    } catch (error) {
+      console.error('Error generating PDF:', error);
+      alert('Failed to generate PDF. Please try again.');
     }
-    
-    // Prepare table data
-    const headers = ['PO #', 'Date', 'Supplier', 'Amount', 'Status'];
-    const rows = itemsToExport.map(purchase => [
-      purchase.po_number,
-      formatDate(purchase.po_date),
-      purchase.supplier_name || 'N/A',
-      formatCurrency(purchase.total_amount || 0),
-      purchase.po_status || 'draft'
-    ]);
-    
-    // Add table
-    pdfGenerator.addTable(headers, rows, 'supplier');
-    
-    // Add summary
-    const totalAmount = itemsToExport.reduce((sum, purchase) => sum + (purchase.total_amount || 0), 0);
-    pdfGenerator.addSummary({
-      subtotal: totalAmount,
-      tax: 0, // Calculate from purchase data if available
-      discount: 0, // Calculate from purchase data if available
-      total: totalAmount
-    });
-    
-    // Add footer
-    pdfGenerator.addFooter();
-    
-    // Save the PDF
-    doc.save(`purchase-orders-${new Date().getTime()}.pdf`);
   };
 
   const printSelected = () => {
@@ -386,10 +394,22 @@ const PurchaseListHistory: React.FC<PurchaseListHistoryProps> = ({ onClose }) =>
     alert(`Editing purchase: ${purchase.po_number}`);
   };
 
-  const handlePrintPurchase = (purchase: Purchase) => {
+  const handlePrintPurchase = async (purchase: Purchase) => {
     console.log('Printing purchase:', purchase.po_number);
-    // TODO: Open print dialog or generate PDF
-    alert(`Printing purchase: ${purchase.po_number}`);
+    try {
+      await generateAndDownloadPDF(
+        purchase,
+        `${purchase.po_number}.pdf`,
+        {
+          theme: 'modern',
+          documentType: 'purchase',
+          watermark: purchase.po_status === 'draft' ? 'DRAFT' : undefined
+        }
+      );
+    } catch (error) {
+      console.error('Error generating PDF:', error);
+      alert('Failed to generate PDF. Please try again.');
+    }
   };
 
   const handleMoreOptions = (purchase: Purchase) => {
@@ -571,9 +591,21 @@ const PurchaseListHistory: React.FC<PurchaseListHistoryProps> = ({ onClose }) =>
           </button>
 
           <button
-            onClick={() => {
-              setSelectedIds(new Set([purchase.id]));
-              setTimeout(() => exportSelectedPDF(), 0);
+            onClick={async () => {
+              try {
+                await generateAndDownloadPDF(
+                  purchase,
+                  `${purchase.po_number}.pdf`,
+                  {
+                    theme: 'modern',
+                    documentType: 'purchase',
+                    watermark: purchase.po_status === 'draft' ? 'DRAFT' : undefined
+                  }
+                );
+              } catch (error) {
+                console.error('Error generating PDF:', error);
+                alert('Failed to generate PDF');
+              }
             }}
             className="p-2 text-purple-500 hover:text-purple-700 hover:bg-purple-50 rounded-lg transition-colors"
             title="Download PDF"
@@ -715,7 +747,7 @@ const PurchaseListHistory: React.FC<PurchaseListHistoryProps> = ({ onClose }) =>
                   <div className="flex items-center space-x-2">
                     <span className="text-sm text-gray-700 mr-1">Selected: {selectedCount}</span>
                     <button 
-                      onClick={exportSelectedPDF} 
+                      onClick={() => exportSelectedPDF()} 
                       className="px-3 py-2 bg-gray-800 text-white rounded-lg hover:bg-gray-700 text-sm flex items-center space-x-2"
                     >
                       <Download className="w-4 h-4" />
@@ -738,7 +770,7 @@ const PurchaseListHistory: React.FC<PurchaseListHistoryProps> = ({ onClose }) =>
                   </div>
                 ) : (
                   <button 
-                    onClick={exportSelectedPDF}
+                    onClick={() => exportSelectedPDF()}
                     className="px-4 py-2 bg-gray-800 text-white rounded-lg hover:bg-gray-700 transition-colors text-sm flex items-center space-x-2"
                   >
                     <Download className="w-4 h-4" />

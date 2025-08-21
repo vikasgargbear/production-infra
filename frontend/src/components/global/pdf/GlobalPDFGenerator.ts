@@ -1,5 +1,5 @@
 import jsPDF from 'jspdf';
-import 'jspdf-autotable';
+import autoTable from 'jspdf-autotable';
 import { companyAPI } from '../../../services/api';
 
 interface CompanyInfo {
@@ -21,14 +21,51 @@ interface PartyDetails {
 
 interface SummaryData {
   subtotal: number;
-  tax: number;
-  discount: number;
+  tax?: number;
+  cgst?: number;
+  sgst?: number;
+  igst?: number;
+  discount?: number;
+  roundOff?: number;
   total: number;
   currency?: string;
+  taxBreakdown?: Array<{
+    label: string;
+    amount: number;
+  }>;
 }
 
-type Theme = 'digital' | 'print';
-type PartyType = 'customer' | 'supplier';
+interface BankDetails {
+  bankName?: string;
+  accountNumber?: string;
+  ifscCode?: string;
+  branch?: string;
+  upiId?: string;
+}
+
+interface ItemDetails {
+  srNo?: number;
+  name: string;
+  description?: string;
+  hsn?: string;
+  batch?: string;
+  expiry?: string;
+  quantity: number;
+  unit?: string;
+  unitPrice: number;
+  discount?: number;
+  discountType?: 'percentage' | 'amount';
+  taxPercent?: number;
+  cgstPercent?: number;
+  sgstPercent?: number;
+  igstPercent?: number;
+  lineTotal: number;
+  notes?: string;
+}
+
+export type Theme = 'digital' | 'print' | 'modern' | 'classic';
+export type PartyType = 'customer' | 'supplier';
+export type DocumentType = 'invoice' | 'purchase' | 'challan' | 'quotation' | 'order' | 'receipt' | 'creditnote' | 'debitnote';
 
 /**
  * Global PDF Generator with consistent branding and themes
@@ -37,11 +74,22 @@ type PartyType = 'customer' | 'supplier';
 class GlobalPDFGenerator {
   doc: jsPDF;
   theme: Theme;
+  documentType: DocumentType;
   companyInfo: CompanyInfo;
   colors: Record<Theme, Record<string, number[]>>;
-  constructor(theme: Theme = 'digital') {
+  currentY: number;
+  pageWidth: number;
+  pageHeight: number;
+  margin: { left: number; right: number; top: number; bottom: number };
+  
+  constructor(theme: Theme = 'modern', documentType: DocumentType = 'invoice') {
     this.doc = new jsPDF();
-    this.theme = theme; // 'print' or 'digital'
+    this.theme = theme;
+    this.documentType = documentType;
+    this.currentY = 0;
+    this.pageWidth = this.doc.internal.pageSize.getWidth();
+    this.pageHeight = this.doc.internal.pageSize.getHeight();
+    this.margin = { left: 15, right: 15, top: 15, bottom: 25 };
     // Will be loaded from backend via init() or loadCompanyInfo()
     this.companyInfo = {
       name: '',
@@ -78,8 +126,34 @@ class GlobalPDFGenerator {
         success: [0, 0, 0],
         warning: [0, 0, 0],
         danger: [0, 0, 0]
+      },
+      modern: {
+        primary: [37, 99, 235], // Blue-600
+        secondary: [79, 70, 229], // Indigo-600
+        accent: [6, 182, 212], // Cyan-500
+        dark: [15, 23, 42], // Slate-900
+        light: [248, 250, 252], // Slate-50
+        white: [255, 255, 255],
+        text: [15, 23, 42], // Slate-900
+        textLight: [100, 116, 139], // Slate-500
+        success: [34, 197, 94],
+        warning: [251, 146, 60],
+        danger: [239, 68, 68]
+      },
+      classic: {
+        primary: [17, 24, 39], // Gray-900
+        secondary: [55, 65, 81], // Gray-700
+        accent: [75, 85, 99], // Gray-600
+        dark: [0, 0, 0],
+        light: [243, 244, 246], // Gray-100
+        white: [255, 255, 255],
+        text: [17, 24, 39],
+        textLight: [107, 114, 128],
+        success: [5, 150, 105],
+        warning: [217, 119, 6],
+        danger: [185, 28, 28]
       }
-    };
+    } as Record<Theme, Record<string, number[]>>;
   }
 
   /**
@@ -114,9 +188,16 @@ class GlobalPDFGenerator {
   /**
    * Initialize PDF with company info
    */
-  async init(theme: Theme = 'digital', orientation: 'portrait' | 'landscape' = 'portrait'): Promise<this> {
+  async init(
+    theme: Theme = 'modern', 
+    documentType: DocumentType = 'invoice',
+    orientation: 'portrait' | 'landscape' = 'portrait'
+  ): Promise<this> {
     this.theme = theme;
+    this.documentType = documentType;
     this.doc = new jsPDF(orientation);
+    this.pageWidth = this.doc.internal.pageSize.getWidth();
+    this.pageHeight = this.doc.internal.pageSize.getHeight();
     
     // Ensure company info is loaded
     await this.loadCompanyInfo();
@@ -125,13 +206,60 @@ class GlobalPDFGenerator {
   }
 
   /**
+   * Get document title based on type
+   */
+  private getDocumentTitle(): string {
+    const titles: Record<DocumentType, string> = {
+      invoice: 'TAX INVOICE',
+      purchase: 'PURCHASE INVOICE',
+      challan: 'DELIVERY CHALLAN',
+      quotation: 'QUOTATION',
+      order: 'PURCHASE ORDER',
+      receipt: 'PAYMENT RECEIPT',
+      creditnote: 'CREDIT NOTE',
+      debitnote: 'DEBIT NOTE'
+    };
+    return titles[this.documentType] || 'DOCUMENT';
+  }
+
+  /**
+   * Add centered text helper
+   */
+  private addCenteredText(text: string, y: number, fontSize: number = 12, fontStyle: string = 'normal'): void {
+    this.doc.setFontSize(fontSize);
+    this.doc.setFont('helvetica', fontStyle);
+    const textWidth = this.doc.getTextWidth(text);
+    this.doc.text(text, (this.pageWidth - textWidth) / 2, y);
+  }
+
+  /**
+   * Add line helper
+   */
+  private addLine(startX: number, startY: number, endX: number, endY: number, width: number = 0.2): void {
+    this.doc.setLineWidth(width);
+    this.doc.line(startX, startY, endX, endY);
+  }
+
+  /**
+   * Check if new page is needed
+   */
+  private checkNewPage(requiredSpace: number = 30): void {
+    if (this.currentY + requiredSpace > this.pageHeight - this.margin.bottom) {
+      this.doc.addPage();
+      this.currentY = this.margin.top;
+      this.addPageNumber();
+    }
+  }
+
+  /**
    * Add branded header with logo and company info
    */
-  addHeader(title: string, subtitle: string = ''): number {
+  addHeader(title?: string, subtitle: string = ''): number {
     const colors = this.colors[this.theme];
     const pageWidth = this.doc.internal.pageSize.getWidth();
+    const docTitle = title || this.getDocumentTitle();
     
-    if (this.theme === 'digital') {
+    if (this.theme === 'digital' || this.theme === 'modern') {
       // Digital theme - colorful header
       // Add gradient background
       this.doc.setFillColor(colors.primary[0], colors.primary[1], colors.primary[2]);
@@ -150,7 +278,7 @@ class GlobalPDFGenerator {
       // Document title
       this.doc.setFontSize(14);
       this.doc.setFont('helvetica', 'normal');
-      this.doc.text(title, 15, 30);
+      this.doc.text(docTitle, 15, 30);
       
       if (subtitle) {
         this.doc.setFontSize(10);
@@ -178,7 +306,8 @@ class GlobalPDFGenerator {
       this.doc.setLineWidth(0.5);
       this.doc.line(15, 47, pageWidth - 15, 47);
       
-      return 55; // Return Y position for content start
+      this.currentY = 55;
+      return this.currentY;
     } else {
       // Print theme - minimal header
       this.applyColor('setTextColor', colors.text);
@@ -191,7 +320,7 @@ class GlobalPDFGenerator {
       // Document title
       this.doc.setFontSize(12);
       this.doc.setFont('helvetica', 'normal');
-      this.doc.text(title, 15, 22);
+      this.doc.text(docTitle, 15, 22);
       
       if (subtitle) {
         this.doc.setFontSize(10);
@@ -203,7 +332,8 @@ class GlobalPDFGenerator {
       this.doc.setLineWidth(0.2);
       this.doc.line(15, 30, pageWidth - 15, 30);
       
-      return 35; // Return Y position for content start
+      this.currentY = 35;
+      return this.currentY;
     }
   }
 
@@ -326,7 +456,7 @@ class GlobalPDFGenerator {
     const colors = this.colors[this.theme];
     const yPos = (this.doc as any).lastAutoTable?.finalY || 100;
     
-    (this.doc as any).autoTable({
+    autoTable(this.doc, {
       startY: yPos + 10,
       head: [headers],
       body: rows,
@@ -345,7 +475,7 @@ class GlobalPDFGenerator {
         fillColor: colors.light
       } : {},
       margin: { left: 15, right: 15 }
-    });
+    } as any);
   }
 
   /**
@@ -392,7 +522,7 @@ class GlobalPDFGenerator {
       }
     });
     
-    (this.doc as any).autoTable(tableConfig);
+    autoTable(this.doc, tableConfig as any);
     
     return (this.doc as any).lastAutoTable.finalY;
   }
@@ -400,21 +530,24 @@ class GlobalPDFGenerator {
   /**
    * Add summary section with totals
    */
-  addSummary(summary: SummaryData, yPos: number = 150): void {
+  addSummary(summary: SummaryData, yPos?: number): void {
     const colors = this.colors[this.theme];
     const pageWidth = this.doc.internal.pageSize.getWidth();
+    const startY = yPos || this.currentY || 150;
     
-    if (this.theme === 'digital') {
+    this.checkNewPage(80);
+    
+    if (this.theme === 'digital' || this.theme === 'modern') {
       // Gradient background for summary (simplified as gradient API may not be available)
       // Just use solid color instead
       
       this.applyColor('setFillColor', colors.light);
-      this.doc.roundedRect(pageWidth - 100, yPos, 85, 60, 3, 3, 'F');
+      this.doc.roundedRect(pageWidth - 100, startY, 85, 80, 3, 3, 'F');
       
       this.applyColor('setTextColor', colors.text);
       this.doc.setFontSize(10);
       
-      let summaryY = yPos + 10;
+      let summaryY = startY + 10;
       
       // Summary items - format currency values
       const formatCurrency = (amount: number) => {
@@ -424,12 +557,44 @@ class GlobalPDFGenerator {
         }).format(amount);
       };
       
-      const items = [
-        { label: 'Subtotal', value: formatCurrency(summary.subtotal), bold: false },
-        { label: 'Tax', value: formatCurrency(summary.tax), bold: false },
-        { label: 'Discount', value: formatCurrency(summary.discount), bold: false },
-        { label: 'Total', value: formatCurrency(summary.total), bold: true }
-      ].filter(item => item.value !== undefined);
+      const items: Array<{ label: string; value: string; bold: boolean }> = [];
+      
+      // Add subtotal
+      items.push({ label: 'Subtotal', value: formatCurrency(summary.subtotal), bold: false });
+      
+      // Add discount if present
+      if (summary.discount !== undefined && summary.discount > 0) {
+        items.push({ label: 'Discount', value: `-${formatCurrency(summary.discount)}`, bold: false });
+      }
+      
+      // Add tax breakdown
+      if (summary.cgst !== undefined && summary.cgst > 0) {
+        items.push({ label: 'CGST', value: formatCurrency(summary.cgst), bold: false });
+      }
+      if (summary.sgst !== undefined && summary.sgst > 0) {
+        items.push({ label: 'SGST', value: formatCurrency(summary.sgst), bold: false });
+      }
+      if (summary.igst !== undefined && summary.igst > 0) {
+        items.push({ label: 'IGST', value: formatCurrency(summary.igst), bold: false });
+      }
+      if (summary.tax !== undefined && summary.tax > 0 && !summary.cgst && !summary.sgst && !summary.igst) {
+        items.push({ label: 'Tax', value: formatCurrency(summary.tax), bold: false });
+      }
+      
+      // Add custom tax breakdown if provided
+      if (summary.taxBreakdown) {
+        summary.taxBreakdown.forEach(tax => {
+          items.push({ label: tax.label, value: formatCurrency(tax.amount), bold: false });
+        });
+      }
+      
+      // Add round off if present
+      if (summary.roundOff !== undefined && summary.roundOff !== 0) {
+        items.push({ label: 'Round Off', value: formatCurrency(summary.roundOff), bold: false });
+      }
+      
+      // Add total
+      items.push({ label: 'Total', value: formatCurrency(summary.total), bold: true });
       
       items.forEach(item => {
         this.doc.setFont('helvetica', item.bold ? 'bold' : 'normal');
@@ -460,12 +625,38 @@ class GlobalPDFGenerator {
         }).format(amount);
       };
       
-      let summaryY = yPos;
-      const items = [
-        { label: 'Subtotal', value: formatCurrency(summary.subtotal) },
-        { label: 'Tax', value: formatCurrency(summary.tax) },
-        { label: 'Total', value: formatCurrency(summary.total), bold: true }
-      ].filter(item => item.value !== undefined);
+      let summaryY = startY;
+      const items: Array<{ label: string; value: string; bold: boolean }> = [];
+      
+      // Add subtotal
+      items.push({ label: 'Subtotal', value: formatCurrency(summary.subtotal), bold: false });
+      
+      // Add discount if present
+      if (summary.discount && summary.discount > 0) {
+        items.push({ label: 'Discount', value: `-${formatCurrency(summary.discount)}`, bold: false });
+      }
+      
+      // Add tax breakdown
+      if (summary.cgst && summary.cgst > 0) {
+        items.push({ label: 'CGST', value: formatCurrency(summary.cgst), bold: false });
+      }
+      if (summary.sgst && summary.sgst > 0) {
+        items.push({ label: 'SGST', value: formatCurrency(summary.sgst), bold: false });
+      }
+      if (summary.igst && summary.igst > 0) {
+        items.push({ label: 'IGST', value: formatCurrency(summary.igst), bold: false });
+      }
+      if (summary.tax && !summary.cgst && !summary.sgst && !summary.igst) {
+        items.push({ label: 'Tax', value: formatCurrency(summary.tax), bold: false });
+      }
+      
+      // Add round off if present
+      if (summary.roundOff !== undefined && summary.roundOff !== 0) {
+        items.push({ label: 'Round Off', value: formatCurrency(summary.roundOff), bold: false });
+      }
+      
+      // Add total
+      items.push({ label: 'Total', value: formatCurrency(summary.total), bold: true });
       
       items.forEach(item => {
         this.doc.setFont('helvetica', item.bold ? 'bold' : 'normal');
@@ -571,8 +762,8 @@ class GlobalPDFGenerator {
     const colors = this.colors[this.theme];
     const pageWidth = this.doc.internal.pageSize.getWidth();
     const pageHeight = this.doc.internal.pageSize.getHeight();
-    const pageNumber = this.doc.internal.getCurrentPageInfo().pageNumber;
-    const totalPages = this.doc.internal.getNumberOfPages();
+    const pageNumber = (this.doc as any).internal.getCurrentPageInfo ? (this.doc as any).internal.getCurrentPageInfo().pageNumber : 1;
+    const totalPages = (this.doc as any).internal.getNumberOfPages ? (this.doc as any).internal.getNumberOfPages() : 1;
     
     this.applyColor('setTextColor', colors.textLight);
     this.doc.setFontSize(8);
