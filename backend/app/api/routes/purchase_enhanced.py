@@ -45,8 +45,6 @@ def get_purchases(
                 p.tax_amount,
                 p.total_amount,
                 p.po_status,
-                p.payment_status,
-                p.receipt_status,
                 p.expected_delivery_date,
                 p.created_at,
                 COUNT(poi.po_item_id) as items_count
@@ -96,8 +94,8 @@ def get_purchases(
         query += """
             GROUP BY p.purchase_order_id, p.po_number, p.po_date, p.po_type,
                      p.supplier_id, p.supplier_name, p.subtotal_amount,
-                     p.tax_amount, p.total_amount, p.po_status, p.payment_status,
-                     p.receipt_status, p.expected_delivery_date, p.created_at
+                     p.tax_amount, p.total_amount, p.po_status,
+                     p.expected_delivery_date, p.created_at
             ORDER BY p.po_date DESC, p.created_at DESC
         """
         
@@ -138,7 +136,13 @@ def get_purchases(
         
         # Execute main query
         result = db.execute(text(query), params)
-        purchases = [dict(row._mapping) for row in result]
+        purchases = []
+        for row in result:
+            purchase = dict(row._mapping)
+            # Add default values for fields frontend expects
+            purchase['payment_status'] = 'pending'  # Default since not in DB
+            purchase['receipt_status'] = purchase.get('receipt_status', 'pending')
+            purchases.append(purchase)
         
         # Calculate pagination info
         total_pages = (total_count + limit - 1) // limit if limit > 0 else 1
