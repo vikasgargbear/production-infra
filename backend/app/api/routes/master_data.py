@@ -24,24 +24,24 @@ DEFAULT_ORG_ID = "ad808530-1ddb-4377-ab20-67bef145d80d"
 async def create_customer(customer_data: Dict[str, Any], db: Session = Depends(get_db)):
     """Create a new customer"""
     try:
-        # Insert into parties.customers table
+        # Insert into parties.customers table with actual column names
         query = text("""
             INSERT INTO parties.customers (
-                org_id, customer_name, customer_code, contact_person,
-                primary_phone, secondary_phone, email, 
-                address_line1, address_line2, area, city, state, pincode,
-                gstin, pan_number, drug_license_number, 
+                org_id, customer_name, customer_code, 
+                primary_phone, secondary_phone, primary_email,
+                contact_person_name, contact_person_phone, contact_person_email,
+                gst_number, pan_number, drug_license_number, 
                 customer_type, territory_id, route_id,
                 credit_limit, credit_days, payment_terms,
-                discount_percent, status, created_by
+                is_active, created_by
             ) VALUES (
-                :org_id, :customer_name, :customer_code, :contact_person,
-                :primary_phone, :secondary_phone, :email,
-                :address_line1, :address_line2, :area, :city, :state, :pincode,
-                :gstin, :pan_number, :drug_license_number,
+                :org_id, :customer_name, :customer_code,
+                :primary_phone, :secondary_phone, :primary_email,
+                :contact_person_name, :contact_person_phone, :contact_person_email,
+                :gst_number, :pan_number, :drug_license_number,
                 :customer_type, :territory_id, :route_id,
                 :credit_limit, :credit_days, :payment_terms,
-                :discount_percent, :status, :created_by
+                :is_active, :created_by
             ) RETURNING customer_id, customer_name, customer_code
         """)
         
@@ -52,17 +52,13 @@ async def create_customer(customer_data: Dict[str, Any], db: Session = Depends(g
             "org_id": DEFAULT_ORG_ID,
             "customer_name": customer_data.get("customer_name"),
             "customer_code": customer_code,
-            "contact_person": customer_data.get("contact_person"),
             "primary_phone": customer_data.get("phone") or customer_data.get("primary_phone"),
             "secondary_phone": customer_data.get("secondary_phone"),
-            "email": customer_data.get("email"),
-            "address_line1": customer_data.get("address_line1"),
-            "address_line2": customer_data.get("address_line2"),
-            "area": customer_data.get("area"),
-            "city": customer_data.get("city"),
-            "state": customer_data.get("state"),
-            "pincode": customer_data.get("postal_code") or customer_data.get("pincode"),
-            "gstin": customer_data.get("gst_number") or customer_data.get("gstin"),
+            "primary_email": customer_data.get("email") or customer_data.get("primary_email"),
+            "contact_person_name": customer_data.get("contact_person") or customer_data.get("contact_person_name"),
+            "contact_person_phone": customer_data.get("contact_person_phone"),
+            "contact_person_email": customer_data.get("contact_person_email"),
+            "gst_number": customer_data.get("gst_number") or customer_data.get("gstin"),
             "pan_number": customer_data.get("pan_number"),
             "drug_license_number": customer_data.get("drug_license_number"),
             "customer_type": customer_data.get("customer_type", "retail"),
@@ -71,8 +67,7 @@ async def create_customer(customer_data: Dict[str, Any], db: Session = Depends(g
             "credit_limit": customer_data.get("credit_limit", 0),
             "credit_days": customer_data.get("credit_days", 0),
             "payment_terms": customer_data.get("payment_terms"),
-            "discount_percent": customer_data.get("discount_percent", 0),
-            "status": "active",
+            "is_active": True,
             "created_by": 1  # System user
         })
         
@@ -125,14 +120,13 @@ async def update_customer(customer_id: int, customer_data: Dict[str, Any], db: S
         field_mapping = {
             "customer_name": "customer_name",
             "phone": "primary_phone",
-            "email": "email",
-            "address_line1": "address_line1",
-            "city": "city",
-            "state": "state",
-            "postal_code": "pincode",
-            "gst_number": "gstin",
+            "email": "primary_email",
+            "gst_number": "gst_number",
             "credit_limit": "credit_limit",
-            "payment_terms": "payment_terms"
+            "payment_terms": "payment_terms",
+            "contact_person": "contact_person_name",
+            "city": "city",
+            "state": "state"
         }
         
         for api_field, db_field in field_mapping.items():
@@ -178,21 +172,21 @@ async def create_supplier(supplier_data: Dict[str, Any], db: Session = Depends(g
     try:
         query = text("""
             INSERT INTO parties.suppliers (
-                org_id, supplier_name, supplier_code, contact_person,
-                primary_phone, secondary_phone, email,
-                address_line1, address_line2, area, city, state, pincode,
-                gstin, pan_number, drug_license_number,
-                supplier_type, credit_limit, credit_days, payment_terms,
-                bank_name, bank_account_number, bank_ifsc_code,
-                status, created_by
+                org_id, supplier_name, supplier_code, 
+                primary_phone, secondary_phone, primary_email,
+                contact_person_name, contact_person_phone,
+                gst_number, pan_number, drug_license_number,
+                supplier_type, payment_days, preferred_payment_mode,
+                bank_name, account_number, ifsc_code,
+                is_active, created_by
             ) VALUES (
-                :org_id, :supplier_name, :supplier_code, :contact_person,
-                :primary_phone, :secondary_phone, :email,
-                :address_line1, :address_line2, :area, :city, :state, :pincode,
-                :gstin, :pan_number, :drug_license_number,
-                :supplier_type, :credit_limit, :credit_days, :payment_terms,
-                :bank_name, :bank_account_number, :bank_ifsc_code,
-                :status, :created_by
+                :org_id, :supplier_name, :supplier_code,
+                :primary_phone, :secondary_phone, :primary_email,
+                :contact_person_name, :contact_person_phone,
+                :gst_number, :pan_number, :drug_license_number,
+                :supplier_type, :payment_days, :preferred_payment_mode,
+                :bank_name, :account_number, :ifsc_code,
+                :is_active, :created_by
             ) RETURNING supplier_id, supplier_name, supplier_code
         """)
         
@@ -203,27 +197,21 @@ async def create_supplier(supplier_data: Dict[str, Any], db: Session = Depends(g
             "org_id": DEFAULT_ORG_ID,
             "supplier_name": supplier_data.get("supplier_name"),
             "supplier_code": supplier_code,
-            "contact_person": supplier_data.get("contact_person"),
             "primary_phone": supplier_data.get("phone") or supplier_data.get("primary_phone"),
             "secondary_phone": supplier_data.get("secondary_phone"),
-            "email": supplier_data.get("email"),
-            "address_line1": supplier_data.get("address") or supplier_data.get("address_line1"),
-            "address_line2": supplier_data.get("address_line2"),
-            "area": supplier_data.get("area"),
-            "city": supplier_data.get("city"),
-            "state": supplier_data.get("state"),
-            "pincode": supplier_data.get("postal_code") or supplier_data.get("pincode"),
-            "gstin": supplier_data.get("gst_number") or supplier_data.get("gstin"),
+            "primary_email": supplier_data.get("email") or supplier_data.get("primary_email"),
+            "contact_person_name": supplier_data.get("contact_person") or supplier_data.get("contact_person_name"),
+            "contact_person_phone": supplier_data.get("contact_person_phone"),
+            "gst_number": supplier_data.get("gst_number") or supplier_data.get("gstin"),
             "pan_number": supplier_data.get("pan_number"),
             "drug_license_number": supplier_data.get("drug_license_number"),
             "supplier_type": supplier_data.get("supplier_type", "manufacturer"),
-            "credit_limit": supplier_data.get("credit_limit", 0),
-            "credit_days": supplier_data.get("credit_days", 0),
-            "payment_terms": supplier_data.get("payment_terms"),
+            "payment_days": supplier_data.get("credit_days") or supplier_data.get("payment_days", 30),
+            "preferred_payment_mode": supplier_data.get("preferred_payment_mode", "bank_transfer"),
             "bank_name": supplier_data.get("bank_name"),
-            "bank_account_number": supplier_data.get("bank_account_number"),
-            "bank_ifsc_code": supplier_data.get("bank_ifsc_code"),
-            "status": "active",
+            "account_number": supplier_data.get("bank_account_number") or supplier_data.get("account_number"),
+            "ifsc_code": supplier_data.get("bank_ifsc_code") or supplier_data.get("ifsc_code"),
+            "is_active": True,
             "created_by": 1  # System user
         })
         
