@@ -14,7 +14,7 @@ from ...core.config import DEFAULT_ORG_ID
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/purchases-enhanced", tags=["purchases-enhanced"])
+router = APIRouter(tags=["Purchase Enhanced"])
 
 # Default org_id - should come from auth in production
 DEFAULT_ORG_ID = "ad808530-1ddb-4377-ab20-67bef145d80d"
