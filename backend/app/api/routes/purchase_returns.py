@@ -272,9 +272,9 @@ async def create_purchase_return(
                 detail="At least one item must be returned"
             )
             
-        # Generate return number with invoice reference
+        # Generate return number using unified service
         purchase_id = return_data.get("purchase_id", "")
-        return_number = f"PR-{datetime.now().strftime('%Y%m%d-%H%M%S')}-INV{purchase_id}"
+        return_number = DocumentNumberService.generate_number(db, "purchase_return", org_id)
         
         # Get supplier details to check for GST
         supplier = db.execute(

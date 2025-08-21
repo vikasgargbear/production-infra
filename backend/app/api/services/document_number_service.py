@@ -2,12 +2,12 @@
 Unified Document Number Generation Service
 Provides consistent document number generation across all modules
 
-Format: PREFIX-YYXXXXXX
+Format: PREFIX-YYXXXXXXXX
 - PREFIX: Document type identifier (2-3 letters)
 - YY: Last 2 digits of year
-- XXXXXX: 6-digit sequential number (100000-999999)
+- XXXXXXXX: 8-digit sequential number (10000000-99999999)
 
-This provides 900,000 unique numbers per document type per year
+This provides 90,000,000 unique numbers per document type per year
 """
 from typing import Dict, Optional
 from datetime import datetime
@@ -179,18 +179,18 @@ class DocumentNumberService:
                     try:
                         # Get the numeric part after prefix and year
                         current_seq = int(parts[-1])
-                        # For migration: if old number is less than 100000, start from 100000
-                        if current_seq < 100000:
-                            next_seq = 100000
+                        # For migration: if old number is less than 10000000, start from 10000000
+                        if current_seq < 10000000:
+                            next_seq = 10000000
                         else:
                             next_seq = current_seq + 1
                     except ValueError:
-                        next_seq = 100000
+                        next_seq = 10000000
                 else:
-                    next_seq = 100000
+                    next_seq = 10000000
             else:
                 # First document of the year
-                next_seq = 100000
+                next_seq = 10000000
             
             # Generate the document number
             document_number = f"{config['prefix']}-{year_prefix}{next_seq}"
@@ -201,8 +201,8 @@ class DocumentNumberService:
         except Exception as e:
             logger.error(f"Error generating {document_type} number: {e}")
             # Fallback to timestamp-based generation
-            timestamp = int(datetime.now().timestamp() * 1000) % 1000000
-            fallback_number = f"{config['prefix']}-{year_prefix}{timestamp:06d}"
+            timestamp = int(datetime.now().timestamp() * 1000) % 100000000
+            fallback_number = f"{config['prefix']}-{year_prefix}{timestamp:08d}"
             logger.warning(f"Using fallback number: {fallback_number}")
             return fallback_number
     
@@ -241,8 +241,8 @@ class DocumentNumberService:
         if prefix != config['prefix']:
             return False
         
-        # Check if number part is 8 digits (YY + 6-digit sequence)
-        if len(number_part) != 8 or not number_part.isdigit():
+        # Check if number part is 10 digits (YY + 8-digit sequence)
+        if len(number_part) != 10 or not number_part.isdigit():
             return False
         
         return True

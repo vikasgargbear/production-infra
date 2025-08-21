@@ -33,8 +33,8 @@ async def generate_sales_return_number(
         logger.error(f"Failed to generate sales return number: {e}")
         # Use service's fallback mechanism  
         current_year = datetime.now().year % 100
-        timestamp = int(datetime.now().timestamp() * 1000) % 1000000
-        fallback_number = f"SRN-{current_year:02d}{timestamp:06d}"
+        timestamp = int(datetime.now().timestamp() * 1000) % 100000000
+        fallback_number = f"SRN-{current_year:02d}{timestamp:08d}"
         return {"return_number": fallback_number}
 
 @router.get("/")

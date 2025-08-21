@@ -29,8 +29,8 @@ def generate_delivery_challan_number(
         logger.error(f"Failed to generate challan number: {e}")
         # Use service's fallback mechanism
         current_year = datetime.now().year % 100
-        timestamp = int(datetime.now().timestamp() * 1000) % 1000000
-        fallback_number = f"DC-{current_year:02d}{timestamp:06d}"
+        timestamp = int(datetime.now().timestamp() * 1000) % 100000000
+        fallback_number = f"DC-{current_year:02d}{timestamp:08d}"
         return {"challan_number": fallback_number}
 
 @router.get("/")

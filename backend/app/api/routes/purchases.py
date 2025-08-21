@@ -34,8 +34,8 @@ def generate_purchase_number(db: Session = Depends(get_db)):
         from datetime import datetime
         import time
         current_year = datetime.now().year % 100
-        timestamp = int(time.time() * 1000) % 1000000
-        fallback_number = f"PO-{current_year:02d}{timestamp:06d}"
+        timestamp = int(time.time() * 1000) % 100000000
+        fallback_number = f"PO-{current_year:02d}{timestamp:08d}"
         return {"po_number": fallback_number}
 
 @router.get("/")

@@ -1,14 +1,18 @@
 import React, { useState, useEffect, useRef, forwardRef, useImperativeHandle } from 'react';
-import { Search, Building2, Phone, MapPin, CreditCard } from 'lucide-react';
+import { Search, Building2, Phone, MapPin, CreditCard, X } from 'lucide-react';
 import { supplierAPI } from '../../services/api';
 import { debounce } from '../../utils/debounce';
 import DataTransformer from '../../services/dataTransformer';
 
 const SupplierSearch = forwardRef(({ 
-  onSupplierSelect = () => {}, 
+  value = null,  // Selected supplier object
+  onChange,  // Alternative to onSupplierSelect for consistency
+  onSupplierSelect,  // Legacy support
   placeholder = "Search supplier by name, code, or contact...",
   autoFocus = true,
   showDetails = true,
+  displayMode = 'full',  // 'full' or 'compact'
+  clearable = false,
   className = ""
 }, ref) => {
   const [searchQuery, setSearchQuery] = useState('');
@@ -16,6 +20,7 @@ const SupplierSearch = forwardRef(({
   const [loading, setLoading] = useState(false);
   const [showDropdown, setShowDropdown] = useState(false);
   const [selectedIndex, setSelectedIndex] = useState(-1);
+  const [selectedSupplier, setSelectedSupplier] = useState(value);
   
   const searchInputRef = useRef(null);
   const dropdownRef = useRef(null);
@@ -103,17 +108,41 @@ const SupplierSearch = forwardRef(({
     }
   };
 
+  // Update selected supplier when value prop changes
+  useEffect(() => {
+    setSelectedSupplier(value);
+  }, [value]);
+
   const handleSelectSupplier = (supplier) => {
-    onSupplierSelect(supplier);
+    setSelectedSupplier(supplier);
+    
+    // Call the appropriate callback
+    if (onChange) {
+      onChange(supplier);
+    } else if (onSupplierSelect) {
+      onSupplierSelect(supplier);
+    }
+    
     setSearchQuery('');
     setShowDropdown(false);
     setSearchResults([]);
     setSelectedIndex(-1);
+  };
+
+  const handleClearSupplier = () => {
+    setSelectedSupplier(null);
+    setSearchQuery('');
     
-    // Clear the input field
+    // Call the appropriate callback
+    if (onChange) {
+      onChange(null);
+    } else if (onSupplierSelect) {
+      onSupplierSelect(null);
+    }
+    
+    // Focus back on input
     if (searchInputRef.current) {
-      searchInputRef.current.value = '';
-      searchInputRef.current.blur();
+      searchInputRef.current.focus();
     }
   };
 
@@ -125,22 +154,50 @@ const SupplierSearch = forwardRef(({
 
   return (
     <div className={`relative ${className}`} ref={dropdownRef}>
-      <div className="relative">
-        <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
-        <input
-          ref={searchInputRef}
-          type="text"
-          placeholder={placeholder}
-          value={searchQuery}
-          onChange={(e) => {
-            setSearchQuery(e.target.value);
-            setShowDropdown(true);
-          }}
-          onFocus={() => setShowDropdown(true)}
-          onKeyDown={handleKeyDown}
-          className="w-full pl-10 pr-4 py-3 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-        />
-      </div>
+      {/* Show selected supplier if one is selected */}
+      {selectedSupplier ? (
+        <div className="flex items-center justify-between p-3 bg-blue-50 border border-blue-200 rounded-lg">
+          <div className="flex items-center gap-3">
+            <Building2 className="w-5 h-5 text-blue-600" />
+            <div>
+              <div className="font-medium text-gray-900">
+                {selectedSupplier.supplier_name || selectedSupplier.name}
+              </div>
+              {displayMode === 'full' && (
+                <div className="text-sm text-gray-600">
+                  {selectedSupplier.phone || selectedSupplier.contact_phone || 'No phone'} • 
+                  {selectedSupplier.email || 'No email'}
+                </div>
+              )}
+            </div>
+          </div>
+          {clearable && (
+            <button
+              onClick={handleClearSupplier}
+              className="p-1 hover:bg-blue-100 rounded-full transition-colors"
+            >
+              <X className="w-4 h-4 text-gray-600" />
+            </button>
+          )}
+        </div>
+      ) : (
+        <div className="relative">
+          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
+          <input
+            ref={searchInputRef}
+            type="text"
+            placeholder={placeholder}
+            value={searchQuery}
+            onChange={(e) => {
+              setSearchQuery(e.target.value);
+              setShowDropdown(true);
+            }}
+            onFocus={() => setShowDropdown(true)}
+            onKeyDown={handleKeyDown}
+            className="w-full pl-10 pr-4 py-3 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+          />
+        </div>
+      )}
 
       {/* Search Results Dropdown */}
       {showDropdown && searchQuery && searchQuery.length > 0 && (

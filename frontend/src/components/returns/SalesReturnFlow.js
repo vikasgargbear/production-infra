@@ -5,7 +5,8 @@ import {
 } from 'lucide-react';
 import { 
   CustomerSearch, ProductSearchSimple, ItemsTable, ModuleHeader,
-  DatePicker, Select, NumberInput, NotesSection, useToast, ViewHistoryButton
+  DatePicker, Select, NumberInput, NotesSection, useToast, ViewHistoryButton,
+  ProceedToReviewComponent
 } from '../global';
 import CustomerCreationB2B from '../global/ui/forms/CustomerCreationB2B';
 import { returnsApi, customersApi, settingsApi } from '../../services/api';
@@ -498,21 +499,26 @@ const SalesReturnFlow = ({ onClose }) => {
       invoice_no: invoiceWithItems.invoice_number || invoiceWithItems.invoice_no,
       invoice_date: invoiceWithItems.invoice_date,
       original_invoice: invoiceWithItems,
-      items: (invoiceWithItems.items || []).map((item, index) => ({
-        ...item,
-        id: item.item_id || item.id || `item-${index}`,
-        product_id: item.product_id,
-        product_name: item.product_name || item.product?.name,
-        batch_id: item.batch_id,
-        rate: item.rate || item.sale_price || item.price || item.unit_price,
-        tax_percent: item.tax_percent || item.gst_percent || 18,
-        quantity: item.quantity,
-        return_quantity: 0,
-        max_returnable_qty: item.quantity - (item.returned_quantity || 0),
-        return_reason: '',
-        selected: false,
-        hsn_code: item.hsn_code || ''
-      }))
+      items: (invoiceWithItems.items || []).map((item, index) => {
+        const maxReturnable = item.quantity - (item.returned_quantity || 0);
+        return {
+          ...item,
+          id: item.item_id || item.id || `item-${index}`,
+          product_id: item.product_id,
+          product_name: item.product_name || item.product?.name,
+          batch_id: item.batch_id,
+          rate: item.rate || item.sale_price || item.price || item.unit_price,
+          tax_percent: item.tax_percent || item.gst_percent || 18,
+          quantity: item.quantity,
+          // Auto-populate with max returnable quantity
+          return_quantity: maxReturnable,
+          max_returnable_qty: maxReturnable,
+          return_reason: '',
+          // Auto-select all items
+          selected: maxReturnable > 0,
+          hsn_code: item.hsn_code || ''
+        };
+      })
     }));
   };
 
@@ -681,7 +687,7 @@ const SalesReturnFlow = ({ onClose }) => {
   // Step 1: Create Return
   if (currentStep === 1) {
     return (
-      <div className="h-full bg-blue-50">
+      <div className="h-full bg-gray-50">
         <div className="h-full flex flex-col">
           <ModuleHeader
             title="Sales Return"
@@ -694,7 +700,7 @@ const SalesReturnFlow = ({ onClose }) => {
           />
 
           {/* Quick Actions Bar */}
-          <div className="bg-blue-50 px-4 py-2 text-sm text-blue-700 border-b border-blue-200">
+          <div className="bg-gray-50 px-4 py-2 text-xs text-gray-700 border-b border-gray-200">
             Keyboard shortcuts: <strong>Ctrl+R</strong> - Search Customer | <strong>Ctrl+I</strong> - Search Invoice | <strong>Ctrl+S</strong> - Proceed | <strong>Esc</strong> - Close
           </div>
 
@@ -714,11 +720,12 @@ const SalesReturnFlow = ({ onClose }) => {
           )}
 
           {/* Content */}
-          <div className="flex-1 overflow-y-auto p-6">
-            <div className="max-w-6xl mx-auto space-y-6">
-              {/* Return Date */}
-              <div className="bg-white rounded-lg shadow-sm border border-blue-200 p-6">
-                <div className="flex justify-end">
+          <div className="flex-1 overflow-y-auto bg-gray-50">
+            <div className="max-w-6xl mx-auto px-6 py-6 space-y-6">
+              {/* Return Info Tile - Date and Reason */}
+              <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+                <div className="flex items-start gap-6">
+                  {/* Left side - Return Date */}
                   <div className="w-64">
                     <DatePicker
                       value={returnData.return_date}
@@ -728,64 +735,100 @@ const SalesReturnFlow = ({ onClose }) => {
                       className="w-full"
                     />
                   </div>
-                </div>
-
-                {/* Customer Selection */}
-                <div className="mb-6">
-                  <h3 className="text-sm font-medium text-blue-700 mb-2 flex items-center">
-                    <User className="w-4 h-4 mr-2" />
-                    Select Customer
-                  </h3>
-                  {!selectedCustomer ? (
-                    <CustomerSearch
-                      ref={customerSearchRef}
-                      onChange={handleCustomerSelect}
-                      placeholder="Search customer by name, phone..."
-                      className="w-full"
-                      showCreateButton={true}
-                      onCreateNew={() => setShowCustomerModal(true)}
-                    />
-                  ) : (
-                    <div className="bg-blue-50 rounded-lg p-4 flex justify-between items-start">
+                  
+                  {/* Right side - Return Reason and Notes */}
+                  <div className="flex-1">
+                    <div className="grid grid-cols-2 gap-4">
                       <div>
-                        <h4 className="font-semibold text-gray-900">{selectedCustomer.customer_name || selectedCustomer.name}</h4>
-                        <p className="text-sm text-gray-600">{selectedCustomer.phone}</p>
-                        <p className="text-sm text-gray-600">{selectedCustomer.address}</p>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          Return Reason <span className="text-red-500">*</span>
+                        </label>
+                        <Select
+                          value={returnData.return_reason}
+                          onChange={(value) => setReturnData(prev => ({ ...prev, return_reason: value }))}
+                          options={returnReasons}
+                          placeholder="Select return reason..."
+                          className="w-full"
+                        />
                       </div>
-                      <button
-                        onClick={() => {
-                          setSelectedCustomer(null);
-                          setSelectedInvoice(null);
-                          setReturnData(prev => ({
-                            ...prev,
-                            customer_id: '',
-                            customer_details: null,
-                            invoice_id: '',
-                            items: []
-                          }));
-                        }}
-                        className="text-red-600 hover:text-red-700"
-                      >
-                        <X className="w-4 h-4" />
-                      </button>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          Notes (Optional)
+                        </label>
+                        <input
+                          type="text"
+                          value={returnData.return_reason_notes}
+                          onChange={(e) => setReturnData(prev => ({ ...prev, return_reason_notes: e.target.value }))}
+                          placeholder="Additional details..."
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                        />
+                      </div>
                     </div>
-                  )}
+                  </div>
                 </div>
+              </div>
 
-                {/* Invoice Selection */}
-                {selectedCustomer && (
-                  <div>
+              {/* Customer Selection */}
+              <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+                <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wider mb-4 flex items-center">
+                  <User className="w-4 h-4 mr-2" />
+                  CUSTOMER
+                </h3>
+                {!selectedCustomer ? (
+                  <CustomerSearch
+                    ref={customerSearchRef}
+                    onChange={handleCustomerSelect}
+                    placeholder="Search customer by name, phone..."
+                    className="w-full"
+                    showCreateButton={true}
+                    onCreateNew={() => setShowCustomerModal(true)}
+                  />
+                ) : (
+                  <div className="bg-gray-50 rounded-lg p-4 flex justify-between items-start border border-gray-200">
+                    <div>
+                      <h4 className="font-semibold text-gray-900">{selectedCustomer.customer_name || selectedCustomer.name}</h4>
+                      <p className="text-sm text-gray-600">{selectedCustomer.phone}</p>
+                      <p className="text-sm text-gray-600">{selectedCustomer.address}</p>
+                    </div>
+                    <button
+                      onClick={() => {
+                        setSelectedCustomer(null);
+                        setSelectedInvoice(null);
+                        setReturnData(prev => ({
+                          ...prev,
+                          customer_id: '',
+                          customer_details: null,
+                          invoice_id: '',
+                          items: []
+                        }));
+                      }}
+                      className="text-red-600 hover:text-red-700"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              {/* Invoice Selection */}
+              {selectedCustomer && (
+                <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
                     <div className="flex items-center justify-between mb-4">
-                      <h3 className="text-sm font-medium text-blue-700 flex items-center">
+                      <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wider flex items-center">
                         <FileText className="w-4 h-4 mr-2" />
-                        Select Invoice (Optional)
+                        SELECT INVOICE
                       </h3>
-                      <button
-                        onClick={handleSkipInvoiceSelection}
-                        className="px-3 py-1 text-sm border border-gray-300 rounded hover:bg-blue-50 text-blue-600"
-                      >
-                        Skip Invoice Selection
-                      </button>
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs text-gray-500">or</span>
+                        <button
+                          onClick={handleSkipInvoiceSelection}
+                          className="px-4 py-2 text-sm font-medium text-gray-600 bg-gray-100 border border-gray-300 rounded-lg hover:bg-gray-200 hover:text-gray-700 transition-colors flex items-center gap-2"
+                          title="Create a return without selecting an invoice"
+                        >
+                          <Plus className="w-4 h-4" />
+                          Manual Return Entry
+                        </button>
+                      </div>
                     </div>
                     
                     {/* Show selected invoice if any */}
@@ -874,7 +917,7 @@ const SalesReturnFlow = ({ onClose }) => {
                               <div
                                 key={invoice.id}
                                 onClick={() => handleInvoiceSelect(invoice)}
-                                className="p-4 border border-gray-200 rounded-lg hover:bg-blue-50 cursor-pointer transition-colors"
+                                className="p-4 border border-gray-200 rounded-lg hover:bg-gray-50 cursor-pointer transition-colors"
                               >
                                 <div className="flex items-center justify-between">
                                   <div>
@@ -943,7 +986,7 @@ const SalesReturnFlow = ({ onClose }) => {
 
               {/* Manual Item Entry - Show when invoice is skipped */}
               {selectedCustomer && showManualEntry && !selectedInvoice && (
-                <div className="bg-white rounded-lg shadow-sm border border-blue-200 p-6">
+                <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
                   <div className="flex items-center justify-between mb-4">
                     <div>
                       <h3 className="text-lg font-semibold text-gray-900 flex items-center">
@@ -977,106 +1020,77 @@ const SalesReturnFlow = ({ onClose }) => {
                 </div>
               )}
 
-              {/* Return Reason - Show when invoice is selected OR manual entry has items */}
-              {selectedCustomer && (selectedInvoice || (showManualEntry && returnData.items.length >= 0)) && (
-                <div className="bg-white rounded-lg shadow-sm border border-blue-200 p-6">
-                  <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
-                    <AlertCircle className="w-5 h-5 mr-2 text-red-600" />
-                    Return Details
-                  </h3>
-                  
-                  <div className="mb-6">
-                    <label className="block text-sm font-medium text-blue-700 mb-2">
-                      Return Reason <span className="text-red-500">*</span>
-                    </label>
-                    <Select
-                      value={returnData.return_reason}
-                      onChange={(value) => setReturnData(prev => ({ ...prev, return_reason: value }))}
-                      options={returnReasons}
-                      placeholder="Select reason..."
-                    />
-                  </div>
 
-                  {/* GST Toggle for GST customers */}
-                  {selectedCustomer && selectedCustomer.gst_number && (
-                    <div className="mb-4 p-3 bg-blue-50 rounded-lg">
-                      <label className="flex items-center space-x-3">
-                        <input
-                          type="checkbox"
-                          checked={returnData.include_gst}
-                          onChange={(e) => setReturnData(prev => ({ ...prev, include_gst: e.target.checked }))}
-                          className="w-4 h-4 text-blue-600 rounded focus:ring-blue-500"
-                        />
-                        <span className="text-sm font-medium text-blue-700">
-                          Include GST in return amount (Customer sees total amount paid)
-                        </span>
-                      </label>
-                      <p className="text-xs text-gray-600 mt-1 ml-7">
-                        When checked, the return amount will include GST. Uncheck to show base amount only.
-                      </p>
-                    </div>
-                  )}
-                  
-                  {/* Credit Adjustment Option */}
-                  {customerDues > 0 && (
-                    <div className="p-4 bg-blue-50 rounded-lg">
-                      <h4 className="text-sm font-semibold text-gray-900 mb-3 flex items-center">
-                        <CheckCircle className="w-4 h-4 mr-2 text-green-600" />
-                        Credit Adjustment
-                      </h4>
-                      <p className="text-sm text-gray-600 mb-3">
-                        Customer has outstanding dues of ₹{customerDues.toFixed(2)}
-                      </p>
-                      <div className="space-y-2">
-                        <label className="flex items-center">
-                          <input
-                            type="radio"
-                            name="creditAdjustment"
-                            value="existing_dues"
-                            checked={returnData.credit_adjustment_type === 'existing_dues'}
-                            onChange={(e) => setReturnData(prev => ({ 
-                              ...prev, 
-                              credit_adjustment_type: e.target.value 
-                            }))}
-                            className="mr-2 text-blue-600"
-                          />
-                          <span className="text-sm">
-                            Adjust against existing dues (₹{Math.min(returnData.total_amount, customerDues).toFixed(2)} will be adjusted)
-                          </span>
-                        </label>
-                        <label className="flex items-center">
-                          <input
-                            type="radio"
-                            name="creditAdjustment"
-                            value="future"
-                            checked={returnData.credit_adjustment_type === 'future'}
-                            onChange={(e) => setReturnData(prev => ({ 
-                              ...prev, 
-                              credit_adjustment_type: e.target.value 
-                            }))}
-                            className="mr-2 text-blue-600"
-                          />
-                          <span className="text-sm">Keep as credit for future invoices</span>
-                        </label>
+              {/* Return Items - Show when invoice is selected or manual entry */}
+              {selectedCustomer && (selectedInvoice || showManualEntry) && (
+                <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+                  {/* GST and Credit Options - Compact Bar */}
+                  {returnData.items.length > 0 && returnData.items.some(item => item.selected) && (
+                    <div className="mb-4 p-3 bg-gray-50 rounded-lg border border-gray-200">
+                      <div className="flex items-center justify-between">
+                        {/* GST Toggle */}
+                        {selectedCustomer && selectedCustomer.gst_number && (
+                          <label className="flex items-center space-x-2 cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={returnData.include_gst}
+                              onChange={(e) => setReturnData(prev => ({ ...prev, include_gst: e.target.checked }))}
+                              className="w-4 h-4 text-blue-600 rounded focus:ring-blue-500"
+                            />
+                            <span className="text-sm font-medium text-gray-700">
+                              Include GST in return amount
+                            </span>
+                          </label>
+                        )}
+                        
+                        {/* Credit Adjustment */}
+                        {customerDues > 0 && (
+                          <div className="flex items-center space-x-4">
+                            <span className="text-sm text-gray-600">Credit:</span>
+                            <label className="flex items-center cursor-pointer">
+                              <input
+                                type="radio"
+                                name="creditAdj"
+                                value="existing_dues"
+                                checked={returnData.credit_adjustment_type === 'existing_dues'}
+                                onChange={(e) => setReturnData(prev => ({ 
+                                  ...prev, 
+                                  credit_adjustment_type: e.target.value 
+                                }))}
+                                className="mr-1.5 text-blue-600"
+                              />
+                              <span className="text-sm">Adjust dues</span>
+                            </label>
+                            <label className="flex items-center cursor-pointer">
+                              <input
+                                type="radio"
+                                name="creditAdj"
+                                value="future"
+                                checked={returnData.credit_adjustment_type === 'future'}
+                                onChange={(e) => setReturnData(prev => ({ 
+                                  ...prev, 
+                                  credit_adjustment_type: e.target.value 
+                                }))}
+                                className="mr-1.5 text-blue-600"
+                              />
+                              <span className="text-sm">Future credit</span>
+                            </label>
+                          </div>
+                        )}
                       </div>
                     </div>
                   )}
-                </div>
-              )}
-
-              {/* Return Items */}
-              {selectedCustomer && returnData.items.length > 0 && (
-                <div className="bg-white rounded-lg shadow-sm border border-blue-200 p-6">
+                  
                   <div className="flex justify-between items-center mb-4">
                     <div>
-                      <h3 className="text-lg font-semibold text-gray-900 flex items-center">
-                        <Package className="w-5 h-5 mr-2 text-blue-600" />
-                        {showManualEntry ? 'Configure Return Items' : 'Select Items to Return'}
+                      <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wider flex items-center">
+                        <Package className="w-4 h-4 mr-2" />
+                        {showManualEntry ? 'RETURN ITEMS' : 'ITEMS TO RETURN'}
                       </h3>
                       <p className="text-sm text-gray-600 mt-1">
                         {showManualEntry 
-                          ? 'Set quantities, rates, and other details for the return items'
-                          : 'Check the items you want to return and specify quantities'
+                          ? 'Configure items for return'
+                          : 'All items pre-selected. Adjust quantities as needed.'
                         }
                       </p>
                     </div>
@@ -1092,7 +1106,7 @@ const SalesReturnFlow = ({ onClose }) => {
                               }
                             });
                           }}
-                          className="px-3 py-1 text-sm border border-gray-300 rounded hover:bg-blue-50"
+                          className="px-3 py-1 text-sm border border-gray-300 rounded hover:bg-gray-50"
                         >
                           Select All
                         </button>
@@ -1101,25 +1115,25 @@ const SalesReturnFlow = ({ onClose }) => {
                         <>
                           <button
                             onClick={() => {
-                              // Select all items
+                              // Reset to full quantities
                               returnData.items.forEach(item => {
                                 updateReturnItem(item.id, 'selected', true);
                                 updateReturnItem(item.id, 'return_quantity', item.max_returnable_qty);
                               });
                             }}
-                            className="px-3 py-1 text-sm border border-gray-300 rounded hover:bg-blue-50"
+                            className="px-3 py-1 text-sm border border-gray-300 rounded hover:bg-gray-50"
                           >
-                            Select All
+                            Reset Quantities
                           </button>
                           <button
                             onClick={() => {
-                              // Deselect all items
+                              // Clear all selections
                               returnData.items.forEach(item => {
                                 updateReturnItem(item.id, 'selected', false);
                                 updateReturnItem(item.id, 'return_quantity', 0);
                               });
                             }}
-                            className="px-3 py-1 text-sm border border-gray-300 rounded hover:bg-blue-50"
+                            className="px-3 py-1 text-sm border border-gray-300 rounded hover:bg-gray-50"
                           >
                             Clear All
                           </button>
@@ -1127,40 +1141,59 @@ const SalesReturnFlow = ({ onClose }) => {
                       )}
                     </div>
                   </div>
-                  <ItemsTable
-                    module="returns"
-                    items={returnData.items}
-                    onUpdateItem={updateReturnItem}
-                    onRemoveItem={showManualEntry ? removeManualItem : undefined}
-                    customer={selectedCustomer}
-                    includeGst={returnData.include_gst}
-                    allowRemove={showManualEntry}
-                  />
+                  
+                  {/* Show items table or empty state */}
+                  {returnData.items.length > 0 ? (
+                    <ItemsTable
+                      module="returns"
+                      items={returnData.items}
+                      onUpdateItem={updateReturnItem}
+                      onRemoveItem={showManualEntry ? removeManualItem : undefined}
+                      customer={selectedCustomer}
+                      includeGst={returnData.include_gst}
+                      allowRemove={showManualEntry}
+                    />
+                  ) : (
+                    <div className="text-center py-8 text-gray-500">
+                      <Package className="w-12 h-12 mx-auto mb-3 text-gray-300" />
+                      <p className="text-lg font-medium">No items to return</p>
+                      <p className="text-sm">
+                        {showManualEntry 
+                          ? 'Add products using the search above' 
+                          : 'Loading invoice items...'}
+                      </p>
+                    </div>
+                  )}
                 </div>
               )}
-
-
-
-              {/* Action Buttons */}
-              <div className="flex justify-end gap-3">
-                <button
-                  onClick={onClose}
-                  className="px-6 py-2 border border-gray-300 text-blue-700 rounded-lg hover:bg-blue-50"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={handleProceedToReview}
-                  disabled={!selectedCustomer || (!selectedInvoice && !showManualEntry) || (returnData.items.length > 0 && !returnData.items.some(item => item.selected && item.return_quantity > 0))}
-                  className="px-6 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-                >
-                  Proceed to Review
-                  <ChevronRight className="w-4 h-4" />
-                </button>
-              </div>
             </div>
           </div>
-        </div>
+
+        {/* Footer - Using Global Component */}
+        <ProceedToReviewComponent
+          currentStep={1}
+          canProceed={selectedCustomer && (selectedInvoice || showManualEntry) && returnData.items.some(item => item.selected && item.return_quantity > 0)}
+          onBack={null}
+          onProceed={handleProceedToReview}
+          onReset={() => {
+            setSelectedCustomer(null);
+            setSelectedInvoice(null);
+            setReturnData(prev => ({
+              ...prev,
+              customer_id: '',
+              customer_details: null,
+              invoice_id: '',
+              items: [],
+              return_reason: '',
+              return_reason_notes: ''
+            }));
+            setShowManualEntry(false);
+          }}
+          totalItems={returnData.items.filter(item => item.selected).length}
+          totalAmount={returnData.total_amount}
+          proceedText="Proceed to Review"
+          saving={false}
+        />
       </div>
     );
   }
@@ -1200,7 +1233,7 @@ const SalesReturnFlow = ({ onClose }) => {
             />
             
             {/* Notes Section */}
-            <div className="mt-6 bg-white rounded-lg shadow-sm border border-blue-200 p-6">
+            <div className="mt-6 bg-white rounded-lg shadow-sm border border-gray-200 p-6">
               <NotesSection
                 value={returnData.return_reason_notes}
                 onChange={(value) => setReturnData(prev => ({ 
@@ -1215,38 +1248,18 @@ const SalesReturnFlow = ({ onClose }) => {
           </div>
         </div>
 
-        {/* Footer */}
-        <div className="flex justify-between items-center p-4 border-t border-blue-200 bg-white">
-          <div className="text-lg font-semibold text-gray-900">
-            Total Return Amount: ₹{returnData.total_amount.toFixed(2)}
-          </div>
-          
-          <div className="flex items-center gap-3">
-            <button
-              onClick={() => setCurrentStep(1)}
-              className="px-6 py-2 border border-gray-300 text-blue-700 rounded-lg hover:bg-blue-50"
-            >
-              Back to Edit
-            </button>
-            <button
-              onClick={handleSaveReturn}
-              disabled={saving}
-              className="px-6 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50 flex items-center gap-2"
-            >
-              {saving ? (
-                <>
-                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                  Processing...
-                </>
-              ) : (
-                <>
-                  <Save className="w-4 h-4" />
-                  Generate Credit Note
-                </>
-              )}
-            </button>
-          </div>
-        </div>
+        {/* Footer - Using Global Component */}
+        <ProceedToReviewComponent
+          currentStep={2}
+          canProceed={true}
+          onBack={() => setCurrentStep(1)}
+          onProceed={handleSaveReturn}
+          onReset={null}
+          totalItems={returnData.items.filter(item => item.selected).length}
+          totalAmount={returnData.total_amount}
+          proceedText="Generate Credit Note"
+          saving={saving}
+        />
       </div>
       
       {/* Hidden History Button - Triggered by ModuleHeader action */}

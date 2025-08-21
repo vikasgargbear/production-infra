@@ -99,6 +99,38 @@ export const customerAPI = {
     const response = await apiClient.get(`/customers/${customerId}/outstanding`);
     return response.data;
   },
+
+  /**
+   * Get all customers (list method for compatibility)
+   */
+  list: async (options = {}) => {
+    try {
+      const response = await apiClient.get('/customers/', {
+        params: {
+          limit: Math.min(options.limit || 100, 100),
+          skip: options.offset || options.skip || 0,
+          search: options.search || '',
+          include_stats: false,
+        },
+      });
+      
+      const customers = response.data?.customers || response.data || [];
+      
+      return {
+        success: true,
+        data: Array.isArray(customers) ? customers : [],
+        total: response.data?.total || customers.length || 0
+      };
+    } catch (error) {
+      console.error('Error fetching customers:', error);
+      return {
+        success: false,
+        data: [],
+        total: 0,
+        error: error.message
+      };
+    }
+  },
 };
 
 // Define the productAPI directly in JavaScript
@@ -240,6 +272,13 @@ export const productAPI = {
   post: async (endpoint, data) => {
     const response = await apiClient.post(endpoint, data);
     return response;
+  },
+
+  /**
+   * List method (alias for getAll) for compatibility
+   */
+  list: async (options = {}) => {
+    return productAPI.getAll(options);
   },
 };
 
@@ -402,18 +441,76 @@ export const purchasesAPI = {
 
 export const supplierAPI = {
   search: async (query, options = {}) => {
-    const response = await apiClient.get('/suppliers/', {
-      params: {
-        q: query,
-        limit: options.limit || 50,
-        offset: options.offset || 0,
-      },
-    });
-    return response.data;
+    try {
+      const response = await apiClient.get('/suppliers/', {
+        params: {
+          search: query,  // Backend expects 'search' not 'q'
+          limit: Math.min(options.limit || 20, 20),
+          skip: options.offset || 0,  // Backend uses 'skip' not 'offset'
+        },
+        timeout: 5000,
+      });
+      
+      // Handle response structure from suppliers endpoint
+      const suppliers = response.data?.suppliers || response.data || [];
+      
+      return {
+        success: true,
+        data: Array.isArray(suppliers) ? suppliers : [],
+        total: response.data?.total || suppliers.length || 0
+      };
+    } catch (error) {
+      console.error('Supplier search failed:', error);
+      return {
+        success: false,
+        data: [],
+        total: 0,
+        error: error.message
+      };
+    }
   },
 
   create: async (supplierData) => {
     const response = await apiClient.post('/suppliers/', supplierData);
+    return response.data;
+  },
+
+  /**
+   * Get all suppliers (list method for compatibility)
+   */
+  list: async (options = {}) => {
+    try {
+      const response = await apiClient.get('/suppliers/', {
+        params: {
+          limit: Math.min(options.limit || 100, 100),
+          skip: options.offset || options.skip || 0,
+          search: options.search || '',
+        },
+      });
+      
+      const suppliers = response.data?.suppliers || response.data || [];
+      
+      return {
+        success: true,
+        data: Array.isArray(suppliers) ? suppliers : [],
+        total: response.data?.total || suppliers.length || 0
+      };
+    } catch (error) {
+      console.error('Error fetching suppliers:', error);
+      return {
+        success: false,
+        data: [],
+        total: 0,
+        error: error.message
+      };
+    }
+  },
+
+  /**
+   * Get supplier details
+   */
+  getDetails: async (supplierId) => {
+    const response = await apiClient.get(`/suppliers/${supplierId}`);
     return response.data;
   },
 };
