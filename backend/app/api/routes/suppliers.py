@@ -116,7 +116,7 @@ def create_supplier(supplier_data: SupplierCreate, db: Session = Depends(get_db)
                 org_id, supplier_code, supplier_name, supplier_type,
                 gst_number, pan_number, drug_license_number, drug_license_validity,
                 primary_phone, secondary_phone, primary_email, contact_person_name,
-                contact_person_phone, bank_name, account_number, ifsc_code, account_holder_name,
+                contact_person_phone, contact_person_email, bank_name, account_number, ifsc_code, account_holder_name,
                 payment_days, quality_rating, delivery_rating, compliance_rating,
                 internal_notes, is_active,
                 created_at, updated_at
