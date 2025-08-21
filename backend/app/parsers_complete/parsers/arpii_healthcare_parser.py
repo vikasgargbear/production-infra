@@ -46,35 +46,41 @@ class ArpiiHealthCareParser(BaseInvoiceParser):
         if date_match:
             data["invoice_date"] = self._parse_date(date_match.group(1))
         
-        # Extract SUPPLIER's GSTIN and DL (from lines 11-12, NOT from bottom)
-        # Look for the first occurrence which is supplier's info
+        # Extract SUPPLIER's GSTIN and DL - they appear in the BOTTOM section, not top
+        # The top section has OUR company info, bottom has supplier's
         supplier_gstin_found = False
         supplier_dl_found = False
         
+        # Look through all lines, but prefer later occurrences (supplier's info)
+        gstin_candidates = []
+        dl_candidates = []
+        
         for i, line in enumerate(lines):
-            # Get supplier GSTIN (first one in document)
-            if not supplier_gstin_found and 'GSTIN' in line and ':' in line:
-                gstin_match = re.search(r'GSTIN\s+No\.\s*:\s*([A-Z0-9]+)', line)
+            # Collect all GSTIN occurrences
+            if 'GSTIN' in line and ':' in line:
+                gstin_match = re.search(r'GSTIN\s*:?\s*([A-Z0-9]+)', line)
                 if gstin_match:
-                    gstin = gstin_match.group(1)
-                    # Ensure it's not our company's GSTIN (avoid common patterns)
-                    if not gstin.startswith('08AXSPK'):  # Our company pattern
-                        data["supplier_gstin"] = gstin
-                        supplier_gstin_found = True
+                    gstin_candidates.append((i, gstin_match.group(1)))
             
-            # Get supplier DL (first one in document)
-            if not supplier_dl_found and 'D.L.' in line and 'No.' in line:
-                dl_match = re.search(r'D\.L\.\s*No\.\s*:\s*([^\s]+)', line)
+            # Collect all DL occurrences  
+            if 'D.L.' in line and 'No.' in line:
+                dl_match = re.search(r'D\.L\.\s*No\.\s*:\s*([A-Z0-9\/\-]+)', line)
                 if dl_match:
-                    dl = dl_match.group(1).strip()
-                    # Avoid our company's DL pattern
-                    if not dl.startswith('DRUG/2020-21'):  # Our company pattern
-                        data["drug_license"] = dl
-                        supplier_dl_found = True
-            
-            # Stop once we have both
-            if supplier_gstin_found and supplier_dl_found:
-                break
+                    dl_candidates.append((i, dl_match.group(1).strip()))
+        
+        # Take the LAST occurrence (supplier's info is at bottom)
+        if gstin_candidates:
+            data["supplier_gstin"] = gstin_candidates[-1][1]
+        
+        if dl_candidates:
+            data["drug_license"] = dl_candidates[-1][1]
+        
+        # Extract phone numbers
+        phone_numbers = self._extract_phone_numbers(lines)
+        if phone_numbers:
+            data["phone"] = phone_numbers[0]  # Primary phone
+            if len(phone_numbers) > 1:
+                data["phone_secondary"] = phone_numbers[1]  # Secondary phone
         
         # Extract supplier bank information
         bank_info = self._extract_bank_info(lines)
@@ -113,38 +119,57 @@ class ArpiiHealthCareParser(BaseInvoiceParser):
         
         return bank_info if bank_info else None
     
+    def _extract_phone_numbers(self, lines):
+        """Extract phone numbers from supplier info"""
+        phone_numbers = []
+        
+        for line in lines[:10]:  # Check first 10 lines for supplier info
+            if 'Phone' in line or 'PHONE' in line:
+                # Extract phone numbers from line like "Phone : 9649017054,9828506516"
+                phones = re.findall(r'[6-9]\d{9}', line)  # Indian mobile pattern
+                phone_numbers.extend(phones)
+                break
+        
+        return phone_numbers
+    
     def _extract_totals(self, lines):
         """Extract financial totals with correct tax calculation"""
         data = self.result["extracted_data"]
         
-        # Look for the totals section
+        # Look for the totals line with pattern: "base_amount 0.00 base_amount cgst sgst"
+        # Like: "Rs. Eight Thousand Four Hundred Fifty Five Only 7549.00 0.00 7549.00 452.94 452.94"
         for i, line in enumerate(lines):
-            # Find subtotal (base amount before tax)
+            # Look for line with amounts in format: amount1 amount2 amount3 tax1 tax2
+            amounts = re.findall(r'\b(\d+\.\d{2})\b', line)
+            if len(amounts) >= 5:
+                # Pattern: [base, discount, base_again, cgst, sgst]
+                try:
+                    base_amount = float(amounts[0])
+                    discount = float(amounts[1])
+                    cgst = float(amounts[3])
+                    sgst = float(amounts[4])
+                    
+                    data["subtotal"] = base_amount
+                    data["discount_amount"] = discount
+                    data["tax_amount"] = cgst + sgst  # Total tax
+                    break
+                except:
+                    continue
+            
+            # Also look for GST 12% line for base amount
             if 'GST 12%' in line and ':' in line:
-                # Extract the base amount for 12% GST
                 gst12_match = re.search(r'GST 12%\s*:\s*([\d,]+\.?\d*)', line)
                 if gst12_match:
                     subtotal = float(gst12_match.group(1).replace(',', ''))
                     data["subtotal"] = subtotal
-                    
-                    # Calculate correct tax: 12% GST = 6% CGST + 6% SGST
-                    # So total tax = 12% of subtotal
-                    cgst = subtotal * 0.06  # 6% CGST
-                    sgst = subtotal * 0.06  # 6% SGST
-                    total_tax = cgst + sgst
-                    data["tax_amount"] = total_tax
+                    # Calculate tax: 12% GST = 6% CGST + 6% SGST
+                    data["tax_amount"] = subtotal * 0.12
             
             # Look for grand total
             if 'Grand Total' in line:
                 total_match = re.search(r'Grand Total\s+([\d,]+\.?\d*)', line)
                 if total_match:
                     data["grand_total"] = float(total_match.group(1).replace(',', ''))
-            
-            # Look for discount
-            if 'Discount' in line and ':' in line:
-                discount_match = re.search(r'Discount\s+([\d,]+\.?\d*)', line)
-                if discount_match:
-                    data["discount_amount"] = float(discount_match.group(1).replace(',', ''))
     
     def extract_items(self):
         """Extract items from Arpii's multi-line cell format"""

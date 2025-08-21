@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, FileText, Loader, Upload, CheckCircle, AlertCircle } from 'lucide-react';
+import { X, FileText, Loader, Upload, CheckCircle, AlertCircle, Trash2 } from 'lucide-react';
 import { purchasesApi } from '../services/api';
 
 const PDFUploadModal = ({ isOpen, onClose, onDataExtracted }) => {
@@ -110,6 +110,12 @@ const PDFUploadModal = ({ isOpen, onClose, onDataExtracted }) => {
       ...newItems[index],
       [field]: value !== undefined ? value : ''
     };
+    setEditedData({ ...editedData, items: newItems });
+  };
+
+  const handleItemDelete = (index) => {
+    if (!editedData || !editedData.items) return;
+    const newItems = editedData.items.filter((_, i) => i !== index);
     setEditedData({ ...editedData, items: newItems });
   };
 
@@ -357,7 +363,7 @@ const PDFUploadModal = ({ isOpen, onClose, onDataExtracted }) => {
             {/* Items */}
             <div className="bg-gray-50 p-4 rounded-lg">
               <h5 className="font-medium mb-3">Items ({editedData.items?.length || 0})</h5>
-              <div className="space-y-4">
+              <div className="space-y-2">
                 {editedData.items && editedData.items.map((item, index) => {
                   // Ensure item exists and has all required properties
                   const safeItem = {
@@ -366,6 +372,10 @@ const PDFUploadModal = ({ isOpen, onClose, onDataExtracted }) => {
                     batch_number: '',
                     expiry_date: '',
                     quantity: 0,
+                    free_quantity: 0,
+                    pack_size: 1,
+                    pack_type: 'STRIP',
+                    total_units: 0,
                     mrp: 0,
                     cost_price: 0,
                     rate: 0,
@@ -374,94 +384,156 @@ const PDFUploadModal = ({ isOpen, onClose, onDataExtracted }) => {
                     ...item
                   };
                   return (
-                  <div key={index} className="bg-white p-4 rounded-lg border shadow-sm">
-                    <div className="mb-3 flex items-center justify-between">
-                      <h6 className="font-medium text-gray-700">Item {index + 1}</h6>
-                      <span className="text-sm text-gray-500">Amount: ₹{safeItem.amount || 0}</span>
+                  <div key={index} className="bg-white p-2 rounded border border-gray-200">
+                    {/* Compact Header */}
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-sm font-medium text-gray-700">#{index + 1}</span>
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm text-green-600 font-medium">₹{safeItem.amount || 0}</span>
+                        <button
+                          onClick={() => handleItemDelete(index)}
+                          className="text-red-500 hover:text-red-700 p-1 hover:bg-red-50 rounded"
+                          title="Delete item"
+                        >
+                          <Trash2 className="w-3 h-3" />
+                        </button>
+                      </div>
                     </div>
                     
-                    {/* Product Name - Full Width */}
-                    <div className="mb-3">
-                      <label className="text-xs text-gray-600">Product Name</label>
+                    {/* Product Name - Compact */}
+                    <div className="mb-2">
                       <input
                         type="text"
                         value={safeItem.product_name}
                         onChange={(e) => handleItemEdit(index, 'product_name', e.target.value)}
-                        className="w-full mt-1 p-2 border rounded text-sm"
+                        className="w-full p-1.5 border rounded text-sm"
+                        placeholder="Product name"
                       />
                     </div>
                     
-                    {/* Row 1: HSN, Batch, Expiry */}
-                    <div className="grid grid-cols-3 gap-3 mb-3">
+                    {/* Compact 3-column layout */}
+                    <div className="grid grid-cols-6 gap-2 text-xs">
+                      {/* Row 1 */}
                       <div>
-                        <label className="text-xs text-gray-600">HSN Code</label>
+                        <label className="text-gray-500 text-xs">HSN</label>
                         <input
                           type="text"
                           value={safeItem.hsn_code || ''}
                           onChange={(e) => handleItemEdit(index, 'hsn_code', e.target.value)}
-                          className="w-full mt-1 p-2 border rounded text-sm"
+                          className="w-full p-1 border rounded text-xs"
                         />
                       </div>
                       <div>
-                        <label className="text-xs text-gray-600">Batch (Auto if empty)</label>
+                        <label className="text-gray-500 text-xs">Batch</label>
                         <input
                           type="text"
                           value={safeItem.batch_number || ''}
                           onChange={(e) => handleItemEdit(index, 'batch_number', e.target.value)}
-                          className="w-full mt-1 p-2 border rounded text-sm"
-                          placeholder="AUTO-GENERATED"
+                          className="w-full p-1 border rounded text-xs"
+                          placeholder="Auto"
                         />
                       </div>
                       <div>
-                        <label className="text-xs text-gray-600">Expiry (Auto if empty)</label>
+                        <label className="text-gray-500 text-xs">Expiry</label>
                         <input
                           type="date"
                           value={safeItem.expiry_date || ''}
                           onChange={(e) => handleItemEdit(index, 'expiry_date', e.target.value)}
-                          className="w-full mt-1 p-2 border rounded text-sm"
-                          placeholder="2 years default"
+                          className="w-full p-1 border rounded text-xs"
                         />
                       </div>
-                    </div>
-                    
-                    {/* Row 2: Quantity, MRP, Cost, Tax */}
-                    <div className="grid grid-cols-4 gap-3">
                       <div>
-                        <label className="text-xs text-gray-600">Quantity</label>
+                        <label className="text-gray-500 text-xs">Qty</label>
                         <input
                           type="number"
                           value={safeItem.quantity || ''}
                           onChange={(e) => handleItemEdit(index, 'quantity', e.target.value)}
-                          className="w-full mt-1 p-2 border rounded text-sm"
+                          className="w-full p-1 border rounded text-xs"
                         />
                       </div>
                       <div>
-                        <label className="text-xs text-gray-600">MRP</label>
+                        <label className="text-gray-500 text-xs">Free</label>
+                        <input
+                          type="number"
+                          value={safeItem.free_quantity || ''}
+                          onChange={(e) => handleItemEdit(index, 'free_quantity', e.target.value)}
+                          className="w-full p-1 border rounded text-xs"
+                          placeholder="0"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-gray-500 text-xs">Pack</label>
+                        <select
+                          value={safeItem.pack_type || 'STRIP'}
+                          onChange={(e) => handleItemEdit(index, 'pack_type', e.target.value)}
+                          className="w-full p-1 border rounded text-xs"
+                        >
+                          <option value="STRIP">Strip</option>
+                          <option value="BOX">Box</option>
+                          <option value="BOTTLE">Bottle</option>
+                          <option value="VIAL">Vial</option>
+                          <option value="TUBE">Tube</option>
+                        </select>
+                      </div>
+                      
+                      {/* Row 2 */}
+                      <div>
+                        <label className="text-gray-500 text-xs">Pack Size</label>
+                        <input
+                          type="number"
+                          value={safeItem.pack_size || ''}
+                          onChange={(e) => handleItemEdit(index, 'pack_size', e.target.value)}
+                          className="w-full p-1 border rounded text-xs"
+                          placeholder="1"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-gray-500 text-xs">Total Units</label>
+                        <input
+                          type="number"
+                          value={safeItem.total_units || ''}
+                          onChange={(e) => handleItemEdit(index, 'total_units', e.target.value)}
+                          className="w-full p-1 border rounded text-xs"
+                          readOnly
+                        />
+                      </div>
+                      <div>
+                        <label className="text-gray-500 text-xs">MRP</label>
                         <input
                           type="number"
                           value={safeItem.mrp || ''}
                           onChange={(e) => handleItemEdit(index, 'mrp', e.target.value)}
-                          className="w-full mt-1 p-2 border rounded text-sm"
+                          className="w-full p-1 border rounded text-xs"
                           step="0.01"
                         />
                       </div>
                       <div>
-                        <label className="text-xs text-gray-600">Cost Price</label>
+                        <label className="text-gray-500 text-xs">Cost</label>
                         <input
                           type="number"
                           value={safeItem.cost_price || safeItem.rate || 0}
                           onChange={(e) => handleItemEdit(index, 'cost_price', e.target.value)}
-                          className="w-full mt-1 p-2 border rounded text-sm"
+                          className="w-full p-1 border rounded text-xs"
                           step="0.01"
                         />
                       </div>
                       <div>
-                        <label className="text-xs text-gray-600">Tax %</label>
+                        <label className="text-gray-500 text-xs">Tax %</label>
                         <input
                           type="number"
                           value={safeItem.tax_percent || 12}
                           onChange={(e) => handleItemEdit(index, 'tax_percent', e.target.value)}
-                          className="w-full mt-1 p-2 border rounded text-sm"
+                          className="w-full p-1 border rounded text-xs"
+                          step="0.01"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-gray-500 text-xs">Amount</label>
+                        <input
+                          type="number"
+                          value={safeItem.amount || 0}
+                          onChange={(e) => handleItemEdit(index, 'amount', e.target.value)}
+                          className="w-full p-1 border rounded text-xs bg-gray-50"
                           step="0.01"
                         />
                       </div>

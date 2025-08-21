@@ -65,7 +65,7 @@ if not pdf_file:
         exit(1)
 
 # Test the endpoint
-url = "http://localhost:8000/api/purchase-upload/parse-pdf"
+url = "http://localhost:8080/api/purchase-upload/parse-pdf"
 
 with open(pdf_file, 'rb') as f:
     files = {'file': ('invoice.pdf', f, 'application/pdf')}
