@@ -11,7 +11,7 @@ from datetime import date, datetime
 from uuid import UUID
 
 from ...core.database import get_db
-from ...dependencies import get_current_org_id, get_current_user_id
+from ...core.config import DEFAULT_ORG_ID
 
 logger = logging.getLogger(__name__)
 
@@ -19,8 +19,7 @@ router = APIRouter(tags=["goods-receipt-notes"])
 
 @router.get("/generate-number")
 def generate_grn_number(
-    db: Session = Depends(get_db),
-    org_id: UUID = Depends(get_current_org_id)
+    db: Session = Depends(get_db)
 ):
     """Generate next GRN number"""
     try:
@@ -37,7 +36,7 @@ def generate_grn_number(
                 ORDER BY grn_id DESC 
                 LIMIT 1
             """),
-            {"org_id": str(org_id), "pattern": f"GRN-{current_year}-%"}
+            {"org_id": DEFAULT_ORG_ID, "pattern": f"GRN-{current_year}-%"}
         )
         
         latest = result.first()
@@ -70,14 +69,12 @@ def generate_grn_number(
 async def create_grn(
     grn_data: Dict[str, Any],
     db: Session = Depends(get_db),
-    org_id: UUID = Depends(get_current_org_id),
-    user_id: int = Depends(get_current_user_id)
 ):
     """Create a new Goods Receipt Note"""
     try:
         # Extract main GRN data
         main_data = {
-            "org_id": str(org_id),
+            "org_id": DEFAULT_ORG_ID,
             "branch_id": grn_data.get("branch_id", 1),
             "grn_number": grn_data.get("grn_no") or grn_data.get("grn_number"),
             "grn_date": grn_data.get("grn_date"),
@@ -88,7 +85,7 @@ async def create_grn(
             "supplier_invoice_date": grn_data.get("supplier_invoice_date"),
             "supplier_challan_number": grn_data.get("challan_number"),
             "supplier_challan_date": grn_data.get("challan_date"),
-            "received_by": user_id,
+            "received_by": 1,  # Default user ID
             "received_at": datetime.now(),
             "transport_mode": grn_data.get("transport_mode", "Road"),
             "vehicle_number": grn_data.get("vehicle_no"),
@@ -180,7 +177,7 @@ async def create_grn(
             for item in items:
                 # Insert into batches table
                 batch_data = {
-                    "org_id": str(org_id),
+                    "org_id": DEFAULT_ORG_ID,
                     "product_id": item.get("product_id"),
                     "batch_number": item.get("batch_no") or item.get("batch_number"),
                     "manufacturing_date": item.get("mfg_date"),
@@ -251,13 +248,12 @@ def get_grns(
     date_from: Optional[date] = Query(None, description="Filter from date"),
     date_to: Optional[date] = Query(None, description="Filter to date"),
     db: Session = Depends(get_db),
-    org_id: UUID = Depends(get_current_org_id)
 ):
     """Get list of GRNs with filtering and pagination"""
     try:
         # Build base query
         where_conditions = ["g.org_id = :org_id"]
-        params = {"org_id": str(org_id)}
+        params = {"org_id": DEFAULT_ORG_ID}
         
         if search:
             where_conditions.append("(g.grn_number ILIKE :search OR s.supplier_name ILIKE :search)")
@@ -342,7 +338,6 @@ def get_grns(
 def get_grn_details(
     grn_id: int,
     db: Session = Depends(get_db),
-    org_id: UUID = Depends(get_current_org_id)
 ):
     """Get detailed GRN information"""
     try:
@@ -363,7 +358,7 @@ def get_grn_details(
             WHERE g.grn_id = :grn_id AND g.org_id = :org_id
         """
         
-        result = db.execute(text(grn_sql), {"grn_id": grn_id, "org_id": str(org_id)})
+        result = db.execute(text(grn_sql), {"grn_id": grn_id, "org_id": DEFAULT_ORG_ID})
         grn = result.first()
         
         if not grn:
@@ -402,14 +397,12 @@ def update_grn(
     grn_id: int,
     grn_data: Dict[str, Any],
     db: Session = Depends(get_db),
-    org_id: UUID = Depends(get_current_org_id),
-    user_id: int = Depends(get_current_user_id)
 ):
     """Update GRN details"""
     try:
         # Check if GRN exists
         check_sql = "SELECT grn_id FROM procurement.goods_receipt_notes WHERE grn_id = :grn_id AND org_id = :org_id"
-        existing = db.execute(text(check_sql), {"grn_id": grn_id, "org_id": str(org_id)}).first()
+        existing = db.execute(text(check_sql), {"grn_id": grn_id, "org_id": DEFAULT_ORG_ID}).first()
         
         if not existing:
             raise HTTPException(status_code=404, detail="GRN not found")
@@ -446,8 +439,6 @@ def approve_grn(
     grn_id: int,
     approval_data: Dict[str, Any],
     db: Session = Depends(get_db),
-    org_id: UUID = Depends(get_current_org_id),
-    user_id: int = Depends(get_current_user_id)
 ):
     """Approve GRN and update stock if not already done"""
     try:
@@ -457,7 +448,7 @@ def approve_grn(
             FROM procurement.goods_receipt_notes 
             WHERE grn_id = :grn_id AND org_id = :org_id
         """
-        grn = db.execute(text(check_sql), {"grn_id": grn_id, "org_id": str(org_id)}).first()
+        grn = db.execute(text(check_sql), {"grn_id": grn_id, "org_id": DEFAULT_ORG_ID}).first()
         
         if not grn:
             raise HTTPException(status_code=404, detail="GRN not found")
@@ -472,7 +463,7 @@ def approve_grn(
         
         db.execute(text(approve_sql), {
             "grn_id": grn_id,
-            "user_id": user_id,
+            "user_id": 1,  # Default user ID
             "now": datetime.now()
         })
         
@@ -493,7 +484,7 @@ def approve_grn(
                 
                 # Update batch inventory
                 batch_data = {
-                    "org_id": str(org_id),
+                    "org_id": DEFAULT_ORG_ID,
                     "product_id": item_dict["product_id"],
                     "batch_number": item_dict["batch_number"],
                     "manufacturing_date": item_dict["manufacturing_date"],

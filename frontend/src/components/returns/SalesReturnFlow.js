@@ -71,9 +71,38 @@ const SalesReturnFlow = ({ onClose }) => {
   // Load return reasons from system settings
   useEffect(() => {
     const loadReturnReasons = async () => {
+      // First set default reasons immediately to avoid blocking
+      const defaultReasons = [
+        { value: 'EXPIRED', label: 'Expired Product' },
+        { value: 'DAMAGED', label: 'Damaged Product' },
+        { value: 'WRONG_PRODUCT', label: 'Wrong Product Delivered' },
+        { value: 'QUALITY_ISSUE', label: 'Quality Issue' },
+        { value: 'NOT_REQUIRED', label: 'Not Required' },
+        { value: 'EXCESS_STOCK', label: 'Excess Stock' },
+        { value: 'RATE_DIFFERENCE', label: 'Rate Difference' },
+        { value: 'CUSTOMER_RETURN', label: 'Customer Return' },
+        { value: 'OTHER', label: 'Other' }
+      ];
+      setReturnReasons(defaultReasons);
+      
+      // Then try to load from backend in background
       try {
-        // Get return reasons from system settings
-        const response = await settingsApi.system.getByCategory('RETURN_REASONS');
+        // Check cache first for faster load
+        const cached = await offlineStorage.getOffline('sales_return_reasons', { persistent: true });
+        if (cached && cached.data && Array.isArray(cached.data) && cached.data.length > 0) {
+          setReturnReasons(cached.data);
+        }
+        
+        // Get return reasons from system settings with timeout
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 5000); // 5 second timeout
+        
+        const response = await settingsApi.system.getByCategory('RETURN_REASONS', {
+          signal: controller.signal
+        });
+        
+        clearTimeout(timeoutId);
+        
         const settings = response.data || [];
         
         if (Array.isArray(settings) && settings.length > 0) {
@@ -85,39 +114,15 @@ const SalesReturnFlow = ({ onClose }) => {
               label: setting.setting_name || setting.setting_value
             }));
           
-          setReturnReasons(reasons);
-          // Cache for offline use
-          await offlineStorage.storeOffline('sales_return_reasons', reasons, { persistent: true });
-        } else {
-          throw new Error('No return reasons found in system settings');
-        }
-        
-      } catch (error) {
-        console.warn('Could not load return reasons from backend:', error.message);
-        
-        // Try offline cache first
-        try {
-          const cached = await offlineStorage.getOffline('sales_return_reasons', { persistent: true });
-          if (cached && cached.data && Array.isArray(cached.data)) {
-            setReturnReasons(cached.data);
-            return;
+          if (reasons.length > 0) {
+            setReturnReasons(reasons);
+            // Cache for offline use
+            await offlineStorage.storeOffline('sales_return_reasons', reasons, { persistent: true });
           }
-        } catch (cacheError) {
-          console.warn('No cached return reasons available');
         }
-        
-        // Ultimate fallback to hardcoded values
-        setReturnReasons([
-          { value: 'EXPIRED', label: 'Expired Product' },
-          { value: 'DAMAGED', label: 'Damaged Product' },
-          { value: 'WRONG_PRODUCT', label: 'Wrong Product Delivered' },
-          { value: 'QUALITY_ISSUE', label: 'Quality Issue' },
-          { value: 'NOT_REQUIRED', label: 'Not Required' },
-          { value: 'EXCESS_STOCK', label: 'Excess Stock' },
-          { value: 'RATE_DIFFERENCE', label: 'Rate Difference' },
-          { value: 'CUSTOMER_RETURN', label: 'Customer Return' },
-          { value: 'OTHER', label: 'Other' }
-        ]);
+      } catch (error) {
+        // Silently fail and keep using default reasons
+        console.warn('Using default return reasons:', error.message);
       }
     };
 
@@ -128,7 +133,12 @@ const SalesReturnFlow = ({ onClose }) => {
   useEffect(() => {
     if (selectedCustomer) {
       const customerId = selectedCustomer.id || selectedCustomer.customer_id || selectedCustomer.party_id;
-      fetchCustomerInvoices(customerId);
+      // Add a small debounce to avoid multiple rapid calls
+      const timeoutId = setTimeout(() => {
+        fetchCustomerInvoices(customerId);
+      }, 300);
+      
+      return () => clearTimeout(timeoutId);
     }
   }, [selectedCustomer, invoicePage, invoiceFilters]);
 
@@ -207,14 +217,26 @@ const SalesReturnFlow = ({ onClose }) => {
       return;
     }
 
+    // Prevent multiple simultaneous calls
+    if (loadingInvoices) {
+      return;
+    }
+
     setLoadingInvoices(true);
     try {
+      // Add timeout to prevent hanging
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
+      
       // Use InvoiceApiService to fetch invoices for the customer
       const response = await InvoiceApiService.getInvoices({
         customer_id: customerId,
         limit: 10,
-        offset: (invoicePage - 1) * 10
+        offset: (invoicePage - 1) * 10,
+        signal: controller.signal
       });
+      
+      clearTimeout(timeoutId);
       
       if (response.success && response.data) {
         let allInvoices = response.data.invoices?.map(invoice => ({
@@ -269,6 +291,13 @@ const SalesReturnFlow = ({ onClose }) => {
         });
       }
     } catch (error) {
+      // Don't show error for aborted requests (component unmount or new request)
+      if (error.name === 'AbortError') {
+        console.log('Invoice fetch aborted');
+        setLoadingInvoices(false);
+        return;
+      }
+      
       console.error('Error fetching customer invoices:', error);
       
       // Mock data for UI/UX demonstration
@@ -432,16 +461,31 @@ const SalesReturnFlow = ({ onClose }) => {
     
     // Fetch invoice details if items not included
     let invoiceWithItems = invoice;
-    if (!invoice.items) {
+    if (!invoice.items || invoice.items.length === 0) {
       try {
         setLoading(true);
-        const response = await InvoiceApiService.getInvoiceById(invoice.invoice_id || invoice.id);
+        
+        // Add timeout to prevent hanging
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 8000); // 8 second timeout
+        
+        const response = await InvoiceApiService.getInvoiceById(invoice.invoice_id || invoice.id, {
+          signal: controller.signal
+        });
+        
+        clearTimeout(timeoutId);
+        
         if (response.success) {
           invoiceWithItems = response.data;
         }
       } catch (error) {
-        toast.error('Failed to fetch invoice details');
+        if (error.name === 'AbortError') {
+          toast.error('Request timed out. Please try again.');
+        } else {
+          toast.error('Failed to fetch invoice details');
+        }
         console.error('Error fetching invoice details:', error);
+        setLoading(false);
         return;
       } finally {
         setLoading(false);
@@ -653,6 +697,21 @@ const SalesReturnFlow = ({ onClose }) => {
           <div className="bg-blue-50 px-4 py-2 text-sm text-blue-700 border-b border-blue-200">
             Keyboard shortcuts: <strong>Ctrl+R</strong> - Search Customer | <strong>Ctrl+I</strong> - Search Invoice | <strong>Ctrl+S</strong> - Proceed | <strong>Esc</strong> - Close
           </div>
+
+          {/* Loading Overlay */}
+          {(loading || saving) && (
+            <div className="absolute inset-0 bg-white bg-opacity-75 z-50 flex items-center justify-center">
+              <div className="bg-white rounded-lg shadow-lg p-6 max-w-sm">
+                <div className="flex flex-col items-center">
+                  <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mb-4"></div>
+                  <p className="text-gray-700 font-medium">
+                    {saving ? 'Creating Sales Return...' : 'Loading Invoice Details...'}
+                  </p>
+                  <p className="text-sm text-gray-500 mt-2">Please wait</p>
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Content */}
           <div className="flex-1 overflow-y-auto p-6">
