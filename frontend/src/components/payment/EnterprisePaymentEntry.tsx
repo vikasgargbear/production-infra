@@ -446,6 +446,18 @@ const EnterprisePaymentEntry: React.FC<EnterprisePaymentEntryProps> = ({ open, o
 
       {/* Customer Selection */}
       <div className="bg-white rounded-lg shadow-sm p-6">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wider flex items-center">
+            <User className="w-4 h-4 mr-2" />
+            CUSTOMER
+          </h3>
+          <button
+            onClick={() => setShowCustomerCreationModal(true)}
+            className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors text-sm font-medium"
+          >
+            Create Customer
+          </button>
+        </div>
         <CustomerSearch
           value={formData.party as any}
           onChange={handlePartySelect}
@@ -461,7 +473,10 @@ const EnterprisePaymentEntry: React.FC<EnterprisePaymentEntryProps> = ({ open, o
 
       {/* Payment Information */}
       <div className="bg-white rounded-lg shadow-sm p-6">
-        <h3 className="text-lg font-semibold text-gray-900 mb-4">Payment Information</h3>
+        <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
+          <CreditCard className="w-5 h-5 mr-2 text-blue-600" />
+          Payment Information
+        </h3>
         
         {/* Payment Type */}
         <div className="mb-6">
@@ -591,7 +606,8 @@ const EnterprisePaymentEntry: React.FC<EnterprisePaymentEntryProps> = ({ open, o
       {(formData.paymentType === 'order_payment' || formData.paymentType === 'regular_payment') && formData.party && (
         <div className="bg-white rounded-lg shadow-sm p-6">
           <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-semibold text-gray-900">
+            <h3 className="text-lg font-semibold text-gray-900 flex items-center">
+              <FileText className="w-5 h-5 mr-2 text-green-600" />
               {formData.paymentType === 'regular_payment' ? 'Automatic Invoice Allocation' : 'Invoice Allocation (Optional)'}
             </h3>
             {formData.paymentType === 'order_payment' && (

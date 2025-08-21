@@ -1,11 +1,23 @@
-import React from 'react';
-import { History, Search, Filter, Download } from 'lucide-react';
+import React, { useEffect } from 'react';
+import { History, Search, Filter, Download, X } from 'lucide-react';
 
 interface PaymentHistoryProps {
   onClose?: () => void;
 }
 
 const PaymentHistory: React.FC<PaymentHistoryProps> = ({ onClose }) => {
+  // ESC key handler for better UX
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape' && onClose) {
+        onClose();
+      }
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [onClose]);
+
   return (
     <div className="h-full bg-gray-50">
       <div className="h-full flex flex-col">
@@ -26,6 +38,15 @@ const PaymentHistory: React.FC<PaymentHistoryProps> = ({ onClose }) => {
                   <Download className="w-4 h-4" />
                   Export
                 </button>
+                {onClose && (
+                  <button
+                    onClick={onClose}
+                    className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+                    title="Close (Esc)"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
+                )}
               </div>
             </div>
           </div>

@@ -1,0 +1,610 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Enhanced Digital Invoice - Continuous Flow Test</title>
+    <style>
+        body { font-family: Arial, sans-serif; padding: 20px; background: #f5f5f5; }
+        .test-container { max-width: 900px; margin: 0 auto; }
+        .btn { 
+            padding: 15px 30px; 
+            margin: 0 15px; 
+            border: none; 
+            border-radius: 8px; 
+            cursor: pointer; 
+            font-size: 16px;
+            font-weight: 600;
+            transition: all 0.3s ease;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+        .btn-primary { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; }
+        .btn-primary:hover { transform: translateY(-2px); box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4); }
+        .btn-success { background: linear-gradient(135deg, #28a745 0%, #20c997 100%); color: white; }
+        .btn-success:hover { transform: translateY(-2px); box-shadow: 0 4px 15px rgba(40, 167, 69, 0.4); }
+        .header { text-align: center; margin-bottom: 30px; }
+        .header h1 { color: #667eea; font-size: 2.5rem; margin-bottom: 10px; }
+        .header p { color: #6b7280; font-size: 1.2rem; }
+        .features { 
+            background: white; 
+            padding: 25px; 
+            border-radius: 12px; 
+            margin: 20px 0; 
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        }
+        .features h3 { color: #667eea; margin-bottom: 15px; }
+        .features ul { list-style: none; padding: 0; }
+        .features li { 
+            padding: 8px 0; 
+            border-bottom: 1px solid #e5e7eb; 
+            color: #4b5563;
+        }
+        .features li:before { content: "✅ "; color: #28a745; font-weight: bold; }
+    </style>
+</head>
+<body>
+    <div class="test-container">
+        <div class="header">
+            <h1>🎨 Enhanced Digital Invoice</h1>
+            <p>Continuous Flow Design for Digital Sharing</p>
+        </div>
+        
+        <div class="features">
+            <h3>🚀 New Features:</h3>
+            <ul>
+                <li>Continuous page flow optimized for digital viewing</li>
+                <li>Enhanced font alignment and spacing for better readability</li>
+                <li>Beautiful gradients and modern design elements</li>
+                <li>Larger, well-spaced text perfect for WhatsApp sharing</li>
+                <li>Professional branding with consistent color scheme</li>
+                <li>Responsive design that works on all devices</li>
+                <li>Print-optimized while maintaining digital beauty</li>
+            </ul>
+        </div>
+        
+        <div style="text-align: center; margin: 30px 0;">
+            <button class="btn btn-primary" onclick="testNewDesign()">🖨️ Test Print (New Design)</button>
+            <button class="btn btn-success" onclick="testDownload()">📥 Test Download (New Design)</button>
+        </div>
+        
+        <div id="status" style="text-align: center; margin: 20px 0; color: #667eea; font-weight: 600;"></div>
+    </div>
+    
+    <script>
+        // Enhanced invoice data for testing
+        const enhancedInvoiceData = {
+            id: 'INV-2024-ENHANCED',
+            invoice_number: 'INV-2024-ENHANCED-001',
+            invoice_date: '2024-01-15',
+            due_date: '2024-02-15',
+            org_name: 'AASO Industries Pvt Ltd',
+            customer: {
+                name: 'Premium Digital Solutions Pvt Ltd',
+                address: '123 Tech Tower, Innovation District',
+                city: 'Mumbai',
+                state: 'Maharashtra',
+                pincode: '400001',
+                phone: '+91 9876543210',
+                email: 'hello@premiumdigital.com'
+            },
+            items: [
+                {
+                    product_name: 'Enterprise Software License (Annual)',
+                    batch_number: 'ESL-2024-001',
+                    quantity: 3,
+                    rate: 50000,
+                    amount: 150000,
+                    tax_rate: 18,
+                    tax_amount: 27000,
+                    total: 177000
+                },
+                {
+                    product_name: 'Professional Support Package',
+                    batch_number: 'PSP-2024-001',
+                    quantity: 1,
+                    rate: 75000,
+                    amount: 75000,
+                    tax_rate: 18,
+                    tax_amount: 13500,
+                    total: 88500
+                },
+                {
+                    product_name: 'Training & Consultation Services',
+                    batch_number: 'TCS-2024-001',
+                    quantity: 2,
+                    rate: 25000,
+                    amount: 50000,
+                    tax_rate: 18,
+                    tax_amount: 9000,
+                    total: 59000
+                },
+                {
+                    product_name: 'Custom Integration Module',
+                    batch_number: 'CIM-2024-001',
+                    quantity: 1,
+                    rate: 100000,
+                    amount: 100000,
+                    tax_rate: 18,
+                    tax_amount: 18000,
+                    total: 118000
+                }
+            ],
+            subtotal: 375000,
+            cgst_amount: 33750,
+            sgst_amount: 33750,
+            total_gst: 67500,
+            final_amount: 442500,
+            billing_address: '123 Tech Tower, Innovation District, Mumbai, Maharashtra - 400001',
+            company: {
+                name: 'AASO Industries Pvt Ltd',
+                address: '456 Corporate Plaza, Business Bay',
+                city: 'Mumbai',
+                state: 'Maharashtra',
+                pincode: '400069',
+                phone: '+91 1234567890',
+                email: 'info@aaso.com',
+                website: 'www.aaso.com'
+            }
+        };
+
+        // Enhanced invoice HTML generation (using the updated styles)
+        function generateEnhancedInvoiceHTML(invoiceData) {
+            const itemsHTML = (invoiceData.items || []).map(item => \`
+                <tr>
+                    <td>
+                        <div class="product-name">\${item.product_name}</div>
+                        <div class="product-batch">Batch: \${item.batch_number || 'N/A'}</div>
+                    </td>
+                    <td style="text-align: center; font-weight: 600;">\${item.quantity}</td>
+                    <td style="text-align: right; font-weight: 600;">₹\${(item.rate || 0).toLocaleString('en-IN')}</td>
+                    <td style="text-align: right; font-weight: 600;">₹\${(item.amount || 0).toLocaleString('en-IN')}</td>
+                    <td style="text-align: right; color: #dc3545; font-weight: 600;">₹\${(item.tax_amount || 0).toLocaleString('en-IN')}</td>
+                    <td style="text-align: right; color: #28a745; font-weight: 700; font-size: 1.1rem;">₹\${(item.total || 0).toLocaleString('en-IN')}</td>
+                </tr>
+            \`).join('');
+
+            const totalAmount = invoiceData.final_amount || invoiceData.total || 0;
+            const amountInWords = numberToWords(totalAmount);
+
+            return \`
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>INVOICE - \${invoiceData.invoice_number}</title>
+    <style>
+        /* Enhanced styles for continuous digital flow */
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { 
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; 
+            line-height: 1.6; 
+            color: #1f2937;
+            background: white;
+        }
+        
+        .print-container { 
+            max-width: 850px; 
+            margin: 0 auto; 
+            background: white; 
+            padding: 2.5rem; 
+            min-height: 100vh;
+            font-size: 14px;
+        }
+        
+        .print-header { 
+            text-align: center; 
+            margin-bottom: 2.5rem; 
+            padding: 2rem;
+            background: linear-gradient(135deg, #f8f9ff 0%, #e3f2fd 100%);
+            border-radius: 12px;
+            border: 3px solid #667eea;
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.15);
+        }
+        
+        .company-logo { 
+            width: 5rem; 
+            height: 5rem; 
+            background: linear-gradient(135deg, #667eea, #764ba2); 
+            border-radius: 50%; 
+            display: flex; 
+            align-items: center; 
+            justify-content: center; 
+            margin: 0 auto 1.5rem; 
+            color: white; 
+            font-size: 2.5rem;
+            box-shadow: 0 4px 15px rgba(102, 126, 234, 0.3);
+        }
+        
+        .company-name { 
+            font-size: 2.2rem; 
+            font-weight: bold; 
+            color: #1f2937; 
+            margin-bottom: 0.8rem;
+            letter-spacing: 1px;
+        }
+        
+        .document-title { 
+            font-size: 1.4rem; 
+            font-weight: 600; 
+            color: #667eea; 
+            margin-bottom: 0.5rem;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+        }
+        
+        .document-number { 
+            color: #6b7280; 
+            margin-bottom: 0.5rem;
+            font-size: 1.1rem;
+            font-weight: 500;
+        }
+        
+        .document-date { 
+            font-size: 1rem; 
+            color: #9ca3af;
+        }
+        
+        .customer-section { 
+            display: grid; 
+            grid-template-columns: 1fr 1fr; 
+            gap: 3rem; 
+            margin-bottom: 2.5rem;
+            background: #f8f9ff;
+            padding: 2rem;
+            border-radius: 12px;
+            border-left: 4px solid #667eea;
+        }
+        
+        .section-title { 
+            font-size: 1.1rem; 
+            font-weight: 700; 
+            color: #667eea; 
+            text-transform: uppercase; 
+            letter-spacing: 1px; 
+            margin-bottom: 1rem;
+            border-bottom: 2px solid #667eea;
+            padding-bottom: 0.5rem;
+        }
+        
+        .customer-name { 
+            font-weight: 600; 
+            margin-bottom: 0.5rem;
+            font-size: 1.1rem;
+            color: #1f2937;
+        }
+        
+        .customer-detail { 
+            font-size: 1rem; 
+            color: #6b7280; 
+            margin-bottom: 0.3rem;
+            line-height: 1.5;
+        }
+        
+        .items-section { 
+            margin-bottom: 2.5rem;
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+        }
+        
+        .print-table { 
+            width: 100%; 
+            border: none;
+            border-collapse: collapse;
+            background: white;
+        }
+        
+        .print-table thead { 
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+        
+        .print-table th { 
+            text-align: left; 
+            padding: 1.2rem 1rem; 
+            font-size: 0.95rem; 
+            font-weight: 600; 
+            color: white;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        
+        .print-table td { 
+            padding: 1rem; 
+            font-size: 1rem;
+            border-bottom: 1px solid #e5e7eb;
+            vertical-align: top;
+        }
+        
+        .print-table tr:nth-child(even) { 
+            background: #f8f9ff; 
+        }
+        
+        .product-name { 
+            font-weight: 600; 
+            margin-bottom: 0.3rem;
+            color: #1f2937;
+            font-size: 1.1rem;
+        }
+        
+        .product-batch { 
+            font-size: 0.9rem; 
+            color: #667eea;
+            font-weight: 500;
+        }
+        
+        .summary-section { 
+            display: grid; 
+            grid-template-columns: 1fr 1fr; 
+            gap: 2rem; 
+            margin-bottom: 2rem;
+        }
+        
+        .summary-box { 
+            background: linear-gradient(135deg, #f8f9ff 0%, #e3f2fd 100%);
+            padding: 1.5rem; 
+            border-radius: 12px;
+            border: 2px solid #667eea;
+            box-shadow: 0 2px 8px rgba(102, 126, 234, 0.1);
+        }
+        
+        .summary-title { 
+            font-size: 1.1rem; 
+            font-weight: 700; 
+            color: #667eea; 
+            margin-bottom: 1rem;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            border-bottom: 2px solid #667eea;
+            padding-bottom: 0.5rem;
+        }
+        
+        .summary-item { 
+            display: flex; 
+            justify-content: space-between; 
+            font-size: 1rem; 
+            margin-bottom: 0.5rem;
+            padding: 0.3rem 0;
+            align-items: center;
+        }
+        
+        .summary-item.total { 
+            border-top: 2px solid #667eea; 
+            padding-top: 1rem; 
+            margin-top: 1rem;
+            font-weight: 700; 
+            color: #667eea;
+            font-size: 1.2rem;
+        }
+        
+        .amount-words { 
+            background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
+            color: white;
+            padding: 1.5rem; 
+            border-radius: 12px; 
+            margin-bottom: 2rem; 
+            font-size: 1.1rem;
+            font-weight: 600;
+            text-align: center;
+            box-shadow: 0 4px 12px rgba(40, 167, 69, 0.2);
+            letter-spacing: 0.5px;
+        }
+        
+        .footer { 
+            text-align: center; 
+            padding: 2rem 0; 
+            border-top: 3px solid #667eea;
+            background: linear-gradient(135deg, #f8f9ff 0%, #e3f2fd 100%);
+            border-radius: 12px;
+            margin-top: 2rem;
+        }
+        
+        .footer-text { 
+            font-size: 1.1rem; 
+            color: #667eea; 
+            margin-bottom: 0.8rem;
+            font-weight: 600;
+        }
+        
+        @media print {
+            @page { size: A4; margin: 1cm 0.8cm; }
+            body { font-size: 13px !important; line-height: 1.5 !important; }
+            .print-container { padding: 20px !important; }
+        }
+    </style>
+</head>
+<body>
+    <div class="print-container">
+        <div class="print-header">
+            <div class="company-logo">🏢</div>
+            <h1 class="company-name">\${invoiceData.org_name || 'Your Company'}</h1>
+            <h2 class="document-title">INVOICE</h2>
+            <p class="document-number">\${invoiceData.invoice_number}</p>
+            <p class="document-date">Date: \${invoiceData.invoice_date}</p>
+        </div>
+        
+        <div class="customer-section">
+            <div>
+                <div class="section-title">📋 Bill To</div>
+                <div class="customer-name">\${invoiceData.customer?.name || 'Customer Name'}</div>
+                <div class="customer-detail">\${invoiceData.billing_address || 'Address'}</div>
+                <div class="customer-detail">📞 \${invoiceData.customer?.phone || 'Phone'}</div>
+                <div class="customer-detail">✉️ \${invoiceData.customer?.email || 'Email'}</div>
+            </div>
+            <div>
+                <div class="section-title">🏢 From</div>
+                <div class="customer-name">\${invoiceData.company?.name || invoiceData.org_name}</div>
+                <div class="customer-detail">\${invoiceData.company?.address || 'Company Address'}</div>
+                <div class="customer-detail">📞 \${invoiceData.company?.phone || 'Phone'}</div>
+                <div class="customer-detail">✉️ \${invoiceData.company?.email || 'Email'}</div>
+            </div>
+        </div>
+        
+        <div class="items-section">
+            <table class="print-table">
+                <thead>
+                    <tr>
+                        <th style="width: 40%;">Item Details</th>
+                        <th style="width: 8%; text-align: center;">Qty</th>
+                        <th style="width: 12%; text-align: right;">Rate</th>
+                        <th style="width: 12%; text-align: right;">Amount</th>
+                        <th style="width: 12%; text-align: right;">Tax</th>
+                        <th style="width: 16%; text-align: right;">Total</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    \${itemsHTML}
+                </tbody>
+            </table>
+        </div>
+        
+        <div class="summary-section">
+            <div class="summary-box">
+                <div class="summary-title">💰 Payment Summary</div>
+                <div class="summary-item">
+                    <span>Subtotal:</span>
+                    <span>₹\${(invoiceData.subtotal || 0).toLocaleString('en-IN')}</span>
+                </div>
+                <div class="summary-item">
+                    <span>CGST (\${((invoiceData.cgst_amount || 0) / (invoiceData.subtotal || 1) * 100).toFixed(1)}%):</span>
+                    <span>₹\${(invoiceData.cgst_amount || 0).toLocaleString('en-IN')}</span>
+                </div>
+                <div class="summary-item">
+                    <span>SGST (\${((invoiceData.sgst_amount || 0) / (invoiceData.subtotal || 1) * 100).toFixed(1)}%):</span>
+                    <span>₹\${(invoiceData.sgst_amount || 0).toLocaleString('en-IN')}</span>
+                </div>
+                <div class="summary-item total">
+                    <span>Grand Total:</span>
+                    <span>₹\${totalAmount.toLocaleString('en-IN')}</span>
+                </div>
+            </div>
+            <div class="summary-box">
+                <div class="summary-title">📊 Invoice Info</div>
+                <div class="summary-item">
+                    <span>Items:</span>
+                    <span>\${(invoiceData.items || []).length} items</span>
+                </div>
+                <div class="summary-item">
+                    <span>Due Date:</span>
+                    <span>\${invoiceData.due_date || 'Immediate'}</span>
+                </div>
+                <div class="summary-item">
+                    <span>Status:</span>
+                    <span style="color: #28a745; font-weight: bold;">✅ Generated</span>
+                </div>
+            </div>
+        </div>
+        
+        <div class="amount-words">
+            <strong>Amount in Words:</strong> \${amountInWords}
+        </div>
+        
+        <div class="footer">
+            <div class="footer-text">🙏 Thank you for your business!</div>
+            <div style="font-size: 1rem; color: #6b7280;">This is a computer-generated invoice.</div>
+        </div>
+    </div>
+</body>
+</html>
+            \`;
+        }
+
+        // Number to words function
+        function numberToWords(num) {
+            const ones = ['', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine'];
+            const tens = ['', '', 'Twenty', 'Thirty', 'Forty', 'Fifty', 'Sixty', 'Seventy', 'Eighty', 'Ninety'];
+            const teens = ['Ten', 'Eleven', 'Twelve', 'Thirteen', 'Fourteen', 'Fifteen', 'Sixteen', 'Seventeen', 'Eighteen', 'Nineteen'];
+
+            const convertHundreds = (n) => {
+                let str = '';
+                if (n > 99) {
+                    str += ones[Math.floor(n / 100)] + ' Hundred ';
+                    n %= 100;
+                }
+                if (n > 19) {
+                    str += tens[Math.floor(n / 10)] + ' ';
+                    n %= 10;
+                } else if (n >= 10) {
+                    str += teens[n - 10] + ' ';
+                    return str;
+                }
+                if (n > 0) {
+                    str += ones[n] + ' ';
+                }
+                return str;
+            };
+
+            const convertToWords = (n) => {
+                if (n === 0) return 'Zero';
+                let str = '';
+                if (n >= 10000000) {
+                    str += convertHundreds(Math.floor(n / 10000000)) + 'Crore ';
+                    n %= 10000000;
+                }
+                if (n >= 100000) {
+                    str += convertHundreds(Math.floor(n / 100000)) + 'Lakh ';
+                    n %= 100000;
+                }
+                if (n >= 1000) {
+                    str += convertHundreds(Math.floor(n / 1000)) + 'Thousand ';
+                    n %= 1000;
+                }
+                if (n > 0) {
+                    str += convertHundreds(n);
+                }
+                return str.trim();
+            };
+
+            const amount = Math.floor(num);
+            const paise = Math.round((num - amount) * 100);
+            let words = convertToWords(amount) + ' Rupees';
+            if (paise > 0) {
+                words += ' and ' + convertToWords(paise) + ' Paise';
+            }
+            words += ' Only';
+            return words;
+        }
+
+        // Test functions
+        function testNewDesign() {
+            updateStatus('🖨️ Generating enhanced invoice with continuous flow design...');
+            
+            const invoiceHTML = generateEnhancedInvoiceHTML(enhancedInvoiceData);
+            const printWindow = window.open('', '_blank', 'width=900,height=700');
+            printWindow.document.write(invoiceHTML);
+            printWindow.document.close();
+            printWindow.onload = () => {
+                printWindow.focus();
+                setTimeout(() => {
+                    printWindow.print();
+                    updateStatus('✅ Enhanced print dialog opened! Check the beautiful continuous flow design.');
+                }, 500);
+            };
+        }
+
+        function testDownload() {
+            updateStatus('📥 Generating enhanced invoice file for download...');
+            
+            const invoiceHTML = generateEnhancedInvoiceHTML(enhancedInvoiceData);
+            const blob = new Blob([invoiceHTML], { type: 'text/html' });
+            const url = URL.createObjectURL(blob);
+            
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = \`enhanced-invoice-\${enhancedInvoiceData.invoice_number}.html\`;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            URL.revokeObjectURL(url);
+            
+            updateStatus('✅ Enhanced invoice downloaded! Perfect for digital sharing on WhatsApp.');
+        }
+
+        function updateStatus(message) {
+            document.getElementById('status').innerHTML = message;
+            setTimeout(() => {
+                document.getElementById('status').innerHTML = '';
+            }, 5000);
+        }
+    </script>
+</body>
+</html>

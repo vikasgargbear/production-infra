@@ -429,7 +429,7 @@ const EnhancedGRNFlow = ({ onClose, prefilledData = null }) => {
               <label className="block text-sm font-medium text-gray-600 mb-1">Transporter Name</label>
               <input
                 type="text"
-                value={grn.transport_details.transporter_name}
+                value={grn.transport_details?.transporter_name || ''}
                 onChange={(e) => setGrn(prev => ({ 
                   ...prev, 
                   transport_details: { ...prev.transport_details, transporter_name: e.target.value }
@@ -442,7 +442,7 @@ const EnhancedGRNFlow = ({ onClose, prefilledData = null }) => {
               <label className="block text-sm font-medium text-gray-600 mb-1">Vehicle Number</label>
               <input
                 type="text"
-                value={grn.transport_details.vehicle_no}
+                value={grn.transport_details?.vehicle_no || ''}
                 onChange={(e) => setGrn(prev => ({ 
                   ...prev, 
                   transport_details: { ...prev.transport_details, vehicle_no: e.target.value }
@@ -455,7 +455,7 @@ const EnhancedGRNFlow = ({ onClose, prefilledData = null }) => {
               <label className="block text-sm font-medium text-gray-600 mb-1">LR Number</label>
               <input
                 type="text"
-                value={grn.transport_details.lr_no}
+                value={grn.transport_details?.lr_no || ''}
                 onChange={(e) => setGrn(prev => ({ 
                   ...prev, 
                   transport_details: { ...prev.transport_details, lr_no: e.target.value }
@@ -576,7 +576,7 @@ const EnhancedGRNFlow = ({ onClose, prefilledData = null }) => {
             </tfoot>
           </table>
 
-          {grn.transport_details.transporter_name && (
+          {grn.transport_details?.transporter_name && (
             <div className="mt-6 p-4 bg-blue-50 rounded-lg">
               <h4 className="font-medium text-blue-900 mb-2">Transport Details:</h4>
               <div className="grid grid-cols-3 gap-4 text-sm text-blue-800">

@@ -1,0 +1,436 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Invoice PDF Test - Print vs Download</title>
+    <style>
+        body { font-family: Arial, sans-serif; padding: 20px; background: #f5f5f5; }
+        .test-container { max-width: 800px; margin: 0 auto; }
+        .button-group { margin: 20px 0; text-align: center; }
+        .btn { 
+            padding: 12px 24px; 
+            margin: 0 10px; 
+            border: none; 
+            border-radius: 6px; 
+            cursor: pointer; 
+            font-size: 16px;
+            transition: all 0.3s ease;
+        }
+        .btn-print { background: #007bff; color: white; }
+        .btn-print:hover { background: #0056b3; }
+        .btn-download { background: #28a745; color: white; }
+        .btn-download:hover { background: #1e7e34; }
+        .status { 
+            margin: 20px 0; 
+            padding: 15px; 
+            border-radius: 6px; 
+            background: #e9ecef; 
+            border-left: 4px solid #007bff;
+        }
+        .preview { 
+            border: 2px solid #ddd; 
+            border-radius: 8px; 
+            background: white; 
+            padding: 20px; 
+            margin: 20px 0;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+    </style>
+</head>
+<body>
+    <div class="test-container">
+        <h1>🧪 Invoice PDF Generation Test</h1>
+        <p>This test demonstrates the difference between <strong>Print</strong> and <strong>Download</strong> functionality:</p>
+        
+        <div class="status">
+            <strong>🖨️ Print Button:</strong> Opens browser print dialog for printing or saving as PDF<br>
+            <strong>📥 Download Button:</strong> Directly downloads the invoice as an HTML file (simulating PDF download)
+        </div>
+        
+        <div class="button-group">
+            <button class="btn btn-print" onclick="testPrintFunction()">🖨️ Test Print Function</button>
+            <button class="btn btn-download" onclick="testDownloadFunction()">📥 Test Download Function</button>
+        </div>
+        
+        <div id="testStatus" class="status" style="display: none;"></div>
+        
+        <div class="preview">
+            <h3>📋 Test Invoice Preview:</h3>
+            <div id="invoicePreview"></div>
+        </div>
+    </div>
+    
+    <script>
+        // Mock invoice data - same as in actual system
+        const testInvoiceData = {
+            id: 'INV-001',
+            invoice_number: 'INV-2024-TEST-001',
+            invoice_date: '2024-01-15',
+            due_date: '2024-02-15',
+            customer: {
+                name: 'Premium Test Customer Pvt Ltd',
+                address: '123 Business Tower, Financial District',
+                city: 'Mumbai',
+                state: 'Maharashtra',
+                pincode: '400001',
+                phone: '+91 9876543210',
+                email: 'customer@premiumtest.com'
+            },
+            items: [
+                {
+                    product_name: 'Professional Software License',
+                    quantity: 2,
+                    rate: 15000,
+                    amount: 30000,
+                    tax_rate: 18,
+                    tax_amount: 5400,
+                    total: 35400
+                },
+                {
+                    product_name: 'Technical Support Package',
+                    quantity: 1,
+                    rate: 25000,
+                    amount: 25000,
+                    tax_rate: 18,
+                    tax_amount: 4500,
+                    total: 29500
+                },
+                {
+                    product_name: 'Training & Documentation',
+                    quantity: 3,
+                    rate: 8000,
+                    amount: 24000,
+                    tax_rate: 18,
+                    tax_amount: 4320,
+                    total: 28320
+                }
+            ],
+            subtotal: 79000,
+            total_tax: 14220,
+            total: 93220,
+            billing_address: '123 Business Tower, Financial District, Mumbai, Maharashtra - 400001',
+            company: {
+                name: 'AASO Industries Pvt Ltd',
+                address: '456 Corporate Plaza, Andheri East',
+                city: 'Mumbai',
+                state: 'Maharashtra',
+                pincode: '400069',
+                phone: '+91 1234567890',
+                email: 'info@aaso.com',
+                website: 'www.aaso.com'
+            }
+        };
+
+        // Generate beautiful invoice HTML (copied from actual implementation)
+        function generateInvoiceHTML(invoiceData) {
+            const customerName = invoiceData.customer?.name || 'N/A';
+            const billingAddress = invoiceData.billing_address || 
+                \`\${invoiceData.customer?.address || ''}, \${invoiceData.customer?.city || ''}, \${invoiceData.customer?.state || ''} - \${invoiceData.customer?.pincode || ''}\`.replace(/,\\s*,/g, ',');
+
+            const itemsHTML = (invoiceData.items || []).map(item => \`
+                <tr>
+                    <td>\${item.product_name || 'N/A'}</td>
+                    <td style="text-align: center;">\${item.quantity || 0}</td>
+                    <td style="text-align: right;">₹\${(item.rate || 0).toLocaleString('en-IN')}</td>
+                    <td style="text-align: right;">₹\${(item.amount || 0).toLocaleString('en-IN')}</td>
+                    <td style="text-align: right;">₹\${(item.tax_amount || 0).toLocaleString('en-IN')}</td>
+                    <td style="text-align: right; font-weight: bold; color: #28a745;">₹\${(item.total || 0).toLocaleString('en-IN')}</td>
+                </tr>
+            \`).join('');
+
+            return \`
+                <!DOCTYPE html>
+                <html>
+                <head>
+                    <title>Invoice \${invoiceData.invoice_number}</title>
+                    <style>
+                        @page { 
+                            size: A4; 
+                            margin: 1.5cm 1cm; 
+                        }
+                        body { 
+                            margin: 0; 
+                            padding: 0; 
+                            background: white;
+                            font-size: 12px;
+                            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+                            line-height: 1.4;
+                            color: #333;
+                        }
+                        .invoice-container {
+                            padding: 0;
+                            max-width: 100%;
+                            margin: 0;
+                        }
+                        .header {
+                            text-align: center;
+                            margin-bottom: 30px;
+                            padding: 25px;
+                            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                            color: white;
+                            border-radius: 10px;
+                            box-shadow: 0 4px 15px rgba(102, 126, 234, 0.3);
+                        }
+                        .header h1 {
+                            margin: 0 0 15px 0;
+                            font-size: 36px;
+                            font-weight: bold;
+                            letter-spacing: 3px;
+                            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+                        }
+                        .header .company-info {
+                            font-size: 16px;
+                            margin-top: 15px;
+                            opacity: 0.95;
+                        }
+                        .invoice-details {
+                            display: flex;
+                            justify-content: space-between;
+                            margin-bottom: 35px;
+                            gap: 40px;
+                        }
+                        .customer-info, .invoice-info {
+                            width: 45%;
+                            background: #f8f9ff;
+                            padding: 20px;
+                            border-radius: 8px;
+                            border-left: 4px solid #667eea;
+                        }
+                        .customer-info h3, .invoice-info h3 {
+                            color: #667eea;
+                            border-bottom: 2px solid #667eea;
+                            padding-bottom: 10px;
+                            margin-bottom: 20px;
+                            font-size: 18px;
+                            display: flex;
+                            align-items: center;
+                        }
+                        .info-line {
+                            margin-bottom: 10px;
+                            font-size: 14px;
+                            display: flex;
+                        }
+                        .info-line strong {
+                            display: inline-block;
+                            width: 90px;
+                            color: #333;
+                            font-weight: 600;
+                        }
+                        .items-table {
+                            width: 100%;
+                            border-collapse: collapse;
+                            margin-bottom: 35px;
+                            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+                            border-radius: 8px;
+                            overflow: hidden;
+                        }
+                        .items-table th {
+                            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                            color: white;
+                            padding: 18px 12px;
+                            text-align: left;
+                            font-weight: bold;
+                            font-size: 13px;
+                            text-transform: uppercase;
+                            letter-spacing: 0.5px;
+                        }
+                        .items-table td {
+                            padding: 15px 12px;
+                            border-bottom: 1px solid #eee;
+                            font-size: 12px;
+                        }
+                        .items-table tr:nth-child(even) {
+                            background-color: #f8f9fa;
+                        }
+                        .items-table tr:hover {
+                            background-color: #e3f2fd;
+                            transform: scale(1.01);
+                            transition: all 0.2s ease;
+                        }
+                        .totals {
+                            text-align: right;
+                            margin-top: 40px;
+                            border: 3px solid #667eea;
+                            border-radius: 12px;
+                            padding: 25px;
+                            background: linear-gradient(135deg, #f8f9ff 0%, #e3f2fd 100%);
+                            box-shadow: 0 4px 15px rgba(102, 126, 234, 0.2);
+                        }
+                        .total-row {
+                            padding: 10px 0;
+                            display: flex;
+                            justify-content: space-between;
+                            border-bottom: 1px solid #ddd;
+                            font-size: 15px;
+                        }
+                        .total-row:last-child {
+                            border-bottom: none;
+                        }
+                        .final-total {
+                            font-size: 22px;
+                            font-weight: bold;
+                            color: #667eea;
+                            border-top: 3px solid #667eea;
+                            padding-top: 15px;
+                            margin-top: 15px;
+                            text-shadow: 1px 1px 2px rgba(0,0,0,0.1);
+                        }
+                        .thank-you {
+                            text-align: center;
+                            margin-top: 40px;
+                            padding: 25px;
+                            background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
+                            color: white;
+                            border-radius: 10px;
+                            font-size: 18px;
+                            box-shadow: 0 4px 15px rgba(40, 167, 69, 0.3);
+                        }
+                        @media print {
+                            .invoice-container {
+                                padding: 0 !important;
+                                box-shadow: none !important;
+                            }
+                            body {
+                                background: white !important;
+                            }
+                        }
+                    </style>
+                </head>
+                <body>
+                    <div class="invoice-container">
+                        <div class="header">
+                            <h1>📄 INVOICE</h1>
+                            <div class="company-info">
+                                <strong>\${invoiceData.company?.name || 'Company Name'}</strong><br>
+                                \${invoiceData.company?.address || ''}, \${invoiceData.company?.city || ''}<br>
+                                📞 \${invoiceData.company?.phone || 'N/A'} | ✉️ \${invoiceData.company?.email || 'N/A'}
+                            </div>
+                        </div>
+                        
+                        <div class="invoice-details">
+                            <div class="customer-info">
+                                <h3>👤 Bill To:</h3>
+                                <div class="info-line"><strong>Name:</strong> <span>\${customerName}</span></div>
+                                <div class="info-line"><strong>Address:</strong> <span>\${billingAddress}</span></div>
+                                <div class="info-line"><strong>Phone:</strong> <span>\${invoiceData.customer?.phone || 'N/A'}</span></div>
+                                <div class="info-line"><strong>Email:</strong> <span>\${invoiceData.customer?.email || 'N/A'}</span></div>
+                            </div>
+                            
+                            <div class="invoice-info">
+                                <h3>📋 Invoice Details:</h3>
+                                <div class="info-line"><strong>Invoice #:</strong> <span>\${invoiceData.invoice_number}</span></div>
+                                <div class="info-line"><strong>Date:</strong> <span>\${invoiceData.invoice_date}</span></div>
+                                <div class="info-line"><strong>Due Date:</strong> <span>\${invoiceData.due_date}</span></div>
+                                <div class="info-line"><strong>Status:</strong> <span style="color: #28a745; font-weight: bold;">✅ Active</span></div>
+                            </div>
+                        </div>
+                        
+                        <table class="items-table">
+                            <thead>
+                                <tr>
+                                    <th style="width: 40%;">📦 Item Description</th>
+                                    <th style="width: 8%; text-align: center;">📊 Qty</th>
+                                    <th style="width: 12%; text-align: right;">💰 Rate</th>
+                                    <th style="width: 12%; text-align: right;">💵 Amount</th>
+                                    <th style="width: 12%; text-align: right;">🏛️ Tax</th>
+                                    <th style="width: 16%; text-align: right;">💎 Total</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                \${itemsHTML}
+                            </tbody>
+                        </table>
+                        
+                        <div class="totals">
+                            <div class="total-row">
+                                <span>💰 Subtotal:</span>
+                                <span><strong>₹\${(invoiceData.subtotal || 0).toLocaleString('en-IN')}</strong></span>
+                            </div>
+                            <div class="total-row">
+                                <span>🏛️ Total Tax (GST):</span>
+                                <span><strong>₹\${(invoiceData.total_tax || 0).toLocaleString('en-IN')}</strong></span>
+                            </div>
+                            <div class="total-row final-total">
+                                <span>💎 GRAND TOTAL:</span>
+                                <span><strong>₹\${(invoiceData.total || 0).toLocaleString('en-IN')}</strong></span>
+                            </div>
+                        </div>
+                        
+                        <div class="thank-you">
+                            <strong>🙏 Thank you for your business!</strong><br>
+                            <small>This is a computer-generated invoice. No signature required.</small>
+                        </div>
+                    </div>
+                </body>
+                </html>
+            \`;
+        }
+
+        // Test print function (opens print dialog)
+        function testPrintFunction() {
+            console.log('🖨️ Testing print function...');
+            updateStatus('🖨️ Print function called - opening print dialog...', '#007bff');
+            
+            const invoiceHTML = generateInvoiceHTML(testInvoiceData);
+            const printWindow = window.open('', '_blank', 'width=800,height=600');
+            printWindow.document.write(invoiceHTML);
+            printWindow.document.close();
+            printWindow.onload = () => {
+                printWindow.focus();
+                printWindow.print();
+                setTimeout(() => {
+                    printWindow.close();
+                    updateStatus('✅ Print function completed successfully! Print dialog was shown.', '#28a745');
+                }, 1000);
+            };
+        }
+
+        // Test download function (directly downloads file)
+        function testDownloadFunction() {
+            console.log('📥 Testing download function...');
+            updateStatus('📥 Download function called - generating file...', '#28a745');
+            
+            const invoiceHTML = generateInvoiceHTML(testInvoiceData);
+            
+            // Create a blob with the HTML content
+            const blob = new Blob([invoiceHTML], { type: 'text/html' });
+            const url = URL.createObjectURL(blob);
+            
+            // Create a temporary link and trigger download
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = \`invoice-\${testInvoiceData.invoice_number}.html\`;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            URL.revokeObjectURL(url);
+            
+            updateStatus('✅ Download function completed successfully! File downloaded to your Downloads folder.', '#28a745');
+        }
+
+        // Update status display
+        function updateStatus(message, color) {
+            const statusEl = document.getElementById('testStatus');
+            statusEl.style.display = 'block';
+            statusEl.style.borderLeftColor = color;
+            statusEl.innerHTML = message;
+        }
+
+        // Initialize preview
+        function initializePreview() {
+            const previewHTML = \`
+                <div style="border: 1px solid #ddd; padding: 15px; border-radius: 6px; background: #f8f9fa;">
+                    <strong>Invoice:</strong> \${testInvoiceData.invoice_number}<br>
+                    <strong>Customer:</strong> \${testInvoiceData.customer.name}<br>
+                    <strong>Amount:</strong> ₹\${testInvoiceData.total.toLocaleString('en-IN')}<br>
+                    <strong>Items:</strong> \${testInvoiceData.items.length} items<br>
+                    <em>Full invoice will be generated when you click Print or Download</em>
+                </div>
+            \`;
+            document.getElementById('invoicePreview').innerHTML = previewHTML;
+        }
+
+        // Initialize when page loads
+        window.onload = initializePreview;
+    </script>
+</body>
+</html>

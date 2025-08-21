@@ -93,6 +93,18 @@ const InvoiceListV2: React.FC<InvoiceListProps> = ({ onClose }) => {
   // State for real data
   const [invoices, setInvoices] = useState<Invoice[]>([]);
 
+  // ESC key handler for better UX
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape' && onClose) {
+        onClose();
+      }
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [onClose]);
+
   // Client-side filtering for display purposes only (server-side search is handled in fetchInvoices)
   const filteredInvoices = invoices; // Use server-filtered data directly
 
@@ -130,7 +142,7 @@ const InvoiceListV2: React.FC<InvoiceListProps> = ({ onClose }) => {
 
     // If single invoice, download the actual invoice PDF
     if (itemsToExport.length === 1) {
-      await handlePrintInvoice(itemsToExport[0]);
+      await handleDownloadInvoice(itemsToExport[0]);
       return;
     }
 
@@ -378,6 +390,7 @@ const InvoiceListV2: React.FC<InvoiceListProps> = ({ onClose }) => {
     alert(`Editing invoice: ${invoice.invoice_number}`);
   };
 
+  // Handle print invoice (shows print dialog)
   const handlePrintInvoice = async (invoice: Invoice) => {
     try {
       // Fetch full invoice details
@@ -386,7 +399,28 @@ const InvoiceListV2: React.FC<InvoiceListProps> = ({ onClose }) => {
       if (response.success && response.data) {
         const fullInvoice = response.data;
         
-        // Use the original invoice PDF generator
+        // Use the print function for print dialog
+        const { printInvoice } = await import('../../utils/invoicePdfGenerator');
+        printInvoice(fullInvoice);
+      } else {
+        alert('Failed to load invoice details. Please try again.');
+      }
+    } catch (error) {
+      console.error('Error printing invoice:', error);
+      alert('Failed to print invoice. Please try again.');
+    }
+  };
+
+  // Handle download invoice (directly saves PDF)
+  const handleDownloadInvoice = async (invoice: Invoice) => {
+    try {
+      // Fetch full invoice details
+      const response = await InvoiceApiService.getInvoiceById(invoice.invoice_id || invoice.id);
+      
+      if (response.success && response.data) {
+        const fullInvoice = response.data;
+        
+        // Use the download function for direct PDF save
         const { downloadInvoicePDF } = await import('../../utils/invoicePdfGenerator');
         downloadInvoicePDF(fullInvoice);
       } else {
@@ -574,10 +608,7 @@ const InvoiceListV2: React.FC<InvoiceListProps> = ({ onClose }) => {
           </button>
           
           <button
-            onClick={() => {
-              setSelectedIds(new Set([invoice.id]));
-              setTimeout(() => printSelected(), 0);
-            }}
+            onClick={() => handlePrintInvoice(invoice)}
             className="p-2 text-green-500 hover:text-green-700 hover:bg-green-50 rounded-lg transition-colors"
             title="Print PDF"
           >
@@ -585,7 +616,7 @@ const InvoiceListV2: React.FC<InvoiceListProps> = ({ onClose }) => {
           </button>
 
           <button
-            onClick={() => handlePrintInvoice(invoice)}
+            onClick={() => handleDownloadInvoice(invoice)}
             className="p-2 text-purple-500 hover:text-purple-700 hover:bg-purple-50 rounded-lg transition-colors"
             title="Download PDF"
           >
@@ -655,6 +686,17 @@ const InvoiceListV2: React.FC<InvoiceListProps> = ({ onClose }) => {
               >
                 Export All
               </Button>
+              {onClose && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={onClose}
+                  className="text-gray-500 hover:text-gray-700 hover:bg-gray-100 p-2 rounded-lg transition-colors"
+                  title="Close (Esc)"
+                >
+                  <X className="w-5 h-5" />
+                </Button>
+              )}
             </div>
           </div>
         </div>

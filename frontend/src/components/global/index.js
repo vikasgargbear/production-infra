@@ -42,6 +42,7 @@ export { default as NotesSection } from './forms/NotesSection';
 // Re-export common components that are already global
 export { default as BaseModal } from '../common/BaseModal';
 export { default as ProductSearchInput } from '../common/ProductSearchInput';
+export { default as CloseButton } from './ui/CloseButton';
 
 // Layout Components - NEW
 export { 

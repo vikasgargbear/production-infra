@@ -185,7 +185,7 @@ const EnhancedStockAdjustmentFlow = ({ onClose }) => {
       const stockData = stockResponse.data?.[0] || {};
       
       // Check if product already added
-      if (adjustmentData.items.find(item => item.product_id === (product.product_id || product.id))) {
+      if ((adjustmentData.items || []).find(item => item.product_id === (product.product_id || product.id))) {
         toast.error('Product already added');
         return;
       }
@@ -794,7 +794,7 @@ Note: Use positive numbers for increase and negative for decrease. Reason codes:
           <div>
             <p className="text-sm text-gray-600">Reason</p>
             <p className="font-medium">
-              {adjustmentReasons[adjustmentData.adjustment_type].find(r => r.value === adjustmentData.reason)?.label}
+              {adjustmentReasons[adjustmentData.adjustment_type]?.find(r => r.value === adjustmentData.reason)?.label}
             </p>
           </div>
           <div>

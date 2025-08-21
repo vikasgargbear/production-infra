@@ -3,7 +3,7 @@ import {
   FileText, User, Search, Package, Calendar, X, Trash2, 
   ChevronRight, AlertCircle, CheckCircle, Printer, Share2, Plus,
   Save, Calculator, History, ArrowLeft, ArrowRight, FileInput, MessageCircle,
-  Loader2, RefreshCw, Clock
+  Loader2, Clock
 } from 'lucide-react';
 import { customerAPI, productAPI, invoiceAPI, ordersAPI, salesOrdersAPI, apiClient } from '../../services/api';
 import { searchCache, smartSearch } from '../../utils/searchCache';
@@ -28,6 +28,7 @@ import InvoicePreview from '../invoice/components/InvoicePreviewEnterprise';
 import ImportDocumentModal from './components/ImportDocumentModal';
 // Removed testBackendConnection - already tested in App.tsx
 import { useToast } from '../global/ui/feedback/Toast';
+import useEscapeKey from '../../hooks/useEscapeKey';
 
 const InvoiceFlow = ({ onClose, prefilledData = null }) => {
   const { companyInfo, getOrgId } = useCompany();
@@ -45,7 +46,6 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
   const [sameAsShipping, setSameAsShipping] = useState(true);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [refreshing, setRefreshing] = useState(false);
 
   // Refs for keyboard navigation
   const customerSearchRef = useRef(null);
@@ -54,6 +54,16 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
   // Backend connection already tested in App.tsx - removed redundant test
   
   const firstInputRef = useRef(null);
+
+  // Enterprise ESC key handling - hierarchical modal management
+  // Main form ESC handler (lowest priority)
+  useEscapeKey(() => onClose(), !showGSTCalculator && !showCustomerModal && !showProductModal && !showImportModal, 'InvoiceFlow-Main');
+  
+  // Modal-specific ESC handlers (higher priority)
+  useEscapeKey(() => setShowGSTCalculator(false), showGSTCalculator, 'GSTCalculator');
+  useEscapeKey(() => setShowCustomerModal(false), showCustomerModal, 'CustomerModal');
+  useEscapeKey(() => setShowProductModal(false), showProductModal, 'ProductModal');
+  useEscapeKey(() => setShowImportModal(false), showImportModal, 'ImportModal');
 
   // Generate sequential invoice number
   const generateInvoiceNumber = async () => {
@@ -140,12 +150,6 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
     }
   };
 
-  // Refresh data
-  const handleRefresh = async () => {
-    setRefreshing(true);
-    await loadInitialData();
-    setRefreshing(false);
-  };
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -186,25 +190,11 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
         }
       }
       
-      // Escape to close
-      if (e.key === 'Escape') {
-        if (showGSTCalculator) {
-          setShowGSTCalculator(false);
-        } else if (showCustomerModal) {
-          setShowCustomerModal(false);
-        } else if (showProductModal) {
-          setShowProductModal(false);
-        } else if (showImportModal) {
-          setShowImportModal(false);
-        } else {
-          onClose();
-        }
-      }
     };
 
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [currentStep, selectedCustomer, showGSTCalculator, showCustomerModal, showProductModal, showImportModal]);
+  }, [currentStep, selectedCustomer]);
 
   // Focus first input on mount and generate invoice number
   useEffect(() => {
@@ -1251,15 +1241,7 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
               console.log('Save draft clicked');
               // TODO: Implement save draft
             }}
-            additionalActions={[
-              {
-                label: refreshing ? 'Refreshing...' : 'Refresh',
-                icon: RefreshCw,
-                onClick: handleRefresh,
-                disabled: refreshing,
-                className: refreshing ? 'animate-spin' : ''
-              }
-            ]}
+            additionalActions={[]}
           />
 
           {/* Loading State */}

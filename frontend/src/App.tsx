@@ -18,6 +18,7 @@ import GSTHub from './components/gst/GSTHub';
 import MasterHub from './components/master/MasterHub';
 import testBackendConnection from './utils/testBackendConnection';
 import { CompanyProvider } from './contexts/CompanyContext';
+import { EscapeKeyProvider } from './contexts/EscapeKeyContext';
 // import ReceivablesCollectionCenter from './components/receivables/ReceivablesCollectionCenter';
 
 // Lazy load components for better performance and code splitting
@@ -211,15 +212,17 @@ function App(): JSX.Element {
   return (
     <QueryClientProvider client={queryClient}>
       <CompanyProvider>
-        <ToastProvider>
-          <ErrorBoundary>
-            <div className="min-h-screen bg-gray-50">
-              <Suspense fallback={<LoadingSpinner />}>
-                {renderActiveComponent()}
-              </Suspense>
-            </div>
-          </ErrorBoundary>
-        </ToastProvider>
+        <EscapeKeyProvider>
+          <ToastProvider>
+            <ErrorBoundary>
+              <div className="min-h-screen bg-gray-50">
+                <Suspense fallback={<LoadingSpinner />}>
+                  {renderActiveComponent()}
+                </Suspense>
+              </div>
+            </ErrorBoundary>
+          </ToastProvider>
+        </EscapeKeyProvider>
       </CompanyProvider>
     </QueryClientProvider>
   );

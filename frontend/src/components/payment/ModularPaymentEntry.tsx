@@ -1,7 +1,7 @@
 import React from 'react';
 import { 
   CreditCard, Calculator, CheckCircle, Printer, ArrowLeft, 
-  X, History, Plus, Loader2, RefreshCw, AlertCircle
+  X, History, Plus, Loader2, AlertCircle, User, FileText
 } from 'lucide-react';
 import { PaymentProvider, usePayment } from '../../contexts/PaymentContext';
 import { customersApi, salesApi } from '../../services/api';
@@ -65,7 +65,6 @@ const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) =>
   // API data states
   const [isLoading, setIsLoading] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
-  const [refreshing, setRefreshing] = React.useState(false);
 
   // Generate receipt number on component mount
   React.useEffect(() => {
@@ -76,23 +75,6 @@ const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) =>
     }
   }, [payment.receipt_no, setPaymentField]);
 
-  const handleRefresh = async () => {
-    setRefreshing(true);
-    try {
-      setError(null);
-      
-      // Refresh payment data if needed
-      // For now, we'll just regenerate the receipt number
-      const newReceiptNo = await generateReceiptNumber();
-      setPaymentField('receipt_no', newReceiptNo);
-      
-    } catch (error) {
-      console.error('Error refreshing payment data:', error);
-      setError('Failed to refresh payment data');
-    } finally {
-      setRefreshing(false);
-    }
-  };
 
   // Keyboard shortcuts
   const shortcuts: KeyboardShortcut[] = currentStep === 1 ? [
@@ -307,13 +289,6 @@ const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) =>
           }}
           additionalActions={[
             {
-              label: "Refresh",
-              onClick: handleRefresh,
-              variant: "default",
-              icon: refreshing ? Loader2 : RefreshCw,
-              disabled: refreshing
-            },
-            {
               label: "GST Calculator",
               onClick: () => setShowGSTCalculator(true),
               icon: Calculator,
@@ -382,7 +357,18 @@ const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) =>
 
                 {/* Customer Section */}
                 <div className="mb-8">
-                  <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wider mb-4">CUSTOMER</h3>
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wider flex items-center">
+                      <User className="w-4 h-4 mr-2" />
+                      CUSTOMER
+                    </h3>
+                    <button
+                      onClick={() => setShowCustomerModal(true)}
+                      className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors text-sm font-medium"
+                    >
+                      Create Customer
+                    </button>
+                  </div>
                   <CustomerSearch
                     value={selectedCustomer}
                     onChange={handleCustomerSelect}
@@ -396,7 +382,10 @@ const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) =>
                 {/* Outstanding Invoices - Only show if customer selected */}
                 {selectedCustomer && (
                   <div className="mb-8">
-                    <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wider mb-4">OUTSTANDING INVOICES</h3>
+                    <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wider mb-4 flex items-center">
+                      <FileText className="w-4 h-4 mr-2" />
+                      OUTSTANDING INVOICES
+                    </h3>
                     <InvoiceSelector />
                   </div>
                 )}
@@ -404,7 +393,10 @@ const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) =>
             ) : (
               // Step 2: Payment Summary
               <div className="mb-8">
-                <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wider mb-4">PAYMENT SUMMARY</h3>
+                <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wider mb-4 flex items-center">
+                  <CheckCircle className="w-4 h-4 mr-2" />
+                  PAYMENT SUMMARY
+                </h3>
                 <PaymentSummary />
               </div>
             )}

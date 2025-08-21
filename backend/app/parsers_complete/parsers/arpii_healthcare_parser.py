@@ -18,21 +18,26 @@ class ArpiiHealthCareParser(BaseInvoiceParser):
     def extract_header_info(self):
         """Extract header information specific to Arpii format"""
         data = self.result["extracted_data"]
+        lines = self.text.split('\n')
         
         # Supplier name - usually first line
         if "ARPII HEALTH CARE" in self.text:
             data["supplier_name"] = "ARPII HEALTH CARE"
             
-            # Get address
-            lines = self.text.split('\n')
+            # Get supplier address - lines immediately after company name (not from bottom)
             for i, line in enumerate(lines):
                 if "ARPII HEALTH CARE" in line:
-                    if i + 1 < len(lines):
-                        data["supplier_address"] = lines[i + 1].strip()
+                    # Get next 3-4 lines as address, skip empty lines
+                    address_parts = []
+                    for j in range(i + 1, min(i + 5, len(lines))):
+                        if lines[j].strip() and not any(skip in lines[j].upper() for skip in ['PHONE', 'GST', 'INVOICE', 'TO:', 'GSTIN']):
+                            address_parts.append(lines[j].strip())
+                    if address_parts:
+                        data["supplier_address"] = ', '.join(address_parts)
                     break
         
         # Invoice number
-        invoice_match = re.search(r'Invoice\s+No\s*:\s*(\w+)', self.text)
+        invoice_match = re.search(r'Invoice\s+No\s*\.?\s*:\s*([A-Z0-9\-]+)', self.text)
         if invoice_match:
             data["invoice_number"] = invoice_match.group(1)
         
@@ -41,15 +46,105 @@ class ArpiiHealthCareParser(BaseInvoiceParser):
         if date_match:
             data["invoice_date"] = self._parse_date(date_match.group(1))
         
-        # GSTIN
-        gstin_match = re.search(r'GSTIN\s+No\.\s*:\s*(\w+)', self.text)
-        if gstin_match:
-            data["supplier_gstin"] = gstin_match.group(1)
+        # Extract SUPPLIER's GSTIN and DL (from lines 11-12, NOT from bottom)
+        # Look for the first occurrence which is supplier's info
+        supplier_gstin_found = False
+        supplier_dl_found = False
         
-        # Drug License
-        dl_match = re.search(r'D\.L\.\s*No\.\s*:\s*([^\n]+)', self.text)
-        if dl_match:
-            data["drug_license"] = dl_match.group(1).strip()
+        for i, line in enumerate(lines):
+            # Get supplier GSTIN (first one in document)
+            if not supplier_gstin_found and 'GSTIN' in line and ':' in line:
+                gstin_match = re.search(r'GSTIN\s+No\.\s*:\s*([A-Z0-9]+)', line)
+                if gstin_match:
+                    gstin = gstin_match.group(1)
+                    # Ensure it's not our company's GSTIN (avoid common patterns)
+                    if not gstin.startswith('08AXSPK'):  # Our company pattern
+                        data["supplier_gstin"] = gstin
+                        supplier_gstin_found = True
+            
+            # Get supplier DL (first one in document)
+            if not supplier_dl_found and 'D.L.' in line and 'No.' in line:
+                dl_match = re.search(r'D\.L\.\s*No\.\s*:\s*([^\s]+)', line)
+                if dl_match:
+                    dl = dl_match.group(1).strip()
+                    # Avoid our company's DL pattern
+                    if not dl.startswith('DRUG/2020-21'):  # Our company pattern
+                        data["drug_license"] = dl
+                        supplier_dl_found = True
+            
+            # Stop once we have both
+            if supplier_gstin_found and supplier_dl_found:
+                break
+        
+        # Extract supplier bank information
+        bank_info = self._extract_bank_info(lines)
+        if bank_info:
+            data["supplier_bank_info"] = bank_info
+        
+        # Extract financial totals
+        self._extract_totals(lines)
+    
+    def _extract_bank_info(self, lines):
+        """Extract supplier bank information"""
+        bank_info = {}
+        
+        for i, line in enumerate(lines):
+            if 'BANK' in line.upper() and 'DETAIL' in line.upper():
+                # Look for bank details in next few lines
+                for j in range(i + 1, min(i + 5, len(lines))):
+                    line_text = lines[j].strip()
+                    
+                    # Bank name (like CANARA BANK)
+                    if any(bank in line_text.upper() for bank in ['CANARA', 'SBI', 'HDFC', 'ICICI', 'AXIS', 'BANK']):
+                        if 'A/C' not in line_text and 'IFSC' not in line_text:
+                            bank_info["bank_name"] = line_text
+                    
+                    # Account number
+                    acc_match = re.search(r'A/C\s*No\.?\s*:\s*([0-9]+)', line_text)
+                    if acc_match:
+                        bank_info["account_number"] = acc_match.group(1)
+                    
+                    # IFSC code
+                    ifsc_match = re.search(r'IFSC\s*CODE?\s*:\s*([A-Z0-9]+)', line_text)
+                    if ifsc_match:
+                        bank_info["ifsc_code"] = ifsc_match.group(1)
+                
+                break
+        
+        return bank_info if bank_info else None
+    
+    def _extract_totals(self, lines):
+        """Extract financial totals with correct tax calculation"""
+        data = self.result["extracted_data"]
+        
+        # Look for the totals section
+        for i, line in enumerate(lines):
+            # Find subtotal (base amount before tax)
+            if 'GST 12%' in line and ':' in line:
+                # Extract the base amount for 12% GST
+                gst12_match = re.search(r'GST 12%\s*:\s*([\d,]+\.?\d*)', line)
+                if gst12_match:
+                    subtotal = float(gst12_match.group(1).replace(',', ''))
+                    data["subtotal"] = subtotal
+                    
+                    # Calculate correct tax: 12% GST = 6% CGST + 6% SGST
+                    # So total tax = 12% of subtotal
+                    cgst = subtotal * 0.06  # 6% CGST
+                    sgst = subtotal * 0.06  # 6% SGST
+                    total_tax = cgst + sgst
+                    data["tax_amount"] = total_tax
+            
+            # Look for grand total
+            if 'Grand Total' in line:
+                total_match = re.search(r'Grand Total\s+([\d,]+\.?\d*)', line)
+                if total_match:
+                    data["grand_total"] = float(total_match.group(1).replace(',', ''))
+            
+            # Look for discount
+            if 'Discount' in line and ':' in line:
+                discount_match = re.search(r'Discount\s+([\d,]+\.?\d*)', line)
+                if discount_match:
+                    data["discount_amount"] = float(discount_match.group(1).replace(',', ''))
     
     def extract_items(self):
         """Extract items from Arpii's multi-line cell format"""
@@ -124,6 +219,10 @@ class ArpiiHealthCareParser(BaseInvoiceParser):
                 "batch_number": batches[i].strip() if i < len(batches) else "",
                 "expiry_date": "",
                 "quantity": 0,
+                "free_quantity": 0,  # For capturing free items
+                "pack_size": 1,      # For pack information (1*100 means pack of 100)
+                "pack_type": "STRIP", # STRIP, BOX, etc.
+                "total_units": 0,    # Total units (quantity * pack_size + free)
                 "unit": "strip",
                 "cost_price": 0,
                 "mrp": 0,
@@ -136,12 +235,37 @@ class ArpiiHealthCareParser(BaseInvoiceParser):
             if i < len(expiries) and expiries[i]:
                 item["expiry_date"] = self._parse_expiry(expiries[i].strip())
             
-            # Parse numeric values
+            # Parse pack information from pack column (like 1*100)
+            if i < len(packs) and packs[i]:
+                pack_text = packs[i].strip()
+                # Parse pack format like "1*100" (1 box of 100 units)
+                pack_match = re.search(r'(\d+)\*(\d+)', pack_text)
+                if pack_match:
+                    item["pack_size"] = int(pack_match.group(2))  # 100 units per pack
+                    item["pack_type"] = "BOX" if int(pack_match.group(2)) > 10 else "STRIP"
+                else:
+                    # Try to extract just pack size number
+                    pack_num_match = re.search(r'(\d+)', pack_text)
+                    if pack_num_match:
+                        item["pack_size"] = int(pack_num_match.group(1))
+            
+            # Parse quantities (may include free quantities)
             if i < len(quantities) and quantities[i]:
-                try:
-                    item["quantity"] = int(quantities[i].replace(',', ''))
-                except:
-                    pass
+                qty_text = quantities[i].strip()
+                # Look for patterns like "500+50" (500 regular + 50 free)
+                free_match = re.search(r'(\d+)\+(\d+)', qty_text)
+                if free_match:
+                    item["quantity"] = int(free_match.group(1))
+                    item["free_quantity"] = int(free_match.group(2))
+                else:
+                    # Regular quantity
+                    try:
+                        item["quantity"] = int(re.sub(r'[^\d]', '', qty_text))
+                    except:
+                        pass
+                
+                # Calculate total units
+                item["total_units"] = (item["quantity"] * item["pack_size"]) + (item["free_quantity"] * item["pack_size"])
             
             if i < len(mrps) and mrps[i]:
                 item["mrp"] = self._parse_amount(mrps[i])

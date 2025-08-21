@@ -1,264 +1,701 @@
-import jsPDF from 'jspdf';
+// Invoice PDF Generator using HTML/CSS (same approach as SalesOrderFlow)
 
 /**
- * Generate invoice PDF from invoice details
+ * Print invoice using browser's print functionality (same beautiful design)
  * @param {Object} invoiceData - Invoice details from API
- * @returns {Blob} PDF blob
  */
-export const generateInvoicePDF = (invoiceData) => {
-  const doc = new jsPDF();
-  const pageWidth = doc.internal.pageSize.width;
-  const pageHeight = doc.internal.pageSize.height;
-  let yPosition = 20;
-
-  // Helper function to add centered text
-  const addCenteredText = (text, y, fontSize = 12, fontStyle = 'normal') => {
-    doc.setFontSize(fontSize);
-    doc.setFont(undefined, fontStyle);
-    const textWidth = doc.getTextWidth(text);
-    doc.text(text, (pageWidth - textWidth) / 2, y);
+export const printInvoice = (invoiceData) => {
+  // Create the HTML content for the invoice
+  const invoiceHTML = generateInvoiceHTML(invoiceData);
+  
+  // Create a new window with the invoice content
+  const printWindow = window.open('', '_blank', 'width=800,height=600');
+  printWindow.document.write(invoiceHTML);
+  printWindow.document.close();
+  
+  // Wait for content to load then print
+  printWindow.onload = () => {
+    printWindow.focus();
+    printWindow.print();
+    printWindow.close();
   };
-
-  // Helper function to add line
-  const addLine = (startX, startY, endX, endY) => {
-    doc.line(startX, startY, endX, endY);
-  };
-
-  // Header
-  addCenteredText('TAX INVOICE', yPosition, 16, 'bold');
-  yPosition += 10;
-
-  // Company Info
-  doc.setFontSize(14);
-  doc.setFont(undefined, 'bold');
-  doc.text(invoiceData.org_name || 'AASO Pharma', 20, yPosition);
-  yPosition += 6;
-
-  doc.setFontSize(10);
-  doc.setFont(undefined, 'normal');
-  const orgAddress = invoiceData.org_address || 'Mumbai, Maharashtra';
-  doc.text(orgAddress, 20, yPosition);
-  yPosition += 5;
-  doc.text(`GSTIN: ${invoiceData.org_gstin || '27AABCU9603R1ZM'}`, 20, yPosition);
-  yPosition += 5;
-  doc.text(`Phone: ${invoiceData.org_phone || '+91 98765 43210'}`, 20, yPosition);
-  yPosition += 10;
-
-  // Invoice Details Box
-  addLine(20, yPosition, pageWidth - 20, yPosition);
-  yPosition += 5;
-
-  // Invoice Number and Date
-  doc.setFont(undefined, 'bold');
-  doc.text(`Invoice No: ${invoiceData.invoice_number}`, 20, yPosition);
-  doc.text(`Date: ${invoiceData.invoice_date}`, pageWidth - 60, yPosition);
-  yPosition += 6;
-  
-  doc.setFont(undefined, 'normal');
-  doc.text(`Due Date: ${invoiceData.due_date}`, pageWidth - 60, yPosition);
-  yPosition += 8;
-
-  // Customer Details
-  doc.setFont(undefined, 'bold');
-  doc.text('Bill To:', 20, yPosition);
-  yPosition += 6;
-  
-  doc.setFont(undefined, 'normal');
-  doc.text(invoiceData.customer_name, 20, yPosition);
-  yPosition += 5;
-  
-  // Split address into multiple lines if needed
-  if (invoiceData.billing_address) {
-    const addressLines = invoiceData.billing_address.split('\n');
-    addressLines.forEach(line => {
-      if (line.trim()) {
-        doc.text(line.trim(), 20, yPosition);
-        yPosition += 5;
-      }
-    });
-  }
-  
-  if (invoiceData.customer_gstin) {
-    doc.text(`GSTIN: ${invoiceData.customer_gstin}`, 20, yPosition);
-    yPosition += 5;
-  }
-  
-  doc.text(`Phone: ${invoiceData.customer_phone}`, 20, yPosition);
-  yPosition += 10;
-
-  // Items Table Header
-  addLine(20, yPosition, pageWidth - 20, yPosition);
-  yPosition += 5;
-  
-  doc.setFont(undefined, 'bold');
-  doc.setFontSize(10);
-  doc.text('S.No', 25, yPosition);
-  doc.text('Product', 40, yPosition);
-  doc.text('HSN', 90, yPosition);
-  doc.text('Qty', 110, yPosition);
-  doc.text('Rate', 125, yPosition);
-  doc.text('Tax%', 145, yPosition);
-  doc.text('Amount', 165, yPosition);
-  yPosition += 5;
-  
-  addLine(20, yPosition, pageWidth - 20, yPosition);
-  yPosition += 5;
-
-  // Items
-  doc.setFont(undefined, 'normal');
-  invoiceData.items.forEach((item, index) => {
-    // Check if we need a new page
-    if (yPosition > pageHeight - 80) {
-      doc.addPage();
-      yPosition = 20;
-    }
-
-    doc.text(String(item.sr_no || index + 1), 25, yPosition);
-    
-    // Truncate product name if too long
-    const productName = item.product_name.length > 25 
-      ? item.product_name.substring(0, 25) + '...' 
-      : item.product_name;
-    doc.text(productName, 40, yPosition);
-    
-    doc.text(item.hsn_code || '', 90, yPosition);
-    doc.text(String(item.quantity), 110, yPosition);
-    doc.text(`₹${item.unit_price.toFixed(2)}`, 125, yPosition);
-    doc.text(`${item.tax_percent}%`, 145, yPosition);
-    doc.text(`₹${item.line_total.toFixed(2)}`, 165, yPosition);
-    
-    yPosition += 6;
-    
-    // Add batch and expiry info if available
-    if (item.batch_number || item.expiry_date) {
-      doc.setFontSize(8);
-      doc.text(`   Batch: ${item.batch_number || 'N/A'} | Exp: ${item.expiry_date || 'N/A'}`, 40, yPosition);
-      doc.setFontSize(10);
-      yPosition += 5;
-    }
-  });
-
-  yPosition += 5;
-  addLine(20, yPosition, pageWidth - 20, yPosition);
-  yPosition += 8;
-
-  // Summary Section
-  const summaryX = pageWidth - 80;
-  
-  doc.setFont(undefined, 'normal');
-  doc.text('Subtotal:', summaryX, yPosition);
-  doc.text(`₹${invoiceData.subtotal_amount}`, summaryX + 40, yPosition);
-  yPosition += 6;
-
-  if (parseFloat(invoiceData.discount_amount) > 0) {
-    doc.text('Discount:', summaryX, yPosition);
-    doc.text(`₹${invoiceData.discount_amount}`, summaryX + 40, yPosition);
-    yPosition += 6;
-  }
-
-  // Tax breakdown
-  if (parseFloat(invoiceData.cgst_amount) > 0) {
-    doc.text('CGST:', summaryX, yPosition);
-    doc.text(`₹${invoiceData.cgst_amount}`, summaryX + 40, yPosition);
-    yPosition += 6;
-    
-    doc.text('SGST:', summaryX, yPosition);
-    doc.text(`₹${invoiceData.sgst_amount}`, summaryX + 40, yPosition);
-    yPosition += 6;
-  }
-
-  if (parseFloat(invoiceData.igst_amount) > 0) {
-    doc.text('IGST:', summaryX, yPosition);
-    doc.text(`₹${invoiceData.igst_amount}`, summaryX + 40, yPosition);
-    yPosition += 6;
-  }
-
-  if (parseFloat(invoiceData.round_off_amount) !== 0) {
-    doc.text('Round Off:', summaryX, yPosition);
-    doc.text(`₹${invoiceData.round_off_amount}`, summaryX + 40, yPosition);
-    yPosition += 6;
-  }
-
-  // Total
-  addLine(summaryX - 5, yPosition, pageWidth - 20, yPosition);
-  yPosition += 6;
-  
-  doc.setFont(undefined, 'bold');
-  doc.setFontSize(12);
-  doc.text('Total:', summaryX, yPosition);
-  doc.text(`₹${invoiceData.final_amount || invoiceData.total_amount}`, summaryX + 40, yPosition);
-  yPosition += 10;
-
-  // Bank Details
-  if (invoiceData.bank_details) {
-    doc.setFontSize(10);
-    doc.setFont(undefined, 'bold');
-    doc.text('Bank Details:', 20, yPosition);
-    yPosition += 6;
-    
-    doc.setFont(undefined, 'normal');
-    doc.text(`Bank: ${invoiceData.bank_details.bank_name}`, 20, yPosition);
-    yPosition += 5;
-    doc.text(`A/C: ${invoiceData.bank_details.account_number}`, 20, yPosition);
-    yPosition += 5;
-    doc.text(`IFSC: ${invoiceData.bank_details.ifsc_code}`, 20, yPosition);
-    yPosition += 10;
-  }
-
-  // Terms and Conditions
-  if (invoiceData.terms_and_conditions) {
-    doc.setFont(undefined, 'bold');
-    doc.text('Terms & Conditions:', 20, yPosition);
-    yPosition += 6;
-    
-    doc.setFont(undefined, 'normal');
-    doc.setFontSize(8);
-    const terms = doc.splitTextToSize(invoiceData.terms_and_conditions, pageWidth - 40);
-    doc.text(terms, 20, yPosition);
-  }
-
-  // Footer
-  const footerY = pageHeight - 20;
-  doc.setFontSize(8);
-  addLine(20, footerY - 10, pageWidth - 20, footerY - 10);
-  addCenteredText('This is a computer generated invoice', footerY - 5, 8);
-
-  return doc.output('blob');
 };
 
 /**
- * Download invoice PDF
+ * Download invoice as PDF file (using same beautiful design)
  * @param {Object} invoiceData - Invoice details from API
  */
 export const downloadInvoicePDF = (invoiceData) => {
-  const blob = generateInvoicePDF(invoiceData);
+  // Create the HTML content for the invoice
+  const invoiceHTML = generateInvoiceHTML(invoiceData);
   
-  // Create a download link
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement('a');
-  link.href = url;
-  link.download = `${invoiceData.invoice_number}.pdf`;
-  link.click();
+  // Create a hidden iframe for PDF generation
+  const iframe = document.createElement('iframe');
+  iframe.style.position = 'absolute';
+  iframe.style.left = '-10000px';
+  iframe.style.top = '-10000px';
+  document.body.appendChild(iframe);
   
-  // Clean up
-  URL.revokeObjectURL(url);
+  // Write content to iframe
+  const iframeDoc = iframe.contentWindow.document;
+  iframeDoc.open();
+  iframeDoc.write(invoiceHTML);
+  iframeDoc.close();
+  
+  // Wait for content to load then trigger download
+  iframe.onload = () => {
+    setTimeout(() => {
+      try {
+        // Focus the iframe and trigger print dialog in "Save as PDF" mode
+        iframe.contentWindow.focus();
+        iframe.contentWindow.print();
+        
+        // Clean up after a delay
+        setTimeout(() => {
+          document.body.removeChild(iframe);
+        }, 1000);
+      } catch (error) {
+        console.error('Error downloading PDF:', error);
+        // Fallback to new window approach
+        const printWindow = window.open('', '_blank');
+        printWindow.document.write(invoiceHTML);
+        printWindow.document.close();
+        printWindow.onload = () => {
+          printWindow.focus();
+          printWindow.print();
+          printWindow.close();
+        };
+        document.body.removeChild(iframe);
+      }
+    }, 500);
+  };
 };
 
 /**
- * Get invoice PDF as base64
+ * Generate invoice PDF blob (for backward compatibility)
  * @param {Object} invoiceData - Invoice details from API
- * @returns {Promise<string>} Base64 encoded PDF
+ * @returns {Blob} Empty blob for compatibility
+ */
+export const generateInvoicePDF = (invoiceData) => {
+  // For backward compatibility, trigger download directly
+  downloadInvoicePDF(invoiceData);
+  return new Blob([''], { type: 'application/pdf' });
+};
+
+/**
+ * Get invoice PDF as base64 (for backward compatibility)
+ * @param {Object} invoiceData - Invoice details from API
+ * @returns {Promise<string>} Empty base64 for compatibility
  */
 export const getInvoicePDFBase64 = async (invoiceData) => {
-  const blob = generateInvoicePDF(invoiceData);
-  
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onloadend = () => {
-      const base64 = reader.result.split(',')[1];
-      resolve(base64);
+  downloadInvoicePDF(invoiceData);
+  return '';
+};
+
+/**
+ * Generate HTML content for invoice (matching SalesOrderFlow design)
+ * @param {Object} invoiceData - Invoice details from API
+ * @returns {string} Complete HTML document
+ */
+const generateInvoiceHTML = (invoiceData) => {
+  // Convert number to words (copied from SalesOrderFlow)
+  const numberToWords = (num) => {
+    const ones = ['', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine'];
+    const tens = ['', '', 'Twenty', 'Thirty', 'Forty', 'Fifty', 'Sixty', 'Seventy', 'Eighty', 'Ninety'];
+    const teens = ['Ten', 'Eleven', 'Twelve', 'Thirteen', 'Fourteen', 'Fifteen', 'Sixteen', 'Seventeen', 'Eighteen', 'Nineteen'];
+
+    const convertHundreds = (n) => {
+      let str = '';
+      if (n > 99) {
+        str += ones[Math.floor(n / 100)] + ' Hundred ';
+        n %= 100;
+      }
+      if (n > 19) {
+        str += tens[Math.floor(n / 10)] + ' ';
+        n %= 10;
+      } else if (n >= 10) {
+        str += teens[n - 10] + ' ';
+        return str;
+      }
+      if (n > 0) {
+        str += ones[n] + ' ';
+      }
+      return str;
     };
-    reader.onerror = reject;
-    reader.readAsDataURL(blob);
-  });
+
+    const convertToWords = (n) => {
+      if (n === 0) return 'Zero';
+      let str = '';
+      if (n >= 10000000) {
+        str += convertHundreds(Math.floor(n / 10000000)) + 'Crore ';
+        n %= 10000000;
+      }
+      if (n >= 100000) {
+        str += convertHundreds(Math.floor(n / 100000)) + 'Lakh ';
+        n %= 100000;
+      }
+      if (n >= 1000) {
+        str += convertHundreds(Math.floor(n / 1000)) + 'Thousand ';
+        n %= 1000;
+      }
+      if (n > 0) {
+        str += convertHundreds(n);
+      }
+      return str.trim();
+    };
+
+    const amount = Math.floor(num);
+    const paise = Math.round((num - amount) * 100);
+    let words = convertToWords(amount) + ' Rupees';
+    if (paise > 0) {
+      words += ' and ' + convertToWords(paise) + ' Paise';
+    }
+    words += ' Only';
+    return words;
+  };
+
+  const totalAmount = parseFloat(invoiceData.final_amount || invoiceData.total_amount || 0);
+  const totalGst = (parseFloat(invoiceData.cgst_amount || 0)) + (parseFloat(invoiceData.sgst_amount || 0));
+
+  // Use "INVOICE" instead of "SALES ORDER" for invoice documents
+  const documentTitle = invoiceData.invoice_number ? 'INVOICE' : 'SALES ORDER';
+  const documentNumber = invoiceData.invoice_number || invoiceData.order_number || 'DOC-' + Date.now();
+
+  return `
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>${documentTitle} - ${documentNumber}</title>
+    <style>
+        /* Reset and base styles */
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.4; color: #1f2937; }
+        
+        /* Digital-first styles - continuous page flow */
+        @media print {
+            @page { 
+                size: A4; 
+                margin: 1cm 0.8cm; 
+            }
+            body { 
+                margin: 0 !important; 
+                padding: 0 !important; 
+                background: white !important;
+                font-size: 13px !important;
+                line-height: 1.5 !important;
+            }
+            .print-container { 
+                padding: 20px !important; 
+                box-shadow: none !important; 
+                margin: 0 !important; 
+                max-width: none !important;
+                width: 100% !important;
+                page-break-inside: avoid;
+            }
+            .print-table { 
+                border-collapse: collapse !important; 
+                border: 1px solid #ddd !important; 
+                width: 100% !important;
+                font-size: 12px !important;
+            }
+            .print-table th, .print-table td { 
+                border: 1px solid #000 !important; 
+                padding: 4px !important;
+                font-size: 10px !important;
+            }
+            .print-table thead { 
+                background-color: #f0f0f0 !important; 
+                -webkit-print-color-adjust: exact; 
+                print-color-adjust: exact; 
+            }
+            .no-print { display: none !important; }
+            .print-header { 
+                border-bottom: 2px solid #000 !important; 
+                margin-bottom: 10px !important; 
+                padding-bottom: 8px !important; 
+            }
+            .company-name { font-size: 1.5rem !important; }
+            .document-title { font-size: 1.1rem !important; }
+            .page-break-avoid { page-break-inside: avoid !important; }
+            input, select { border: none !important; background: transparent !important; }
+            .order-details { background: #f5f5f5 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; padding: 8px !important; }
+            .summary-box { background: #f5f5f5 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; padding: 8px !important; }
+            .amount-words { background: #f5f5f5 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; padding: 6px !important; }
+            .terms-section { background: #f5f5f5 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; padding: 8px !important; }
+            .summary-section { gap: 8px !important; }
+            .customer-section { gap: 1rem !important; margin-bottom: 1rem !important; }
+            .signature-section { margin-bottom: 1rem !important; }
+        }
+        
+        /* Layout styles - continuous digital flow */
+        .print-container { 
+            max-width: 850px; 
+            margin: 0 auto; 
+            background: white; 
+            padding: 2.5rem; 
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            font-size: 14px;
+            line-height: 1.6;
+        }
+        .print-header { 
+            text-align: center; 
+            margin-bottom: 2.5rem; 
+            padding-bottom: 1.5rem; 
+            border-bottom: 3px solid #667eea;
+            background: linear-gradient(135deg, #f8f9ff 0%, #e3f2fd 100%);
+            padding: 2rem;
+            border-radius: 12px;
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.15);
+        }
+        .company-logo { 
+            width: 5rem; 
+            height: 5rem; 
+            background: linear-gradient(135deg, #667eea, #764ba2); 
+            border-radius: 50%; 
+            display: flex; 
+            align-items: center; 
+            justify-content: center; 
+            margin: 0 auto 1.5rem; 
+            color: white; 
+            font-size: 2.5rem;
+            box-shadow: 0 4px 15px rgba(102, 126, 234, 0.3);
+        }
+        .company-name { 
+            font-size: 2.2rem; 
+            font-weight: bold; 
+            color: #1f2937; 
+            margin-bottom: 0.8rem;
+            letter-spacing: 1px;
+        }
+        .document-title { 
+            font-size: 1.4rem; 
+            font-weight: 600; 
+            color: #667eea; 
+            margin-bottom: 0.5rem;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+        }
+        .document-number { 
+            color: #6b7280; 
+            margin-bottom: 0.5rem;
+            font-size: 1.1rem;
+            font-weight: 500;
+        }
+        .document-date { 
+            font-size: 1rem; 
+            color: #9ca3af;
+        }
+        
+        /* Order details grid - enhanced for digital viewing */
+        .order-details { 
+            display: grid; 
+            grid-template-columns: repeat(2, 1fr); 
+            gap: 2rem; 
+            margin-bottom: 2rem; 
+            padding: 1.5rem; 
+            background: linear-gradient(135deg, #f8f9ff 0%, #e3f2fd 100%);
+            border-radius: 12px;
+            border: 2px solid #667eea;
+            box-shadow: 0 2px 8px rgba(102, 126, 234, 0.1);
+        }
+        .detail-item { }
+        .detail-label { 
+            font-size: 0.9rem; 
+            color: #667eea; 
+            margin-bottom: 0.3rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        .detail-value { 
+            font-size: 1.1rem; 
+            font-weight: 600; 
+            color: #1f2937;
+            line-height: 1.4;
+        }
+        
+        /* Customer info - improved spacing and alignment */
+        .customer-section { 
+            display: grid; 
+            grid-template-columns: 1fr 1fr; 
+            gap: 3rem; 
+            margin-bottom: 2.5rem;
+            background: #f8f9ff;
+            padding: 2rem;
+            border-radius: 12px;
+            border-left: 4px solid #667eea;
+        }
+        .section-title { 
+            font-size: 1.1rem; 
+            font-weight: 700; 
+            color: #667eea; 
+            text-transform: uppercase; 
+            letter-spacing: 1px; 
+            margin-bottom: 1rem;
+            border-bottom: 2px solid #667eea;
+            padding-bottom: 0.5rem;
+        }
+        .customer-name { 
+            font-weight: 600; 
+            margin-bottom: 0.5rem;
+            font-size: 1.1rem;
+            color: #1f2937;
+        }
+        .customer-detail { 
+            font-size: 1rem; 
+            color: #6b7280; 
+            margin-bottom: 0.3rem;
+            line-height: 1.5;
+        }
+        
+        /* Items table - enhanced for digital viewing */
+        .items-section { 
+            margin-bottom: 2.5rem;
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+        }
+        .print-table { 
+            width: 100%; 
+            border: none;
+            border-collapse: collapse;
+            background: white;
+        }
+        .print-table thead { 
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+        .print-table th { 
+            text-align: left; 
+            padding: 1.2rem 1rem; 
+            font-size: 0.95rem; 
+            font-weight: 600; 
+            color: white;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            border: none;
+        }
+        .print-table td { 
+            padding: 1rem; 
+            font-size: 1rem;
+            border-bottom: 1px solid #e5e7eb;
+            vertical-align: top;
+        }
+        .print-table tr:nth-child(even) { 
+            background: #f8f9ff; 
+        }
+        .print-table tr:hover {
+            background: #e3f2fd;
+            transition: background-color 0.2s ease;
+        }
+        .product-name { 
+            font-weight: 600; 
+            margin-bottom: 0.3rem;
+            color: #1f2937;
+            font-size: 1.1rem;
+        }
+        .product-batch { 
+            font-size: 0.9rem; 
+            color: #667eea;
+            font-weight: 500;
+        }
+        
+        /* Summary sections - enhanced for digital viewing */
+        .summary-section { 
+            display: grid; 
+            grid-template-columns: 1fr 1fr; 
+            gap: 2rem; 
+            margin-bottom: 2rem;
+        }
+        .summary-box { 
+            background: linear-gradient(135deg, #f8f9ff 0%, #e3f2fd 100%);
+            padding: 1.5rem; 
+            border-radius: 12px;
+            border: 2px solid #667eea;
+            box-shadow: 0 2px 8px rgba(102, 126, 234, 0.1);
+        }
+        .summary-title { 
+            font-size: 1.1rem; 
+            font-weight: 700; 
+            color: #667eea; 
+            margin-bottom: 1rem;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            border-bottom: 2px solid #667eea;
+            padding-bottom: 0.5rem;
+        }
+        .summary-item { 
+            display: flex; 
+            justify-content: space-between; 
+            font-size: 1rem; 
+            margin-bottom: 0.5rem;
+            padding: 0.3rem 0;
+            align-items: center;
+        }
+        .summary-item.total { 
+            border-top: 2px solid #667eea; 
+            padding-top: 1rem; 
+            margin-top: 1rem;
+            font-weight: 700; 
+            color: #667eea;
+            font-size: 1.2rem;
+        }
+        
+        /* Amount in words - enhanced styling */
+        .amount-words { 
+            background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
+            color: white;
+            padding: 1.5rem; 
+            border-radius: 12px; 
+            margin-bottom: 2rem; 
+            font-size: 1.1rem;
+            font-weight: 600;
+            text-align: center;
+            box-shadow: 0 4px 12px rgba(40, 167, 69, 0.2);
+            letter-spacing: 0.5px;
+        }
+        
+        /* Terms - enhanced for better readability */
+        .terms-section { 
+            background: #f8f9ff; 
+            padding: 1.5rem; 
+            border-radius: 12px;
+            margin-bottom: 2rem;
+            border-left: 4px solid #667eea;
+        }
+        .terms-title {
+            font-size: 1.1rem;
+            font-weight: 700;
+            color: #667eea;
+            margin-bottom: 1rem;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+        .terms-list { 
+            font-size: 1rem; 
+            color: #4b5563; 
+            list-style: decimal inside;
+            line-height: 1.6;
+        }
+        .terms-list li { 
+            margin-bottom: 0.8rem;
+            padding-left: 0.5rem;
+        }
+        
+        /* Signatures - enhanced styling */
+        .signature-section { 
+            display: grid; 
+            grid-template-columns: 1fr 1fr; 
+            gap: 3rem; 
+            margin-bottom: 2rem;
+            background: #f8f9ff;
+            padding: 2rem;
+            border-radius: 12px;
+        }
+        .signature-box { 
+            text-align: center;
+            padding: 1rem;
+        }
+        .signature-line { 
+            height: 5rem; 
+            border-bottom: 2px solid #667eea; 
+            margin-bottom: 1rem;
+            position: relative;
+        }
+        .signature-label { 
+            font-size: 1.1rem; 
+            color: #667eea; 
+            margin-bottom: 0.5rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        .signature-sublabel { 
+            font-size: 0.9rem; 
+            color: #6b7280;
+        }
+        
+        /* Footer - enhanced branding */
+        .footer { 
+            text-align: center; 
+            padding: 2rem 0; 
+            border-top: 3px solid #667eea;
+            background: linear-gradient(135deg, #f8f9ff 0%, #e3f2fd 100%);
+            border-radius: 12px;
+            margin-top: 2rem;
+        }
+        .footer-text { 
+            font-size: 1.1rem; 
+            color: #667eea; 
+            margin-bottom: 0.8rem;
+            font-weight: 600;
+        }
+        .footer-subtext { 
+            font-size: 1rem; 
+            color: #6b7280; 
+            margin-bottom: 0.5rem;
+        }
+        .footer-brand { 
+            font-size: 0.9rem; 
+            color: #667eea;
+            font-weight: 500;
+        }
+    </style>
+</head>
+<body>
+    <div class="print-container">
+        <!-- Header -->
+        <div class="print-header">
+            <div class="company-logo">🛒</div>
+            <h1 class="company-name">${invoiceData.org_name || 'Your Company Name'}</h1>
+            <h2 class="document-title">${documentTitle}</h2>
+            <p class="document-number">${documentNumber}</p>
+            <p class="document-date">Date: ${invoiceData.invoice_date || invoiceData.order_date || new Date().toLocaleDateString('en-IN')}</p>
+        </div>
+
+        <!-- Essential Details Only -->
+        <div class="order-details">
+            <div class="detail-item">
+                <p class="detail-label">Document Status</p>
+                <p class="detail-value">CONFIRMED</p>
+            </div>
+            <div class="detail-item">
+                <p class="detail-label">Payment Terms</p>
+                <p class="detail-value">Credit</p>
+            </div>
+        </div>
+
+        <!-- Customer Section -->
+        <div class="customer-section">
+            <div>
+                <h3 class="section-title">Bill To</h3>
+                <p class="customer-name">${invoiceData.customer_name || 'Customer Name'}</p>
+                ${invoiceData.billing_address ? invoiceData.billing_address.split('\\n').map(line => `<p class="customer-detail">${line}</p>`).join('') : ''}
+                ${invoiceData.customer_phone ? `<p class="customer-detail">Phone: ${invoiceData.customer_phone}</p>` : ''}
+                ${invoiceData.customer_gstin ? `<p class="customer-detail">GSTIN: ${invoiceData.customer_gstin}</p>` : ''}
+            </div>
+            <div>
+                <h3 class="section-title">Ship To</h3>
+                <p class="customer-detail">---</p>
+            </div>
+        </div>
+
+        <!-- Items Section -->
+        <div class="items-section">
+            <h3 class="section-title">Order Items</h3>
+            <table class="print-table">
+                <thead>
+                    <tr>
+                        <th>Item Details</th>
+                        <th style="text-align: center;">HSN</th>
+                        <th style="text-align: center;">Qty</th>
+                        <th style="text-align: right;">MRP</th>
+                        <th style="text-align: right;">Rate</th>
+                        <th style="text-align: right;">GST %</th>
+                        <th style="text-align: right;">Amount</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${(invoiceData.items || []).map(item => `
+                        <tr>
+                            <td>
+                                <div class="product-name">${item.product_name || 'Unknown Product'}</div>
+                                <div class="product-batch">Batch: ${item.batch_number || item.batch_no || 'N/A'}</div>
+                            </td>
+                            <td style="text-align: center;">${item.hsn_code || '3004'}</td>
+                            <td style="text-align: center;">${item.quantity || 1}</td>
+                            <td style="text-align: right;">₹${(item.mrp || item.unit_price || 0).toFixed(2)}</td>
+                            <td style="text-align: right;">₹${(item.unit_price || 0).toFixed(2)}</td>
+                            <td style="text-align: right;">${item.tax_percent || item.gst_percent || 12}%</td>
+                            <td style="text-align: right; font-weight: 500;">₹${(item.line_total || item.total || 0).toFixed(2)}</td>
+                        </tr>
+                    `).join('')}
+                </tbody>
+            </table>
+        </div>
+
+        <!-- Summary Section -->
+        <div class="summary-section">
+            <div class="summary-box">
+                <h4 class="summary-title">GST Breakdown</h4>
+                <div class="summary-item">
+                    <span>CGST (6%)</span>
+                    <span>₹${(parseFloat(invoiceData.cgst_amount) || 0).toFixed(2)}</span>
+                </div>
+                <div class="summary-item">
+                    <span>SGST (6%)</span>
+                    <span>₹${(parseFloat(invoiceData.sgst_amount) || 0).toFixed(2)}</span>
+                </div>
+                <div class="summary-item total">
+                    <span>Total GST</span>
+                    <span>₹${totalGst.toFixed(2)}</span>
+                </div>
+            </div>
+            
+            <div class="summary-box">
+                <h4 class="summary-title">Order Summary</h4>
+                <div class="summary-item">
+                    <span>Sub Total</span>
+                    <span>₹${(invoiceData.subtotal_amount || 0).toFixed(2)}</span>
+                </div>
+                <div class="summary-item">
+                    <span>Total GST</span>
+                    <span>₹${totalGst.toFixed(2)}</span>
+                </div>
+                ${invoiceData.round_off_amount ? `
+                <div class="summary-item">
+                    <span>Round Off</span>
+                    <span>₹${invoiceData.round_off_amount}</span>
+                </div>
+                ` : ''}
+                <div class="summary-item total">
+                    <span>Grand Total</span>
+                    <span>₹${totalAmount.toFixed(2)}</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Amount in Words -->
+        <div class="amount-words">
+            <strong>Amount in Words:</strong> ${numberToWords(totalAmount)}
+        </div>
+
+        <!-- Terms & Conditions -->
+        <div class="terms-section">
+            <h4 class="summary-title">Terms & Conditions</h4>
+            <ol class="terms-list">
+                <li>Goods once sold will not be taken back or exchanged</li>
+                <li>Interest @ 36% p.a will be charged if payment is not made within the stipulated time</li>
+                <li>Subject to our standard terms of credit</li>
+                <li>All disputes are subject to [Location] jurisdiction only</li>
+                <li>E.&O.E.</li>
+            </ol>
+        </div>
+
+        <!-- Signatures -->
+        <div class="signature-section">
+            <div class="signature-box">
+                <div class="signature-line"></div>
+                <p class="signature-label">Prepared By</p>
+                <p class="signature-sublabel">Authorized Signatory</p>
+            </div>
+            <div class="signature-box">
+                <div class="signature-line"></div>
+                <p class="signature-label">For ${invoiceData.org_name || 'Your Company Name'}</p>
+                <p class="signature-sublabel">Authorized Signatory</p>
+            </div>
+        </div>
+
+        <!-- Footer -->
+        <div class="footer">
+            <p class="footer-text">Thank you for your business!</p>
+            <p class="footer-subtext">${invoiceData.org_name || 'Your Company Name'} | Your trusted healthcare partner</p>
+            <p class="footer-brand">Powered by AASO ERP</p>
+        </div>
+    </div>
+</body>
+</html>`;
 };
