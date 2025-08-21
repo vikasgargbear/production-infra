@@ -35,7 +35,7 @@ const FinancialJournalFlow: React.FC<FinancialJournalFlowProps> = ({ onClose }) 
   const [refreshing, setRefreshing] = useState(false);
 
   // Accounts for selection - loaded from API
-  const [accounts, setAccounts] = useState([]);
+  const [accounts, setAccounts] = useState<{account_code: string, account_name: string}[]>([]);
 
   useEffect(() => {
     // Load initial data

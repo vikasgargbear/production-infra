@@ -148,7 +148,7 @@ function App(): JSX.Element {
       case 'products':
         return <Products key="products" />;
       case 'customers':
-        return <MasterHub key="customers" defaultModule="customer-master" />;
+        return <MasterHub key="customers" />;
       case 'orders':
         return <Orders key="orders" />;
       case 'batches':

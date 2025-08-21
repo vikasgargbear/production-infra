@@ -31,7 +31,7 @@ const ExpenseClaimsFlow: React.FC<ExpenseClaimsFlowProps> = ({ onClose }) => {
   const [refreshing, setRefreshing] = useState(false);
 
   // Expense types loaded from API
-  const [expenseTypes, setExpenseTypes] = useState([]);
+  const [expenseTypes, setExpenseTypes] = useState<{code: string, name: string}[]>([]);
 
   useEffect(() => {
     // Load any initial data if needed

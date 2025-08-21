@@ -25,11 +25,14 @@ const PaymentHistory: React.FC<PaymentHistoryProps> = ({ onClose }) => {
         {/* Header - Using Global ModuleHeader */}
         <ModuleHeader
           title="Payment History"
-          subtitle="View and manage payment transactions"
+          documentNumber=""
+          status="active"
           icon={History}
           iconColor="text-blue-600"
           onClose={onClose}
           historyType="payment"
+          showSaveDraft={false}
+          onSaveDraft={() => {}}
         />
 
         {/* Content */}

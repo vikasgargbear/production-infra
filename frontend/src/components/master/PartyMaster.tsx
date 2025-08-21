@@ -87,10 +87,10 @@ const PartyMaster: React.FC<PartyMasterProps> = ({ open, onClose }) => {
         if (suppliersResponse.data) {
           if (Array.isArray(suppliersResponse.data)) {
             suppliersData = suppliersResponse.data;
-          } else if (suppliersResponse.data.data && Array.isArray(suppliersResponse.data.data)) {
-            suppliersData = suppliersResponse.data.data;
-          } else if (suppliersResponse.data.suppliers && Array.isArray(suppliersResponse.data.suppliers)) {
-            suppliersData = suppliersResponse.data.suppliers;
+          } else if ((suppliersResponse.data as any).data && Array.isArray((suppliersResponse.data as any).data)) {
+            suppliersData = (suppliersResponse.data as any).data;
+          } else if ((suppliersResponse.data as any).suppliers && Array.isArray((suppliersResponse.data as any).suppliers)) {
+            suppliersData = (suppliersResponse.data as any).suppliers;
           }
         }
         const suppliers = suppliersData.map(s => ({ ...s, type: 'supplier' as const }));
@@ -138,8 +138,8 @@ const PartyMaster: React.FC<PartyMasterProps> = ({ open, onClose }) => {
         if (suppliersResponse.data) {
           if (Array.isArray(suppliersResponse.data)) {
             suppliersData = suppliersResponse.data;
-          } else if (suppliersResponse.data.data && Array.isArray(suppliersResponse.data.data)) {
-            suppliersData = suppliersResponse.data.data;
+          } else if ((suppliersResponse.data as any).data && Array.isArray((suppliersResponse.data as any).data)) {
+            suppliersData = (suppliersResponse.data as any).data;
           }
         }
         const suppliers = suppliersData.map(s => ({ ...s, type: 'supplier' as const }));

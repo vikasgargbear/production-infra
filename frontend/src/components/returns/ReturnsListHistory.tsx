@@ -469,11 +469,14 @@ const ReturnsListHistory: React.FC<ReturnsListHistoryProps> = ({ onClose }) => {
         {/* Header - Using Global ModuleHeader */}
         <ModuleHeader
           title="Returns History"
-          subtitle="View and manage all your returns"
+          documentNumber=""
+          status="active"
           icon={RotateCcw}
           iconColor="text-blue-600"
           onClose={onClose}
           historyType="return"
+          showSaveDraft={false}
+          onSaveDraft={() => {}}
           additionalActions={[
             {
               label: "Refresh",
@@ -488,7 +491,7 @@ const ReturnsListHistory: React.FC<ReturnsListHistoryProps> = ({ onClose }) => {
               variant: "default",
               icon: Download
             }
-          ]}
+          ] as any}
         />
 
         {/* Content */}
