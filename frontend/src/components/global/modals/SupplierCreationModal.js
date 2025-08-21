@@ -137,6 +137,13 @@ const SupplierCreationModal = ({
     if (!formData.city) newErrors.city = 'City is required';
     if (!formData.state) newErrors.state = 'State is required';
     
+    // If city and state are provided, pincode becomes required (database constraint)
+    if ((formData.city || formData.state) && !formData.pincode) {
+      newErrors.pincode = 'Pincode is required when providing address';
+    } else if (formData.pincode && !/^\d{6}$/.test(formData.pincode)) {
+      newErrors.pincode = 'Pincode must be 6 digits';
+    }
+    
     // Format validations
     if (formData.gstin && !validateGSTIN(formData.gstin)) {
       newErrors.gstin = 'Invalid GSTIN format';
@@ -148,10 +155,6 @@ const SupplierCreationModal = ({
     
     if (formData.email && !/\S+@\S+\.\S+/.test(formData.email)) {
       newErrors.email = 'Invalid email format';
-    }
-    
-    if (formData.pincode && !/^\d{6}$/.test(formData.pincode)) {
-      newErrors.pincode = 'Pincode must be 6 digits';
     }
     
     setErrors(newErrors);
@@ -380,6 +383,9 @@ const SupplierCreationModal = ({
             <h3 className="text-lg font-semibold text-gray-800 mb-4 flex items-center gap-2">
               <MapPin className="w-5 h-5 text-blue-600" />
               Address Details
+              <span className="text-sm font-normal text-gray-600 ml-2">
+                (City, State & Pincode are required together)
+              </span>
             </h3>
             <div className="space-y-6">
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -422,7 +428,7 @@ const SupplierCreationModal = ({
                     className={`w-full px-4 py-3 text-base border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
                       errors.city ? 'border-red-300' : 'border-gray-300'
                     }`}
-                    placeholder="City"
+                    placeholder="City (required)"
                   />
                   {errors.city && (
                     <p className="mt-1 text-sm text-red-600">{errors.city}</p>
@@ -452,7 +458,8 @@ const SupplierCreationModal = ({
                 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Pincode
+                    Pincode *
+                    <span className="text-xs text-gray-500 ml-1">(required for address)</span>
                   </label>
                   <input
                     type="text"
@@ -461,7 +468,7 @@ const SupplierCreationModal = ({
                     className={`w-full px-4 py-3 text-base border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
                       errors.pincode ? 'border-red-300' : 'border-gray-300'
                     }`}
-                    placeholder="6 digits"
+                    placeholder="6 digits (required)"
                     maxLength="6"
                   />
                   {errors.pincode && (
