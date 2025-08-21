@@ -151,10 +151,15 @@ const EnhancedGRNFlow = ({ onClose, prefilledData = null }) => {
       hsn_code: product.hsn_code || '',
       batch_number: '',
       expiry_date: '',
+      manufacturer: product.manufacturer || '',
       ordered_qty: 0,
       received_qty: 1,
+      unit: product.unit || product.uom || 'Strip',
       unit_price: product.purchase_price || 0,
+      mrp: product.mrp || 0,
       tax_percent: product.tax_percent || 12,
+      discount_percent: 0,
+      free_quantity: 0,
       quality_status: 'Approved',
       total: product.purchase_price || 0
     };
@@ -390,26 +395,65 @@ const EnhancedGRNFlow = ({ onClose, prefilledData = null }) => {
       {grn.items && grn.items.length > 0 && (
         <ContentCard title="Goods Received" subtitle={null} actions={null} className="mb-6">
           <ItemsTable
-            items={grn.items}
-            onUpdateItem={handleUpdateItem}
+            items={grn.items.map(item => ({
+              ...item,
+              quantity: item.received_qty || item.quantity,
+              rate: item.unit_price,
+              tax: item.tax_percent,
+              discount_percent: item.discount_percent || 0,
+              free_quantity: item.free_quantity || 0,
+              mrp: item.mrp || 0,
+              batch_number: item.batch_number || '',
+              expiry_date: item.expiry_date || '',
+              total: (item.received_qty * item.unit_price * (1 + (item.tax_percent || 0) / 100)).toFixed(2)
+            }))}
+            onUpdateItem={(index, field, value) => {
+              const mappedField = field === 'rate' ? 'unit_price' : 
+                                field === 'tax' ? 'tax_percent' :
+                                field === 'quantity' ? 'received_qty' :
+                                field;
+              handleUpdateItem(index, mappedField, value);
+            }}
             onRemoveItem={handleRemoveItem}
-            module="grn"
             showTotals={false}
-            columns={[
-              { key: 'product_name', label: 'Product', width: 'w-80' },
-              { key: 'batch_number', label: 'Batch', type: 'text', editable: true },
-              { key: 'expiry_date', label: 'Expiry', type: 'date', editable: true },
-              { key: 'ordered_qty', label: 'Ordered', type: 'number', editable: true },
-              { key: 'received_qty', label: 'Received', type: 'number', editable: true },
-              { key: 'unit_price', label: 'Rate', type: 'number', editable: true },
-              { key: 'tax_percent', label: 'GST%', type: 'select', editable: true, options: PURCHASE_CONFIG.TAX_OPTIONS },
-              { key: 'quality_status', label: 'Quality', type: 'select', editable: true, options: [
-                { value: 'Approved', label: 'Approved' },
-                { value: 'Rejected', label: 'Rejected' },
-                { value: 'Pending', label: 'Pending' }
-              ]},
-              { key: 'total', label: 'Total', type: 'currency', calculated: true }
-            ]}
+            columns={['product', 'batch', 'expiry', 'ordered', 'quantity', 'unit', 'mrp', 'rate', 'tax', 'total']}
+            customColumns={{
+              batch: {
+                label: 'Batch',
+                align: 'center',
+                render: (item, index) => (
+                  <input
+                    type="text"
+                    value={item.batch_number || ''}
+                    onChange={(e) => handleUpdateItem(index, 'batch_number', e.target.value)}
+                    className="w-24 text-center border-0 bg-transparent focus:ring-2 focus:ring-blue-500 rounded-md"
+                    placeholder="Batch"
+                    required
+                  />
+                )
+              },
+              expiry: {
+                label: 'Expiry',
+                align: 'center',
+                render: (item, index) => (
+                  <input
+                    type="date"
+                    value={item.expiry_date || ''}
+                    onChange={(e) => handleUpdateItem(index, 'expiry_date', e.target.value)}
+                    className="w-32 text-center border-0 bg-transparent focus:ring-2 focus:ring-blue-500 rounded-md"
+                    required
+                  />
+                )
+              },
+              ordered: {
+                label: 'Ordered',
+                align: 'center',
+                render: (item) => (
+                  <span className="text-gray-600">{item.ordered_qty || 0}</span>
+                )
+              }
+            }}
+            title="Goods Received"
           />
         </ContentCard>
       )}

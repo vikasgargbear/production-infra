@@ -64,6 +64,13 @@ class DocumentNumberService {
   }
 
   /**
+   * Generate PO Number (alias for generatePurchaseOrderNumber)
+   */
+  async generatePONumber() {
+    return this.generatePurchaseOrderNumber();
+  }
+
+  /**
    * Generate GRN Number
    */
   async generateGRNNumber() {

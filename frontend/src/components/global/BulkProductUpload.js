@@ -1,0 +1,593 @@
+import React, { useState, useRef } from 'react';
+import { 
+  Upload, Download, FileSpreadsheet, AlertCircle, 
+  CheckCircle, X, Edit2, Save, Trash2, Plus,
+  Package, Info
+} from 'lucide-react';
+import * as XLSX from 'xlsx';
+import { productAPI } from '../../services/api';
+import { useToast } from './ui';
+
+/**
+ * BulkProductUpload Component
+ * Allows users to:
+ * 1. Download an Excel template
+ * 2. Fill it with product data
+ * 3. Upload and preview
+ * 4. Edit inline before saving
+ * 5. Bulk create products for purchase
+ */
+const BulkProductUpload = ({ 
+  onProductsAdded, 
+  onClose,
+  mode = 'purchase' // 'purchase' or 'inventory'
+}) => {
+  const toast = useToast();
+  const fileInputRef = useRef(null);
+  const [uploading, setUploading] = useState(false);
+  const [products, setProducts] = useState([]);
+  const [errors, setErrors] = useState([]);
+  const [saving, setSaving] = useState(false);
+  const [editingIndex, setEditingIndex] = useState(null);
+
+  // Template columns definition
+  const templateColumns = [
+    { field: 'product_name', header: 'Product Name*', required: true, example: 'Paracetamol 500mg' },
+    { field: 'generic_name', header: 'Generic Name', required: false, example: 'Paracetamol' },
+    { field: 'manufacturer', header: 'Manufacturer', required: false, example: 'Cipla Ltd' },
+    { field: 'hsn_code', header: 'HSN Code', required: false, example: '3004' },
+    { field: 'batch_number', header: 'Batch No*', required: true, example: 'BATCH001' },
+    { field: 'expiry_date', header: 'Expiry (MM/YYYY)*', required: true, example: '12/2025' },
+    { field: 'quantity', header: 'Quantity*', required: true, example: '100' },
+    { field: 'free_quantity', header: 'Free Qty', required: false, example: '10' },
+    { field: 'pack_size', header: 'Pack Size', required: false, example: '10' },
+    { field: 'pack_type', header: 'Pack Type', required: false, example: 'STRIP' },
+    { field: 'mrp', header: 'MRP*', required: true, example: '120.00' },
+    { field: 'cost_price', header: 'Cost Price*', required: true, example: '80.00' },
+    { field: 'sale_price', header: 'Sale Price', required: false, example: '100.00' },
+    { field: 'gst_percent', header: 'GST %', required: false, example: '12' },
+    { field: 'discount_percent', header: 'Discount %', required: false, example: '5' },
+    { field: 'schedule_type', header: 'Schedule', required: false, example: 'H' },
+    { field: 'storage_condition', header: 'Storage', required: false, example: 'Cool & Dry' }
+  ];
+
+  // Generate and download Excel template
+  const downloadTemplate = () => {
+    // Create workbook
+    const wb = XLSX.utils.book_new();
+    
+    // Create header row
+    const headers = templateColumns.map(col => col.header);
+    
+    // Create example row
+    const exampleRow = templateColumns.map(col => col.example);
+    
+    // Create instructions sheet
+    const instructionsData = [
+      ['BULK PRODUCT UPLOAD TEMPLATE'],
+      [''],
+      ['Instructions:'],
+      ['1. Fill in product details in the Data sheet'],
+      ['2. Required fields are marked with *'],
+      ['3. Date format: MM/YYYY (e.g., 12/2025)'],
+      ['4. Pack Types: STRIP, BOX, BOTTLE, VIAL, TUBE'],
+      ['5. GST % options: 0, 5, 12, 18, 28'],
+      ['6. Schedule Types: H, H1, X, G, J (leave empty for OTC)'],
+      ['7. You can copy-paste data from PDFs'],
+      [''],
+      ['Field Descriptions:'],
+      ...templateColumns.map(col => [
+        col.header,
+        col.required ? 'Required' : 'Optional',
+        col.example
+      ])
+    ];
+    
+    const instructionsSheet = XLSX.utils.aoa_to_sheet(instructionsData);
+    XLSX.utils.book_append_sheet(wb, instructionsSheet, 'Instructions');
+    
+    // Create data sheet with headers and example
+    const dataSheet = XLSX.utils.aoa_to_sheet([headers, exampleRow]);
+    
+    // Set column widths
+    const colWidths = templateColumns.map(col => ({ wch: Math.max(col.header.length, 15) }));
+    dataSheet['!cols'] = colWidths;
+    
+    // Add data sheet to workbook
+    XLSX.utils.book_append_sheet(wb, dataSheet, 'Data');
+    
+    // Generate and download file
+    XLSX.writeFile(wb, `product_upload_template_${new Date().getTime()}.xlsx`);
+    
+    toast.success('Template downloaded! Fill it and upload back.');
+  };
+
+  // Parse uploaded Excel file
+  const handleFileUpload = (event) => {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    // Check file type
+    const validTypes = [
+      'application/vnd.ms-excel',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      'text/csv'
+    ];
+    
+    if (!validTypes.includes(file.type) && !file.name.match(/\.(xlsx|xls|csv)$/)) {
+      toast.error('Please upload an Excel or CSV file');
+      return;
+    }
+
+    setUploading(true);
+    const reader = new FileReader();
+    
+    reader.onload = (e) => {
+      try {
+        const data = new Uint8Array(e.target.result);
+        const workbook = XLSX.read(data, { type: 'array' });
+        
+        // Get the first sheet or 'Data' sheet
+        const sheetName = workbook.SheetNames.includes('Data') ? 'Data' : workbook.SheetNames[0];
+        const worksheet = workbook.Sheets[sheetName];
+        
+        // Convert to JSON
+        const jsonData = XLSX.utils.sheet_to_json(worksheet, { raw: false });
+        
+        if (jsonData.length === 0) {
+          toast.error('No data found in the file');
+          setUploading(false);
+          return;
+        }
+
+        // Process and validate data
+        const processedProducts = [];
+        const validationErrors = [];
+        
+        jsonData.forEach((row, index) => {
+          const product = {};
+          const rowErrors = [];
+          
+          // Map Excel columns to product fields
+          templateColumns.forEach(col => {
+            const value = row[col.header];
+            
+            // Check required fields
+            if (col.required && !value) {
+              rowErrors.push(`${col.header} is required`);
+            }
+            
+            // Process value based on field type
+            if (value !== undefined && value !== '') {
+              switch (col.field) {
+                case 'quantity':
+                case 'free_quantity':
+                case 'pack_size':
+                  product[col.field] = parseInt(value) || 0;
+                  break;
+                case 'mrp':
+                case 'cost_price':
+                case 'sale_price':
+                case 'gst_percent':
+                case 'discount_percent':
+                  product[col.field] = parseFloat(value) || 0;
+                  break;
+                case 'expiry_date':
+                  // Convert MM/YYYY to YYYY-MM-DD (last day of month)
+                  const [month, year] = value.split('/');
+                  if (month && year) {
+                    const lastDay = new Date(year, month, 0).getDate();
+                    product[col.field] = `${year}-${month.padStart(2, '0')}-${lastDay}`;
+                  }
+                  break;
+                default:
+                  product[col.field] = value?.toString().trim() || '';
+              }
+            } else if (col.field === 'gst_percent') {
+              product[col.field] = 12; // Default GST
+            }
+          });
+          
+          // Auto-generate batch if not provided
+          if (!product.batch_number) {
+            product.batch_number = `AUTO-${Date.now()}-${index}`;
+          }
+          
+          // Calculate amount
+          product.amount = (product.quantity || 0) * (product.cost_price || 0);
+          
+          if (rowErrors.length > 0) {
+            validationErrors.push({
+              row: index + 2, // +2 for header and 0-index
+              errors: rowErrors
+            });
+          } else {
+            processedProducts.push(product);
+          }
+        });
+        
+        if (validationErrors.length > 0) {
+          setErrors(validationErrors);
+          toast.error(`Found ${validationErrors.length} rows with errors`);
+        }
+        
+        if (processedProducts.length > 0) {
+          setProducts(processedProducts);
+          toast.success(`Loaded ${processedProducts.length} products. Review and save.`);
+        }
+        
+      } catch (error) {
+        console.error('Error parsing file:', error);
+        toast.error('Failed to parse file. Please check the format.');
+      } finally {
+        setUploading(false);
+        // Reset file input
+        if (fileInputRef.current) {
+          fileInputRef.current.value = '';
+        }
+      }
+    };
+    
+    reader.readAsArrayBuffer(file);
+  };
+
+  // Handle inline editing
+  const handleEdit = (index, field, value) => {
+    const updatedProducts = [...products];
+    updatedProducts[index] = {
+      ...updatedProducts[index],
+      [field]: value
+    };
+    
+    // Recalculate amount if quantity or cost_price changed
+    if (field === 'quantity' || field === 'cost_price') {
+      updatedProducts[index].amount = 
+        (updatedProducts[index].quantity || 0) * 
+        (updatedProducts[index].cost_price || 0);
+    }
+    
+    setProducts(updatedProducts);
+  };
+
+  // Remove product from list
+  const handleRemove = (index) => {
+    setProducts(products.filter((_, i) => i !== index));
+    toast.info('Product removed from list');
+  };
+
+  // Save all products
+  const handleSaveAll = async () => {
+    if (products.length === 0) {
+      toast.error('No products to save');
+      return;
+    }
+
+    setSaving(true);
+    const results = {
+      success: [],
+      failed: []
+    };
+
+    try {
+      // Create products in parallel batches
+      const batchSize = 5;
+      for (let i = 0; i < products.length; i += batchSize) {
+        const batch = products.slice(i, i + batchSize);
+        const promises = batch.map(async (product) => {
+          try {
+            const response = await productAPI.create(product);
+            return { success: true, product: response.data };
+          } catch (error) {
+            return { 
+              success: false, 
+              product, 
+              error: error.response?.data?.message || 'Failed to create'
+            };
+          }
+        });
+        
+        const batchResults = await Promise.all(promises);
+        batchResults.forEach(result => {
+          if (result.success) {
+            results.success.push(result.product);
+          } else {
+            results.failed.push(result);
+          }
+        });
+      }
+
+      // Show results
+      if (results.success.length > 0) {
+        toast.success(`Successfully created ${results.success.length} products`);
+        
+        // Pass created products to parent
+        if (onProductsAdded) {
+          onProductsAdded(results.success);
+        }
+      }
+      
+      if (results.failed.length > 0) {
+        toast.error(`Failed to create ${results.failed.length} products`);
+      }
+      
+      // Clear successful products, keep failed ones for retry
+      if (results.failed.length > 0) {
+        setProducts(results.failed.map(r => r.product));
+      } else {
+        setProducts([]);
+        if (onClose) {
+          onClose();
+        }
+      }
+      
+    } catch (error) {
+      console.error('Error saving products:', error);
+      toast.error('Failed to save products');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-xl w-full max-w-7xl max-h-[90vh] overflow-hidden shadow-2xl">
+        {/* Header */}
+        <div className="px-6 py-4 border-b bg-gradient-to-r from-blue-50 to-indigo-50">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <FileSpreadsheet className="w-6 h-6 text-blue-600" />
+              <div>
+                <h2 className="text-xl font-semibold text-gray-800">
+                  Bulk Product Upload
+                </h2>
+                <p className="text-sm text-gray-600">
+                  Upload multiple products via Excel
+                </p>
+              </div>
+            </div>
+            <button 
+              onClick={onClose}
+              className="p-2 hover:bg-white rounded-lg transition-all"
+            >
+              <X className="w-5 h-5 text-gray-500" />
+            </button>
+          </div>
+        </div>
+
+        {/* Instructions & Actions */}
+        <div className="px-6 py-4 bg-gray-50 border-b">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-4">
+              <button
+                onClick={downloadTemplate}
+                className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+              >
+                <Download className="w-4 h-4" />
+                <span>Download Template</span>
+              </button>
+              
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".xlsx,.xls,.csv"
+                onChange={handleFileUpload}
+                className="hidden"
+              />
+              
+              <button
+                onClick={() => fileInputRef.current?.click()}
+                disabled={uploading}
+                className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:bg-gray-400"
+              >
+                <Upload className="w-4 h-4" />
+                <span>{uploading ? 'Processing...' : 'Upload File'}</span>
+              </button>
+            </div>
+            
+            <div className="flex items-center gap-2 text-sm text-gray-600">
+              <Info className="w-4 h-4" />
+              <span>Excel (.xlsx, .xls) or CSV files supported</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Error Display */}
+        {errors.length > 0 && (
+          <div className="px-6 py-3 bg-red-50 border-b border-red-100">
+            <div className="flex items-start gap-2">
+              <AlertCircle className="w-5 h-5 text-red-500 mt-0.5" />
+              <div>
+                <p className="font-medium text-red-800">Validation Errors:</p>
+                <ul className="mt-1 text-sm text-red-700">
+                  {errors.slice(0, 3).map((error, i) => (
+                    <li key={i}>Row {error.row}: {error.errors.join(', ')}</li>
+                  ))}
+                  {errors.length > 3 && (
+                    <li>...and {errors.length - 3} more errors</li>
+                  )}
+                </ul>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Products Table */}
+        <div className="overflow-x-auto overflow-y-auto max-h-[calc(90vh-280px)]">
+          {products.length > 0 ? (
+            <table className="w-full">
+              <thead className="bg-gray-50 sticky top-0">
+                <tr>
+                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-700">#</th>
+                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-700">Product Name</th>
+                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-700">Batch</th>
+                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-700">Expiry</th>
+                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-700">Qty</th>
+                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-700">Free</th>
+                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-700">MRP</th>
+                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-700">Cost</th>
+                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-700">GST%</th>
+                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-700">Amount</th>
+                  <th className="px-3 py-2 text-center text-xs font-medium text-gray-700">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="bg-white divide-y divide-gray-200">
+                {products.map((product, index) => (
+                  <tr key={index} className="hover:bg-gray-50">
+                    <td className="px-3 py-2 text-sm text-gray-600">{index + 1}</td>
+                    <td className="px-3 py-2">
+                      {editingIndex === index ? (
+                        <input
+                          type="text"
+                          value={product.product_name}
+                          onChange={(e) => handleEdit(index, 'product_name', e.target.value)}
+                          className="w-full px-2 py-1 text-sm border rounded"
+                          autoFocus
+                        />
+                      ) : (
+                        <div>
+                          <p className="text-sm font-medium text-gray-900">{product.product_name}</p>
+                          {product.manufacturer && (
+                            <p className="text-xs text-gray-500">{product.manufacturer}</p>
+                          )}
+                        </div>
+                      )}
+                    </td>
+                    <td className="px-3 py-2">
+                      <input
+                        type="text"
+                        value={product.batch_number}
+                        onChange={(e) => handleEdit(index, 'batch_number', e.target.value)}
+                        className="w-20 px-2 py-1 text-sm border rounded"
+                      />
+                    </td>
+                    <td className="px-3 py-2">
+                      <input
+                        type="date"
+                        value={product.expiry_date}
+                        onChange={(e) => handleEdit(index, 'expiry_date', e.target.value)}
+                        className="w-32 px-2 py-1 text-sm border rounded"
+                      />
+                    </td>
+                    <td className="px-3 py-2">
+                      <input
+                        type="number"
+                        value={product.quantity}
+                        onChange={(e) => handleEdit(index, 'quantity', parseInt(e.target.value) || 0)}
+                        className="w-16 px-2 py-1 text-sm border rounded"
+                      />
+                    </td>
+                    <td className="px-3 py-2">
+                      <input
+                        type="number"
+                        value={product.free_quantity || 0}
+                        onChange={(e) => handleEdit(index, 'free_quantity', parseInt(e.target.value) || 0)}
+                        className="w-14 px-2 py-1 text-sm border rounded"
+                      />
+                    </td>
+                    <td className="px-3 py-2">
+                      <input
+                        type="number"
+                        value={product.mrp}
+                        onChange={(e) => handleEdit(index, 'mrp', parseFloat(e.target.value) || 0)}
+                        className="w-20 px-2 py-1 text-sm border rounded"
+                        step="0.01"
+                      />
+                    </td>
+                    <td className="px-3 py-2">
+                      <input
+                        type="number"
+                        value={product.cost_price}
+                        onChange={(e) => handleEdit(index, 'cost_price', parseFloat(e.target.value) || 0)}
+                        className="w-20 px-2 py-1 text-sm border rounded"
+                        step="0.01"
+                      />
+                    </td>
+                    <td className="px-3 py-2">
+                      <select
+                        value={product.gst_percent}
+                        onChange={(e) => handleEdit(index, 'gst_percent', parseFloat(e.target.value))}
+                        className="w-16 px-2 py-1 text-sm border rounded"
+                      >
+                        <option value="0">0%</option>
+                        <option value="5">5%</option>
+                        <option value="12">12%</option>
+                        <option value="18">18%</option>
+                        <option value="28">28%</option>
+                      </select>
+                    </td>
+                    <td className="px-3 py-2 text-sm font-medium text-gray-900">
+                      ₹{product.amount?.toFixed(2) || '0.00'}
+                    </td>
+                    <td className="px-3 py-2">
+                      <div className="flex items-center justify-center gap-1">
+                        <button
+                          onClick={() => setEditingIndex(editingIndex === index ? null : index)}
+                          className="p-1 text-blue-600 hover:bg-blue-50 rounded"
+                        >
+                          <Edit2 className="w-4 h-4" />
+                        </button>
+                        <button
+                          onClick={() => handleRemove(index)}
+                          className="p-1 text-red-600 hover:bg-red-50 rounded"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          ) : (
+            <div className="flex flex-col items-center justify-center py-20">
+              <Package className="w-16 h-16 text-gray-300 mb-4" />
+              <p className="text-lg font-medium text-gray-600 mb-2">No products uploaded yet</p>
+              <p className="text-sm text-gray-500">Download template, fill it, and upload to get started</p>
+            </div>
+          )}
+        </div>
+
+        {/* Footer */}
+        {products.length > 0 && (
+          <div className="px-6 py-4 border-t bg-gray-50">
+            <div className="flex items-center justify-between">
+              <div className="text-sm text-gray-600">
+                <span className="font-medium">{products.length}</span> products ready
+                • Total Amount: <span className="font-medium">
+                  ₹{products.reduce((sum, p) => sum + (p.amount || 0), 0).toFixed(2)}
+                </span>
+              </div>
+              <div className="flex gap-3">
+                <button
+                  onClick={() => setProducts([])}
+                  className="px-4 py-2 text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50"
+                >
+                  Clear All
+                </button>
+                <button
+                  onClick={handleSaveAll}
+                  disabled={saving || products.length === 0}
+                  className="px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:bg-gray-400 flex items-center gap-2"
+                >
+                  {saving ? (
+                    <>
+                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                      <span>Saving...</span>
+                    </>
+                  ) : (
+                    <>
+                      <CheckCircle className="w-4 h-4" />
+                      <span>Save All Products</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+export default BulkProductUpload;

@@ -141,9 +141,16 @@ const EnhancedPurchaseOrderFlow = ({ onClose, prefilledData = null }) => {
       product_name: product.product_name,
       product_code: product.product_code,
       hsn_code: product.hsn_code || '',
+      batch_number: product.batch_number || '',
+      expiry_date: product.expiry_date || '',
       quantity: 1,
+      unit: product.unit || product.uom || 'Strip',
       unit_price: product.purchase_price || 0,
+      mrp: product.mrp || 0,
       tax_percent: product.tax_percent || 12,
+      discount_percent: 0,
+      free_quantity: 0,
+      manufacturer: product.manufacturer || '',
       total: product.purchase_price || 0
     };
     
@@ -360,18 +367,24 @@ const EnhancedPurchaseOrderFlow = ({ onClose, prefilledData = null }) => {
       {purchaseOrder.items && purchaseOrder.items.length > 0 && (
         <ContentCard title="Purchase Order Items" subtitle={null} actions={null} className="mb-6">
           <ItemsTable
-            items={purchaseOrder.items}
-            onUpdateItem={handleUpdateItem}
+            items={purchaseOrder.items.map(item => ({
+              ...item,
+              rate: item.unit_price,
+              tax: item.tax_percent,
+              discount_percent: item.discount_percent || 0,
+              free_quantity: item.free_quantity || 0,
+              total: (item.quantity * item.unit_price * (1 + (item.tax_percent || 0) / 100)).toFixed(2)
+            }))}
+            onUpdateItem={(index, field, value) => {
+              const mappedField = field === 'rate' ? 'unit_price' : 
+                                field === 'tax' ? 'tax_percent' :
+                                field;
+              handleUpdateItem(index, mappedField, value);
+            }}
             onRemoveItem={handleRemoveItem}
-            module="purchase-order"
             showTotals={false}
-            columns={[
-              { key: 'product_name', label: 'Product', width: 'w-96' },
-              { key: 'quantity', label: 'Qty', type: 'number', editable: true },
-              { key: 'unit_price', label: 'Unit Price', type: 'number', editable: true },
-              { key: 'tax_percent', label: 'GST%', type: 'select', editable: true, options: PURCHASE_CONFIG.TAX_OPTIONS },
-              { key: 'total', label: 'Total', type: 'currency', calculated: true }
-            ]}
+            columns={['product', 'quantity', 'unit', 'rate', 'discount', 'free', 'tax', 'total']}
+            title="Purchase Order Items"
           />
         </ContentCard>
       )}

@@ -880,20 +880,9 @@ const CurrentStock = ({ open = true, onClose }) => {
           <div className="max-w-6xl mx-auto px-6 py-6">
             
             {/* Enhanced Filter Bar */}
-            <div className="mb-6 border border-gray-200 rounded-lg bg-gray-50 p-4">
+            <div className="mb-6 border border-gray-200 rounded-lg bg-white shadow-sm p-4">
               <div className="flex items-center space-x-4">
-                {/* Select All */}
-                <label className="inline-flex items-center space-x-2">
-                  <input
-                    type="checkbox"
-                    checked={isAllSelected}
-                    onChange={toggleSelectAll}
-                    className="w-4 h-4 rounded border-gray-300"
-                  />
-                  <span className="text-sm text-gray-600">Select All</span>
-                </label>
-
-                {/* Search */}
+                {/* Search - Now first */}
                 <div className="flex-1 relative">
                   <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
                   <input

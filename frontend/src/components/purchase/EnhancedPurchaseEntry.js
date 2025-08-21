@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Package, FileText, Save, Printer, ArrowLeft, X, CheckCircle, AlertCircle, Share2, Calendar, Building2, Plus } from 'lucide-react';
+import { Package, FileText, Save, Printer, ArrowLeft, X, CheckCircle, AlertCircle, Share2, Calendar, Building2, Plus, Upload } from 'lucide-react';
 import { suppliersApi } from '../../services/api';
 import { purchasesApi } from '../../services/api/modules/purchases.api';
 import { searchCache } from '../../utils/searchCache';
@@ -19,6 +19,7 @@ import documentNumberService from '../../services/documentNumberService';
 import { PURCHASE_CONFIG } from '../../config/purchase.config';
 import PDFUploadModal from '../PDFUploadModal';
 import PDFUploadCard from '../global/ui/PDFUploadCard';
+import BulkProductUpload from '../global/BulkProductUpload';
 
 /**
  * EnhancedPurchaseEntry - Purchase Entry using the full global document system
@@ -37,6 +38,7 @@ const EnhancedPurchaseEntry = ({ onClose, prefilledData = null }) => {
   const [showProductModal, setShowProductModal] = useState(false);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [showPDFUpload, setShowPDFUpload] = useState(false);
+  const [showBulkUpload, setShowBulkUpload] = useState(false);
   const [createdPurchaseData, setCreatedPurchaseData] = useState(null);
   const [saving, setSaving] = useState(false);
   const [errors, setErrors] = useState({});
@@ -185,6 +187,36 @@ const EnhancedPurchaseEntry = ({ onClose, prefilledData = null }) => {
       ...prev,
       items: [...(prev.items || []), newItem]
     }));
+  };
+
+  const handleBulkUpload = (products) => {
+    // Process multiple products from bulk upload
+    const newItems = products.map((product, index) => ({
+      id: Date.now() + index + Math.random(), // Unique ID for tracking
+      product_id: product.product_id,
+      product_name: product.product_name,
+      product_code: product.product_code,
+      hsn_code: product.hsn_code || '',
+      batch_no: product.batch_no || '',
+      batch_number: product.batch_no || '',
+      expiry_date: product.expiry_date || '',
+      quantity: product.quantity || 1,
+      free_quantity: product.free_quantity || 0,
+      mrp: product.mrp || 0,
+      purchase_price: product.purchase_price || (product.mrp || 0) * 0.7,
+      selling_price: product.selling_price || product.mrp || 0,
+      discount_percent: product.discount_percent || 0,
+      tax_percent: product.tax_percent || product.gst_percent || 12,
+      tax_amount: product.tax_amount || 0
+    }));
+    
+    setPurchase(prev => ({
+      ...prev,
+      items: [...(prev.items || []), ...newItems]
+    }));
+    
+    setShowBulkUpload(false);
+    toast.success(`Added ${products.length} products from bulk upload`);
   };
 
   const handleUpdateItem = (index, field, value) => {
@@ -448,12 +480,21 @@ const EnhancedPurchaseEntry = ({ onClose, prefilledData = null }) => {
             <Package className="w-5 h-5 text-gray-600" />
             <h3 className="text-sm font-semibold text-gray-700">PRODUCTS</h3>
           </div>
-          <button
-            onClick={() => setShowProductModal(true)}
-            className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors text-sm font-medium"
-          >
-            Create Product
-          </button>
+          <div className="flex gap-2">
+            <button
+              onClick={() => setShowBulkUpload(true)}
+              className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg transition-colors text-sm font-medium flex items-center gap-2"
+            >
+              <Upload className="w-4 h-4" />
+              Bulk Upload
+            </button>
+            <button
+              onClick={() => setShowProductModal(true)}
+              className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors text-sm font-medium"
+            >
+              Create Product
+            </button>
+          </div>
         </div>
         <ProductSearchSimple
           onAddItem={handleAddItem}
@@ -472,21 +513,52 @@ const EnhancedPurchaseEntry = ({ onClose, prefilledData = null }) => {
       {purchase.items && purchase.items.length > 0 && (
         <ContentCard title="Purchase Items" subtitle={null} actions={null} className="mb-6">
           <ItemsTable
-            items={purchase.items}
-            onUpdateItem={handleUpdateItem}
+            items={purchase.items.map(item => ({
+              ...item,
+              rate: item.purchase_price,
+              tax: item.tax_percent,
+              batch_number: item.batch_no || item.batch_number,
+              unit: item.unit || 'Strip',
+              total: (item.quantity * item.purchase_price * (1 + (item.tax_percent || 0) / 100)).toFixed(2)
+            }))}
+            onUpdateItem={(index, field, value) => {
+              const mappedField = field === 'rate' ? 'purchase_price' : 
+                                field === 'tax' ? 'tax_percent' :
+                                field === 'batch' ? 'batch_no' :
+                                field;
+              handleUpdateItem(index, mappedField, value);
+            }}
             onRemoveItem={handleRemoveItem}
-            module="purchase"
             showTotals={false}
-            columns={[
-              { key: 'product_name', label: 'Product', width: 'w-96' },
-              { key: 'quantity', label: 'Qty', type: 'number', editable: true },
-              { key: 'mrp', label: 'MRP', type: 'currency' },
-              { key: 'purchase_price', label: 'Rate', type: 'number', editable: true },
-              { key: 'tax_percent', label: 'GST%', type: 'select', editable: true, options: PURCHASE_CONFIG.TAX_OPTIONS },
-              { key: 'batch_no', label: 'Batch', type: 'text', editable: true },
-              { key: 'expiry_date', label: 'Expiry', type: 'date', editable: true },
-              { key: 'total', label: 'Total', type: 'currency', calculated: true }
-            ]}
+            columns={['product', 'batch', 'expiry', 'quantity', 'unit', 'mrp', 'rate', 'discount', 'free', 'tax', 'total']}
+            customColumns={{
+              batch: {
+                label: 'Batch',
+                align: 'center',
+                render: (item, index) => (
+                  <input
+                    type="text"
+                    value={item.batch_number || item.batch_no || ''}
+                    onChange={(e) => handleUpdateItem(index, 'batch_no', e.target.value)}
+                    className="w-20 text-center border-0 bg-transparent focus:ring-2 focus:ring-blue-500 rounded-md"
+                    placeholder="Batch"
+                  />
+                )
+              },
+              expiry: {
+                label: 'Expiry',
+                align: 'center',
+                render: (item, index) => (
+                  <input
+                    type="date"
+                    value={item.expiry_date || ''}
+                    onChange={(e) => handleUpdateItem(index, 'expiry_date', e.target.value)}
+                    className="w-28 text-center border-0 bg-transparent focus:ring-2 focus:ring-blue-500 rounded-md"
+                  />
+                )
+              }
+            }}
+            title="Purchase Items"
           />
         </ContentCard>
       )}
@@ -779,6 +851,14 @@ const EnhancedPurchaseEntry = ({ onClose, prefilledData = null }) => {
             
             toast.success('PDF data extracted successfully! Review the details below.');
           }}
+        />
+      )}
+
+      {/* Bulk Upload Modal */}
+      {showBulkUpload && (
+        <BulkProductUpload
+          onClose={() => setShowBulkUpload(false)}
+          onUpload={handleBulkUpload}
         />
       )}
 
