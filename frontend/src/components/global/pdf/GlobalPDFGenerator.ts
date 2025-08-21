@@ -2,15 +2,54 @@ import jsPDF from 'jspdf';
 import 'jspdf-autotable';
 import { companyAPI } from '../../../services/api';
 
+interface CompanyInfo {
+  name: string;
+  address: string;
+  phone: string;
+  email: string;
+  gst: string;
+  website?: string;
+}
+
+interface PartyDetails {
+  name: string;
+  phone?: string;
+  address?: string;
+  gst?: string;
+  email?: string;
+}
+
+interface SummaryData {
+  subtotal: number;
+  tax: number;
+  discount: number;
+  total: number;
+  currency?: string;
+}
+
+type Theme = 'digital' | 'print';
+type PartyType = 'customer' | 'supplier';
+
 /**
  * Global PDF Generator with consistent branding and themes
  * Provides two templates: Print (minimal) and Digital (branded)
  */
 class GlobalPDFGenerator {
-  constructor() {
-    this.doc = null;
-    this.theme = 'digital'; // 'print' or 'digital'
-    this.companyInfo = null;
+  doc: jsPDF;
+  theme: Theme;
+  companyInfo: CompanyInfo;
+  colors: Record<Theme, Record<string, number[]>>;
+  constructor(theme: Theme = 'digital') {
+    this.doc = new jsPDF();
+    this.theme = theme; // 'print' or 'digital'
+    this.companyInfo = {
+      name: 'Your Company Name',
+      address: '123 Business Street, City, State 12345',
+      phone: '+91 98765 43210',
+      email: 'info@company.com',
+      gst: '29ABCDE1234F1Z5',
+      website: 'www.company.com'
+    };
     this.colors = {
       digital: {
         primary: [59, 130, 246], // Blue
@@ -42,9 +81,16 @@ class GlobalPDFGenerator {
   }
 
   /**
+   * Helper method to apply color arrays
+   */
+  private applyColor(method: 'setTextColor' | 'setFillColor' | 'setDrawColor', color: number[]): void {
+    (this.doc as any)[method](color[0], color[1], color[2]);
+  }
+
+  /**
    * Initialize PDF with company info
    */
-  async init(theme = 'digital', orientation = 'portrait') {
+  async init(theme: Theme = 'digital', orientation: 'portrait' | 'landscape' = 'portrait'): Promise<this> {
     this.theme = theme;
     this.doc = new jsPDF(orientation);
     
@@ -77,22 +123,22 @@ class GlobalPDFGenerator {
   /**
    * Add branded header with logo and company info
    */
-  addHeader(title, subtitle = '') {
+  addHeader(title: string, subtitle: string = ''): void {
     const colors = this.colors[this.theme];
     const pageWidth = this.doc.internal.pageSize.getWidth();
     
     if (this.theme === 'digital') {
       // Digital theme - colorful header
       // Add gradient background
-      this.doc.setFillColor(...colors.primary);
+      this.doc.setFillColor(colors.primary[0], colors.primary[1], colors.primary[2]);
       this.doc.rect(0, 0, pageWidth, 45, 'F');
       
       // Add secondary accent
-      this.doc.setFillColor(...colors.secondary);
+      this.doc.setFillColor(colors.secondary[0], colors.secondary[1], colors.secondary[2]);
       this.doc.rect(0, 40, pageWidth, 5, 'F');
       
       // Company name - large and bold
-      this.doc.setTextColor(...colors.white);
+      this.applyColor('setTextColor', colors.white);
       this.doc.setFontSize(24);
       this.doc.setFont('helvetica', 'bold');
       this.doc.text(this.companyInfo.name, 15, 20);
@@ -124,14 +170,14 @@ class GlobalPDFGenerator {
       });
       
       // Add decorative elements
-      this.doc.setDrawColor(...colors.accent);
+      this.applyColor('setDrawColor', colors.accent);
       this.doc.setLineWidth(0.5);
       this.doc.line(15, 47, pageWidth - 15, 47);
       
       return 55; // Return Y position for content start
     } else {
       // Print theme - minimal header
-      this.doc.setTextColor(...colors.text);
+      this.applyColor('setTextColor', colors.text);
       
       // Company name
       this.doc.setFontSize(16);
@@ -149,7 +195,7 @@ class GlobalPDFGenerator {
       }
       
       // Simple line separator
-      this.doc.setDrawColor(...colors.secondary);
+      this.applyColor('setDrawColor', colors.secondary);
       this.doc.setLineWidth(0.2);
       this.doc.line(15, 30, pageWidth - 15, 30);
       
@@ -160,30 +206,30 @@ class GlobalPDFGenerator {
   /**
    * Add customer/party details section
    */
-  addPartyDetails(party, yPos, type = 'customer') {
+  addPartyDetails(party: PartyDetails, type: PartyType = 'customer', yPos?: number): void {
     const colors = this.colors[this.theme];
     const pageWidth = this.doc.internal.pageSize.getWidth();
     
     if (this.theme === 'digital') {
       // Colored background for party details
-      this.doc.setFillColor(...colors.light);
+      this.applyColor('setFillColor', colors.light);
       this.doc.roundedRect(15, yPos, (pageWidth - 30) / 2 - 5, 35, 3, 3, 'F');
       
       // Label
-      this.doc.setTextColor(...colors.primary);
+      this.applyColor('setTextColor', colors.primary);
       this.doc.setFontSize(10);
       this.doc.setFont('helvetica', 'bold');
       this.doc.text(type === 'customer' ? 'BILL TO' : 'SUPPLIER', 20, yPos + 7);
       
       // Party details
-      this.doc.setTextColor(...colors.text);
+      this.applyColor('setTextColor', colors.text);
       this.doc.setFontSize(11);
       this.doc.setFont('helvetica', 'bold');
       this.doc.text(party.name || 'N/A', 20, yPos + 14);
       
       this.doc.setFontSize(9);
       this.doc.setFont('helvetica', 'normal');
-      this.doc.setTextColor(...colors.textLight);
+      this.applyColor('setTextColor', colors.textLight);
       
       let detailY = yPos + 20;
       if (party.phone) {
@@ -200,7 +246,7 @@ class GlobalPDFGenerator {
       }
     } else {
       // Print theme - simple text
-      this.doc.setTextColor(...colors.text);
+      this.applyColor('setTextColor', colors.text);
       this.doc.setFontSize(10);
       this.doc.setFont('helvetica', 'bold');
       this.doc.text(type === 'customer' ? 'Bill To:' : 'Supplier:', 15, yPos);
@@ -220,15 +266,15 @@ class GlobalPDFGenerator {
   /**
    * Add document info (invoice number, date, etc.)
    */
-  addDocumentInfo(info, yPos) {
+  addDocumentInfo(info: any, yPos?: number): void {
     const colors = this.colors[this.theme];
     const pageWidth = this.doc.internal.pageSize.getWidth();
     const xPos = pageWidth / 2 + 10;
     
     if (this.theme === 'digital') {
       // Colored background
-      this.doc.setFillColor(...colors.secondary);
-      this.doc.setTextColor(...colors.white);
+      this.applyColor('setFillColor', colors.secondary);
+      this.applyColor('setTextColor', colors.white);
       this.doc.roundedRect(xPos, yPos, (pageWidth - 30) / 2 - 5, 35, 3, 3, 'F');
       
       // Document details
@@ -251,7 +297,7 @@ class GlobalPDFGenerator {
       });
     } else {
       // Print theme
-      this.doc.setTextColor(...colors.text);
+      this.applyColor('setTextColor', colors.text);
       this.doc.setFontSize(10);
       this.doc.setFont('helvetica', 'bold');
       
@@ -270,9 +316,38 @@ class GlobalPDFGenerator {
   }
 
   /**
+   * Add simple table with headers and rows
+   */
+  addTable(headers: string[], rows: any[][], type: PartyType = 'customer'): void {
+    const colors = this.colors[this.theme];
+    const yPos = this.doc.lastAutoTable?.finalY || 100;
+    
+    (this.doc as any).autoTable({
+      startY: yPos + 10,
+      head: [headers],
+      body: rows,
+      theme: this.theme === 'digital' ? 'grid' : 'plain',
+      headStyles: {
+        fillColor: this.theme === 'digital' ? colors.primary : colors.white,
+        textColor: this.theme === 'digital' ? colors.white : colors.text,
+        fontSize: 10,
+        fontStyle: 'bold'
+      },
+      bodyStyles: {
+        textColor: colors.text,
+        fontSize: 9
+      },
+      alternateRowStyles: this.theme === 'digital' ? {
+        fillColor: colors.light
+      } : {},
+      margin: { left: 15, right: 15 }
+    });
+  }
+
+  /**
    * Add items table with enhanced styling
    */
-  addItemsTable(items, columns, yPos) {
+  addItemsTable(items: any[], columns: any[], yPos?: number): number {
     const colors = this.colors[this.theme];
     
     const tableConfig = {
@@ -321,7 +396,7 @@ class GlobalPDFGenerator {
   /**
    * Add summary section with totals
    */
-  addSummary(summary, yPos) {
+  addSummary(summary: SummaryData, yPos?: number): void {
     const colors = this.colors[this.theme];
     const pageWidth = this.doc.internal.pageSize.getWidth();
     
@@ -331,10 +406,10 @@ class GlobalPDFGenerator {
       gradient.addColorStop(0, colors.primary);
       gradient.addColorStop(1, colors.secondary);
       
-      this.doc.setFillColor(...colors.light);
+      this.applyColor('setFillColor', colors.light);
       this.doc.roundedRect(pageWidth - 100, yPos, 85, 60, 3, 3, 'F');
       
-      this.doc.setTextColor(...colors.text);
+      this.applyColor('setTextColor', colors.text);
       this.doc.setFontSize(10);
       
       let summaryY = yPos + 10;
@@ -352,11 +427,11 @@ class GlobalPDFGenerator {
         this.doc.setFontSize(item.bold ? 12 : 10);
         
         if (item.bold) {
-          this.doc.setFillColor(...colors.primary);
+          this.applyColor('setFillColor', colors.primary);
           this.doc.rect(pageWidth - 100, summaryY - 5, 85, 12, 'F');
-          this.doc.setTextColor(...colors.white);
+          this.applyColor('setTextColor', colors.white);
         } else {
-          this.doc.setTextColor(...colors.text);
+          this.applyColor('setTextColor', colors.text);
         }
         
         this.doc.text(item.label + ':', pageWidth - 95, summaryY);
@@ -366,7 +441,7 @@ class GlobalPDFGenerator {
       });
     } else {
       // Print theme - simple summary
-      this.doc.setTextColor(...colors.text);
+      this.applyColor('setTextColor', colors.text);
       this.doc.setFontSize(10);
       
       let summaryY = yPos;
@@ -389,13 +464,13 @@ class GlobalPDFGenerator {
   /**
    * Add notes/terms section
    */
-  addNotes(notes, yPos) {
+  addNotes(notes: string, yPos?: number): void {
     const colors = this.colors[this.theme];
     const pageWidth = this.doc.internal.pageSize.getWidth();
     
     if (!notes) return yPos;
     
-    this.doc.setTextColor(...colors.textLight);
+    this.applyColor('setTextColor', colors.textLight);
     this.doc.setFontSize(9);
     this.doc.setFont('helvetica', 'normal');
     
@@ -404,7 +479,7 @@ class GlobalPDFGenerator {
       const lines = this.doc.splitTextToSize(notes, pageWidth - 130);
       const height = lines.length * 5 + 10;
       
-      this.doc.setFillColor(...colors.light);
+      this.applyColor('setFillColor', colors.light);
       this.doc.roundedRect(15, yPos, pageWidth - 130, height, 3, 3, 'F');
       
       this.doc.text('Notes:', 20, yPos + 8);
@@ -421,17 +496,17 @@ class GlobalPDFGenerator {
   /**
    * Add footer with branding
    */
-  addFooter() {
+  addFooter(): void {
     const colors = this.colors[this.theme];
     const pageWidth = this.doc.internal.pageSize.getWidth();
     const pageHeight = this.doc.internal.pageSize.getHeight();
     
     if (this.theme === 'digital') {
       // Colorful footer
-      this.doc.setFillColor(...colors.primary);
+      this.applyColor('setFillColor', colors.primary);
       this.doc.rect(0, pageHeight - 20, pageWidth, 20, 'F');
       
-      this.doc.setTextColor(...colors.white);
+      this.applyColor('setTextColor', colors.white);
       this.doc.setFontSize(8);
       this.doc.setFont('helvetica', 'normal');
       
@@ -446,7 +521,7 @@ class GlobalPDFGenerator {
       this.doc.text(this.companyInfo.website, (pageWidth - websiteWidth) / 2, pageHeight - 6);
       
       // Social icons placeholder
-      this.doc.setFillColor(...colors.white);
+      this.applyColor('setFillColor', colors.white);
       const iconY = pageHeight - 10;
       const iconSpacing = 15;
       const startX = pageWidth - 60;
@@ -457,11 +532,11 @@ class GlobalPDFGenerator {
       }
     } else {
       // Print theme - minimal footer
-      this.doc.setDrawColor(...colors.secondary);
+      this.applyColor('setDrawColor', colors.secondary);
       this.doc.setLineWidth(0.2);
       this.doc.line(15, pageHeight - 25, pageWidth - 15, pageHeight - 25);
       
-      this.doc.setTextColor(...colors.textLight);
+      this.applyColor('setTextColor', colors.textLight);
       this.doc.setFontSize(8);
       this.doc.setFont('helvetica', 'normal');
       
@@ -474,14 +549,14 @@ class GlobalPDFGenerator {
   /**
    * Add page numbers
    */
-  addPageNumber() {
+  addPageNumber(): void {
     const colors = this.colors[this.theme];
     const pageWidth = this.doc.internal.pageSize.getWidth();
     const pageHeight = this.doc.internal.pageSize.getHeight();
     const pageNumber = this.doc.internal.getCurrentPageInfo().pageNumber;
     const totalPages = this.doc.internal.getNumberOfPages();
     
-    this.doc.setTextColor(...colors.textLight);
+    this.applyColor('setTextColor', colors.textLight);
     this.doc.setFontSize(8);
     this.doc.setFont('helvetica', 'normal');
     
@@ -493,14 +568,14 @@ class GlobalPDFGenerator {
   /**
    * Add watermark
    */
-  addWatermark(text) {
+  addWatermark(text: string): void {
     const colors = this.colors[this.theme];
     const pageWidth = this.doc.internal.pageSize.getWidth();
     const pageHeight = this.doc.internal.pageSize.getHeight();
     
     this.doc.saveGraphicsState();
     this.doc.setGState(this.doc.GState({ opacity: 0.1 }));
-    this.doc.setTextColor(...colors.textLight);
+    this.applyColor('setTextColor', colors.textLight);
     this.doc.setFontSize(60);
     this.doc.setFont('helvetica', 'bold');
     

@@ -81,12 +81,15 @@ app.add_middleware(
 async def root():
     return {
         "message": "Pharma ERP API",
-        "version": "2.0.0",
+        "version": "2.0.4",
         "status": "healthy",
+        "deployment": "latest-with-purchases",
         "endpoints": {
             "health": "/health",
             "docs": "/docs",
-            "api": "/api"
+            "api": "/api",
+            "purchases": "/api/purchases",
+            "purchase-upload": "/api/purchase-upload"
         }
     }
 
