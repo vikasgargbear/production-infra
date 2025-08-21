@@ -53,10 +53,8 @@ export const purchasesApi = {
       },
     });
     
-    // Transform parsed data to frontend format
-    if (response.data && response.data.extracted_data) {
-      response.data.extracted_data = purchaseDataTransformer.transformParsedDataToPurchase(response.data);
-    }
+    // Don't transform here - let the modal handle the raw extracted data
+    // The transformation was causing issues with the display
     
     return response;
   },

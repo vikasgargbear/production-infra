@@ -127,7 +127,7 @@ class GlobalPDFGenerator {
   /**
    * Add branded header with logo and company info
    */
-  addHeader(title: string, subtitle: string = ''): void {
+  addHeader(title: string, subtitle: string = ''): number {
     const colors = this.colors[this.theme];
     const pageWidth = this.doc.internal.pageSize.getWidth();
     
@@ -210,7 +210,7 @@ class GlobalPDFGenerator {
   /**
    * Add customer/party details section
    */
-  addPartyDetails(party: PartyDetails, type: PartyType = 'customer', yPos?: number): void {
+  addPartyDetails(party: PartyDetails, type: PartyType = 'customer', yPos: number = 60): void {
     const colors = this.colors[this.theme];
     const pageWidth = this.doc.internal.pageSize.getWidth();
     
@@ -270,7 +270,7 @@ class GlobalPDFGenerator {
   /**
    * Add document info (invoice number, date, etc.)
    */
-  addDocumentInfo(info: any, yPos?: number): void {
+  addDocumentInfo(info: any, yPos: number = 60): void {
     const colors = this.colors[this.theme];
     const pageWidth = this.doc.internal.pageSize.getWidth();
     const xPos = pageWidth / 2 + 10;
@@ -324,7 +324,7 @@ class GlobalPDFGenerator {
    */
   addTable(headers: string[], rows: any[][], type: PartyType = 'customer'): void {
     const colors = this.colors[this.theme];
-    const yPos = this.doc.lastAutoTable?.finalY || 100;
+    const yPos = (this.doc as any).lastAutoTable?.finalY || 100;
     
     (this.doc as any).autoTable({
       startY: yPos + 10,
@@ -351,7 +351,7 @@ class GlobalPDFGenerator {
   /**
    * Add items table with enhanced styling
    */
-  addItemsTable(items: any[], columns: any[], yPos?: number): number {
+  addItemsTable(items: any[], columns: any[], yPos: number = 100): number {
     const colors = this.colors[this.theme];
     
     const tableConfig = {
@@ -392,23 +392,21 @@ class GlobalPDFGenerator {
       }
     });
     
-    this.doc.autoTable(tableConfig);
+    (this.doc as any).autoTable(tableConfig);
     
-    return this.doc.lastAutoTable.finalY;
+    return (this.doc as any).lastAutoTable.finalY;
   }
 
   /**
    * Add summary section with totals
    */
-  addSummary(summary: SummaryData, yPos?: number): void {
+  addSummary(summary: SummaryData, yPos: number = 150): void {
     const colors = this.colors[this.theme];
     const pageWidth = this.doc.internal.pageSize.getWidth();
     
     if (this.theme === 'digital') {
-      // Gradient background for summary
-      const gradient = this.doc.linearGradient(pageWidth - 100, yPos, pageWidth - 15, yPos + 60);
-      gradient.addColorStop(0, colors.primary);
-      gradient.addColorStop(1, colors.secondary);
+      // Gradient background for summary (simplified as gradient API may not be available)
+      // Just use solid color instead
       
       this.applyColor('setFillColor', colors.light);
       this.doc.roundedRect(pageWidth - 100, yPos, 85, 60, 3, 3, 'F');
@@ -418,12 +416,19 @@ class GlobalPDFGenerator {
       
       let summaryY = yPos + 10;
       
-      // Summary items
+      // Summary items - format currency values
+      const formatCurrency = (amount: number) => {
+        return new Intl.NumberFormat('en-IN', {
+          style: 'currency',
+          currency: summary.currency || 'INR'
+        }).format(amount);
+      };
+      
       const items = [
-        { label: 'Subtotal', value: summary.subtotal, bold: false },
-        { label: 'Tax', value: summary.tax, bold: false },
-        { label: 'Discount', value: summary.discount, bold: false },
-        { label: 'Total', value: summary.total, bold: true }
+        { label: 'Subtotal', value: formatCurrency(summary.subtotal), bold: false },
+        { label: 'Tax', value: formatCurrency(summary.tax), bold: false },
+        { label: 'Discount', value: formatCurrency(summary.discount), bold: false },
+        { label: 'Total', value: formatCurrency(summary.total), bold: true }
       ].filter(item => item.value !== undefined);
       
       items.forEach(item => {
@@ -448,11 +453,18 @@ class GlobalPDFGenerator {
       this.applyColor('setTextColor', colors.text);
       this.doc.setFontSize(10);
       
+      const formatCurrency = (amount: number) => {
+        return new Intl.NumberFormat('en-IN', {
+          style: 'currency',
+          currency: summary.currency || 'INR'
+        }).format(amount);
+      };
+      
       let summaryY = yPos;
       const items = [
-        { label: 'Subtotal', value: summary.subtotal },
-        { label: 'Tax', value: summary.tax },
-        { label: 'Total', value: summary.total, bold: true }
+        { label: 'Subtotal', value: formatCurrency(summary.subtotal) },
+        { label: 'Tax', value: formatCurrency(summary.tax) },
+        { label: 'Total', value: formatCurrency(summary.total), bold: true }
       ].filter(item => item.value !== undefined);
       
       items.forEach(item => {
@@ -468,7 +480,7 @@ class GlobalPDFGenerator {
   /**
    * Add notes/terms section
    */
-  addNotes(notes: string, yPos?: number): void {
+  addNotes(notes: string, yPos: number = 200): number {
     const colors = this.colors[this.theme];
     const pageWidth = this.doc.internal.pageSize.getWidth();
     

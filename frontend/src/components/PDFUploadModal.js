@@ -29,8 +29,10 @@ const PDFUploadModal = ({ isOpen, onClose, onDataExtracted }) => {
 
     try {
       const response = await purchasesApi.parseInvoice(formData);
+      console.log('PDF Parse Response:', response.data);
       
       if (response.data.success || response.data.extracted_data) {
+        console.log('Setting extracted data:', response.data.extracted_data);
         setExtractedData(response.data.extracted_data);
         setEditedData(response.data.extracted_data);
         
@@ -70,6 +72,13 @@ const PDFUploadModal = ({ isOpen, onClose, onDataExtracted }) => {
   };
 
   if (!isOpen) return null;
+  
+  console.log('PDFUploadModal State:', { 
+    isOpen, 
+    hasFile: !!file, 
+    hasExtractedData: !!extractedData,
+    extractedDataLength: extractedData?.items?.length || 0
+  });
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[100]">

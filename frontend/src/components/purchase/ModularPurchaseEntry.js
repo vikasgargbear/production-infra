@@ -186,7 +186,8 @@ const PurchaseEntryContent = ({ onClose, initialShowPDFUpload = false }) => {
       setTimeout(() => calculateTotals(), 100);
       
       setMessage(PURCHASE_CONFIG.MESSAGES.SUCCESS.PDF_PARSED, 'success');
-      togglePDFUpload();
+      // Don't close modal immediately - let user confirm the data first
+      // The modal will close itself after user clicks "Create Purchase Order"
       
     } catch (error) {
       console.error('Error processing PDF:', error);
