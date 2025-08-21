@@ -32,14 +32,23 @@ def get_suppliers(
 ):
     """Get suppliers with optional search"""
     try:
-        query = "SELECT * FROM parties.suppliers WHERE 1=1"
+        query = """
+            SELECT s.*, 
+                   a.city, 
+                   a.state_name as state,
+                   a.address_line1 as address,
+                   a.pincode
+            FROM parties.suppliers s
+            LEFT JOIN master.addresses a ON (a.entity_type = 'supplier' AND a.entity_id = s.supplier_id AND a.is_default = true)
+            WHERE 1=1
+        """
         params = {}
         
         if search:
-            query += " AND LOWER(supplier_name) LIKE LOWER(:search)"
+            query += " AND LOWER(s.supplier_name) LIKE LOWER(:search)"
             params["search"] = f"%{search}%"
             
-        query += " ORDER BY supplier_name LIMIT :limit OFFSET :skip"
+        query += " ORDER BY s.supplier_name LIMIT :limit OFFSET :skip"
         params.update({"limit": limit, "skip": skip})
         
         result = db.execute(text(query), params)
@@ -48,13 +57,23 @@ def get_suppliers(
         for row in result:
             suppliers.append({
                 "id": row.supplier_id,
+                "supplier_id": row.supplier_id,
                 "name": row.supplier_name,
+                "supplier_name": row.supplier_name,
                 "code": row.supplier_code,
                 "gst_number": row.gst_number,
                 "pan_number": row.pan_number,
                 "phone": row.primary_phone,
+                "primary_phone": row.primary_phone,
                 "email": row.primary_email,
+                "primary_email": row.primary_email,
                 "contact_person": row.contact_person_name,
+                "contact_person_name": row.contact_person_name,
+                "contact_person_phone": row.contact_person_phone,
+                "city": row.city,
+                "state": row.state,
+                "address": row.address,
+                "pincode": row.pincode,
                 "created_at": row.created_at,
                 "updated_at": row.updated_at
             })
@@ -70,8 +89,14 @@ def get_supplier(supplier_id: int, db: Session = Depends(get_db)):
     """Get a single supplier by ID"""
     try:
         result = db.execute(text("""
-            SELECT * FROM parties.suppliers 
-            WHERE supplier_id = :supplier_id
+            SELECT s.*, 
+                   a.city, 
+                   a.state_name as state,
+                   a.address_line1 as address,
+                   a.pincode
+            FROM parties.suppliers s
+            LEFT JOIN master.addresses a ON (a.entity_type = 'supplier' AND a.entity_id = s.supplier_id AND a.is_default = true)
+            WHERE s.supplier_id = :supplier_id
         """), {"supplier_id": supplier_id})
         
         supplier = result.fetchone()
@@ -81,13 +106,23 @@ def get_supplier(supplier_id: int, db: Session = Depends(get_db)):
         # Map database columns to response schema
         return {
             "id": supplier.supplier_id,
+            "supplier_id": supplier.supplier_id,
             "name": supplier.supplier_name,
+            "supplier_name": supplier.supplier_name,
             "code": supplier.supplier_code,
             "gst_number": supplier.gst_number,
             "pan_number": supplier.pan_number,
             "phone": supplier.primary_phone,
+            "primary_phone": supplier.primary_phone,
             "email": supplier.primary_email,
+            "primary_email": supplier.primary_email,
             "contact_person": supplier.contact_person_name,
+            "contact_person_name": supplier.contact_person_name,
+            "contact_person_phone": supplier.contact_person_phone,
+            "city": supplier.city,
+            "state": supplier.state,
+            "address": supplier.address,
+            "pincode": supplier.pincode,
             "created_at": supplier.created_at,
             "updated_at": supplier.updated_at
         }

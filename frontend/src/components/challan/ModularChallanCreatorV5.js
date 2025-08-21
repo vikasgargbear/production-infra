@@ -750,126 +750,66 @@ Expected Delivery: ${challan.expected_delivery_date}
         <div className="flex-1 overflow-y-auto">
           <div className="max-w-6xl mx-auto p-6">
             
-            {/* Compact Address & Transport Section */}
+            {/* Address Section - Like invoice flow */}
             {selectedCustomer && (
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
-                {/* Billing Address */}
-                <AddressForm
-                  title="Billing Address"
-                  addressType="billing"
-                  customer={selectedCustomer}
-                  readonly={true}
-                  className=""
-                />
-                
-                {/* Delivery Address */}
-                <AddressForm
-                  title="Delivery Address"
-                  addressType="shipping"
-                  customer={selectedCustomer}
-                  sameAsBilling={sameAsBilling}
-                  onSameAsBillingChange={(checked) => {
-                    setSameAsBilling(checked);
-                    if (checked && selectedCustomer) {
-                      // Copy billing address to delivery
+              <div className="max-w-6xl mx-auto mb-6">
+                <div className="grid grid-cols-2 gap-4">
+                  <AddressForm
+                    title="Billing Address"
+                    addressType="billing"
+                    customer={selectedCustomer}
+                    readonly={true}
+                    className=""
+                  />
+                  <AddressForm
+                    title="Delivery Address"
+                    addressType="shipping"
+                    customer={selectedCustomer}
+                    sameAsBilling={sameAsBilling}
+                    onSameAsBillingChange={(checked) => {
+                      setSameAsBilling(checked);
+                      if (checked && selectedCustomer) {
+                        // Copy billing address to delivery
+                        setChallan(prev => ({
+                          ...prev,
+                          delivery_address: selectedCustomer.address || '',
+                          delivery_city: selectedCustomer.city || '',
+                          delivery_state: selectedCustomer.state || '',
+                          delivery_pincode: selectedCustomer.pincode || '',
+                          delivery_contact_person: selectedCustomer.contact_person || selectedCustomer.customer_name,
+                          delivery_contact_phone: selectedCustomer.phone || ''
+                        }));
+                      }
+                    }}
+                    addressData={{
+                      address_line1: challan.delivery_address,
+                      city: challan.delivery_city,
+                      state: challan.delivery_state,
+                      pincode: challan.delivery_pincode,
+                      contact_person: challan.delivery_contact_person,
+                      contact_phone: challan.delivery_contact_phone
+                    }}
+                    onChange={(addressString) => {
+                      // Parse the address string back to individual fields if needed
+                      // For now, just store the complete address
+                      setChallan(prev => ({ ...prev, delivery_address: addressString }));
+                    }}
+                    onSave={(addressData) => {
                       setChallan(prev => ({
                         ...prev,
-                        delivery_address: selectedCustomer.address || '',
-                        delivery_city: selectedCustomer.city || '',
-                        delivery_state: selectedCustomer.state || '',
-                        delivery_pincode: selectedCustomer.pincode || '',
-                        delivery_contact_person: selectedCustomer.contact_person || selectedCustomer.customer_name,
-                        delivery_contact_phone: selectedCustomer.phone || ''
+                        delivery_address: addressData.address_line1,
+                        delivery_city: addressData.city,
+                        delivery_state: addressData.state,
+                        delivery_pincode: addressData.pincode,
+                        delivery_contact_person: addressData.contact_person,
+                        delivery_contact_phone: addressData.contact_phone
                       }));
-                    }
-                  }}
-                  addressData={{
-                    address_line1: challan.delivery_address,
-                    city: challan.delivery_city,
-                    state: challan.delivery_state,
-                    pincode: challan.delivery_pincode,
-                    contact_person: challan.delivery_contact_person,
-                    contact_phone: challan.delivery_contact_phone
-                  }}
-                  onChange={(addressString) => {
-                    // Parse the address string back to individual fields if needed
-                    // For now, just store the complete address
-                    setChallan(prev => ({ ...prev, delivery_address: addressString }));
-                  }}
-                  onSave={(addressData) => {
-                    setChallan(prev => ({
-                      ...prev,
-                      delivery_address: addressData.address_line1,
-                      delivery_city: addressData.city,
-                      delivery_state: addressData.state,
-                      delivery_pincode: addressData.pincode,
-                      delivery_contact_person: addressData.contact_person,
-                      delivery_contact_phone: addressData.contact_phone
-                    }));
-                  }}
-                />
-                
-                {/* Transport Details - Now organized next to addresses */}
-                <div className="bg-white border border-gray-200 rounded-lg p-4">
-                  <label className="block text-xs font-medium text-gray-600 mb-3 uppercase tracking-wider flex items-center">
-                    <Truck className="w-4 h-4 mr-2" />
-                    Transport Details
-                  </label>
-                  
-                  <div className="space-y-3">
-                    <div>
-                      <label className="block text-xs font-medium text-gray-600 mb-1">Transport Company</label>
-                      <input
-                        type="text"
-                        value={challan.transport_company}
-                        onChange={(e) => setChallan(prev => ({ ...prev, transport_company: e.target.value }))}
-                        className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                        placeholder="Company name"
-                      />
-                    </div>
-                    
-                    <div>
-                      <label className="block text-xs font-medium text-gray-600 mb-1">Vehicle Number</label>
-                      <input
-                        type="text"
-                        value={challan.vehicle_number}
-                        onChange={(e) => setChallan(prev => ({ ...prev, vehicle_number: e.target.value.toUpperCase() }))}
-                        className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 uppercase"
-                        placeholder="KA01AB1234"
-                      />
-                    </div>
-                    
-                    <div>
-                      <label className="block text-xs font-medium text-gray-600 mb-1">Driver Phone</label>
-                      <input
-                        type="tel"
-                        value={challan.driver_phone}
-                        onChange={(e) => setChallan(prev => ({ ...prev, driver_phone: e.target.value }))}
-                        className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                        placeholder="Phone number"
-                      />
-                    </div>
-                    
-                    <div>
-                      <label className="block text-xs font-medium text-gray-600 mb-1">Freight Charges</label>
-                      <div className="relative">
-                        <span className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-500 text-sm">₹</span>
-                        <input
-                          type="text"
-                          value={challan.freight_amount || ''}
-                          onChange={(e) => {
-                            const value = e.target.value.replace(/[^\d.]/g, '');
-                            setChallan(prev => ({ ...prev, freight_amount: value ? parseFloat(value) : 0 }));
-                          }}
-                          className="w-full pl-8 pr-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                          placeholder="0"
-                        />
-                      </div>
-                    </div>
-                  </div>
+                    }}
+                  />
                 </div>
               </div>
             )}
+            
             
             <ChallanPreview 
               challan={challan}
