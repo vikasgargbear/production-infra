@@ -19,6 +19,145 @@ router = APIRouter(prefix="/purchases-enhanced", tags=["purchases-enhanced"])
 # Default org_id - should come from auth in production
 DEFAULT_ORG_ID = "ad808530-1ddb-4377-ab20-67bef145d80d"
 
+@router.get("/")
+def get_purchases(
+    skip: int = Query(0, description="Skip records"),
+    limit: int = Query(25, description="Limit records"),
+    offset: int = Query(0, description="Offset records"),
+    search: Optional[str] = Query(None, description="Search term"),
+    po_status: Optional[str] = Query(None, description="Filter by PO status"),
+    supplier_id: Optional[int] = Query(None, description="Filter by supplier"),
+    dateFilter: Optional[str] = Query(None, description="Date filter"),
+    db: Session = Depends(get_db)
+):
+    """Get list of purchase orders with pagination and filtering"""
+    try:
+        # Build base query
+        query = """
+            SELECT 
+                p.purchase_order_id,
+                p.po_number,
+                p.po_date,
+                p.po_type,
+                p.supplier_id,
+                p.supplier_name,
+                p.subtotal_amount,
+                p.tax_amount,
+                p.total_amount,
+                p.po_status,
+                p.payment_status,
+                p.receipt_status,
+                p.expected_delivery_date,
+                p.created_at,
+                COUNT(poi.po_item_id) as items_count
+            FROM procurement.purchase_orders p
+            LEFT JOIN procurement.purchase_order_items poi ON p.purchase_order_id = poi.purchase_order_id
+            WHERE 1=1
+        """
+        
+        params = {}
+        
+        # Add search filter
+        if search:
+            query += """ AND (
+                p.po_number ILIKE :search OR 
+                p.supplier_name ILIKE :search
+            )"""
+            params["search"] = f"%{search}%"
+        
+        # Add status filter
+        if po_status:
+            query += " AND p.po_status = :po_status"
+            params["po_status"] = po_status
+        
+        # Add supplier filter
+        if supplier_id:
+            query += " AND p.supplier_id = :supplier_id"
+            params["supplier_id"] = supplier_id
+        
+        # Add date filter
+        if dateFilter:
+            from datetime import datetime, timedelta
+            today = datetime.now().date()
+            
+            if dateFilter == "today":
+                query += " AND DATE(p.po_date) = :date"
+                params["date"] = today
+            elif dateFilter == "week":
+                week_ago = today - timedelta(days=7)
+                query += " AND DATE(p.po_date) >= :date"
+                params["date"] = week_ago
+            elif dateFilter == "month":
+                month_ago = today - timedelta(days=30)
+                query += " AND DATE(p.po_date) >= :date"
+                params["date"] = month_ago
+        
+        # Group by and order
+        query += """
+            GROUP BY p.purchase_order_id, p.po_number, p.po_date, p.po_type,
+                     p.supplier_id, p.supplier_name, p.subtotal_amount,
+                     p.tax_amount, p.total_amount, p.po_status, p.payment_status,
+                     p.receipt_status, p.expected_delivery_date, p.created_at
+            ORDER BY p.po_date DESC, p.created_at DESC
+        """
+        
+        # Get total count for pagination
+        count_query = """
+            SELECT COUNT(DISTINCT p.purchase_order_id) as total
+            FROM procurement.purchase_orders p
+            WHERE 1=1
+        """
+        
+        # Apply same filters to count query
+        if search:
+            count_query += """ AND (
+                p.po_number ILIKE :search OR 
+                p.supplier_name ILIKE :search
+            )"""
+        
+        if po_status:
+            count_query += " AND p.po_status = :po_status"
+        
+        if supplier_id:
+            count_query += " AND p.supplier_id = :supplier_id"
+        
+        if dateFilter and "date" in params:
+            if dateFilter == "today":
+                count_query += " AND DATE(p.po_date) = :date"
+            else:
+                count_query += " AND DATE(p.po_date) >= :date"
+        
+        # Execute count query
+        count_result = db.execute(text(count_query), params)
+        total_count = count_result.scalar() or 0
+        
+        # Add pagination to main query
+        query += " LIMIT :limit OFFSET :offset"
+        params["limit"] = limit
+        params["offset"] = offset if offset else skip
+        
+        # Execute main query
+        result = db.execute(text(query), params)
+        purchases = [dict(row._mapping) for row in result]
+        
+        # Calculate pagination info
+        total_pages = (total_count + limit - 1) // limit if limit > 0 else 1
+        current_page = (offset // limit) + 1 if limit > 0 else 1
+        
+        return {
+            "purchases": purchases,
+            "pagination": {
+                "total": total_count,
+                "page": current_page,
+                "per_page": limit,
+                "total_pages": total_pages
+            }
+        }
+        
+    except Exception as e:
+        logger.error(f"Error fetching purchases: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to fetch purchases: {str(e)}")
+
 @router.post("/direct-purchase-entry")
 def create_direct_purchase_entry(purchase_data: dict, db: Session = Depends(get_db)):
     """
