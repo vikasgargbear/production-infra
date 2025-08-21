@@ -179,52 +179,56 @@ const SupplierSearch = forwardRef(({
             />
           </div>
         ) : (
-          <div className="relative bg-gray-50 rounded-lg p-2">
-            {/* Delete Icon - Top Right */}
-            {clearable && (
-              <button
-                type="button"
-                onClick={handleClearSupplier}
-                className="absolute top-1 right-1 p-1 hover:bg-gray-200 rounded-full text-gray-400 hover:text-red-500 transition-colors"
-                title="Remove supplier"
-              >
-                <Trash2 className="w-3 h-3" />
-              </button>
-            )}
-            
-            <div className="flex items-center gap-2 pr-6">
-              <Building2 className="w-4 h-4 text-blue-600" />
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2">
-                  <p className="font-medium text-gray-900 truncate">{selectedSupplier.supplier_name || selectedSupplier.name}</p>
-                  {/* GST Status Badge */}
-                  {selectedSupplier.gst_number ? (
-                    <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-green-100 text-green-700 shrink-0">
-                      GST
-                    </span>
-                  ) : (
-                    <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-600 shrink-0">
-                      No GST
-                    </span>
-                  )}
-                </div>
-                <div className="flex items-center gap-3 text-xs text-gray-600 mt-0.5">
-                  {/* Phone Number */}
-                  {(selectedSupplier.primary_phone || selectedSupplier.contact_person_phone || selectedSupplier.phone) && (
-                    <span className="flex items-center gap-1">
-                      <Phone className="w-3 h-3" /> {selectedSupplier.primary_phone || selectedSupplier.contact_person_phone || selectedSupplier.phone}
-                    </span>
-                  )}
-                  
-                  {/* Compact Address - City, State only */}
-                  {(selectedSupplier.city || selectedSupplier.state) && (
-                    <span className="flex items-center gap-1">
-                      <MapPin className="w-3 h-3" /> 
-                      {selectedSupplier.city}{selectedSupplier.state ? `, ${selectedSupplier.state}` : ''}
-                    </span>
-                  )}
+          <div className="bg-gray-50 rounded-lg p-2">
+            <div className="flex items-start justify-between gap-2">
+              <div className="flex items-center gap-2 flex-1 min-w-0">
+                <Building2 className="w-4 h-4 text-blue-600" />
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <p className="font-medium text-gray-900 truncate">{selectedSupplier.supplier_name || selectedSupplier.name}</p>
+                    {/* GST Status Badge */}
+                    {selectedSupplier.gst_number ? (
+                      <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-green-100 text-green-700 shrink-0">
+                        GST
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-600 shrink-0">
+                        No GST
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-3 text-xs text-gray-600 mt-0.5">
+                    {/* Phone Number */}
+                    {(selectedSupplier.primary_phone || selectedSupplier.contact_person_phone || selectedSupplier.phone) && (
+                      <span className="flex items-center gap-1">
+                        <Phone className="w-3 h-3" /> {selectedSupplier.primary_phone || selectedSupplier.contact_person_phone || selectedSupplier.phone}
+                      </span>
+                    )}
+                    
+                    {/* Compact Address - City, State only */}
+                    {(selectedSupplier.city || selectedSupplier.state) && (
+                      <span className="flex items-center gap-1">
+                        <MapPin className="w-3 h-3" /> 
+                        {selectedSupplier.city}{selectedSupplier.state ? `, ${selectedSupplier.state}` : ''}
+                      </span>
+                    )}
+                  </div>
                 </div>
               </div>
+              
+              {/* Delete Icon - Vertically Centered Right */}
+              {clearable && (
+                <div className="flex items-center justify-center min-h-[3rem]">
+                  <button
+                    type="button"
+                    onClick={handleClearSupplier}
+                    className="p-3 hover:bg-red-50 rounded-full text-red-500 hover:text-red-600 transition-colors shrink-0"
+                    title="Remove supplier"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </div>
+              )}
             </div>
           </div>
         )}

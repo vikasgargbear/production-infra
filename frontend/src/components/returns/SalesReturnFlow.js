@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { 
   ArrowLeft, Search, Package, Calendar, X, AlertCircle, CheckCircle, 
-  RotateCcw, FileText, User, ChevronRight, Save, Printer, History, Truck, Plus
+  RotateCcw, FileText, User, ChevronRight, Save, Printer, History, Truck, Plus, Trash2
 } from 'lucide-react';
 import { 
   CustomerSearch, ProductSearchSimple, ItemsTable, ModuleHeader,
@@ -375,6 +375,21 @@ const SalesReturnFlow = ({ onClose }) => {
   // Handle customer selection
   const handleCustomerSelect = async (customer) => {
     console.log('Customer selected:', customer);
+    
+    // Handle customer clear/removal
+    if (!customer) {
+      setSelectedCustomer(null);
+      setSelectedInvoice(null);
+      setReturnData(prev => ({
+        ...prev,
+        customer_id: '',
+        customer_details: null,
+        invoice_id: '',
+        items: []
+      }));
+      return;
+    }
+    
     setSelectedCustomer(customer);
     setSelectedInvoice(null); // Reset invoice selection
     setReturnData(prev => ({
@@ -777,25 +792,13 @@ const SalesReturnFlow = ({ onClose }) => {
                     CUSTOMER
                   </h3>
                   <CustomerSearch
-                    ref={customerSearchRef}
-                    value={selectedCustomer}
+                    value={selectedCustomer || null}
                     onChange={handleCustomerSelect}
-                    placeholder="Search customer by name, phone..."
-                    className="w-full"
-                    showCreateButton={true}
                     onCreateNew={() => setShowCustomerModal(true)}
+                    displayMode="inline"
+                    placeholder="Search customer by name, phone, or code..."
+                    required
                     clearable={true}
-                    onClear={() => {
-                      setSelectedCustomer(null);
-                      setSelectedInvoice(null);
-                      setReturnData(prev => ({
-                        ...prev,
-                        customer_id: '',
-                        customer_details: null,
-                        invoice_id: '',
-                        items: []
-                      }));
-                    }}
                   />
                 </div>
 
@@ -840,7 +843,7 @@ const SalesReturnFlow = ({ onClose }) => {
                           }}
                           className="text-red-600 hover:text-red-700"
                         >
-                          <X className="w-4 h-4" />
+                          <Trash2 className="w-4 h-4" />
                         </button>
                       </div>
                     )}

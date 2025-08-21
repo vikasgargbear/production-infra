@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef, forwardRef, useImperativeHandle } from 'react';
-import { User, Search, Plus, Trash2, MapPin, Phone, Mail, Building } from 'lucide-react';
+import { User, Search, Plus, Trash2, MapPin, Phone, Mail, Building, X } from 'lucide-react';
 import { Customer } from '../../../types/models/customer';
 import { useCustomerSearch } from '../../../hooks/customers/useCustomers';
 import { debounce } from 'lodash';
@@ -316,76 +316,80 @@ export const CustomerSearch = forwardRef<CustomerSearchRef, CustomerSearchProps>
             {searchQuery && renderSearchResults()}
           </div>
         ) : (
-          <div className="relative bg-gray-50 rounded-lg p-2">
-            {/* Delete Icon - Top Right */}
-            {clearable && !disabled && (
-              <button
-                type="button"
-                onClick={handleRemoveCustomer}
-                className="absolute top-1 right-1 p-1 hover:bg-gray-200 rounded-full text-gray-400 hover:text-red-500 transition-colors"
-                title="Remove customer"
-              >
-                <Trash2 className="w-3 h-3" />
-              </button>
-            )}
-            
-            <div className="flex items-center gap-2 pr-6">
-              <Building className="w-4 h-4 text-blue-600" />
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2">
-                  <p className="font-medium text-gray-900 truncate">{value.customer_name}</p>
-                  {value.customer_type === 'B2B' && (
-                    <span className="text-xs bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded shrink-0">B2B</span>
-                  )}
-                  {/* GST Status Badge */}
-                  {(value.gstin || value.gst_number || (value as any).gst_number) ? (
-                    <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-green-100 text-green-700 shrink-0">
-                      GST
-                    </span>
-                  ) : (
-                    <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-600 shrink-0">
-                      No GST
-                    </span>
-                  )}
-                </div>
-                <div className="flex items-center gap-3 text-xs text-gray-600 mt-0.5">
-                  {/* Phone Number */}
-                  {(() => {
-                    const phoneNumber = (value as any).contact_person_phone || 
-                                       value.phone || 
-                                       value.contact_info?.primary_phone ||
-                                       (value as any).primary_phone;
-                    if (phoneNumber) {
-                      return (
-                        <span className="flex items-center gap-1">
-                          <Phone className="w-3 h-3" /> {phoneNumber}
-                        </span>
-                      );
-                    }
-                    return null;
-                  })()}
-                  
-                  {/* Compact Address - City, State only */}
-                  {(() => {
-                    const city = value.billing_address?.city || 
-                                value.address_info?.billing_city || 
-                                (value as any).city || '';
-                    const state = value.billing_address?.state || 
-                                 value.address_info?.billing_state || 
-                                 (value as any).state || '';
+          <div className="bg-gray-50 rounded-lg p-2">
+            <div className="flex items-start justify-between gap-2">
+              <div className="flex items-center gap-2 flex-1 min-w-0">
+                <Building className="w-4 h-4 text-blue-600" />
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <p className="font-medium text-gray-900 truncate">{value.customer_name}</p>
+                    {value.customer_type === 'B2B' && (
+                      <span className="text-xs bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded shrink-0">B2B</span>
+                    )}
+                    {/* GST Status Badge */}
+                    {(value.gstin || value.gst_number || (value as any).gst_number) ? (
+                      <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-green-100 text-green-700 shrink-0">
+                        GST
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-600 shrink-0">
+                        No GST
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-3 text-xs text-gray-600 mt-0.5">
+                    {/* Phone Number */}
+                    {(() => {
+                      const phoneNumber = (value as any).contact_person_phone || 
+                                         value.phone || 
+                                         value.contact_info?.primary_phone ||
+                                         (value as any).primary_phone;
+                      if (phoneNumber) {
+                        return (
+                          <span className="flex items-center gap-1">
+                            <Phone className="w-3 h-3" /> {phoneNumber}
+                          </span>
+                        );
+                      }
+                      return null;
+                    })()}
                     
-                    if (city || state) {
-                      return (
-                        <span className="flex items-center gap-1">
-                          <MapPin className="w-3 h-3" /> 
-                          {city}{state ? `, ${state}` : ''}
-                        </span>
-                      );
-                    }
-                    return null;
-                  })()}
+                    {/* Compact Address - City, State only */}
+                    {(() => {
+                      const city = value.billing_address?.city || 
+                                  value.address_info?.billing_city || 
+                                  (value as any).city || '';
+                      const state = value.billing_address?.state || 
+                                   value.address_info?.billing_state || 
+                                   (value as any).state || '';
+                      
+                      if (city || state) {
+                        return (
+                          <span className="flex items-center gap-1">
+                            <MapPin className="w-3 h-3" /> 
+                            {city}{state ? `, ${state}` : ''}
+                          </span>
+                        );
+                      }
+                      return null;
+                    })()}
+                  </div>
                 </div>
               </div>
+              
+              {/* Delete Icon - Vertically Centered Right */}
+              {clearable && !disabled && (
+                <div className="flex items-center justify-center min-h-[3rem]">
+                  <button
+                    type="button"
+                    onClick={handleRemoveCustomer}
+                    className="p-3 hover:bg-red-50 rounded-full text-red-500 hover:text-red-600 transition-colors shrink-0"
+                    title="Remove customer"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </div>
+              )}
             </div>
           </div>
         )}
