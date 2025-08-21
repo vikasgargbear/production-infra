@@ -1,10 +1,10 @@
 import React, { useState, useEffect, useRef, useCallback, forwardRef, useImperativeHandle } from 'react';
 import { Search, Package, Plus, X, Loader2 } from 'lucide-react';
-import { productsApi, productAPI } from '../../../services/api';
+import { productAPI } from '../../../services/api';
 import { AddNewButton } from '../ui';
 import BatchSelectionModalV2 from '../../invoice/modals/BatchSelectionModalV2';
 import DataTransformer from '../../../services/dataTransformer';
-import { searchCache, smartSearch } from '../../../utils/searchCache';
+import searchCache, { smartSearch } from '../../../utils/searchCache';
 import { debounce } from '../../../utils/debounce';
 
 const ProductSearchSimple = forwardRef(({ onAddItem, onCreateProduct, showBatchSelection = true }, ref) => {
@@ -26,6 +26,32 @@ const ProductSearchSimple = forwardRef(({ onAddItem, onCreateProduct, showBatchS
     }
   }));
 
+  // Preload products on mount for ultra-fast search
+  useEffect(() => {
+    const preloadProducts = async () => {
+      try {
+        // Check if we already have products in cache
+        const cached = searchCache.get('products', 'all');
+        if (cached && cached.length > 0) {
+          return; // Already cached
+        }
+
+        // Load recent products for quick access
+        const response = await productAPI.list({ limit: 100 });
+        const products = response?.data || response || [];
+        
+        if (products.length > 0) {
+          searchCache.setItems('products', products);
+          searchCache.set('products', 'all', products);
+        }
+      } catch (error) {
+        console.error('Error preloading products:', error);
+      }
+    };
+
+    preloadProducts();
+  }, []);
+
   // Debounced search function with smart cache integration
   const searchProducts = useCallback(
     debounce(async (query) => {
@@ -36,27 +62,13 @@ const ProductSearchSimple = forwardRef(({ onAddItem, onCreateProduct, showBatchS
 
       setLoading(true);
       try {
-        // First try smart cache search for ultra-fast response
-        const cachedResults = await smartSearch('products', query, { limit: 20 });
-        
-        if (cachedResults.length > 0) {
-          // Transform cached results to consistent format
-          const transformedResults = cachedResults.map(product => 
-            DataTransformer.transformProduct(product, 'search')
-          );
-          setSearchResults(transformedResults);
-          setLoading(false);
-          return;
-        }
-        
-        // Fallback to API search if no cache results
-        const response = await productAPI.search(query);
-        const results = response?.data || response || [];
-        
-        // Cache the API results for next time
-        if (results.length > 0) {
-          searchCache.preloadItems('products', results);
-        }
+        // Use smartSearch with the product API search function
+        const results = await smartSearch(
+          'products', 
+          query, 
+          productAPI.search.bind(productAPI),
+          { limit: 20 }
+        );
         
         // Transform results to consistent format
         const transformedResults = results.map(product => 
@@ -65,7 +77,26 @@ const ProductSearchSimple = forwardRef(({ onAddItem, onCreateProduct, showBatchS
         setSearchResults(transformedResults);
       } catch (error) {
         console.error('Error searching products:', error);
-        setSearchResults([]);
+        
+        // Fallback to direct API search if smartSearch fails
+        try {
+          const response = await productAPI.search(query);
+          const results = response?.data || response || [];
+          
+          // Transform results to consistent format
+          const transformedResults = results.map(product => 
+            DataTransformer.transformProduct(product, 'search')
+          );
+          setSearchResults(transformedResults);
+          
+          // Cache the results for next time
+          if (results.length > 0) {
+            searchCache.setItems('products', results);
+          }
+        } catch (apiError) {
+          console.error('API search also failed:', apiError);
+          setSearchResults([]);
+        }
       } finally {
         setLoading(false);
       }
