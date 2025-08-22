@@ -221,4 +221,4 @@ async def delete_storage_location(location_id: int, db: Session = Depends(get_db
         return {"success": True, "message": f"Storage location {location_id} deleted"}
     except Exception as e:
         logger.error(f"Error deleting storage location: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e)}
+        raise HTTPException(status_code=500, detail=str(e))
