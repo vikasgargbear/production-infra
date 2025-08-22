@@ -7,7 +7,7 @@ import {
   SupplierSearch, ProductSearchSimple, ItemsTable, ModuleHeader,
   DatePicker, Select, NumberInput, NotesSection, useToast, PurchaseSearch, ViewHistoryButton
 } from '../global';
-import { returnsApi, purchasesApi, suppliersApi, settingsApi } from '../../services/api';
+import { returnsApi, purchasesApi, suppliersApi, settingsApi, metadataApi } from '../../services/api';
 import PurchaseInvoiceSelector from './components/PurchaseInvoiceSelector';
 // ReturnItemsTable moved to archive - use ItemsTable from global instead
 import ReturnSummary from './components/ReturnSummary';
@@ -57,28 +57,20 @@ const PurchaseReturnFlow = ({ onClose }) => {
   const [returnablePurchases, setReturnablePurchases] = useState([]);
   const [returnReasons, setReturnReasons] = useState([]);
 
-  // Load return reasons from system settings
+  // Load return reasons from metadata API
   useEffect(() => {
     const loadReturnReasons = async () => {
       try {
-        // Get return reasons from system settings
-        const response = await settingsApi.system.getByCategory('RETURN_REASONS');
-        const settings = response.data || [];
+        // Get return reasons from metadata API
+        const response = await metadataApi.getReturnReasons();
+        const returnReasons = response.data?.purchase_return_reasons || [];
         
-        if (Array.isArray(settings) && settings.length > 0) {
-          // Transform system settings to dropdown format
-          const reasons = settings
-            .filter(setting => setting.setting_scope === 'PURCHASE_RETURN' || setting.setting_scope === 'ALL')
-            .map(setting => ({
-              value: setting.setting_key,
-              label: setting.setting_name || setting.setting_value
-            }));
-          
-          setReturnReasons(reasons);
+        if (Array.isArray(returnReasons) && returnReasons.length > 0) {
+          setReturnReasons(returnReasons);
           // Cache for offline use
-          await offlineStorage.storeOffline('purchase_return_reasons', reasons, { persistent: true });
+          await offlineStorage.storeOffline('purchase_return_reasons', returnReasons, { persistent: true });
         } else {
-          throw new Error('No return reasons found in system settings');
+          throw new Error('No return reasons found in metadata');
         }
         
       } catch (error) {

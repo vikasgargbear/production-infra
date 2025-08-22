@@ -9,7 +9,7 @@ import {
   ProceedToReviewComponent, StandardDatePicker
 } from '../global';
 import CustomerCreationB2B from '../global/ui/forms/CustomerCreationB2B';
-import { returnsApi, customersApi, settingsApi } from '../../services/api';
+import { returnsApi, customersApi, settingsApi, metadataApi } from '../../services/api';
 import InvoiceApiService from '../../services/invoiceApiService';
 // ReturnItemsTable moved to archive - use ItemsTable from global instead
 import ReturnSummary from './components/ReturnSummary';
@@ -95,26 +95,14 @@ const SalesReturnFlow = ({ onClose }) => {
           setReturnReasons(cached.data);
         }
         
-        // Get return reasons from system settings with timeout
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 5000); // 5 second timeout
+        // Get return reasons from metadata API
+        const response = await metadataApi.getReturnReasons();
         
-        const response = await settingsApi.system.getByCategory('RETURN_REASONS', {
-          signal: controller.signal
-        });
+        const returnReasons = response.data?.sales_return_reasons || [];
         
-        clearTimeout(timeoutId);
-        
-        const settings = response.data || [];
-        
-        if (Array.isArray(settings) && settings.length > 0) {
-          // Transform system settings to dropdown format
-          const reasons = settings
-            .filter(setting => setting.setting_scope === 'SALES_RETURN' || setting.setting_scope === 'ALL')
-            .map(setting => ({
-              value: setting.setting_key,
-              label: setting.setting_name || setting.setting_value
-            }));
+        if (Array.isArray(returnReasons) && returnReasons.length > 0) {
+          // Use return reasons directly from metadata API
+          const reasons = returnReasons;
           
           if (reasons.length > 0) {
             setReturnReasons(reasons);

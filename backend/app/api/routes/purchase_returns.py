@@ -17,7 +17,7 @@ from ...core.config import DEFAULT_ORG_ID
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/purchase-returns", tags=["purchase-returns"])
+router = APIRouter(tags=["purchase-returns"])
 
 @router.get("/")
 async def get_purchase_returns(

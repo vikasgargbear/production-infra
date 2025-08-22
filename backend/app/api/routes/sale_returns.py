@@ -17,7 +17,7 @@ from ..services.document_number_service import DocumentNumberService
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/sale-returns", tags=["sale-returns"])
+router = APIRouter(tags=["sale-returns"])
 
 @router.get("/generate-number")
 async def generate_sales_return_number(
