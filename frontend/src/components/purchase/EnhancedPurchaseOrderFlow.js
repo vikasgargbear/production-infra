@@ -396,6 +396,7 @@ const EnhancedPurchaseOrderFlow = ({ onClose, prefilledData = null }) => {
                     onChange={(e) => handleUpdateItem(index, 'pack_type', e.target.value)}
                     className="w-16 text-xs border-0 bg-transparent focus:ring-2 focus:ring-blue-500 rounded-md"
                   >
+                    {/* TODO: Fetch pack types from backend categories */}
                     <option value="STRIP">STRIP</option>
                     <option value="BOX">BOX</option>
                     <option value="BOTTLE">BOTTLE</option>
