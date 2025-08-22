@@ -56,14 +56,40 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
   const firstInputRef = useRef(null);
 
   // Enterprise ESC key handling - hierarchical modal management
-  // Main form ESC handler (lowest priority)
-  useEscapeKey(() => onClose(), !showGSTCalculator && !showCustomerModal && !showProductModal && !showImportModal, 'InvoiceFlow-Main');
+  // Main form ESC handler (lowest priority) - only active when no modals are open
+  const shouldHandleMainEsc = !showGSTCalculator && !showCustomerModal && !showProductModal && !showImportModal;
+  useEscapeKey(
+    useCallback(() => {
+      if (onClose) onClose();
+    }, [onClose]),
+    shouldHandleMainEsc,
+    'InvoiceFlow-Main'
+  );
   
   // Modal-specific ESC handlers (higher priority)
-  useEscapeKey(() => setShowGSTCalculator(false), showGSTCalculator, 'GSTCalculator');
-  useEscapeKey(() => setShowCustomerModal(false), showCustomerModal, 'CustomerModal');
-  useEscapeKey(() => setShowProductModal(false), showProductModal, 'ProductModal');
-  useEscapeKey(() => setShowImportModal(false), showImportModal, 'ImportModal');
+  useEscapeKey(
+    useCallback(() => setShowGSTCalculator(false), []),
+    showGSTCalculator,
+    'GSTCalculator'
+  );
+  
+  useEscapeKey(
+    useCallback(() => setShowCustomerModal(false), []),
+    showCustomerModal,
+    'CustomerModal'
+  );
+  
+  useEscapeKey(
+    useCallback(() => setShowProductModal(false), []),
+    showProductModal,
+    'ProductModal'
+  );
+  
+  useEscapeKey(
+    useCallback(() => setShowImportModal(false), []),
+    showImportModal,
+    'ImportModal'
+  );
 
   // Generate sequential invoice number
   const generateInvoiceNumber = async () => {

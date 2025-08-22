@@ -29,7 +29,7 @@ export const useEscapeKey = (onEscape, enabled = true, name = '') => {
   useEscapeHandler(
     enabled ? onEscape : null,
     name,
-    [enabled]
+    [enabled, onEscape] // Include onEscape in deps to prevent stale closure
   );
 };
 

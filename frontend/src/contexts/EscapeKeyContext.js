@@ -77,11 +77,11 @@ export const EscapeKeyProvider = ({ children }) => {
   // Unregister an ESC handler
   const unregisterEscHandler = useCallback((id) => {
     setHandlers(prev => {
-      const filtered = prev.filter(h => h.id !== id);
-      if (filtered.length !== prev.length) {
-        console.log(`ESC handler unregistered: ${id}`);
+      const handler = prev.find(h => h.id === id);
+      if (handler) {
+        console.log(`ESC handler unregistered: ${handler.name || id}`);
       }
-      return filtered;
+      return prev.filter(h => h.id !== id);
     });
   }, []);
 
@@ -120,7 +120,8 @@ export const useEscapeHandler = (callback, name = '', deps = []) => {
     return () => {
       unregisterEscHandler(handlerId);
     };
-  }, [callback, name, registerEscHandler, unregisterEscHandler, ...deps]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [callback, name, ...deps]); // Removed registerEscHandler and unregisterEscHandler from deps
 };
 
 export default EscapeKeyContext;
