@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, forwardRef } from 'react';
 import { Search, Package, Plus, X, User, Building2, Phone, MapPin, Award, FileText, Clock, TrendingUp, CreditCard, Calendar, Star } from 'lucide-react';
 import { purchasesApi, suppliersApi, productsApi } from '../../services/api';
 import { searchCache } from '../../utils/searchCache';
-import { ProductCreationModal, MonthYearPicker, ViewHistoryButton, ItemsTable, SupplierCreationModal, PurchaseFlow as GlobalPurchaseFlow, ContentCard, AddNewButton } from '../global';
+import { ProductCreationModal, MonthYearPicker, ViewHistoryButton, ItemsTable, SupplierCreationModal, PurchaseFlow as GlobalPurchaseFlow, ContentCard, AddNewButton, StandardDatePicker } from '../global';
 import PurchaseSummaryTop from './components/PurchaseSummaryTop';
 import documentNumberService from '../../services/documentNumberService';
 import PurchaseCalculatorEnterprise from '../../services/purchaseCalculatorEnterprise';
@@ -389,12 +389,11 @@ const PurchaseFlow = ({ onClose }) => {
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Invoice Date *</label>
-              <input
-                type="date"
+              <StandardDatePicker
+                label="Invoice Date"
                 value={purchase.invoice_date}
-                onChange={(e) => setPurchase(prev => ({ ...prev, invoice_date: e.target.value }))}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                onChange={(value) => setPurchase(prev => ({ ...prev, invoice_date: value }))}
+                required
               />
             </div>
             <div>

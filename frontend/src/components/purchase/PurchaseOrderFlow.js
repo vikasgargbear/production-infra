@@ -8,7 +8,7 @@ import {
 } from 'lucide-react';
 import { suppliersApi, productsApi, purchaseApi } from '../../services/api';
 import { searchCache } from '../../utils/searchCache';
-import { SupplierSearch, PurchaseProductSearch, PharmaItemsTable, NotesSection, ProductCreationModal, GSTCalculator, ViewHistoryButton, ModuleHeader } from '../global';
+import { SupplierSearch, PurchaseProductSearch, PharmaItemsTable, NotesSection, ProductCreationModal, GSTCalculator, ViewHistoryButton, ModuleHeader, StandardDatePicker } from '../global';
 import PurchaseOrderPreview from './components/PurchaseOrderPreview';
 import SupplierCreationModal from '../global/modals/SupplierCreationModal';
 import ShareModal from '../common/ShareModal';
@@ -587,28 +587,21 @@ ${localStorage.getItem('company_name') || 'AASO Pharmaceuticals'}
 
                 <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                   <div>
-                    <label className="block text-sm font-medium text-blue-700 mb-1">
-                      PO Date
-                    </label>
-                    <input
-                      ref={firstInputRef}
-                      type="date"
+                    <StandardDatePicker
+                      label="PO Date"
                       value={purchaseOrder.po_date}
-                      onChange={(e) => setPurchaseOrder(prev => ({ ...prev, po_date: e.target.value }))}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                      onChange={(value) => setPurchaseOrder(prev => ({ ...prev, po_date: value }))}
+                      required
+                      autoFocus
                     />
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-blue-700 mb-1">
-                      Expected Delivery
-                    </label>
-                    <input
-                      type="date"
+                    <StandardDatePicker
+                      label="Expected Delivery"
                       value={purchaseOrder.expected_delivery_date}
-                      onChange={(e) => setPurchaseOrder(prev => ({ ...prev, expected_delivery_date: e.target.value }))}
+                      onChange={(value) => setPurchaseOrder(prev => ({ ...prev, expected_delivery_date: value }))}
                       min={purchaseOrder.po_date}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
                     />
                   </div>
 

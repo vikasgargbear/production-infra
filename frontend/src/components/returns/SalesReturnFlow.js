@@ -6,7 +6,7 @@ import {
 import { 
   CustomerSearch, ProductSearchSimple, ItemsTable, ModuleHeader,
   DatePicker, Select, NumberInput, NotesSection, useToast, ViewHistoryButton,
-  ProceedToReviewComponent
+  ProceedToReviewComponent, StandardDatePicker
 } from '../global';
 import CustomerCreationB2B from '../global/ui/forms/CustomerCreationB2B';
 import { returnsApi, customersApi, settingsApi } from '../../services/api';
@@ -895,21 +895,19 @@ const SalesReturnFlow = ({ onClose }) => {
                           </div>
                           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                             <div>
-                              <label className="block text-xs font-medium text-gray-700 mb-1">From Date</label>
-                              <input
-                                type="date"
+                              <StandardDatePicker
+                                label="From Date"
                                 value={invoiceFilters.dateFrom}
-                                onChange={(e) => setInvoiceFilters(prev => ({ ...prev, dateFrom: e.target.value }))}
-                                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                onChange={(value) => setInvoiceFilters(prev => ({ ...prev, dateFrom: value }))}
+                                size="sm"
                               />
                             </div>
                             <div>
-                              <label className="block text-xs font-medium text-gray-700 mb-1">To Date</label>
-                              <input
-                                type="date"
+                              <StandardDatePicker
+                                label="To Date"
                                 value={invoiceFilters.dateTo}
-                                onChange={(e) => setInvoiceFilters(prev => ({ ...prev, dateTo: e.target.value }))}
-                                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                onChange={(value) => setInvoiceFilters(prev => ({ ...prev, dateTo: value }))}
+                                size="sm"
                               />
                             </div>
                             <div>

@@ -10,6 +10,7 @@ import {
   TrendingDown
 } from 'lucide-react';
 import { salesApi, purchasesApi, paymentsApi } from '../../services/api';
+import { StandardMonthYearPicker } from '../global';
 import * as XLSX from 'xlsx';
 
 const GSTR3BReport = ({ open, onClose }) => {
@@ -336,12 +337,10 @@ const GSTR3BReport = ({ open, onClose }) => {
         <div className="px-8 py-4 border-b border-gray-200 bg-gray-50">
           <div className="flex items-center space-x-4">
             <div className="flex items-center space-x-2">
-              <Calendar className="w-5 h-5 text-gray-500" />
-              <input
-                type="month"
+              <StandardMonthYearPicker
                 value={dateRange.startDate.substring(0, 7)}
-                onChange={(e) => {
-                  const [year, month] = e.target.value.split('-');
+                onChange={(value) => {
+                  const [year, month] = value.split('-');
                   const startDate = new Date(year, month - 1, 1);
                   const endDate = new Date(year, month, 0);
                   setDateRange({
@@ -349,7 +348,7 @@ const GSTR3BReport = ({ open, onClose }) => {
                     endDate: endDate.toISOString().split('T')[0]
                   });
                 }}
-                className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                size="sm"
               />
             </div>
             <div className="flex-1" />

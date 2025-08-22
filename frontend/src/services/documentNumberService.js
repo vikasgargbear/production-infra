@@ -39,7 +39,7 @@ class DocumentNumberService {
    * Generate Purchase Number (for direct purchase entry, not PO)
    */
   async generatePurchaseNumber() {
-    const response = await safeApiCall(() => apiClient.get('/purchases/generate-entry-number'));
+    const response = await safeApiCall(() => apiClient.get('/purchases/generate-number'));
     if (response?.data?.purchase_number) {
       return response.data.purchase_number;
     }

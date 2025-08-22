@@ -14,10 +14,10 @@ export const settingsApi = {
 
   // System Settings APIs
   system: {
-    getAll: () => apiClient.get('/settings/system'),
-    getByCategory: (category) => apiClient.get(`/settings/system/${category}`),
-    update: (data) => apiClient.put('/settings/system', data),
-    reset: (category) => apiClient.post(`/settings/system/${category}/reset`),
+    getAll: () => apiClient.get('/system/settings'),
+    getByCategory: (category) => apiClient.get(`/system/settings/${category}`),
+    update: (data) => apiClient.put('/system/settings', data),
+    reset: (category) => apiClient.post(`/system/settings/${category}/reset`),
   },
 
   // Feature Settings APIs

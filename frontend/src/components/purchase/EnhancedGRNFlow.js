@@ -14,7 +14,8 @@ import {
   ContentCard,
   useToast,
   NumericInput,
-  MonthYearPicker
+  MonthYearPicker,
+  StandardDatePicker
 } from '../global';
 import documentNumberService from '../../services/documentNumberService';
 import { PURCHASE_CONFIG } from '../../config/purchase.config';
@@ -285,16 +286,12 @@ const EnhancedGRNFlow = ({ onClose, prefilledData = null }) => {
         <ContentCard title={null} subtitle={null} actions={null}>
           <div className="grid grid-cols-3 gap-4">
             <div>
-              <label className="block text-sm font-medium text-gray-600 mb-1">GRN Date</label>
-              <div className="relative">
-                <Calendar className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
-                <input
-                  type="date"
-                  value={grn.grn_date}
-                  onChange={(e) => setGrn(prev => ({ ...prev, grn_date: e.target.value }))}
-                  className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500"
-                />
-              </div>
+              <StandardDatePicker
+                label="GRN Date"
+                value={grn.grn_date}
+                onChange={(value) => setGrn(prev => ({ ...prev, grn_date: value }))}
+                required
+              />
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-600 mb-1">PO Reference</label>
@@ -679,19 +676,14 @@ const EnhancedGRNFlow = ({ onClose, prefilledData = null }) => {
               </select>
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-600 mb-1">Check Date</label>
-              <div className="relative">
-                <Calendar className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
-                <input
-                  type="date"
-                  value={grn.quality_check?.check_date || new Date().toISOString().split('T')[0]}
-                  onChange={(e) => setGrn(prev => ({ 
-                    ...prev, 
-                    quality_check: { ...prev.quality_check, check_date: e.target.value }
-                  }))}
-                  className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500"
-                />
-              </div>
+              <StandardDatePicker
+                label="Check Date"
+                value={grn.quality_check?.check_date || new Date().toISOString().split('T')[0]}
+                onChange={(value) => setGrn(prev => ({ 
+                  ...prev, 
+                  quality_check: { ...prev.quality_check, check_date: value }
+                }))}
+              />
             </div>
             <div className="col-span-3">
               <label className="block text-sm font-medium text-gray-600 mb-1">Quality Remarks</label>

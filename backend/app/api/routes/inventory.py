@@ -349,7 +349,7 @@ async def list_stock_movements(
         total = db.execute(text(count_query), params).scalar()
         
         # Get movements
-        query += " ORDER BY im.created_at DESC LIMIT :limit OFFSET :skip"
+        query += " ORDER BY movement_date DESC LIMIT :limit OFFSET :skip"
         params.update({"limit": limit, "skip": skip})
         
         result = db.execute(text(query), params)

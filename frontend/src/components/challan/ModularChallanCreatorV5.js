@@ -3,7 +3,7 @@ import {
   Truck, Calendar, ArrowRight,
   CheckCircle, MessageCircle, FileInput, Printer, User, MapPin, Package
 } from 'lucide-react';
-import { ModuleHeader, CustomerSearch, ProductSearchSimple, ItemsTable, DocumentFooter, ProductCreationModal, NotesSection, AddressForm } from '../global';
+import { ModuleHeader, CustomerSearch, ProductSearchSimple, ItemsTable, DocumentFooter, ProductCreationModal, NotesSection, AddressForm, StandardDatePicker } from '../global';
 import CustomerCreationB2B from '../global/ui/forms/CustomerCreationB2B';
 // NotesSection is now imported from global
 import ChallanPreview from './components/ChallanPreview';
@@ -545,28 +545,21 @@ Expected Delivery: ${challan.expected_delivery_date}
               {/* Top Section - Dates and Import */}
               <div className="grid grid-cols-3 gap-4 mb-6">
                 <div>
-                  <label className="block text-sm font-medium text-gray-600 mb-2">Challan Date</label>
-                  <div className="relative">
-                    <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-                    <input
-                      type="date"
-                      value={challan.challan_date}
-                      onChange={(e) => setChallan(prev => ({ ...prev, challan_date: e.target.value }))}
-                      className="w-full pl-10 pr-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                    />
-                  </div>
+                  <StandardDatePicker
+                    label="Challan Date"
+                    value={challan.challan_date}
+                    onChange={(value) => setChallan(prev => ({ ...prev, challan_date: value }))}
+                    size="sm"
+                    required
+                  />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-600 mb-2">Expected Delivery</label>
-                  <div className="relative">
-                    <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-                    <input
-                      type="date"
-                      value={challan.expected_delivery_date}
-                      onChange={(e) => setChallan(prev => ({ ...prev, expected_delivery_date: e.target.value }))}
-                      className="w-full pl-10 pr-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                    />
-                  </div>
+                  <StandardDatePicker
+                    label="Expected Delivery"
+                    value={challan.expected_delivery_date}
+                    onChange={(value) => setChallan(prev => ({ ...prev, expected_delivery_date: value }))}
+                    size="sm"
+                  />
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-600 mb-2">Import Data</label>
