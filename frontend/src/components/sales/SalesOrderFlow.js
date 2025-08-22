@@ -278,6 +278,20 @@ const SalesOrderFlow = ({ open = true, onClose }) => {
   // Handle customer selection
   const handleCustomerSelect = (customer) => {
     setSelectedCustomer(customer);
+    
+    // Handle null customer (removal case)
+    if (!customer) {
+      setOrder(prev => ({
+        ...prev,
+        customer_id: null,
+        customer_name: '',
+        customer_details: null,
+        billing_address: '',
+        shipping_address: ''
+      }));
+      return;
+    }
+    
     const billingAddress = `${customer.address || ''}, ${customer.city || ''}, ${customer.state || ''} ${customer.pincode || ''}`.trim();
     
     setOrder(prev => ({

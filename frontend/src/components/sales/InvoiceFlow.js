@@ -467,6 +467,24 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
   const handleCustomerSelect = async (customer) => {
     console.log('handleCustomerSelect called with:', customer);
     setSelectedCustomer(customer);
+    
+    // Handle null customer (removal case) early
+    if (!customer) {
+      console.log('Customer removed');
+      setInvoice(prev => ({
+        ...prev,
+        customer_id: null,
+        customer_name: '',
+        customer_details: null,
+        billing_address: '',
+        shipping_address: '',
+        place_of_supply: companyInfo.state || 'Gujarat',
+        gst_type: 'CGST/SGST'
+      }));
+      return;
+    }
+    
+    // Process valid customer
     if (customer) {
       const companyState = companyInfo.state || 'Gujarat';
       const customerState = customer.state || '';
@@ -548,18 +566,6 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
           productSearchRef.current.focus();
         }
       }, 300);
-    } else {
-      // Customer was removed
-      console.log('Customer removed');
-      setInvoice(prev => ({
-        ...prev,
-        customer_id: null,
-        customer_name: '',
-        customer_details: null,
-        billing_address: '',
-        shipping_address: '',
-        gst_type: 'CGST/SGST'
-      }));
     }
   };
 
