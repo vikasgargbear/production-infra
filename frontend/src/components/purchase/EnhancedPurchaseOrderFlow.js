@@ -632,7 +632,7 @@ const EnhancedPurchaseOrderFlow = ({ onClose, prefilledData = null }) => {
               <label className="block text-sm font-medium text-gray-600 mb-1">Delivery Terms</label>
               <input
                 type="text"
-                value={purchaseOrder.delivery_terms}
+                value={purchaseOrder.delivery_terms || ''}
                 onChange={(e) => setPurchaseOrder(prev => ({ ...prev, delivery_terms: e.target.value }))}
                 placeholder="e.g., F.O.R. Destination"
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"

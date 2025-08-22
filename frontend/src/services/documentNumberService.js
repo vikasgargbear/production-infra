@@ -49,12 +49,16 @@ class DocumentNumberService {
    */
   async generatePurchaseOrderNumber() {
     try {
-      const response = await apiClient.get('/purchase-orders/generate-number');
-      if (response?.data?.order_number) {
-        return response.data.order_number;
+      // Fixed: Use correct endpoint path
+      const response = await apiClient.get('/purchases/generate-number');
+      if (response?.data?.po_number) {
+        return response.data.po_number;
       }
     } catch (error) {
-      console.warn('Backend purchase order number generation failed:', error);
+      // Only log non-404 errors once
+      if (error?.response?.status !== 404) {
+        console.warn('Purchase order number generation error:', error.message);
+      }
     }
     
     // Fallback to client-side generation

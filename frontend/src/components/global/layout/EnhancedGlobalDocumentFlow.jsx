@@ -150,31 +150,43 @@ const EnhancedGlobalDocumentFlow = ({
     onStepChange?.(newStep);
   };
   
-  // Auto-generate document number
+  // Auto-generate document number - only once on mount
+  const [hasGeneratedNumber, setHasGeneratedNumber] = useState(false);
+  
   useEffect(() => {
-    if (autoGenerateNumber && !documentData?.documentNumber && !generatedNumber) {
+    // Only generate once when component mounts and conditions are met
+    if (autoGenerateNumber && !documentData?.documentNumber && !hasGeneratedNumber) {
       const generateNumber = async () => {
         try {
           setIsGenerating(true);
+          setHasGeneratedNumber(true); // Mark as generated to prevent re-runs
+          
           const serviceMethod = config.serviceMethod;
+          let number = null;
           
           // Try to use the service if it exists
-          if (documentNumberService[serviceMethod]) {
-            const number = await documentNumberService[serviceMethod]();
-            setGeneratedNumber(number);
-            onDocumentUpdate?.({ documentNumber: number });
-          } else {
-            // Fallback to timestamp-based generation
-            const fallbackNumber = `${config.prefix}-${Date.now().toString().slice(-8)}`;
-            setGeneratedNumber(fallbackNumber);
-            onDocumentUpdate?.({ documentNumber: fallbackNumber });
+          if (documentNumberService && documentNumberService[serviceMethod]) {
+            try {
+              number = await documentNumberService[serviceMethod]();
+            } catch (serviceError) {
+              // Service failed, use fallback
+              console.debug(`Document number service failed, using fallback`);
+            }
+          }
+          
+          // Use fallback if service didn't provide a number
+          if (!number) {
+            number = `${config.prefix}-${Date.now().toString().slice(-8)}`;
+          }
+          
+          setGeneratedNumber(number);
+          if (onDocumentUpdate) {
+            onDocumentUpdate(prev => ({ ...prev, documentNumber: number }));
           }
         } catch (error) {
-          console.warn(`Failed to generate ${documentType} number:`, error);
-          // Fallback
-          const fallbackNumber = `${config.prefix}-${Date.now().toString().slice(-8)}`;
-          setGeneratedNumber(fallbackNumber);
-          onDocumentUpdate?.({ documentNumber: fallbackNumber });
+          console.error(`Failed to generate ${documentType} number:`, error);
+          // Even on error, mark as generated to prevent infinite retries
+          setHasGeneratedNumber(true);
         } finally {
           setIsGenerating(false);
         }
@@ -182,7 +194,8 @@ const EnhancedGlobalDocumentFlow = ({
       
       generateNumber();
     }
-  }, [autoGenerateNumber, documentData?.documentNumber, generatedNumber, documentType, config, onDocumentUpdate]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoGenerateNumber]); // Only depend on autoGenerateNumber prop
 
   // Default keyboard shortcuts per step
   const defaultShortcuts = {
