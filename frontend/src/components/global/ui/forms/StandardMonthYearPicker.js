@@ -43,15 +43,15 @@ const StandardMonthYearPicker = ({
   const defaultPlaceholder = format === 'MM/YY' ? 'MM/YY' : 'MM/YYYY';
   const finalPlaceholder = placeholder || defaultPlaceholder;
 
-  // Size configurations
+  // Standardized sizing - MUST match StandardFormInput
   const sizeClasses = {
-    sm: 'py-1.5 pl-8 pr-8 text-sm',
-    md: 'py-2 pl-10 pr-10',
-    lg: 'py-3 pl-12 pr-12 text-lg'
+    sm: 'h-9 pl-8 pr-8 text-sm',     // 36px height
+    md: 'h-10 pl-10 pr-10 text-base', // 40px height - DEFAULT
+    lg: 'h-12 pl-12 pr-12 text-lg'    // 48px height
   };
 
   const iconSizes = {
-    sm: 'w-3 h-3',
+    sm: 'w-4 h-4',
     md: 'w-4 h-4',
     lg: 'w-5 h-5'
   };

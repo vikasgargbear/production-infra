@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, forwardRef } from 'react';
 import { Search, Package, Plus, X, User, Building2, Phone, MapPin, Award, FileText, Clock, TrendingUp, CreditCard, Calendar, Star } from 'lucide-react';
 import { purchasesApi, suppliersApi, productsApi } from '../../services/api';
 import { searchCache } from '../../utils/searchCache';
-import { ProductCreationModal, MonthYearPicker, ViewHistoryButton, ItemsTable, SupplierCreationModal, PurchaseFlow as GlobalPurchaseFlow, ContentCard, AddNewButton, StandardDatePicker } from '../global';
+import { ProductCreationModal, MonthYearPicker, ViewHistoryButton, ItemsTable, SupplierCreationModal, PurchaseFlow as GlobalPurchaseFlow, ContentCard, AddNewButton, StandardDatePicker, StandardFormInput, StandardSelect } from '../global';
 import PurchaseSummaryTop from './components/PurchaseSummaryTop';
 import documentNumberService from '../../services/documentNumberService';
 import PurchaseCalculatorEnterprise from '../../services/purchaseCalculatorEnterprise';

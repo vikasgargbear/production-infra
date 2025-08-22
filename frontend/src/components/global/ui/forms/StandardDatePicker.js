@@ -33,15 +33,15 @@ const StandardDatePicker = ({
   size = 'md',
   autoFocus = false
 }) => {
-  // Size configurations
+  // Standardized sizing - MUST match StandardFormInput
   const sizeClasses = {
-    sm: 'py-1.5 pl-8 pr-3 text-sm',
-    md: 'py-2 pl-10 pr-3',
-    lg: 'py-3 pl-12 pr-4 text-lg'
+    sm: 'h-9 pl-8 pr-3 text-sm',     // 36px height
+    md: 'h-10 pl-10 pr-3 text-base',  // 40px height - DEFAULT
+    lg: 'h-12 pl-12 pr-4 text-lg'     // 48px height
   };
 
   const iconSizes = {
-    sm: 'w-3 h-3 left-2.5',
+    sm: 'w-4 h-4 left-2.5',
     md: 'w-4 h-4 left-3',
     lg: 'w-5 h-5 left-4'
   };
@@ -56,7 +56,7 @@ const StandardDatePicker = ({
   return (
     <div className={className}>
       {label && (
-        <label className="block text-sm font-medium text-gray-600 mb-2">
+        <label className="block text-sm font-medium text-gray-700 mb-1.5">
           {label}
           {required && <span className="text-red-500 ml-1">*</span>}
         </label>

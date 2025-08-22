@@ -228,24 +228,24 @@ const ModuleHub = ({
   // Sidebar layout (default) - Enhanced with pharma-themed design
   return (
     <div className="fixed inset-0 bg-gray-100 z-50 flex">
-      {/* Enhanced Sidebar with Pharma Theme */}
-      <div className="w-80 h-full bg-gradient-to-b from-blue-50 to-green-50 p-3">
-        <div className="h-full bg-white rounded-2xl shadow-lg border border-blue-100 flex flex-col">
-          {/* Header - Clean Pharma Design */}
-          <div className="p-5 border-b border-gray-100 rounded-t-2xl">
+      {/* Enhanced Sidebar with Medical Theme - Professional Healthcare Aesthetics */}
+      <div className="w-80 h-full bg-gradient-to-b from-teal-50 via-cyan-50 to-emerald-50 p-3">
+        <div className="h-full bg-white/95 backdrop-blur-sm rounded-2xl shadow-xl border border-teal-100/50 flex flex-col">
+          {/* Header - Professional Medical Design */}
+          <div className="p-5 border-b border-teal-100/30 rounded-t-2xl bg-gradient-to-r from-teal-50/50 to-cyan-50/50">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-green-500 rounded-xl flex items-center justify-center shadow-md">
+              <div className="w-10 h-10 bg-gradient-to-br from-teal-500 to-cyan-600 rounded-xl flex items-center justify-center shadow-lg shadow-teal-500/20">
                 {HubIcon ? <HubIcon className="w-5 h-5 text-white" /> : null}
               </div>
               <div>
-                <h3 className="font-semibold text-gray-800">{title}</h3>
-                <p className="text-xs text-gray-500">Operations Center</p>
+                <h3 className="font-semibold text-teal-900">{title}</h3>
+                <p className="text-xs text-teal-600">Healthcare Operations</p>
               </div>
             </div>
           </div>
         
-          {/* Module List - Clean Pharma Design */}
-          <div className="flex-1 overflow-y-auto py-2">
+          {/* Module List - Medical Professional Design */}
+          <div className="flex-1 overflow-y-auto py-2 bg-gradient-to-b from-transparent to-teal-50/10">
             <nav className="px-3">
               {modules.map((module, index) => {
                 const Icon = module.icon;
@@ -260,19 +260,19 @@ const ModuleHub = ({
                       w-full mb-1 px-3 py-2.5 rounded-xl flex items-center justify-between
                       transition-all duration-200 group
                       ${isActive 
-                        ? 'bg-gradient-to-r from-blue-500 to-blue-600 text-white shadow-md' 
-                        : 'hover:bg-gray-50 text-gray-700 hover:text-gray-900'
+                        ? 'bg-gradient-to-r from-teal-500 to-cyan-500 text-white shadow-lg shadow-teal-500/25' 
+                        : 'hover:bg-teal-50/50 text-slate-700 hover:text-teal-900 hover:shadow-sm'
                       }
                     `}
                   >
                     <div className="flex items-center gap-3">
-                      <Icon className={`w-4 h-4 ${isActive ? 'text-white' : 'text-gray-500 group-hover:text-blue-500'}`} />
+                      <Icon className={`w-4 h-4 ${isActive ? 'text-white' : 'text-teal-600 group-hover:text-cyan-600'}`} />
                       <div className="text-left">
                         <div className="text-sm font-medium">
                           {module.label || module.fullLabel}
                         </div>
                         {module.description && (
-                          <div className={`text-xs ${isActive ? 'text-blue-100' : 'text-gray-500'}`}>
+                          <div className={`text-xs ${isActive ? 'text-teal-100' : 'text-slate-500'}`}>
                             {module.description}
                           </div>
                         )}
@@ -284,7 +284,7 @@ const ModuleHub = ({
                       text-xs font-mono px-1.5 py-0.5 rounded
                       ${isActive 
                         ? 'bg-white/20 text-white' 
-                        : 'bg-gray-100 text-gray-500'
+                        : 'bg-teal-100/50 text-teal-700'
                       }
                     `}>
                       {index + 1}
@@ -295,31 +295,31 @@ const ModuleHub = ({
             </nav>
           </div>
 
-          {/* Pro Tip Section */}
-          <div className="p-4 border-t border-gray-100">
-            <div className="bg-gradient-to-r from-blue-50 to-green-50 rounded-xl p-4 mb-3">
+          {/* Medical Tip Section */}
+          <div className="p-4 border-t border-teal-100/30">
+            <div className="bg-gradient-to-r from-emerald-50 to-teal-50 rounded-xl p-4 mb-3 border border-teal-100/50">
               <div className="flex items-center justify-between mb-2">
-                <Activity className="w-5 h-5 text-blue-600" />
-                <span className="text-xs text-gray-500">Pro Tip</span>
+                <Activity className="w-5 h-5 text-teal-600" />
+                <span className="text-xs text-teal-700 font-medium">Healthcare Tip</span>
               </div>
-              <p className="text-xs text-gray-600 mb-2">
-                Use number keys <kbd className="px-1.5 py-0.5 bg-white rounded text-xs font-mono">1-{modules.length}</kbd> to quickly navigate between modules
+              <p className="text-xs text-slate-600 mb-2">
+                Use number keys <kbd className="px-1.5 py-0.5 bg-teal-100 text-teal-700 rounded text-xs font-mono">1-{modules.length}</kbd> for quick navigation
               </p>
-              <button className="text-xs text-blue-600 hover:text-blue-700 font-medium flex items-center gap-1">
+              <button className="text-xs text-teal-600 hover:text-cyan-700 font-medium flex items-center gap-1 transition-colors">
                 View all shortcuts
                 <ChevronRight className="w-3 h-3" />
               </button>
             </div>
           </div>
 
-          {/* Footer */}
-          <div className="p-4 border-t border-gray-100 rounded-b-2xl">
+          {/* Footer - Medical Professional */}
+          <div className="p-4 border-t border-teal-100/30 rounded-b-2xl bg-gradient-to-r from-teal-50/30 to-cyan-50/30">
             <div className="flex items-center justify-between">
-              <button className="p-2 hover:bg-gray-100 rounded-lg transition-colors">
-                <Settings className="w-4 h-4 text-gray-500" />
+              <button className="p-2 hover:bg-teal-100/50 rounded-lg transition-all hover:shadow-sm">
+                <Settings className="w-4 h-4 text-teal-600" />
               </button>
-              <button className="p-2 hover:bg-gray-100 rounded-lg transition-colors">
-                <HelpCircle className="w-4 h-4 text-gray-500" />
+              <button className="p-2 hover:bg-teal-100/50 rounded-lg transition-all hover:shadow-sm">
+                <HelpCircle className="w-4 h-4 text-teal-600" />
               </button>
             </div>
           </div>

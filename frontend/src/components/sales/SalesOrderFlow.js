@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { 
   ShoppingCart, Calendar, ArrowRight, ArrowLeft,
   CheckCircle, MessageCircle, FileInput, Printer,
-  X, AlertCircle, FileText, Truck, User, Package
+  X, AlertCircle, FileText, Truck, User, Package, MapPin
 } from 'lucide-react';
 import { 
   CustomerSearch, 
@@ -16,6 +16,7 @@ import {
   GenericSuccessModal,
   StandardDatePicker
 } from '../global';
+import AddressSelector from '../global/ui/AddressSelector';
 import CustomerCreationB2B from '../global/ui/forms/CustomerCreationB2B';
 import { ordersApi, salesApi, api, apiClient, usersApi } from '../../services/api';
 import salesOrdersAPI from '../../services/api/modules/salesOrders.api';
@@ -826,6 +827,34 @@ Expected Delivery: ${order.expected_delivery_date}
 
 
 
+              {/* Address Section */}
+              {selectedCustomer && (
+                <div className="mb-6">
+                  <h3 className="text-sm font-semibold text-blue-700 uppercase tracking-wider mb-3 flex items-center">
+                    <MapPin className="w-4 h-4 mr-2" />
+                    DELIVERY DETAILS
+                  </h3>
+                  <div className="grid grid-cols-2 gap-4">
+                    <AddressSelector
+                      customer={selectedCustomer}
+                      currentAddress={order.billing_address}
+                      addressType="billing"
+                      onChange={(address) => setOrder(prev => ({ ...prev, billing_address: address }))}
+                      className="bg-white"
+                    />
+                    <AddressSelector
+                      customer={selectedCustomer}
+                      currentAddress={order.shipping_address}
+                      addressType="shipping"
+                      onChange={(address) => setOrder(prev => ({ ...prev, shipping_address: address }))}
+                      sameAsBilling={sameAsBilling}
+                      onSameAsBillingChange={setSameAsBilling}
+                      className="bg-white"
+                    />
+                  </div>
+                </div>
+              )}
+
               {/* Products Section */}
               <div className="mb-6">
                 <div className="flex items-center justify-between mb-3">
@@ -966,17 +995,7 @@ Expected Delivery: ${order.expected_delivery_date}
         <div className="flex-1 overflow-y-auto">
           <div className="max-w-6xl mx-auto p-6">
             
-            {/* Review Page Header */}
-            <div className="flex justify-between items-center mb-6">
-              <h2 className="text-xl font-semibold text-gray-900">Review Sales Order</h2>
-              <button
-                onClick={() => setCurrentStep(1)}
-                className="px-4 py-2 text-blue-600 hover:text-blue-700 hover:bg-blue-50 rounded-lg transition-colors flex items-center gap-2"
-              >
-                <ArrowLeft className="w-4 h-4" />
-                Back to Edit
-              </button>
-            </div>
+            {/* Removed redundant Review Page Header - already in ModuleHeader */}
             
             {/* Message Display */}
             {message && (
@@ -1070,84 +1089,54 @@ Expected Delivery: ${order.expected_delivery_date}
                 <p className="text-sm text-gray-500">Date: {new Date(order.order_date).toLocaleDateString()}</p>
               </div>
 
-              {/* Order Details Section */}
-              <div className="grid grid-cols-3 gap-4 mb-6 p-4 bg-blue-50 rounded-lg">
-                <div>
-                  <p className="text-xs text-gray-600">Order Status</p>
-                  <p className="text-sm font-semibold text-purple-600">CONFIRMED</p>
+              {/* Compact Order Info Bar */}
+              <div className="flex items-center justify-between mb-4 p-3 bg-blue-50 rounded-lg">
+                <div className="flex items-center gap-6">
+                  <div>
+                    <span className="text-xs text-gray-600">Status:</span>
+                    <span className="ml-2 text-sm font-semibold text-purple-600">CONFIRMED</span>
+                  </div>
+                  <div>
+                    <span className="text-xs text-gray-600">Delivery:</span>
+                    <span className="ml-2 text-sm font-semibold">{new Date(order.expected_delivery_date).toLocaleDateString('en-IN')}</span>
+                  </div>
+                  <div>
+                    <span className="text-xs text-gray-600">Payment:</span>
+                    <select
+                      value={order.payment_terms || 'credit'}
+                      onChange={(e) => setOrder(prev => ({ ...prev, payment_terms: e.target.value }))}
+                      className="ml-2 text-sm font-semibold bg-transparent capitalize cursor-pointer focus:outline-none"
+                    >
+                      <option value="cash">Cash</option>
+                      <option value="credit">Credit</option>
+                      <option value="advance">Advance</option>
+                    </select>
+                  </div>
                 </div>
-                <div>
-                  <p className="text-xs text-gray-600">Expected Delivery</p>
-                  <p className="text-sm font-semibold">{new Date(order.expected_delivery_date).toLocaleDateString('en-IN')}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-gray-600">Payment Terms</p>
-                  <select
-                    value={order.payment_terms || 'credit'}
-                    onChange={(e) => setOrder(prev => ({ ...prev, payment_terms: e.target.value }))}
-                    className="text-sm font-semibold bg-transparent border-b border-gray-300 focus:border-purple-500 focus:outline-none capitalize cursor-pointer"
-                  >
-                    <option value="cash">Cash</option>
-                    <option value="credit">Credit</option>
-                    <option value="advance">Advance</option>
-                  </select>
-                </div>
-                <div>
-                  <p className="text-xs text-gray-600">Sales Person</p>
-                  <input
-                    type="text"
-                    value={order.sales_person || localStorage.getItem('userName') || 'Admin'}
-                    onChange={(e) => setOrder(prev => ({ ...prev, sales_person: e.target.value }))}
-                    className="text-sm font-semibold bg-transparent border-b border-gray-300 focus:border-purple-500 focus:outline-none"
-                    placeholder="Sales person name"
-                  />
-                </div>
-                <div>
-                  <p className="text-xs text-gray-600">Created By</p>
-                  <select
-                    value={order.created_by || ''}
-                    onChange={(e) => {
-                      const selectedEmployee = employees.find(emp => emp.user_id == e.target.value);
-                      setOrder(prev => ({ 
-                        ...prev, 
-                        created_by: e.target.value,
-                        created_by_name: selectedEmployee?.full_name || 'Unknown'
-                      }));
-                    }}
-                    className="text-sm font-semibold bg-transparent border-b border-gray-300 focus:border-purple-500 focus:outline-none min-w-[120px]"
-                  >
-                    <option value="">Select Employee</option>
-                    {employees.map(employee => (
-                      <option key={employee.user_id} value={employee.user_id}>
-                        {employee.full_name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <p className="text-xs text-gray-600">Created On</p>
-                  <p className="text-sm font-semibold">{new Date().toLocaleString('en-IN')}</p>
+                <div className="text-xs text-gray-500">
+                  {new Date().toLocaleDateString('en-IN')} • {localStorage.getItem('userName') || 'Admin'}
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-8 mb-8">
-                <div>
-                  <h3 className="text-sm font-semibold text-blue-700 uppercase tracking-wider mb-2">Bill To</h3>
-                  <p className="font-medium">{order.customer_name}</p>
-                  <p className="text-sm text-gray-600">{order.billing_address}</p>
+              {/* Customer & Address Section - Compact */}
+              <div className="grid grid-cols-2 gap-4 mb-4">
+                <div className="border border-gray-200 rounded-lg p-3">
+                  <h3 className="text-xs font-semibold text-gray-700 mb-2 flex items-center">
+                    <MapPin className="w-3 h-3 mr-1" />
+                    Billing Address
+                  </h3>
+                  <p className="font-medium text-sm text-gray-900">{order.customer_name}</p>
+                  <p className="text-xs text-gray-600 mt-1">{order.billing_address || 'No address provided'}</p>
                   {selectedCustomer?.gstin && (
-                    <p className="text-sm text-gray-600">GSTIN: {selectedCustomer.gstin}</p>
-                  )}
-                  {selectedCustomer?.phone && (
-                    <p className="text-sm text-gray-600">Phone: {selectedCustomer.phone}</p>
-                  )}
-                  {selectedCustomer?.email && (
-                    <p className="text-sm text-gray-600">Email: {selectedCustomer.email}</p>
+                    <p className="text-xs text-gray-500 mt-1">GSTIN: {selectedCustomer.gstin}</p>
                   )}
                 </div>
-                <div>
-                  <h3 className="text-sm font-semibold text-blue-700 uppercase tracking-wider mb-2">Ship To</h3>
-                  <p className="text-sm text-gray-600">{order.shipping_address}</p>
+                <div className="border border-gray-200 rounded-lg p-3">
+                  <h3 className="text-xs font-semibold text-gray-700 mb-2 flex items-center">
+                    <MapPin className="w-3 h-3 mr-1" />
+                    Shipping Address
+                  </h3>
+                  <p className="text-xs text-gray-600">{order.shipping_address || order.billing_address || 'Same as billing'}</p>
                   {selectedCustomer?.shipping_phone && (
                     <p className="text-sm text-gray-600">Contact: {selectedCustomer.shipping_phone}</p>
                   )}
@@ -1265,29 +1254,21 @@ Expected Delivery: ${order.expected_delivery_date}
                   <p className="text-sm"><span className="font-medium">Amount in Words:</span> {numberToWords(order.total_amount)}</p>
                 </div>
                 
-                {/* Terms & Conditions */}
-                <div className="mt-6 p-4 bg-blue-50 rounded-lg">
-                  <h4 className="text-sm font-semibold text-blue-700 mb-2">Terms & Conditions</h4>
-                  <ol className="text-xs text-gray-600 space-y-1 list-decimal list-inside">
-                    <li>Goods once sold will not be taken back or exchanged</li>
-                    <li>Interest @ 18% p.a. will be charged if payment is not made within the stipulated time</li>
-                    <li>Our responsibility ceases after goods leave our premises</li>
-                    <li>Subject to local jurisdiction only</li>
-                    <li>E. & O.E.</li>
-                  </ol>
-                </div>
-                
-                {/* Prepared By / Authorized Signatory */}
-                <div className="mt-6 grid grid-cols-2 gap-4">
-                  <div className="text-center">
-                    <div className="h-16 border-b border-gray-300"></div>
-                    <p className="text-sm text-gray-600 mt-2">Prepared By</p>
-                    <p className="text-xs text-gray-500">{order.created_by || localStorage.getItem('userName') || 'Sales Team'}</p>
+                {/* Terms and Signature Section - Compact */}
+                <div className="grid grid-cols-2 gap-6 mt-4 pt-3 border-t border-gray-200">
+                  <div>
+                    <h4 className="text-xs font-semibold text-gray-700 mb-2">Terms & Conditions</h4>
+                    <ol className="text-xs text-gray-600 list-decimal list-inside space-y-0.5">
+                      <li>Goods once sold will not be taken back</li>
+                      <li>Interest @ 18% p.a. for late payment</li>
+                      <li>Subject to local jurisdiction only</li>
+                      <li>E. & O.E.</li>
+                    </ol>
                   </div>
                   <div className="text-center">
-                    <div className="h-16 border-b border-gray-300"></div>
-                    <p className="text-sm text-gray-600 mt-2">Authorized Signatory</p>
-                    <p className="text-xs text-gray-500">For {companyInfo.name || 'Your Company'}</p>
+                    <div className="h-12 border-b border-gray-300 mb-2"></div>
+                    <p className="text-xs font-semibold text-gray-700">Authorized Signatory</p>
+                    <p className="text-xs text-gray-500">For {companyInfo.name || 'Your Company Name'}</p>
                   </div>
                 </div>
               </div>
