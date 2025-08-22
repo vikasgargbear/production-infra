@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Home,
   Plus,
@@ -17,182 +17,305 @@ import {
   Clock,
   DollarSign,
   AlertCircle,
-  CheckCircle2
+  CheckCircle2,
+  // Medical/Pharma Icons
+  Pill,
+  Heart,
+  Stethoscope,
+  Activity,
+  Zap,
+  Bell,
+  Search,
+  Calendar,
+  FileCheck,
+  AlertTriangle,
+  UserCheck,
+  Timer,
+  Target,
+  Atom,
+  Cross,
+  ChevronRight,
+  ChevronDown,
+  Star,
+  RotateCw,
+  Globe,
+  MapPin,
+  Phone,
+  Mail,
+  BadgeCheck,
+  Lock,
+  Thermometer
 } from 'lucide-react';
 
 /**
- * Enhanced Apple-Inspired Desktop Sidebar
- * Designed for less tech-savvy users with clear, always-visible navigation
+ * Enhanced Pharma-Friendly Sidebar Component
+ * Medical-themed design with comprehensive pharmaceutical workflow support
  */
 const EnhancedSidebar = ({ activeTab, onTabChange, className = '' }) => {
   const [hoveredItem, setHoveredItem] = useState(null);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [expandedSections, setExpandedSections] = useState({
+    quickStats: true,
+    quickActions: true,
+    compliance: true,
+    notifications: true
+  });
+  const [currentTime, setCurrentTime] = useState(new Date());
 
-  // Workflow-based menu organization
+  // Update time every minute
+  useEffect(() => {
+    const timer = setInterval(() => setCurrentTime(new Date()), 60000);
+    return () => clearInterval(timer);
+  }, []);
+
+  // Mock data for demonstration
+  const quickStats = {
+    prescriptions: { count: 47, trend: '+12%', color: 'teal' },
+    lowStock: { count: 8, trend: 'urgent', color: 'red' },
+    pendingOrders: { count: 23, trend: '+5', color: 'blue' },
+    expiryAlerts: { count: 12, trend: '7 days', color: 'amber' }
+  };
+
+  const complianceStatus = {
+    dgft: { status: 'valid', expiry: '2024-12-31', color: 'green' },
+    gst: { status: 'filed', expiry: '2024-09-15', color: 'green' },
+    narcotic: { status: 'updated', expiry: '2024-10-01', color: 'green' },
+    license: { status: 'expires', expiry: '2024-11-15', color: 'amber' }
+  };
+
+  const recentSearches = ['Paracetamol', 'Amoxicillin', 'Insulin', 'Metformin'];
+  const notifications = [
+    { id: 1, type: 'stock', message: 'Paracetamol 500mg running low', urgent: true },
+    { id: 2, type: 'expiry', message: '5 batches expiring in 7 days', urgent: false },
+    { id: 3, type: 'order', message: 'New order from City Hospital', urgent: false },
+    { id: 4, type: 'compliance', message: 'Drug License renewal due', urgent: true }
+  ];
+
+  // Pharma-specific menu organization
   const menuSections = [
     {
-      id: 'daily',
-      title: 'Daily Work',
-      description: 'Your everyday tasks',
+      id: 'prescription',
+      title: 'Prescription Management',
+      description: 'Handle prescriptions & dispensing',
+      icon: Stethoscope,
       items: [
         {
           id: 'home',
           label: 'Dashboard',
-          icon: Home,
+          icon: Activity,
           count: null,
-          description: 'Overview of your business'
+          description: 'Medical overview dashboard'
         },
         {
-          id: 'quick-sale',
-          label: 'Quick Sale',
+          id: 'quick-prescription',
+          label: 'Quick Prescription',
           icon: Plus,
           count: null,
-          description: 'Create new sale quickly',
+          description: 'Rapid prescription entry',
           highlight: true
         },
         {
-          id: 'orders',
-          label: 'Today\'s Orders',
-          icon: ShoppingCart,
-          count: '12',
-          description: 'Orders for today',
+          id: 'prescriptions',
+          label: 'Today\'s Prescriptions',
+          icon: FileCheck,
+          count: '47',
+          description: 'Daily prescription log',
           status: 'active'
         },
         {
-          id: 'payments',
-          label: 'Payment Due',
-          icon: CreditCard,
-          count: '₹2.4L',
-          description: 'Pending payments',
-          status: 'warning'
+          id: 'drug-interaction',
+          label: 'Drug Interaction Check',
+          icon: AlertTriangle,
+          count: null,
+          description: 'Safety verification tool'
         }
       ]
     },
     {
       id: 'inventory',
-      title: 'Products & Stock',
-      description: 'Manage your inventory',
+      title: 'Pharmaceutical Inventory',
+      description: 'Drug stock & batch management',
+      icon: Pill,
       items: [
         {
           id: 'products',
-          label: 'Products',
+          label: 'Drug Catalog',
           icon: Package,
-          count: '1,245',
-          description: 'All your products'
+          count: '2,456',
+          description: 'Complete medicine database'
         },
         {
           id: 'batches',
-          label: 'Stock Check',
+          label: 'Batch Tracking',
           icon: Archive,
-          count: '89',
-          description: 'Check batch expiry'
+          count: '189',
+          description: 'Batch expiry monitoring'
         },
         {
           id: 'low-stock',
-          label: 'Low Stock Alert',
+          label: 'Critical Stock Alerts',
           icon: AlertCircle,
-          count: '15',
-          description: 'Products running low',
+          count: '8',
+          description: 'Urgent restocking needed',
           status: 'alert'
+        },
+        {
+          id: 'expiry-tracker',
+          label: 'Expiry Tracker',
+          icon: Timer,
+          count: '12',
+          description: 'Near-expiry medicines',
+          status: 'warning'
         }
       ]
     },
     {
       id: 'customers',
-      title: 'Customer Management',
-      description: 'Handle customer relations',
+      title: 'Patient & Customer Care',
+      description: 'Customer relationship management',
+      icon: Heart,
       items: [
         {
           id: 'customers',
-          label: 'All Customers',
+          label: 'Patient Database',
           icon: Users,
-          count: '456',
-          description: 'Customer database'
+          count: '1,234',
+          description: 'Patient medical records'
         },
         {
           id: 'credit',
-          label: 'Credit Management',
+          label: 'Credit & Insurance',
           icon: Shield,
-          count: '23',
-          description: 'Customer credit limits'
+          count: '156',
+          description: 'Insurance claim management'
+        },
+        {
+          id: 'loyalty',
+          label: 'Loyalty Program',
+          icon: Star,
+          count: '89%',
+          description: 'Patient retention program'
         },
         {
           id: 'whatsapp',
-          label: 'WhatsApp Updates',
+          label: 'Patient Communication',
           icon: MessageSquare,
           count: 'New',
-          description: 'Customer communications',
+          description: 'WhatsApp notifications',
           status: 'new'
         }
       ]
     },
     {
+      id: 'compliance',
+      title: 'Regulatory Compliance',
+      description: 'Legal & regulatory requirements',
+      icon: BadgeCheck,
+      items: [
+        {
+          id: 'dgft-compliance',
+          label: 'DGFT Compliance',
+          icon: Globe,
+          count: 'Valid',
+          description: 'Export-import compliance',
+          status: 'active'
+        },
+        {
+          id: 'gst-pharma',
+          label: 'Pharma GST Filing',
+          icon: FileText,
+          count: 'Filed',
+          description: 'Tax compliance status',
+          status: 'active'
+        },
+        {
+          id: 'narcotic-register',
+          label: 'Narcotic Register',
+          icon: Lock,
+          count: 'Updated',
+          description: 'Controlled substance tracking'
+        },
+        {
+          id: 'license-tracker',
+          label: 'License Management',
+          icon: FileCheck,
+          count: '45 days',
+          description: 'License renewal alerts',
+          status: 'warning'
+        }
+      ]
+    },
+    {
       id: 'reports',
-      title: 'Reports & Analytics',
-      description: 'Business insights',
+      title: 'Medical Analytics',
+      description: 'Healthcare business insights',
+      icon: BarChart3,
       items: [
         {
           id: 'sales-report',
-          label: 'Sales Report',
+          label: 'Drug Sales Analysis',
           icon: TrendingUp,
           count: null,
-          description: 'Daily/Monthly sales'
+          description: 'Pharmaceutical sales trends'
         },
         {
-          id: 'gst-reports',
-          label: 'GST Reports',
-          icon: FileText,
+          id: 'patient-analytics',
+          label: 'Patient Analytics',
+          icon: Activity,
           count: null,
-          description: 'Tax compliance reports'
+          description: 'Patient behavior insights'
         },
         {
-          id: 'analytics',
-          label: 'Business Analytics',
-          icon: BarChart3,
+          id: 'inventory-reports',
+          label: 'Inventory Reports',
+          icon: Package,
           count: null,
-          description: 'Performance insights'
+          description: 'Stock movement analysis'
         }
       ]
     },
     {
       id: 'advanced',
-      title: 'Advanced Features',
-      description: 'Additional tools',
+      title: 'Advanced Medical Tools',
+      description: 'Professional healthcare tools',
+      icon: Atom,
       items: [
         {
-          id: 'inventory-management',
-          label: 'Advanced Inventory',
-          icon: Package,
+          id: 'formulary',
+          label: 'Drug Formulary',
+          icon: Pill,
           count: null,
-          description: 'Detailed inventory tools'
+          description: 'Comprehensive drug database'
         },
         {
-          id: 'accounting',
-          label: 'Accounting',
-          icon: DollarSign,
+          id: 'clinical-decision',
+          label: 'Clinical Decision Support',
+          icon: Stethoscope,
           count: null,
-          description: 'Financial management'
+          description: 'Medical decision assistance'
         },
         {
-          id: 'profile',
-          label: 'Company Profile',
-          icon: User,
-          count: null,
-          description: 'Business information'
+          id: 'cold-chain',
+          label: 'Cold Chain Monitoring',
+          icon: Thermometer,
+          count: '2°C',
+          description: 'Temperature-sensitive drugs'
         },
         {
           id: 'settings',
-          label: 'Settings',
+          label: 'System Settings',
           icon: Settings,
           count: null,
-          description: 'App preferences'
+          description: 'Application preferences'
         }
       ]
     }
   ];
 
+  // Helper functions for styling
   const getStatusColor = (status) => {
     switch (status) {
-      case 'active': return 'bg-green-100 text-green-800 border-green-200';
+      case 'active': return 'bg-teal-100 text-teal-800 border-teal-200';
       case 'warning': return 'bg-amber-100 text-amber-800 border-amber-200';
       case 'alert': return 'bg-red-100 text-red-800 border-red-200';
       case 'new': return 'bg-blue-100 text-blue-800 border-blue-200';
@@ -202,111 +325,423 @@ const EnhancedSidebar = ({ activeTab, onTabChange, className = '' }) => {
 
   const getItemBackgroundColor = (itemId, isHovered) => {
     const isActive = activeTab === itemId;
-    if (isActive) return 'bg-blue-50 border-blue-200 shadow-sm';
-    if (isHovered) return 'bg-gray-50 border-gray-200';
-    return 'bg-white border-gray-100';
+    if (isActive) return 'bg-gradient-to-r from-teal-50 to-blue-50 border-teal-200 shadow-lg';
+    if (isHovered) return 'bg-gradient-to-r from-gray-50 to-blue-50 border-gray-200';
+    return 'bg-white/80 backdrop-blur-sm border-gray-100';
   };
 
-  return (
-    <div className={`w-80 h-screen bg-white border-r border-gray-200 flex flex-col ${className}`}>
-      {/* Header */}
-      <div className="p-6 border-b border-gray-100">
-        <div className="flex items-center space-x-3">
-          <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-blue-600 rounded-xl flex items-center justify-center shadow-lg">
-            <Shield className="w-5 h-5 text-white" />
-          </div>
-          <div>
-            <div className="font-semibold text-gray-900 text-lg">AASO Pharma</div>
-            <div className="text-sm text-gray-600">Wholesale Management</div>
-          </div>
+  const getStatCardColor = (color) => {
+    const colors = {
+      teal: 'from-teal-500 to-cyan-500',
+      red: 'from-red-500 to-pink-500',
+      blue: 'from-blue-500 to-indigo-500',
+      amber: 'from-amber-500 to-orange-500',
+      green: 'from-green-500 to-emerald-500'
+    };
+    return colors[color] || colors.blue;
+  };
+
+  const toggleSection = (section) => {
+    setExpandedSections(prev => ({
+      ...prev,
+      [section]: !prev[section]
+    }));
+  };
+
+  // Quick Stats Component
+  const QuickStatsSection = () => (
+    <div className="mb-6">
+      <button 
+        onClick={() => toggleSection('quickStats')}
+        className="w-full flex items-center justify-between p-3 text-left hover:bg-gray-50 rounded-lg transition-colors"
+      >
+        <div className="flex items-center space-x-2">
+          <Activity className="w-4 h-4 text-teal-600" />
+          <span className="text-sm font-semibold text-gray-900">Today's Overview</span>
         </div>
-      </div>
-
-      {/* Navigation Sections */}
-      <div className="flex-1 overflow-y-auto">
-        <div className="p-4 space-y-8">
-          {menuSections.map((section) => (
-            <div key={section.id} className="space-y-3">
-              {/* Section Header */}
-              <div className="space-y-1">
-                <h3 className="text-sm font-semibold text-gray-900 uppercase tracking-wider">
-                  {section.title}
-                </h3>
-                <p className="text-xs text-gray-500">{section.description}</p>
+        {expandedSections.quickStats ? 
+          <ChevronDown className="w-4 h-4 text-gray-500" /> : 
+          <ChevronRight className="w-4 h-4 text-gray-500" />
+        }
+      </button>
+      
+      {expandedSections.quickStats && (
+        <div className="grid grid-cols-2 gap-3 mt-3">
+          {Object.entries(quickStats).map(([key, stat]) => (
+            <div key={key} className={`relative p-3 rounded-xl bg-gradient-to-br ${getStatCardColor(stat.color)} text-white overflow-hidden`}>
+              <div className="relative z-10">
+                <div className="text-lg font-bold">{stat.count}</div>
+                <div className="text-xs opacity-90 capitalize">{key.replace(/([A-Z])/g, ' $1')}</div>
+                <div className="text-xs opacity-75">{stat.trend}</div>
               </div>
-
-              {/* Section Items */}
-              <div className="space-y-2">
-                {section.items.map((item) => {
-                  const IconComponent = item.icon;
-                  const isActive = activeTab === item.id;
-                  const isHovered = hoveredItem === item.id;
-                  
-                  return (
-                    <button
-                      key={item.id}
-                      className={`w-full flex items-center p-3 rounded-xl border transition-all duration-200 group ${getItemBackgroundColor(item.id, isHovered)}`}
-                      onClick={() => onTabChange(item.id)}
-                      onMouseEnter={() => setHoveredItem(item.id)}
-                      onMouseLeave={() => setHoveredItem(null)}
-                    >
-                      {/* Icon */}
-                      <div className={`flex items-center justify-center w-10 h-10 rounded-lg transition-colors ${
-                        isActive 
-                          ? 'bg-blue-500 text-white' 
-                          : isHovered 
-                            ? 'bg-gray-100 text-gray-700'
-                            : 'bg-gray-50 text-gray-600'
-                      }`}>
-                        <IconComponent className="w-5 h-5" />
-                      </div>
-
-                      {/* Content */}
-                      <div className="ml-3 flex-1 text-left">
-                        <div className="flex items-center justify-between">
-                          <span className={`font-medium text-sm ${
-                            isActive ? 'text-blue-900' : 'text-gray-900'
-                          }`}>
-                            {item.label}
-                          </span>
-                          
-                          {/* Count/Badge */}
-                          {item.count && (
-                            <span className={`text-xs px-2 py-1 rounded-full border font-medium ${
-                              item.status ? getStatusColor(item.status) : 'bg-gray-100 text-gray-700 border-gray-200'
-                            }`}>
-                              {item.count}
-                            </span>
-                          )}
-                        </div>
-                        
-                        <p className="text-xs text-gray-500 mt-0.5">
-                          {item.description}
-                        </p>
-                      </div>
-
-                      {/* Highlight indicator for important items */}
-                      {item.highlight && (
-                        <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse ml-2"></div>
-                      )}
-                    </button>
-                  );
-                })}
-              </div>
+              <div className="absolute -top-2 -right-2 w-8 h-8 bg-white/20 rounded-full"></div>
+              <div className="absolute -bottom-1 -left-1 w-6 h-6 bg-white/10 rounded-full"></div>
             </div>
           ))}
         </div>
+      )}
+    </div>
+  );
+
+  // Quick Actions Component
+  const QuickActionsSection = () => (
+    <div className="mb-6">
+      <button 
+        onClick={() => toggleSection('quickActions')}
+        className="w-full flex items-center justify-between p-3 text-left hover:bg-gray-50 rounded-lg transition-colors"
+      >
+        <div className="flex items-center space-x-2">
+          <Zap className="w-4 h-4 text-blue-600" />
+          <span className="text-sm font-semibold text-gray-900">Quick Actions</span>
+        </div>
+        {expandedSections.quickActions ? 
+          <ChevronDown className="w-4 h-4 text-gray-500" /> : 
+          <ChevronRight className="w-4 h-4 text-gray-500" />
+        }
+      </button>
+      
+      {expandedSections.quickActions && (
+        <div className="space-y-2 mt-3">
+          {[
+            { id: 'quick-prescription', label: 'New Prescription', icon: Plus, color: 'teal' },
+            { id: 'emergency-stock', label: 'Emergency Stock', icon: AlertCircle, color: 'red' },
+            { id: 'drug-interaction', label: 'Drug Checker', icon: Shield, color: 'blue' },
+            { id: 'batch-expiry', label: 'Batch Expiry', icon: Timer, color: 'amber' }
+          ].map((action) => {
+            const IconComponent = action.icon;
+            return (
+              <button
+                key={action.id}
+                onClick={() => onTabChange(action.id)}
+                className="w-full flex items-center p-2 rounded-lg bg-gray-50 hover:bg-gray-100 transition-colors group"
+              >
+                <div className={`w-8 h-8 rounded-lg bg-gradient-to-br ${getStatCardColor(action.color)} flex items-center justify-center mr-3`}>
+                  <IconComponent className="w-4 h-4 text-white" />
+                </div>
+                <span className="text-sm font-medium text-gray-700 group-hover:text-gray-900">{action.label}</span>
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+
+  // Drug Search Component
+  const DrugSearchSection = () => (
+    <div className="mb-6">
+      <div className="relative">
+        <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
+        <input
+          type="text"
+          placeholder="Search drugs..."
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          className="w-full pl-10 pr-4 py-2 border border-gray-200 rounded-lg bg-white/80 backdrop-blur-sm focus:ring-2 focus:ring-teal-500 focus:border-teal-500 transition-all"
+        />
+      </div>
+      
+      {searchQuery === '' && (
+        <div className="mt-3">
+          <div className="text-xs font-medium text-gray-500 mb-2">Recent Searches</div>
+          <div className="flex flex-wrap gap-1">
+            {recentSearches.map((drug) => (
+              <button
+                key={drug}
+                onClick={() => setSearchQuery(drug)}
+                className="text-xs px-2 py-1 bg-teal-50 text-teal-700 rounded-full hover:bg-teal-100 transition-colors"
+              >
+                {drug}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+
+  // Compliance Status Component
+  const ComplianceSection = () => (
+    <div className="mb-6">
+      <button 
+        onClick={() => toggleSection('compliance')}
+        className="w-full flex items-center justify-between p-3 text-left hover:bg-gray-50 rounded-lg transition-colors"
+      >
+        <div className="flex items-center space-x-2">
+          <BadgeCheck className="w-4 h-4 text-green-600" />
+          <span className="text-sm font-semibold text-gray-900">Compliance Status</span>
+        </div>
+        {expandedSections.compliance ? 
+          <ChevronDown className="w-4 h-4 text-gray-500" /> : 
+          <ChevronRight className="w-4 h-4 text-gray-500" />
+        }
+      </button>
+      
+      {expandedSections.compliance && (
+        <div className="space-y-2 mt-3">
+          {Object.entries(complianceStatus).map(([key, status]) => (
+            <div key={key} className="flex items-center justify-between p-2 bg-gray-50 rounded-lg">
+              <div className="flex items-center space-x-2">
+                <div className={`w-2 h-2 rounded-full ${
+                  status.color === 'green' ? 'bg-green-500' : 
+                  status.color === 'amber' ? 'bg-amber-500' : 'bg-red-500'
+                }`}></div>
+                <span className="text-xs font-medium text-gray-700 capitalize">{key.replace(/([A-Z])/g, ' $1')}</span>
+              </div>
+              <span className={`text-xs px-2 py-1 rounded-full ${
+                status.color === 'green' ? 'bg-green-100 text-green-800' : 
+                status.color === 'amber' ? 'bg-amber-100 text-amber-800' : 'bg-red-100 text-red-800'
+              }`}>
+                {status.status}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+
+  // Notifications Component
+  const NotificationsSection = () => (
+    <div className="mb-6">
+      <button 
+        onClick={() => toggleSection('notifications')}
+        className="w-full flex items-center justify-between p-3 text-left hover:bg-gray-50 rounded-lg transition-colors"
+      >
+        <div className="flex items-center space-x-2">
+          <Bell className="w-4 h-4 text-blue-600" />
+          <span className="text-sm font-semibold text-gray-900">Notifications</span>
+          {notifications.filter(n => n.urgent).length > 0 && (
+            <div className="w-2 h-2 bg-red-500 rounded-full animate-pulse"></div>
+          )}
+        </div>
+        {expandedSections.notifications ? 
+          <ChevronDown className="w-4 h-4 text-gray-500" /> : 
+          <ChevronRight className="w-4 h-4 text-gray-500" />
+        }
+      </button>
+      
+      {expandedSections.notifications && (
+        <div className="space-y-2 mt-3 max-h-40 overflow-y-auto">
+          {notifications.map((notification) => (
+            <div key={notification.id} className={`p-2 rounded-lg border-l-4 ${
+              notification.urgent ? 'border-red-500 bg-red-50' : 'border-blue-500 bg-blue-50'
+            }`}>
+              <div className="text-xs font-medium text-gray-700">{notification.message}</div>
+              {notification.urgent && (
+                <div className="flex items-center mt-1">
+                  <AlertCircle className="w-3 h-3 text-red-500 mr-1" />
+                  <span className="text-xs text-red-600">Urgent</span>
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+
+  // User Profile Section
+  const UserProfileSection = () => (
+    <div className="mb-6">
+      <div className="bg-gradient-to-br from-teal-500 to-blue-600 p-4 rounded-xl text-white relative overflow-hidden">
+        <div className="relative z-10">
+          <div className="flex items-center space-x-3">
+            <div className="w-10 h-10 bg-white/20 rounded-lg flex items-center justify-center">
+              <UserCheck className="w-5 h-5 text-white" />
+            </div>
+            <div>
+              <div className="font-semibold text-sm">Dr. Rajesh Kumar</div>
+              <div className="text-xs opacity-90">Licensed Pharmacist</div>
+              <div className="text-xs opacity-75">License: DL-12345678</div>
+            </div>
+          </div>
+          <div className="mt-3 flex items-center justify-between text-xs">
+            <div>
+              <div className="opacity-75">Shift: 9 AM - 9 PM</div>
+              <div className="opacity-75">Time: {currentTime.toLocaleTimeString()}</div>
+            </div>
+            <button className="bg-white/20 hover:bg-white/30 px-2 py-1 rounded-lg transition-colors">
+              <Settings className="w-3 h-3" />
+            </button>
+          </div>
+        </div>
+        <div className="absolute -top-4 -right-4 w-16 h-16 bg-white/10 rounded-full"></div>
+        <div className="absolute -bottom-2 -left-2 w-8 h-8 bg-white/5 rounded-full"></div>
+      </div>
+    </div>
+  );
+
+  return (
+    <div className={`w-80 h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-teal-50 border-r border-gray-200 flex flex-col ${className} relative overflow-hidden`}>
+      {/* Medical Background Pattern */}
+      <div className="absolute inset-0 opacity-5">
+        <div className="absolute top-10 left-10">
+          <Cross className="w-16 h-16 text-teal-600 rotate-12" />
+        </div>
+        <div className="absolute top-32 right-8">
+          <Atom className="w-12 h-12 text-blue-600 -rotate-12" />
+        </div>
+        <div className="absolute bottom-32 left-6">
+          <Heart className="w-14 h-14 text-red-400 rotate-6" />
+        </div>
+        <div className="absolute bottom-20 right-16">
+          <Pill className="w-10 h-10 text-teal-500 -rotate-45" />
+        </div>
       </div>
 
-      {/* Footer Status */}
-      <div className="p-4 border-t border-gray-100">
-        <div className="bg-green-50 border border-green-200 rounded-lg p-3">
-          <div className="flex items-center">
-            <CheckCircle2 className="w-4 h-4 text-green-600" />
-            <span className="ml-2 text-sm font-medium text-green-800">System Online</span>
+      {/* Header with Medical Theme */}
+      <div className="relative z-10 p-6 border-b border-gray-200/50 bg-white/80 backdrop-blur-sm">
+        <div className="flex items-center space-x-3">
+          <div className="w-12 h-12 bg-gradient-to-br from-teal-500 to-blue-600 rounded-xl flex items-center justify-center shadow-lg">
+            <Cross className="w-6 h-6 text-white" />
           </div>
-          <div className="text-xs text-green-600 mt-1">
-            Last sync: {new Date().toLocaleTimeString()}
+          <div>
+            <div className="font-bold text-gray-900 text-lg">AASO Pharma+</div>
+            <div className="text-sm text-gray-600 flex items-center">
+              <Heart className="w-3 h-3 mr-1 text-red-500" />
+              Healthcare Management
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Main Content */}
+      <div className="flex-1 overflow-y-auto relative z-10">
+        <div className="p-4 space-y-6">
+          {/* User Profile Section */}
+          <UserProfileSection />
+          
+          {/* Quick Stats Section */}
+          <QuickStatsSection />
+          
+          {/* Drug Search Section */}
+          <DrugSearchSection />
+          
+          {/* Quick Actions Section */}
+          <QuickActionsSection />
+          
+          {/* Compliance Section */}
+          <ComplianceSection />
+          
+          {/* Notifications Section */}
+          <NotificationsSection />
+
+          {/* Navigation Sections */}
+          {menuSections.map((section) => {
+            const SectionIcon = section.icon;
+            return (
+              <div key={section.id} className="space-y-3">
+                {/* Section Header with Medical Icons */}
+                <div className="flex items-center space-x-2 p-3 bg-white/60 backdrop-blur-sm rounded-lg border border-gray-200/50">
+                  <div className="w-8 h-8 bg-gradient-to-br from-teal-500 to-blue-600 rounded-lg flex items-center justify-center">
+                    <SectionIcon className="w-4 h-4 text-white" />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-semibold text-gray-900">
+                      {section.title}
+                    </h3>
+                    <p className="text-xs text-gray-500">{section.description}</p>
+                  </div>
+                </div>
+
+                {/* Section Items with Enhanced Medical Styling */}
+                <div className="space-y-2 ml-4">
+                  {section.items.map((item) => {
+                    const IconComponent = item.icon;
+                    const isActive = activeTab === item.id;
+                    const isHovered = hoveredItem === item.id;
+                    
+                    return (
+                      <button
+                        key={item.id}
+                        className={`w-full flex items-center p-3 rounded-xl border transition-all duration-300 group transform hover:scale-105 ${getItemBackgroundColor(item.id, isHovered)}`}
+                        onClick={() => onTabChange(item.id)}
+                        onMouseEnter={() => setHoveredItem(item.id)}
+                        onMouseLeave={() => setHoveredItem(null)}
+                      >
+                        {/* Icon with Medical Theme */}
+                        <div className={`flex items-center justify-center w-10 h-10 rounded-lg transition-all duration-300 ${
+                          isActive 
+                            ? 'bg-gradient-to-br from-teal-500 to-blue-600 text-white shadow-lg' 
+                            : isHovered 
+                              ? 'bg-gradient-to-br from-gray-100 to-gray-200 text-gray-700'
+                              : 'bg-gradient-to-br from-gray-50 to-gray-100 text-gray-600'
+                        }`}>
+                          <IconComponent className="w-5 h-5" />
+                        </div>
+
+                        {/* Content */}
+                        <div className="ml-3 flex-1 text-left">
+                          <div className="flex items-center justify-between">
+                            <span className={`font-medium text-sm ${
+                              isActive ? 'text-teal-900' : 'text-gray-900'
+                            }`}>
+                              {item.label}
+                            </span>
+                            
+                            {/* Count/Badge with Medical Colors */}
+                            {item.count && (
+                              <span className={`text-xs px-2 py-1 rounded-full border font-medium transition-all duration-200 ${
+                                item.status ? getStatusColor(item.status) : 'bg-teal-100 text-teal-700 border-teal-200'
+                              }`}>
+                                {item.count}
+                              </span>
+                            )}
+                          </div>
+                          
+                          <p className="text-xs text-gray-500 mt-0.5">
+                            {item.description}
+                          </p>
+                        </div>
+
+                        {/* Pulse indicator for important items */}
+                        {item.highlight && (
+                          <div className="flex items-center ml-2">
+                            <div className="w-2 h-2 bg-teal-400 rounded-full animate-pulse"></div>
+                            <div className="w-3 h-3 bg-teal-400/30 rounded-full animate-ping absolute"></div>
+                          </div>
+                        )}
+
+                        {/* Medical urgency indicators */}
+                        {item.status === 'alert' && (
+                          <div className="ml-2">
+                            <AlertTriangle className="w-4 h-4 text-red-500 animate-pulse" />
+                          </div>
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Enhanced Footer with Medical Status */}
+      <div className="relative z-10 p-4 border-t border-gray-200/50 bg-white/80 backdrop-blur-sm">
+        <div className="bg-gradient-to-r from-teal-50 to-blue-50 border border-teal-200 rounded-xl p-3">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center">
+              <div className="relative">
+                <Heart className="w-4 h-4 text-teal-600" />
+                <div className="absolute -inset-1 w-6 h-6 bg-teal-400/20 rounded-full animate-ping"></div>
+              </div>
+              <span className="ml-2 text-sm font-medium text-teal-800">System Healthy</span>
+            </div>
+            <div className="flex items-center space-x-2 text-xs text-teal-600">
+              <Activity className="w-3 h-3" />
+              <span>Live</span>
+            </div>
+          </div>
+          <div className="text-xs text-teal-600 mt-1 flex items-center justify-between">
+            <span>Last health check: {new Date().toLocaleTimeString()}</span>
+            <div className="flex items-center space-x-1">
+              <div className="w-1 h-1 bg-teal-500 rounded-full"></div>
+              <div className="w-1 h-1 bg-blue-500 rounded-full"></div>
+              <div className="w-1 h-1 bg-green-500 rounded-full"></div>
+            </div>
           </div>
         </div>
       </div>
