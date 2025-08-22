@@ -70,15 +70,22 @@ export {
 // Enhanced Document Flow - NEW
 export { default as EnhancedGlobalDocumentFlow } from './layout/EnhancedGlobalDocumentFlow';
 
+// NEW Global Layout Components for World-Class UX
+export { default as DocumentLayout } from './layout/DocumentLayout';
+export { default as SectionHeader } from './ui/SectionHeader';
+export { default as FormGrid, FormField } from './ui/FormGrid';
+export { default as ActionButton } from './ui/ActionButton';
+export { default as ContentSection } from './ui/ContentSection';
+
 // UI Components - NEW
 export * from './ui';
+export { default as Button } from './ui/Button.tsx';
 export { 
   // Forms
   Select,
   DatePicker,
   NumberInput,
   CurrencyInput,
-  Button,
   SearchBar,
   // Display
   DataTable,
@@ -90,6 +97,7 @@ export {
   ItemsTable,
   Card,
   CardSection,
+  Pagination,
   Badge,
   BadgeGroup,
   SimpleStatusBadge,

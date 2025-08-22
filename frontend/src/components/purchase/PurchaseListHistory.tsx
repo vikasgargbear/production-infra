@@ -4,7 +4,7 @@ import {
   MoreHorizontal, Package, ShoppingBag, Search, Calendar, ChevronDown,
   X, Check, AlertCircle, RefreshCw, CheckCircle, Clock
 } from 'lucide-react';
-import { Button, StatusBadge, DataTable, InlineFilterPanel } from '../global';
+import { Button, StatusBadge, DataTable, InlineFilterPanel, Pagination } from '../global';
 import { purchasesApi } from '../../services/api';
 import { formatCurrency } from '../../utils/formatters';
 
@@ -186,17 +186,31 @@ const PurchaseListHistory: React.FC<PurchaseListHistoryProps> = ({ onClose }) =>
           po_type: purchase.po_type || 'purchase_order',
           created_at: purchase.created_at,
           expected_delivery_date: purchase.expected_delivery_date,
-          items_count: purchase.items?.length || 0
+          items_count: purchase.items_count || purchase.items?.length || 0
         })) || [];
 
         console.log('Transformed purchases:', transformedPurchases);
+        console.log('Pagination data from API:', response.data.pagination);
+        
         setPurchases(transformedPurchases);
-        setPagination({
-          total: response.data.total || transformedPurchases.length,
-          page: page,
-          per_page: pagination.per_page,
-          total_pages: Math.ceil((response.data.total || transformedPurchases.length) / pagination.per_page)
-        });
+        
+        // Use the pagination data from the API response
+        if (response.data.pagination) {
+          setPagination({
+            total: response.data.pagination.total,
+            page: response.data.pagination.page,
+            per_page: response.data.pagination.per_page,
+            total_pages: response.data.pagination.total_pages
+          });
+        } else {
+          // Fallback if pagination is not in response
+          setPagination({
+            total: transformedPurchases.length,
+            page: page,
+            per_page: pagination.per_page,
+            total_pages: Math.ceil(transformedPurchases.length / pagination.per_page)
+          });
+        }
       } else {
         setError('No data received from API');
       }
@@ -1032,34 +1046,15 @@ const PurchaseListHistory: React.FC<PurchaseListHistoryProps> = ({ onClose }) =>
                 />
                 
                 {/* Pagination Controls */}
-                {pagination.total_pages > 1 && (
-                  <div className="flex items-center justify-between px-6 py-4 border-t border-gray-200">
-                    <div className="text-sm text-gray-600">
-                      Showing {filteredPurchases.length} of {pagination.total} purchases
-                    </div>
-                    <div className="flex items-center space-x-2">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => fetchPurchases(pagination.page - 1)}
-                        disabled={pagination.page <= 1 || loading}
-                      >
-                        Previous
-                      </Button>
-                      <span className="text-sm text-gray-600">
-                        Page {pagination.page} of {pagination.total_pages}
-                      </span>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => fetchPurchases(pagination.page + 1)}
-                        disabled={pagination.page >= pagination.total_pages || loading}
-                      >
-                        Next
-                      </Button>
-                    </div>
-                  </div>
-                )}
+                <Pagination
+                  currentPage={pagination.page}
+                  totalPages={pagination.total_pages}
+                  totalItems={pagination.total}
+                  itemsPerPage={pagination.per_page}
+                  onPageChange={(page) => fetchPurchases(page)}
+                  loading={loading}
+                  itemName="purchases"
+                />
               </div>
             )}
           </div>

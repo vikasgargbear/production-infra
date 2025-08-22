@@ -305,7 +305,7 @@ const InvoiceManagement = () => {
   }
 
   return (
-    <div className="p-6">
+    <div className="max-w-7xl mx-auto p-6">
       {/* Header */}
       <div className="mb-6">
         <h2 className="text-2xl font-bold text-gray-900">Invoice Management</h2>

@@ -539,13 +539,13 @@ Expected Delivery: ${challan.expected_delivery_date}
           </div>
 
           {/* Content - Single Page */}
-          <div className="flex-1 overflow-y-auto">
-            <div className="max-w-4xl mx-auto p-6">
+          <div className="flex-1 overflow-y-auto bg-blue-50">
+            <div className="max-w-6xl mx-auto px-6 py-6">
               
               {/* Top Section - Dates and Import */}
               <div className="grid grid-cols-3 gap-4 mb-6">
                 <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">Challan Date</label>
+                  <label className="block text-sm font-medium text-gray-600 mb-2">Challan Date</label>
                   <div className="relative">
                     <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
                     <input
@@ -557,7 +557,7 @@ Expected Delivery: ${challan.expected_delivery_date}
                   </div>
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">Expected Delivery</label>
+                  <label className="block text-sm font-medium text-gray-600 mb-2">Expected Delivery</label>
                   <div className="relative">
                     <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
                     <input
@@ -569,7 +569,7 @@ Expected Delivery: ${challan.expected_delivery_date}
                   </div>
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">Import Data</label>
+                  <label className="block text-sm font-medium text-gray-600 mb-2">Import Data</label>
                   <button
                     onClick={() => setShowImportModal(true)}
                     className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg hover:bg-blue-50 transition-colors flex items-center justify-center gap-2 h-[38px]"
@@ -747,8 +747,8 @@ Expected Delivery: ${challan.expected_delivery_date}
         </div>
 
         {/* Content */}
-        <div className="flex-1 overflow-y-auto">
-          <div className="max-w-4xl mx-auto p-6">
+        <div className="flex-1 overflow-y-auto bg-blue-50">
+          <div className="max-w-6xl mx-auto px-6 py-6">
             
             {/* Transport Details Section - Global Tile Style */}
             <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden mb-6">
@@ -764,7 +764,7 @@ Expected Delivery: ${challan.expected_delivery_date}
               <div className="p-6">
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                 <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">Transport Company</label>
+                  <label className="block text-sm font-medium text-gray-600 mb-2">Transport Company</label>
                   <input
                     type="text"
                     value={challan.transport_company}
@@ -775,7 +775,7 @@ Expected Delivery: ${challan.expected_delivery_date}
                 </div>
                 
                 <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">Vehicle Number</label>
+                  <label className="block text-sm font-medium text-gray-600 mb-2">Vehicle Number</label>
                   <input
                     type="text"
                     value={challan.vehicle_number}
@@ -786,7 +786,7 @@ Expected Delivery: ${challan.expected_delivery_date}
                 </div>
                 
                 <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">Driver Phone</label>
+                  <label className="block text-sm font-medium text-gray-600 mb-2">Driver Phone</label>
                   <input
                     type="tel"
                     value={challan.driver_phone}
@@ -797,7 +797,7 @@ Expected Delivery: ${challan.expected_delivery_date}
                 </div>
                 
                 <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">Freight Charges</label>
+                  <label className="block text-sm font-medium text-gray-600 mb-2">Freight Charges</label>
                   <div className="relative">
                     <span className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-500 text-sm">₹</span>
                     <input

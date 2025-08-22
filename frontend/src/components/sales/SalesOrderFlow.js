@@ -960,7 +960,7 @@ Expected Delivery: ${order.expected_delivery_date}
 
         {/* Content */}
         <div className="flex-1 overflow-y-auto">
-          <div className="max-w-4xl mx-auto p-6">
+          <div className="max-w-6xl mx-auto p-6">
             
             {/* Review Page Header */}
             <div className="flex justify-between items-center mb-6">
@@ -1477,7 +1477,7 @@ const ImportFromDocumentModal = ({ isOpen, onClose, onImport }) => {
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-white rounded-lg w-full max-w-3xl mx-4 max-h-[80vh] flex flex-col">
+      <div className="bg-white rounded-lg w-full max-w-2xl mx-4 max-h-[80vh] flex flex-col">
         {/* Header */}
         <div className="flex items-center justify-between p-4 border-b">
           <h3 className="text-lg font-semibold">Import from Document</h3>

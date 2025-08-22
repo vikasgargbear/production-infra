@@ -5,7 +5,7 @@ import {
   X, Check, AlertCircle, RefreshCw, Search, Mail,
   Share2, Copy, MoreVertical, CheckCircle, Clock
 } from 'lucide-react';
-import { Button, StatusBadge, DataTable, InlineFilterPanel } from '../global';
+import { Button, StatusBadge, DataTable, InlineFilterPanel, Pagination } from '../global';
 import InvoiceApiService from '../../services/invoiceApiService';
 import debugLogger from '../../utils/debugLogger';
 
@@ -1071,34 +1071,15 @@ const InvoiceListV2: React.FC<InvoiceListProps> = ({ onClose }) => {
                 />
                 
                 {/* Pagination Controls */}
-                {pagination.total_pages > 1 && (
-                  <div className="flex items-center justify-between px-6 py-4 border-t border-gray-200">
-                    <div className="text-sm text-gray-600">
-                      Showing {filteredInvoices.length} of {pagination.total} invoices
-                    </div>
-                    <div className="flex items-center space-x-2">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => fetchInvoices(pagination.page - 1)}
-                        disabled={pagination.page <= 1 || loading}
-                      >
-                        Previous
-                      </Button>
-                      <span className="text-sm text-gray-600">
-                        Page {pagination.page} of {pagination.total_pages}
-                      </span>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => fetchInvoices(pagination.page + 1)}
-                        disabled={pagination.page >= pagination.total_pages || loading}
-                      >
-                        Next
-                      </Button>
-                    </div>
-                  </div>
-                )}
+                <Pagination
+                  currentPage={pagination.page}
+                  totalPages={pagination.total_pages}
+                  totalItems={pagination.total}
+                  itemsPerPage={pagination.per_page}
+                  onPageChange={(page) => fetchInvoices(page)}
+                  loading={loading}
+                  itemName="invoices"
+                />
               </div>
             )}
           </div>

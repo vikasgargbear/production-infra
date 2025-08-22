@@ -3,7 +3,6 @@ export { default as Select } from './forms/Select';
 export { default as DatePicker } from './forms/DatePicker';
 export { default as NumberInput } from './forms/NumberInput';
 export { default as CurrencyInput } from './forms/CurrencyInput';
-export { default as Button } from './Button';
 export { default as SearchBar } from './SearchBar';
 export { default as AddNewButton } from './AddNewButton';
 export { default as CustomerCreationB2B } from './forms/CustomerCreationB2B';
@@ -22,6 +21,7 @@ export { default as Badge, BadgeGroup, SimpleStatusBadge } from './Badge';
 export { default as DocumentFooter } from './display/DocumentFooter';
 export { default as DocumentSummaryTop } from './display/DocumentSummaryTop';
 export { default as PDFUploadCard } from './PDFUploadCard';
+export { Pagination } from './Pagination';
 
 // Layout Components
 export { default as ModuleHeader } from './ModuleHeader';

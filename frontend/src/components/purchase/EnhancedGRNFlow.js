@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Package, FileText, Truck, Calendar, Building2, Plus, Save, Printer } from 'lucide-react';
+import { Package, FileText, Truck, Calendar, Building2, Plus, Save, Printer, CheckCircle, CreditCard } from 'lucide-react';
 import { suppliersApi, productsApi, purchaseApi } from '../../services/api';
 import { searchCache } from '../../utils/searchCache';
 import { 
@@ -12,7 +12,9 @@ import {
   ProductCreationModal,
   GenericSuccessModal,
   ContentCard,
-  useToast
+  useToast,
+  NumericInput,
+  MonthYearPicker
 } from '../global';
 import documentNumberService from '../../services/documentNumberService';
 import { PURCHASE_CONFIG } from '../../config/purchase.config';
@@ -45,14 +47,6 @@ const EnhancedGRNFlow = ({ onClose, prefilledData = null }) => {
     supplier_invoice_no: '',
     supplier_invoice_date: new Date().toISOString().split('T')[0],
     items: prefilledData?.items || [],
-    transport_details: {
-      transporter_name: '',
-      vehicle_no: '',
-      lr_no: '',
-      lr_date: '',
-      received_by: '',
-      received_date: new Date().toISOString().split('T')[0]
-    },
     quality_check: {
       checked_by: '',
       check_date: new Date().toISOString().split('T')[0],
@@ -155,11 +149,15 @@ const EnhancedGRNFlow = ({ onClose, prefilledData = null }) => {
       ordered_qty: 0,
       received_qty: 1,
       unit: product.unit || product.uom || 'Strip',
-      unit_price: product.purchase_price || 0,
+      unit_price: product.purchase_price || (product.mrp || 0) * 0.7,
       mrp: product.mrp || 0,
+      selling_price: product.sale_price || product.selling_price || product.mrp || 0,
       tax_percent: product.tax_percent || 12,
       discount_percent: 0,
       free_quantity: 0,
+      pack_type: 'STRIP',
+      pack_size: 10,
+      strips_per_box: 10,
       quality_status: 'Approved',
       total: product.purchase_price || 0
     };
@@ -218,7 +216,6 @@ const EnhancedGRNFlow = ({ onClose, prefilledData = null }) => {
           tax_percent: parseFloat(item.tax_percent) || 12,
           quality_status: item.quality_status || 'Approved'
         })),
-        transport_details: grn.transport_details,
         quality_check: grn.quality_check,
         notes: grn.notes
       };
@@ -283,19 +280,10 @@ const EnhancedGRNFlow = ({ onClose, prefilledData = null }) => {
       <div className="mb-6">
         <div className="flex items-center gap-2 mb-3">
           <FileText className="w-5 h-5 text-gray-600" />
-          <h3 className="text-sm font-semibold text-gray-700">GRN DETAILS</h3>
+          <h3 className="text-sm font-semibold text-gray-700">RECEIPT INFORMATION</h3>
         </div>
         <ContentCard title={null} subtitle={null} actions={null}>
-          <div className="grid grid-cols-4 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-600 mb-1">GRN Number</label>
-              <input
-                type="text"
-                value={grn.grn_no}
-                readOnly
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50"
-              />
-            </div>
+          <div className="grid grid-cols-3 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-600 mb-1">GRN Date</label>
               <div className="relative">
@@ -391,9 +379,13 @@ const EnhancedGRNFlow = ({ onClose, prefilledData = null }) => {
         />
       </div>
 
-      {/* Items Table */}
+      {/* Items Table - Enhanced */}
       {grn.items && grn.items.length > 0 && (
-        <ContentCard title="Goods Received" subtitle={null} actions={null} className="mb-6">
+        <>
+          <div className="flex items-center gap-2 mb-3">
+            <Package className="w-5 h-5 text-gray-600" />
+            <h3 className="text-sm font-semibold text-gray-700">RECEIVED ITEMS</h3>
+          </div>
           <ItemsTable
             items={grn.items.map(item => ({
               ...item,
@@ -405,7 +397,7 @@ const EnhancedGRNFlow = ({ onClose, prefilledData = null }) => {
               mrp: item.mrp || 0,
               batch_number: item.batch_number || '',
               expiry_date: item.expiry_date || '',
-              total: (item.received_qty * item.unit_price * (1 + (item.tax_percent || 0) / 100)).toFixed(2)
+              total: ((item.received_qty || 0) * (item.unit_price || 0) * (1 + ((item.tax_percent || 0) / 100))).toFixed(2)
             }))}
             onUpdateItem={(index, field, value) => {
               const mappedField = field === 'rate' ? 'unit_price' : 
@@ -416,8 +408,55 @@ const EnhancedGRNFlow = ({ onClose, prefilledData = null }) => {
             }}
             onRemoveItem={handleRemoveItem}
             showTotals={false}
-            columns={['product', 'batch', 'expiry', 'ordered', 'quantity', 'unit', 'mrp', 'rate', 'tax', 'total']}
+            title=""
+            columns={['product', 'pack_type', 'pack_config', 'batch', 'expiry', 'ordered', 'received', 'free', 'mrp', 'rate', 'disc', 'tax', 'status', 'total']}
             customColumns={{
+              pack_type: {
+                label: 'Pack',
+                align: 'center',
+                render: (item, index) => (
+                  <select
+                    value={item.pack_type || 'STRIP'}
+                    onChange={(e) => handleUpdateItem(index, 'pack_type', e.target.value)}
+                    className="w-16 text-xs border-0 bg-transparent focus:ring-2 focus:ring-blue-500 rounded-md"
+                  >
+                    <option value="STRIP">STRIP</option>
+                    <option value="BOX">BOX</option>
+                    <option value="BOTTLE">BOTTLE</option>
+                    <option value="VIAL">VIAL</option>
+                    <option value="TUBE">TUBE</option>
+                  </select>
+                )
+              },
+              pack_config: {
+                label: 'Pack Size',
+                align: 'center',
+                render: (item, index) => (
+                  <div className="flex gap-1">
+                    <NumericInput
+                      value={item.pack_size}
+                      onChange={(value) => handleUpdateItem(index, 'pack_size', value)}
+                      min={1}
+                      defaultValue={10}
+                      width="w-8"
+                      align="center"
+                      clearable={false}
+                      className="text-xs"
+                    />
+                    <span className="text-xs text-gray-400">×</span>
+                    <NumericInput
+                      value={item.strips_per_box}
+                      onChange={(value) => handleUpdateItem(index, 'strips_per_box', value)}
+                      min={1}
+                      defaultValue={10}
+                      width="w-8"
+                      align="center"
+                      clearable={false}
+                      className="text-xs"
+                    />
+                  </div>
+                )
+              },
               batch: {
                 label: 'Batch',
                 align: 'center',
@@ -426,7 +465,7 @@ const EnhancedGRNFlow = ({ onClose, prefilledData = null }) => {
                     type="text"
                     value={item.batch_number || ''}
                     onChange={(e) => handleUpdateItem(index, 'batch_number', e.target.value)}
-                    className="w-24 text-center border-0 bg-transparent focus:ring-2 focus:ring-blue-500 rounded-md"
+                    className="w-20 text-xs text-center border-0 bg-transparent focus:ring-2 focus:ring-blue-500 rounded-md"
                     placeholder="Batch"
                     required
                   />
@@ -436,140 +475,316 @@ const EnhancedGRNFlow = ({ onClose, prefilledData = null }) => {
                 label: 'Expiry',
                 align: 'center',
                 render: (item, index) => (
-                  <input
-                    type="date"
-                    value={item.expiry_date || ''}
-                    onChange={(e) => handleUpdateItem(index, 'expiry_date', e.target.value)}
-                    className="w-32 text-center border-0 bg-transparent focus:ring-2 focus:ring-blue-500 rounded-md"
-                    required
+                  <MonthYearPicker
+                    value={item.expiry_date}
+                    onChange={(value) => handleUpdateItem(index, 'expiry_date', value)}
+                    width="w-20"
+                    className="text-xs"
                   />
                 )
               },
               ordered: {
                 label: 'Ordered',
                 align: 'center',
-                render: (item) => (
-                  <span className="text-gray-600">{item.ordered_qty || 0}</span>
+                render: (item, index) => (
+                  <NumericInput
+                    value={item.ordered_qty}
+                    onChange={(value) => handleUpdateItem(index, 'ordered_qty', value)}
+                    min={0}
+                    defaultValue={0}
+                    width="w-12"
+                    align="center"
+                    clearable={true}
+                  />
                 )
+              },
+              received: {
+                label: 'Received',
+                align: 'center',
+                render: (item, index) => (
+                  <NumericInput
+                    value={item.received_qty}
+                    onChange={(value) => handleUpdateItem(index, 'received_qty', value)}
+                    min={0}
+                    defaultValue={1}
+                    width="w-12"
+                    align="center"
+                    clearable={true}
+                  />
+                )
+              },
+              free: {
+                label: 'Free',
+                align: 'center',
+                render: (item, index) => (
+                  <NumericInput
+                    value={item.free_quantity}
+                    onChange={(value) => handleUpdateItem(index, 'free_quantity', value)}
+                    min={0}
+                    defaultValue={0}
+                    width="w-10"
+                    align="center"
+                    clearable={true}
+                  />
+                )
+              },
+              mrp: {
+                label: 'MRP',
+                align: 'center',
+                render: (item, index) => (
+                  <NumericInput
+                    value={item.mrp}
+                    onChange={(value) => handleUpdateItem(index, 'mrp', value)}
+                    min={0}
+                    defaultValue={0}
+                    decimalPlaces={2}
+                    width="w-16"
+                    align="center"
+                    clearable={true}
+                    prefix="₹"
+                  />
+                )
+              },
+              rate: {
+                label: 'Rate',
+                align: 'center',
+                render: (item, index) => (
+                  <NumericInput
+                    value={item.unit_price}
+                    onChange={(value) => handleUpdateItem(index, 'unit_price', value)}
+                    min={0}
+                    defaultValue={0}
+                    decimalPlaces={2}
+                    width="w-16"
+                    align="center"
+                    clearable={true}
+                    prefix="₹"
+                  />
+                )
+              },
+              disc: {
+                label: 'Disc%',
+                align: 'center',
+                render: (item, index) => (
+                  <NumericInput
+                    value={item.discount_percent}
+                    onChange={(value) => handleUpdateItem(index, 'discount_percent', value)}
+                    min={0}
+                    max={100}
+                    defaultValue={0}
+                    decimalPlaces={1}
+                    width="w-12"
+                    align="center"
+                    clearable={true}
+                    suffix="%"
+                  />
+                )
+              },
+              tax: {
+                label: 'Tax%',
+                align: 'center',
+                render: (item, index) => (
+                  <select
+                    value={item.tax_percent || 12}
+                    onChange={(e) => handleUpdateItem(index, 'tax_percent', parseFloat(e.target.value))}
+                    className="w-12 text-xs text-center border-0 bg-transparent focus:ring-2 focus:ring-blue-500 rounded-md"
+                  >
+                    <option value="0">0%</option>
+                    <option value="5">5%</option>
+                    <option value="12">12%</option>
+                    <option value="18">18%</option>
+                    <option value="28">28%</option>
+                  </select>
+                )
+              },
+              status: {
+                label: 'Status',
+                align: 'center',
+                render: (item, index) => (
+                  <select
+                    value={item.quality_status || 'Approved'}
+                    onChange={(e) => handleUpdateItem(index, 'quality_status', e.target.value)}
+                    className={`w-20 text-xs text-center border-0 bg-transparent focus:ring-2 focus:ring-blue-500 rounded-md ${
+                      item.quality_status === 'Approved' ? 'text-green-600' : 
+                      item.quality_status === 'Rejected' ? 'text-red-600' : 'text-yellow-600'
+                    }`}
+                  >
+                    <option value="Approved">Approved</option>
+                    <option value="Pending">Pending</option>
+                    <option value="Rejected">Rejected</option>
+                  </select>
+                )
+              },
+              total: {
+                label: 'Total',
+                align: 'right',
+                render: (item) => {
+                  const qty = parseFloat(item.received_qty) || 0;
+                  const price = parseFloat(item.unit_price) || 0;
+                  const taxPercent = parseFloat(item.tax_percent) || 0;
+                  const subtotal = qty * price;
+                  const tax = subtotal * (taxPercent / 100);
+                  const total = subtotal + tax;
+                  return <span className="font-medium">₹{total.toFixed(2)}</span>;
+                }
               }
             }}
-            title="Goods Received"
           />
-        </ContentCard>
+        </>
       )}
       {errors.items && (
         <p className="text-red-500 text-xs mt-1">{errors.items}</p>
       )}
 
-      {/* Transport Details */}
-      <div className="mb-6">
-        <div className="flex items-center gap-2 mb-3">
-          <Truck className="w-5 h-5 text-gray-600" />
-          <h3 className="text-sm font-semibold text-gray-700">TRANSPORT DETAILS</h3>
-        </div>
-        <ContentCard title={null} subtitle={null} actions={null}>
-          <div className="grid grid-cols-3 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-600 mb-1">Transporter Name</label>
-              <input
-                type="text"
-                value={grn.transport_details?.transporter_name || ''}
-                onChange={(e) => setGrn(prev => ({ 
-                  ...prev, 
-                  transport_details: { ...prev.transport_details, transporter_name: e.target.value }
-                }))}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500"
-                placeholder="Transporter company name"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-600 mb-1">Vehicle Number</label>
-              <input
-                type="text"
-                value={grn.transport_details?.vehicle_no || ''}
-                onChange={(e) => setGrn(prev => ({ 
-                  ...prev, 
-                  transport_details: { ...prev.transport_details, vehicle_no: e.target.value }
-                }))}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500"
-                placeholder="Vehicle registration number"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-600 mb-1">LR Number</label>
-              <input
-                type="text"
-                value={grn.transport_details?.lr_no || ''}
-                onChange={(e) => setGrn(prev => ({ 
-                  ...prev, 
-                  transport_details: { ...prev.transport_details, lr_no: e.target.value }
-                }))}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500"
-                placeholder="Lorry receipt number"
-              />
-            </div>
-          </div>
-        </ContentCard>
-      </div>
     </>
   );
 
   // Review content for step 2
   const reviewContent = (
     <>
-      {/* GRN Summary */}
-      <DocumentSummaryTop
-        document={grn}
-        onDocumentUpdate={(updates) => setGrn(prev => ({ ...prev, ...updates }))}
-        documentType="grn"
-        showDelivery={false}
-        showPayment={false}
-        showReference={true}
-        customFields={[
-          {
-            key: 'quality_check.checked_by',
-            label: 'Quality Checked By',
-            type: 'text',
-            placeholder: 'QC Inspector name'
-          },
-          {
-            key: 'quality_check.remarks',
-            label: 'Quality Remarks',
-            type: 'text',
-            placeholder: 'Quality inspection notes'
-          }
-        ]}
-      />
+      {/* Quality Check & Transport Details */}
+      <div className="mb-6">
+        <div className="flex items-center gap-2 mb-3">
+          <CheckCircle className="w-5 h-5 text-gray-600" />
+          <h3 className="text-sm font-semibold text-gray-700">QUALITY CHECK & VERIFICATION</h3>
+        </div>
+        <ContentCard title={null} subtitle={null} actions={null}>
+          <div className="grid grid-cols-3 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-600 mb-1">Checked By</label>
+              <input
+                type="text"
+                value={grn.quality_check?.checked_by || ''}
+                onChange={(e) => setGrn(prev => ({ 
+                  ...prev, 
+                  quality_check: { ...prev.quality_check, checked_by: e.target.value }
+                }))}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500"
+                placeholder="QC Inspector name"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-600 mb-1">Quality Status</label>
+              <select
+                value={grn.quality_check?.quality_status || 'Approved'}
+                onChange={(e) => setGrn(prev => ({ 
+                  ...prev, 
+                  quality_check: { ...prev.quality_check, quality_status: e.target.value }
+                }))}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500"
+              >
+                <option value="Approved">Approved</option>
+                <option value="Partial">Partial Approval</option>
+                <option value="Rejected">Rejected</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-600 mb-1">Check Date</label>
+              <div className="relative">
+                <Calendar className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
+                <input
+                  type="date"
+                  value={grn.quality_check?.check_date || new Date().toISOString().split('T')[0]}
+                  onChange={(e) => setGrn(prev => ({ 
+                    ...prev, 
+                    quality_check: { ...prev.quality_check, check_date: e.target.value }
+                  }))}
+                  className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500"
+                />
+              </div>
+            </div>
+            <div className="col-span-3">
+              <label className="block text-sm font-medium text-gray-600 mb-1">Quality Remarks</label>
+              <textarea
+                value={grn.quality_check?.remarks || ''}
+                onChange={(e) => setGrn(prev => ({ 
+                  ...prev, 
+                  quality_check: { ...prev.quality_check, remarks: e.target.value }
+                }))}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500"
+                placeholder="Quality inspection notes..."
+                rows="2"
+              />
+            </div>
+          </div>
+        </ContentCard>
+      </div>
 
-      {/* GRN Preview */}
-      <ContentCard title="Goods Receipt Note" subtitle={null} actions={null}>
+      {/* GRN Preview with Actions */}
+      <ContentCard 
+        title="Goods Receipt Note Preview" 
+        subtitle={null} 
+        actions={
+          <div className="flex gap-2">
+            <button
+              onClick={handleSaveGRN}
+              disabled={saving}
+              className="flex items-center gap-2 px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg transition-colors text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <Save className="w-4 h-4" />
+              {saving ? 'Saving...' : 'Save GRN'}
+            </button>
+            <button
+              onClick={handlePrint}
+              className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors text-sm font-medium"
+            >
+              <Printer className="w-4 h-4" />
+              Print
+            </button>
+          </div>
+        }
+      >
         <div className="bg-white rounded-lg p-6">
+          {/* Company Branding Header */}
+          <div className="text-center mb-6 pb-4 border-b-2 border-gray-300">
+            <h1 className="text-3xl font-bold text-green-600 mb-2">PHARMA SOLUTIONS PVT. LTD.</h1>
+            <p className="text-sm text-gray-600">Wholesale Pharmaceutical Distributor</p>
+            <p className="text-sm text-gray-600">GST: 27AAACP1234B1Z5 | Drug License: 20B/123456</p>
+            <p className="text-sm text-gray-600">123 Business Park, Mumbai - 400001 | Tel: +91-22-12345678</p>
+          </div>
+
           <div className="text-center mb-6">
             <h2 className="text-2xl font-bold">GOODS RECEIPT NOTE</h2>
-            <p className="text-gray-600">GRN No: {grn.grn_no}</p>
+            <p className="text-gray-600">GRN No: <span className="font-semibold">{grn.grn_no}</span></p>
             <p className="text-gray-600">Date: {new Date(grn.grn_date).toLocaleDateString('en-IN')}</p>
             <p className="text-gray-600">PO Reference: {grn.po_reference}</p>
             <p className="text-gray-600">Supplier Invoice: {grn.supplier_invoice_no}</p>
           </div>
 
-          <div className="mb-6 p-4 bg-gray-50 rounded-lg">
-            <h3 className="font-semibold mb-2 text-gray-700">Supplier Details:</h3>
-            <p className="text-gray-900 font-medium">{selectedSupplier?.supplier_name}</p>
-            {selectedSupplier?.phone && <p className="text-gray-600">Phone: {selectedSupplier.phone}</p>}
-            {selectedSupplier?.gst_number && <p className="text-gray-600">GST: {selectedSupplier.gst_number}</p>}
-            {selectedSupplier?.address && <p className="text-gray-600">Address: {selectedSupplier.address}</p>}
+          <div className="grid grid-cols-2 gap-6 mb-6">
+            {/* From (Company) */}
+            <div className="p-4 bg-green-50 rounded-lg">
+              <h3 className="font-semibold mb-2 text-green-900">Receiver:</h3>
+              <p className="text-green-900 font-medium">Pharma Solutions Pvt. Ltd.</p>
+              <p className="text-green-800 text-sm">123 Business Park</p>
+              <p className="text-green-800 text-sm">Mumbai - 400001</p>
+              <p className="text-green-800 text-sm">Warehouse: Main Branch</p>
+            </div>
+
+            {/* From (Supplier) */}
+            <div className="p-4 bg-gray-50 rounded-lg">
+              <h3 className="font-semibold mb-2 text-gray-700">Supplier:</h3>
+              <p className="text-gray-900 font-medium">{selectedSupplier?.supplier_name}</p>
+              {selectedSupplier?.phone && <p className="text-gray-600 text-sm">Phone: {selectedSupplier.phone}</p>}
+              {selectedSupplier?.gst_number && <p className="text-gray-600 text-sm">GST: {selectedSupplier.gst_number}</p>}
+              {selectedSupplier?.address && <p className="text-gray-600 text-sm">{selectedSupplier.address}</p>}
+            </div>
           </div>
 
           <table className="w-full mb-6">
             <thead>
               <tr className="border-b-2 border-gray-300">
                 <th className="text-left py-2">Item</th>
+                <th className="text-center py-2">Pack</th>
                 <th className="text-center py-2">Batch</th>
                 <th className="text-center py-2">Expiry</th>
                 <th className="text-center py-2">Ordered</th>
                 <th className="text-center py-2">Received</th>
+                <th className="text-center py-2">Free</th>
+                <th className="text-right py-2">MRP</th>
                 <th className="text-right py-2">Rate</th>
-                <th className="text-center py-2">Quality</th>
+                <th className="text-right py-2">Tax</th>
+                <th className="text-center py-2">Status</th>
                 <th className="text-right py-2">Amount</th>
               </tr>
             </thead>
@@ -585,11 +800,19 @@ const EnhancedGRNFlow = ({ onClose, prefilledData = null }) => {
                 return (
                   <tr key={index} className="border-b border-gray-200">
                     <td className="py-2">{item.product_name}</td>
+                    <td className="text-center py-2 text-sm">
+                      {item.pack_type || 'STRIP'} {item.pack_size || 10}×{item.strips_per_box || 10}
+                    </td>
                     <td className="text-center py-2">{item.batch_number || '-'}</td>
-                    <td className="text-center py-2">{item.expiry_date || '-'}</td>
+                    <td className="text-center py-2">
+                      {item.expiry_date ? new Date(item.expiry_date).toLocaleDateString('en-IN', { month: '2-digit', year: '2-digit' }) : '-'}
+                    </td>
                     <td className="text-center py-2">{item.ordered_qty || '-'}</td>
-                    <td className="text-center py-2">{receivedQty}</td>
+                    <td className="text-center py-2 font-medium">{receivedQty}</td>
+                    <td className="text-center py-2">{item.free_quantity || 0}</td>
+                    <td className="text-right py-2">{formatCurrency(item.mrp)}</td>
                     <td className="text-right py-2">{formatCurrency(unitPrice)}</td>
+                    <td className="text-right py-2">{taxPercent}%</td>
                     <td className="text-center py-2">
                       <span className={`px-2 py-1 rounded-full text-xs font-medium ${
                         item.quality_status === 'Approved' ? 'bg-green-100 text-green-800' :
@@ -599,35 +822,38 @@ const EnhancedGRNFlow = ({ onClose, prefilledData = null }) => {
                         {item.quality_status || 'Pending'}
                       </span>
                     </td>
-                    <td className="text-right py-2">{formatCurrency(totalWithTax)}</td>
+                    <td className="text-right py-2 font-medium">{formatCurrency(totalWithTax)}</td>
                   </tr>
                 );
               })}
             </tbody>
             <tfoot>
               <tr className="border-t-2 border-gray-300">
-                <td colSpan="7" className="text-right py-2 font-medium">Subtotal:</td>
+                <td colSpan="11" className="text-right py-2 font-medium">Subtotal:</td>
                 <td className="text-right py-2 font-medium">{formatCurrency(grn.gross_amount)}</td>
               </tr>
               <tr>
-                <td colSpan="7" className="text-right py-2">Tax:</td>
+                <td colSpan="11" className="text-right py-2">Tax:</td>
                 <td className="text-right py-2">{formatCurrency(grn.tax_amount)}</td>
               </tr>
               <tr className="border-t border-gray-300">
-                <td colSpan="7" className="text-right py-2 text-lg font-bold">Total:</td>
+                <td colSpan="11" className="text-right py-2 text-lg font-bold">Total Amount:</td>
                 <td className="text-right py-2 text-lg font-bold">{formatCurrency(grn.final_amount)}</td>
               </tr>
             </tfoot>
           </table>
 
-          {grn.transport_details?.transporter_name && (
-            <div className="mt-6 p-4 bg-blue-50 rounded-lg">
-              <h4 className="font-medium text-blue-900 mb-2">Transport Details:</h4>
-              <div className="grid grid-cols-3 gap-4 text-sm text-blue-800">
-                <div>Transporter: {grn.transport_details.transporter_name}</div>
-                <div>Vehicle: {grn.transport_details.vehicle_no}</div>
-                <div>LR No: {grn.transport_details.lr_no}</div>
+          {grn.quality_check?.checked_by && (
+            <div className="mt-6 p-4 bg-green-50 rounded-lg">
+              <h4 className="font-medium text-green-900 mb-2">Quality Verification:</h4>
+              <div className="grid grid-cols-3 gap-4 text-sm text-green-800">
+                <div>Checked By: {grn.quality_check.checked_by}</div>
+                <div>Status: {grn.quality_check.quality_status || 'Approved'}</div>
+                <div>Date: {new Date(grn.quality_check.check_date || grn.grn_date).toLocaleDateString('en-IN')}</div>
               </div>
+              {grn.quality_check.remarks && (
+                <p className="mt-2 text-sm text-green-700">Remarks: {grn.quality_check.remarks}</p>
+              )}
             </div>
           )}
 
