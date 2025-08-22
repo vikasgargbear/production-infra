@@ -14,9 +14,9 @@ import {
   ModuleHeader,
   DocumentFooter,
   GenericSuccessModal,
-  StandardDatePicker
+  StandardDatePicker,
+  AddressForm
 } from '../global';
-import AddressSelector from '../global/ui/AddressSelector';
 import CustomerCreationB2B from '../global/ui/forms/CustomerCreationB2B';
 import { ordersApi, salesApi, api, apiClient, usersApi } from '../../services/api';
 import salesOrdersAPI from '../../services/api/modules/salesOrders.api';
@@ -124,6 +124,8 @@ const SalesOrderFlow = ({ open = true, onClose }) => {
     customer_details: null,
     billing_address: '',
     shipping_address: '',
+    billing_address_data: null,
+    shipping_address_data: null,
     items: [],
     status: 'pending',
     payment_terms: 'credit',
@@ -276,8 +278,8 @@ const SalesOrderFlow = ({ open = true, onClose }) => {
     }
   };
 
-  // Handle customer selection
-  const handleCustomerSelect = (customer) => {
+  // Handle customer selection - with proper address fetching
+  const handleCustomerSelect = async (customer) => {
     setSelectedCustomer(customer);
     
     // Handle null customer (removal case)
@@ -288,20 +290,96 @@ const SalesOrderFlow = ({ open = true, onClose }) => {
         customer_name: '',
         customer_details: null,
         billing_address: '',
-        shipping_address: ''
+        shipping_address: '',
+        billing_address_data: null,
+        shipping_address_data: null
       }));
       return;
     }
     
-    const billingAddress = `${customer.address || ''}, ${customer.city || ''}, ${customer.state || ''} ${customer.pincode || ''}`.trim();
+    // Build address from customer data
+    const addressParts = [];
+    if (customer.address) addressParts.push(customer.address);
+    if (customer.city) addressParts.push(customer.city);
+    if (customer.state) addressParts.push(customer.state);
+    if (customer.pincode) addressParts.push(customer.pincode);
+    let fullAddress = addressParts.filter(Boolean).join(', ');
+    
+    // Prepare address data for AddressForm
+    let addressData = {
+      address_line1: customer.address || '',
+      address_line2: customer.address2 || '',
+      city: customer.city || '',
+      state: customer.state || '',
+      pincode: customer.pincode || '',
+      country: 'India'
+    };
+    
+    // Fetch customer addresses if not available
+    if (!fullAddress && customer.customer_id) {
+      try {
+        const response = await apiClient.get(`/customers/${customer.customer_id}/addresses`);
+        
+        if (response.data?.success && response.data.data?.length > 0) {
+          const addresses = response.data.data;
+          
+          // Prioritize billing, then shipping, then any default address
+          const billingAddr = addresses.find(addr => addr.address_type === 'billing' && addr.is_default);
+          const shippingAddr = addresses.find(addr => addr.address_type === 'shipping' && addr.is_default);
+          const anyDefaultAddr = addresses.find(addr => addr.is_default);
+          
+          const preferredAddr = billingAddr || shippingAddr || anyDefaultAddr || addresses[0];
+          
+          console.log('Found address data:', preferredAddr);
+          
+          // Build full address from fetched data
+          const fetchedParts = [];
+          if (preferredAddr.address_line1) fetchedParts.push(preferredAddr.address_line1);
+          if (preferredAddr.address_line2) fetchedParts.push(preferredAddr.address_line2);
+          if (preferredAddr.city) fetchedParts.push(preferredAddr.city);
+          if (preferredAddr.state || preferredAddr.state_name) fetchedParts.push(preferredAddr.state || preferredAddr.state_name);
+          if (preferredAddr.pincode || preferredAddr.pin_code || preferredAddr.postal_code) {
+            fetchedParts.push(preferredAddr.pincode || preferredAddr.pin_code || preferredAddr.postal_code);
+          }
+          fullAddress = fetchedParts.filter(Boolean).join(', ');
+          
+          // Update address data
+          addressData = {
+            address_line1: preferredAddr.address_line1 || '',
+            address_line2: preferredAddr.address_line2 || '',
+            city: preferredAddr.city || '',
+            state: preferredAddr.state || preferredAddr.state_name || '',
+            pincode: preferredAddr.pincode || preferredAddr.pin_code || preferredAddr.postal_code || '',
+            country: preferredAddr.country || 'India'
+          };
+          
+          // Update customer object with address data
+          customer = {
+            ...customer,
+            address: preferredAddr.address_line1 || '',
+            address2: preferredAddr.address_line2 || '',
+            city: preferredAddr.city || '',
+            state: preferredAddr.state || preferredAddr.state_name || '',
+            pincode: preferredAddr.pincode || preferredAddr.pin_code || preferredAddr.postal_code || ''
+          };
+          
+          // Update selectedCustomer with full address data
+          setSelectedCustomer(customer);
+        }
+      } catch (error) {
+        console.error('Failed to fetch customer addresses:', error);
+      }
+    }
     
     setOrder(prev => ({
       ...prev,
       customer_id: customer.customer_id || customer.id,
       customer_name: customer.customer_name || customer.name,
       customer_details: customer,
-      billing_address: billingAddress,
-      shipping_address: sameAsBilling ? billingAddress : prev.shipping_address
+      billing_address: fullAddress,
+      shipping_address: fullAddress, // Initially same as billing
+      billing_address_data: addressData,
+      shipping_address_data: addressData // Initially same as billing
     }));
   };
 
@@ -1087,23 +1165,34 @@ Expected Delivery: ${order.expected_delivery_date}
                   </div>
                 </div>
                 
-                {/* Address Selectors */}
+                {/* Address Forms - Using proper global component */}
                 {selectedCustomer && (
                   <div className="grid grid-cols-2 gap-4 mt-4">
-                    <AddressSelector
+                    <AddressForm
                       customer={selectedCustomer}
-                      currentAddress={order.billing_address}
+                      addressData={order.billing_address_data}
                       addressType="billing"
                       onChange={(address) => setOrder(prev => ({ ...prev, billing_address: address }))}
+                      onSave={(addressData) => setOrder(prev => ({ ...prev, billing_address_data: addressData }))}
                       className="bg-white"
                     />
-                    <AddressSelector
+                    <AddressForm
                       customer={selectedCustomer}
-                      currentAddress={order.shipping_address}
+                      addressData={order.shipping_address_data}
                       addressType="shipping"
                       onChange={(address) => setOrder(prev => ({ ...prev, shipping_address: address }))}
+                      onSave={(addressData) => setOrder(prev => ({ ...prev, shipping_address_data: addressData }))}
                       sameAsBilling={sameAsBilling}
-                      onSameAsBillingChange={setSameAsBilling}
+                      onSameAsBillingChange={(same) => {
+                        setSameAsBilling(same);
+                        if (same) {
+                          setOrder(prev => ({ 
+                            ...prev, 
+                            shipping_address: prev.billing_address,
+                            shipping_address_data: prev.billing_address_data 
+                          }));
+                        }
+                      }}
                       className="bg-white"
                     />
                   </div>
