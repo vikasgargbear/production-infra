@@ -236,6 +236,18 @@ class OfflineStorageService {
     try {
       const { operation } = queueItem;
       
+      // Track retry attempts
+      if (!queueItem.retryCount) {
+        queueItem.retryCount = 0;
+      }
+      queueItem.retryCount++;
+      
+      // Max 3 retry attempts for any operation
+      if (queueItem.retryCount > 3) {
+        console.warn(`Operation ${operation.type} failed after 3 attempts, removing from queue`);
+        return true; // Remove from queue
+      }
+      
       switch (operation.type) {
         case 'stock_adjustment':
           return await this.syncStockAdjustment(operation.data);
@@ -246,12 +258,12 @@ class OfflineStorageService {
         case 'invoice_create':
           return await this.syncInvoiceCreate(operation.data);
         case 'CREATE_CUSTOMER':
-          return await this.syncCustomerCreate(operation.data);
+          return await this.syncCustomerCreate(operation.data, queueItem.retryCount);
         case 'CREATE_SUPPLIER':
-          return await this.syncSupplierCreate(operation.data);
+          return await this.syncSupplierCreate(operation.data, queueItem.retryCount);
         default:
           console.warn('Unknown operation type:', operation.type);
-          return false;
+          return true; // Remove unknown operations from queue
       }
     } catch (error) {
       console.error('Error processing operation:', error);
@@ -277,14 +289,22 @@ class OfflineStorageService {
   /**
    * Sync customer creation
    */
-  async syncCustomerCreate(data) {
+  async syncCustomerCreate(data, attemptCount = 1) {
     try {
       // Import the customers API dynamically to avoid circular dependencies
       const { customersApi } = await import('./api');
       const response = await customersApi.create(data);
       return response.success;
     } catch (error) {
-      console.error('Error syncing customer creation:', error);
+      // For 422 errors (validation), don't retry - the data is invalid
+      if (error?.response?.status === 422) {
+        console.warn('Customer creation failed validation, removing from queue:', error.response?.data);
+        return true; // Return true to remove from queue
+      }
+      // For other errors, only log on first attempt
+      if (attemptCount === 1) {
+        console.debug('Customer sync will retry later');
+      }
       return false;
     }
   }
@@ -292,14 +312,22 @@ class OfflineStorageService {
   /**
    * Sync supplier creation
    */
-  async syncSupplierCreate(data) {
+  async syncSupplierCreate(data, attemptCount = 1) {
     try {
       // Import the suppliers API dynamically to avoid circular dependencies
       const { suppliersApi } = await import('./api');
       const response = await suppliersApi.create(data);
       return response.success;
     } catch (error) {
-      console.error('Error syncing supplier creation:', error);
+      // For 422 errors (validation), don't retry - the data is invalid
+      if (error?.response?.status === 422) {
+        console.warn('Supplier creation failed validation, removing from queue:', error.response?.data);
+        return true; // Return true to remove from queue
+      }
+      // For other errors, only log on first attempt
+      if (attemptCount === 1) {
+        console.debug('Supplier sync will retry later');
+      }
       return false;
     }
   }

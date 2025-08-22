@@ -36,22 +36,18 @@ class DocumentNumberService {
   }
 
   /**
-   * Generate Purchase Number
+   * Generate Purchase Number (for direct purchase entry, not PO)
    */
   async generatePurchaseNumber() {
-    try {
-      const response = await apiClient.get('/purchases/generate-number');
-      if (response?.data?.po_number) {
-        return response.data.po_number;
-      }
-    } catch (error) {
-      console.warn('Backend purchase number generation failed:', error);
+    const response = await safeApiCall(() => apiClient.get('/purchases/generate-entry-number'));
+    if (response?.data?.purchase_number) {
+      return response.data.purchase_number;
     }
     
-    // Fallback to client-side generation
+    // Fallback to client-side generation with PURCH prefix for Purchase Entry
     const timestamp = Date.now();
-    const year = new Date().getFullYear();
-    return `PO-${year}-${timestamp.toString().slice(-6)}`;
+    const year = new Date().getFullYear().toString().slice(-2);
+    return `PURCH-${year}${timestamp.toString().slice(-8)}`;
   }
 
   /**

@@ -13,7 +13,8 @@ import {
   NotesSection,
   ModuleHeader,
   DocumentFooter,
-  GenericSuccessModal
+  GenericSuccessModal,
+  StandardDatePicker
 } from '../global';
 import CustomerCreationB2B from '../global/ui/forms/CustomerCreationB2B';
 import { ordersApi, salesApi, api, apiClient, usersApi } from '../../services/api';
@@ -760,30 +761,19 @@ Expected Delivery: ${order.expected_delivery_date}
               
               {/* Top Section - Dates and Import */}
               <div className="grid grid-cols-3 gap-4 mb-6">
-                <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">Order Date</label>
-                  <div className="relative">
-                    <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-                    <input
-                      type="date"
-                      value={order.order_date}
-                      onChange={(e) => setOrder(prev => ({ ...prev, order_date: e.target.value }))}
-                      className="w-full pl-10 pr-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500"
-                    />
-                  </div>
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">Expected Delivery</label>
-                  <div className="relative">
-                    <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-                    <input
-                      type="date"
-                      value={order.expected_delivery_date}
-                      onChange={(e) => setOrder(prev => ({ ...prev, expected_delivery_date: e.target.value }))}
-                      className="w-full pl-10 pr-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500"
-                    />
-                  </div>
-                </div>
+                <StandardDatePicker
+                  label="Order Date"
+                  value={order.order_date}
+                  onChange={(value) => setOrder(prev => ({ ...prev, order_date: value }))}
+                  required
+                  size="sm"
+                />
+                <StandardDatePicker
+                  label="Expected Delivery"
+                  value={order.expected_delivery_date}
+                  onChange={(value) => setOrder(prev => ({ ...prev, expected_delivery_date: value }))}
+                  size="sm"
+                />
                 <div>
                   <label className="block text-xs font-medium text-gray-600 mb-1">Import Data</label>
                   <button

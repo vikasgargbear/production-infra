@@ -6,6 +6,7 @@ import {
   Loader2, Clock
 } from 'lucide-react';
 import KeyboardShortcuts, { SHORTCUT_SETS } from '../global/ui/KeyboardShortcuts';
+import { StandardDatePicker } from '../global';
 import { customerAPI, productAPI, invoiceAPI, ordersAPI, salesOrdersAPI, apiClient } from '../../services/api';
 import { searchCache, smartSearch } from '../../utils/searchCache';
 // MIGRATED: Using enterprise API-only calculations
@@ -1321,33 +1322,21 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
 
             {/* Date Section */}
             <div className="grid grid-cols-3 gap-4 mb-6">
-              <div>
-                <label className="block text-sm font-medium text-gray-600 mb-2">Invoice Date</label>
-                <div className="relative">
-                  <Calendar className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
-                  <input
-                    ref={firstInputRef}
-                    type="date"
-                    value={invoice.invoice_date}
-                    onChange={(e) => setInvoice(prev => ({ ...prev, invoice_date: e.target.value }))}
-                    className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                    tabIndex={1}
-                  />
-                </div>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-600 mb-2">Due Date</label>
-                <div className="relative">
-                  <Calendar className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
-                  <input
-                    type="date"
-                    value={invoice.due_date}
-                    onChange={(e) => setInvoice(prev => ({ ...prev, due_date: e.target.value }))}
-                    className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                    tabIndex={2}
-                  />
-                </div>
-              </div>
+              <StandardDatePicker
+                label="Invoice Date"
+                value={invoice.invoice_date}
+                onChange={(value) => setInvoice(prev => ({ ...prev, invoice_date: value }))}
+                required
+                tabIndex={1}
+                autoFocus
+              />
+              <StandardDatePicker
+                label="Due Date"
+                value={invoice.due_date}
+                onChange={(value) => setInvoice(prev => ({ ...prev, due_date: value }))}
+                required
+                tabIndex={2}
+              />
               <div>
                 <label className="block text-sm font-medium text-gray-600 mb-2 opacity-0">Import</label>
                 <button

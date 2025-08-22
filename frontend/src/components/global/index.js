@@ -85,6 +85,8 @@ export {
   // Forms
   Select,
   DatePicker,
+  StandardDatePicker,
+  StandardMonthYearPicker,
   NumberInput,
   CurrencyInput,
   SearchBar,
