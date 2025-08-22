@@ -405,13 +405,13 @@ def create_purchase_with_items(purchase_data: dict, db: Session = Depends(get_db
                     INSERT INTO procurement.purchase_order_items (
                         purchase_order_id, product_id, product_name,
                         ordered_quantity, unit_price, free_quantity,
-                        discount_percentage, discount_amount,
-                        line_total, gst_percentage, tax_amount, final_amount
+                        discount_percent, discount_amount,
+                        line_total, tax_percent, tax_amount, final_amount
                     ) VALUES (
                         :purchase_order_id, :product_id, :product_name,
                         :ordered_qty, :unit_price, :free_qty,
                         :disc_percent, :disc_amount,
-                        :line_total, :gst_percent, :tax_amount, :final_amount
+                        :line_total, :tax_percent, :tax_amount, :final_amount
                     )
                 """),
                 {
@@ -424,7 +424,7 @@ def create_purchase_with_items(purchase_data: dict, db: Session = Depends(get_db
                     "disc_percent": discount_percent,
                     "disc_amount": discount_amount,
                     "line_total": taxable_amount,
-                    "gst_percent": tax_percent,
+                    "tax_percent": tax_percent,
                     "tax_amount": tax_amount,
                     "final_amount": total_price
                 }
