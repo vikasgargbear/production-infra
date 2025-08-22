@@ -5,6 +5,16 @@
 
 import { apiClient } from './api';
 
+// Wrapper to safely handle API calls without throwing uncaught errors
+const safeApiCall = async (apiCall) => {
+  try {
+    return await apiCall();
+  } catch (error) {
+    // Return null to trigger fallback, don't re-throw
+    return null;
+  }
+};
+
 class DocumentNumberService {
   
   /**

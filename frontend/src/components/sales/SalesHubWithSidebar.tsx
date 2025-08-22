@@ -145,7 +145,7 @@ const SalesHubWithSidebar: React.FC<SalesHubWithSidebarProps> = ({
             {activeView === 'pending' && (
               <div>
                 <h2 className="text-xl font-bold text-gray-800 mb-4">Pending Invoices</h2>
-                <InvoiceListV2 filterStatus="pending" />
+                <InvoiceListV2 />
               </div>
             )}
 

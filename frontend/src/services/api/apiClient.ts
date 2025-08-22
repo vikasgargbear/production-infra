@@ -36,11 +36,23 @@ apiClient.interceptors.request.use(
 apiClient.interceptors.response.use(
   (response) => response,
   (error: AxiosError) => {
+    // Handle specific status codes
     if (error.response?.status === 401) {
       // Handle unauthorized - redirect to login
       localStorage.removeItem('auth_token');
       window.location.href = '/login';
+    } else if (error.response?.status === 404) {
+      // For 404 errors, return a rejected promise with a custom flag
+      // This prevents uncaught errors while allowing handlers to detect 404s
+      const customError = {
+        ...error,
+        isNotFound: true,
+        message: 'Resource not found'
+      };
+      return Promise.reject(customError);
     }
+    
+    // For other errors, reject normally
     return Promise.reject(error);
   }
 );

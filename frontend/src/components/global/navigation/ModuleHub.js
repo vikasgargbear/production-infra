@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X } from 'lucide-react';
+import { X, Settings, HelpCircle, ChevronRight, Activity } from 'lucide-react';
 
 /**
  * ModuleHub - A reusable hub component with Apple-inspired layout
@@ -225,98 +225,104 @@ const ModuleHub = ({
     );
   }
 
-  // Sidebar layout (default)
+  // Sidebar layout (default) - Enhanced with pharma-themed design
   return (
-    <div className="fixed inset-0 bg-black/20 backdrop-blur-sm z-50 flex items-start justify-start">
-      {/* Compact Sidebar */}
-      <div className="w-80 h-full bg-white shadow-2xl border-r border-gray-200 flex flex-col">
-        {/* Enhanced Logo/Title Area */}
-        <div className="h-24 px-6 flex items-center bg-gradient-to-br from-white to-gray-50 border-b border-gray-100 relative overflow-hidden">
-          {/* Background pattern for visual interest */}
-          <div className="absolute inset-0 opacity-5">
-            <div className="absolute top-2 right-2 w-16 h-16 bg-blue-500 rounded-full"></div>
-            <div className="absolute bottom-2 left-2 w-8 h-8 bg-indigo-500 rounded-full"></div>
-            <div className="absolute top-1/2 right-4 w-4 h-4 bg-purple-500 rounded-full"></div>
+    <div className="fixed inset-0 bg-gray-100 z-50 flex">
+      {/* Enhanced Sidebar with Pharma Theme */}
+      <div className="w-80 h-full bg-gradient-to-b from-blue-50 to-green-50 p-3">
+        <div className="h-full bg-white rounded-2xl shadow-lg border border-blue-100 flex flex-col">
+          {/* Header - Clean Pharma Design */}
+          <div className="p-5 border-b border-gray-100 rounded-t-2xl">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-green-500 rounded-xl flex items-center justify-center shadow-md">
+                {HubIcon ? <HubIcon className="w-5 h-5 text-white" /> : null}
+              </div>
+              <div>
+                <h3 className="font-semibold text-gray-800">{title}</h3>
+                <p className="text-xs text-gray-500">Operations Center</p>
+              </div>
+            </div>
           </div>
-          
-          {/* Enhanced Icon Container */}
-          <div className="relative z-10 p-3 bg-gradient-to-br from-blue-500 via-indigo-600 to-purple-600 rounded-2xl shadow-lg transform hover:scale-105 transition-transform duration-200">
-            {HubIcon ? <HubIcon className="w-6 h-6 text-white" /> : null}
-            {/* Subtle glow effect */}
-            <div className="absolute inset-0 bg-gradient-to-br from-blue-400/30 to-purple-400/30 rounded-2xl blur-sm"></div>
-          </div>
-          
-          {/* Enhanced Title Section */}
-          <div className="ml-4 relative z-10 flex-1">
-            <h2 className="text-xl font-bold text-gray-900 tracking-tight">{title}</h2>
-            <p className="text-sm text-gray-600 mt-1 font-medium">{subtitle}</p>
-          </div>
-        </div>
         
-        {/* Module List */}
-        <div className="flex-1 px-3 py-4 overflow-y-auto">
-          {modules.map((module, index) => {
-            const Icon = module.icon;
-            const isActive = activeModule === module.id;
-            const colors = colorStyles[module.color] || colorStyles.gray;
-            
-            return (
-              <button
-                key={module.id}
-                onClick={() => setActiveModule(module.id)}
-                className={`
-                  w-full mb-2 px-4 py-4 rounded-xl flex items-center
-                  transition-all duration-200 group relative
-                  ${isActive 
-                    ? 'bg-white shadow-md transform scale-[1.02]' 
-                    : 'hover:bg-white/70 hover:shadow-sm'
-                  }
-                `}
-              >
-                {/* Icon with background */}
-                <div className={`
-                  p-3 rounded-xl mr-4 transition-all duration-200 relative overflow-hidden
-                  ${isActive 
-                    ? `${colors.active} shadow-lg` 
-                    : `${colors.inactive} group-hover:${colors.hover}`
-                  }
-                `}>
-                  {/* Gradient overlay for active state */}
-                  {isActive && (
-                    <div className={`absolute inset-0 bg-gradient-to-br ${colors.activeOverlay} to-transparent`} />
-                  )}
-                  <Icon className={`
-                    w-5 h-5 relative z-10
-                    ${isActive ? 'text-white' : ''}
-                  `} />
-                </div>
+          {/* Module List - Clean Pharma Design */}
+          <div className="flex-1 overflow-y-auto py-2">
+            <nav className="px-3">
+              {modules.map((module, index) => {
+                const Icon = module.icon;
+                const isActive = activeModule === module.id;
+                const colors = colorStyles[module.color] || colorStyles.gray;
                 
-                {/* Label and description */}
-                <div className="flex-1 text-left">
-                  <div className={`font-semibold text-sm ${isActive ? 'text-gray-900' : 'text-gray-700'}`}>
-                    {module.fullLabel}
-                  </div>
-                  <div className={`text-xs mt-0.5 ${isActive ? 'text-gray-600' : 'text-gray-500'}`}>
-                    {module.description}
-                  </div>
-                </div>
-                
-                {/* Keyboard shortcut tooltip on hover */}
-                <div className={`
-                  absolute -right-1 top-1/2 -translate-y-1/2
-                  text-xs font-medium px-2 py-1 rounded-lg
-                  bg-gray-900 text-white
-                  transition-all duration-200 pointer-events-none
-                  ${isActive 
-                    ? 'opacity-0' 
-                    : 'opacity-0 group-hover:opacity-100 group-hover:translate-x-1'
-                  }
-                `}>
-                  Press {index + 1}
-                </div>
+                return (
+                  <button
+                    key={module.id}
+                    onClick={() => setActiveModule(module.id)}
+                    className={`
+                      w-full mb-1 px-3 py-2.5 rounded-xl flex items-center justify-between
+                      transition-all duration-200 group
+                      ${isActive 
+                        ? 'bg-gradient-to-r from-blue-500 to-blue-600 text-white shadow-md' 
+                        : 'hover:bg-gray-50 text-gray-700 hover:text-gray-900'
+                      }
+                    `}
+                  >
+                    <div className="flex items-center gap-3">
+                      <Icon className={`w-4 h-4 ${isActive ? 'text-white' : 'text-gray-500 group-hover:text-blue-500'}`} />
+                      <div className="text-left">
+                        <div className="text-sm font-medium">
+                          {module.label || module.fullLabel}
+                        </div>
+                        {module.description && (
+                          <div className={`text-xs ${isActive ? 'text-blue-100' : 'text-gray-500'}`}>
+                            {module.description}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                    
+                    {/* Keyboard hint */}
+                    <span className={`
+                      text-xs font-mono px-1.5 py-0.5 rounded
+                      ${isActive 
+                        ? 'bg-white/20 text-white' 
+                        : 'bg-gray-100 text-gray-500'
+                      }
+                    `}>
+                      {index + 1}
+                    </span>
+                  </button>
+                );
+              })}
+            </nav>
+          </div>
+
+          {/* Pro Tip Section */}
+          <div className="p-4 border-t border-gray-100">
+            <div className="bg-gradient-to-r from-blue-50 to-green-50 rounded-xl p-4 mb-3">
+              <div className="flex items-center justify-between mb-2">
+                <Activity className="w-5 h-5 text-blue-600" />
+                <span className="text-xs text-gray-500">Pro Tip</span>
+              </div>
+              <p className="text-xs text-gray-600 mb-2">
+                Use number keys <kbd className="px-1.5 py-0.5 bg-white rounded text-xs font-mono">1-{modules.length}</kbd> to quickly navigate between modules
+              </p>
+              <button className="text-xs text-blue-600 hover:text-blue-700 font-medium flex items-center gap-1">
+                View all shortcuts
+                <ChevronRight className="w-3 h-3" />
               </button>
-            );
-          })}
+            </div>
+          </div>
+
+          {/* Footer */}
+          <div className="p-4 border-t border-gray-100 rounded-b-2xl">
+            <div className="flex items-center justify-between">
+              <button className="p-2 hover:bg-gray-100 rounded-lg transition-colors">
+                <Settings className="w-4 h-4 text-gray-500" />
+              </button>
+              <button className="p-2 hover:bg-gray-100 rounded-lg transition-colors">
+                <HelpCircle className="w-4 h-4 text-gray-500" />
+              </button>
+            </div>
+          </div>
         </div>
       </div>
 
