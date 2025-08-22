@@ -40,6 +40,7 @@ import partyLedgerApi from './partyLedgerApi';
 import { companyAPI, DEFAULT_COMPANY_INFO } from './company.api';
 import { journalApi } from './modules/journal.api';
 import { expensesApi } from './modules/expenses.api';
+import { metadataApi } from './modules/metadata.api';
 
 // Re-export everything for easy access
 export {
@@ -82,6 +83,7 @@ export {
   DEFAULT_COMPANY_INFO,
   journalApi,
   expensesApi,
+  metadataApi,
   
   // Aliases for backward compatibility
   customerAPI as customersApi,
@@ -124,6 +126,7 @@ const apiModules = {
   organizations: organizationsApi.organizations,
   features: organizationsApi.features,
   partyLedger: partyLedgerApi,
+  metadata: metadataApi,
 };
 
 // For backward compatibility: export the raw axios instance as default
