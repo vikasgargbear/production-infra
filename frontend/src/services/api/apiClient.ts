@@ -50,10 +50,31 @@ apiClient.interceptors.response.use(
         message: 'Resource not found'
       };
       return Promise.reject(customError);
+    } else if (error.response?.status === 502 || error.response?.status === 503) {
+      // Backend is down or restarting
+      console.warn('Backend service temporarily unavailable');
+      const customError = {
+        ...error,
+        isServiceUnavailable: true,
+        message: 'Service temporarily unavailable. Please try again in a moment.'
+      };
+      return Promise.reject(customError);
     }
     
-    // For other errors, reject normally
-    return Promise.reject(error);
+    // For other errors, create a proper error object
+    const errorMessage = error.response?.data?.detail || 
+                        error.response?.data?.message || 
+                        error.message || 
+                        'An unexpected error occurred';
+    
+    const customError = {
+      ...error,
+      message: errorMessage,
+      status: error.response?.status
+    };
+    
+    // For other errors, reject normally with better error structure
+    return Promise.reject(customError);
   }
 );
 
