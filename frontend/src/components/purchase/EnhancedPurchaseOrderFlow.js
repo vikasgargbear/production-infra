@@ -385,7 +385,7 @@ const EnhancedPurchaseOrderFlow = ({ onClose, prefilledData = null }) => {
             onRemoveItem={handleRemoveItem}
             showTotals={false}
             title=""
-            columns={['product', 'pack_type', 'pack_config', 'qty', 'free', 'mrp', 'rate', 'expected', 'disc', 'tax', 'total']}
+            columns={['product', 'pack_type', 'pack_config', 'qty', 'free', 'mrp', 'rate', 'disc', 'tax', 'total']}
             customColumns={{
               pack_type: {
                 label: 'Pack',
@@ -497,23 +497,6 @@ const EnhancedPurchaseOrderFlow = ({ onClose, prefilledData = null }) => {
                   />
                 )
               },
-              expected: {
-                label: 'Expected',
-                align: 'center',
-                render: (item, index) => (
-                  <NumericInput
-                    value={item.expected_rate}
-                    onChange={(value) => handleUpdateItem(index, 'expected_rate', value)}
-                    min={0}
-                    defaultValue={item.mrp || 0}
-                    decimalPlaces={2}
-                    width="w-16"
-                    align="center"
-                    clearable={true}
-                    prefix="₹"
-                  />
-                )
-              },
               disc: {
                 label: 'Disc%',
                 align: 'center',
@@ -564,6 +547,48 @@ const EnhancedPurchaseOrderFlow = ({ onClose, prefilledData = null }) => {
               }
             }}
           />
+          
+          {/* Totals Section */}
+          {purchaseOrder.items?.length > 0 && (
+            <div className="mt-4 bg-gray-50 p-4 rounded-lg">
+              <div className="flex justify-end">
+                <div className="w-80 space-y-2">
+                  <div className="flex justify-between text-sm">
+                    <span>Subtotal:</span>
+                    <span className="font-medium">₹{(purchaseOrder.gross_amount || 0).toFixed(2)}</span>
+                  </div>
+                  {purchaseOrder.freight_charges > 0 && (
+                    <div className="flex justify-between text-sm">
+                      <span>Freight Charges:</span>
+                      <span>₹{purchaseOrder.freight_charges.toFixed(2)}</span>
+                    </div>
+                  )}
+                  <div className="flex justify-between text-sm">
+                    <span>Tax Amount:</span>
+                    <span>₹{(purchaseOrder.tax_amount || 0).toFixed(2)}</span>
+                  </div>
+                  <div className="flex justify-between text-sm items-center">
+                    <span>Discount:</span>
+                    <NumericInput
+                      value={purchaseOrder.discount_amount}
+                      onChange={(value) => setPurchaseOrder(prev => ({ ...prev, discount_amount: value }))}
+                      min={0}
+                      defaultValue={0}
+                      decimalPlaces={2}
+                      width="w-32"
+                      prefix="₹"
+                      clearable={true}
+                      className="text-red-600"
+                    />
+                  </div>
+                  <div className="border-t pt-2 flex justify-between text-base font-semibold">
+                    <span>Total Amount:</span>
+                    <span className="text-blue-600">₹{(purchaseOrder.final_amount || 0).toFixed(2)}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
         </>
       )}
       {errors.items && (
@@ -579,7 +604,7 @@ const EnhancedPurchaseOrderFlow = ({ onClose, prefilledData = null }) => {
       <div className="mb-6">
         <div className="flex items-center gap-2 mb-3">
           <Truck className="w-5 h-5 text-gray-600" />
-          <h3 className="text-sm font-semibold text-gray-700">DELIVERY & PAYMENT TERMS</h3>
+          <h3 className="text-sm font-semibold text-gray-700">Delivery & Payment Terms</h3>
         </div>
         <ContentCard title={null} subtitle={null} actions={null}>
           <div className="grid grid-cols-3 gap-4">
@@ -587,13 +612,19 @@ const EnhancedPurchaseOrderFlow = ({ onClose, prefilledData = null }) => {
               <label className="block text-sm font-medium text-gray-600 mb-1">Payment Terms</label>
               <div className="relative">
                 <CreditCard className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
-                <input
-                  type="text"
-                  value={purchaseOrder.payment_terms}
+                <select
+                  value={purchaseOrder.payment_terms || '30 days'}
                   onChange={(e) => setPurchaseOrder(prev => ({ ...prev, payment_terms: e.target.value }))}
-                  placeholder="e.g., 30 days"
-                  className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                />
+                  className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white"
+                >
+                  <option value="Immediate">Immediate</option>
+                  <option value="7 days">7 days</option>
+                  <option value="15 days">15 days</option>
+                  <option value="30 days">30 days</option>
+                  <option value="45 days">45 days</option>
+                  <option value="60 days">60 days</option>
+                  <option value="90 days">90 days</option>
+                </select>
               </div>
             </div>
             <div>
@@ -657,29 +688,11 @@ const EnhancedPurchaseOrderFlow = ({ onClose, prefilledData = null }) => {
         </ContentCard>
       </div>
 
-      {/* PO Preview with Actions */}
+      {/* PO Preview */}
       <ContentCard 
         title="Purchase Order Preview" 
         subtitle={null} 
-        actions={
-          <div className="flex gap-2">
-            <button
-              onClick={handleSavePurchaseOrder}
-              disabled={saving}
-              className="flex items-center gap-2 px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg transition-colors text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              <Save className="w-4 h-4" />
-              {saving ? 'Saving...' : 'Save PO'}
-            </button>
-            <button
-              onClick={handlePrint}
-              className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors text-sm font-medium"
-            >
-              <Printer className="w-4 h-4" />
-              Print
-            </button>
-          </div>
-        }
+        actions={null}
       >
         <div className="bg-white rounded-lg p-6">
           {/* Company Branding Header */}

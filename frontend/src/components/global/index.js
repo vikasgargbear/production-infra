@@ -76,6 +76,7 @@ export { default as SectionHeader } from './ui/SectionHeader';
 export { default as FormGrid, FormField } from './ui/FormGrid';
 export { default as ActionButton } from './ui/ActionButton';
 export { default as ContentSection } from './ui/ContentSection';
+export { default as KeyboardShortcuts, SHORTCUT_SETS } from './ui/KeyboardShortcuts';
 
 // UI Components - NEW
 export * from './ui';

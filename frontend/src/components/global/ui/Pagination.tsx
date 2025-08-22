@@ -30,7 +30,7 @@ export const Pagination: React.FC<PaginationProps> = ({
 
   // Generate page numbers to display
   const getPageNumbers = () => {
-    const pages = [];
+    const pages: number[] = [];
     const maxPagesToShow = 5;
     const halfRange = Math.floor(maxPagesToShow / 2);
     
@@ -110,7 +110,7 @@ export const Pagination: React.FC<PaginationProps> = ({
           {pageNumbers.map(page => (
             <Button
               key={page}
-              variant={page === currentPage ? 'default' : 'outline'}
+              variant={page === currentPage ? 'primary' : 'outline'}
               size="sm"
               onClick={() => onPageChange(page)}
               disabled={loading}

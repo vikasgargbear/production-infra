@@ -5,6 +5,7 @@ import {
   Save, Calculator, History, ArrowLeft, ArrowRight, FileInput, MessageCircle,
   Loader2, Clock
 } from 'lucide-react';
+import KeyboardShortcuts, { SHORTCUT_SETS } from '../global/ui/KeyboardShortcuts';
 import { customerAPI, productAPI, invoiceAPI, ordersAPI, salesOrdersAPI, apiClient } from '../../services/api';
 import { searchCache, smartSearch } from '../../utils/searchCache';
 // MIGRATED: Using enterprise API-only calculations
@@ -1271,9 +1272,7 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
           />
 
           {/* Keyboard Shortcuts Help */}
-          <div className="bg-blue-50 px-4 py-2 text-xs text-blue-700 border-b border-blue-200">
-            Keyboard shortcuts: <strong>Ctrl+N</strong> - Add Customer | <strong>Ctrl+F</strong> - Search Products | <strong>Ctrl+S</strong> - Save Draft | <strong>Esc</strong> - Close
-          </div>
+          <KeyboardShortcuts shortcuts={SHORTCUT_SETS.CREATE} />
 
           {/* Loading State */}
           {isLoading && (
@@ -1523,9 +1522,7 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
         />
 
         {/* Keyboard Shortcuts Help */}
-        <div className="bg-blue-50 px-4 py-2 text-xs text-blue-700 border-b border-blue-200">
-          Keyboard shortcuts: <strong>Ctrl+S</strong> - Save Invoice | <strong>Ctrl+P</strong> - Print | <strong>Esc</strong> - Close
-        </div>
+        <KeyboardShortcuts shortcuts={SHORTCUT_SETS.REVIEW} />
 
         {/* Content - Invoice Preview */}
         <div className="flex-1 overflow-y-auto bg-blue-50">

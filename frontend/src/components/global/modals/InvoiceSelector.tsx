@@ -3,7 +3,8 @@ import {
   Search, FileText, X, Check, ChevronDown, Calendar, Filter,
   Eye, Printer, MessageCircle, RefreshCw
 } from 'lucide-react';
-import { Button, StatusBadge, DataTable } from '../ui';
+import Button from '../ui/Button';
+import { StatusBadge, DataTable } from '../ui';
 import InvoiceApiService from '../../../services/invoiceApiService';
 import debugLogger from '../../../utils/debugLogger';
 
