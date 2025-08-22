@@ -27,7 +27,7 @@ from .api.routes import (
 # Import additional routers not in __init__.py
 from .api.routes import stock_receive, enterprise_delivery_challan, inventory_batches, create_user, delivery_challan, stock_dashboard, sales_orders, grn, journal_entries, expense_claims
 # Import new APIs
-from .api.routes import master_settings, schemes_discounts, loyalty_points, compliance, metadata
+from .api.routes import master_settings, schemes_discounts, loyalty_points, compliance, metadata, master_data_crud
 # Import comprehensive enterprise API
 from .api.routes import enterprise_api_complete
 # Import enterprise calculation service
@@ -152,6 +152,7 @@ api.include_router(schemes_discounts.router, prefix="/schemes-discounts", tags=[
 api.include_router(loyalty_points.router, prefix="/loyalty-points", tags=["Loyalty Points"])
 api.include_router(compliance.router, prefix="/compliance", tags=["Compliance"])
 api.include_router(metadata.router, prefix="/metadata", tags=["Metadata"])
+api.include_router(master_data_crud.router, tags=["Master Data CRUD"])
 
 # Register comprehensive enterprise API
 api.include_router(enterprise_api_complete.router, tags=["Enterprise ERP Complete"])
