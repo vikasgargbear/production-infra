@@ -13,6 +13,9 @@ import {
   ProductCreationModal,
   GenericSuccessModal,
   ContentCard,
+  StandardFormInput,
+  StandardDatePicker,
+  StandardSelect,
   useToast,
   NumericInput,
   MonthYearPicker
@@ -394,50 +397,33 @@ const EnhancedPurchaseEntry = ({ onClose, prefilledData = null }) => {
       </div>
 
 
-      {/* Invoice Details - Direct like CreateInvoice */}
+      {/* Invoice Details - Standardized Components */}
       <div className="grid grid-cols-3 gap-4 mb-6">
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">
-            Supplier Invoice Number <span className="text-red-500">*</span>
-          </label>
-          <input
-            type="text"
-            value={purchase.supplier_invoice_number}
-            onChange={(e) => setPurchase(prev => ({ ...prev, supplier_invoice_number: e.target.value }))}
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-            placeholder="Invoice number"
-            required
-          />
-          {errors.invoice_number && (
-            <p className="text-red-500 text-xs mt-1">{errors.invoice_number}</p>
-          )}
-        </div>
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Invoice Date</label>
-          <div className="relative">
-            <Calendar className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
-            <input
-              type="date"
-              value={purchase.invoice_date}
-              onChange={(e) => setPurchase(prev => ({ ...prev, invoice_date: e.target.value }))}
-              className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-            />
-          </div>
-        </div>
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Payment Mode</label>
-          <select
-            value={purchase.payment_mode}
-            onChange={(e) => setPurchase(prev => ({ ...prev, payment_mode: e.target.value }))}
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-          >
-            <option value="Cash">Cash</option>
-            <option value="Credit">Credit</option>
-            <option value="UPI">UPI</option>
-            <option value="Bank Transfer">Bank Transfer</option>
-            <option value="Cheque">Cheque</option>
-          </select>
-        </div>
+        <StandardFormInput
+          label="Supplier Invoice Number"
+          value={purchase.supplier_invoice_number}
+          onChange={(e) => setPurchase(prev => ({ ...prev, supplier_invoice_number: e.target.value }))}
+          placeholder="Invoice number"
+          required
+          error={errors.invoice_number}
+        />
+        <StandardDatePicker
+          label="Invoice Date"
+          value={purchase.invoice_date}
+          onChange={(value) => setPurchase(prev => ({ ...prev, invoice_date: value }))}
+        />
+        <StandardSelect
+          label="Payment Mode"
+          value={purchase.payment_mode}
+          onChange={(e) => setPurchase(prev => ({ ...prev, payment_mode: e.target.value }))}
+          options={[
+            { value: 'Cash', label: 'Cash' },
+            { value: 'Credit', label: 'Credit' },
+            { value: 'UPI', label: 'UPI' },
+            { value: 'Bank Transfer', label: 'Bank Transfer' },
+            { value: 'Cheque', label: 'Cheque' }
+          ]}
+        />
       </div>
 
       {/* Supplier Section - Clean and Separate */}

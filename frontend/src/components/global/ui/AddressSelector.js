@@ -36,8 +36,8 @@ const AddressSelector = ({
       
       setAddresses(allAddresses);
       
-      // Set local address if not already set
-      if (!localAddress && defaultAddress) {
+      // Always use the currentAddress if provided, otherwise use defaultAddress
+      if (!currentAddress && defaultAddress) {
         setLocalAddress(defaultAddress);
         // Only call onChange if address actually changed
         if (defaultAddress !== currentAddress) {
@@ -45,7 +45,7 @@ const AddressSelector = ({
         }
       }
     }
-  }, [customer]); // Remove onChange from deps to avoid infinite loop
+  }, [customer, currentAddress]); // Include currentAddress in deps
   
   // Update local address when currentAddress prop changes
   useEffect(() => {
@@ -64,7 +64,7 @@ const AddressSelector = ({
   };
 
   const handleEdit = () => {
-    setEditableAddress(currentAddress || '');
+    setEditableAddress(localAddress || currentAddress || '');
     setIsEditing(true);
   };
 
@@ -187,7 +187,7 @@ const AddressSelector = ({
             </div>
           )}
           <div className="text-sm text-gray-700">
-            {localAddress || currentAddress || (
+            {currentAddress || localAddress || (
               <span className="text-gray-400 italic">No address available</span>
             )}
           </div>

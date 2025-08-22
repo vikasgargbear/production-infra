@@ -377,34 +377,26 @@ const PurchaseFlow = ({ onClose }) => {
         {/* Purchase Header */}
         <ContentCard title="Invoice Details" subtitle={null} actions={null}>
           <div className="grid grid-cols-3 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Supplier Invoice No *</label>
-              <input
-                type="text"
-                value={purchase.invoice_number}
-                onChange={(e) => setPurchase(prev => ({ ...prev, invoice_number: e.target.value }))}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                placeholder="SUP-INV-001"
-                ref={firstInputRef}
-              />
-            </div>
-            <div>
-              <StandardDatePicker
-                label="Invoice Date"
-                value={purchase.invoice_date}
-                onChange={(value) => setPurchase(prev => ({ ...prev, invoice_date: value }))}
-                required
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Purchase No</label>
-              <input
-                type="text"
-                value={purchase.purchase_no}
-                readOnly
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50"
-              />
-            </div>
+            <StandardFormInput
+              label="Supplier Invoice Number"
+              value={purchase.invoice_number}
+              onChange={(e) => setPurchase(prev => ({ ...prev, invoice_number: e.target.value }))}
+              placeholder="Invoice number"
+              required
+              autoFocus
+            />
+            <StandardDatePicker
+              label="Invoice Date"
+              value={purchase.invoice_date}
+              onChange={(value) => setPurchase(prev => ({ ...prev, invoice_date: value }))}
+              required
+            />
+            <StandardFormInput
+              label="Purchase No"
+              value={purchase.purchase_no}
+              readOnly
+              disabled
+            />
           </div>
         </ContentCard>
 

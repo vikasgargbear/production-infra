@@ -827,33 +827,6 @@ Expected Delivery: ${order.expected_delivery_date}
 
 
 
-              {/* Address Section */}
-              {selectedCustomer && (
-                <div className="mb-6">
-                  <h3 className="text-sm font-semibold text-blue-700 uppercase tracking-wider mb-3 flex items-center">
-                    <MapPin className="w-4 h-4 mr-2" />
-                    DELIVERY DETAILS
-                  </h3>
-                  <div className="grid grid-cols-2 gap-4">
-                    <AddressSelector
-                      customer={selectedCustomer}
-                      currentAddress={order.billing_address}
-                      addressType="billing"
-                      onChange={(address) => setOrder(prev => ({ ...prev, billing_address: address }))}
-                      className="bg-white"
-                    />
-                    <AddressSelector
-                      customer={selectedCustomer}
-                      currentAddress={order.shipping_address}
-                      addressType="shipping"
-                      onChange={(address) => setOrder(prev => ({ ...prev, shipping_address: address }))}
-                      sameAsBilling={sameAsBilling}
-                      onSameAsBillingChange={setSameAsBilling}
-                      className="bg-white"
-                    />
-                  </div>
-                </div>
-              )}
 
               {/* Products Section */}
               <div className="mb-6">
@@ -1089,58 +1062,52 @@ Expected Delivery: ${order.expected_delivery_date}
                 <p className="text-sm text-gray-500">Date: {new Date(order.order_date).toLocaleDateString()}</p>
               </div>
 
-              {/* Compact Order Info Bar */}
-              <div className="flex items-center justify-between mb-4 p-3 bg-blue-50 rounded-lg">
-                <div className="flex items-center gap-6">
-                  <div>
-                    <span className="text-xs text-gray-600">Status:</span>
-                    <span className="ml-2 text-sm font-semibold text-purple-600">CONFIRMED</span>
-                  </div>
-                  <div>
-                    <span className="text-xs text-gray-600">Delivery:</span>
-                    <span className="ml-2 text-sm font-semibold">{new Date(order.expected_delivery_date).toLocaleDateString('en-IN')}</span>
-                  </div>
-                  <div>
-                    <span className="text-xs text-gray-600">Payment:</span>
-                    <select
-                      value={order.payment_terms || 'credit'}
-                      onChange={(e) => setOrder(prev => ({ ...prev, payment_terms: e.target.value }))}
-                      className="ml-2 text-sm font-semibold bg-transparent capitalize cursor-pointer focus:outline-none"
-                    >
-                      <option value="cash">Cash</option>
-                      <option value="credit">Credit</option>
-                      <option value="advance">Advance</option>
-                    </select>
-                  </div>
-                </div>
-                <div className="text-xs text-gray-500">
-                  {new Date().toLocaleDateString('en-IN')} • {localStorage.getItem('userName') || 'Admin'}
-                </div>
-              </div>
 
-              {/* Customer & Address Section - Compact */}
-              <div className="grid grid-cols-2 gap-4 mb-4">
-                <div className="border border-gray-200 rounded-lg p-3">
-                  <h3 className="text-xs font-semibold text-gray-700 mb-2 flex items-center">
-                    <MapPin className="w-3 h-3 mr-1" />
-                    Billing Address
-                  </h3>
-                  <p className="font-medium text-sm text-gray-900">{order.customer_name}</p>
-                  <p className="text-xs text-gray-600 mt-1">{order.billing_address || 'No address provided'}</p>
-                  {selectedCustomer?.gstin && (
-                    <p className="text-xs text-gray-500 mt-1">GSTIN: {selectedCustomer.gstin}</p>
-                  )}
+              {/* Customer & Address Section with AddressSelector */}
+              <div className="mb-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <h3 className="text-xs font-semibold text-gray-700 mb-2">Customer Details</h3>
+                    <div className="border border-gray-200 rounded-lg p-3">
+                      <p className="font-medium text-sm text-gray-900">{order.customer_name}</p>
+                      {selectedCustomer?.gstin && (
+                        <p className="text-xs text-gray-500 mt-1">GSTIN: {selectedCustomer.gstin}</p>
+                      )}
+                      {selectedCustomer?.phone && (
+                        <p className="text-xs text-gray-500">Phone: {selectedCustomer.phone}</p>
+                      )}
+                    </div>
+                  </div>
+                  <div>
+                    <h3 className="text-xs font-semibold text-gray-700 mb-2">Expected Delivery</h3>
+                    <div className="border border-gray-200 rounded-lg p-3">
+                      <p className="text-sm font-medium text-gray-900">{new Date(order.expected_delivery_date).toLocaleDateString('en-IN')}</p>
+                      <p className="text-xs text-gray-500 mt-1">Payment Terms: {order.payment_terms || 'Credit'}</p>
+                    </div>
+                  </div>
                 </div>
-                <div className="border border-gray-200 rounded-lg p-3">
-                  <h3 className="text-xs font-semibold text-gray-700 mb-2 flex items-center">
-                    <MapPin className="w-3 h-3 mr-1" />
-                    Shipping Address
-                  </h3>
-                  <p className="text-xs text-gray-600">{order.shipping_address || order.billing_address || 'Same as billing'}</p>
-                  {selectedCustomer?.shipping_phone && (
-                    <p className="text-sm text-gray-600">Contact: {selectedCustomer.shipping_phone}</p>
-                  )}
-                </div>
+                
+                {/* Address Selectors */}
+                {selectedCustomer && (
+                  <div className="grid grid-cols-2 gap-4 mt-4">
+                    <AddressSelector
+                      customer={selectedCustomer}
+                      currentAddress={order.billing_address}
+                      addressType="billing"
+                      onChange={(address) => setOrder(prev => ({ ...prev, billing_address: address }))}
+                      className="bg-white"
+                    />
+                    <AddressSelector
+                      customer={selectedCustomer}
+                      currentAddress={order.shipping_address}
+                      addressType="shipping"
+                      onChange={(address) => setOrder(prev => ({ ...prev, shipping_address: address }))}
+                      sameAsBilling={sameAsBilling}
+                      onSameAsBillingChange={setSameAsBilling}
+                      className="bg-white"
+                    />
+                  </div>
+                )}
               </div>
 
               <div className="mb-8">
