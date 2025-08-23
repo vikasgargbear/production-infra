@@ -3,7 +3,7 @@ import {
   Truck, Calendar, ArrowRight,
   CheckCircle, MessageCircle, FileInput, Printer, User, MapPin, Package
 } from 'lucide-react';
-import { ModuleHeader, CustomerSearch, ProductSearchSimple, ItemsTable, DocumentFooter, ProductCreationModal, NotesSection, AddressForm, StandardDatePicker } from '../global';
+import { ModuleHeader, CustomerSearch, ProductSearchSimple, ItemsTable, DocumentFooter, ProductCreationModal, NotesSection, AddressForm, StandardDatePicker, PrintUtility } from '../global';
 import CustomerCreationB2B from '../global/ui/forms/CustomerCreationB2B';
 // NotesSection is now imported from global
 import ChallanPreview from './components/ChallanPreview';
@@ -900,25 +900,45 @@ Expected Delivery: ${challan.expected_delivery_date}
             )}
             
             
-            <ChallanPreview 
-              challan={{
-                ...challan,
-                // Ensure customer_details is properly structured without circular refs
-                customer_details: selectedCustomer ? {
-                  address: selectedCustomer.address || '',
-                  city: selectedCustomer.city || '',
-                  state: selectedCustomer.state || '',
-                  pincode: selectedCustomer.pincode || '',
-                  phone: selectedCustomer.phone || ''
-                } : null,
-                // Ensure delivery address fields are clean strings
-                delivery_address: challan.delivery_address || '',
-                delivery_city: challan.delivery_city || '',
-                delivery_state: challan.delivery_state || '',
-                delivery_pincode: challan.delivery_pincode || '',
-                delivery_contact_person: challan.delivery_contact_person || '',
-                delivery_contact_phone: challan.delivery_contact_phone || ''
+            {/* Challan Preview with Thermal Print Support */}
+            <PrintUtility
+              documentData={{
+                documentNumber: challan.challan_number,
+                date: challan.challan_date,
+                customer: {
+                  name: challan.customer_name,
+                  phone: selectedCustomer?.phone || selectedCustomer?.primary_phone,
+                  gstin: selectedCustomer?.gstin,
+                  dl_number: selectedCustomer?.dl_number
+                },
+                items: challan.items.map(item => ({
+                  product_name: item.product_name || item.name,
+                  hsn_code: item.hsn_code,
+                  batch_no: item.batch_no || item.batch_number,
+                  quantity: item.quantity,
+                  free_quantity: item.free_quantity || 0,
+                  unit_price: item.unit_price || item.selling_price || 0,
+                  discount_percent: item.discount_percent || 0,
+                  gst_percent: item.gst_percent || item.tax_percent || 18,
+                  total: item.total || item.line_total || (item.quantity * (item.unit_price || 0))
+                })),
+                totals: {
+                  subtotal: challan.subtotal_amount || challan.total_amount,
+                  discount: challan.discount_amount || 0,
+                  tax_amount: challan.tax_amount || 0,
+                  cgst_amount: challan.cgst_amount || (challan.tax_amount / 2) || 0,
+                  sgst_amount: challan.sgst_amount || (challan.tax_amount / 2) || 0,
+                  igst_amount: challan.igst_amount || 0,
+                  total_amount: challan.total_amount || 0,
+                  final_amount: challan.total_amount || 0
+                },
+                addresses: {
+                  billing: challan.billing_address,
+                  shipping: challan.delivery_address
+                },
+                notes: challan.notes
               }}
+              documentType="delivery-challan"
               companyInfo={{
                 name: localStorage.getItem('companyName') || 'AASO PHARMACEUTICALS',
                 address: localStorage.getItem('companyAddress') || 'Gangapur City, Rajasthan',
@@ -928,7 +948,38 @@ Expected Delivery: ${challan.expected_delivery_date}
                 drugLicense: localStorage.getItem('companyDrugLicense') || 'DL No: MH-MUM-123456',
                 logo: localStorage.getItem('companyLogo') || null
               }}
-            />
+              showPrintOptions={true}
+            >
+              <ChallanPreview 
+                challan={{
+                  ...challan,
+                  // Ensure customer_details is properly structured without circular refs
+                  customer_details: selectedCustomer ? {
+                    address: selectedCustomer.address || '',
+                    city: selectedCustomer.city || '',
+                    state: selectedCustomer.state || '',
+                    pincode: selectedCustomer.pincode || '',
+                    phone: selectedCustomer.phone || ''
+                  } : null,
+                  // Ensure delivery address fields are clean strings
+                  delivery_address: challan.delivery_address || '',
+                  delivery_city: challan.delivery_city || '',
+                  delivery_state: challan.delivery_state || '',
+                  delivery_pincode: challan.delivery_pincode || '',
+                  delivery_contact_person: challan.delivery_contact_person || '',
+                  delivery_contact_phone: challan.delivery_contact_phone || ''
+                }}
+                companyInfo={{
+                  name: localStorage.getItem('companyName') || 'AASO PHARMACEUTICALS',
+                  address: localStorage.getItem('companyAddress') || 'Gangapur City, Rajasthan',
+                  phone: localStorage.getItem('companyPhone') || '7738228969',
+                  email: localStorage.getItem('companyEmail') || 'info@aasopharma.com',
+                  gstin: localStorage.getItem('companyGSTIN') || '08AAXCA4042N1Z2',
+                  drugLicense: localStorage.getItem('companyDrugLicense') || 'DL No: MH-MUM-123456',
+                  logo: localStorage.getItem('companyLogo') || null
+                }}
+              />
+            </PrintUtility>
             
             {/* Notes Section - Using compact global component */}
             <div className="bg-white rounded-lg border border-gray-200 p-4 mt-6">

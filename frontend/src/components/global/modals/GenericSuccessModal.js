@@ -1,5 +1,6 @@
-import React from 'react';
-import { CheckCircle, X, Printer, Download, Send, Copy, ExternalLink, Sparkles } from 'lucide-react';
+import React, { useState } from 'react';
+import { CheckCircle, X, Printer, Download, Send, Copy, ExternalLink, Sparkles, Share2 } from 'lucide-react';
+import ShareDocument from '../ui/ShareDocument';
 
 /**
  * Generic Success Modal Component
@@ -19,9 +20,14 @@ const GenericSuccessModal = ({
   onWhatsApp,
   additionalActions = [], // Custom action buttons
   showCopy = true,
-  autoCloseDelay = null // Auto close after X seconds
+  autoCloseDelay = null, // Auto close after X seconds
+  enableShare = true, // Enable the new ShareDocument modal
+  partyDetails = null, // Customer/Supplier details for sharing
+  companyInfo = {},
+  documentData = {} // Full document data for sharing
 }) => {
-  const [copied, setCopied] = React.useState(false);
+  const [copied, setCopied] = useState(false);
+  const [showShareModal, setShowShareModal] = useState(false);
   
   // Auto close functionality
   React.useEffect(() => {
@@ -163,7 +169,19 @@ const GenericSuccessModal = ({
 
           {/* Action Buttons */}
           <div className="grid grid-cols-2 gap-3">
-            {onPrint && (
+            {/* Universal Share Button - Primary Action */}
+            {enableShare && (
+              <button
+                onClick={() => setShowShareModal(true)}
+                className="flex items-center justify-center gap-2 px-4 py-3 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white rounded-lg transition-all transform hover:scale-105 col-span-2"
+              >
+                <Share2 className="w-4 h-4" />
+                Share Document
+              </button>
+            )}
+            
+            {/* Legacy buttons - kept for backward compatibility */}
+            {!enableShare && onPrint && (
               <button
                 onClick={onPrint}
                 className="flex items-center justify-center gap-2 px-4 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors"
@@ -173,7 +191,7 @@ const GenericSuccessModal = ({
               </button>
             )}
             
-            {onWhatsApp && (
+            {!enableShare && onWhatsApp && (
               <button
                 onClick={onWhatsApp}
                 className="flex items-center justify-center gap-2 px-4 py-3 bg-green-600 hover:bg-green-700 text-white rounded-lg transition-colors"
@@ -183,7 +201,7 @@ const GenericSuccessModal = ({
               </button>
             )}
             
-            {onDownload && (
+            {!enableShare && onDownload && (
               <button
                 onClick={onDownload}
                 className="flex items-center justify-center gap-2 px-4 py-3 bg-purple-600 hover:bg-purple-700 text-white rounded-lg transition-colors"
@@ -215,6 +233,31 @@ const GenericSuccessModal = ({
           </button>
         </div>
       </div>
+      
+      {/* ShareDocument Modal */}
+      {enableShare && (
+        <ShareDocument
+          isOpen={showShareModal}
+          onClose={() => setShowShareModal(false)}
+          documentType={documentType.replace('-', '')} // Convert "sales-order" to "order"
+          documentData={{
+            documentNumber,
+            totalAmount,
+            itemCount: documentData.itemCount,
+            paymentStatus: documentData.paymentStatus,
+            deliveryDate: documentData.deliveryDate,
+            ...documentData
+          }}
+          partyDetails={partyDetails || { 
+            name: customerName,
+            phone: documentData.customerPhone,
+            email: documentData.customerEmail
+          }}
+          companyInfo={companyInfo}
+          onPrint={onPrint}
+          onDownload={onDownload}
+        />
+      )}
     </div>
   );
 };

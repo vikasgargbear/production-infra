@@ -8,7 +8,7 @@ import {
 } from 'lucide-react';
 import { suppliersApi, productsApi, purchaseApi } from '../../services/api';
 import { searchCache } from '../../utils/searchCache';
-import { SupplierSearch, PurchaseProductSearch, PharmaItemsTable, NotesSection, ProductCreationModal, GSTCalculator, ViewHistoryButton, ModuleHeader, StandardDatePicker } from '../global';
+import { SupplierSearch, PurchaseProductSearch, PharmaItemsTable, NotesSection, ProductCreationModal, GSTCalculator, ViewHistoryButton, ModuleHeader, StandardDatePicker, PrintUtility } from '../global';
 import PurchaseOrderPreview from './components/PurchaseOrderPreview';
 import SupplierCreationModal from '../global/modals/SupplierCreationModal';
 import ShareModal from '../common/ShareModal';
@@ -1098,9 +1098,57 @@ ${localStorage.getItem('company_name') || 'AASO Pharmaceuticals'}
                 </div>
               </div>
 
-              {/* Right side - PO Preview */}
+              {/* Right side - PO Preview with Thermal Print Support */}
               <div className="lg:col-span-2">
-                <PurchaseOrderPreview purchaseOrder={purchaseOrder} />
+                <PrintUtility
+                  documentData={{
+                    documentNumber: purchaseOrder.po_number,
+                    date: purchaseOrder.order_date,
+                    customer: {
+                      name: purchaseOrder.supplier_name,
+                      phone: selectedSupplier?.phone,
+                      gstin: selectedSupplier?.gstin
+                    },
+                    items: purchaseOrder.items.map(item => ({
+                      product_name: item.product_name,
+                      hsn_code: item.hsn_code,
+                      batch_no: item.batch_no || item.batch_number,
+                      quantity: item.quantity,
+                      free_quantity: item.free_quantity || 0,
+                      unit_price: item.unit_price || item.cost_price || 0,
+                      discount_percent: item.discount_percent || 0,
+                      gst_percent: item.gst_percent || item.tax_percent || 18,
+                      total: item.total || item.line_total || (item.quantity * (item.unit_price || 0))
+                    })),
+                    totals: {
+                      subtotal: purchaseOrder.subtotal_amount || purchaseOrder.total_amount,
+                      discount: purchaseOrder.discount_amount || 0,
+                      tax_amount: purchaseOrder.tax_amount || 0,
+                      cgst_amount: purchaseOrder.cgst_amount || (purchaseOrder.tax_amount / 2) || 0,
+                      sgst_amount: purchaseOrder.sgst_amount || (purchaseOrder.tax_amount / 2) || 0,
+                      igst_amount: purchaseOrder.igst_amount || 0,
+                      total_amount: purchaseOrder.total_amount || 0,
+                      final_amount: purchaseOrder.total_amount || 0
+                    },
+                    addresses: {
+                      billing: purchaseOrder.billing_address,
+                      shipping: purchaseOrder.delivery_address
+                    },
+                    notes: purchaseOrder.notes
+                  }}
+                  documentType="purchase-order"
+                  companyInfo={{
+                    name: localStorage.getItem('companyName') || 'Your Company',
+                    address: localStorage.getItem('companyAddress') || '',
+                    phone: localStorage.getItem('companyPhone') || '',
+                    email: localStorage.getItem('companyEmail') || '',
+                    gstin: localStorage.getItem('companyGSTIN') || '',
+                    drugLicense: localStorage.getItem('companyDrugLicense') || ''
+                  }}
+                  showPrintOptions={true}
+                >
+                  <PurchaseOrderPreview purchaseOrder={purchaseOrder} />
+                </PrintUtility>
               </div>
             </div>
           </div>

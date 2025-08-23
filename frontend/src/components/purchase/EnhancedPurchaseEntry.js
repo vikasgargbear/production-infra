@@ -1017,7 +1017,7 @@ const EnhancedPurchaseEntry = ({ onClose, prefilledData = null }) => {
         />
       )}
 
-      {/* Success Modal */}
+      {/* Success Modal with ShareDocument */}
       {showSuccessModal && createdPurchaseData && (
         <GenericSuccessModal
           isOpen={showSuccessModal}
@@ -1033,6 +1033,19 @@ const EnhancedPurchaseEntry = ({ onClose, prefilledData = null }) => {
           totalAmount={createdPurchaseData.totalAmount}
           onPrint={handlePrint}
           showCopy={true}
+          enableShare={true}
+          partyDetails={{
+            name: selectedSupplier?.supplier_name,
+            phone: selectedSupplier?.phone,
+            email: selectedSupplier?.email,
+            supplier_id: selectedSupplier?.supplier_id
+          }}
+          documentData={{
+            supplierInvoiceNumber: purchase.supplier_invoice_number,
+            paymentStatus: purchase.payment_status,
+            itemCount: purchase.items?.length || 0,
+            date: purchase.invoice_date
+          }}
         />
       )}
     </>

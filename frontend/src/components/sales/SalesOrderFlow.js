@@ -15,7 +15,8 @@ import {
   DocumentFooter,
   GenericSuccessModal,
   StandardDatePicker,
-  AddressForm
+  AddressForm,
+  PrintUtility
 } from '../global';
 import CustomerCreationB2B from '../global/ui/forms/CustomerCreationB2B';
 import { ordersApi, salesApi, api, apiClient, usersApi } from '../../services/api';
@@ -1372,7 +1373,48 @@ Expected Delivery: ${order.expected_delivery_date}
               }
             ` }} />
             
-            {/* Order Preview */}
+            {/* Order Preview with Thermal Print Support */}
+            <PrintUtility
+              documentData={{
+                documentNumber: order.order_number,
+                date: order.order_date,
+                customer: {
+                  name: order.customer_name,
+                  phone: selectedCustomer?.phone || selectedCustomer?.primary_phone,
+                  gstin: selectedCustomer?.gstin,
+                  dl_number: selectedCustomer?.dl_number
+                },
+                items: order.items.map(item => ({
+                  product_name: item.product_name,
+                  hsn_code: item.hsn_code,
+                  batch_no: item.batch_no || item.batch_number,
+                  quantity: item.quantity,
+                  free_quantity: item.free_quantity || 0,
+                  unit_price: item.unit_price,
+                  discount_percent: item.discount_percent || 0,
+                  gst_percent: item.gst_percent || 18,
+                  total: item.calculated_total || item.total
+                })),
+                totals: {
+                  subtotal: order.subtotal_amount,
+                  discount: order.discount_amount || 0,
+                  tax_amount: order.tax_amount,
+                  cgst_amount: order.cgst_amount || (order.tax_amount / 2),
+                  sgst_amount: order.sgst_amount || (order.tax_amount / 2),
+                  igst_amount: order.igst_amount || 0,
+                  total_amount: order.total_amount,
+                  final_amount: order.total_amount
+                },
+                addresses: {
+                  billing: order.billing_address,
+                  shipping: order.shipping_address
+                },
+                notes: order.notes
+              }}
+              documentType="sales-order"
+              companyInfo={companyInfo}
+              showPrintOptions={true}
+            >
             <div className="bg-white rounded-lg shadow-sm border border-blue-200 p-8 print-container order-preview-container">
               {/* Professional Header with Logo Space */}
               <div className="mb-4 pb-3 border-b-2 border-blue-300 print-header">
@@ -1715,6 +1757,7 @@ Expected Delivery: ${order.expected_delivery_date}
               </div>
 
             </div>
+            </PrintUtility>
             
             {/* Notes Section - Editable on review page */}
             <div className="mt-6">
@@ -1749,7 +1792,7 @@ Expected Delivery: ${order.expected_delivery_date}
       </div>
     )}
 
-      {/* Success Modal - Rendered at component level */}
+      {/* Success Modal with ShareDocument */}
       {showSuccessModal && (
         <GenericSuccessModal
           isOpen={showSuccessModal}
@@ -1772,6 +1815,20 @@ Expected Delivery: ${order.expected_delivery_date}
             setShowSuccessModal(false);
           }}
           showCopy={true}
+          enableShare={true}
+          partyDetails={{
+            name: selectedCustomer?.customer_name,
+            phone: selectedCustomer?.phone,
+            email: selectedCustomer?.email,
+            customer_id: selectedCustomer?.customer_id
+          }}
+          documentData={{
+            expectedDelivery: order.expected_delivery_date,
+            paymentTerms: order.payment_terms,
+            itemCount: order.items?.length || 0,
+            date: order.order_date
+          }}
+          companyInfo={companyInfo}
         />
       )}
     </>

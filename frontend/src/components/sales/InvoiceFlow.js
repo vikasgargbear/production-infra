@@ -18,7 +18,7 @@ import InvoiceValidator from '../../services/invoiceValidator';
 import DataTransformer from '../../services/dataTransformer';
 import DateFormatter from '../../services/dateFormatter';
 import InvoiceApiService from '../../services/invoiceApiService';
-import { ProductSearchSimple, ItemsTable, ModuleHeader, CustomerSearch, ProductCreationModal, ViewHistoryButton, GSTCalculator, DocumentFooter, GenericSuccessModal, AddressForm, NotesSection } from '../global';
+import { ProductSearchSimple, ItemsTable, ModuleHeader, CustomerSearch, ProductCreationModal, ViewHistoryButton, GSTCalculator, DocumentFooter, GenericSuccessModal, AddressForm, NotesSection, PrintUtility } from '../global';
 import CustomerCreationB2B from '../global/ui/forms/CustomerCreationB2B';
 import { useCompany } from '../../contexts/CompanyContext';
 // import InvoiceSuccessModal from './InvoiceSuccessModal'; // Replaced with GenericSuccessModal
@@ -1578,12 +1578,56 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
             </div>
           )}
 
-          <InvoicePreview
-            invoice={invoice}
-            customer={selectedCustomer}
-            showAddresses={false}  // Hide addresses in PDF preview since we show them above
+          {/* Invoice Preview with Thermal Print Support */}
+          <PrintUtility
+            documentData={{
+              documentNumber: invoice.invoice_number,
+              date: invoice.invoice_date,
+              customer: {
+                name: selectedCustomer?.customer_name || selectedCustomer?.name,
+                phone: selectedCustomer?.phone || selectedCustomer?.primary_phone,
+                gstin: selectedCustomer?.gstin,
+                dl_number: selectedCustomer?.dl_number
+              },
+              items: invoice.items.map(item => ({
+                product_name: item.product_name || item.name,
+                hsn_code: item.hsn_code,
+                batch_no: item.batch_no || item.batch_number,
+                quantity: item.quantity,
+                free_quantity: item.free_quantity || 0,
+                unit_price: item.unit_price || item.selling_price,
+                discount_percent: item.discount_percent || 0,
+                gst_percent: item.gst_percent || item.tax_percent || 18,
+                total: item.total || item.line_total
+              })),
+              totals: {
+                subtotal: invoice.subtotal_amount || invoice.gross_amount,
+                discount: invoice.discount_amount || 0,
+                tax_amount: invoice.tax_amount || invoice.total_tax,
+                cgst_amount: invoice.cgst_amount || (invoice.tax_amount / 2),
+                sgst_amount: invoice.sgst_amount || (invoice.tax_amount / 2),
+                igst_amount: invoice.igst_amount || 0,
+                total_amount: invoice.net_amount || invoice.final_amount,
+                paid_amount: invoice.paid_amount || 0,
+                balance_amount: invoice.balance_amount || invoice.net_amount
+              },
+              addresses: {
+                billing: invoice.billing_address,
+                shipping: invoice.shipping_address
+              },
+              notes: invoice.notes
+            }}
+            documentType="invoice"
             companyInfo={companyInfo}
-          />
+            showPrintOptions={true}
+          >
+            <InvoicePreview
+              invoice={invoice}
+              customer={selectedCustomer}
+              showAddresses={false}  // Hide addresses in PDF preview since we show them above
+              companyInfo={companyInfo}
+            />
+          </PrintUtility>
 
           {/* Notes */}
           <div className="max-w-6xl mx-auto mt-6 mb-6">
