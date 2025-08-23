@@ -333,16 +333,20 @@ const InvoicePreviewEnterprise = ({
                     <td className="px-3 py-3 text-sm font-medium text-gray-900">{item.product_name}</td>
                     <td className="px-3 py-3 text-sm text-center text-gray-600">{item.hsn_code || '3004'}</td>
                     <td className="px-3 py-3 text-sm text-center text-gray-600 pack-column">
-                      {item.pack_type || item.pack_size ? (
-                        <span className="text-xs">
-                          {item.pack_type || 
-                           (item.pack_size && item.pack_unit ? `1×${item.pack_size}${item.pack_unit}` : '') ||
-                           (item.qty_per_strip && item.strips_per_box ? `${item.qty_per_strip}×${item.strips_per_box}` : '') ||
-                           (item.sale_unit ? item.sale_unit : 'Unit')}
-                        </span>
-                      ) : (
-                        <span className="text-gray-400">-</span>
-                      )}
+                      <span className="text-xs">
+                        {(() => {
+                          // Display pack configuration
+                          if (item.packages_per_box && item.units_per_pack) {
+                            return `${item.packages_per_box}×${item.units_per_pack}`;
+                          } else if (item.pack_type && item.units_per_pack) {
+                            return `${item.units_per_pack} ${item.pack_type}`;
+                          } else if (item.pack_size) {
+                            return `1×${item.pack_size}`;
+                          } else {
+                            return '-';
+                          }
+                        })()}
+                      </span>
                     </td>
                     <td className="px-3 py-3 text-sm text-center text-gray-600">{item.batch_number}</td>
                     <td className="px-3 py-3 text-sm text-center text-gray-600">

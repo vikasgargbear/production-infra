@@ -630,10 +630,20 @@ async def get_invoice(
         
         invoice_dict = dict(invoice._mapping)
         
-        # Get invoice items
+        # Get invoice items with pack information from batches
         items_result = db.execute(text("""
-            SELECT * FROM sales.invoice_items
-            WHERE invoice_id = :invoice_id
+            SELECT 
+                ii.*,
+                b.pack_type,
+                b.pack_size,
+                b.units_per_pack,
+                b.packages_per_box,
+                b.pack_uom,
+                b.base_uom
+            FROM sales.invoice_items ii
+            LEFT JOIN inventory.batches b ON ii.batch_id = b.batch_id
+            WHERE ii.invoice_id = :invoice_id
+            ORDER BY ii.invoice_item_id
         """), {"invoice_id": invoice_id})
         
         invoice_dict["items"] = [dict(item._mapping) for item in items_result]

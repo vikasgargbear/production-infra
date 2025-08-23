@@ -122,17 +122,30 @@ const SplitPayment = ({
 
   return (
     <div className={`${className}`}>
-      {/* Compact Header - Status only, no redundant title */}
-      <div className="flex items-center justify-between mb-2">
-        <div className="flex items-center gap-3">
-          {/* Single row for method and amount */}
-          {paymentMethods.length === 1 && (
-            <div className="flex items-center gap-2">
+      {/* Header with status badge - matching other tiles */}
+      <div className="flex items-center justify-between mb-3">
+        <h3 className="text-sm font-medium text-gray-700">Payment Method</h3>
+        <div className={`px-2 py-0.5 rounded-full text-xs font-medium ${
+          paymentStatus === 'Paid' ? 'bg-green-100 text-green-700' :
+          paymentStatus === 'Partial' ? 'bg-yellow-100 text-yellow-700' :
+          paymentStatus === 'Overpaid' ? 'bg-red-100 text-red-700' :
+          'bg-gray-100 text-gray-700'
+        }`}>
+          {paymentStatus}
+        </div>
+      </div>
+
+      {/* Single payment method - default view */}
+      {paymentMethods.length === 1 && (
+        <div className="space-y-3">
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs text-gray-600 mb-1">Method</label>
               <select
                 value={paymentMethods[0].method}
                 onChange={(e) => updatePaymentMethod(paymentMethods[0].id, 'method', e.target.value)}
                 disabled={readOnly}
-                className="px-2 py-1 text-sm border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 disabled:bg-gray-100"
+                className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-100"
               >
                 {paymentOptions.map(option => (
                   <option key={option.value} value={option.value}>
@@ -140,6 +153,9 @@ const SplitPayment = ({
                   </option>
                 ))}
               </select>
+            </div>
+            <div>
+              <label className="block text-xs text-gray-600 mb-1">Amount</label>
               <input
                 type="text"
                 value={paymentMethods[0].amount || ''}
@@ -148,52 +164,45 @@ const SplitPayment = ({
                   updatePaymentMethod(paymentMethods[0].id, 'amount', value);
                 }}
                 disabled={readOnly}
-                placeholder="Amount"
-                className="w-24 px-2 py-1 text-sm border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 disabled:bg-gray-100"
+                placeholder="0.00"
+                className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-100"
               />
-              {!readOnly && (
-                <button
-                  onClick={addPaymentMethod}
-                  className="p-1 text-blue-600 hover:text-blue-700 hover:bg-blue-50 rounded"
-                  title="Add payment method"
-                >
-                  <Plus className="w-4 h-4" />
-                </button>
-              )}
+            </div>
+          </div>
+          
+          {/* Split payment button */}
+          {!readOnly && (
+            <button
+              onClick={addPaymentMethod}
+              className="text-sm text-blue-600 hover:text-blue-700 font-medium"
+            >
+              Split Payment
+            </button>
+          )}
+          
+          {/* Remaining amount indicator */}
+          {remaining !== 0 && (
+            <div className="text-xs">
+              <span className={`font-medium ${
+                remaining > 0 ? 'text-orange-600' : 'text-red-600'
+              }`}>
+                {remaining > 0 ? `Remaining: ₹${remaining.toFixed(2)}` : `Excess: ₹${Math.abs(remaining).toFixed(2)}`}
+              </span>
             </div>
           )}
         </div>
-        
-        {/* Compact status badge */}
-        <div className="flex items-center gap-2">
-          {remaining !== 0 && (
-            <span className={`text-xs font-medium ${
-              remaining > 0 ? 'text-orange-600' : 'text-red-600'
-            }`}>
-              {remaining > 0 ? `₹${remaining.toFixed(0)} pending` : `₹${Math.abs(remaining).toFixed(0)} excess`}
-            </span>
-          )}
-          <div className={`px-2 py-0.5 rounded text-xs font-medium ${
-            paymentStatus === 'Paid' ? 'bg-green-100 text-green-700' :
-            paymentStatus === 'Partial' ? 'bg-yellow-100 text-yellow-700' :
-            paymentStatus === 'Overpaid' ? 'bg-red-100 text-red-700' :
-            'bg-gray-100 text-gray-700'
-          }`}>
-            {paymentStatus}
-          </div>
-        </div>
-      </div>
+      )}
 
-      {/* Multiple payment methods - compact grid */}
+      {/* Multiple payment methods - split view */}
       {paymentMethods.length > 1 && (
-        <div className="space-y-1.5">
+        <div className="space-y-2">
           {paymentMethods.map((payment, index) => (
             <div key={payment.id} className="flex items-center gap-2">
               <select
                 value={payment.method}
                 onChange={(e) => updatePaymentMethod(payment.id, 'method', e.target.value)}
                 disabled={readOnly}
-                className="flex-1 px-2 py-1 text-sm border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 disabled:bg-gray-100"
+                className="flex-1 px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100"
               >
                 {paymentOptions.map(option => (
                   <option key={option.value} value={option.value}>
@@ -210,28 +219,47 @@ const SplitPayment = ({
                 }}
                 disabled={readOnly}
                 placeholder="Amount"
-                className="w-24 px-2 py-1 text-sm border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 disabled:bg-gray-100"
+                className="w-28 px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100"
               />
               {!readOnly && (
                 <button
                   onClick={() => removePaymentMethod(payment.id)}
                   className="p-1 text-red-500 hover:text-red-700 hover:bg-red-50 rounded"
                 >
-                  <X className="w-3 h-3" />
+                  <X className="w-4 h-4" />
                 </button>
               )}
             </div>
           ))}
           
-          {/* Compact add button */}
+          {/* Add more button */}
           {!readOnly && (
             <button
               onClick={addPaymentMethod}
-              className="w-full py-1 border border-dashed border-gray-300 rounded text-gray-500 hover:border-blue-400 hover:text-blue-600 text-xs flex items-center justify-center gap-1"
+              className="text-sm text-blue-600 hover:text-blue-700 font-medium mt-1"
             >
-              <Plus className="w-3 h-3" />
-              Add Method
+              + Add Method
             </button>
+          )}
+          
+          {/* Summary for multiple payments */}
+          {paymentMethods.length > 1 && (
+            <div className="pt-2 mt-2 border-t border-gray-200 text-xs space-y-1">
+              <div className="flex justify-between">
+                <span className="text-gray-600">Total Paid:</span>
+                <span className="font-medium">₹{totalPaid.toFixed(2)}</span>
+              </div>
+              {remaining !== 0 && (
+                <div className="flex justify-between">
+                  <span className="text-gray-600">{remaining > 0 ? 'Remaining:' : 'Excess:'}</span>
+                  <span className={`font-medium ${
+                    remaining > 0 ? 'text-orange-600' : 'text-red-600'
+                  }`}>
+                    ₹{Math.abs(remaining).toFixed(2)}
+                  </span>
+                </div>
+              )}
+            </div>
           )}
         </div>
       )}
