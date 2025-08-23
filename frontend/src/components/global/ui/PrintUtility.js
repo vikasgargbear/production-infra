@@ -1,6 +1,5 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { Printer, Monitor, FileText } from 'lucide-react';
-import ReactToPrint from 'react-to-print';
 
 /**
  * Enterprise Print Utility Component
@@ -328,6 +327,8 @@ export const ThermalPrintTemplate = React.forwardRef(({
   );
 });
 
+ThermalPrintTemplate.displayName = 'ThermalPrintTemplate';
+
 // Main Print Utility Component
 const PrintUtility = ({ 
   children, 
@@ -342,8 +343,34 @@ const PrintUtility = ({
   const [thermalWidth, setThermalWidth] = useState('80mm'); // '80mm' or '58mm'
   const [showPrintMenu, setShowPrintMenu] = useState(false);
   
-  const digitalPrintRef = useRef();
   const thermalPrintRef = useRef();
+
+  // Handle thermal print
+  useEffect(() => {
+    if (printFormat === 'thermal' && thermalPrintRef.current) {
+      // Create a new window for thermal print
+      const printWindow = window.open('', '', 'width=400,height=600');
+      if (printWindow) {
+        printWindow.document.write('<html><head><title>Print</title>');
+        printWindow.document.write('<style>');
+        printWindow.document.write(`
+          @page { size: ${thermalWidth} auto; margin: 0; }
+          body { margin: 0; padding: 0; }
+        `);
+        printWindow.document.write('</style></head><body>');
+        printWindow.document.write(thermalPrintRef.current.innerHTML);
+        printWindow.document.write('</body></html>');
+        printWindow.document.close();
+        
+        setTimeout(() => {
+          printWindow.print();
+          printWindow.close();
+          setPrintFormat('digital');
+          if (onPrint) onPrint('thermal', thermalWidth);
+        }, 250);
+      }
+    }
+  }, [printFormat, thermalWidth, onPrint]);
 
   const handlePrintClick = () => {
     if (showPrintOptions) {
@@ -364,102 +391,90 @@ const PrintUtility = ({
   };
 
   const handleThermalPrint = (width) => {
-    setPrintFormat('thermal');
     setThermalWidth(width);
+    setPrintFormat('thermal');
     setShowPrintMenu(false);
-    // Trigger print after state update
-    setTimeout(() => {
-      if (onPrint) onPrint('thermal', width);
-    }, 100);
   };
 
   return (
     <div className={`print-utility-container ${className}`}>
       {/* Print Button with Options */}
-      <div className="relative inline-block">
-        <button
-          onClick={handlePrintClick}
-          className="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors flex items-center gap-2"
-        >
-          <Printer className="w-4 h-4" />
-          Print
-        </button>
-        
-        {/* Print Options Menu */}
-        {showPrintMenu && showPrintOptions && (
-          <div className="absolute top-full mt-2 left-0 bg-white rounded-lg shadow-xl border border-gray-200 p-2 z-50 min-w-[200px]">
-            <div className="text-xs text-gray-500 uppercase tracking-wider px-3 py-1">
-              Print Format
+      {showPrintOptions && (
+        <div className="relative inline-block">
+          <button
+            onClick={handlePrintClick}
+            className="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors flex items-center gap-2"
+          >
+            <Printer className="w-4 h-4" />
+            Print
+          </button>
+          
+          {/* Print Options Menu */}
+          {showPrintMenu && (
+            <div className="absolute top-full mt-2 left-0 bg-white rounded-lg shadow-xl border border-gray-200 p-2 z-50 min-w-[200px]">
+              <div className="text-xs text-gray-500 uppercase tracking-wider px-3 py-1">
+                Print Format
+              </div>
+              
+              <button
+                onClick={handleDigitalPrint}
+                className="w-full text-left px-3 py-2 hover:bg-blue-50 rounded flex items-center gap-2 text-sm"
+              >
+                <Monitor className="w-4 h-4 text-blue-500" />
+                <div>
+                  <div className="font-medium">Digital/Color</div>
+                  <div className="text-xs text-gray-500">For screen & sharing</div>
+                </div>
+              </button>
+              
+              <div className="border-t border-gray-200 my-2"></div>
+              
+              <div className="text-xs text-gray-500 uppercase tracking-wider px-3 py-1">
+                Thermal Printer
+              </div>
+              
+              <button
+                onClick={() => handleThermalPrint('80mm')}
+                className="w-full text-left px-3 py-2 hover:bg-gray-50 rounded flex items-center gap-2 text-sm"
+              >
+                <FileText className="w-4 h-4 text-gray-600" />
+                <div>
+                  <div className="font-medium">80mm Width</div>
+                  <div className="text-xs text-gray-500">Standard thermal</div>
+                </div>
+              </button>
+              
+              <button
+                onClick={() => handleThermalPrint('58mm')}
+                className="w-full text-left px-3 py-2 hover:bg-gray-50 rounded flex items-center gap-2 text-sm"
+              >
+                <FileText className="w-4 h-4 text-gray-600" />
+                <div>
+                  <div className="font-medium">58mm Width</div>
+                  <div className="text-xs text-gray-500">Compact thermal</div>
+                </div>
+              </button>
             </div>
-            
-            <button
-              onClick={handleDigitalPrint}
-              className="w-full text-left px-3 py-2 hover:bg-blue-50 rounded flex items-center gap-2 text-sm"
-            >
-              <Monitor className="w-4 h-4 text-blue-500" />
-              <div>
-                <div className="font-medium">Digital/Color</div>
-                <div className="text-xs text-gray-500">For screen & sharing</div>
-              </div>
-            </button>
-            
-            <div className="border-t border-gray-200 my-2"></div>
-            
-            <div className="text-xs text-gray-500 uppercase tracking-wider px-3 py-1">
-              Thermal Printer
-            </div>
-            
-            <button
-              onClick={() => handleThermalPrint('80mm')}
-              className="w-full text-left px-3 py-2 hover:bg-gray-50 rounded flex items-center gap-2 text-sm"
-            >
-              <FileText className="w-4 h-4 text-gray-600" />
-              <div>
-                <div className="font-medium">80mm Width</div>
-                <div className="text-xs text-gray-500">Standard thermal</div>
-              </div>
-            </button>
-            
-            <button
-              onClick={() => handleThermalPrint('58mm')}
-              className="w-full text-left px-3 py-2 hover:bg-gray-50 rounded flex items-center gap-2 text-sm"
-            >
-              <FileText className="w-4 h-4 text-gray-600" />
-              <div>
-                <div className="font-medium">58mm Width</div>
-                <div className="text-xs text-gray-500">Compact thermal</div>
-              </div>
-            </button>
-          </div>
-        )}
-      </div>
-
-      {/* Hidden Thermal Print Template */}
-      {printFormat === 'thermal' && documentData && (
-        <div style={{ display: 'none' }}>
-          <ThermalPrintTemplate
-            ref={thermalPrintRef}
-            documentType={documentType}
-            documentData={documentData}
-            companyInfo={companyInfo}
-            width={thermalWidth}
-          />
+          )}
         </div>
       )}
 
-      {/* ReactToPrint Component for Thermal */}
-      {printFormat === 'thermal' && (
-        <ReactToPrint
-          trigger={() => <span></span>}
-          content={() => thermalPrintRef.current}
-          onAfterPrint={() => setPrintFormat('digital')}
-        />
-      )}
+      {/* Hidden Thermal Print Template */}
+      <div style={{ display: 'none' }}>
+        <div ref={thermalPrintRef}>
+          {printFormat === 'thermal' && documentData && (
+            <ThermalPrintTemplate
+              documentType={documentType}
+              documentData={documentData}
+              companyInfo={companyInfo}
+              width={thermalWidth}
+            />
+          )}
+        </div>
+      </div>
 
       {/* Digital Print Content (children) */}
-      <div ref={digitalPrintRef} style={{ display: printFormat === 'digital' ? 'block' : 'none' }}>
-        {children}
-      </div>
+      {children}
     </div>
   );
 };
