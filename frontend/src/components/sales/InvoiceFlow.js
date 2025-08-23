@@ -2008,8 +2008,7 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
 
           {/* Payment Details - Using Global Component */}
           <div className="mb-4">
-            <h3 className="text-xs font-semibold text-gray-600 uppercase tracking-wider mb-1.5 px-1">PAYMENT DETAILS</h3>
-            <div className="bg-white rounded-lg border border-gray-200 p-3">
+            <div className="bg-white rounded-lg border border-gray-200 p-2">
               <SplitPayment
                 totalAmount={invoice.net_amount || 0}
                 payments={[

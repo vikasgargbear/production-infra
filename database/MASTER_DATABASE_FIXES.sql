@@ -2167,4 +2167,54 @@ RAISE NOTICE '- free_quantity = promotional items (analytics)';
 RAISE NOTICE '- quantity = total delivered (inventory deduction)';
 RAISE NOTICE '- All revenue calculations use base_quantity only';
 RAISE NOTICE '- Single source of truth for all calculations';
+
+-- ========================================
+-- SECTION 18: PACK CONFIGURATION COLUMN RENAME
+-- ========================================
+-- Date: 2025-08-23
+-- Purpose: Rename strips_per_box to packages_per_box for generic pack support
+
+RAISE NOTICE '';
+RAISE NOTICE '========================================';
+RAISE NOTICE '🔧 SECTION 18: RENAMING PACK CONFIGURATION COLUMNS';
+RAISE NOTICE '========================================';
+
+-- Check if column exists before renaming
+DO $$
+BEGIN
+    IF EXISTS (
+        SELECT 1 FROM information_schema.columns 
+        WHERE table_schema = 'inventory' 
+        AND table_name = 'batches' 
+        AND column_name = 'strips_per_box'
+    ) THEN
+        -- Rename the column
+        ALTER TABLE inventory.batches 
+        RENAME COLUMN strips_per_box TO packages_per_box;
+        
+        RAISE NOTICE '✅ Renamed strips_per_box to packages_per_box';
+    ELSE
+        RAISE NOTICE '⚠️ Column strips_per_box not found or already renamed';
+    END IF;
+END $$;
+
+-- Add comments to clarify column purposes
+COMMENT ON COLUMN inventory.batches.packages_per_box IS 'Number of packages (strips/bottles/vials/boxes) per box';
+COMMENT ON COLUMN inventory.batches.units_per_pack IS 'Number of units (tablets/capsules/ml) per package';
+COMMENT ON COLUMN inventory.batches.tablets_per_strip IS 'DEPRECATED: Use units_per_pack instead. Kept for backward compatibility';
+
+RAISE NOTICE '';
+RAISE NOTICE '========================================';
+RAISE NOTICE '✅ SECTION 18: PACK CONFIGURATION RENAME COMPLETE';
+RAISE NOTICE '========================================';
+RAISE NOTICE 'CHANGES MADE:';
+RAISE NOTICE '1. Renamed strips_per_box to packages_per_box for generic support';
+RAISE NOTICE '2. Added clarifying comments to pack configuration columns';
+RAISE NOTICE '3. Marked tablets_per_strip as deprecated';
+RAISE NOTICE '';
+RAISE NOTICE 'PACK CONFIGURATION INTERPRETATION:';
+RAISE NOTICE '- Input "1*10" means: 1 package per box, 10 units per package';
+RAISE NOTICE '- packages_per_box: How many packages in a box';
+RAISE NOTICE '- units_per_pack: How many units in each package';
+RAISE NOTICE '- Total units per box = packages_per_box × units_per_pack';
 RAISE NOTICE '========================================';

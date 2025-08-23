@@ -122,155 +122,117 @@ const SplitPayment = ({
 
   return (
     <div className={`${className}`}>
-      {/* Header with Status Only */}
-      <div className="flex items-center justify-between mb-4">
-        <h3 className="text-sm font-semibold text-gray-700">Payment Details</h3>
+      {/* Compact Header - Status only, no redundant title */}
+      <div className="flex items-center justify-between mb-2">
+        <div className="flex items-center gap-3">
+          {/* Single row for method and amount */}
+          {paymentMethods.length === 1 && (
+            <div className="flex items-center gap-2">
+              <select
+                value={paymentMethods[0].method}
+                onChange={(e) => updatePaymentMethod(paymentMethods[0].id, 'method', e.target.value)}
+                disabled={readOnly}
+                className="px-2 py-1 text-sm border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 disabled:bg-gray-100"
+              >
+                {paymentOptions.map(option => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+              <input
+                type="text"
+                value={paymentMethods[0].amount || ''}
+                onChange={(e) => {
+                  const value = e.target.value.replace(/[^0-9.]/g, '');
+                  updatePaymentMethod(paymentMethods[0].id, 'amount', value);
+                }}
+                disabled={readOnly}
+                placeholder="Amount"
+                className="w-24 px-2 py-1 text-sm border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 disabled:bg-gray-100"
+              />
+              {!readOnly && (
+                <button
+                  onClick={addPaymentMethod}
+                  className="p-1 text-blue-600 hover:text-blue-700 hover:bg-blue-50 rounded"
+                  title="Add payment method"
+                >
+                  <Plus className="w-4 h-4" />
+                </button>
+              )}
+            </div>
+          )}
+        </div>
         
-        {/* Payment Status Badge */}
-        <div className={`px-3 py-1 rounded-full text-xs font-semibold ${
-          paymentStatus === 'Paid' ? 'bg-green-100 text-green-700' :
-          paymentStatus === 'Partial' ? 'bg-yellow-100 text-yellow-700' :
-          paymentStatus === 'Overpaid' ? 'bg-red-100 text-red-700' :
-          'bg-gray-100 text-gray-700'
-        }`}>
-          {paymentStatus}
+        {/* Compact status badge */}
+        <div className="flex items-center gap-2">
+          {remaining !== 0 && (
+            <span className={`text-xs font-medium ${
+              remaining > 0 ? 'text-orange-600' : 'text-red-600'
+            }`}>
+              {remaining > 0 ? `₹${remaining.toFixed(0)} pending` : `₹${Math.abs(remaining).toFixed(0)} excess`}
+            </span>
+          )}
+          <div className={`px-2 py-0.5 rounded text-xs font-medium ${
+            paymentStatus === 'Paid' ? 'bg-green-100 text-green-700' :
+            paymentStatus === 'Partial' ? 'bg-yellow-100 text-yellow-700' :
+            paymentStatus === 'Overpaid' ? 'bg-red-100 text-red-700' :
+            'bg-gray-100 text-gray-700'
+          }`}>
+            {paymentStatus}
+          </div>
         </div>
       </div>
 
-      {/* Payment Methods List */}
-      <div className="space-y-3">
-        {paymentMethods.map((payment, index) => {
-          const Icon = getPaymentIcon(payment.method);
-          const color = getPaymentColor(payment.method);
+      {/* Multiple payment methods - compact grid */}
+      {paymentMethods.length > 1 && (
+        <div className="space-y-1.5">
+          {paymentMethods.map((payment, index) => (
+            <div key={payment.id} className="flex items-center gap-2">
+              <select
+                value={payment.method}
+                onChange={(e) => updatePaymentMethod(payment.id, 'method', e.target.value)}
+                disabled={readOnly}
+                className="flex-1 px-2 py-1 text-sm border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 disabled:bg-gray-100"
+              >
+                {paymentOptions.map(option => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+              <input
+                type="text"
+                value={payment.amount || ''}
+                onChange={(e) => {
+                  const value = e.target.value.replace(/[^0-9.]/g, '');
+                  updatePaymentMethod(payment.id, 'amount', value);
+                }}
+                disabled={readOnly}
+                placeholder="Amount"
+                className="w-24 px-2 py-1 text-sm border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 disabled:bg-gray-100"
+              />
+              {!readOnly && (
+                <button
+                  onClick={() => removePaymentMethod(payment.id)}
+                  className="p-1 text-red-500 hover:text-red-700 hover:bg-red-50 rounded"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              )}
+            </div>
+          ))}
           
-          return (
-            <div key={payment.id} className={`border rounded-lg p-3 ${
-              readOnly ? 'bg-gray-50' : 'bg-white hover:shadow-sm transition-shadow'
-            }`}>
-              <div className="flex items-start gap-3">
-                {/* Payment Method Icon */}
-                <div className={`p-2 rounded-lg bg-${color}-50 text-${color}-600`}>
-                  <Icon className="w-4 h-4" />
-                </div>
-
-                {/* Payment Details */}
-                <div className="flex-1">
-                  <div className="grid grid-cols-2 gap-3">
-                    {/* Payment Method Dropdown */}
-                    <div>
-                      <label className="block text-xs text-gray-600 mb-1">Method</label>
-                      <select
-                        value={payment.method}
-                        onChange={(e) => updatePaymentMethod(payment.id, 'method', e.target.value)}
-                        disabled={readOnly}
-                        className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-100"
-                      >
-                        {paymentOptions.map(option => (
-                          <option key={option.value} value={option.value}>
-                            {option.label}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-
-                    {/* Amount Input - Simple text input for better UX */}
-                    <div>
-                      <label className="block text-xs text-gray-600 mb-1">
-                        Amount
-                        {!readOnly && remaining > 0 && (
-                          <button
-                            onClick={() => autoFillRemaining(payment.id)}
-                            className="ml-2 text-blue-600 hover:text-blue-700 text-xs"
-                          >
-                            (Fill ₹{remaining.toFixed(2)})
-                          </button>
-                        )}
-                      </label>
-                      <input
-                        type="text"
-                        value={payment.amount || ''}
-                        onChange={(e) => {
-                          const value = e.target.value.replace(/[^0-9.]/g, '');
-                          updatePaymentMethod(payment.id, 'amount', value);
-                        }}
-                        disabled={readOnly}
-                        placeholder="0.00"
-                        className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-100"
-                      />
-                    </div>
-                  </div>
-                </div>
-
-                {/* Remove Button */}
-                {!readOnly && paymentMethods.length > 1 && (
-                  <button
-                    onClick={() => removePaymentMethod(payment.id)}
-                    className="p-1 text-red-500 hover:text-red-700 hover:bg-red-50 rounded transition-colors"
-                  >
-                    <X className="w-4 h-4" />
-                  </button>
-                )}
-              </div>
-            </div>
-          );
-        })}
-
-        {/* Add Payment Method Button */}
-        {!readOnly && (
-          <button
-            onClick={addPaymentMethod}
-            className="w-full py-2 border-2 border-dashed border-gray-300 rounded-lg text-gray-600 hover:border-blue-400 hover:text-blue-600 transition-colors flex items-center justify-center gap-2"
-          >
-            <Plus className="w-4 h-4" />
-            <span className="text-sm">Add Payment Method</span>
-          </button>
-        )}
-      </div>
-
-      {/* Payment Summary - Simplified */}
-      {(remaining !== 0 || paymentMethods.length > 1) && (
-        <div className="mt-4 pt-4 border-t border-gray-200">
-          <div className="space-y-2">
-            {paymentMethods.length > 1 && (
-              <div className="flex justify-between text-sm">
-                <span className="text-gray-600">Total Paid</span>
-                <span className={`font-medium ${totalPaid > 0 ? 'text-green-600' : ''}`}>
-                  ₹{totalPaid.toFixed(2)}
-                </span>
-              </div>
-            )}
-            {remaining !== 0 && (
-              <div className="flex justify-between text-sm">
-                <span className="text-gray-600">{remaining > 0 ? 'Remaining' : 'Excess'}</span>
-                <span className={`font-semibold ${
-                  remaining > 0 ? 'text-orange-600' : 'text-red-600'
-                }`}>
-                  ₹{Math.abs(remaining).toFixed(2)}
-                </span>
-              </div>
-            )}
-          </div>
-
-        {/* Warning Messages */}
-        {isOverPaid && (
-          <div className="mt-3 p-2 bg-red-50 border border-red-200 rounded flex items-start gap-2">
-            <AlertCircle className="w-4 h-4 text-red-500 mt-0.5" />
-            <div className="text-xs text-red-700">
-              <p className="font-semibold">Overpayment Detected</p>
-              <p>The total payment exceeds the bill amount by ₹{Math.abs(remaining).toFixed(2)}</p>
-            </div>
-          </div>
-        )}
-
-        {!allowPartial && remaining > 0 && totalPaid > 0 && (
-          <div className="mt-3 p-2 bg-yellow-50 border border-yellow-200 rounded flex items-start gap-2">
-            <AlertCircle className="w-4 h-4 text-yellow-500 mt-0.5" />
-            <div className="text-xs text-yellow-700">
-              <p className="font-semibold">Partial Payment</p>
-              <p>Please complete the full payment of ₹{remaining.toFixed(2)}</p>
-            </div>
-          </div>
-        )}
+          {/* Compact add button */}
+          {!readOnly && (
+            <button
+              onClick={addPaymentMethod}
+              className="w-full py-1 border border-dashed border-gray-300 rounded text-gray-500 hover:border-blue-400 hover:text-blue-600 text-xs flex items-center justify-center gap-1"
+            >
+              <Plus className="w-3 h-3" />
+              Add Method
+            </button>
+          )}
         </div>
       )}
     </div>
