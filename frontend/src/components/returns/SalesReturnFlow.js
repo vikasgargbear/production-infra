@@ -132,10 +132,12 @@ const SalesReturnFlow = ({ onClose }) => {
     }
   }, [selectedCustomer, invoicePage, invoiceFilters]);
 
-  // Generate return number
+  // Generate return number with consistent format
   const generateReturnNumber = () => {
-    const timestamp = Date.now();
-    return `RET-${new Date().getFullYear()}-${timestamp.toString().slice(-6)}`;
+    const date = new Date();
+    const dateStr = date.toISOString().slice(2,10).replace(/-/g, ''); // YYMMDD
+    const randomNum = Math.floor(Math.random() * 10000).toString().padStart(4, '0');
+    return `SR-${dateStr}${randomNum}`; // Format: SR-YYMMDD#### (Sales Return)
   };
 
   // Initialize return number

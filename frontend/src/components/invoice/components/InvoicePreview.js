@@ -106,6 +106,11 @@ const InvoicePreview = ({
           .print-bg-blue {
             background-color: #eff6ff !important;
           }
+          /* Pack column specific styling for print */
+          .pack-column {
+            max-width: 60px !important;
+            font-size: 9px !important;
+          }
         }
       `}</style>
       <div id="invoice-preview" className="px-6 py-4">
@@ -274,6 +279,7 @@ const InvoicePreview = ({
                 <th className="px-3 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">#</th>
                 <th className="px-3 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Product</th>
                 <th className="px-3 py-3 text-center text-xs font-semibold text-gray-700 uppercase tracking-wider">HSN</th>
+                <th className="px-3 py-3 text-center text-xs font-semibold text-gray-700 uppercase tracking-wider pack-column">Pack</th>
                 <th className="px-3 py-3 text-center text-xs font-semibold text-gray-700 uppercase tracking-wider">Batch</th>
                 <th className="px-3 py-3 text-center text-xs font-semibold text-gray-700 uppercase tracking-wider">Exp</th>
                 <th className="px-3 py-3 text-center text-xs font-semibold text-gray-700 uppercase tracking-wider">Qty</th>
@@ -293,6 +299,18 @@ const InvoicePreview = ({
                   <td className="px-3 py-3 text-sm text-gray-600">{index + 1}</td>
                   <td className="px-3 py-3 text-sm font-medium text-gray-900">{item.product_name}</td>
                   <td className="px-3 py-3 text-sm text-center text-gray-600">{item.hsn_code || '3004'}</td>
+                  <td className="px-3 py-3 text-sm text-center text-gray-600 pack-column">
+                    {item.pack_type || item.pack_size ? (
+                      <span className="text-xs">
+                        {item.pack_type || 
+                         (item.pack_size && item.pack_unit ? `1×${item.pack_size}${item.pack_unit}` : '') ||
+                         (item.qty_per_strip && item.strips_per_box ? `${item.qty_per_strip}×${item.strips_per_box}` : '') ||
+                         (item.sale_unit ? item.sale_unit : 'Unit')}
+                      </span>
+                    ) : (
+                      <span className="text-gray-400">-</span>
+                    )}
+                  </td>
                   <td className="px-3 py-3 text-sm text-center text-gray-600">{item.batch_number}</td>
                   <td className="px-3 py-3 text-sm text-center text-gray-600">
                     {item.expiry_date ? new Date(item.expiry_date).toLocaleDateString('en-IN', { 

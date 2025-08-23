@@ -616,14 +616,6 @@ const BusinessSalesEntry = ({ open, onClose }) => {
                 </>
               )}
               <button
-                onClick={() => setShowPrintPreview(true)}
-                disabled={invoice.items.length === 0}
-                className="inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                <Printer className="w-4 h-4 mr-2" />
-                Print
-              </button>
-              <button
                 onClick={handleWhatsAppPDF}
                 disabled={invoice.items.length === 0 || !invoice.customerDetails?.phone}
                 className="inline-flex items-center px-4 py-2 bg-green-600 text-white text-sm font-medium rounded-md hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 disabled:opacity-50 disabled:cursor-not-allowed"

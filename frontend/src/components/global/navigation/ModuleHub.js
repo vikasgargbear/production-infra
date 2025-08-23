@@ -279,16 +279,18 @@ const ModuleHub = ({
                       </div>
                     </div>
                     
-                    {/* Keyboard hint */}
-                    <span className={`
-                      text-xs font-mono px-1.5 py-0.5 rounded
-                      ${isActive 
-                        ? 'bg-white/20 text-white' 
-                        : 'bg-teal-100/50 text-teal-700'
-                      }
-                    `}>
-                      {index + 1}
-                    </span>
+                    {/* Status indicator or badge */}
+                    {module.badge && (
+                      <span className={`
+                        text-xs px-1.5 py-0.5 rounded
+                        ${isActive 
+                          ? 'bg-white/20 text-white' 
+                          : 'bg-teal-100/50 text-teal-700'
+                        }
+                      `}>
+                        {module.badge}
+                      </span>
+                    )}
                   </button>
                 );
               })}
@@ -303,7 +305,7 @@ const ModuleHub = ({
                 <span className="text-xs text-teal-700 font-medium">Healthcare Tip</span>
               </div>
               <p className="text-xs text-slate-600 mb-2">
-                Use number keys <kbd className="px-1.5 py-0.5 bg-teal-100 text-teal-700 rounded text-xs font-mono">1-{modules.length}</kbd> for quick navigation
+                Press number keys <kbd className="px-1.5 py-0.5 bg-teal-100 text-teal-700 rounded text-xs font-mono">1-{modules.length}</kbd> to quickly navigate between modules
               </p>
               <button className="text-xs text-teal-600 hover:text-cyan-700 font-medium flex items-center gap-1 transition-colors">
                 View all shortcuts

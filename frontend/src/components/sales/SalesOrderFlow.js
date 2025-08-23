@@ -26,6 +26,7 @@ import { challansApi as challansApiModule } from '../../services/api/modules/cha
 import debugLogger from '../../utils/debugLogger';
 import SalesOrderCalculatorEnterprise from '../../services/salesOrderCalculatorEnterprise';
 import { useCompany } from '../../contexts/CompanyContext';
+import ImportFromDocumentModal from './components/ImportFromDocumentModal';
 
 // Function to convert number to words
 const numberToWords = (num) => {
@@ -109,10 +110,12 @@ const SalesOrderFlow = ({ open = true, onClose }) => {
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [createdOrderData, setCreatedOrderData] = useState(null);
 
-  // Generate order number
+  // Generate order number with consistent format
   const generateOrderNumber = () => {
-    const timestamp = new Date().getTime();
-    return `SO-${timestamp}`;
+    const date = new Date();
+    const dateStr = date.toISOString().slice(2,10).replace(/-/g, ''); // YYMMDD
+    const randomNum = Math.floor(Math.random() * 10000).toString().padStart(4, '0');
+    return `SO-${dateStr}${randomNum}`; // Format: SO-YYMMDD####
   };
 
   // Sales Order data state
@@ -256,6 +259,11 @@ const SalesOrderFlow = ({ open = true, onClose }) => {
 
   // Handle import from invoice/challan
   const handleImport = (importData) => {
+    console.log('=== IMPORT DATA RECEIVED IN SALES ORDER ===');
+    console.log('Full import data:', importData);
+    console.log('Items in import data:', importData.items);
+    console.log('Items count:', importData.items?.length || 0);
+    
     // Set customer details
     if (importData.customer_id) {
       setSelectedCustomer(importData.customer_details);
@@ -271,14 +279,52 @@ const SalesOrderFlow = ({ open = true, onClose }) => {
       }));
     }
     
-    // Set items
+    // Set items - ensure they have all required fields
     if (importData.items && importData.items.length > 0) {
-      setOrder(prev => ({
-        ...prev,
-        items: importData.items,
-        notes: importData.reference_doc ? `Created from ${importData.reference_doc}` : prev.notes
+      const formattedItems = importData.items.map((item, index) => ({
+        ...item,
+        id: item.id || `imported-${Date.now()}-${index}`,
+        product_id: item.product_id,
+        product_name: item.product_name,
+        product_code: item.product_code,
+        batch_no: item.batch_no || item.batch_number || '',
+        batch_number: item.batch_no || item.batch_number || '',
+        hsn_code: item.hsn_code || '',
+        expiry_date: item.expiry_date || '',
+        quantity: parseFloat(item.quantity) || 0,
+        free_quantity: parseFloat(item.free_quantity) || 0,
+        rate: parseFloat(item.rate || item.sale_price || item.unit_price) || 0,
+        sale_price: parseFloat(item.sale_price || item.rate || item.unit_price) || 0,
+        unit_price: parseFloat(item.unit_price || item.rate || item.sale_price) || 0,
+        discount_percent: parseFloat(item.discount_percent) || 0,
+        gst_percent: parseFloat(item.gst_percent || item.tax_rate) || 18,
+        mrp: parseFloat(item.mrp) || 0,
+        line_total: 0 // Will be recalculated
       }));
-      recalculateTotals(importData.items);
+      
+      console.log('=== FORMATTED ITEMS FOR SALES ORDER ===');
+      console.log('Formatted items count:', formattedItems.length);
+      console.log('First formatted item:', formattedItems[0]);
+      
+      setOrder(prev => {
+        const updated = {
+          ...prev,
+          items: formattedItems,
+          notes: importData.notes || prev.notes
+        };
+        console.log('Updated order with items:', updated);
+        return updated;
+      });
+      
+      // Recalculate totals after a small delay to ensure state is updated
+      setTimeout(() => {
+        console.log('Recalculating totals for imported items');
+        recalculateTotals(formattedItems);
+      }, 100);
+    } else {
+      console.warn('No items found in import data!');
+      setMessage('⚠️ No items found in the selected document');
+      setMessageType('warning');
     }
   };
 
@@ -638,6 +684,7 @@ const SalesOrderFlow = ({ open = true, onClose }) => {
         customer_phone: order.customer_phone || '',
         
         // Order details
+        order_number: order.order_number, // Send our generated order number
         order_date: order.order_date || new Date().toISOString().split('T')[0],
         delivery_date: order.expected_delivery_date || order.order_date || new Date().toISOString().split('T')[0],
         delivery_address: order.shipping_address || order.billing_address || '',
@@ -1835,252 +1882,6 @@ Expected Delivery: ${order.expected_delivery_date}
   );
 };
 
-// Import Modal Component
-const ImportFromDocumentModal = ({ isOpen, onClose, onImport }) => {
-  const [searchType, setSearchType] = useState('invoice');
-  const [searchQuery, setSearchQuery] = useState('');
-  const [searchResults, setSearchResults] = useState([]);
-  const [selectedDoc, setSelectedDoc] = useState(null);
-  const [loading, setLoading] = useState(false);
-
-  // Load recent documents on mount
-  React.useEffect(() => {
-    if (isOpen) {
-      loadRecentDocuments();
-    }
-  }, [isOpen, searchType]);
-
-  const loadRecentDocuments = async () => {
-    setLoading(true);
-    try {
-      let results = [];
-      if (searchType === 'invoice') {
-        const response = await invoicesApiModule.getAll({ 
-          limit: 10,
-          sort: 'invoice_date',
-          order: 'desc'
-        });
-        results = response.data || [];
-      } else {
-        const response = await challansApiModule.getAll({ 
-          limit: 10,
-          sort: 'challan_date',
-          order: 'desc'
-        });
-        results = response.data || [];
-      }
-      setSearchResults(results);
-    } catch (error) {
-      console.error('Error loading recent documents:', error);
-      setSearchResults([]);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleSearch = async () => {
-    if (!searchQuery.trim()) {
-      loadRecentDocuments();
-      return;
-    }
-
-    setLoading(true);
-    try {
-      let results = [];
-      if (searchType === 'invoice') {
-        const response = await invoicesApiModule.search(searchQuery);
-        results = response.data || [];
-      } else {
-        const response = await challansApiModule.getAll({ 
-          search: searchQuery
-        });
-        results = response.data || [];
-      }
-      setSearchResults(results);
-    } catch (error) {
-      console.error('Search error:', error);
-      setSearchResults([]);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleImport = () => {
-    if (!selectedDoc) return;
-
-    const importData = {
-      customer_id: selectedDoc.customer_id,
-      customer_name: selectedDoc.customer_name,
-      customer_details: selectedDoc.customer_details || {
-        customer_id: selectedDoc.customer_id,
-        customer_name: selectedDoc.customer_name,
-        address: selectedDoc.billing_address,
-        city: selectedDoc.billing_city,
-        state: selectedDoc.billing_state,
-        pincode: selectedDoc.billing_pincode,
-        phone: selectedDoc.customer_phone,
-        gstin: selectedDoc.customer_gstin
-      },
-      billing_address: selectedDoc.billing_address,
-      shipping_address: selectedDoc.shipping_address || selectedDoc.billing_address,
-      items: (selectedDoc.items || selectedDoc.invoice_items || []).map(item => ({
-        id: Date.now() + Math.random(),
-        product_id: item.product_id,
-        product_name: item.product_name,
-        hsn_code: item.hsn_code,
-        quantity: item.quantity,
-        unit: item.unit || 'NOS',
-        mrp: item.mrp,
-        unit_price: item.unit_price || item.selling_price,
-        discount_percent: item.discount_percent || 0,
-        gst_percent: item.tax_percent || item.gst_percent || 18,
-        manufacturer: item.manufacturer,
-        category: item.category
-      })),
-      reference_doc: searchType === 'invoice' ? 
-        `Invoice: ${selectedDoc.invoice_number}` : 
-        `Challan: ${selectedDoc.challan_number}`
-    };
-
-    onImport(importData);
-    onClose();
-  };
-
-  if (!isOpen) return null;
-
-  return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-white rounded-lg w-full max-w-2xl mx-4 max-h-[80vh] flex flex-col">
-        {/* Header */}
-        <div className="flex items-center justify-between p-4 border-b">
-          <h3 className="text-lg font-semibold">Import from Document</h3>
-          <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-lg">
-            <X className="w-5 h-5" />
-          </button>
-        </div>
-
-        {/* Content */}
-        <div className="flex-1 overflow-y-auto p-4">
-          {/* Document Type */}
-          <div className="mb-4">
-            <label className="block text-sm font-medium text-blue-700 mb-2">Document Type</label>
-            <div className="grid grid-cols-2 gap-2">
-              <button
-                onClick={() => {
-                  setSearchType('invoice');
-                  setSearchQuery('');
-                }}
-                className={`p-3 rounded-lg border-2 ${
-                  searchType === 'invoice' 
-                    ? 'border-purple-500 bg-purple-50' 
-                    : 'border-gray-300'
-                }`}
-              >
-                <FileText className="w-5 h-5 mx-auto mb-1" />
-                <span className="text-sm">Sales Invoice</span>
-              </button>
-              <button
-                onClick={() => {
-                  setSearchType('challan');
-                  setSearchQuery('');
-                }}
-                className={`p-3 rounded-lg border-2 ${
-                  searchType === 'challan' 
-                    ? 'border-purple-500 bg-purple-50' 
-                    : 'border-gray-300'
-                }`}
-              >
-                <Truck className="w-5 h-5 mx-auto mb-1" />
-                <span className="text-sm">Delivery Challan</span>
-              </button>
-            </div>
-          </div>
-
-          {/* Search */}
-          <div className="mb-4">
-            <label className="block text-sm font-medium text-blue-700 mb-2">Search Document</label>
-            <div className="flex gap-2">
-              <input
-                type="text"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                onKeyPress={(e) => e.key === 'Enter' && handleSearch()}
-                placeholder={`Enter ${searchType === 'invoice' ? 'invoice' : 'challan'} number or customer name`}
-                className="flex-1 px-3 py-2 border rounded-lg focus:ring-2 focus:ring-purple-500"
-              />
-              <button
-                onClick={handleSearch}
-                disabled={loading}
-                className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:bg-gray-400"
-              >
-                {loading ? '...' : 'Search'}
-              </button>
-            </div>
-          </div>
-
-          {/* Results */}
-          {searchResults.length > 0 && (
-            <div className="space-y-2">
-              <h4 className="text-sm font-medium text-blue-700">
-                {searchQuery ? 'Search Results' : `Recent ${searchType === 'invoice' ? 'Invoices' : 'Challans'}`}
-              </h4>
-              <div className="max-h-64 overflow-y-auto">
-                {searchResults.map((doc) => (
-                  <div
-                    key={doc.invoice_id || doc.challan_id}
-                    onClick={() => setSelectedDoc(doc)}
-                    className={`p-3 border rounded-lg cursor-pointer ${
-                      selectedDoc?.invoice_id === doc.invoice_id || selectedDoc?.challan_id === doc.challan_id
-                        ? 'border-purple-500 bg-purple-50' 
-                        : 'border-blue-200 hover:border-gray-300'
-                    }`}
-                  >
-                    <div className="flex justify-between items-start">
-                      <div>
-                        <div className="font-medium">
-                          {searchType === 'invoice' ? doc.invoice_number : doc.challan_number}
-                        </div>
-                        <div className="text-sm text-gray-600">{doc.customer_name}</div>
-                        <div className="text-xs text-gray-500 flex items-center gap-2 mt-1">
-                          <Calendar className="w-3 h-3" />
-                          {new Date(doc.invoice_date || doc.challan_date).toLocaleDateString()}
-                        </div>
-                      </div>
-                      <div className="text-right">
-                        <div className="font-medium">
-                          ₹{(doc.total_amount || 0).toFixed(2)}
-                        </div>
-                        <div className="text-xs text-gray-500">
-                          {doc.items?.length || doc.invoice_items?.length || 0} items
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* Footer */}
-        <div className="flex justify-end gap-2 p-4 border-t">
-          <button
-            onClick={onClose}
-            className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-blue-50"
-          >
-            Cancel
-          </button>
-          <button
-            onClick={handleImport}
-            disabled={!selectedDoc}
-            className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:bg-gray-400"
-          >
-            Import to Order
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-};
+// ImportFromDocumentModal imported from separate file
 
 export default SalesOrderFlow;

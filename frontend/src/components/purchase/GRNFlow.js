@@ -19,15 +19,12 @@ const GRNFlow = ({ onClose }) => {
   const productSearchRef = useRef(null);
   const firstInputRef = useRef(null);
 
-  // Generate sequential GRN number
+  // Generate sequential GRN number with consistent format
   const generateGRNNumber = () => {
-    const lastGRNNo = localStorage.getItem('lastGRNNo') || 'GRN-2024-0000';
-    const parts = lastGRNNo.split('-');
-    const year = new Date().getFullYear();
-    const sequence = parseInt(parts[2] || '0') + 1;
-    const newGRNNo = `GRN-${year}-${sequence.toString().padStart(4, '0')}`;
-    localStorage.setItem('lastGRNNo', newGRNNo);
-    return newGRNNo;
+    const date = new Date();
+    const dateStr = date.toISOString().slice(2,10).replace(/-/g, ''); // YYMMDD
+    const randomNum = Math.floor(Math.random() * 10000).toString().padStart(4, '0');
+    return `GRN-${dateStr}${randomNum}`; // Format: GRN-YYMMDD####
   };
 
   // GRN data state

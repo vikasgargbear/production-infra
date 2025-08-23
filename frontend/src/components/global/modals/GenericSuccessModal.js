@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
-import { CheckCircle, X, Printer, Download, Send, Copy, ExternalLink, Sparkles, Share2 } from 'lucide-react';
+import React, { useState, useRef } from 'react';
+import { CheckCircle, X, Printer, Download, Send, Copy, ExternalLink, Sparkles, Share2, Mail, MessageCircle, FileText } from 'lucide-react';
 import ShareDocument from '../ui/ShareDocument';
+import PrintUtility from '../ui/PrintUtility';
 
 /**
  * Generic Success Modal Component
@@ -18,16 +19,19 @@ const GenericSuccessModal = ({
   onPrint,
   onDownload,
   onWhatsApp,
+  onThermalPrint,
   additionalActions = [], // Custom action buttons
   showCopy = true,
   autoCloseDelay = null, // Auto close after X seconds
   enableShare = true, // Enable the new ShareDocument modal
   partyDetails = null, // Customer/Supplier details for sharing
   companyInfo = {},
-  documentData = {} // Full document data for sharing
+  documentData = {}, // Full document data for sharing
+  showQuickActions = true // Show individual action buttons
 }) => {
   const [copied, setCopied] = useState(false);
   const [showShareModal, setShowShareModal] = useState(false);
+  const printUtilityRef = useRef();
   
   // Auto close functionality
   React.useEffect(() => {
@@ -167,62 +171,175 @@ const GenericSuccessModal = ({
             )}
           </div>
 
-          {/* Action Buttons */}
-          <div className="grid grid-cols-2 gap-3">
-            {/* Universal Share Button - Primary Action */}
-            {enableShare && (
-              <button
-                onClick={() => setShowShareModal(true)}
-                className="flex items-center justify-center gap-2 px-4 py-3 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white rounded-lg transition-all transform hover:scale-105 col-span-2"
-              >
-                <Share2 className="w-4 h-4" />
-                Share Document
-              </button>
-            )}
-            
-            {/* Legacy buttons - kept for backward compatibility */}
-            {!enableShare && onPrint && (
-              <button
-                onClick={onPrint}
-                className="flex items-center justify-center gap-2 px-4 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors"
-              >
-                <Printer className="w-4 h-4" />
-                Print
-              </button>
-            )}
-            
-            {!enableShare && onWhatsApp && (
-              <button
-                onClick={onWhatsApp}
-                className="flex items-center justify-center gap-2 px-4 py-3 bg-green-600 hover:bg-green-700 text-white rounded-lg transition-colors"
-              >
-                <Send className="w-4 h-4" />
-                WhatsApp
-              </button>
-            )}
-            
-            {!enableShare && onDownload && (
-              <button
-                onClick={onDownload}
-                className="flex items-center justify-center gap-2 px-4 py-3 bg-purple-600 hover:bg-purple-700 text-white rounded-lg transition-colors"
-              >
-                <Download className="w-4 h-4" />
-                Download
-              </button>
-            )}
-            
-            {/* Additional custom actions */}
-            {additionalActions.map((action, index) => (
-              <button
-                key={index}
-                onClick={action.onClick}
-                className={`flex items-center justify-center gap-2 px-4 py-3 ${action.className || 'bg-gray-600 hover:bg-gray-700 text-white'} rounded-lg transition-colors`}
-              >
-                {action.icon && <action.icon className="w-4 h-4" />}
-                {action.label}
-              </button>
-            ))}
-          </div>
+          {/* Quick Action Buttons - Beautiful Grid Layout */}
+          {showQuickActions && (
+            <div className="space-y-3">
+              {/* Primary Actions - Full Width */}
+              <div className="grid grid-cols-2 gap-2">
+                {/* WhatsApp Share */}
+                <button
+                  onClick={() => {
+                    if (onWhatsApp) {
+                      onWhatsApp();
+                    } else {
+                      // Direct WhatsApp share
+                      const phone = partyDetails?.phone || documentData.customerPhone || '';
+                      const message = `${documentType.charAt(0).toUpperCase() + documentType.slice(1)} #${documentNumber}\nAmount: ₹${totalAmount?.toFixed(2) || '0'}\nFor: ${customerName}`;
+                      const formattedPhone = phone.replace(/^\+91|^91/, '');
+                      const whatsappUrl = `https://wa.me/91${formattedPhone}?text=${encodeURIComponent(message)}`;
+                      window.open(whatsappUrl, '_blank');
+                    }
+                  }}
+                  className="flex items-center justify-center gap-2 px-4 py-3 bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 text-white rounded-xl transition-all transform hover:scale-105 shadow-lg hover:shadow-xl"
+                >
+                  <MessageCircle className="w-5 h-5" />
+                  <span className="font-medium">WhatsApp</span>
+                </button>
+                
+                {/* Email - Opens Gmail Compose */}
+                <button
+                  onClick={() => {
+                    const email = partyDetails?.email || documentData.customerEmail || '';
+                    const subject = `${documentType.charAt(0).toUpperCase() + documentType.slice(1)} #${documentNumber}`;
+                    const body = `Dear ${customerName},\n\nPlease find the ${documentType} details:\n\nDocument Number: ${documentNumber}\nAmount: ₹${totalAmount?.toFixed(2) || '0'}\n\nThank you for your business!\n\nBest regards,\n${companyInfo.name || 'Company'}`;
+                    
+                    // Use Gmail compose URL
+                    // Note: Gmail & WhatsApp Web don't support file attachments via URL
+                    // Best solution: Generate shareable links (e.g., yourapp.com/invoice/INV-123)
+                    // that serve PDFs on-demand with temporary access tokens
+                    const gmailUrl = `https://mail.google.com/mail/?view=cm&fs=1&to=${encodeURIComponent(email)}&su=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+                    window.open(gmailUrl, '_blank');
+                  }}
+                  className="flex items-center justify-center gap-2 px-4 py-3 bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white rounded-xl transition-all transform hover:scale-105 shadow-lg hover:shadow-xl"
+                >
+                  <Mail className="w-5 h-5" />
+                  <span className="font-medium">Email</span>
+                </button>
+              </div>
+              
+              {/* Secondary Actions - Three Column Grid */}
+              <div className="grid grid-cols-3 gap-2">
+                {/* Print */}
+                <button
+                  onClick={() => {
+                    if (onPrint) {
+                      onPrint();
+                    } else {
+                      window.print();
+                    }
+                  }}
+                  className="flex flex-col items-center justify-center gap-1.5 px-3 py-3 bg-gray-50 hover:bg-gray-100 border border-gray-200 rounded-xl transition-all group"
+                >
+                  <Printer className="w-5 h-5 text-gray-600 group-hover:text-gray-800" />
+                  <span className="text-xs font-medium text-gray-600 group-hover:text-gray-800">Print</span>
+                </button>
+                
+                {/* Thermal Print */}
+                <div className="relative group">
+                  <button
+                    onClick={() => {
+                      // Show thermal print options
+                      const menu = document.getElementById('thermal-menu-' + documentId);
+                      if (menu) menu.classList.toggle('hidden');
+                    }}
+                    className="w-full flex flex-col items-center justify-center gap-1.5 px-3 py-3 bg-gray-50 hover:bg-gray-100 border border-gray-200 rounded-xl transition-all"
+                  >
+                    <FileText className="w-5 h-5 text-gray-600 group-hover:text-gray-800" />
+                    <span className="text-xs font-medium text-gray-600 group-hover:text-gray-800">Thermal</span>
+                  </button>
+                  
+                  {/* Thermal Dropdown */}
+                  <div id={`thermal-menu-${documentId}`} className="hidden absolute bottom-full mb-2 left-0 right-0 bg-white rounded-lg shadow-xl border border-gray-200 p-2 z-50">
+                    <button
+                      onClick={() => {
+                        if (onThermalPrint) {
+                          onThermalPrint('80mm');
+                        } else if (printUtilityRef.current?.printThermal) {
+                          printUtilityRef.current.printThermal('80mm');
+                        }
+                        document.getElementById('thermal-menu-' + documentId)?.classList.add('hidden');
+                      }}
+                      className="w-full text-left px-3 py-2 hover:bg-gray-50 rounded text-sm"
+                    >
+                      80mm
+                    </button>
+                    <button
+                      onClick={() => {
+                        if (onThermalPrint) {
+                          onThermalPrint('58mm');
+                        } else if (printUtilityRef.current?.printThermal) {
+                          printUtilityRef.current.printThermal('58mm');
+                        }
+                        document.getElementById('thermal-menu-' + documentId)?.classList.add('hidden');
+                      }}
+                      className="w-full text-left px-3 py-2 hover:bg-gray-50 rounded text-sm"
+                    >
+                      58mm
+                    </button>
+                  </div>
+                </div>
+                
+                {/* Download */}
+                <button
+                  onClick={() => {
+                    if (onDownload) {
+                      onDownload();
+                    } else {
+                      // Trigger download
+                      alert('PDF download will be implemented');
+                    }
+                  }}
+                  className="flex flex-col items-center justify-center gap-1.5 px-3 py-3 bg-gray-50 hover:bg-gray-100 border border-gray-200 rounded-xl transition-all group"
+                >
+                  <Download className="w-5 h-5 text-gray-600 group-hover:text-gray-800" />
+                  <span className="text-xs font-medium text-gray-600 group-hover:text-gray-800">Download</span>
+                </button>
+              </div>
+              
+              {/* More Options - Optional */}
+              {enableShare && (
+                <button
+                  onClick={() => setShowShareModal(true)}
+                  className="w-full flex items-center justify-center gap-2 px-3 py-2 text-gray-600 hover:text-gray-800 hover:bg-gray-50 rounded-lg transition-colors text-sm"
+                >
+                  <Share2 className="w-4 h-4" />
+                  More sharing options
+                </button>
+              )}
+            </div>
+          )}
+          
+          {/* Legacy Action Buttons - Hidden when showQuickActions is true */}
+          {!showQuickActions && (
+            <div className="grid grid-cols-2 gap-3">
+              {/* Universal Share Button - Primary Action */}
+              {enableShare && (
+                <button
+                  onClick={() => setShowShareModal(true)}
+                  className="flex items-center justify-center gap-2 px-4 py-3 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white rounded-lg transition-all transform hover:scale-105 col-span-2"
+                >
+                  <Share2 className="w-4 h-4" />
+                  Share Document
+                </button>
+              )}
+            </div>
+          )}
+          
+          {/* Additional custom actions */}
+          {additionalActions.length > 0 && (
+            <div className="grid grid-cols-2 gap-2 mt-3">
+              {additionalActions.map((action, index) => (
+                <button
+                  key={index}
+                  onClick={action.onClick}
+                  className={`flex items-center justify-center gap-2 px-4 py-3 ${action.className || 'bg-gray-600 hover:bg-gray-700 text-white'} rounded-lg transition-colors`}
+                >
+                  {action.icon && <action.icon className="w-4 h-4" />}
+                  {action.label}
+                </button>
+              ))}
+            </div>
+          )}
 
           {/* Close Button */}
           <button
@@ -232,6 +349,25 @@ const GenericSuccessModal = ({
             Done
           </button>
         </div>
+      </div>
+      
+      {/* Hidden PrintUtility for thermal printing */}
+      <div style={{ display: 'none' }}>
+        <PrintUtility 
+          ref={printUtilityRef}
+          documentData={{
+            documentNumber,
+            date: new Date().toISOString(),
+            customer: { name: customerName },
+            items: documentData.items || [],
+            totals: {
+              total_amount: totalAmount,
+              ...documentData.totals
+            }
+          }}
+          documentType={documentType}
+          companyInfo={companyInfo}
+        />
       </div>
       
       {/* ShareDocument Modal */}

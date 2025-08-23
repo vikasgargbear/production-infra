@@ -210,6 +210,10 @@ const generateInvoiceHTML = (invoiceData) => {
                 -webkit-print-color-adjust: exact; 
                 print-color-adjust: exact; 
             }
+            .pack-info { 
+                font-size: 9px !important; 
+                color: #666 !important; 
+            }
             .no-print { display: none !important; }
             .print-header { 
                 border-bottom: 2px solid #000 !important; 
@@ -579,7 +583,14 @@ const generateInvoiceHTML = (invoiceData) => {
             </div>
             <div>
                 <h3 class="section-title">Ship To</h3>
-                <p class="customer-detail">---</p>
+                ${invoiceData.is_same_address !== false ? 
+                  `<p class="customer-detail" style="color: #10b981; font-weight: 500;">✓ Same as billing</p>
+                   <p class="customer-name">${invoiceData.customer_name || 'Customer Name'}</p>
+                   ${invoiceData.billing_address ? invoiceData.billing_address.split('\\n').map(line => `<p class="customer-detail">${line}</p>`).join('') : ''}
+                   ${invoiceData.customer_phone ? `<p class="customer-detail">Phone: ${invoiceData.customer_phone}</p>` : ''}` :
+                  `<p class="customer-name">${invoiceData.shipping_contact_name || invoiceData.customer_name || 'Customer Name'}</p>
+                   ${invoiceData.shipping_address ? invoiceData.shipping_address.split('\\n').map(line => `<p class="customer-detail">${line}</p>`).join('') : ''}
+                   ${invoiceData.shipping_phone ? `<p class="customer-detail">Phone: ${invoiceData.shipping_phone}</p>` : ''}`}
             </div>
         </div>
 
@@ -591,6 +602,7 @@ const generateInvoiceHTML = (invoiceData) => {
                     <tr>
                         <th>Item Details</th>
                         <th style="text-align: center;">HSN</th>
+                        <th style="text-align: center;">Pack</th>
                         <th style="text-align: center;">Qty</th>
                         <th style="text-align: right;">MRP</th>
                         <th style="text-align: right;">Rate</th>
@@ -606,6 +618,14 @@ const generateInvoiceHTML = (invoiceData) => {
                                 <div class="product-batch">Batch: ${item.batch_number || item.batch_no || 'N/A'}</div>
                             </td>
                             <td style="text-align: center;">${item.hsn_code || '3004'}</td>
+                            <td style="text-align: center;">
+                                <span class="pack-info">
+                                    ${item.pack_type || 
+                                      (item.pack_size && item.pack_unit ? `1×${item.pack_size}${item.pack_unit}` : '') ||
+                                      (item.qty_per_strip && item.strips_per_box ? `${item.qty_per_strip}×${item.strips_per_box}` : '') ||
+                                      (item.sale_unit ? item.sale_unit : '-')}
+                                </span>
+                            </td>
                             <td style="text-align: center;">${item.quantity || 1}</td>
                             <td style="text-align: right;">₹${(item.mrp || item.unit_price || 0).toFixed(2)}</td>
                             <td style="text-align: right;">₹${(item.unit_price || 0).toFixed(2)}</td>

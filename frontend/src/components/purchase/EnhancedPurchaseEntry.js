@@ -86,7 +86,10 @@ const EnhancedPurchaseEntry = ({ onClose, prefilledData = null }) => {
         setPurchase(prev => ({ ...prev, purchase_number: purchaseNumber }));
       } catch (error) {
         console.warn('Failed to generate purchase number:', error);
-        const fallbackNumber = `PUR-${Date.now().toString().slice(-8)}`;
+        const date = new Date();
+        const dateStr = date.toISOString().slice(2,10).replace(/-/g, ''); // YYMMDD
+        const randomNum = Math.floor(Math.random() * 10000).toString().padStart(4, '0');
+        const fallbackNumber = `PUR-${dateStr}${randomNum}`; // Format: PUR-YYMMDD####
         setPurchase(prev => ({ ...prev, purchase_number: fallbackNumber }));
       }
     };

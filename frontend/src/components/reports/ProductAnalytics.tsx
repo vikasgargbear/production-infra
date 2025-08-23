@@ -233,17 +233,17 @@ const ProductAnalytics: React.FC = () => {
           </div>
           <div className="p-4 border border-gray-200 rounded-lg">
             <Star className="h-8 w-8 text-yellow-600 mb-2" />
-            <p className="text-sm text-gray-600">High Margin (>25%)</p>
+            <p className="text-sm text-gray-600">High Margin (&gt;25%)</p>
             <p className="text-xl font-bold">{products.filter(p => p.margin > 25).length}</p>
           </div>
           <div className="p-4 border border-gray-200 rounded-lg">
             <Zap className="h-8 w-8 text-green-600 mb-2" />
-            <p className="text-sm text-gray-600">Fast Moving (>10)</p>
+            <p className="text-sm text-gray-600">Fast Moving (&gt;10)</p>
             <p className="text-xl font-bold">{products.filter(p => p.turnover > 10).length}</p>
           </div>
           <div className="p-4 border border-gray-200 rounded-lg">
             <AlertTriangle className="h-8 w-8 text-orange-600 mb-2" />
-            <p className="text-sm text-gray-600">Low Stock (<1000)</p>
+            <p className="text-sm text-gray-600">Low Stock (&lt;1000)</p>
             <p className="text-xl font-bold">{products.filter(p => p.stock < 1000).length}</p>
           </div>
           <div className="p-4 border border-gray-200 rounded-lg">

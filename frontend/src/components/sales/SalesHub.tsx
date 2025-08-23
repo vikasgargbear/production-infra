@@ -27,36 +27,36 @@ const SalesHub: React.FC<SalesHubProps> = ({ open = true, onClose }) => {
   const salesModules: SalesModule[] = [
     {
       id: 'invoice',
-      label: 'New Invoice',
-      fullLabel: 'Create Invoice',
-      description: 'GST Invoice',
+      label: 'Create Invoice',
+      fullLabel: 'Create New Invoice',
+      description: 'GST Tax Invoice',
       icon: FileText,
       color: 'blue',
       component: InvoiceFlow
     },
     {
       id: 'challan',
-      label: 'Challan',
-      fullLabel: 'Delivery Challan',
-      description: 'Without GST',
+      label: 'Delivery Challan',
+      fullLabel: 'Create Delivery Challan',
+      description: 'Dispatch Note',
       icon: Truck,
       color: 'emerald',
       component: ModularChallanCreatorV5
     },
     {
       id: 'sales-order',
-      label: 'Order',
-      fullLabel: 'Sales Order',
-      description: 'Booking',
+      label: 'Sales Order',
+      fullLabel: 'Create Sales Order',
+      description: 'Order Booking',
       icon: ShoppingCart,
       color: 'purple',
       component: SalesOrderFlow
     },
     {
       id: 'invoice-list',
-      label: 'All Invoices',
-      fullLabel: 'Invoice List',
-      description: 'Manage invoices',
+      label: 'Invoice History',
+      fullLabel: 'Invoice History',
+      description: 'View & Manage',
       icon: List,
       color: 'gray',
       component: InvoiceListV2

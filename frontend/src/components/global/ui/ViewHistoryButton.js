@@ -76,18 +76,26 @@ const ViewHistoryButton = ({
           break;
 
         case 'challan':
-          response = await challansAPI.search({ limit: 10 });
-          const challanResponse = response.data || response;
-          if (challanResponse.data && Array.isArray(challanResponse.data)) {
-            formattedItems = challanResponse.data.map(challan => ({
-              id: challan.challan_id,
-              number: challan.challan_number || `DC-${challan.challan_id}`,
+          try {
+            response = await challansAPI.search({ limit: 20 });
+            const challanData = response.data || response;
+            // Handle both array response and object with data property
+            const challans = Array.isArray(challanData) ? challanData : 
+                           (challanData.data && Array.isArray(challanData.data)) ? challanData.data :
+                           (challanData.challans && Array.isArray(challanData.challans)) ? challanData.challans : [];
+            
+            formattedItems = challans.map(challan => ({
+              id: challan.challan_id || challan.id,
+              number: challan.challan_number || `DC-${challan.challan_id || challan.id}`,
               date: challan.challan_date || challan.created_at,
               customerName: challan.customer_name || 'N/A',
               amount: challan.total_amount || 0,
-              status: challan.status || 'pending',
+              status: challan.status || challan.delivery_status || 'pending',
               rawData: challan
             }));
+          } catch (error) {
+            console.error('Error loading challan history:', error);
+            formattedItems = [];
           }
           break;
 

@@ -43,7 +43,9 @@ export { default as StandardFormInput } from './ui/forms/StandardFormInput';
 export { default as StandardSelect } from './ui/forms/StandardSelect';
 export { default as SplitPayment } from './ui/SplitPayment';
 export { default as ShareDocument } from './ui/ShareDocument';
-export { default as PrintUtility, ThermalPrintTemplate } from './ui/PrintUtility';
+// PrintUtility exports
+export { default as PrintUtility } from './ui/PrintUtility';
+export { ThermalPrintTemplate } from './ui/PrintUtility';
 
 // Re-export common components that are already global
 export { default as BaseModal } from '../common/BaseModal';

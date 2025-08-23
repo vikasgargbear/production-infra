@@ -106,10 +106,12 @@ const PurchaseReturnFlow = ({ onClose }) => {
     loadReturnReasons();
   }, []);
 
-  // Generate return number
+  // Generate return number with consistent format
   const generateReturnNumber = () => {
-    const timestamp = Date.now();
-    return `PRN-${new Date().getFullYear()}-${timestamp.toString().slice(-6)}`;
+    const date = new Date();
+    const dateStr = date.toISOString().slice(2,10).replace(/-/g, ''); // YYMMDD
+    const randomNum = Math.floor(Math.random() * 10000).toString().padStart(4, '0');
+    return `PR-${dateStr}${randomNum}`; // Format: PR-YYMMDD#### (Purchase Return)
   };
 
   // Initialize return number

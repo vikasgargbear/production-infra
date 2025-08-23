@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 import { X, Search, FileText, ShoppingCart, Calendar, FileInput } from 'lucide-react';
-import { invoicesApi } from '../../../services/api/modules/invoices.api';
-import { ordersApi } from '../../../services/api/modules/orders.api';
+import { invoicesApi, ordersApi, salesOrdersAPI } from '../../../services/api';
 
 const ImportFromInvoiceModal = ({ isOpen, onClose, onImport }) => {
   const [searchType, setSearchType] = useState('invoice');
@@ -22,22 +21,21 @@ const ImportFromInvoiceModal = ({ isOpen, onClose, onImport }) => {
     try {
       let results = [];
       if (searchType === 'invoice') {
-        // Get recent invoices (last 10)
-        const response = await invoicesApi.getAll({ 
-          limit: 10,
-          sort: 'invoice_date',
-          order: 'desc'
+        // Get recent invoices using search with empty query
+        const response = await invoicesApi.search('', { 
+          limit: 10
         });
-        results = response.data || [];
+        // Handle different response formats
+        results = Array.isArray(response) ? response : 
+                 (response?.data && Array.isArray(response.data)) ? response.data :
+                 (response?.invoices && Array.isArray(response.invoices)) ? response.invoices : [];
       } else {
-        // Get recent orders (last 10)
-        const response = await ordersApi.getAll({ 
-          limit: 10,
-          order_type: 'sales',
-          sort: 'order_date',
-          order: 'desc'
+        // Get recent sales orders
+        const response = await salesOrdersAPI.search('', { 
+          limit: 10
         });
-        results = response.data || [];
+        // Handle response format
+        results = response?.data || [];
       }
       setSearchResults(results);
     } catch (error) {
@@ -62,13 +60,14 @@ const ImportFromInvoiceModal = ({ isOpen, onClose, onImport }) => {
       let results = [];
       if (searchType === 'invoice') {
         const response = await invoicesApi.search(searchQuery);
-        results = response.data || [];
+        // Handle different response formats
+        results = Array.isArray(response) ? response : 
+                 (response?.data && Array.isArray(response.data)) ? response.data :
+                 (response?.invoices && Array.isArray(response.invoices)) ? response.invoices : [];
       } else {
-        const response = await ordersApi.getAll({ 
-          search: searchQuery,
-          order_type: 'sales'
-        });
-        results = response.data || [];
+        // Search sales orders
+        const response = await salesOrdersAPI.search(searchQuery);
+        results = response?.data || [];
       }
       setSearchResults(results);
     } catch (error) {

@@ -78,7 +78,7 @@ const ItemsTable = ({
           type="number"
           value={item.quantity || ''}
           onChange={(e) => onUpdateItem(index, 'quantity', e.target.value)}
-          className="w-20 text-center border-0 bg-transparent focus:ring-2 focus:ring-blue-500 rounded-md text-gray-900 font-medium"
+          className="w-20 px-2 py-1 text-center border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 font-medium"
           min="1"
           max={item.available_quantity}
         />
@@ -104,7 +104,7 @@ const ItemsTable = ({
           type="number"
           value={item.discount_percent || item.discount || ''}
           onChange={(e) => onUpdateItem(index, 'discount_percent', e.target.value)}
-          className="w-20 text-center border-0 bg-transparent focus:ring-2 focus:ring-blue-500 rounded-md text-gray-900 font-medium"
+          className="w-20 px-2 py-1 text-center border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 font-medium"
           min="0"
           max="100"
           step="0.01"
@@ -121,7 +121,7 @@ const ItemsTable = ({
           type="number"
           value={item.free_quantity || item.free || ''}
           onChange={(e) => onUpdateItem(index, 'free_quantity', e.target.value)}
-          className="w-16 text-center border-0 bg-transparent focus:ring-2 focus:ring-blue-500 rounded-md text-gray-900 font-medium"
+          className="w-16 px-2 py-1 text-center border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 font-medium"
           min="0"
         />
       )

@@ -21,6 +21,11 @@ export const challansApi = {
     return apiHelpers.get(CHALLAN_ENDPOINT, { params });
   },
   
+  // Search challans
+  search: async (params = {}) => {
+    return apiHelpers.get(CHALLAN_ENDPOINT, { params });
+  },
+  
   // Get challan by ID
   getById: async (id) => {
     return apiHelpers.get(`${CHALLAN_ENDPOINT}${id}/`);

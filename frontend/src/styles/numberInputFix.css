@@ -1,0 +1,40 @@
+/* Global fix for number input spinners */
+/* Hide arrows/spinners from all number inputs */
+input[type="number"]::-webkit-inner-spin-button,
+input[type="number"]::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+  display: none;
+}
+
+input[type="number"] {
+  -moz-appearance: textfield; /* Firefox */
+  appearance: textfield;
+}
+
+/* Default number input styles - don't override table-specific styles */
+form input[type="number"],
+.modal input[type="number"],
+.form-group input[type="number"] {
+  padding: 0.5rem 0.75rem;
+  border: 1px solid #d1d5db;
+  border-radius: 0.375rem;
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+  width: 100%;
+}
+
+form input[type="number"]:focus,
+.modal input[type="number"]:focus,
+.form-group input[type="number"]:focus {
+  outline: none;
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+
+/* Table-specific number inputs should use their own styles */
+table input[type="number"] {
+  /* Let table components define their own styles */
+  -webkit-appearance: none;
+  -moz-appearance: textfield;
+}

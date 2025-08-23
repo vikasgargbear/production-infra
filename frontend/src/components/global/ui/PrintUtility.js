@@ -330,15 +330,15 @@ export const ThermalPrintTemplate = React.forwardRef(({
 ThermalPrintTemplate.displayName = 'ThermalPrintTemplate';
 
 // Main Print Utility Component
-const PrintUtility = ({ 
+const PrintUtility = React.forwardRef(({ 
   children, 
   documentData, 
   documentType,
   companyInfo,
   onPrint,
-  showPrintOptions = true,
+  showPrintOptions = false, // Changed to false - we'll handle print options in footer
   className = ''
-}) => {
+}, ref) => {
   const [printFormat, setPrintFormat] = useState('digital'); // 'digital' or 'thermal'
   const [thermalWidth, setThermalWidth] = useState('80mm'); // '80mm' or '58mm'
   const [showPrintMenu, setShowPrintMenu] = useState(false);
@@ -396,9 +396,19 @@ const PrintUtility = ({
     setShowPrintMenu(false);
   };
 
+  // Expose methods to parent component
+  React.useImperativeHandle(ref, () => ({
+    printThermal: (width = '80mm') => {
+      handleThermalPrint(width);
+    },
+    printDigital: () => {
+      handleDigitalPrint();
+    }
+  }), []);
+
   return (
     <div className={`print-utility-container ${className}`}>
-      {/* Print Button with Options */}
+      {/* Print Button with Options - only show if showPrintOptions is true */}
       {showPrintOptions && (
         <div className="relative inline-block">
           <button
@@ -477,6 +487,8 @@ const PrintUtility = ({
       {children}
     </div>
   );
-};
+});
+
+PrintUtility.displayName = 'PrintUtility';
 
 export default PrintUtility;

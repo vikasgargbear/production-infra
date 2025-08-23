@@ -203,8 +203,8 @@ const ChallanPreview = ({
                 <th className="text-center py-2 px-3 text-xs font-medium text-gray-700 uppercase border-r border-gray-200">HSN</th>
                 <th className="text-center py-2 px-3 text-xs font-medium text-gray-700 uppercase border-r border-gray-200">Qty</th>
                 <th className="text-center py-2 px-3 text-xs font-medium text-gray-700 uppercase border-r border-gray-200">Unit</th>
+                <th className="text-right py-2 px-3 text-xs font-medium text-gray-700 uppercase border-r border-gray-200">MRP</th>
                 <th className="text-right py-2 px-3 text-xs font-medium text-gray-700 uppercase border-r border-gray-200">Rate</th>
-                <th className="text-right py-2 px-3 text-xs font-medium text-gray-700 uppercase border-r border-gray-200">Taxable</th>
                 <th className="text-center py-2 px-3 text-xs font-medium text-gray-700 uppercase border-r border-gray-200">GST%</th>
                 <th className="text-right py-2 px-3 text-xs font-medium text-gray-700 uppercase">Total</th>
               </tr>
@@ -223,8 +223,8 @@ const ChallanPreview = ({
                     <td className="py-2 px-3 text-sm text-center border-r border-gray-200">{item.hsn_code || '-'}</td>
                     <td className="py-2 px-3 text-sm text-center border-r border-gray-200">{item.quantity}</td>
                     <td className="py-2 px-3 text-sm text-center border-r border-gray-200">{item.unit || item.base_uom || 'Unit'}</td>
+                    <td className="py-2 px-3 text-sm text-right border-r border-gray-200">{formatCurrency(item.mrp || 0)}</td>
                     <td className="py-2 px-3 text-sm text-right border-r border-gray-200">{formatCurrency(price)}</td>
-                    <td className="py-2 px-3 text-sm text-right border-r border-gray-200">{formatCurrency(taxableAmount)}</td>
                     <td className="py-2 px-3 text-sm text-center border-r border-gray-200">{gstPercent}%</td>
                     <td className="py-2 px-3 text-sm text-right font-medium">{formatCurrency(totalAmount)}</td>
                   </tr>
@@ -234,31 +234,34 @@ const ChallanPreview = ({
           </table>
         </div>
 
-        {/* Total Summary Section */}
-        <div className="grid grid-cols-3 gap-4 mb-6">
-          {/* Notes/Terms Box */}
-          <div className="col-span-2 border border-gray-300 rounded-lg p-4">
-            <h3 className="text-xs font-bold text-gray-700 uppercase mb-2">Terms & Conditions</h3>
-            <div className="space-y-2">
-              {challan.notes ? (
-                <p className="text-xs text-gray-700">{challan.notes}</p>
-              ) : (
-                <>
-                  <p className="text-xs text-gray-600">1. Goods once sold will not be taken back</p>
-                  <p className="text-xs text-gray-600">2. Subject to local jurisdiction only</p>
-                  <p className="text-xs text-gray-600">3. E. & O.E.</p>
-                </>
-              )}
+        {/* Total Summary Section - Optimized Layout */}
+        <div className="grid grid-cols-2 gap-6 mb-3">
+          {/* Left Side: Notes + Company Authorization */}
+          <div className="space-y-3">
+            {/* Notes Box if exists */}
+            {challan.notes && (
+              <div className="border border-gray-200 rounded-lg p-3">
+                <p className="text-xs font-semibold text-gray-700 mb-1">Notes:</p>
+                <p className="text-xs text-gray-600">{challan.notes}</p>
+              </div>
+            )}
+            
+            {/* Digital Authorization - Compact */}
+            <div className="border border-gray-200 rounded p-2">
+              <p className="text-xs text-gray-600">For {companyInfo?.name || 'Your Company'}</p>
+              <p className="text-xs text-gray-400 mt-1">Digitally Authorized</p>
+              <p className="text-xs text-gray-400">ERP System Generated</p>
             </div>
           </div>
 
-          {/* Summary Box */}
-          <div className="border border-gray-300 rounded-lg overflow-hidden">
-            <div className="bg-gray-100 px-4 py-2">
+          {/* Right Side: Summary Box */}
+          <div className="flex justify-end">
+            <div className="border border-gray-300 rounded-lg overflow-hidden w-80">
+            <div className="bg-gray-100 px-3 py-1">
               <h3 className="text-xs font-bold text-gray-800 uppercase">Summary</h3>
             </div>
-            <div className="p-4 space-y-2">
-              <div className="flex justify-between text-sm">
+            <div className="p-3 space-y-1">
+              <div className="flex justify-between text-xs">
                 <span className="text-gray-600">Taxable Amount:</span>
                 <span className="font-medium">
                   {formatCurrency(
@@ -269,7 +272,7 @@ const ChallanPreview = ({
                   )}
                 </span>
               </div>
-              <div className="flex justify-between text-sm">
+              <div className="flex justify-between text-xs">
                 <span className="text-gray-600">Total GST:</span>
                 <span className="font-medium">
                   {formatCurrency(
@@ -283,14 +286,14 @@ const ChallanPreview = ({
                 </span>
               </div>
               {challan.freight_amount > 0 && (
-                <div className="flex justify-between text-sm">
+                <div className="flex justify-between text-xs">
                   <span className="text-gray-600">Freight Charges:</span>
                   <span className="font-medium">{formatCurrency(challan.freight_amount)}</span>
                 </div>
               )}
-              <div className="flex justify-between pt-2 border-t border-gray-300">
-                <span className="text-base font-bold text-gray-900">Grand Total:</span>
-                <span className="text-base font-bold text-blue-600">
+              <div className="flex justify-between pt-1 border-t border-gray-300">
+                <span className="text-sm font-bold text-gray-900">Grand Total:</span>
+                <span className="text-sm font-bold text-blue-600">
                   {formatCurrency(
                     challan.items.reduce((sum, item) => {
                       const price = item.unit_price || item.rate || item.sale_price || 0;
@@ -305,28 +308,12 @@ const ChallanPreview = ({
             </div>
           </div>
         </div>
-
-        {/* Signature Section */}
-        <div className="grid grid-cols-2 gap-8 mt-8 pt-4">
-          <div>
-            <p className="text-xs text-gray-600 mb-12">Received the above goods in good condition</p>
-            <div className="border-t border-gray-400 pt-2 w-48">
-              <p className="text-xs font-medium text-gray-700">Receiver's Signature</p>
-            </div>
-          </div>
-          <div className="text-right">
-            <p className="text-xs text-gray-600 mb-12">For {companyInfo?.name || 'AASO PHARMACEUTICALS'}</p>
-            <div className="inline-block">
-              <div className="border-t border-gray-400 pt-2 w-48">
-                <p className="text-xs font-medium text-gray-700">Authorized Signatory</p>
-              </div>
-            </div>
-          </div>
         </div>
 
-        {/* Footer */}
-        <div className="text-center mt-6 pt-4 border-t border-gray-200">
-          <p className="text-xs text-gray-500">This is a computer generated delivery challan and does not require signature</p>
+        {/* Digital Footer - No physical signatures needed */}
+        <div className="text-center mt-4 pt-3 border-t-2 border-gray-200">
+          <p className="text-sm font-medium text-gray-700 mb-1">This is a computer generated delivery challan</p>
+          <p className="text-xs text-gray-500">Digital document - No signature required</p>
         </div>
       </div>
     </div>

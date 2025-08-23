@@ -1,5 +1,5 @@
-import React from 'react';
-import { ArrowRight, Save, MessageCircle, Printer } from 'lucide-react';
+import React, { useState } from 'react';
+import { ArrowRight, Save, MessageCircle, Printer, Receipt } from 'lucide-react';
 
 /**
  * Standardized Document Footer Component
@@ -17,6 +17,7 @@ const DocumentFooter = ({
   onContinue,
   onSave,
   onPrint,
+  onThermalPrint, // New prop for thermal print
   onWhatsApp,
   isSaving = false,
   customerPhone = null,
@@ -29,6 +30,7 @@ const DocumentFooter = ({
   showActionButtons = false, // Show save/print/whatsapp buttons
   className = ""
 }) => {
+  const [showThermalOptions, setShowThermalOptions] = useState(false);
   const getButtonColorClasses = (color) => {
     switch (color) {
       case 'purple':
@@ -70,7 +72,42 @@ const DocumentFooter = ({
           </div>
           
           <div className="flex items-center gap-3">
-            {/* Print button first (left) */}
+            {/* Thermal Print button with dropdown */}
+            {onThermalPrint && (
+              <div className="relative">
+                <button
+                  onClick={() => setShowThermalOptions(!showThermalOptions)}
+                  className="px-4 py-2 bg-gray-500 hover:bg-gray-600 text-white rounded-lg transition-colors flex items-center gap-2"
+                >
+                  <Receipt className="w-4 h-4" />
+                  Thermal Print
+                </button>
+                {showThermalOptions && (
+                  <div className="absolute bottom-full mb-2 right-0 bg-white rounded-lg shadow-xl border border-gray-200 p-2 z-50 min-w-[150px]">
+                    <button
+                      onClick={() => {
+                        onThermalPrint('80mm');
+                        setShowThermalOptions(false);
+                      }}
+                      className="w-full text-left px-3 py-2 hover:bg-gray-50 rounded text-sm"
+                    >
+                      80mm Width
+                    </button>
+                    <button
+                      onClick={() => {
+                        onThermalPrint('58mm');
+                        setShowThermalOptions(false);
+                      }}
+                      className="w-full text-left px-3 py-2 hover:bg-gray-50 rounded text-sm"
+                    >
+                      58mm Width
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+            
+            {/* Digital/Color Print button */}
             {onPrint && (
               <button
                 onClick={onPrint}

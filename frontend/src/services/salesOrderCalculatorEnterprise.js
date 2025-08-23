@@ -19,7 +19,9 @@ class SalesOrderCalculatorEnterprise {
         items: orderData.items.map(item => ({
           product_id: item.product_id,
           quantity: parseFloat(item.quantity) || 0,
+          free_quantity: parseFloat(item.free_quantity) || 0, // Include free quantity for tracking
           unit_price: parseFloat(item.unit_price || item.sale_price || item.rate) || 0,
+          mrp: parseFloat(item.mrp) || 0, // Include MRP for tracking
           discount_percent: parseFloat(item.discount_percent) || 0,
           gst_percent: parseFloat(item.gst_percent || item.tax_percent) || 12
         })),
@@ -81,13 +83,18 @@ class SalesOrderCalculatorEnterprise {
     let totalTax = 0;
     
     const calculatedLineItems = items.map(item => {
-      const quantity = parseFloat(item.quantity) || 0;
+      // IMPORTANT: Only billable quantity affects pricing, free quantity is a bonus
+      const billableQuantity = parseFloat(item.quantity) || 0; // What customer pays for
+      const freeQuantity = parseFloat(item.free_quantity) || 0; // Bonus items (not billed)
+      const totalQuantity = billableQuantity + freeQuantity; // What customer receives
+      
       const unitPrice = parseFloat(item.unit_price || item.sale_price || item.rate) || 0;
+      const mrp = parseFloat(item.mrp) || unitPrice; // Track MRP for reference
       const discountPercent = parseFloat(item.discount_percent) || 0;
       const gstPercent = parseFloat(item.gst_percent || item.tax_percent) || 12;
       
-      // Calculate line subtotal (quantity * unit price)
-      const lineSubtotal = quantity * unitPrice;
+      // Calculate line subtotal (billable quantity * unit price) - FREE ITEMS NOT BILLED
+      const lineSubtotal = billableQuantity * unitPrice;
       
       // Apply item discount
       const itemDiscount = (lineSubtotal * discountPercent) / 100;
@@ -105,11 +112,20 @@ class SalesOrderCalculatorEnterprise {
       
       return {
         ...item,
+        // Quantities
+        quantity: billableQuantity, // Billable quantity only
+        free_quantity: freeQuantity, // Bonus items
+        total_quantity: totalQuantity, // Total items customer receives
+        // Pricing
+        mrp: mrp, // Maximum retail price for reference
+        unit_price: unitPrice,
+        // Calculations (based on billable quantity only)
         line_subtotal: lineSubtotal,
         discount_amount: itemDiscount,
         taxable_amount: lineSubtotalAfterDiscount,
         tax_amount: taxAmount,
-        line_total: lineTotal
+        line_total: lineTotal,
+        calculated_total: lineTotal // For ItemsTable display
       };
     });
     

@@ -8,7 +8,7 @@ import {
 } from 'lucide-react';
 import { suppliersApi, productsApi, purchaseApi } from '../../services/api';
 import { searchCache } from '../../utils/searchCache';
-import { SupplierSearch, PurchaseProductSearch, PharmaItemsTable, NotesSection, ProductCreationModal, GSTCalculator, ViewHistoryButton, ModuleHeader, StandardDatePicker, PrintUtility } from '../global';
+import { SupplierSearch, PurchaseProductSearch, PharmaItemsTable, NotesSection, ProductCreationModal, GSTCalculator, ViewHistoryButton, ModuleHeader, StandardDatePicker, DocumentFooter } from '../global';
 import PurchaseOrderPreview from './components/PurchaseOrderPreview';
 import SupplierCreationModal from '../global/modals/SupplierCreationModal';
 import ShareModal from '../common/ShareModal';
@@ -26,12 +26,174 @@ const PurchaseOrderFlow = ({ onClose, prefilledData = null }) => {
   const [error, setError] = useState(null);
   const [refreshing, setRefreshing] = useState(false);
 
+  // Print functions
+  const printOrder = () => {
+    window.print();
+  };
+
+  // Thermal print purchase order
+  const thermalPrintOrder = (width = '80mm') => {
+    const printWindow = window.open('', '', 'width=400,height=600');
+    const orderDate = new Date(purchaseOrder.po_date).toLocaleDateString('en-IN');
+    const expectedDate = new Date(purchaseOrder.expected_delivery_date).toLocaleDateString('en-IN');
+    
+    // Format address helper
+    const formatAddress = (addr) => {
+      if (!addr) return '';
+      if (typeof addr === 'string') return addr;
+      const parts = [];
+      if (addr.address_line_1) parts.push(addr.address_line_1);
+      if (addr.address_line_2) parts.push(addr.address_line_2);
+      if (addr.city) parts.push(addr.city);
+      if (addr.state) parts.push(addr.state);
+      if (addr.pincode) parts.push(addr.pincode);
+      return parts.join(', ');
+    };
+
+    const thermalHTML = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <title>PO - ${purchaseOrder.po_no}</title>
+        <style>
+          @page {
+            size: ${width} auto;
+            margin: 0;
+          }
+          body {
+            font-family: monospace;
+            font-size: ${width === '58mm' ? '10px' : '12px'};
+            line-height: 1.3;
+            margin: 0;
+            padding: 5px;
+            width: ${width};
+          }
+          .center { text-align: center; }
+          .bold { font-weight: bold; }
+          .divider { 
+            border-top: 1px dashed #000; 
+            margin: 3px 0;
+          }
+          .item-row {
+            display: flex;
+            justify-content: space-between;
+            margin: 2px 0;
+          }
+          .total-section {
+            margin-top: 5px;
+            padding-top: 5px;
+            border-top: 1px dashed #000;
+          }
+          @media print {
+            body { margin: 0; padding: 2px; }
+          }
+        </style>
+      </head>
+      <body>
+        <div class="center bold">PURCHASE ORDER</div>
+        <div class="center">${purchaseOrder.po_no}</div>
+        <div class="divider"></div>
+        
+        <div>Date: ${orderDate}</div>
+        <div>Expected: ${expectedDate}</div>
+        <div class="divider"></div>
+        
+        <div class="bold">Supplier:</div>
+        <div>${purchaseOrder.supplier_name || 'N/A'}</div>
+        ${purchaseOrder.supplier_details?.gstin ? `<div>GSTIN: ${purchaseOrder.supplier_details.gstin}</div>` : ''}
+        
+        <div class="divider"></div>
+        <div class="bold">Items:</div>
+        ${purchaseOrder.items.map((item, idx) => `
+          <div class="item-row">
+            <span>${idx + 1}. ${item.product_name || item.name || 'N/A'}</span>
+          </div>
+          <div class="item-row">
+            <span>  Qty: ${item.quantity} ${item.unit || ''}</span>
+            <span>₹${(item.rate || item.unit_price || 0).toFixed(2)}</span>
+          </div>
+          ${item.batch_no ? `<div>  Batch: ${item.batch_no}</div>` : ''}
+        `).join('')}
+        
+        <div class="total-section">
+          <div class="item-row">
+            <span class="bold">Subtotal:</span>
+            <span>₹${(purchaseOrder.subtotal_amount || 0).toFixed(2)}</span>
+          </div>
+          ${purchaseOrder.discount_amount ? `
+          <div class="item-row">
+            <span class="bold">Discount:</span>
+            <span>-₹${purchaseOrder.discount_amount.toFixed(2)}</span>
+          </div>
+          ` : ''}
+          ${purchaseOrder.tax_amount ? `
+          <div class="item-row">
+            <span class="bold">Tax:</span>
+            <span>₹${purchaseOrder.tax_amount.toFixed(2)}</span>
+          </div>
+          ` : ''}
+          <div class="divider"></div>
+          <div class="item-row">
+            <span class="bold">Total:</span>
+            <span class="bold">₹${(purchaseOrder.total_amount || 0).toFixed(2)}</span>
+          </div>
+        </div>
+        
+        ${purchaseOrder.payment_terms ? `
+        <div class="divider"></div>
+        <div class="bold">Payment:</div>
+        <div>${purchaseOrder.payment_terms}</div>
+        ` : ''}
+        
+        ${purchaseOrder.notes ? `
+        <div class="divider"></div>
+        <div class="bold">Notes:</div>
+        <div>${purchaseOrder.notes}</div>
+        ` : ''}
+        
+        <div class="divider"></div>
+        <div class="center" style="margin-top: 10px;">Thank You!</div>
+      </body>
+      </html>
+    `;
+    
+    printWindow.document.write(thermalHTML);
+    printWindow.document.close();
+    printWindow.focus();
+    
+    setTimeout(() => {
+      printWindow.print();
+      printWindow.close();
+    }, 250);
+  };
+
+  // Save purchase order
+  const saveOrder = async () => {
+    setSaving(true);
+    try {
+      const response = await purchaseApi.createPurchaseOrder(purchaseOrder);
+      if (response?.data) {
+        setMessage('Purchase order saved successfully!');
+        setMessageType('success');
+        setTimeout(() => {
+          onClose();
+        }, 1500);
+      }
+    } catch (error) {
+      console.error('Error saving purchase order:', error);
+      setMessage('Failed to save purchase order');
+      setMessageType('error');
+    } finally {
+      setSaving(false);
+    }
+  };
+
   // Refs for keyboard navigation
   const supplierSearchRef = useRef(null);
   const productSearchRef = useRef(null);
   const firstInputRef = useRef(null);
 
-  // Generate sequential PO number
+  // Generate sequential PO number with consistent format
   const generatePONumber = async () => {
     try {
       const response = await purchaseApi.generatePONumber();
@@ -42,14 +204,11 @@ const PurchaseOrderFlow = ({ onClose, prefilledData = null }) => {
       console.error('Error generating PO number:', error);
     }
     
-    // Fallback to local generation
-    const lastPONo = localStorage.getItem('lastPONo') || 'PO-2024-0000';
-    const parts = lastPONo.split('-');
-    const year = new Date().getFullYear();
-    const sequence = parseInt(parts[2] || '0') + 1;
-    const newPONo = `PO-${year}-${sequence.toString().padStart(4, '0')}`;
-    localStorage.setItem('lastPONo', newPONo);
-    return newPONo;
+    // Fallback to local generation with consistent format
+    const date = new Date();
+    const dateStr = date.toISOString().slice(2,10).replace(/-/g, ''); // YYMMDD
+    const randomNum = Math.floor(Math.random() * 10000).toString().padStart(4, '0');
+    return `PO-${dateStr}${randomNum}`; // Format: PO-YYMMDD####
   };
 
   // Purchase Order state
@@ -417,9 +576,6 @@ const PurchaseOrderFlow = ({ onClose, prefilledData = null }) => {
     }
   };
 
-  const handlePrint = () => {
-    window.print();
-  };
 
   const handleWhatsAppShare = () => {
     if (!selectedSupplier?.phone) {
@@ -984,11 +1140,6 @@ ${localStorage.getItem('company_name') || 'AASO Pharmaceuticals'}
               variant: "default"
             },
             {
-              label: "Print",
-              onClick: handlePrint,
-              variant: "default"
-            },
-            {
               label: refreshing ? "Refreshing..." : "Refresh",
               onClick: handleRefresh,
               variant: "outline",
@@ -1098,119 +1249,28 @@ ${localStorage.getItem('company_name') || 'AASO Pharmaceuticals'}
                 </div>
               </div>
 
-              {/* Right side - PO Preview with Thermal Print Support */}
+              {/* Right side - PO Preview */}
               <div className="lg:col-span-2">
-                <PrintUtility
-                  documentData={{
-                    documentNumber: purchaseOrder.po_number,
-                    date: purchaseOrder.order_date,
-                    customer: {
-                      name: purchaseOrder.supplier_name,
-                      phone: selectedSupplier?.phone,
-                      gstin: selectedSupplier?.gstin
-                    },
-                    items: purchaseOrder.items.map(item => ({
-                      product_name: item.product_name,
-                      hsn_code: item.hsn_code,
-                      batch_no: item.batch_no || item.batch_number,
-                      quantity: item.quantity,
-                      free_quantity: item.free_quantity || 0,
-                      unit_price: item.unit_price || item.cost_price || 0,
-                      discount_percent: item.discount_percent || 0,
-                      gst_percent: item.gst_percent || item.tax_percent || 18,
-                      total: item.total || item.line_total || (item.quantity * (item.unit_price || 0))
-                    })),
-                    totals: {
-                      subtotal: purchaseOrder.subtotal_amount || purchaseOrder.total_amount,
-                      discount: purchaseOrder.discount_amount || 0,
-                      tax_amount: purchaseOrder.tax_amount || 0,
-                      cgst_amount: purchaseOrder.cgst_amount || (purchaseOrder.tax_amount / 2) || 0,
-                      sgst_amount: purchaseOrder.sgst_amount || (purchaseOrder.tax_amount / 2) || 0,
-                      igst_amount: purchaseOrder.igst_amount || 0,
-                      total_amount: purchaseOrder.total_amount || 0,
-                      final_amount: purchaseOrder.total_amount || 0
-                    },
-                    addresses: {
-                      billing: purchaseOrder.billing_address,
-                      shipping: purchaseOrder.delivery_address
-                    },
-                    notes: purchaseOrder.notes
-                  }}
-                  documentType="purchase-order"
-                  companyInfo={{
-                    name: localStorage.getItem('companyName') || 'Your Company',
-                    address: localStorage.getItem('companyAddress') || '',
-                    phone: localStorage.getItem('companyPhone') || '',
-                    email: localStorage.getItem('companyEmail') || '',
-                    gstin: localStorage.getItem('companyGSTIN') || '',
-                    drugLicense: localStorage.getItem('companyDrugLicense') || ''
-                  }}
-                  showPrintOptions={true}
-                >
-                  <PurchaseOrderPreview purchaseOrder={purchaseOrder} />
-                </PrintUtility>
+                <PurchaseOrderPreview purchaseOrder={purchaseOrder} />
               </div>
             </div>
           </div>
         </div>
 
-        {/* Footer */}
-        <div className="flex justify-between items-center p-4 border-t border-blue-200 bg-white">
-          <div className="text-lg font-semibold text-gray-900">
-            Total Amount: ₹{purchaseOrder.total_amount.toFixed(2)}
-          </div>
-          
-          <div className="flex items-center gap-3">
-            <button
-              onClick={() => setCurrentStep(1)}
-              className="px-4 py-2 border border-gray-300 text-blue-700 rounded-lg hover:bg-blue-50 transition-colors"
-            >
-              Back to Edit
-            </button>
-            <button
-              onClick={handlePrint}
-              className="px-4 py-2 border border-gray-300 text-blue-700 rounded-lg hover:bg-blue-50 transition-colors flex items-center gap-2"
-              title="Print PO (Ctrl+P)"
-            >
-              <Printer className="w-4 h-4" />
-              Print
-            </button>
-            <button
-              onClick={handleWhatsAppShare}
-              className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors flex items-center gap-2"
-              title="Send via WhatsApp (Ctrl+W)"
-            >
-              <MessageCircle className="w-4 h-4" />
-              WhatsApp
-            </button>
-            <button
-              onClick={handleEmailShare}
-              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2"
-              title="Send via Email (Ctrl+M)"
-            >
-              <Mail className="w-4 h-4" />
-              Email
-            </button>
-            <button
-              onClick={handleSavePO}
-              disabled={saving}
-              className="px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed flex items-center gap-2"
-              title="Save Purchase Order (Ctrl+S)"
-            >
-              {saving ? (
-                <>
-                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-                  Saving...
-                </>
-              ) : (
-                <>
-                  <Save className="w-4 h-4" />
-                  Save PO
-                </>
-              )}
-            </button>
-          </div>
-        </div>
+        {/* Footer - Using DocumentFooter */}
+        <DocumentFooter
+          documentType="Purchase Order"
+          documentNumber={purchaseOrder.po_no}
+          totalItems={purchaseOrder.items.length}
+          totalAmount={purchaseOrder.total_amount}
+          onPrint={printOrder}
+          onThermalPrint={thermalPrintOrder}
+          onSave={saveOrder}
+          onShare={() => setShowShareModal(true)}
+          onWhatsApp={handleWhatsAppShare}
+          onBack={() => setCurrentStep(1)}
+          isSaving={saving}
+        />
       </div>
 
       {/* Share Modal */}

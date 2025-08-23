@@ -22,19 +22,19 @@ import { ProductSearchSimple, ItemsTable, ModuleHeader, CustomerSearch, ProductC
 import CustomerCreationB2B from '../global/ui/forms/CustomerCreationB2B';
 import { useCompany } from '../../contexts/CompanyContext';
 // import InvoiceSuccessModal from './InvoiceSuccessModal'; // Replaced with GenericSuccessModal
-import InvoiceSummaryTop from './components/InvoiceSummaryTop';
+import SplitPayment from '../global/ui/SplitPayment';
 import Toast from '../common/Toast';
 // import BillSummary from './components/BillSummary';
 // MIGRATED: Use enterprise API-driven preview component
 import InvoicePreview from '../invoice/components/InvoicePreviewEnterprise';
 import ImportDocumentModal from './components/ImportDocumentModal';
 // Removed testBackendConnection - already tested in App.tsx
-import { useToast } from '../global/ui/feedback/Toast';
 import useEscapeKey from '../../hooks/useEscapeKey';
+import { jsPDF } from 'jspdf';
+import autoTable from 'jspdf-autotable';
 
 const InvoiceFlow = ({ onClose, prefilledData = null }) => {
   const { companyInfo, getOrgId } = useCompany();
-  const toast = useToast();
   const [currentStep, setCurrentStep] = useState(1);
   const [showCustomerModal, setShowCustomerModal] = useState(false);
   const [showProductModal, setShowProductModal] = useState(false);
@@ -104,9 +104,11 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
       console.warn('Failed to generate invoice number from API:', error);
     }
     
-    // Fallback to local generation if needed
-    const timestamp = Date.now();
-    return `INV-${timestamp.toString().slice(-8)}`;
+    // Fallback to local generation with proper format
+    const date = new Date();
+    const dateStr = date.toISOString().slice(2,10).replace(/-/g, ''); // YYMMDD
+    const randomNum = Math.floor(Math.random() * 10000).toString().padStart(4, '0');
+    return `INV-${dateStr}${randomNum}`; // Format: INV-YYMMDD####
   };
 
   // Invoice data state - merge with prefilled data if provided
@@ -144,7 +146,11 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
     irn: '',
     qr_code: '',
     ack_no: '',
-    ack_date: ''
+    ack_date: '',
+    // E-way bill fields
+    eway_bill_number: '',
+    eway_bill_date: '',
+    eway_bill_valid_upto: ''
   });
 
   const [selectedCustomer, setSelectedCustomer] = useState(prefilledData?.customer_details || null);
@@ -738,6 +744,7 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
           billing_address: invoice.billing_address || selectedCustomer?.address,
           
           // Invoice details
+          invoice_number: invoice.invoice_no, // Send our generated invoice number
           invoice_date: invoice.invoice_date || new Date().toISOString().split('T')[0],
           invoice_type: 'tax_invoice',
           payment_terms: invoice.payment_mode === 'Cash' ? 'cash' : 'credit',
@@ -832,10 +839,14 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
         }
         
         // Show error to user
-        toast.error(`Backend error: ${errorDetails}`);
+        // toast.error(`Backend error: ${errorDetails}`);
+        console.error(`Backend error: ${errorDetails}`);
         
         // Still save locally and show success
-        const fallbackInvoiceNumber = 'INV-' + new Date().getTime();
+        const date = new Date();
+        const dateStr = date.toISOString().slice(2,10).replace(/-/g, ''); // YYMMDD
+        const randomNum = Math.floor(Math.random() * 10000).toString().padStart(4, '0');
+        const fallbackInvoiceNumber = `INV-${dateStr}${randomNum}`;
         
         // Store in localStorage for debugging
         localStorage.setItem('lastFailedInvoice', JSON.stringify({
@@ -852,10 +863,14 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
             invoiceNumber: fallbackInvoiceNumber,
             invoiceId: null,
             customerName: selectedCustomer?.customer_name || invoice.customer_name,
-            totalAmount: invoice.net_amount
+            totalAmount: invoice.net_amount,
+            customerPhone: selectedCustomer?.phone || selectedCustomer?.mobile || selectedCustomer?.primary_phone || invoice.customer_phone,
+            customerEmail: selectedCustomer?.email || invoice.customer_email,
+            items: invoice.invoice_items || []
           });
           setShowSuccessModal(true);
-          toast.warning(`Invoice ${fallbackInvoiceNumber} saved locally (backend issue)`);
+          // toast.warning(`Invoice ${fallbackInvoiceNumber} saved locally (backend issue)`);
+          console.warn(`Invoice ${fallbackInvoiceNumber} saved locally (backend issue)`);
         }, 3000);
         
         setSaving(false);
@@ -864,7 +879,18 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
       
       // Store the invoice details for future reference
       if (response && response.data) {
-        const invoiceNumber = response.data.invoice_number || response.data.invoiceNumber || 'INV-' + Date.now();
+        // Use our format regardless of what API returns
+        const apiInvoiceNumber = response.data.invoice_number || response.data.invoiceNumber;
+        let invoiceNumber = invoice.invoice_no; // Keep our format
+        
+        // Only use API number if ours is still temp
+        if (invoice.invoice_no === 'INV-TEMP' && apiInvoiceNumber) {
+          // Check if API number is in our format, otherwise keep our generated one
+          if (apiInvoiceNumber.match(/^INV-\d{6}\d{4}$/)) {
+            invoiceNumber = apiInvoiceNumber;
+          }
+        }
+        
         const invoiceId = response.data.invoice_id || response.data.id || response.data.invoiceId;
         
         localStorage.setItem('lastCreatedOrderId', response.data.order_id || '');
@@ -883,26 +909,37 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
           invoiceNumber: invoiceNumber,
           invoiceId: invoiceId,
           customerName: selectedCustomer?.customer_name || invoice.customer_name,
-          totalAmount: invoice.net_amount
+          totalAmount: invoice.net_amount,
+          customerPhone: selectedCustomer?.phone || selectedCustomer?.mobile || selectedCustomer?.primary_phone || invoice.customer_phone,
+          customerEmail: selectedCustomer?.email || invoice.customer_email,
+          items: invoice.invoice_items || []
         });
         
         // Show success modal
         setShowSuccessModal(true);
         
         // Also show success message as backup
-        toast.success(`Invoice ${invoiceNumber} created successfully!`);
+        // toast.success(`Invoice ${invoiceNumber} created successfully!`);
+        console.log(`Invoice ${invoiceNumber} created successfully!`);
         console.log('SUCCESS: Setting message:', `✅ Invoice ${invoiceNumber} created successfully!`);
       } else {
         // If no response data, still show success
-        const fallbackInvoiceNumber = 'INV-' + Date.now();
-        toast.success(`Invoice ${fallbackInvoiceNumber} created!`);
+        const date = new Date();
+        const dateStr = date.toISOString().slice(2,10).replace(/-/g, ''); // YYMMDD  
+        const randomNum = Math.floor(Math.random() * 10000).toString().padStart(4, '0');
+        const fallbackInvoiceNumber = `INV-${dateStr}${randomNum}`;
+        // toast.success(`Invoice ${fallbackInvoiceNumber} created!`);
+        console.log(`Invoice ${fallbackInvoiceNumber} created!`);
         
         // Still show modal with fallback data
         setCreatedInvoiceData({
           invoiceNumber: fallbackInvoiceNumber,
           invoiceId: null,
           customerName: selectedCustomer?.customer_name || invoice.customer_name,
-          totalAmount: invoice.net_amount
+          totalAmount: invoice.net_amount,
+          customerPhone: selectedCustomer?.phone || selectedCustomer?.mobile || selectedCustomer?.primary_phone || invoice.customer_phone,
+          customerEmail: selectedCustomer?.email || invoice.customer_email,
+          items: invoice.invoice_items || []
         });
         setShowSuccessModal(true);
       }
@@ -927,13 +964,193 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
         errorMessage = error.message;
       }
       
-      toast.error(errorMessage);
+      // toast.error(errorMessage);
+      console.error(errorMessage);
     } finally {
       setSaving(false);
     }
   };
 
+  // Digital/Color Print - Simple and working
   const handlePrint = () => {
+    window.print();
+  };
+
+  // Thermal Print - Black & White compact format
+  const handleThermalPrint = (width = '80mm') => {
+    // Create thermal print window
+    const printWindow = window.open('', '', 'width=400,height=600');
+    if (!printWindow) return;
+
+    // Build thermal print HTML
+    const thermalHTML = `
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Invoice - ${invoice.invoice_no}</title>
+  <style>
+    @page { size: ${width} auto; margin: 0; }
+    body { 
+      margin: 0; 
+      padding: 5mm; 
+      font-family: 'Courier New', monospace;
+      font-size: 11px;
+      line-height: 1.3;
+    }
+    .header { 
+      text-align: center; 
+      border-bottom: 1px dashed #000;
+      padding-bottom: 3mm;
+      margin-bottom: 3mm;
+    }
+    .company-name {
+      font-size: 14px;
+      font-weight: bold;
+      text-transform: uppercase;
+    }
+    .doc-title {
+      font-size: 12px;
+      font-weight: bold;
+      margin: 2mm 0;
+      text-decoration: underline;
+    }
+    .section {
+      margin: 3mm 0;
+      padding: 2mm 0;
+    }
+    .row {
+      display: flex;
+      justify-content: space-between;
+      margin: 1mm 0;
+    }
+    .label { font-weight: bold; }
+    .divider {
+      border-top: 1px dashed #000;
+      margin: 3mm 0;
+    }
+    .items-header {
+      border-top: 1px solid #000;
+      border-bottom: 1px solid #000;
+      padding: 1mm 0;
+      font-weight: bold;
+    }
+    .item-row {
+      padding: 1mm 0;
+      border-bottom: 1px dotted #ccc;
+    }
+    .total-section {
+      margin-top: 3mm;
+      padding-top: 2mm;
+      border-top: 2px solid #000;
+    }
+    .grand-total {
+      font-size: 13px;
+      font-weight: bold;
+      border-top: 1px solid #000;
+      border-bottom: 2px solid #000;
+      padding: 2mm 0;
+      margin: 2mm 0;
+    }
+    .footer {
+      text-align: center;
+      margin-top: 5mm;
+      padding-top: 3mm;
+      border-top: 1px dashed #000;
+      font-size: 10px;
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <div class="company-name">${companyInfo.name || 'Company Name'}</div>
+    ${companyInfo.address ? `<div>${companyInfo.address}</div>` : ''}
+    ${companyInfo.phone ? `<div>Ph: ${companyInfo.phone}</div>` : ''}
+    ${companyInfo.gstin ? `<div>GSTIN: ${companyInfo.gstin}</div>` : ''}
+  </div>
+
+  <div class="doc-title">TAX INVOICE</div>
+
+  <div class="section">
+    <div class="row">
+      <span class="label">No:</span>
+      <span>${invoice.invoice_no}</span>
+    </div>
+    <div class="row">
+      <span class="label">Date:</span>
+      <span>${DateFormatter.formatDate(invoice.invoice_date)}</span>
+    </div>
+  </div>
+
+  <div class="divider"></div>
+
+  <div class="section">
+    <div class="label">BILL TO:</div>
+    <div>${invoice.customer_name}</div>
+    ${selectedCustomer?.phone ? `<div>Ph: ${selectedCustomer.phone}</div>` : ''}
+    ${selectedCustomer?.gstin ? `<div>GST: ${selectedCustomer.gstin}</div>` : ''}
+  </div>
+
+  <div class="divider"></div>
+
+  <div class="items-header">ITEMS</div>
+  ${invoice.items.map((item, i) => `
+    <div class="item-row">
+      <div style="font-weight: bold;">${i + 1}. ${item.product_name}</div>
+      ${item.batch_no ? `<div style="font-size: 9px;">Batch: ${item.batch_no}</div>` : ''}
+      <div class="row">
+        <span>Qty: ${item.quantity}${item.free_quantity > 0 ? `+${item.free_quantity}F` : ''}</span>
+        <span>Rate: ${parseFloat(item.unit_price || 0).toFixed(2)}</span>
+        <span>Amt: ${parseFloat(item.line_total || (item.quantity * item.unit_price)).toFixed(2)}</span>
+      </div>
+      ${item.discount_percent > 0 ? `<div style="font-size: 9px;">Disc: ${item.discount_percent}% | GST: ${item.gst_percent || 12}%</div>` : ''}
+    </div>
+  `).join('')}
+
+  <div class="total-section">
+    <div class="row">
+      <span>Subtotal:</span>
+      <span>₹${parseFloat(invoice.subtotal_amount || 0).toFixed(2)}</span>
+    </div>
+    ${invoice.discount_amount > 0 ? `
+    <div class="row">
+      <span>Discount:</span>
+      <span>-₹${parseFloat(invoice.discount_amount || 0).toFixed(2)}</span>
+    </div>` : ''}
+    <div class="row">
+      <span>GST:</span>
+      <span>₹${parseFloat(invoice.tax_amount || 0).toFixed(2)}</span>
+    </div>
+    ${invoice.round_off !== 0 ? `
+    <div class="row">
+      <span>Round Off:</span>
+      <span>${invoice.round_off > 0 ? '+' : ''}₹${parseFloat(invoice.round_off || 0).toFixed(2)}</span>
+    </div>` : ''}
+    <div class="grand-total">
+      <div class="row">
+        <span>TOTAL:</span>
+        <span>₹${parseFloat(invoice.net_amount || 0).toFixed(2)}</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="footer">
+    <div>Thank You!</div>
+    <div>${companyInfo.name || 'Your Company'}</div>
+  </div>
+</body>
+</html>`;
+
+    printWindow.document.write(thermalHTML);
+    printWindow.document.close();
+    
+    setTimeout(() => {
+      printWindow.print();
+      printWindow.close();
+    }, 250);
+  };
+
+  // Original print function kept as backup
+  const handlePrintOld = () => {
     // Create a new window with the full invoice preview and trigger print
     const printWindow = window.open('', '_blank');
     if (printWindow) {
@@ -1147,15 +1364,143 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
     }
   };
 
-  const handleWhatsAppShare = async () => {
-    if (!selectedCustomer?.phone) {
+  // Generate PDF for download - Simple version
+  const generateInvoicePDF = (invoiceData = null) => {
+    const data = invoiceData || invoice;
+    const doc = new jsPDF();
+    
+    // Simple header
+    doc.setFontSize(16);
+    doc.setFont(undefined, 'bold');
+    doc.text(companyInfo?.name || 'AASO PHARMACEUTICALS', 14, 20);
+    
+    doc.setFontSize(10);
+    doc.setFont(undefined, 'normal');
+    if (companyInfo?.address) doc.text(companyInfo.address, 14, 26);
+    if (companyInfo?.phone) doc.text(`Phone: ${companyInfo.phone}`, 14, 32);
+    if (companyInfo?.gstin) doc.text(`GSTIN: ${companyInfo.gstin}`, 14, 38);
+    
+    
+    // Invoice details on right
+    doc.setFontSize(14);
+    doc.setFont(undefined, 'bold');
+    doc.text('TAX INVOICE', 140, 20);
+    doc.setFontSize(10);
+    doc.setFont(undefined, 'normal');
+    doc.text(`Invoice No: ${data.invoice_no || data.invoice_number || 'N/A'}`, 140, 28);
+    doc.text(`Date: ${new Date(data.invoice_date).toLocaleDateString('en-IN')}`, 140, 34);
+    
+    // Customer details
+    let yPos = 50;
+    doc.setFont(undefined, 'bold');
+    doc.text('Bill To:', 14, yPos);
+    doc.setFont(undefined, 'normal');
+    doc.text(data.customer_name || 'Customer', 14, yPos + 6);
+    if (data.billing_address) {
+      const addressLines = doc.splitTextToSize(data.billing_address, 80);
+      addressLines.forEach((line, index) => {
+        doc.text(line, 14, yPos + 12 + (index * 5));
+      });
+    }
+    
+    yPos = 85;
+    
+    // Items table - Simple version
+    const tableData = (data.items || []).map((item, index) => [
+      (index + 1).toString(),
+      item.product_name || '',
+      item.hsn_code || '',
+      item.batch_no || item.batch_number || '',
+      (item.quantity || 0).toString(),
+      (item.free_quantity || 0).toString(),
+      `₹${(item.rate || item.unit_price || 0).toFixed(2)}`,
+      `${item.discount_percent || 0}%`,
+      `${item.gst_percent || item.tax_percentage || 18}%`,
+      `₹${(item.line_total || item.total_amount || 0).toFixed(2)}`
+    ]);
+    
+    autoTable(doc, {
+      startY: yPos,
+      head: [['#', 'Product', 'HSN', 'Batch', 'Qty', 'Free', 'Rate', 'Disc%', 'GST%', 'Amount']],
+      body: tableData,
+      theme: 'grid',
+      headStyles: { 
+        fillColor: [41, 128, 185],
+        textColor: 255
+      },
+      columnStyles: {
+        0: { cellWidth: 10 },
+        1: { cellWidth: 50 },
+        2: { cellWidth: 20 },
+        3: { cellWidth: 20 },
+        4: { cellWidth: 15 },
+        5: { cellWidth: 15 },
+        6: { cellWidth: 20 },
+        7: { cellWidth: 15 },
+        8: { cellWidth: 15 },
+        9: { cellWidth: 25 }
+      }
+    });
+    
+    // Totals section - Simple
+    const finalY = (doc.previousAutoTable?.finalY || yPos + 100) + 10;
+    
+    // Right-align totals
+    const totalsX = 140;
+    doc.setFont(undefined, 'normal');
+    doc.setFontSize(10);
+    
+    doc.text('Subtotal:', totalsX, finalY);
+    doc.text(`₹${(data.subtotal_amount || 0).toFixed(2)}`, 195, finalY, { align: 'right' });
+    
+    doc.text('Tax Amount:', totalsX, finalY + 7);
+    doc.text(`₹${(data.tax_amount || 0).toFixed(2)}`, 195, finalY + 7, { align: 'right' });
+    
+    if (data.round_off) {
+      doc.text('Round Off:', totalsX, finalY + 14);
+      doc.text(`₹${(data.round_off || 0).toFixed(2)}`, 195, finalY + 14, { align: 'right' });
+    }
+    
+    doc.setFontSize(12);
+    doc.setFont(undefined, 'bold');
+    doc.text('Total Amount:', totalsX, finalY + 21);
+    doc.text(`₹${(data.net_amount || data.total_amount || 0).toFixed(2)}`, 195, finalY + 21, { align: 'right' });
+    
+    // Footer
+    doc.setFontSize(10);
+    doc.setFont(undefined, 'normal');
+    doc.text('Thank you for your business!', 105, 280, { align: 'center' });
+    
+    return doc;
+  };
+
+  // Handle PDF download
+  const handlePDFDownload = (invoiceData = null) => {
+    try {
+      const doc = generateInvoicePDF(invoiceData);
+      const fileName = `Invoice_${invoiceData?.invoice_number || invoice.invoice_no || 'Draft'}.pdf`;
+      doc.save(fileName);
+      return true;
+    } catch (error) {
+      console.error('Error generating PDF:', error);
+      setMessage('Failed to generate PDF. Please try again.');
+      setMessageType('error');
+      return false;
+    }
+  };
+
+  const handleWhatsAppShare = async (phoneOverride = null) => {
+    // Use phoneOverride if provided (from success modal), otherwise use selectedCustomer
+    const customerPhone = phoneOverride || selectedCustomer?.phone || selectedCustomer?.mobile || selectedCustomer?.primary_phone;
+    
+    if (!customerPhone) {
       setMessage('Customer phone number not available');
       setMessageType('error');
       return;
     }
 
     // Format phone number (remove spaces, add country code if needed)
-    let phoneNumber = selectedCustomer.phone.replace(/\s+/g, '');
+    let phoneNumber = customerPhone.replace(/\s+/g, '');
     if (!phoneNumber.startsWith('+')) {
       phoneNumber = '+91' + phoneNumber; // Assuming India code
     }
@@ -1201,11 +1546,15 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
       `Your invoice ${invoice.invoice_no} dated ${new Date(invoice.invoice_date).toLocaleDateString('en-IN')} ` +
       `for amount ₹${totalAmount.toFixed(2)} has been generated.\n\n` +
       `Thank you for your business!\n\n` +
-      `Regards,\n${companyInfo.name}`
+      `Regards,\n${companyInfo?.name || 'AASO Pharmaceuticals'}`
     );
 
     // Note: WhatsApp Web doesn't support file attachments via URL
-    // Users need to manually attach the PDF after clicking send
+    // For a better solution, consider:
+    // 1. Upload PDF to cloud storage (S3/Firebase) with temporary access
+    // 2. Generate a short shareable link (e.g., yourapp.com/invoice/INV-83774632)
+    // 3. Include the link in the WhatsApp message for easy download
+    // This avoids costs as links expire after X days and are generated on-demand
     // We could implement a PDF generation service that returns a download link
     
     // Open WhatsApp
@@ -1220,39 +1569,155 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
 
   // Handle import from challan/order
   const handleImport = (importData) => {
-    // For both sales orders and challans, populate the form with imported data
+    console.log('=== IMPORT DATA RECEIVED ===');
+    console.log('Full import data:', importData);
+    console.log('Items received:', importData.items);
+    console.log('Items count:', importData.items?.length || 0);
+    
+    // Close the modal first
+    setShowImportModal(false);
+    
+    // Build the customer object for CustomerSearch component
+    const customerData = {
+      customer_id: importData.customer_id,
+      customer_name: importData.customer_name,
+      name: importData.customer_name, // CustomerSearch may look for 'name' field
+      phone: importData.customer_phone || importData.customer_details?.phone,
+      mobile: importData.customer_details?.mobile,
+      email: importData.customer_details?.email,
+      address: importData.billing_address,
+      gstin: importData.customer_details?.gstin,
+      dl_number: importData.customer_details?.dl_number,
+      state: importData.customer_details?.state,
+      city: importData.customer_details?.city,
+      ...importData.customer_details
+    };
+    
+    // Set selectedCustomer for any components that use it
     if (importData.customer_id) {
-      setSelectedCustomer({
-        customer_id: importData.customer_id,
-        customer_name: importData.customer_name,
-        phone: importData.customer_phone,
-        address: importData.billing_address,
-        ...importData.customer_details
-      });
+      setSelectedCustomer(customerData);
     }
     
-    // Update invoice with imported data
-    setInvoice(prev => ({
-      ...prev,
-      customer_id: importData.customer_id || prev.customer_id,
-      customer_name: importData.customer_name || prev.customer_name,
-      customer_details: importData.customer_details || prev.customer_details,
-      billing_address: importData.billing_address || prev.billing_address,
-      shipping_address: importData.delivery_address || importData.shipping_address || prev.shipping_address,
-      items: importData.items || prev.items,
-      reference_no: `${importData.source_type === 'sales-order' ? 'SO' : 'DC'}-${importData.source_id}`,
+    // Check if we have items to import
+    if (!importData.items || importData.items.length === 0) {
+      console.warn('No items found in import data!');
+      setMessage('⚠️ No items found in the selected document. Please select a different document.');
+      setMessageType('warning');
+      setTimeout(() => {
+        setMessage('');
+      }, 5000);
+      return;
+    }
+    
+    // Transform items to ensure all necessary fields are present
+    const transformedItems = importData.items.map((item, index) => ({
+      // Ensure unique ID for each item
+      id: item.id || item.item_id || `imported-${Date.now()}-${index}`,
+      item_id: item.item_id || `imported-${Date.now()}-${index}`,
+      
+      // Product details
+      product_id: item.product_id,
+      product_name: item.product_name || item.name,
+      product_code: item.product_code,
+      
+      // Quantities
+      quantity: parseFloat(item.quantity || item.dispatched_quantity || 0),
+      base_quantity: parseFloat(item.quantity || item.dispatched_quantity || 0),
+      free_quantity: parseFloat(item.free_quantity || 0),
+      
+      // Pricing
+      mrp: parseFloat(item.mrp || item.sale_price || 0),
+      rate: parseFloat(item.unit_price || item.rate || item.sale_price || 0),
+      unit_price: parseFloat(item.unit_price || item.rate || item.sale_price || 0),
+      sale_price: parseFloat(item.unit_price || item.rate || item.sale_price || 0),
+      
+      // Discounts and taxes
+      discount_percent: parseFloat(item.discount_percent || item.discount_percentage || 0),
+      discount_percentage: parseFloat(item.discount_percent || item.discount_percentage || 0),
+      gst_percent: parseFloat(item.gst_percent || item.tax_rate || item.tax_percent || item.tax_percentage || 18),
+      tax_percentage: parseFloat(item.gst_percent || item.tax_rate || item.tax_percent || item.tax_percentage || 18),
+      
+      // Batch and other details
+      batch_no: item.batch_no || item.batch_number,
+      batch_number: item.batch_no || item.batch_number,
+      hsn_code: item.hsn_code,
+      expiry_date: item.expiry_date,
+      
+      // Calculated fields (will be recalculated)
+      line_total: 0,
+      taxable_amount: 0,
+      tax_amount: 0,
+      total_amount: 0
+    }));
+    
+    console.log('=== TRANSFORMED DATA ===');
+    console.log('Transformed items count:', transformedItems.length);
+    console.log('First transformed item:', transformedItems[0]);
+    console.log('Customer data:', customerData);
+    
+    // Update invoice with imported data - MUST set customer_details for CustomerSearch
+    const updatedInvoice = {
+      ...invoice, // Use current invoice state, not prev
+      // Customer information - CRITICAL: customer_details is what CustomerSearch uses
+      customer_id: importData.customer_id,
+      customer_name: importData.customer_name,
+      customer_details: customerData, // This is what CustomerSearch component looks for!
+      
+      // Addresses
+      billing_address: importData.billing_address || invoice.billing_address,
+      shipping_address: importData.delivery_address || importData.shipping_address || invoice.shipping_address,
+      
+      // Items with proper structure - CRITICAL for display
+      items: transformedItems.length > 0 ? transformedItems : invoice.items,
+      
+      // Reference and notes
+      reference_no: importData.reference_no || `${importData.source_type === 'sales-order' ? 'SO' : 'DC'}-${importData.source_id}`,
       notes: `Imported from ${importData.source_type === 'sales-order' ? 'Sales Order' : importData.source_type === 'challan' ? 'Delivery Challan' : 'Document'} #${importData.source_id}`,
-      // Add transport details if from challan
-      vehicle_number: importData.transport_details?.vehicle_number || prev.vehicle_number,
-      lr_number: importData.transport_details?.lr_number || prev.lr_number,
-      transport_company: importData.transport_details?.transport_company || prev.transport_company,
+      
+      // Transport details if from challan
+      vehicle_number: importData.transport_details?.vehicle_number || invoice.vehicle_number,
+      transport_company: importData.transport_details?.transport_company || invoice.transport_company,
+      
       // Link references
       order_id: importData.order_id,
       challan_id: importData.challan_id
-    }));
+    };
     
-    toast.success('Document imported successfully', 3000);
-    setShowImportModal(false);
+    console.log('Setting invoice with imported data:');
+    console.log('- Customer:', updatedInvoice.customer_name);
+    console.log('- Items count:', updatedInvoice.items.length);
+    console.log('- First item:', updatedInvoice.items[0]);
+    
+    // Set invoice state directly
+    setInvoice(updatedInvoice);
+    
+    // Force component re-render and calculate totals for imported items
+    if (transformedItems.length > 0) {
+      // Use a small delay to ensure state update completes
+      setTimeout(() => {
+        // Force re-render by setting invoice again with the items
+        setInvoice(current => ({
+          ...current,
+          items: [...transformedItems] // Create new array reference to force re-render
+        }));
+        
+        // Then calculate totals
+        calculateInvoiceTotals(transformedItems);
+      }, 50);
+    }
+    
+    // Show a notification that data has been imported and user can review/edit
+    setMessage(`✅ Data imported from ${importData.source_type === 'sales-order' ? 'Sales Order' : 'Delivery Challan'}. Please review and make any necessary changes before proceeding.`);
+    setMessageType('success');
+    
+    // Clear the message after 7 seconds
+    setTimeout(() => {
+      setMessage('');
+      setMessageType('');
+    }, 7000);
+    
+    // Stay on the current step (step 1) so user can review and edit the imported data
+    setCurrentStep(1);
   };
 
   // Step 1: Input Form
@@ -1348,6 +1813,7 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
                 <button
                   onClick={() => setShowImportModal(true)}
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg hover:bg-blue-50 transition-colors flex items-center justify-center gap-2"
+                  type="button"
                 >
                   <FileInput className="w-4 h-4 text-gray-600" />
                   <span className="text-sm">Import from Order/Challan</span>
@@ -1447,7 +1913,8 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
             onCustomerCreated={(customer) => {
               handleCustomerSelect(customer);
               setShowCustomerModal(false);
-              toast.success('Customer created successfully');
+              // toast.success('Customer created successfully');
+              console.log('Customer created successfully');
             }}
           />
         )}
@@ -1539,11 +2006,84 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
             </div>
           )}
 
-          {/* Invoice Summary Top - Delivery & Payment Details */}
-          <InvoiceSummaryTop
-            invoice={invoice}
-            onInvoiceUpdate={(updates) => setInvoice(prev => ({ ...prev, ...updates }))}
-          />
+          {/* Payment Details - Using Global Component */}
+          <div className="mb-4">
+            <h3 className="text-xs font-semibold text-gray-600 uppercase tracking-wider mb-1.5 px-1">PAYMENT DETAILS</h3>
+            <div className="bg-white rounded-lg border border-gray-200 p-3">
+              <SplitPayment
+                totalAmount={invoice.net_amount || 0}
+                payments={[
+                  {
+                    id: '1',
+                    method: invoice.payment_mode || 'cash',
+                    amount: invoice.payment_mode === 'cash' ? (invoice.net_amount || 0) : 0
+                  }
+                ]}
+                onChange={(payments) => {
+                  const primaryPayment = payments[0];
+                  setInvoice(prev => ({
+                    ...prev,
+                    payment_mode: primaryPayment?.method || 'cash',
+                    payment_amount: primaryPayment?.amount || 0
+                  }));
+                }}
+                allowSplit={false}  // Single payment for now
+              />
+            </div>
+          </div>
+
+          {/* Delivery Details - Separated and Compact */}
+          <div className="mb-4">
+            <h3 className="text-xs font-semibold text-gray-600 uppercase tracking-wider mb-1.5 px-1">DELIVERY DETAILS</h3>
+            <div className="bg-white rounded-lg border border-gray-200 p-3">
+              <div className="grid grid-cols-4 gap-3">
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">Delivery Type</label>
+                  <select
+                    value={invoice.delivery_type || 'PICKUP'}
+                    onChange={(e) => setInvoice(prev => ({ ...prev, delivery_type: e.target.value }))}
+                    className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="PICKUP">Pickup</option>
+                    <option value="SAME_DAY">Same Day</option>
+                    <option value="NEXT_DAY">Next Day</option>
+                    <option value="EXPRESS">Express</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">Transport</label>
+                  <input
+                    type="text"
+                    value={invoice.transport_company || ''}
+                    onChange={(e) => setInvoice(prev => ({ ...prev, transport_company: e.target.value }))}
+                    className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                    placeholder="Company name"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">Vehicle No.</label>
+                  <input
+                    type="text"
+                    value={invoice.vehicle_number || ''}
+                    onChange={(e) => setInvoice(prev => ({ ...prev, vehicle_number: e.target.value }))}
+                    className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                    placeholder="MH-01-AB-1234"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">Charges (₹)</label>
+                  <input
+                    type="number"
+                    value={invoice.delivery_charges || ''}
+                    onChange={(e) => setInvoice(prev => ({ ...prev, delivery_charges: parseFloat(e.target.value) || 0 }))}
+                    className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                    placeholder="0"
+                    min="0"
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
 
           {/* Address Section - Enhanced forms with dropdowns and multi-field input */}
           {selectedCustomer && (
@@ -1619,124 +2159,181 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
             }}
             documentType="invoice"
             companyInfo={companyInfo}
-            showPrintOptions={true}
+            showPrintOptions={false}
           >
             <InvoicePreview
-              invoice={invoice}
+              invoice={{
+                ...invoice,
+                customer_details: {
+                  ...selectedCustomer,
+                  address: invoice.billing_address,
+                  gstin: selectedCustomer?.gstin,
+                  phone: selectedCustomer?.phone || selectedCustomer?.mobile
+                },
+                shipping_address: invoice.shipping_address,
+                is_same_address: invoice.billing_address === invoice.shipping_address
+              }}
               customer={selectedCustomer}
-              showAddresses={false}  // Hide addresses in PDF preview since we show them above
+              showAddresses={true}  // Show addresses in preview
               companyInfo={companyInfo}
             />
           </PrintUtility>
 
           {/* Notes */}
-          <div className="max-w-6xl mx-auto mt-6 mb-6">
-            <div className="bg-white rounded-lg border border-blue-200 p-4">
-              <label className="block text-sm font-medium text-gray-600 mb-2">Notes</label>
-              <textarea
-                value={invoice.notes}
-                onChange={(e) => setInvoice(prev => ({ ...prev, notes: e.target.value }))}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-none"
-                rows="2"
-                placeholder="Add any additional notes or comments..."
-              />
+          <div className="max-w-6xl mx-auto mt-3 mb-3">
+            <div className="bg-white rounded-lg border border-gray-200 p-2.5">
+              <div className="flex items-start gap-2">
+                <label className="text-xs font-medium text-gray-600 mt-1">Notes:</label>
+                <textarea
+                  value={invoice.notes}
+                  onChange={(e) => setInvoice(prev => ({ ...prev, notes: e.target.value }))}
+                  className="flex-1 px-2 py-1 text-sm border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500 resize-none"
+                  rows="1"
+                  placeholder="Add any additional notes or comments..."
+                  style={{ minHeight: '28px' }}
+                />
+              </div>
             </div>
           </div>
 
           {/* E-invoice Section - NEW */}
           {selectedCustomer?.gstin && parseFloat(invoice.net_amount || 0) >= 500 && (
-            <div className="max-w-6xl mx-auto mt-6 mb-6">
-              <div className="bg-orange-50 rounded-lg border border-orange-200 p-4">
-                <div className="flex items-center justify-between mb-4">
+            <div className="max-w-6xl mx-auto mt-4 mb-4">
+              <div className="bg-orange-50 rounded-lg border border-orange-200 p-3">
+                <div className="flex items-center justify-between mb-3">
                   <div className="flex items-center">
-                    <FileInput className="w-5 h-5 text-orange-600 mr-2" />
-                    <label className="text-sm font-medium text-orange-800">E-Invoice Generation</label>
+                    <FileInput className="w-4 h-4 text-orange-600 mr-2" />
+                    <label className="text-xs font-medium text-orange-800">E-Invoice Generation</label>
                   </div>
                   <label className="flex items-center">
                     <input
                       type="checkbox"
                       checked={invoice.e_invoice_applicable}
                       onChange={(e) => setInvoice(prev => ({ ...prev, e_invoice_applicable: e.target.checked }))}
-                      className="mr-2 w-4 h-4 text-orange-600 rounded focus:ring-orange-500"
+                      className="mr-2 w-3.5 h-3.5 text-orange-600 rounded focus:ring-orange-500"
                     />
-                    <span className="text-sm text-orange-700">Generate E-Invoice</span>
+                    <span className="text-xs text-orange-700">Generate E-Invoice</span>
                   </label>
                 </div>
                 
                 {invoice.e_invoice_applicable && (
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                     <div>
-                      <label className="block text-sm font-medium text-blue-700 mb-1">
+                      <label className="block text-xs font-medium text-blue-700 mb-1">
                         E-Invoice Number
                       </label>
                       <input
                         type="text"
                         value={invoice.e_invoice_number}
                         onChange={(e) => setInvoice(prev => ({ ...prev, e_invoice_number: e.target.value }))}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                        className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
                         placeholder="Auto-generated after submission"
                         readOnly
                       />
                     </div>
                     
                     <div>
-                      <label className="block text-sm font-medium text-blue-700 mb-1">
+                      <label className="block text-xs font-medium text-blue-700 mb-1">
                         IRN (Invoice Reference Number)
                       </label>
                       <input
                         type="text"
                         value={invoice.irn}
                         onChange={(e) => setInvoice(prev => ({ ...prev, irn: e.target.value }))}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                        className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
                         placeholder="Generated by GST Portal"
                         readOnly
                       />
                     </div>
                     
                     <div>
-                      <label className="block text-sm font-medium text-blue-700 mb-1">
+                      <label className="block text-xs font-medium text-blue-700 mb-1">
                         Acknowledgment Number
                       </label>
                       <input
                         type="text"
                         value={invoice.ack_no}
                         onChange={(e) => setInvoice(prev => ({ ...prev, ack_no: e.target.value }))}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                        className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
                         placeholder="From GST Portal"
                         readOnly
                       />
                     </div>
                     
                     <div>
-                      <label className="block text-sm font-medium text-blue-700 mb-1">
+                      <label className="block text-xs font-medium text-blue-700 mb-1">
                         Acknowledgment Date
                       </label>
                       <input
                         type="datetime-local"
                         value={invoice.ack_date}
                         onChange={(e) => setInvoice(prev => ({ ...prev, ack_date: e.target.value }))}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                        className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
                         readOnly
                       />
                     </div>
                     
                     <div className="md:col-span-2">
-                      <label className="block text-sm font-medium text-blue-700 mb-1">
+                      <label className="block text-xs font-medium text-blue-700 mb-1">
                         QR Code Data
                       </label>
                       <textarea
                         value={invoice.qr_code}
                         onChange={(e) => setInvoice(prev => ({ ...prev, qr_code: e.target.value }))}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500 resize-none"
+                        className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500 resize-none"
                         rows="2"
                         placeholder="QR code data from GST Portal"
                         readOnly
                       />
                     </div>
+                    
+                    {/* E-way Bill Section */}
+                    <div className="md:col-span-2 border-t pt-2 mt-2">
+                      <div className="text-xs font-medium text-orange-700 mb-2">E-way Bill Details (Auto-generated for distance > 50km)</div>
+                      <div className="grid grid-cols-3 gap-3">
+                        <div>
+                          <label className="block text-xs font-medium text-blue-700 mb-1">
+                            E-way Bill Number
+                          </label>
+                          <input
+                            type="text"
+                            value={invoice.eway_bill_number}
+                            onChange={(e) => setInvoice(prev => ({ ...prev, eway_bill_number: e.target.value }))}
+                            className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                            placeholder="Auto-generated"
+                            readOnly
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-medium text-blue-700 mb-1">
+                            E-way Bill Date
+                          </label>
+                          <input
+                            type="date"
+                            value={invoice.eway_bill_date}
+                            onChange={(e) => setInvoice(prev => ({ ...prev, eway_bill_date: e.target.value }))}
+                            className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                            readOnly
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-medium text-blue-700 mb-1">
+                            Valid Upto
+                          </label>
+                          <input
+                            type="date"
+                            value={invoice.eway_bill_valid_upto}
+                            onChange={(e) => setInvoice(prev => ({ ...prev, eway_bill_valid_upto: e.target.value }))}
+                            className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                            readOnly
+                          />
+                        </div>
+                      </div>
+                    </div>
                   </div>
                 )}
                 
-                <div className="mt-3 text-xs text-orange-600">
+                <div className="mt-2 text-xs text-orange-600">
                   <AlertCircle className="w-3 h-3 inline mr-1" />
                   E-Invoice is mandatory for B2B transactions above ₹500 with registered businesses
                 </div>
@@ -1756,10 +2353,12 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
           grandTotal={invoice.net_amount}
           onSave={handleSaveInvoice}
           onPrint={handlePrint}
+          onThermalPrint={handleThermalPrint}
           onWhatsApp={handleWhatsAppShare}
           isSaving={saving}
           customerPhone={selectedCustomer?.phone || invoice.customer_details?.phone}
           showActionButtons={true}
+          saveLabel="Generate Invoice"
         />
 
       </div>
@@ -1792,8 +2391,41 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
           documentType="invoice"
           customerName={createdInvoiceData.customerName}
           totalAmount={createdInvoiceData.totalAmount}
+          documentData={{
+            customerPhone: createdInvoiceData.customerPhone,
+            customerEmail: createdInvoiceData.customerEmail,
+            items: createdInvoiceData.items,
+            totals: {
+              total_amount: createdInvoiceData.totalAmount
+            }
+          }}
+          partyDetails={{
+            name: createdInvoiceData.customerName,
+            phone: createdInvoiceData.customerPhone,
+            email: createdInvoiceData.customerEmail
+          }}
+          companyInfo={companyInfo}
           onPrint={handlePrint}
-          onWhatsApp={handleWhatsAppShare}
+          onThermalPrint={handleThermalPrint}
+          onWhatsApp={() => handleWhatsAppShare(createdInvoiceData.customerPhone)}
+          onDownload={() => {
+            // Fetch the full invoice data if needed
+            if (createdInvoiceData.invoiceId) {
+              InvoiceApiService.getInvoiceById(createdInvoiceData.invoiceId)
+                .then(response => {
+                  if (response.success && response.data) {
+                    handlePDFDownload(response.data);
+                  } else {
+                    handlePDFDownload(createdInvoiceData);
+                  }
+                })
+                .catch(() => {
+                  handlePDFDownload(createdInvoiceData);
+                });
+            } else {
+              handlePDFDownload(createdInvoiceData);
+            }
+          }}
           showCopy={true}
         />
       )}

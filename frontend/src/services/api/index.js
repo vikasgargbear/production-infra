@@ -21,6 +21,7 @@ import {
 // Import remaining JavaScript modules
 import { authApi } from './modules/auth.api';
 import { batchesApi } from './modules/batches.api';
+import { challansApi as challansApiModule } from './modules/challans.api';
 import { deliveryApi } from './modules/delivery.api';
 import { ledgerApi } from './modules/ledger.api';
 import { notesApi } from './modules/notes.api';
@@ -94,7 +95,7 @@ export {
   purchasesAPI as purchaseApi,
   ordersAPI as ordersApi,
   paymentAPI as paymentsApi,
-  challansAPI as challansApi,
+  challansApiModule as challansApi,  // Use the module version which has getAll
   batchesApi as batchAPI,
   partyLedgerApi as partyLedgerAPI,
   salesOrdersAPI as salesOrdersAPIAlias,

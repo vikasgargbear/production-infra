@@ -63,9 +63,15 @@ export const suppliersApi = {
 
   // Get all suppliers with outstanding amounts
   getOutstanding: () => {
-    return apiHelpers.get(`${ENDPOINTS.BASE}`, { 
-      params: { with_outstanding: true }
-    }).catch(error => {
+    // Try to get suppliers with outstanding, fallback to all suppliers
+    return apiHelpers.get(`${ENDPOINTS.BASE}/outstanding`, {})
+      .catch(() => {
+        // If outstanding endpoint doesn't exist, get all suppliers
+        return apiHelpers.get(`${ENDPOINTS.BASE}`, { 
+          params: { limit: 100 }
+        });
+      })
+      .catch(error => {
       console.error('Error fetching supplier outstanding:', error);
       // Return mock data structure for Outstanding Management component
       return {

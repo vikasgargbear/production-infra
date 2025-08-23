@@ -3,7 +3,7 @@ import {
   Truck, Calendar, ArrowRight,
   CheckCircle, MessageCircle, FileInput, Printer, User, MapPin, Package
 } from 'lucide-react';
-import { ModuleHeader, CustomerSearch, ProductSearchSimple, ItemsTable, DocumentFooter, ProductCreationModal, NotesSection, AddressForm, StandardDatePicker, PrintUtility } from '../global';
+import { ModuleHeader, CustomerSearch, ProductSearchSimple, ItemsTable, DocumentFooter, ProductCreationModal, NotesSection, AddressForm, StandardDatePicker, GenericSuccessModal } from '../global';
 import CustomerCreationB2B from '../global/ui/forms/CustomerCreationB2B';
 // NotesSection is now imported from global
 import ChallanPreview from './components/ChallanPreview';
@@ -51,6 +51,8 @@ const ModularChallanCreatorV5 = ({ open = true, onClose }) => {
   const [showCreateCustomer, setShowCreateCustomer] = useState(false);
   const [showCreateProduct, setShowCreateProduct] = useState(false);
   const [showImportModal, setShowImportModal] = useState(false);
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
+  const [createdChallanData, setCreatedChallanData] = useState(null);
   const [sameAsBilling, setSameAsBilling] = useState(true);
   const [newProductName, setNewProductName] = useState('');
   const [fetchingAddress, setFetchingAddress] = useState(false);
@@ -179,6 +181,11 @@ const ModularChallanCreatorV5 = ({ open = true, onClose }) => {
 
   // Handle import from invoice/order
   const handleImport = (importData) => {
+    console.log('=== IMPORT DATA RECEIVED IN CHALLAN ===');
+    console.log('Full import data:', importData);
+    console.log('Items in import data:', importData.items);
+    console.log('Items count:', importData.items?.length || 0);
+    
     // Set customer details
     if (importData.customer_id) {
       setSelectedCustomer(importData.customer_details);
@@ -197,14 +204,50 @@ const ModularChallanCreatorV5 = ({ open = true, onClose }) => {
       }));
     }
     
-    // Set items
+    // Set items - ensure they have all required fields
     if (importData.items && importData.items.length > 0) {
-      setChallan(prev => ({
-        ...prev,
-        items: importData.items,
-        notes: importData.notes || prev.notes
+      const formattedItems = importData.items.map((item, index) => ({
+        ...item,
+        id: item.id || `imported-${Date.now()}-${index}`,
+        product_id: item.product_id,
+        product_name: item.product_name,
+        product_code: item.product_code,
+        batch_no: item.batch_no || item.batch_number || '',
+        batch_number: item.batch_no || item.batch_number || '',
+        hsn_code: item.hsn_code || '',
+        expiry_date: item.expiry_date || '',
+        quantity: parseFloat(item.quantity || item.dispatched_quantity) || 0,
+        unit_price: parseFloat(item.unit_price || item.rate || item.sale_price) || 0,
+        rate: parseFloat(item.rate || item.unit_price || item.sale_price) || 0,
+        sale_price: parseFloat(item.sale_price || item.rate || item.unit_price) || 0,
+        mrp: parseFloat(item.mrp) || 0,
+        gst_percent: parseFloat(item.gst_percent || item.tax_rate) || 18,
+        line_total: 0 // Will be recalculated
       }));
-      recalculateTotals(importData.items);
+      
+      console.log('=== FORMATTED ITEMS FOR CHALLAN ===');
+      console.log('Formatted items count:', formattedItems.length);
+      console.log('First formatted item:', formattedItems[0]);
+      
+      setChallan(prev => {
+        const updated = {
+          ...prev,
+          items: formattedItems,
+          notes: importData.notes || prev.notes
+        };
+        console.log('Updated challan with items:', updated);
+        return updated;
+      });
+      
+      // Recalculate totals after a small delay
+      setTimeout(() => {
+        console.log('Recalculating totals for imported items');
+        recalculateTotals(formattedItems);
+      }, 100);
+    } else {
+      console.warn('No items found in import data!');
+      setMessage('⚠️ No items found in the selected document');
+      setMessageType('warning');
     }
   };
 
@@ -482,8 +525,16 @@ const ModularChallanCreatorV5 = ({ open = true, onClose }) => {
       
       if (response.data) {
         const challanNumber = response.data.challan_number || challan.challan_number || `DC-${response.data.challan_id}`;
-        alert(`Challan ${challanNumber} created successfully!`);
-        onClose();
+        const createdData = {
+          ...response.data,
+          challan_number: challanNumber,
+          customer_name: challan.customer_name,
+          customer_details: challan.customer_details,
+          items: challan.items,
+          total_amount: challan.total_amount
+        };
+        setCreatedChallanData(createdData);
+        setShowSuccessModal(true);
       }
     } catch (error) {
       console.error('Error saving challan:', error);
@@ -528,6 +579,142 @@ Expected Delivery: ${challan.expected_delivery_date}
   // Print challan
   const printChallan = () => {
     window.print();
+  };
+
+  // Thermal print challan
+  const thermalPrintChallan = (width = '80mm') => {
+    const printWindow = window.open('', '', 'width=400,height=600');
+    const challanDate = new Date(challan.challan_date).toLocaleDateString('en-IN');
+    const expectedDeliveryDate = new Date(challan.expected_delivery_date).toLocaleDateString('en-IN');
+    
+    // Format address helper
+    const formatAddress = (addr) => {
+      if (!addr) return '';
+      if (typeof addr === 'string') return addr;
+      const parts = [];
+      if (addr.address_line_1) parts.push(addr.address_line_1);
+      if (addr.address_line_2) parts.push(addr.address_line_2);
+      if (addr.city) parts.push(addr.city);
+      if (addr.state) parts.push(addr.state);
+      if (addr.pincode) parts.push(addr.pincode);
+      return parts.join(', ');
+    };
+
+    const thermalHTML = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <title>Challan - ${challan.challan_number}</title>
+        <style>
+          @page {
+            size: ${width} auto;
+            margin: 0;
+          }
+          body {
+            font-family: monospace;
+            font-size: ${width === '58mm' ? '10px' : '12px'};
+            line-height: 1.3;
+            margin: 0;
+            padding: 5px;
+            width: ${width};
+          }
+          .center { text-align: center; }
+          .bold { font-weight: bold; }
+          .divider { 
+            border-top: 1px dashed #000; 
+            margin: 3px 0;
+          }
+          .item-row {
+            display: flex;
+            justify-content: space-between;
+            margin: 2px 0;
+          }
+          .total-section {
+            margin-top: 5px;
+            padding-top: 5px;
+            border-top: 1px dashed #000;
+          }
+          @media print {
+            body { margin: 0; padding: 2px; }
+          }
+        </style>
+      </head>
+      <body>
+        <div class="center bold">DELIVERY CHALLAN</div>
+        <div class="center">${challan.challan_number}</div>
+        <div class="divider"></div>
+        
+        <div>Date: ${challanDate}</div>
+        <div>Expected: ${expectedDeliveryDate}</div>
+        <div class="divider"></div>
+        
+        <div class="bold">Customer:</div>
+        <div>${challan.customer_name || 'N/A'}</div>
+        ${selectedCustomer?.gstin ? `<div>GSTIN: ${selectedCustomer.gstin}</div>` : ''}
+        
+        <div class="divider"></div>
+        <div class="bold">Delivery To:</div>
+        <div>${formatAddress(challan.delivery_address) || 'N/A'}</div>
+        ${challan.delivery_contact_person ? `<div>Contact: ${challan.delivery_contact_person}</div>` : ''}
+        ${challan.delivery_contact_phone ? `<div>Phone: ${challan.delivery_contact_phone}</div>` : ''}
+        
+        <div class="divider"></div>
+        <div class="bold">Items:</div>
+        ${challan.items.map((item, idx) => `
+          <div class="item-row">
+            <span>${idx + 1}. ${item.product_name || item.name || 'N/A'}</span>
+          </div>
+          <div class="item-row">
+            <span>  Qty: ${item.quantity} ${item.unit || ''}</span>
+            <span>₹${(item.rate || item.unit_price || 0).toFixed(2)}</span>
+          </div>
+        `).join('')}
+        
+        <div class="total-section">
+          <div class="item-row">
+            <span class="bold">Total Items:</span>
+            <span>${challan.items.length}</span>
+          </div>
+          <div class="item-row">
+            <span class="bold">Total Qty:</span>
+            <span>${challan.total_quantity || challan.items.reduce((sum, item) => sum + (item.quantity || 0), 0)}</span>
+          </div>
+          ${challan.total_packages ? `
+          <div class="item-row">
+            <span class="bold">Packages:</span>
+            <span>${challan.total_packages}</span>
+          </div>
+          ` : ''}
+        </div>
+        
+        ${challan.transport_company || challan.vehicle_number ? `
+        <div class="divider"></div>
+        <div class="bold">Transport:</div>
+        ${challan.transport_company ? `<div>${challan.transport_company}</div>` : ''}
+        ${challan.vehicle_number ? `<div>Vehicle: ${challan.vehicle_number}</div>` : ''}
+        ${challan.lr_number ? `<div>LR: ${challan.lr_number}</div>` : ''}
+        ` : ''}
+        
+        ${challan.notes ? `
+        <div class="divider"></div>
+        <div class="bold">Notes:</div>
+        <div>${challan.notes}</div>
+        ` : ''}
+        
+        <div class="divider"></div>
+        <div class="center" style="margin-top: 10px;">Thank You!</div>
+      </body>
+      </html>
+    `;
+    
+    printWindow.document.write(thermalHTML);
+    printWindow.document.close();
+    printWindow.focus();
+    
+    setTimeout(() => {
+      printWindow.print();
+      printWindow.close();
+    }, 250);
   };
 
   if (!open) return null;
@@ -900,45 +1087,26 @@ Expected Delivery: ${challan.expected_delivery_date}
             )}
             
             
-            {/* Challan Preview with Thermal Print Support */}
-            <PrintUtility
-              documentData={{
-                documentNumber: challan.challan_number,
-                date: challan.challan_date,
-                customer: {
-                  name: challan.customer_name,
-                  phone: selectedCustomer?.phone || selectedCustomer?.primary_phone,
-                  gstin: selectedCustomer?.gstin,
-                  dl_number: selectedCustomer?.dl_number
-                },
-                items: challan.items.map(item => ({
-                  product_name: item.product_name || item.name,
-                  hsn_code: item.hsn_code,
-                  batch_no: item.batch_no || item.batch_number,
-                  quantity: item.quantity,
-                  free_quantity: item.free_quantity || 0,
-                  unit_price: item.unit_price || item.selling_price || 0,
-                  discount_percent: item.discount_percent || 0,
-                  gst_percent: item.gst_percent || item.tax_percent || 18,
-                  total: item.total || item.line_total || (item.quantity * (item.unit_price || 0))
-                })),
-                totals: {
-                  subtotal: challan.subtotal_amount || challan.total_amount,
-                  discount: challan.discount_amount || 0,
-                  tax_amount: challan.tax_amount || 0,
-                  cgst_amount: challan.cgst_amount || (challan.tax_amount / 2) || 0,
-                  sgst_amount: challan.sgst_amount || (challan.tax_amount / 2) || 0,
-                  igst_amount: challan.igst_amount || 0,
-                  total_amount: challan.total_amount || 0,
-                  final_amount: challan.total_amount || 0
-                },
-                addresses: {
-                  billing: challan.billing_address,
-                  shipping: challan.delivery_address
-                },
-                notes: challan.notes
+            {/* Challan Preview */}
+            <ChallanPreview 
+              challan={{
+                ...challan,
+                // Ensure customer_details is properly structured without circular refs
+                customer_details: selectedCustomer ? {
+                  address: selectedCustomer.address || '',
+                  city: selectedCustomer.city || '',
+                  state: selectedCustomer.state || '',
+                  pincode: selectedCustomer.pincode || '',
+                  phone: selectedCustomer.phone || ''
+                } : null,
+                // Ensure delivery address fields are clean strings
+                delivery_address: challan.delivery_address || '',
+                delivery_city: challan.delivery_city || '',
+                delivery_state: challan.delivery_state || '',
+                delivery_pincode: challan.delivery_pincode || '',
+                delivery_contact_person: challan.delivery_contact_person || '',
+                delivery_contact_phone: challan.delivery_contact_phone || ''
               }}
-              documentType="delivery-challan"
               companyInfo={{
                 name: localStorage.getItem('companyName') || 'AASO PHARMACEUTICALS',
                 address: localStorage.getItem('companyAddress') || 'Gangapur City, Rajasthan',
@@ -948,38 +1116,7 @@ Expected Delivery: ${challan.expected_delivery_date}
                 drugLicense: localStorage.getItem('companyDrugLicense') || 'DL No: MH-MUM-123456',
                 logo: localStorage.getItem('companyLogo') || null
               }}
-              showPrintOptions={true}
-            >
-              <ChallanPreview 
-                challan={{
-                  ...challan,
-                  // Ensure customer_details is properly structured without circular refs
-                  customer_details: selectedCustomer ? {
-                    address: selectedCustomer.address || '',
-                    city: selectedCustomer.city || '',
-                    state: selectedCustomer.state || '',
-                    pincode: selectedCustomer.pincode || '',
-                    phone: selectedCustomer.phone || ''
-                  } : null,
-                  // Ensure delivery address fields are clean strings
-                  delivery_address: challan.delivery_address || '',
-                  delivery_city: challan.delivery_city || '',
-                  delivery_state: challan.delivery_state || '',
-                  delivery_pincode: challan.delivery_pincode || '',
-                  delivery_contact_person: challan.delivery_contact_person || '',
-                  delivery_contact_phone: challan.delivery_contact_phone || ''
-                }}
-                companyInfo={{
-                  name: localStorage.getItem('companyName') || 'AASO PHARMACEUTICALS',
-                  address: localStorage.getItem('companyAddress') || 'Gangapur City, Rajasthan',
-                  phone: localStorage.getItem('companyPhone') || '7738228969',
-                  email: localStorage.getItem('companyEmail') || 'info@aasopharma.com',
-                  gstin: localStorage.getItem('companyGSTIN') || '08AAXCA4042N1Z2',
-                  drugLicense: localStorage.getItem('companyDrugLicense') || 'DL No: MH-MUM-123456',
-                  logo: localStorage.getItem('companyLogo') || null
-                }}
-              />
-            </PrintUtility>
+            />
             
             {/* Notes Section - Using compact global component */}
             <div className="bg-white rounded-lg border border-gray-200 p-4 mt-6">
@@ -996,44 +1133,42 @@ Expected Delivery: ${challan.expected_delivery_date}
           </div>
         </div>
 
-        {/* Footer */}
-        <div className="border-t border-blue-200 bg-white px-6 py-4">
-          <div className="flex justify-between items-center">
-            <div className="text-lg">
-              Total: <span className="font-bold text-gray-900">₹{challan.total_amount.toFixed(2)}</span>
-            </div>
-            
-            <div className="flex items-center gap-3">
-              <button
-                onClick={printChallan}
-                className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-blue-700 rounded-lg transition-colors flex items-center gap-2"
-              >
-                <Printer className="w-4 h-4" />
-                Print
-              </button>
-              <button
-                onClick={shareOnWhatsApp}
-                disabled={!challan.customer_details?.phone}
-                className="px-4 py-2 bg-green-500 hover:bg-green-600 text-white rounded-lg transition-colors flex items-center gap-2"
-              >
-                <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
-                  <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413Z"/>
-                </svg>
-                WhatsApp
-              </button>
-              <button
-                onClick={saveChallan}
-                disabled={saving}
-                className="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors flex items-center gap-2 disabled:opacity-50"
-              >
-                <CheckCircle className="w-4 h-4" />
-                {saving ? 'Saving...' : 'Save Challan'}
-              </button>
-            </div>
-          </div>
-        </div>
+        {/* Footer with Thermal Print Support */}
+        <DocumentFooter
+          totalItems={challan.total_quantity || challan.items?.length || 0}
+          totalAmount={challan.total_amount}
+          subtotalAmount={challan.total_amount || 0}
+          taxAmount={0}
+          grandTotal={challan.total_amount || 0}
+          onPrint={printChallan}
+          onThermalPrint={thermalPrintChallan}
+          onSave={saveChallan}
+          saveLabel="Generate Challan"
+          onWhatsApp={shareOnWhatsApp}
+          isSaving={saving}
+          customerPhone={challan.customer_details?.phone || selectedCustomer?.phone}
+          showActionButtons={true}
+        />
 
       </div>
+
+      {/* Success Modal */}
+      {showSuccessModal && createdChallanData && (
+        <GenericSuccessModal
+          isOpen={showSuccessModal}
+          onClose={() => {
+            setShowSuccessModal(false);
+            onClose();
+          }}
+          documentType="Delivery Challan"
+          documentNumber={createdChallanData.challan_number}
+          documentData={createdChallanData}
+          onPrint={printChallan}
+          onThermalPrint={thermalPrintChallan}
+          onWhatsApp={() => shareOnWhatsApp(createdChallanData)}
+          phoneNumber={createdChallanData.customer_details?.phone || challan.customer_details?.phone}
+        />
+      )}
     </div>
   );
 };

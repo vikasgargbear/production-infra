@@ -351,7 +351,7 @@ const ImportDocumentModal: React.FC<ImportDocumentModalProps> = ({ isOpen, onClo
             </div>
           ) : (
             <div className="space-y-2">
-              {documents.map((doc) => {
+              {documents.map((doc, index) => {
                 const docId = documentType === 'sales-order' ? doc.order_id : doc.challan_id;
                 const docNumber = documentType === 'sales-order' 
                   ? (doc.order_number || `ORD-${doc.order_id}`)
@@ -359,7 +359,7 @@ const ImportDocumentModal: React.FC<ImportDocumentModalProps> = ({ isOpen, onClo
                 
                 return (
                   <div
-                    key={docId}
+                    key={docId || `doc-${index}`}
                     onClick={() => setSelectedDoc(doc)}
                     className={`p-4 border rounded-lg cursor-pointer transition-all ${
                       selectedDoc?.order_id === doc.order_id || selectedDoc?.challan_id === doc.challan_id
