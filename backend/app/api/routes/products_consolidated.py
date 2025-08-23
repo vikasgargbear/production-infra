@@ -73,6 +73,7 @@ async def get_products(
                     FIRST_VALUE(pack_uom) OVER (PARTITION BY product_id ORDER BY batch_id DESC) as pack_uom,
                     FIRST_VALUE(base_uom) OVER (PARTITION BY product_id ORDER BY batch_id DESC) as base_uom,
                     FIRST_VALUE(units_per_pack) OVER (PARTITION BY product_id ORDER BY batch_id DESC) as units_per_pack,
+                    FIRST_VALUE(packages_per_box) OVER (PARTITION BY product_id ORDER BY batch_id DESC) as packages_per_box,
                     FIRST_VALUE(tablets_per_strip) OVER (PARTITION BY product_id ORDER BY batch_id DESC) as tablets_per_strip
                 FROM inventory.batches
                 WHERE batch_status = 'active' AND quality_status = 'approved'
@@ -103,6 +104,7 @@ async def get_products(
                 bd.pack_uom,
                 bd.base_uom,
                 bd.units_per_pack,
+                bd.packages_per_box,
                 bd.tablets_per_strip
             FROM inventory.products p
             LEFT JOIN batch_aggregates ba ON p.product_id = ba.product_id
@@ -366,6 +368,36 @@ async def create_product(
             else:
                 expiry_date = (datetime.now() + timedelta(days=365)).strftime("%Y-%m-%d")
             
+            # Parse pack configuration
+            pack_type = product.get("pack_type", "Strip")
+            pack_size = product.get("pack_size", 1)
+            units_per_pack = 10  # Default 10 units per package
+            packages_per_box = 1  # Default 1 package per box
+            
+            # Parse pack_input if provided (format: "packages*units" e.g., "1*10")
+            pack_input = product.get("pack_input", "")
+            if pack_input and "*" in pack_input:
+                try:
+                    parts = pack_input.split("*")
+                    if len(parts) == 2:
+                        # First number is packages per box, second is units per package
+                        packages_per_box = int(parts[0].strip())
+                        # Second part might have unit suffix like "10ML" or "10"
+                        units_str = parts[1].strip()
+                        # Extract number from units string
+                        import re
+                        units_match = re.match(r'^(\d+)', units_str)
+                        if units_match:
+                            units_per_pack = int(units_match.group(1))
+                except Exception as e:
+                    logger.warning(f"Could not parse pack_input '{pack_input}': {e}")
+            
+            # Also check for direct field values
+            if product.get("units_per_pack"):
+                units_per_pack = int(product.get("units_per_pack"))
+            if product.get("packages_per_box"):
+                packages_per_box = int(product.get("packages_per_box"))
+            
             batch_data = {
                 "org_id": DEFAULT_ORG_ID,
                 "product_id": created.product_id,
@@ -377,7 +409,13 @@ async def create_product(
                 "cost_per_unit": cost_price,
                 "sale_price_per_unit": sale_price,
                 "mrp_per_unit": mrp,
-                "source_type": "initial_stock"
+                "source_type": "initial_stock",
+                "pack_type": pack_type,
+                "pack_size": pack_size,
+                "units_per_pack": units_per_pack,
+                "packages_per_box": packages_per_box,
+                "pack_uom": product.get("pack_uom", pack_type),
+                "base_uom": product.get("base_uom", "Unit")
             }
             
             # Temporarily disable problematic triggers to allow batch creation
@@ -394,13 +432,17 @@ async def create_product(
                         manufacturing_date, expiry_date,
                         initial_quantity, quantity_available,
                         cost_per_unit, sale_price_per_unit, mrp_per_unit,
-                        source_type, created_at, updated_at
+                        source_type, pack_type, pack_size, units_per_pack, 
+                        packages_per_box, pack_uom, base_uom,
+                        created_at, updated_at
                     ) VALUES (
                         :org_id, :product_id, :batch_number,
                         :manufacturing_date, :expiry_date,
                         :initial_quantity, :quantity_available,
                         :cost_per_unit, :sale_price_per_unit, :mrp_per_unit,
-                        :source_type, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+                        :source_type, :pack_type, :pack_size, :units_per_pack,
+                        :packages_per_box, :pack_uom, :base_uom,
+                        CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
                     ) RETURNING batch_id
                 """), batch_data)
                 
@@ -520,8 +562,10 @@ async def update_product(
         batch_field_mapping = {
             "pack_type": "pack_type",
             "pack_size": "pack_size",
-            "pack_unit_quantity": "units_per_pack",
-            "sub_unit_quantity": "tablets_per_strip", 
+            "units_per_pack": "units_per_pack",  # Units in each package
+            "packages_per_box": "packages_per_box",  # Number of packages per box
+            "pack_unit_quantity": "units_per_pack",  # Legacy mapping
+            "sub_unit_quantity": "tablets_per_strip",  # Legacy mapping
             "purchase_unit": "pack_uom",
             "sale_unit": "base_uom"
         }
@@ -654,6 +698,7 @@ async def update_product_batches(
             "pack_type": "pack_type", 
             "pack_size": "pack_size",
             "units_per_pack": "units_per_pack",
+            "packages_per_box": "packages_per_box",  # Added packages_per_box
             "tablets_per_strip": "tablets_per_strip",
             "pack_uom": "pack_uom",
             "base_uom": "base_uom",
