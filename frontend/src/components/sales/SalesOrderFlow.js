@@ -142,7 +142,10 @@ const SalesOrderFlow = ({ open = true, onClose }) => {
     tax_amount: 0,
     cgst_amount: 0,
     sgst_amount: 0,
-    round_off: 0
+    igst_amount: 0,
+    round_off: 0,
+    gst_type: 'CGST/SGST', // Default to CGST/SGST
+    place_of_supply: ''
   });
 
   const [selectedCustomer, setSelectedCustomer] = useState(null);
@@ -371,6 +374,23 @@ const SalesOrderFlow = ({ open = true, onClose }) => {
       }
     }
     
+    // Determine GST type based on customer state
+    const customerState = addressData.state || customer.state || customer.state_name || '';
+    const companyState = companyInfo.state || 'Gujarat';
+    
+    // Clean up state names for comparison (remove extra spaces, convert to lowercase)
+    const cleanCustomerState = customerState.trim().toLowerCase();
+    const cleanCompanyState = companyState.trim().toLowerCase();
+    
+    // If states match, use CGST/SGST, otherwise IGST
+    const gstType = (cleanCustomerState === cleanCompanyState || cleanCustomerState === '') ? 'CGST/SGST' : 'IGST';
+    
+    console.log('GST Type Determination:', {
+      customerState: cleanCustomerState,
+      companyState: cleanCompanyState,
+      gstType: gstType
+    });
+    
     setOrder(prev => ({
       ...prev,
       customer_id: customer.customer_id || customer.id,
@@ -379,7 +399,9 @@ const SalesOrderFlow = ({ open = true, onClose }) => {
       billing_address: fullAddress,
       shipping_address: fullAddress, // Initially same as billing
       billing_address_data: addressData,
-      shipping_address_data: addressData // Initially same as billing
+      shipping_address_data: addressData, // Initially same as billing
+      gst_type: gstType,
+      place_of_supply: customerState || companyState
     }));
   };
 
@@ -1061,6 +1083,12 @@ Expected Delivery: ${order.expected_delivery_date}
             {/* Print Styles */}
             <style dangerouslySetInnerHTML={{ __html: `
               @media print {
+                @page {
+                  size: A4;
+                  margin: 15mm;
+                }
+                
+                /* Hide everything except order preview */
                 body.printing-order * {
                   visibility: hidden !important;
                 }
@@ -1074,26 +1102,104 @@ Expected Delivery: ${order.expected_delivery_date}
                   top: 0 !important;
                   width: 100% !important;
                   margin: 0 !important;
-                  padding: 20px !important;
+                  padding: 0 !important;
                   background: white !important;
-                }
-                .print-container {
-                  padding: 20px !important;
+                  border: none !important;
                   box-shadow: none !important;
+                }
+                
+                /* Hide ALL interactive elements during print */
+                .no-print,
+                button,
+                .edit-icon,
+                [class*="Edit"],
+                [class*="edit"],
+                svg[class*="edit"],
+                svg.lucide-edit2,
+                .lucide-edit2,
+                input[type="checkbox"],
+                select,
+                .text-blue-600,
+                .hover\\:text-blue-700,
+                [title="Edit address"] {
+                  display: none !important;
+                  visibility: hidden !important;
+                }
+                
+                /* Make inputs look like plain text */
+                input:not([type="checkbox"]),
+                textarea {
+                  border: none !important;
+                  background: transparent !important;
+                  padding: 0 !important;
+                  resize: none !important;
+                }
+                
+                /* Maintain preview appearance in print */
+                .print-container {
+                  padding: 24px !important;
+                  box-shadow: none !important;
+                  border: none !important;
+                  outline: none !important;
                   margin: 0 !important;
                 }
+                
+                /* Maintain header proportions */
+                .print-header {
+                  padding-bottom: 12px !important;
+                  margin-bottom: 16px !important;
+                }
+                
+                .print-header h1 {
+                  font-size: 20px !important;
+                  margin-bottom: 4px !important;
+                }
+                
+                .print-header h2 {
+                  font-size: 16px !important;
+                  margin-bottom: 8px !important;
+                }
+                
+                /* Maintain proper spacing */
+                .mb-4 {
+                  margin-bottom: 16px !important;
+                }
+                
+                .mb-3 {
+                  margin-bottom: 12px !important;
+                }
+                
+                .mb-2 {
+                  margin-bottom: 8px !important;
+                }
+                
+                .p-3 {
+                  padding: 12px !important;
+                }
+                
+                .p-4 {
+                  padding: 16px !important;
+                }
+                
+                .gap-4 {
+                  gap: 16px !important;
+                }
+                
+                /* Table with proper spacing */
                 .print-table {
                   border-collapse: collapse !important;
-                  border: 1px solid #000 !important;
+                  border: 1px solid #e5e7eb !important;
                   width: 100% !important;
+                  margin: 16px 0 !important;
                 }
                 .print-table th,
                 .print-table td {
-                  border: 1px solid #000 !important;
-                  padding: 8px !important;
+                  border: 1px solid #e5e7eb !important;
+                  padding: 10px 8px !important;
+                  font-size: 11px !important;
                 }
                 .print-table thead {
-                  background-color: #f0f0f0 !important;
+                  background-color: #f9fafb !important;
                   -webkit-print-color-adjust: exact;
                   print-color-adjust: exact;
                 }
@@ -1101,12 +1207,11 @@ Expected Delivery: ${order.expected_delivery_date}
                   display: none !important;
                 }
                 .print-header {
-                  border-bottom: 2px solid #000 !important;
-                  margin-bottom: 20px !important;
-                  padding-bottom: 10px !important;
+                  border-bottom: 2px solid #dbeafe !important;
+                  margin-bottom: 16px !important;
+                  padding-bottom: 12px !important;
                 }
                 .print-section {
-                  border: 1px solid #000 !important;
                   padding: 10px !important;
                   margin-bottom: 10px !important;
                 }
@@ -1122,50 +1227,310 @@ Expected Delivery: ${order.expected_delivery_date}
                   border: none !important;
                   background: transparent !important;
                 }
+                /* Hide calendar icon and make date input look like text in print */
+                input[type="date"]::-webkit-calendar-picker-indicator {
+                  display: none !important;
+                }
+                input[type="date"] {
+                  -webkit-appearance: none !important;
+                  -moz-appearance: none !important;
+                  appearance: none !important;
+                }
+                /* Show text values in print */
+                .print\:block {
+                  display: block !important;
+                }
+                .print\:hidden {
+                  display: none !important;
+                }
+                /* Make all sections look uniform in print */
+                .bg-gray-50 {
+                  background-color: #f9fafb !important;
+                  -webkit-print-color-adjust: exact;
+                  print-color-adjust: exact;
+                }
+                
+                /* Enhanced print styling to match preview */
+                .bg-blue-50 {
+                  background-color: #eff6ff !important;
+                  -webkit-print-color-adjust: exact;
+                  print-color-adjust: exact;
+                }
+                
+                .bg-purple-50 {
+                  background-color: #faf5ff !important;
+                  -webkit-print-color-adjust: exact;
+                  print-color-adjust: exact;
+                }
+                
+                /* Keep rounded corners in print */
+                .rounded-lg {
+                  border-radius: 0.5rem !important;
+                }
+                
+                /* Soft borders for inner elements only */
+                .border {
+                  border-width: 1px !important;
+                  border-style: solid !important;
+                }
+                
+                .border-gray-200 {
+                  border-color: #f3f4f6 !important;
+                }
+                
+                .border-blue-200 {
+                  border-color: transparent !important;
+                }
+                
+                .border-purple-200 {
+                  border-color: #faf5ff !important;
+                }
+                
+                .border-b-2 {
+                  border-bottom-width: 1px !important;
+                }
+                
+                .border-blue-300 {
+                  border-bottom-color: #e5e7eb !important;
+                }
+                
+                /* Remove border from main container */
+                .bg-white.print-container {
+                  border: none !important;
+                  outline: none !important;
+                }
+                
+                /* Calendar icon and other UI elements */
+                svg.text-blue-400 {
+                  display: none !important;
+                }
+                
+                /* Make date input look clean in print */
+                input[type="date"] {
+                  font-weight: 500 !important;
+                  color: #111827 !important;
+                }
+                
+                /* Text colors in print */
+                .text-gray-700 {
+                  color: #374151 !important;
+                }
+                
+                .text-gray-600 {
+                  color: #4b5563 !important;
+                }
+                
+                .text-gray-500 {
+                  color: #6b7280 !important;
+                }
+                
+                .text-blue-700 {
+                  color: #1d4ed8 !important;
+                }
+                
+                .text-purple-600 {
+                  color: #9333ea !important;
+                }
+                
+                /* No shadows in print */
+                .shadow-sm {
+                  box-shadow: none !important;
+                }
+                
+                /* Logo box styling for print - subtle */
+                .border-2.border-gray-300 {
+                  border: 1px solid #e5e7eb !important;
+                }
+                
+                /* Text sizes - maintain proportions */
+                .text-xs {
+                  font-size: 11px !important;
+                }
+                
+                .text-sm {
+                  font-size: 13px !important;
+                }
+                
+                .text-lg {
+                  font-size: 16px !important;
+                }
+                
+                .text-xl {
+                  font-size: 18px !important;
+                }
+                
+                .text-2xl {
+                  font-size: 20px !important;
+                }
+                
+                /* Headings */
+                h3 {
+                  font-size: 11px !important;
+                  font-weight: 600 !important;
+                  margin-bottom: 8px !important;
+                }
               }
             ` }} />
             
             {/* Order Preview */}
             <div className="bg-white rounded-lg shadow-sm border border-blue-200 p-8 print-container order-preview-container">
-              {/* Branding Header */}
-              <div className="text-center mb-8 print-header">
-                <div className="flex items-center justify-center mb-4">
-                  <div className="w-16 h-16 bg-gradient-to-br from-purple-600 to-purple-700 rounded-full flex items-center justify-center shadow-lg">
-                    <ShoppingCart className="w-8 h-8 text-white" />
+              {/* Professional Header with Logo Space */}
+              <div className="mb-4 pb-3 border-b-2 border-blue-300 print-header">
+                <div className="flex justify-between items-start">
+                  {/* Left: Logo Space + Company Details */}
+                  <div className="flex gap-4">
+                    {/* Logo Placeholder - Professional space for branding */}
+                    <div className="w-24 h-24 border-2 border-gray-300 rounded-lg flex items-center justify-center bg-gray-50">
+                      <span className="text-xs text-gray-400 text-center">Company<br/>Logo</span>
+                    </div>
+                    
+                    {/* Company Information */}
+                    <div>
+                      <h1 className="text-2xl font-bold text-gray-900 mb-1">{companyInfo.name || 'Your Company'}</h1>
+                      {/* GST Number - Prominently displayed right after company name */}
+                      {companyInfo.gstin && (
+                        <p className="text-sm font-semibold text-gray-700 mb-1">
+                          GSTIN: {companyInfo.gstin}
+                        </p>
+                      )}
+                      <p className="text-xs text-gray-600">{companyInfo.address || ''}</p>
+                      {companyInfo.phone && (
+                        <p className="text-xs text-gray-600">
+                          Phone: {companyInfo.phone} 
+                          {companyInfo.email && ` | Email: ${companyInfo.email}`}
+                        </p>
+                      )}
+                      {/* Additional Registration Numbers if needed */}
+                      {companyInfo.pan && (
+                        <p className="text-xs text-gray-600">PAN: {companyInfo.pan}</p>
+                      )}
+                    </div>
+                  </div>
+                  
+                  {/* Right: Document Details */}
+                  <div className="text-right">
+                    <h2 className="text-xl font-bold text-purple-600 mb-2">SALES ORDER</h2>
+                    <div className="bg-purple-50 border border-purple-200 rounded p-2">
+                      <p className="text-sm font-semibold text-gray-700">Order No: {order.order_number}</p>
+                      <p className="text-xs text-gray-600 mt-1">Date: {new Date(order.order_date).toLocaleDateString('en-IN')}</p>
+                    </div>
                   </div>
                 </div>
-                <h1 className="text-3xl font-bold text-gray-900 mb-2">{companyInfo.name || 'Your Company'}</h1>
-                <h2 className="text-xl font-semibold text-purple-600">SALES ORDER</h2>
-                <p className="text-gray-600 mt-1">{order.order_number}</p>
-                <p className="text-sm text-gray-500">Date: {new Date(order.order_date).toLocaleDateString()}</p>
               </div>
 
 
-              {/* Customer & Address Section with AddressSelector */}
+              {/* Customer Details Section */}
               <div className="mb-4">
                 <div className="grid grid-cols-2 gap-4">
+                  {/* Left: Customer Info & Delivery */}
                   <div>
                     <h3 className="text-xs font-semibold text-gray-700 mb-2">Customer Details</h3>
-                    <div className="border border-gray-200 rounded-lg p-3">
+                    <div className="bg-gray-50 border border-gray-200 rounded-lg p-3 mb-3">
                       <p className="font-medium text-sm text-gray-900">{order.customer_name}</p>
                       {selectedCustomer?.gstin && (
                         <p className="text-xs text-gray-500 mt-1">GSTIN: {selectedCustomer.gstin}</p>
+                      )}
+                      {selectedCustomer?.dl_number && (
+                        <p className="text-xs text-gray-500">D.L. No: {selectedCustomer.dl_number}</p>
                       )}
                       {selectedCustomer?.phone && (
                         <p className="text-xs text-gray-500">Phone: {selectedCustomer.phone}</p>
                       )}
                     </div>
+                    
+                    {/* Expected Delivery Below Customer - Reduced Height */}
+                    <div className="bg-gray-50 border border-gray-200 rounded-lg px-3 py-2">
+                      <label className="text-xs font-semibold text-gray-700 block flex items-center">
+                        <span className="text-red-500 mr-1">*</span>
+                        Expected Delivery
+                      </label>
+                      <input
+                        type="date"
+                        value={order.expected_delivery_date}
+                        onChange={(e) => setOrder(prev => ({ ...prev, expected_delivery_date: e.target.value }))}
+                        className="w-full px-2 py-1 text-sm border-0 bg-transparent focus:outline-none print:appearance-none"
+                        style={{ WebkitAppearance: 'none' }}
+                        required
+                      />
+                    </div>
                   </div>
+                  
+                  {/* Right: Payment Terms and Bank Details in Separate Tiles */}
                   <div>
-                    <h3 className="text-xs font-semibold text-gray-700 mb-2">Expected Delivery</h3>
-                    <div className="border border-gray-200 rounded-lg p-3">
-                      <p className="text-sm font-medium text-gray-900">{new Date(order.expected_delivery_date).toLocaleDateString('en-IN')}</p>
-                      <p className="text-xs text-gray-500 mt-1">Payment Terms: {order.payment_terms || 'Credit'}</p>
+                    <h3 className="text-xs font-semibold text-gray-700 mb-2">Payment & Banking</h3>
+                    
+                    {/* Payment Terms Tile */}
+                    <div className="bg-gray-50 border border-gray-200 rounded-lg p-3 mb-3">
+                      <label className="text-xs font-semibold text-gray-700 block mb-2">Payment Terms</label>
+                      <span className="text-sm font-medium text-gray-900 print:inline hidden print:block">
+                        {order.payment_terms === 'net30' ? 'Net 30 Days' : 
+                         order.payment_terms === 'net60' ? 'Net 60 Days' :
+                         order.payment_terms === 'credit' ? 'Credit' :
+                         order.payment_terms === 'cash' ? 'Cash' :
+                         order.payment_terms === 'advance' ? 'Advance' : order.payment_terms}
+                      </span>
+                      <select
+                        value={order.payment_terms}
+                        onChange={(e) => setOrder(prev => ({ ...prev, payment_terms: e.target.value }))}
+                        className="w-full px-2 py-1 text-sm bg-white border border-gray-200 rounded focus:outline-none focus:ring-1 focus:ring-blue-500 print:hidden"
+                      >
+                        <option value="credit">Credit</option>
+                        <option value="cash">Cash</option>
+                        <option value="advance">Advance</option>
+                        <option value="net30">Net 30 Days</option>
+                        <option value="net60">Net 60 Days</option>
+                      </select>
+                    </div>
+                    
+                    {/* Bank Details Tile - Editable */}
+                    <div className="bg-gray-50 border border-gray-200 rounded-lg p-3">
+                      <p className="text-xs font-semibold text-gray-700 mb-2">Bank Information</p>
+                      <div className="space-y-1">
+                        <input
+                          type="text"
+                          value={order.bank_name || companyInfo.bank_name || 'State Bank of India'}
+                          onChange={(e) => setOrder(prev => ({ ...prev, bank_name: e.target.value }))}
+                          className="w-full px-2 py-1 text-xs text-gray-600 bg-transparent border-b border-gray-300 focus:border-blue-500 focus:outline-none"
+                          placeholder="Bank Name"
+                        />
+                        <div className="flex gap-2">
+                          <span className="text-xs text-gray-500">A/c:</span>
+                          <input
+                            type="text"
+                            value={order.account_number || companyInfo.account_number || '1234567890'}
+                            onChange={(e) => setOrder(prev => ({ ...prev, account_number: e.target.value }))}
+                            className="flex-1 px-1 text-xs text-gray-500 bg-transparent border-b border-gray-300 focus:border-blue-500 focus:outline-none"
+                            placeholder="Account Number"
+                          />
+                        </div>
+                        <div className="flex gap-2">
+                          <span className="text-xs text-gray-500">IFSC:</span>
+                          <input
+                            type="text"
+                            value={order.ifsc_code || companyInfo.ifsc_code || 'SBIN0001234'}
+                            onChange={(e) => setOrder(prev => ({ ...prev, ifsc_code: e.target.value }))}
+                            className="flex-1 px-1 text-xs text-gray-500 bg-transparent border-b border-gray-300 focus:border-blue-500 focus:outline-none"
+                            placeholder="IFSC Code"
+                          />
+                        </div>
+                        {(order.upi_id || companyInfo.upi_id) && (
+                          <div className="flex gap-2">
+                            <span className="text-xs text-gray-500">UPI:</span>
+                            <input
+                              type="text"
+                              value={order.upi_id || companyInfo.upi_id || ''}
+                              onChange={(e) => setOrder(prev => ({ ...prev, upi_id: e.target.value }))}
+                              className="flex-1 px-1 text-xs text-gray-500 bg-transparent border-b border-gray-300 focus:border-blue-500 focus:outline-none"
+                              placeholder="UPI ID"
+                            />
+                          </div>
+                        )}
+                      </div>
                     </div>
                   </div>
                 </div>
                 
-                {/* Address Forms - Using proper global component */}
+                {/* Address Forms - Using proper global component with consistent styling */}
                 {selectedCustomer && (
                   <div className="grid grid-cols-2 gap-4 mt-4">
                     <AddressForm
@@ -1174,7 +1539,7 @@ Expected Delivery: ${order.expected_delivery_date}
                       addressType="billing"
                       onChange={(address) => setOrder(prev => ({ ...prev, billing_address: address }))}
                       onSave={(addressData) => setOrder(prev => ({ ...prev, billing_address_data: addressData }))}
-                      className="bg-white"
+                      className="bg-gray-50 border border-gray-200 rounded-lg"
                     />
                     <AddressForm
                       customer={selectedCustomer}
@@ -1183,6 +1548,7 @@ Expected Delivery: ${order.expected_delivery_date}
                       onChange={(address) => setOrder(prev => ({ ...prev, shipping_address: address }))}
                       onSave={(addressData) => setOrder(prev => ({ ...prev, shipping_address_data: addressData }))}
                       sameAsBilling={sameAsBilling}
+                      billingAddressData={order.billing_address_data} // Pass billing data for display
                       onSameAsBillingChange={(same) => {
                         setSameAsBilling(same);
                         if (same) {
@@ -1193,7 +1559,7 @@ Expected Delivery: ${order.expected_delivery_date}
                           }));
                         }
                       }}
-                      className="bg-white"
+                      className="bg-gray-50 border border-gray-200 rounded-lg"
                     />
                   </div>
                 )}
@@ -1265,14 +1631,25 @@ Expected Delivery: ${order.expected_delivery_date}
                   <div className="bg-blue-50 p-4 rounded-lg">
                     <h4 className="text-sm font-semibold text-blue-700 mb-2">GST Breakdown</h4>
                     <div className="space-y-1">
-                      <div className="flex justify-between text-sm">
-                        <span className="text-gray-600">CGST (9%)</span>
-                        <span className="font-medium">₹{(order.cgst_amount || order.tax_amount/2 || 0).toFixed(2)}</span>
-                      </div>
-                      <div className="flex justify-between text-sm">
-                        <span className="text-gray-600">SGST (9%)</span>
-                        <span className="font-medium">₹{(order.sgst_amount || order.tax_amount/2 || 0).toFixed(2)}</span>
-                      </div>
+                      {order.gst_type === 'IGST' ? (
+                        <>
+                          <div className="flex justify-between text-sm">
+                            <span className="text-gray-600">IGST (18%)</span>
+                            <span className="font-medium">₹{(order.igst_amount || order.tax_amount || 0).toFixed(2)}</span>
+                          </div>
+                        </>
+                      ) : (
+                        <>
+                          <div className="flex justify-between text-sm">
+                            <span className="text-gray-600">CGST (9%)</span>
+                            <span className="font-medium">₹{(order.cgst_amount || order.tax_amount/2 || 0).toFixed(2)}</span>
+                          </div>
+                          <div className="flex justify-between text-sm">
+                            <span className="text-gray-600">SGST (9%)</span>
+                            <span className="font-medium">₹{(order.sgst_amount || order.tax_amount/2 || 0).toFixed(2)}</span>
+                          </div>
+                        </>
+                      )}
                       <div className="flex justify-between text-sm border-t pt-1">
                         <span className="text-blue-700 font-medium">Total GST</span>
                         <span className="font-semibold">₹{(order.tax_amount || 0).toFixed(2)}</span>
@@ -1310,14 +1687,14 @@ Expected Delivery: ${order.expected_delivery_date}
                   <p className="text-sm"><span className="font-medium">Amount in Words:</span> {numberToWords(order.total_amount)}</p>
                 </div>
                 
-                {/* Terms and Signature Section - Compact */}
+                {/* Terms and Signature Section */}
                 <div className="grid grid-cols-2 gap-6 mt-4 pt-3 border-t border-gray-200">
                   <div>
                     <h4 className="text-xs font-semibold text-gray-700 mb-2">Terms & Conditions</h4>
                     <ol className="text-xs text-gray-600 list-decimal list-inside space-y-0.5">
-                      <li>Goods once sold will not be taken back</li>
-                      <li>Interest @ 18% p.a. for late payment</li>
-                      <li>Subject to local jurisdiction only</li>
+                      <li>Goods once sold will not be taken back or exchanged</li>
+                      <li>Interest @ 18% p.a. will be charged on overdue payments</li>
+                      <li>All disputes subject to {companyInfo.city || 'local'} jurisdiction</li>
                       <li>E. & O.E.</li>
                     </ol>
                   </div>
@@ -1327,17 +1704,14 @@ Expected Delivery: ${order.expected_delivery_date}
                     <p className="text-xs text-gray-500">For {companyInfo.name || 'Your Company Name'}</p>
                   </div>
                 </div>
-              </div>
-
-              {/* Footer Branding */}
-              <div className="mt-8 pt-6 border-t border-blue-200 text-center">
-                <p className="text-sm text-gray-600">Thank you for your business!</p>
-                <p className="text-xs text-gray-500 mt-2">
-                  {companyInfo.name || 'Your Company'} | Your trusted healthcare partner
-                </p>
-                <p className="text-xs text-purple-600 mt-1">
-                  Powered by AASO ERP
-                </p>
+                
+                {/* Thank You Message */}
+                <div className="text-center mt-4 pt-3 border-t border-gray-100">
+                  <p className="text-sm text-gray-600">Thank you for your business!</p>
+                  <p className="text-xs text-gray-400 mt-1">
+                    {companyInfo.name || 'Your Company'}
+                  </p>
+                </div>
               </div>
 
             </div>
@@ -1364,6 +1738,7 @@ Expected Delivery: ${order.expected_delivery_date}
           grandTotal={order.total_amount}
           onPrint={printOrder}
           onSave={saveOrder}
+          saveLabel="Generate Order"
           onWhatsApp={shareOnWhatsApp}
           isSaving={saving}
           customerPhone={selectedCustomer?.phone || order.customer_details?.phone}

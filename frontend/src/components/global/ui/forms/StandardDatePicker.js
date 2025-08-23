@@ -35,9 +35,9 @@ const StandardDatePicker = ({
 }) => {
   // Standardized sizing - MUST match StandardFormInput
   const sizeClasses = {
-    sm: 'h-9 pl-8 pr-3 text-sm',     // 36px height
-    md: 'h-10 pl-10 pr-3 text-base',  // 40px height - DEFAULT
-    lg: 'h-12 pl-12 pr-4 text-lg'     // 48px height
+    sm: 'h-9 pl-8 pr-3 py-1.5 text-sm',     // 36px height
+    md: 'h-10 pl-10 pr-3 py-2 text-base',  // 40px height - DEFAULT
+    lg: 'h-12 pl-12 pr-4 py-3 text-lg'     // 48px height
   };
 
   const iconSizes = {

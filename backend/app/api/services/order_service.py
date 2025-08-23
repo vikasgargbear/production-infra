@@ -172,11 +172,17 @@ class OrderService:
             
             if product:
                 quantity = Decimal(str(item['quantity']))
+                free_quantity = Decimal(str(item.get('free_quantity', 0)))
+                # Calculate billable quantity (total - free)
+                base_quantity = quantity - free_quantity
+                if base_quantity < 0:
+                    base_quantity = Decimal("0")
+                
                 unit_price = Decimal(str(item.get('unit_price', product.mrp)))
                 discount_percent = Decimal(str(item.get('discount_percent', 0)))
                 
-                # Calculate line subtotal
-                line_subtotal = quantity * unit_price
+                # Calculate line subtotal using billable quantity only
+                line_subtotal = base_quantity * unit_price
                 
                 # Apply item discount
                 item_discount = line_subtotal * discount_percent / 100

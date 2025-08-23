@@ -22,6 +22,7 @@ const DocumentFooter = ({
   customerPhone = null,
   cancelLabel = "Cancel",
   continueLabel = "Continue",
+  saveLabel = "Generate Invoice", // Customizable save button text
   continueDisabled = false,
   continueButtonColor = "blue", // blue, purple, green, etc.
   showContinueButton = true,
@@ -88,7 +89,7 @@ const DocumentFooter = ({
                 className="px-8 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed font-medium shadow-sm"
               >
                 <Save className="w-5 h-5" />
-                {isSaving ? 'Generating...' : 'Generate Invoice'}
+                {isSaving ? 'Generating...' : saveLabel}
               </button>
             )}
           </div>

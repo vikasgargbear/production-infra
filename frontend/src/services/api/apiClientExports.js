@@ -50,11 +50,11 @@ export const customerAPI = {
       const response = await apiClient.get('/customers/', {
         params: {
           search: query,
-          limit: Math.min(options.limit || 5, 5), // Ultra-small limit to avoid DB overload
+          limit: Math.min(options.limit || 10, 10), // Reasonable limit for search results
           include_stats: false, // Never include stats for search
           fast_search: true, // Use fast search mode
         },
-        timeout: 5000, // 5 second timeout
+        timeout: 15000, // 15 second timeout for better reliability
       });
       
       // Handle the response structure from customers endpoint

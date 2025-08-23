@@ -18,7 +18,8 @@ import {
   StandardSelect,
   useToast,
   NumericInput,
-  MonthYearPicker
+  MonthYearPicker,
+  SplitPayment
 } from '../global';
 import documentNumberService from '../../services/documentNumberService';
 import { PURCHASE_CONFIG } from '../../config/purchase.config';
@@ -58,7 +59,7 @@ const EnhancedPurchaseEntry = ({ onClose, prefilledData = null }) => {
     supplier_name: prefilledData?.supplier_name || '',
     supplier_details: prefilledData?.supplier_details || null,
     items: prefilledData?.items || [],
-    payment_mode: 'Cash',
+    payment_methods: [], // Split payment support
     payment_status: 'Pending',
     delivery_date: new Date().toISOString().split('T')[0],
     delivery_type: 'DELIVERY',
@@ -268,7 +269,13 @@ const EnhancedPurchaseEntry = ({ onClose, prefilledData = null }) => {
           discount_percent: parseFloat(item.discount_percent) || 0,
           tax_percent: parseFloat(item.tax_percent) || 12
         })),
-        payment_mode: purchase.payment_mode,
+        // Handle split payments
+        payment_methods: purchase.payment_methods && purchase.payment_methods.length > 0 
+          ? purchase.payment_methods 
+          : [{ method: 'Cash', amount: purchase.final_amount }],
+        payment_mode: purchase.payment_methods && purchase.payment_methods.length > 0
+          ? purchase.payment_methods[0].method  // Primary payment method
+          : 'Cash',
         payment_status: purchase.payment_status || 'Pending',
         discount_amount: parseFloat(purchase.discount_amount) || 0,
         other_charges: parseFloat(purchase.other_charges) || 0,
@@ -325,11 +332,17 @@ const EnhancedPurchaseEntry = ({ onClose, prefilledData = null }) => {
   };
 
   const handlePrint = () => {
+    const printContent = document.getElementById('purchase-print-area');
+    const originalContent = document.body.innerHTML;
+    document.body.innerHTML = printContent.innerHTML;
     window.print();
+    document.body.innerHTML = originalContent;
+    window.location.reload();
   };
 
   const formatCurrency = (amount) => {
-    return `₹${(amount || 0).toFixed(2)}`;
+    const numAmount = parseFloat(amount) || 0;
+    return `₹${numAmount.toFixed(2)}`;
   };
 
   // Handle PDF Upload
@@ -412,17 +425,10 @@ const EnhancedPurchaseEntry = ({ onClose, prefilledData = null }) => {
           value={purchase.invoice_date}
           onChange={(value) => setPurchase(prev => ({ ...prev, invoice_date: value }))}
         />
-        <StandardSelect
-          label="Payment Mode"
-          value={purchase.payment_mode}
-          onChange={(e) => setPurchase(prev => ({ ...prev, payment_mode: e.target.value }))}
-          options={[
-            { value: 'Cash', label: 'Cash' },
-            { value: 'Credit', label: 'Credit' },
-            { value: 'UPI', label: 'UPI' },
-            { value: 'Bank Transfer', label: 'Bank Transfer' },
-            { value: 'Cheque', label: 'Cheque' }
-          ]}
+        <StandardDatePicker
+          label="Delivery Date"
+          value={purchase.delivery_date}
+          onChange={(value) => setPurchase(prev => ({ ...prev, delivery_date: value }))}
         />
       </div>
 
@@ -493,7 +499,8 @@ const EnhancedPurchaseEntry = ({ onClose, prefilledData = null }) => {
             <Package className="w-5 h-5 text-gray-600" />
             <h3 className="text-sm font-semibold text-gray-700">PURCHASE ITEMS</h3>
           </div>
-          <ItemsTable
+          <div className="overflow-visible relative" style={{ minHeight: '300px', zIndex: 50 }}>
+            <ItemsTable
             items={purchase.items.map(item => ({
               ...item,
               rate: item.purchase_price,
@@ -560,12 +567,14 @@ const EnhancedPurchaseEntry = ({ onClose, prefilledData = null }) => {
                 label: 'Expiry',
                 align: 'center',
                 render: (item, index) => (
-                  <MonthYearPicker
-                    value={item.expiry_date}
-                    onChange={(value) => handleUpdateItem(index, 'expiry_date', value)}
-                    width="w-20"
-                    className="text-xs"
-                  />
+                  <div className="relative">
+                    <MonthYearPicker
+                      value={item.expiry_date}
+                      onChange={(value) => handleUpdateItem(index, 'expiry_date', value)}
+                      width="w-20"
+                      className="text-xs"
+                    />
+                  </div>
                 )
               },
               qty: {
@@ -699,6 +708,7 @@ const EnhancedPurchaseEntry = ({ onClose, prefilledData = null }) => {
               }
             }}
           />
+          </div>
         </>
       )}
       {errors.items && (
@@ -707,63 +717,92 @@ const EnhancedPurchaseEntry = ({ onClose, prefilledData = null }) => {
     </>
   );
 
-  // Review content for step 2
+  // Review content for step 2 - Simplified like Sales Order
   const reviewContent = (
     <>
-      {/* Purchase Summary Top - Using global component */}
-      <DocumentSummaryTop
-        document={purchase}
-        onDocumentUpdate={(updates) => setPurchase(prev => ({ ...prev, ...updates }))}
-        documentType="purchase"
-        showDelivery={true}
-        showPayment={true}
-        showReference={false}
-        customFields={[
-          {
-            key: 'discount_amount',
-            label: 'Discount Amount',
-            type: 'number',
-            placeholder: '0.00'
-          },
-          {
-            key: 'other_charges',
-            label: 'Other Charges',
-            type: 'number',
-            placeholder: '0.00'
-          }
-        ]}
-      />
-
-      {/* Purchase Preview */}
-      <ContentCard title="Purchase Summary" subtitle={null} actions={null}>
-        <div className="bg-white rounded-lg p-6">
-          <div className="text-center mb-6">
-            <h2 className="text-2xl font-bold">PURCHASE ENTRY</h2>
-            <p className="text-gray-600">Purchase No: {purchase.purchase_number}</p>
-            <p className="text-gray-600">Supplier Invoice: {purchase.supplier_invoice_number}</p>
-            <p className="text-gray-600">Date: {new Date(purchase.invoice_date).toLocaleDateString('en-IN')}</p>
+      {/* Clean Purchase Preview - Matching Sales Order Style */}
+      <div id="purchase-print-area" className="bg-white rounded-lg shadow-sm border border-green-200 p-8">
+        {/* Compact Header Section */}
+        <div className="mb-4 pb-3 border-b-2 border-green-300">
+          <div className="flex justify-between items-start">
+            <div>
+              <h2 className="text-2xl font-bold text-gray-900 mb-2">Purchase Entry</h2>
+              <div className="text-sm">
+                <span className="text-gray-600">Purchase No:</span>
+                <span className="ml-2 font-semibold text-gray-900">{purchase.purchase_number}</span>
+              </div>
+            </div>
+            
+            {/* Supplier Invoice Info with Date - Right Side */}
+            <div className="text-right">
+              <div className="bg-green-50 px-4 py-3 rounded-lg border border-green-200">
+                <p className="text-sm font-semibold text-gray-900">
+                  Supplier Invoice: {purchase.supplier_invoice_number}
+                </p>
+                <p className="text-xs text-gray-600 mt-1">
+                  Date: {new Date(purchase.invoice_date).toLocaleDateString('en-IN')}
+                </p>
+              </div>
+            </div>
           </div>
+        </div>
 
-          <div className="mb-6 p-4 bg-gray-50 rounded-lg">
-            <h3 className="font-semibold mb-2 text-gray-700">Supplier Details:</h3>
-            <p className="text-gray-900 font-medium">{selectedSupplier?.supplier_name}</p>
-            {selectedSupplier?.phone && <p className="text-gray-600">Phone: {selectedSupplier.phone}</p>}
-            {selectedSupplier?.gst_number && <p className="text-gray-600">GST: {selectedSupplier.gst_number}</p>}
-            {selectedSupplier?.address && <p className="text-gray-600">Address: {selectedSupplier.address}</p>}
+        {/* Split Payment Component - Moved to Top */}
+        <div className="mb-6">
+          <SplitPayment
+            totalAmount={purchase.final_amount || 0}
+            payments={purchase.payment_methods || []}
+            onChange={(payments, summary) => {
+              setPurchase(prev => ({
+                ...prev,
+                payment_methods: payments,
+                payment_status: summary.status
+              }));
+            }}
+            onPaymentStatusChange={(status) => {
+              setPurchase(prev => ({ ...prev, payment_status: status }));
+            }}
+            allowPartial={true}
+            className=""
+          />
+        </div>
+
+        {/* Simplified Supplier Section with GST and DL */}
+        <div className="mb-6">
+          <div className="bg-gray-50 px-4 py-3 rounded-lg border border-gray-200">
+            <div className="flex justify-between items-start">
+              <div>
+                <h3 className="text-sm font-medium text-gray-600 mb-1">Supplier</h3>
+                <p className="text-base font-semibold text-gray-900">{selectedSupplier?.supplier_name}</p>
+                <div className="mt-1 space-y-0.5">
+                  {selectedSupplier?.gst_number && (
+                    <p className="text-sm text-gray-600">GST: {selectedSupplier.gst_number}</p>
+                  )}
+                  {selectedSupplier?.dl_number && (
+                    <p className="text-sm text-gray-600">D.L. No: {selectedSupplier.dl_number}</p>
+                  )}
+                </div>
+              </div>
+              {selectedSupplier?.phone && (
+                <div className="text-right">
+                  <p className="text-sm text-gray-600">{selectedSupplier.phone}</p>
+                </div>
+              )}
+            </div>
           </div>
+        </div>
 
-          <table className="w-full mb-6">
+        {/* Clean Items Table */}
+        <div className="mb-6">
+          <table className="w-full">
             <thead>
-              <tr className="border-b-2 border-gray-300">
-                <th className="text-left py-2">Item</th>
-                <th className="text-center py-2">Batch</th>
-                <th className="text-center py-2">Expiry</th>
-                <th className="text-center py-2">Qty</th>
-                <th className="text-center py-2">Free</th>
-                <th className="text-right py-2">Rate</th>
-                <th className="text-right py-2">MRP</th>
-                <th className="text-right py-2">Tax</th>
-                <th className="text-right py-2">Amount</th>
+              <tr className="border-b-2 border-gray-200 bg-gray-50">
+                <th className="text-left py-3 px-2 text-sm font-medium text-gray-700">Item</th>
+                <th className="text-center py-3 px-2 text-sm font-medium text-gray-700">Batch</th>
+                <th className="text-center py-3 px-2 text-sm font-medium text-gray-700">Qty</th>
+                <th className="text-right py-3 px-2 text-sm font-medium text-gray-700">Rate</th>
+                <th className="text-right py-3 px-2 text-sm font-medium text-gray-700">Tax</th>
+                <th className="text-right py-3 px-2 text-sm font-medium text-gray-700">Amount</th>
               </tr>
             </thead>
             <tbody>
@@ -776,61 +815,46 @@ const EnhancedPurchaseEntry = ({ onClose, prefilledData = null }) => {
                 const totalWithTax = itemTotal + itemTax;
                 
                 return (
-                  <tr key={index} className="border-b border-gray-200">
-                    <td className="py-2">{item.product_name}</td>
-                    <td className="text-center py-2">{item.batch_no || '-'}</td>
-                    <td className="text-center py-2">{item.expiry_date || '-'}</td>
-                    <td className="text-center py-2">{quantity}</td>
-                    <td className="text-center py-2">{item.free_quantity || 0}</td>
-                    <td className="text-right py-2">{formatCurrency(purchasePrice)}</td>
-                    <td className="text-right py-2">{formatCurrency(item.mrp)}</td>
-                    <td className="text-right py-2">{taxPercent}%</td>
-                    <td className="text-right py-2">{formatCurrency(totalWithTax)}</td>
+                  <tr key={index} className="border-b border-gray-100 hover:bg-gray-50">
+                    <td className="py-3 px-2 text-sm">{item.product_name}</td>
+                    <td className="text-center py-3 px-2 text-sm text-gray-600">{item.batch_no || '-'}</td>
+                    <td className="text-center py-3 px-2 text-sm font-medium">{quantity}</td>
+                    <td className="text-right py-3 px-2 text-sm">{formatCurrency(purchasePrice)}</td>
+                    <td className="text-right py-3 px-2 text-sm text-gray-600">{taxPercent}%</td>
+                    <td className="text-right py-3 px-2 text-sm font-medium">{formatCurrency(totalWithTax)}</td>
                   </tr>
                 );
               })}
             </tbody>
-            <tfoot>
-              <tr className="border-t-2 border-gray-300">
-                <td colSpan="8" className="text-right py-2 font-medium">Subtotal:</td>
-                <td className="text-right py-2 font-medium">{formatCurrency(purchase.gross_amount)}</td>
-              </tr>
-              <tr>
-                <td colSpan="8" className="text-right py-2">Tax:</td>
-                <td className="text-right py-2">{formatCurrency(purchase.tax_amount)}</td>
-              </tr>
-              {purchase.discount_amount > 0 && (
-                <tr>
-                  <td colSpan="8" className="text-right py-2">Discount:</td>
-                  <td className="text-right py-2 text-red-600">-{formatCurrency(purchase.discount_amount)}</td>
-                </tr>
-              )}
-              {purchase.other_charges > 0 && (
-                <tr>
-                  <td colSpan="8" className="text-right py-2">Other Charges:</td>
-                  <td className="text-right py-2">{formatCurrency(purchase.other_charges)}</td>
-                </tr>
-              )}
-              <tr className="border-t font-semibold text-lg">
-                <td colSpan="8" className="text-right py-2">Total:</td>
-                <td className="text-right py-2">{formatCurrency(purchase.final_amount)}</td>
-              </tr>
-            </tfoot>
           </table>
+        </div>
 
-          {/* Notes */}
-          <div className="mt-6">
-            <label className="block text-sm font-medium text-gray-600 mb-2">Notes</label>
-            <textarea
-              value={purchase.notes}
-              onChange={(e) => setPurchase(prev => ({ ...prev, notes: e.target.value }))}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 resize-none"
-              rows="2"
-              placeholder="Add any additional notes..."
-            />
+        {/* Clean Summary Section */}
+        <div className="border-t-2 border-gray-200 pt-4">
+          <div className="flex justify-end">
+            <div className="w-64">
+              <div className="flex justify-between py-2">
+                <span className="text-sm text-gray-600">Subtotal</span>
+                <span className="text-sm font-medium">{formatCurrency(purchase.gross_amount)}</span>
+              </div>
+              <div className="flex justify-between py-2">
+                <span className="text-sm text-gray-600">Tax</span>
+                <span className="text-sm">{formatCurrency(purchase.tax_amount)}</span>
+              </div>
+              {purchase.discount_amount > 0 && (
+                <div className="flex justify-between py-2">
+                  <span className="text-sm text-gray-600">Discount</span>
+                  <span className="text-sm text-red-600">-{formatCurrency(purchase.discount_amount)}</span>
+                </div>
+              )}
+              <div className="flex justify-between py-3 border-t border-gray-200 mt-2">
+                <span className="text-base font-semibold text-gray-900">Total Amount</span>
+                <span className="text-base font-bold text-green-600">{formatCurrency(purchase.final_amount)}</span>
+              </div>
+            </div>
           </div>
         </div>
-      </ContentCard>
+      </div>
     </>
   );
 

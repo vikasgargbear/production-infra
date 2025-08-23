@@ -422,39 +422,60 @@ const ModularChallanCreatorV5 = ({ open = true, onClose }) => {
   const saveChallan = async () => {
     setSaving(true);
     try {
+      // Validate required fields
+      if (!challan.customer_id) {
+        alert('Please select a customer');
+        setSaving(false);
+        return;
+      }
+      
+      if (!challan.items || challan.items.length === 0) {
+        alert('Please add at least one item');
+        setSaving(false);
+        return;
+      }
+
       // Transform items for API
       const apiItems = challan.items.map(item => ({
         product_id: item.product_id,
         product_name: item.product_name,
         hsn_code: item.hsn_code,
         quantity: item.quantity,
-        unit: item.unit,
-        unit_price: item.unit_price,
-        mrp: item.mrp,
-        gst_percent: item.gst_percent,
+        unit: item.unit || item.base_uom || 'Unit',
+        unit_price: item.unit_price || item.rate || item.sale_price || 0,
+        mrp: item.mrp || 0,
+        gst_percent: item.gst_percent || 0,
+        tax_amount: ((item.unit_price || 0) * item.quantity * (item.gst_percent || 0)) / 100,
         batch_id: item.batch_id || null,
         batch_number: item.batch_number || null,
         expiry_date: item.expiry_date || null
       }));
 
+      // Calculate total amount
+      const totalAmount = apiItems.reduce((sum, item) => 
+        sum + (item.quantity * item.unit_price), 0
+      ) + (parseFloat(challan.freight_amount) || 0);
+
       // Prepare challan data with complete delivery address
       const challanData = {
         challan_number: challan.challan_number,
         challan_date: challan.challan_date,
-        expected_delivery_date: challan.expected_delivery_date,
+        expected_delivery_date: challan.expected_delivery_date || challan.challan_date,
         customer_id: challan.customer_id,
         customer_name: challan.customer_name,
-        // Complete delivery address data
-        delivery_address: challan.delivery_address || '',
-        delivery_city: challan.delivery_city || '',
-        delivery_state: challan.delivery_state || '',
-        delivery_pincode: challan.delivery_pincode || '',
+        // Complete delivery address data - with defaults
+        delivery_address: challan.delivery_address || selectedCustomer?.address || 'N/A',
+        delivery_city: challan.delivery_city || selectedCustomer?.city || 'Mumbai',
+        delivery_state: challan.delivery_state || selectedCustomer?.state || 'Maharashtra',
+        delivery_pincode: challan.delivery_pincode || selectedCustomer?.pincode || '400001',
         items: apiItems,
-        transport_company: challan.transport_company,
-        vehicle_number: challan.vehicle_number,
-        lr_number: challan.lr_number,
-        notes: challan.notes,
-        total_amount: challan.total_amount
+        transport_company: challan.transport_company || '',
+        vehicle_number: challan.vehicle_number || '',
+        driver_phone: challan.driver_phone || '',
+        freight_amount: parseFloat(challan.freight_amount) || 0,
+        lr_number: challan.lr_number || '',
+        notes: challan.notes || '',
+        total_amount: totalAmount
       };
 
       const response = await challansApi.create(challanData);

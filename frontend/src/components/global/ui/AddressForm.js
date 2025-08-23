@@ -13,6 +13,7 @@ const AddressForm = ({
   onSave,
   sameAsBilling = false,
   onSameAsBillingChange,
+  billingAddressData = null, // For shipping address when same as billing
   className = ''
 }) => {
   const [isEditing, setIsEditing] = useState(false);
@@ -22,7 +23,8 @@ const AddressForm = ({
     city: '',
     state: '',
     pincode: '',
-    country: 'India'
+    country: 'India',
+    mobile: '' // Add mobile field
   });
 
   // Initialize form data from customer or addressData - PREVENT INFINITE LOOP
@@ -35,7 +37,8 @@ const AddressForm = ({
         city: source.city || '',
         state: source.state || source.state_name || '',
         pincode: source.pincode || source.pin_code || source.postal_code || '',
-        country: source.country || 'India'
+        country: source.country || 'India',
+        mobile: source.mobile || source.phone || source.primary_phone || '' // Include mobile
       });
       
       // DON'T automatically call onChange to prevent infinite loops
@@ -96,32 +99,54 @@ const AddressForm = ({
     }
   };
 
-  // If shipping and same as billing, show simple message
+  // If shipping and same as billing, show the actual billing address
   if (addressType === 'shipping' && sameAsBilling) {
+    const displayData = billingAddressData || formData;
     return (
-      <div className={`bg-gray-50 p-4 rounded-lg ${className}`}>
-        <div className="flex items-center justify-between mb-2">
+      <div className={`p-4 ${className}`}>
+        <div className="flex items-center justify-between mb-3">
           <label className="text-sm font-medium text-gray-700 flex items-center">
             <MapPin className="w-4 h-4 mr-1" />
             Shipping Address
           </label>
-          <label className="flex items-center text-sm">
+          <label className="flex items-center text-sm no-print">
             <input
               type="checkbox"
               checked={sameAsBilling}
               onChange={(e) => onSameAsBillingChange && onSameAsBillingChange(e.target.checked)}
               className="mr-2 rounded border-gray-300"
             />
-            Same as billing
+            <span className="no-print">Same as billing</span>
           </label>
         </div>
-        <p className="text-sm text-gray-600 italic">Using billing address</p>
+        <div className="space-y-1">
+          {displayData.address_line1 || displayData.address_line2 || displayData.city ? (
+            <>
+              {displayData.address_line1 && (
+                <div className="text-sm text-gray-700">{displayData.address_line1}</div>
+              )}
+              {displayData.address_line2 && (
+                <div className="text-sm text-gray-600">{displayData.address_line2}</div>
+              )}
+              <div className="text-sm text-gray-700">
+                {[displayData.city, displayData.state, displayData.pincode].filter(Boolean).join(', ')}
+              </div>
+              {displayData.mobile && addressType === 'billing' && (
+                <div className="text-sm text-gray-600">Mobile: {displayData.mobile}</div>
+              )}
+            </>
+          ) : (
+            <div className="text-sm text-gray-400 italic">
+              Using billing address
+            </div>
+          )}
+        </div>
       </div>
     );
   }
 
   return (
-    <div className={`bg-white border border-gray-200 rounded-lg p-4 ${className}`}>
+    <div className={`p-4 ${className}`}>
       <div className="flex items-center justify-between mb-3">
         <label className="text-sm font-medium text-gray-700 flex items-center">
           <MapPin className="w-4 h-4 mr-1" />
@@ -129,23 +154,23 @@ const AddressForm = ({
         </label>
         <div className="flex items-center gap-2">
           {addressType === 'shipping' && onSameAsBillingChange && (
-            <label className="flex items-center text-sm">
+            <label className="flex items-center text-sm no-print">
               <input
                 type="checkbox"
                 checked={sameAsBilling}
                 onChange={(e) => onSameAsBillingChange(e.target.checked)}
                 className="mr-2 rounded border-gray-300"
               />
-              Same as billing
+              <span className="no-print">Same as billing</span>
             </label>
           )}
           {!isEditing && (
             <button
               onClick={handleEdit}
-              className="text-blue-600 hover:text-blue-700 p-1"
+              className="text-blue-600 hover:text-blue-700 p-1 no-print"
               title="Edit address"
             >
-              <Edit2 className="w-4 h-4" />
+              <Edit2 className="w-4 h-4 no-print" />
             </button>
           )}
         </div>
@@ -233,6 +258,23 @@ const AddressForm = ({
                 className="w-full px-3 py-2 bg-gray-100 border border-gray-300 rounded-md text-sm text-gray-500"
               />
             </div>
+            
+            {addressType === 'billing' && (
+              <div className="col-span-2">
+                <label className="block text-xs font-medium text-gray-700 mb-1">
+                  Mobile Number
+                </label>
+                <input
+                  type="tel"
+                  value={formData.mobile}
+                  onChange={(e) => handleFieldChange('mobile', e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                  placeholder="Mobile number"
+                  pattern="[0-9]{10}"
+                  maxLength="10"
+                />
+              </div>
+            )}
           </div>
           
           <div className="flex justify-end gap-2 pt-2">
@@ -265,6 +307,9 @@ const AddressForm = ({
               <div className="text-sm text-gray-700">
                 {[formData.city, formData.state, formData.pincode].filter(Boolean).join(', ')}
               </div>
+              {formData.mobile && addressType === 'billing' && (
+                <div className="text-sm text-gray-600">Mobile: {formData.mobile}</div>
+              )}
             </>
           ) : (
             <div className="text-sm text-gray-400 italic">

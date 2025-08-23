@@ -21,7 +21,7 @@ const ChallanPreview = ({
   };
 
   return (
-    <div className="bg-white p-8 max-w-4xl mx-auto">
+    <div className="bg-white w-full">
       <style>{`
         @media print {
           body * {
@@ -42,13 +42,17 @@ const ChallanPreview = ({
           }
           @page {
             size: A4 portrait;
-            margin: 10mm;
+            margin: 15mm;
+          }
+          .print-colors {
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
           }
         }
       `}</style>
       
-      <div id="challan-preview" className="font-sans">
-        {/* Header - Company Info and Challan Details in parallel */}
+      <div id="challan-preview" className="font-sans p-8 print-colors">
+        {/* Header Section - Consistent with Invoice */}
         <div className="mb-8 grid grid-cols-2 gap-4">
           {/* Company Info - Left Side */}
           <div className="flex items-start space-x-3">
@@ -59,7 +63,7 @@ const ChallanPreview = ({
                 className="w-14 h-14 object-contain"
               />
             ) : (
-              <div className="w-14 h-14 bg-orange-100 rounded flex items-center justify-center">
+              <div className="w-14 h-14 bg-orange-100 rounded flex items-center justify-center print-colors">
                 <span className="text-xl font-bold text-orange-600">A</span>
               </div>
             )}
@@ -67,6 +71,7 @@ const ChallanPreview = ({
               <h2 className="text-lg font-bold text-gray-900 uppercase">{companyInfo?.name || 'AASO PHARMACEUTICALS'}</h2>
               <p className="text-sm text-gray-600">{companyInfo?.address || 'Gangapur City, Rajasthan'}</p>
               <p className="text-sm text-gray-600">GSTIN: {companyInfo?.gstin || '08AAXCA4042N1Z2'}</p>
+              {companyInfo?.drugLicense && <p className="text-sm text-gray-600">{companyInfo.drugLicense}</p>}
             </div>
           </div>
 
@@ -75,104 +80,153 @@ const ChallanPreview = ({
             <h1 className="text-xl font-bold text-gray-900 uppercase">DELIVERY CHALLAN</h1>
             <p className="text-sm text-gray-600 mt-1">No: {challan.challan_number}</p>
             <p className="text-sm text-gray-600">Date: {formatDate(challan.challan_date)}</p>
+            {challan.expected_delivery_date && (
+              <p className="text-sm text-gray-600">Expected Delivery: {formatDate(challan.expected_delivery_date)}</p>
+            )}
+            <p className="text-sm text-gray-600">Place of Supply: {challan.delivery_state || challan.customer_details?.state || 'Maharashtra'}</p>
           </div>
         </div>
 
-        {/* Transport Details - Only show if any transport info exists */}
-        {(challan.transport_company || challan.vehicle_number || challan.driver_phone || challan.freight_amount > 0) && (
-          <div className="mb-6 p-3 bg-gray-50 rounded">
-            <h3 className="text-xs font-semibold text-gray-700 uppercase mb-2">Transport Details</h3>
-            <div className="grid grid-cols-2 gap-4 text-sm">
-              {challan.transport_company && (
-                <div>
-                  <span className="text-gray-600">Transport: </span>
-                  <span className="text-gray-900">{challan.transport_company}</span>
-                </div>
-              )}
-              {challan.vehicle_number && (
-                <div>
-                  <span className="text-gray-600">Vehicle: </span>
-                  <span className="text-gray-900">{challan.vehicle_number}</span>
-                </div>
-              )}
-              {challan.driver_phone && (
-                <div>
-                  <span className="text-gray-600">Driver Phone: </span>
-                  <span className="text-gray-900">{challan.driver_phone}</span>
-                </div>
-              )}
-              {challan.freight_amount > 0 && (
-                <div>
-                  <span className="text-gray-600">Freight Charges: </span>
-                  <span className="text-gray-900">{formatCurrency(challan.freight_amount)}</span>
-                </div>
+
+        {/* Party & Transport Details Section - 3 columns */}
+        <div className="grid grid-cols-3 gap-4 mb-6">
+          {/* Bill To Box */}
+          <div className="border border-gray-300 rounded-lg p-4 bg-blue-50 print-colors">
+            <h3 className="text-xs font-bold text-blue-700 uppercase mb-3 border-b border-blue-200 pb-1">Bill To</h3>
+            <div className="space-y-1">
+              <p className="font-semibold text-gray-900 text-sm">{challan.customer_name || 'N/A'}</p>
+              {challan.customer_details ? (
+                <>
+                  <p className="text-gray-700 text-xs">{challan.customer_details.address || challan.billing_address || ''}</p>
+                  <p className="text-gray-700 text-xs">
+                    {[
+                      challan.customer_details.city || '',
+                      challan.customer_details.state || '',
+                      challan.customer_details.pincode || ''
+                    ].filter(Boolean).join(', ')}
+                  </p>
+                  {challan.customer_details.gstin && (
+                    <p className="text-xs font-medium text-gray-800">GSTIN: {challan.customer_details.gstin}</p>
+                  )}
+                  {challan.customer_details.phone && (
+                    <p className="text-gray-700 text-xs">Phone: {challan.customer_details.phone}</p>
+                  )}
+                </>
+              ) : challan.billing_address ? (
+                <p className="text-gray-700 text-xs">{challan.billing_address}</p>
+              ) : null}
+            </div>
+          </div>
+
+          {/* Ship To Box */}
+          <div className="border border-gray-300 rounded-lg p-4 bg-green-50 print-colors">
+            <h3 className="text-xs font-bold text-green-700 uppercase mb-3 border-b border-green-200 pb-1">Ship To</h3>
+            <div className="space-y-1">
+              {(challan.delivery_address && challan.delivery_address.trim()) ? (
+                <>
+                  <p className="font-semibold text-gray-900 text-sm">{challan.delivery_contact_person || challan.customer_name || 'N/A'}</p>
+                  <p className="text-gray-700 text-xs">{challan.delivery_address}</p>
+                  <p className="text-gray-700 text-xs">{[challan.delivery_city, challan.delivery_state, challan.delivery_pincode].filter(Boolean).join(', ')}</p>
+                  {challan.delivery_gstin && (
+                    <p className="text-xs font-medium text-gray-800">GSTIN: {challan.delivery_gstin}</p>
+                  )}
+                  {challan.delivery_contact_phone && (
+                    <p className="text-gray-700 text-xs">Phone: {challan.delivery_contact_phone}</p>
+                  )}
+                </>
+              ) : (
+                <>
+                  <p className="font-semibold text-gray-900 text-sm">{challan.customer_name || 'N/A'}</p>
+                  {challan.customer_details?.address && <p className="text-gray-700 text-xs">{challan.customer_details.address}</p>}
+                  {(challan.customer_details?.city || challan.customer_details?.state || challan.customer_details?.pincode) && (
+                    <p className="text-gray-700 text-xs">{[challan.customer_details?.city, challan.customer_details?.state, challan.customer_details?.pincode].filter(Boolean).join(', ')}</p>
+                  )}
+                  {challan.customer_details?.gstin && (
+                    <p className="text-xs font-medium text-gray-800">GSTIN: {challan.customer_details.gstin}</p>
+                  )}
+                  {challan.customer_details?.phone && (
+                    <p className="text-gray-700 text-xs">Phone: {challan.customer_details.phone}</p>
+                  )}
+                </>
               )}
             </div>
           </div>
-        )}
 
-        {/* Bill To & Ship To */}
-        <div className="mb-8 grid grid-cols-2 gap-8">
-          <div>
-            <h3 className="text-xs font-medium text-gray-500 uppercase mb-2">Bill To:</h3>
-            <h4 className="font-semibold text-gray-900">{challan.customer_name || 'N/A'}</h4>
-            {challan.customer_details && (
-              <>
-                <p className="text-gray-600">{challan.customer_details.address || ''}</p>
-                <p className="text-gray-600">{challan.customer_details.city || ''}, {challan.customer_details.state || ''}</p>
-                {challan.customer_details.phone && <p className="text-gray-600">Phone: {challan.customer_details.phone}</p>}
-              </>
-            )}
-          </div>
-          <div>
-            <h3 className="text-xs font-medium text-gray-500 uppercase mb-2">Ship To:</h3>
-            {(challan.delivery_address && challan.delivery_address.trim()) ? (
-              <div className="text-gray-600">
-                <p className="font-medium">{challan.delivery_contact_person || challan.customer_name || 'N/A'}</p>
-                <p>{challan.delivery_address}</p>
-                <p>{[challan.delivery_city, challan.delivery_state, challan.delivery_pincode].filter(Boolean).join(', ')}</p>
-                {challan.delivery_contact_phone && <p>Phone: {challan.delivery_contact_phone}</p>}
-              </div>
-            ) : (
-              <div className="text-gray-600">
-                <p className="font-medium">{challan.customer_name || 'N/A'}</p>
-                {challan.customer_details?.address && <p>{challan.customer_details.address}</p>}
-                {(challan.customer_details?.city || challan.customer_details?.state || challan.customer_details?.pincode) && (
-                  <p>{[challan.customer_details?.city, challan.customer_details?.state, challan.customer_details?.pincode].filter(Boolean).join(', ')}</p>
-                )}
-                {challan.customer_details?.phone && <p>Phone: {challan.customer_details.phone}</p>}
-              </div>
-            )}
+          {/* Transport Details Box */}
+          <div className="border border-gray-300 rounded-lg p-4 bg-yellow-50 print-colors">
+            <h3 className="text-xs font-bold text-yellow-700 uppercase mb-3 border-b border-yellow-200 pb-1">Transport Details</h3>
+            <div className="space-y-1">
+              {challan.transport_company && (
+                <div className="text-xs">
+                  <span className="font-medium text-gray-700">Company:</span>
+                  <p className="text-gray-900">{challan.transport_company}</p>
+                </div>
+              )}
+              {challan.vehicle_number && (
+                <div className="text-xs">
+                  <span className="font-medium text-gray-700">Vehicle No:</span>
+                  <p className="text-gray-900 font-medium">{challan.vehicle_number}</p>
+                </div>
+              )}
+              {challan.lr_number && (
+                <div className="text-xs">
+                  <span className="font-medium text-gray-700">LR No:</span>
+                  <p className="text-gray-900">{challan.lr_number}</p>
+                </div>
+              )}
+              {challan.driver_phone && (
+                <div className="text-xs">
+                  <span className="font-medium text-gray-700">Driver Phone:</span>
+                  <p className="text-gray-900">{challan.driver_phone}</p>
+                </div>
+              )}
+              {challan.freight_amount > 0 && (
+                <div className="text-xs mt-2 pt-2 border-t border-yellow-200">
+                  <span className="font-medium text-gray-700">Freight Charges:</span>
+                  <p className="text-gray-900 font-bold">{formatCurrency(challan.freight_amount)}</p>
+                </div>
+              )}
+              {!challan.transport_company && !challan.vehicle_number && !challan.driver_phone && !challan.freight_amount && (
+                <p className="text-xs text-gray-400 italic">No transport details provided</p>
+              )}
+            </div>
           </div>
         </div>
 
         {/* Items Table */}
-        <div className="mb-8">
-          <table className="w-full">
-            <thead>
+        <div className="mb-6">
+          <table className="w-full border border-gray-300">
+            <thead className="bg-gray-100 print-colors">
               <tr className="border-b border-gray-300">
-                <th className="text-left py-2 px-3 text-xs font-medium text-gray-700 uppercase">#</th>
-                <th className="text-left py-2 px-3 text-xs font-medium text-gray-700 uppercase">Product</th>
-                <th className="text-center py-2 px-3 text-xs font-medium text-gray-700 uppercase">Qty</th>
-                <th className="text-center py-2 px-3 text-xs font-medium text-gray-700 uppercase">Unit</th>
-                <th className="text-right py-2 px-3 text-xs font-medium text-gray-700 uppercase">MRP</th>
-                <th className="text-right py-2 px-3 text-xs font-medium text-gray-700 uppercase">Price</th>
-                <th className="text-right py-2 px-3 text-xs font-medium text-gray-700 uppercase">Amount</th>
+                <th className="text-left py-2 px-3 text-xs font-medium text-gray-700 uppercase border-r border-gray-200">#</th>
+                <th className="text-left py-2 px-3 text-xs font-medium text-gray-700 uppercase border-r border-gray-200">Description</th>
+                <th className="text-center py-2 px-3 text-xs font-medium text-gray-700 uppercase border-r border-gray-200">HSN</th>
+                <th className="text-center py-2 px-3 text-xs font-medium text-gray-700 uppercase border-r border-gray-200">Qty</th>
+                <th className="text-center py-2 px-3 text-xs font-medium text-gray-700 uppercase border-r border-gray-200">Unit</th>
+                <th className="text-right py-2 px-3 text-xs font-medium text-gray-700 uppercase border-r border-gray-200">Rate</th>
+                <th className="text-right py-2 px-3 text-xs font-medium text-gray-700 uppercase border-r border-gray-200">Taxable</th>
+                <th className="text-center py-2 px-3 text-xs font-medium text-gray-700 uppercase border-r border-gray-200">GST%</th>
+                <th className="text-right py-2 px-3 text-xs font-medium text-gray-700 uppercase">Total</th>
               </tr>
             </thead>
             <tbody>
               {challan.items.map((item, index) => {
                 const price = item.unit_price || item.rate || item.sale_price || 0;
-                const amount = (parseFloat(item.quantity) || 0) * price;
+                const taxableAmount = (parseFloat(item.quantity) || 0) * price;
+                const gstPercent = item.gst_percent || item.tax_percent || 0;
+                const gstAmount = (taxableAmount * gstPercent) / 100;
+                const totalAmount = taxableAmount + gstAmount;
                 return (
                   <tr key={index} className="border-b border-gray-200">
-                    <td className="py-3 px-3 text-sm">{index + 1}</td>
-                    <td className="py-3 px-3 text-sm">{item.product_name}</td>
-                    <td className="py-3 px-3 text-sm text-center">{item.quantity}</td>
-                    <td className="py-3 px-3 text-sm text-center">{item.unit || item.base_uom || 'Unit'}</td>
-                    <td className="py-3 px-3 text-sm text-right">{formatCurrency(item.mrp || 0)}</td>
-                    <td className="py-3 px-3 text-sm text-right">{formatCurrency(price)}</td>
-                    <td className="py-3 px-3 text-sm text-right font-medium">{formatCurrency(amount)}</td>
+                    <td className="py-2 px-3 text-sm border-r border-gray-200">{index + 1}</td>
+                    <td className="py-2 px-3 text-sm border-r border-gray-200">{item.product_name}</td>
+                    <td className="py-2 px-3 text-sm text-center border-r border-gray-200">{item.hsn_code || '-'}</td>
+                    <td className="py-2 px-3 text-sm text-center border-r border-gray-200">{item.quantity}</td>
+                    <td className="py-2 px-3 text-sm text-center border-r border-gray-200">{item.unit || item.base_uom || 'Unit'}</td>
+                    <td className="py-2 px-3 text-sm text-right border-r border-gray-200">{formatCurrency(price)}</td>
+                    <td className="py-2 px-3 text-sm text-right border-r border-gray-200">{formatCurrency(taxableAmount)}</td>
+                    <td className="py-2 px-3 text-sm text-center border-r border-gray-200">{gstPercent}%</td>
+                    <td className="py-2 px-3 text-sm text-right font-medium">{formatCurrency(totalAmount)}</td>
                   </tr>
                 );
               })}
@@ -180,9 +234,99 @@ const ChallanPreview = ({
           </table>
         </div>
 
+        {/* Total Summary Section */}
+        <div className="grid grid-cols-3 gap-4 mb-6">
+          {/* Notes/Terms Box */}
+          <div className="col-span-2 border border-gray-300 rounded-lg p-4">
+            <h3 className="text-xs font-bold text-gray-700 uppercase mb-2">Terms & Conditions</h3>
+            <div className="space-y-2">
+              {challan.notes ? (
+                <p className="text-xs text-gray-700">{challan.notes}</p>
+              ) : (
+                <>
+                  <p className="text-xs text-gray-600">1. Goods once sold will not be taken back</p>
+                  <p className="text-xs text-gray-600">2. Subject to local jurisdiction only</p>
+                  <p className="text-xs text-gray-600">3. E. & O.E.</p>
+                </>
+              )}
+            </div>
+          </div>
+
+          {/* Summary Box */}
+          <div className="border border-gray-300 rounded-lg overflow-hidden">
+            <div className="bg-gray-100 px-4 py-2">
+              <h3 className="text-xs font-bold text-gray-800 uppercase">Summary</h3>
+            </div>
+            <div className="p-4 space-y-2">
+              <div className="flex justify-between text-sm">
+                <span className="text-gray-600">Taxable Amount:</span>
+                <span className="font-medium">
+                  {formatCurrency(
+                    challan.items.reduce((sum, item) => {
+                      const price = item.unit_price || item.rate || item.sale_price || 0;
+                      return sum + ((parseFloat(item.quantity) || 0) * price);
+                    }, 0)
+                  )}
+                </span>
+              </div>
+              <div className="flex justify-between text-sm">
+                <span className="text-gray-600">Total GST:</span>
+                <span className="font-medium">
+                  {formatCurrency(
+                    challan.items.reduce((sum, item) => {
+                      const price = item.unit_price || item.rate || item.sale_price || 0;
+                      const taxableAmount = (parseFloat(item.quantity) || 0) * price;
+                      const gstPercent = item.gst_percent || item.tax_percent || 0;
+                      return sum + ((taxableAmount * gstPercent) / 100);
+                    }, 0)
+                  )}
+                </span>
+              </div>
+              {challan.freight_amount > 0 && (
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-600">Freight Charges:</span>
+                  <span className="font-medium">{formatCurrency(challan.freight_amount)}</span>
+                </div>
+              )}
+              <div className="flex justify-between pt-2 border-t border-gray-300">
+                <span className="text-base font-bold text-gray-900">Grand Total:</span>
+                <span className="text-base font-bold text-blue-600">
+                  {formatCurrency(
+                    challan.items.reduce((sum, item) => {
+                      const price = item.unit_price || item.rate || item.sale_price || 0;
+                      const taxableAmount = (parseFloat(item.quantity) || 0) * price;
+                      const gstPercent = item.gst_percent || item.tax_percent || 0;
+                      const gstAmount = (taxableAmount * gstPercent) / 100;
+                      return sum + taxableAmount + gstAmount;
+                    }, 0) + (parseFloat(challan.freight_amount) || 0)
+                  )}
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Signature Section */}
+        <div className="grid grid-cols-2 gap-8 mt-8 pt-4">
+          <div>
+            <p className="text-xs text-gray-600 mb-12">Received the above goods in good condition</p>
+            <div className="border-t border-gray-400 pt-2 w-48">
+              <p className="text-xs font-medium text-gray-700">Receiver's Signature</p>
+            </div>
+          </div>
+          <div className="text-right">
+            <p className="text-xs text-gray-600 mb-12">For {companyInfo?.name || 'AASO PHARMACEUTICALS'}</p>
+            <div className="inline-block">
+              <div className="border-t border-gray-400 pt-2 w-48">
+                <p className="text-xs font-medium text-gray-700">Authorized Signatory</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
         {/* Footer */}
-        <div className="text-sm text-gray-500">
-          This is a computer generated delivery challan.
+        <div className="text-center mt-6 pt-4 border-t border-gray-200">
+          <p className="text-xs text-gray-500">This is a computer generated delivery challan and does not require signature</p>
         </div>
       </div>
     </div>

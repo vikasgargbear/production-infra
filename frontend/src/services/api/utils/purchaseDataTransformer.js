@@ -10,7 +10,7 @@ export const purchaseDataTransformer = {
       // Basic fields
       supplier_id: purchaseData.supplier_id,
       purchase_date: purchaseData.purchase_date || new Date().toISOString().split('T')[0],
-      supplier_invoice_number: purchaseData.invoice_number,
+      supplier_invoice_number: purchaseData.supplier_invoice_number || purchaseData.invoice_number,
       supplier_invoice_date: purchaseData.invoice_date,
       
       // Transform amounts

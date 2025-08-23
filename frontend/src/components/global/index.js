@@ -41,6 +41,7 @@ export { default as NotesSection } from './forms/NotesSection';
 export { default as AddressForm } from './ui/AddressForm';
 export { default as StandardFormInput } from './ui/forms/StandardFormInput';
 export { default as StandardSelect } from './ui/forms/StandardSelect';
+export { default as SplitPayment } from './ui/SplitPayment';
 
 // Re-export common components that are already global
 export { default as BaseModal } from '../common/BaseModal';
