@@ -278,7 +278,7 @@ async def create_product(
             generic_name_default = str(composition_value) if composition_value else ""
         
         product_data = {
-            "org_id": DEFAULT_ORG_ID,
+            "org_id": org_id,
             "product_code": product.get("product_code") or f"PROD{random.randint(100000, 999999)}",
             "product_name": product.get("product_name"),
             "generic_name": product.get("generic_name") or generic_name_default,
@@ -299,14 +299,14 @@ async def create_product(
         exists = db.execute(text("""
             SELECT 1 FROM inventory.products 
             WHERE product_code = :product_code AND org_id = :org_id
-        """), {"product_code": product_data["product_code"], "org_id": DEFAULT_ORG_ID}).scalar()
+        """), {"product_code": product_data["product_code"], "org_id": org_id}).scalar()
         
         if exists:
             # Return existing product instead of error
             result = db.execute(text("""
                 SELECT * FROM inventory.products
                 WHERE product_code = :product_code AND org_id = :org_id
-            """), {"product_code": product_data["product_code"], "org_id": DEFAULT_ORG_ID})
+            """), {"product_code": product_data["product_code"], "org_id": org_id})
             
             existing = result.fetchone()
             return {
@@ -497,7 +497,7 @@ async def get_product(
         result = db.execute(text("""
             SELECT * FROM inventory.products
             WHERE product_id = :product_id AND org_id = :org_id
-        """), {"product_id": product_id, "org_id": DEFAULT_ORG_ID})
+        """), {"product_id": product_id, "org_id": org_id})
         
         product = result.fetchone()
         if not product:
@@ -528,7 +528,7 @@ async def update_product(
     try:
         # Build update query dynamically
         update_fields = []
-        params = {"product_id": product_id, "org_id": DEFAULT_ORG_ID}
+        params = {"product_id": product_id, "org_id": org_id}
         
         field_mapping = {
             "product_name": "product_name",
@@ -592,7 +592,7 @@ async def update_product(
                       AND org_id = :org_id 
                       AND is_active = true
                     LIMIT 1
-                """), {"category_name": category_name, "org_id": DEFAULT_ORG_ID}).fetchone()
+                """), {"category_name": category_name, "org_id": org_id}).fetchone()
                 
                 if category_lookup:
                     # Use proper category from master table
@@ -638,7 +638,7 @@ async def update_product(
                 SELECT product_id, product_code, product_name 
                 FROM inventory.products 
                 WHERE product_id = :product_id AND org_id = :org_id
-            """), {"product_id": product_id, "org_id": DEFAULT_ORG_ID})
+            """), {"product_id": product_id, "org_id": org_id})
             updated = result.fetchone()
             
             if not updated:
@@ -650,7 +650,7 @@ async def update_product(
         # Update active batches if we have batch-level changes
         if batch_fields:
             batch_update_fields = []
-            batch_params = {"product_id": product_id, "org_id": DEFAULT_ORG_ID}
+            batch_params = {"product_id": product_id, "org_id": org_id}
             
             for batch_field, value in batch_fields.items():
                 batch_update_fields.append(f"{batch_field} = :{batch_field}")
@@ -697,7 +697,7 @@ async def update_product_batches(
     try:
         # Build update query dynamically for batches
         update_fields = []
-        params = {"product_id": product_id, "org_id": DEFAULT_ORG_ID}
+        params = {"product_id": product_id, "org_id": org_id}
         
         batch_field_mapping = {
             "category_name": "category_name",
@@ -853,7 +853,7 @@ async def create_product_category(
                 :org_id, :category_name, :category_code, true, CURRENT_TIMESTAMP
             ) RETURNING category_id, category_name, category_code
         """), {
-            "org_id": DEFAULT_ORG_ID,
+            "org_id": org_id,
             "category_name": category_name,
             "category_code": category_code
         })

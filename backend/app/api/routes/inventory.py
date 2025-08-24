@@ -111,7 +111,7 @@ async def list_batches(
             JOIN inventory.products p ON b.product_id = p.product_id
             WHERE b.org_id = :org_id
         """
-        params = {"org_id": DEFAULT_ORG_ID}
+        params = {"org_id": org_id}
         
         if product_id:
             query += " AND b.product_id = :product_id"
@@ -213,7 +213,7 @@ async def list_current_stock(
             ) b ON p.product_id = b.product_id
             WHERE p.org_id = :org_id
         """
-        params = {"org_id": DEFAULT_ORG_ID}
+        params = {"org_id": org_id}
         
         if category:
             query += " AND p.category_id = :category"
@@ -326,7 +326,7 @@ async def list_stock_movements(
             )
             SELECT * FROM movements WHERE 1=1
         """
-        params = {"org_id": DEFAULT_ORG_ID}
+        params = {"org_id": org_id}
         
         if product_id:
             query += " AND product_id = :product_id"
@@ -377,7 +377,7 @@ async def adjust_stock(
     - Maintains audit trail
     """
     try:
-        return InventoryService.process_stock_adjustment(db, adjustment, DEFAULT_ORG_ID)
+        return InventoryService.process_stock_adjustment(db, adjustment, org_id)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
@@ -398,7 +398,7 @@ async def get_expiry_alerts(
     - Includes stock value at risk
     """
     try:
-        alerts = InventoryService.get_expiry_alerts(db, DEFAULT_ORG_ID, days_ahead)
+        alerts = InventoryService.get_expiry_alerts(db, org_id, days_ahead)
         
         if alert_level:
             alerts = [a for a in alerts if a.alert_level == alert_level]
@@ -423,7 +423,7 @@ async def get_stock_valuation(
     - Category-wise breakdown
     """
     try:
-        return InventoryService.get_stock_valuation(db, DEFAULT_ORG_ID, as_of_date)
+        return InventoryService.get_stock_valuation(db, org_id, as_of_date)
     except Exception as e:
         logger.error(f"Error getting valuation: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to get valuation: {str(e)}")
@@ -439,7 +439,7 @@ async def get_inventory_dashboard(db: Session = Depends(get_db)):
     - Expiry alerts
     """
     try:
-        return InventoryService.get_inventory_dashboard(db, DEFAULT_ORG_ID)
+        return InventoryService.get_inventory_dashboard(db, org_id)
     except Exception as e:
         logger.error(f"Error getting dashboard: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to get dashboard: {str(e)}")

@@ -22,7 +22,7 @@ router = APIRouter(tags=["sale-returns"])
 @router.get("/generate-number")
 async def generate_sales_return_number(
     db: Session = Depends(get_db),
-    org_id: str = DEFAULT_ORG_ID
+    org_id: Optional[str] = None  # Will be provided via header
 ):
     """Generate next sales return number using unified service"""
     try:
@@ -323,7 +323,7 @@ async def create_sale_return(
                 RETURNING return_id
             """),
             {
-                "org_id": DEFAULT_ORG_ID,  # Default org
+                "org_id": org_id,  # Default org
                 "return_number": return_number,
                 "return_date": return_data["return_date"],
                 "customer_id": return_data.get("customer_id", return_data.get("party_id")),

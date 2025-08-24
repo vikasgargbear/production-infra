@@ -50,7 +50,7 @@ def get_tax_entries(
             LEFT JOIN parties.customers c ON i.customer_id = c.customer_id
             WHERE i.org_id = :org_id
         """
-        params = {"org_id": DEFAULT_ORG_ID}
+        params = {"org_id": org_id}
         
         if entry_type and entry_type == 'sales':
             # Already filtered to sales above
@@ -106,7 +106,7 @@ def get_tax_entry(entry_id: int, db: Session = Depends(get_db)):
                 LEFT JOIN parties.customers c ON i.customer_id = c.customer_id
                 WHERE i.invoice_id = :entry_id AND i.org_id = :org_id
             """),
-            {"entry_id": entry_id, "org_id": DEFAULT_ORG_ID}
+            {"entry_id": entry_id, "org_id": org_id}
         )
         entry = result.first()
         if not entry:
@@ -192,7 +192,7 @@ def get_gstr1_summary(
         b2b_result = db.execute(text(b2b_query), {
             "start_date": start_date, 
             "end_date": end_date,
-            "org_id": DEFAULT_ORG_ID
+            "org_id": org_id
         })
         b2b_supplies = [dict(row._mapping) for row in b2b_result]
         
@@ -216,7 +216,7 @@ def get_gstr1_summary(
         b2c_result = db.execute(text(b2c_query), {
             "start_date": start_date, 
             "end_date": end_date,
-            "org_id": DEFAULT_ORG_ID
+            "org_id": org_id
         })
         b2c_summary = dict(b2c_result.first()._mapping)
         
@@ -242,7 +242,7 @@ def get_gstr1_summary(
         hsn_result = db.execute(text(hsn_query), {
             "start_date": start_date, 
             "end_date": end_date,
-            "org_id": DEFAULT_ORG_ID
+            "org_id": org_id
         })
         hsn_summary = [dict(row._mapping) for row in hsn_result]
         
@@ -282,7 +282,7 @@ def get_tax_analytics(
             FROM sales.invoices i
             WHERE i.org_id = :org_id
         """
-        params = {"org_id": DEFAULT_ORG_ID}
+        params = {"org_id": org_id}
         
         if start_date:
             query += " AND i.invoice_date >= :start_date"

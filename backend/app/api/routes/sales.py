@@ -73,7 +73,6 @@ class SaleResponse(BaseModel):
     sale_status: str
     created_at: datetime
 
-
 @router.post("/", response_model=SaleResponse)
 async def create_direct_sale(
     sale_data: SaleCreate,
@@ -93,7 +92,7 @@ async def create_direct_sale(
         if not sale_data.seller_gstin:
             org = db.execute(
                 text("SELECT gst_number FROM parties.organizations WHERE org_id = :org_id"),
-                {"org_id": DEFAULT_ORG_ID}
+                {"org_id": org_id}
             ).first()
             seller_gstin = org.gst_number if org else "27AABCU9603R1ZM"  # Default Maharashtra GSTIN
         else:
@@ -235,7 +234,7 @@ async def create_direct_sale(
                     {
                         "quantity": item.quantity,
                         "product_id": item.product_id,
-                        "org_id": DEFAULT_ORG_ID
+                        "org_id": org_id
                     }
                 )
                 
@@ -255,7 +254,7 @@ async def create_direct_sale(
                 """),
                 {
                     "ledger_id": str(uuid.uuid4()),
-                    "org_id": DEFAULT_ORG_ID,
+                    "org_id": org_id,
                     "party_id": sale_data.party_id,
                     "date": sale_date,
                     "invoice_id": str(invoice_id),
@@ -289,7 +288,6 @@ async def create_direct_sale(
         db.rollback()
         logger.error(f"Error creating sale: {e}")
         raise HTTPException(status_code=500, detail=str(e))
-
 
 @router.get("/")
 async def get_sales(
@@ -366,7 +364,6 @@ async def get_sales(
         logger.error(f"Error fetching sales: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
-
 @router.get("/outstanding")
 async def get_outstanding_sales(
     customer_id: Optional[int] = Query(None),
@@ -402,7 +399,7 @@ async def get_outstanding_sales(
                 AND i.payment_status IN ('unpaid', 'partial')
         """
         
-        params = {"org_id": DEFAULT_ORG_ID}
+        params = {"org_id": org_id}
         
         if customer_id:
             query += " AND c.customer_id = :customer_id"
@@ -427,7 +424,6 @@ async def get_outstanding_sales(
             "total_outstanding": 0,
             "count": 0
         }
-
 
 @router.get("/{sale_id}")
 async def get_sale_detail(
@@ -479,7 +475,6 @@ async def get_sale_detail(
         logger.error(f"Error fetching sale detail: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
-
 @router.post("/calculate")
 async def calculate_sale_totals(
     sale_data: SaleCreate,
@@ -494,7 +489,7 @@ async def calculate_sale_totals(
         if not sale_data.seller_gstin:
             org = db.execute(
                 text("SELECT gst_number FROM parties.organizations WHERE org_id = :org_id"),
-                {"org_id": DEFAULT_ORG_ID}
+                {"org_id": org_id}
             ).first()
             seller_gstin = org.gst_number if org else "27AABCU9603R1ZM"
         else:
@@ -535,7 +530,6 @@ async def calculate_sale_totals(
         logger.error(f"Error calculating sale: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
-
 @router.get("/invoice/{invoice_number}")
 async def get_sale_by_invoice(
     invoice_number: str,
@@ -566,7 +560,6 @@ async def get_sale_by_invoice(
         logger.error(f"Error fetching invoice: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
-
 @router.post("/{sale_id}/print")
 async def get_sale_print_data(
     sale_id: str,
@@ -579,7 +572,7 @@ async def get_sale_print_data(
         # Get organization details
         org = db.execute(
             text("SELECT * FROM parties.organizations WHERE org_id = :org_id"),
-            {"org_id": DEFAULT_ORG_ID}
+            {"org_id": org_id}
         ).first()
         
         # Get sale with all details
@@ -609,5 +602,4 @@ async def get_sale_print_data(
     except Exception as e:
         logger.error(f"Error getting print data: {e}")
         raise HTTPException(status_code=500, detail=str(e))
-
 

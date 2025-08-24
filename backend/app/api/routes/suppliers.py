@@ -142,7 +142,7 @@ def create_supplier(supplier_data: SupplierCreate, db: Session = Depends(get_db)
             count_result = db.execute(text("""
                 SELECT COUNT(*) FROM parties.suppliers 
                 WHERE org_id = :org_id
-            """), {"org_id": DEFAULT_ORG_ID}).scalar()
+            """), {"org_id": org_id}).scalar()
             supplier_code = f"SUP-{count_result + 1:04d}"
         
         # Create supplier using SQL
@@ -165,7 +165,7 @@ def create_supplier(supplier_data: SupplierCreate, db: Session = Depends(get_db)
                 CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
             ) RETURNING supplier_id, created_at
         """), {
-            "org_id": DEFAULT_ORG_ID,
+            "org_id": org_id,
             "supplier_code": supplier_code,
             "supplier_name": supplier_data.name,
             "supplier_type": supplier_data.supplier_type or "distributor",
@@ -212,7 +212,7 @@ def create_supplier(supplier_data: SupplierCreate, db: Session = Depends(get_db)
                     CURRENT_TIMESTAMP
                 )
             """), {
-                "org_id": DEFAULT_ORG_ID,
+                "org_id": org_id,
                 "entity_id": supplier_id,
                 "address_line1": supplier_data.address or "",
                 "address_line2": getattr(supplier_data, 'address_line2', None),
@@ -240,7 +240,7 @@ def create_supplier(supplier_data: SupplierCreate, db: Session = Depends(get_db)
                     CURRENT_TIMESTAMP
                 )
             """), {
-                "org_id": DEFAULT_ORG_ID,
+                "org_id": org_id,
                 "entity_id": supplier_id,
                 "address_line1": supplier_data.address or "",
                 "address_line2": getattr(supplier_data, 'address_line2', None),

@@ -59,7 +59,7 @@ async def get_batches(
             """
             params = {
                 "product_id": product_id,
-                "org_id": DEFAULT_ORG_ID,
+                "org_id": org_id,
                 "limit": limit,
                 "skip": skip
             }
@@ -83,7 +83,7 @@ async def get_batches(
                 LIMIT :limit OFFSET :skip
             """
             params = {
-                "org_id": DEFAULT_ORG_ID,
+                "org_id": org_id,
                 "limit": limit,
                 "skip": skip
             }
@@ -111,7 +111,7 @@ async def get_batches(
                     FROM inventory.products
                     WHERE product_id = :product_id AND org_id = :org_id
                 """),
-                {"product_id": product_id, "org_id": DEFAULT_ORG_ID}
+                {"product_id": product_id, "org_id": org_id}
             )
             product = product_result.first()
             
@@ -181,7 +181,7 @@ async def get_available_batches(
         
         result = db.execute(
             text(query),
-            {"product_id": product_id, "org_id": DEFAULT_ORG_ID}
+            {"product_id": product_id, "org_id": org_id}
         )
         
         batches = [dict(row._mapping) for row in result]
@@ -219,7 +219,7 @@ async def get_expiring_batches(
         
         result = db.execute(
             text(query),
-            {"org_id": DEFAULT_ORG_ID, "expiry_date": expiry_date}
+            {"org_id": org_id, "expiry_date": expiry_date}
         )
         
         batches = [dict(row._mapping) for row in result]
@@ -266,7 +266,7 @@ async def create_batch(
         """
         
         params = {
-            "org_id": DEFAULT_ORG_ID,
+            "org_id": org_id,
             "product_id": batch_data["product_id"],
             "batch_number": batch_data["batch_number"],
             "expiry_date": batch_data.get("expiry_date"),
@@ -319,7 +319,7 @@ async def update_batch_quantity(
             {
                 "batch_id": batch_id,
                 "quantity": quantity_data["quantity"],
-                "org_id": DEFAULT_ORG_ID
+                "org_id": org_id
             }
         )
         

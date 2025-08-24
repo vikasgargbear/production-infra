@@ -547,7 +547,7 @@ def create_purchase_from_parsed(
                     ) RETURNING supplier_id
                 """),
                 {
-                    "org_id": DEFAULT_ORG_ID,
+                    "org_id": org_id,
                     "code": supplier_code,
                     "name": supplier_data.get("supplier_name"),
                     "gstin": supplier_data.get("supplier_gstin", supplier_data.get("gst_number")),
@@ -576,7 +576,7 @@ def create_purchase_from_parsed(
                 ) RETURNING purchase_id
             """),
             {
-                "org_id": DEFAULT_ORG_ID,
+                "org_id": org_id,
                 "purchase_number": purchase_number,
                 "purchase_date": purchase_data.get("purchase_date", datetime.now().date()),
                 "supplier_id": supplier_id,
@@ -612,7 +612,7 @@ def create_purchase_from_parsed(
                         ) RETURNING product_id
                     """),
                     {
-                        "org_id": DEFAULT_ORG_ID,
+                        "org_id": org_id,
                         "code": product_code,
                         "name": item.get("description"),
                         "hsn": item.get("hsn_code"),

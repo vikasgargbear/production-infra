@@ -160,7 +160,7 @@ async def create_stock_writeoff(
             """),
             {
                 "writeoff_id": writeoff_id,
-                "org_id": DEFAULT_ORG_ID,  # Default org
+                "org_id": org_id,  # Default org
                 "writeoff_number": writeoff_number,
                 "writeoff_date": writeoff_data["write_off_date"],
                 "reason": reason,
@@ -233,7 +233,7 @@ async def create_stock_writeoff(
                 """),
                 {
                     "movement_id": str(uuid.uuid4()),
-                    "org_id": DEFAULT_ORG_ID,
+                    "org_id": org_id,
                     "date": writeoff_data["write_off_date"],
                     "product_id": item["product_id"],
                     "batch_id": item["batch_id"],
@@ -257,7 +257,7 @@ async def create_stock_writeoff(
                 """),
                 {
                     "adj_id": str(uuid.uuid4()),
-                    "org_id": DEFAULT_ORG_ID,
+                    "org_id": org_id,
                     "date": writeoff_data["write_off_date"],
                     "writeoff_id": writeoff_id,
                     "amount": total_itc_reversal,

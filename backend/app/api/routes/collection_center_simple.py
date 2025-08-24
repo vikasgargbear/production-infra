@@ -21,7 +21,7 @@ router = APIRouter(prefix="/collection-center", tags=["collection-center"])
 
 @router.get("/dashboard")
 async def get_collection_dashboard(
-    org_id: str = Query(default=DEFAULT_ORG_ID),
+    org_id: str = Depends(get_org_id_from_header),
     db: Session = Depends(get_db)
 ):
     """
@@ -330,7 +330,7 @@ async def generate_reminder_links(
                     )
                 """),
                 {
-                    "org_id": reminder_data.get("org_id", DEFAULT_ORG_ID),
+                    "org_id": reminder_data.get("org_id", org_id),
                     "customer_id": party.party_id,
                     "reminder_type": channel,
                     "reminder_date": date.today(),
@@ -462,7 +462,7 @@ async def record_payment_collection(
                 RETURNING collection_id
             """),
             {
-                "org_id": payment_data.get("org_id", DEFAULT_ORG_ID),
+                "org_id": payment_data.get("org_id", org_id),
                 "customer_id": payment_data["customer_id"],
                 "payment_date": payment_data.get("payment_date", date.today()),
                 "payment_amount": Decimal(str(payment_data["payment_amount"])),

@@ -193,7 +193,7 @@ def create_stock_receive(
                 AND COALESCE(batch_id, 0) = COALESCE(:batch_id, 0)
             """),
             {
-                "org_id": DEFAULT_ORG_ID,
+                "org_id": org_id,
                 "product_id": receive_data["product_id"],
                 "location_id": receive_data.get("location_id", 1),
                 "batch_id": receive_data.get("batch_id")
@@ -230,7 +230,7 @@ def create_stock_receive(
                     )
                 """),
                 {
-                    "org_id": DEFAULT_ORG_ID,
+                    "org_id": org_id,
                     "location_id": receive_data.get("location_id", 1),
                     "product_id": receive_data["product_id"],
                     "batch_id": receive_data.get("batch_id"),
@@ -290,7 +290,7 @@ def create_stock_issue(
                 AND COALESCE(batch_id, 0) = COALESCE(:batch_id, 0)
             """),
             {
-                "org_id": DEFAULT_ORG_ID,
+                "org_id": org_id,
                 "product_id": issue_data["product_id"],
                 "location_id": issue_data.get("location_id", 1),
                 "batch_id": batch_id
@@ -435,7 +435,7 @@ def get_product_batches(
         batches = db.execute(
             text(query),
             {
-                "org_id": DEFAULT_ORG_ID,
+                "org_id": org_id,
                 "product_id": product_id
             }
         ).fetchall()
@@ -476,7 +476,7 @@ def get_near_expiry_stock(
         items = db.execute(
             text(query),
             {
-                "org_id": DEFAULT_ORG_ID,
+                "org_id": org_id,
                 "days": days
             }
         ).fetchall()
@@ -520,7 +520,7 @@ def get_low_stock_items(
         
         items = db.execute(
             text(query),
-            {"org_id": DEFAULT_ORG_ID}
+            {"org_id": org_id}
         ).fetchall()
         
         return {

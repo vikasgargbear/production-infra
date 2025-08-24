@@ -39,7 +39,7 @@ class JournalLineCreate(BaseModel):
 
 class JournalEntryCreate(BaseModel):
     """Schema for creating journal entry"""
-    org_id: str = Field(default=DEFAULT_ORG_ID)
+    org_id: Optional[str] = None  # Will be provided via header
     journal_date: date = Field(default_factory=date.today)
     reference_number: Optional[str] = None
     narration: str = Field(..., description="Journal entry description")
@@ -90,7 +90,7 @@ async def generate_journal_number(db: Session = Depends(get_db)):
         like_pattern = f"JV-{year}-%"
         
         result = db.execute(text(seq_query), {
-            "org_id": DEFAULT_ORG_ID,
+            "org_id": org_id,
             "year": year,
             "pattern": pattern,
             "extract_pattern": extract_pattern,
@@ -141,7 +141,7 @@ async def get_chart_of_accounts(
             WHERE org_id = :org_id
         """
         
-        params = {"org_id": DEFAULT_ORG_ID}
+        params = {"org_id": org_id}
         
         if active_only:
             query += " AND is_active = true"
@@ -346,7 +346,7 @@ async def get_journal_entries(
         """
         
         params = {
-            "org_id": DEFAULT_ORG_ID,
+            "org_id": org_id,
             "limit": limit,
             "offset": offset
         }
@@ -381,7 +381,7 @@ async def get_journal_entries(
             WHERE je.org_id = :org_id
         """
         
-        count_params = {"org_id": DEFAULT_ORG_ID}
+        count_params = {"org_id": org_id}
         
         if from_date:
             count_query += " AND je.journal_date >= :from_date"
@@ -437,7 +437,7 @@ async def get_journal_entry_details(
         
         header_result = db.execute(text(header_query), {
             "journal_id": journal_id,
-            "org_id": DEFAULT_ORG_ID
+            "org_id": org_id
         }).first()
         
         if not header_result:
@@ -496,7 +496,7 @@ async def delete_journal_entry(
         
         entry = db.execute(text(check_query), {
             "journal_id": journal_id,
-            "org_id": DEFAULT_ORG_ID
+            "org_id": org_id
         }).first()
         
         if not entry:

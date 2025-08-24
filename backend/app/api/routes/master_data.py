@@ -11,12 +11,12 @@ from uuid import uuid4
 import logging
 
 from ...core.database import get_db
+from ...core.auth_utils import get_org_id_from_header
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
 # Default organization ID - replace with actual from session/context
-DEFAULT_ORG_ID = "ad808530-1ddb-4377-ab20-67bef145d80d"
 
 # ============== CUSTOMER ENDPOINTS ==============
 
@@ -49,7 +49,7 @@ async def create_customer(customer_data: Dict[str, Any], db: Session = Depends(g
         customer_code = customer_data.get("customer_code") or f"CUST{int(datetime.now().timestamp())}"
         
         result = db.execute(query, {
-            "org_id": DEFAULT_ORG_ID,
+            "org_id": org_id,
             "customer_name": customer_data.get("customer_name"),
             "customer_code": customer_code,
             "primary_phone": customer_data.get("phone") or customer_data.get("primary_phone"),
@@ -194,7 +194,7 @@ async def create_supplier(supplier_data: Dict[str, Any], db: Session = Depends(g
         supplier_code = supplier_data.get("supplier_code") or f"SUP{int(datetime.now().timestamp())}"
         
         result = db.execute(query, {
-            "org_id": DEFAULT_ORG_ID,
+            "org_id": org_id,
             "supplier_name": supplier_data.get("supplier_name"),
             "supplier_code": supplier_code,
             "primary_phone": supplier_data.get("phone") or supplier_data.get("primary_phone"),
@@ -339,7 +339,7 @@ async def create_product(product_data: Dict[str, Any], db: Session = Depends(get
         product_code = product_data.get("product_code") or product_data.get("sku") or f"PRD{int(datetime.now().timestamp())}"
         
         result = db.execute(query, {
-            "org_id": DEFAULT_ORG_ID,
+            "org_id": org_id,
             "product_code": product_code,
             "product_name": product_data.get("product_name"),
             "generic_name": product_data.get("generic_name", ""),

@@ -16,9 +16,6 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["Purchase Enhanced"])
 
-# Default org_id - should come from auth in production
-DEFAULT_ORG_ID = "ad808530-1ddb-4377-ab20-67bef145d80d"
-
 @router.get("/")
 def get_purchases(
     skip: int = Query(0, description="Skip records"),
@@ -192,7 +189,7 @@ def create_direct_purchase_entry(purchase_data: dict, db: Session = Depends(get_
                 CURRENT_TIMESTAMP
             ) RETURNING purchase_order_id
         """), {
-            "org_id": DEFAULT_ORG_ID,
+            "org_id": org_id,
             "po_number": po_number,
             "po_date": purchase_data.get("purchase_date", datetime.now().date()),
             "supplier_id": purchase_data.get("supplier_id"),
@@ -250,7 +247,7 @@ def create_direct_purchase_entry(purchase_data: dict, db: Session = Depends(get_
                         CURRENT_TIMESTAMP
                     ) RETURNING batch_id
                 """), {
-                    "org_id": DEFAULT_ORG_ID,
+                    "org_id": org_id,
                     "product_id": item.get("product_id"),
                     "supplier_id": purchase_data.get("supplier_id"),
                     "batch_number": item.get("batch_number"),
@@ -309,7 +306,7 @@ def create_purchase_with_items(purchase_data: dict, db: Session = Depends(get_db
                     ORDER BY user_id
                     LIMIT 1
                 """),
-                {"org_id": DEFAULT_ORG_ID}
+                {"org_id": org_id}
             ).first()
             
             if user_result:
@@ -327,7 +324,7 @@ def create_purchase_with_items(purchase_data: dict, db: Session = Depends(get_db
                                 'System', 'API', ARRAY['api_user'], true
                             ) RETURNING user_id
                         """),
-                        {"org_id": DEFAULT_ORG_ID}
+                        {"org_id": org_id}
                     ).first()
                     created_by = create_user.user_id if create_user else None
                 except:
@@ -357,7 +354,7 @@ def create_purchase_with_items(purchase_data: dict, db: Session = Depends(get_db
                 ) RETURNING purchase_order_id
             """),
             {
-                "org_id": DEFAULT_ORG_ID,
+                "org_id": org_id,
                 "purchase_number": purchase_number,
                 "po_date": purchase_data.get("purchase_date", datetime.now().date()),
                 "supplier_id": purchase_data.get("supplier_id"),
@@ -588,7 +585,7 @@ def receive_purchase_items(
                         purchase_invoice_number,
                         batch_status
                     ) VALUES (
-                        DEFAULT_ORG_ID,
+                        org_id,
                         :product_id, :batch_number,
                         :mfg_date, :exp_date,
                         :qty_received, :qty_available,
@@ -624,7 +621,7 @@ def receive_purchase_items(
                         reference_type, reference_id, reference_number,
                         notes
                     ) VALUES (
-                        DEFAULT_ORG_ID,
+                        org_id,
                         CURRENT_TIMESTAMP, 'purchase',
                         :product_id, :batch_id,
                         :qty_in, 0,

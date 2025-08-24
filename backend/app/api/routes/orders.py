@@ -39,7 +39,7 @@ async def create_order(
     """
     try:
         # Set org_id early
-        org_id = order.org_id if order.org_id else DEFAULT_ORG_ID
+        org_id = order.org_id if order.org_id else org_id
         
         # Validate customer exists and has credit
         credit_check = CustomerService.validate_credit_limit(
@@ -106,7 +106,7 @@ async def create_order(
         
         # Ensure org_id is set (critical for multi-tenant queries)
         if "org_id" not in order_data:
-            order_data["org_id"] = DEFAULT_ORG_ID
+            order_data["org_id"] = org_id
         
         # Ensure payment_terms has a value (it might be None even with schema default)
         if not order_data.get("payment_terms"):
@@ -234,7 +234,7 @@ async def list_orders(
             WHERE o.org_id = :org_id
         """
         
-        params = {"org_id": DEFAULT_ORG_ID}
+        params = {"org_id": org_id}
         
         # Add filters
         if customer_id:
@@ -328,7 +328,7 @@ async def get_order(
             FROM sales.orders o
             JOIN parties.customers c ON o.customer_id = c.customer_id
             WHERE o.order_id = :id AND o.org_id = :org_id
-        """), {"id": order_id, "org_id": DEFAULT_ORG_ID})
+        """), {"id": order_id, "org_id": org_id})
         
         order = result.fetchone()
         if not order:
@@ -377,14 +377,14 @@ async def update_order(
         existing = db.execute(text("""
             SELECT order_id FROM sales.orders 
             WHERE order_id = :id AND org_id = :org_id
-        """), {"id": order_id, "org_id": DEFAULT_ORG_ID}).scalar()
+        """), {"id": order_id, "org_id": org_id}).scalar()
         
         if not existing:
             raise HTTPException(status_code=404, detail=f"Order {order_id} not found")
         
         # Build update query dynamically based on provided fields
         update_fields = []
-        params = {"order_id": order_id, "org_id": DEFAULT_ORG_ID}
+        params = {"order_id": order_id, "org_id": org_id}
         
         # List of allowed update fields
         allowed_fields = [
@@ -440,7 +440,7 @@ async def confirm_order(
         # Check order exists and is pending
         status = db.execute(text("""
             SELECT order_status FROM sales.orders WHERE order_id = :id AND org_id = :org_id
-        """), {"id": order_id, "org_id": DEFAULT_ORG_ID}).scalar()
+        """), {"id": order_id, "org_id": org_id}).scalar()
         
         if not status:
             raise HTTPException(status_code=404, detail=f"Order {order_id} not found")
@@ -458,7 +458,7 @@ async def confirm_order(
                 confirmed_at = CURRENT_TIMESTAMP,
                 updated_at = CURRENT_TIMESTAMP
             WHERE order_id = :id AND org_id = :org_id
-        """), {"id": order_id, "org_id": DEFAULT_ORG_ID})
+        """), {"id": order_id, "org_id": org_id})
         
         db.commit()
         
@@ -483,13 +483,13 @@ async def generate_invoice(
         # Check order exists and is confirmed
         order = db.execute(text("""
             SELECT order_status, order_number FROM sales.orders WHERE order_id = :id AND org_id = :org_id
-        """), {"id": order_id, "org_id": DEFAULT_ORG_ID}).fetchone()
+        """), {"id": order_id, "org_id": org_id}).fetchone()
         
         if not order:
             # Get helpful debugging info
             latest = db.execute(text("""
                 SELECT MAX(order_id) as max_id FROM sales.orders WHERE org_id = :org_id
-            """), {"org_id": DEFAULT_ORG_ID}).scalar()
+            """), {"org_id": org_id}).scalar()
             
             raise HTTPException(
                 status_code=404, 
@@ -517,7 +517,7 @@ async def generate_invoice(
             db, 
             order_id, 
             invoice_request.invoice_date,
-            DEFAULT_ORG_ID
+            org_id
         )
         
         db.commit()
@@ -543,7 +543,7 @@ async def mark_delivered(
         # Check order exists and is ready for delivery
         status = db.execute(text("""
             SELECT order_status FROM sales.orders WHERE order_id = :id AND org_id = :org_id
-        """), {"id": order_id, "org_id": DEFAULT_ORG_ID}).scalar()
+        """), {"id": order_id, "org_id": org_id}).scalar()
         
         if not status:
             raise HTTPException(status_code=404, detail=f"Order {order_id} not found")
@@ -618,7 +618,7 @@ async def process_return(
 async def get_order_dashboard(db: Session = Depends(get_db)):
     """Get order dashboard statistics"""
     try:
-        stats = OrderService.get_order_dashboard(db, DEFAULT_ORG_ID)
+        stats = OrderService.get_order_dashboard(db, org_id)
         return stats
     except Exception as e:
         logger.error(f"Error getting dashboard: {str(e)}")

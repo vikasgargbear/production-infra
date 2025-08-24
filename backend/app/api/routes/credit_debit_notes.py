@@ -212,7 +212,7 @@ async def create_credit_note(
             """),
             {
                 "note_id": note_id,
-                "org_id": DEFAULT_ORG_ID,
+                "org_id": org_id,
                 "note_number": note_number,
                 "note_date": note_data["note_date"],
                 "party_id": note_data["party_id"],
@@ -241,7 +241,7 @@ async def create_credit_note(
             """),
             {
                 "ledger_id": str(uuid.uuid4()),
-                "org_id": DEFAULT_ORG_ID,
+                "org_id": org_id,
                 "party_id": note_data["party_id"],
                 "date": note_data["note_date"],
                 "note_id": note_id,
@@ -320,7 +320,7 @@ async def create_debit_note(
             """),
             {
                 "note_id": note_id,
-                "org_id": DEFAULT_ORG_ID,
+                "org_id": org_id,
                 "note_number": note_number,
                 "note_date": note_data["note_date"],
                 "party_id": note_data["party_id"],
@@ -361,7 +361,7 @@ async def create_debit_note(
                 """),
                 {
                     "ledger_id": str(uuid.uuid4()),
-                    "org_id": DEFAULT_ORG_ID,
+                    "org_id": org_id,
                     "supplier_id": note_data["party_id"],
                     "date": note_data["note_date"],
                     "note_id": note_id,
@@ -387,7 +387,7 @@ async def create_debit_note(
                 """),
                 {
                     "ledger_id": str(uuid.uuid4()),
-                    "org_id": DEFAULT_ORG_ID,
+                    "org_id": org_id,
                     "party_id": note_data["party_id"],
                     "date": note_data["note_date"],
                     "note_id": note_id,
@@ -540,7 +540,7 @@ async def cancel_note(
                 """),
                 {
                     "ledger_id": str(uuid.uuid4()),
-                    "org_id": DEFAULT_ORG_ID,
+                    "org_id": org_id,
                     "party_id": note.party_id,
                     "note_id": note_id,
                     "amount": note.total_amount,
@@ -570,7 +570,7 @@ async def cancel_note(
                     """),
                     {
                         "ledger_id": str(uuid.uuid4()),
-                        "org_id": DEFAULT_ORG_ID,
+                        "org_id": org_id,
                         "party_id": note.party_id,
                         "note_id": note_id,
                         "amount": note.total_amount,
@@ -593,7 +593,7 @@ async def cancel_note(
                     """),
                     {
                         "ledger_id": str(uuid.uuid4()),
-                        "org_id": DEFAULT_ORG_ID,
+                        "org_id": org_id,
                         "supplier_id": note.party_id,
                         "note_id": note_id,
                         "amount": note.total_amount,

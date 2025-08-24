@@ -29,7 +29,7 @@ class ExpenseLineCreate(BaseModel):
 
 class ExpenseClaimCreate(BaseModel):
     """Schema for creating expense claim"""
-    org_id: str = Field(default=DEFAULT_ORG_ID)
+    org_id: Optional[str] = None  # Will be provided via header
     employee_id: Optional[int] = None
     employee_name: str = Field(..., description="Employee name")
     claim_date: date = Field(default_factory=date.today)
@@ -68,7 +68,7 @@ async def generate_claim_number(db: Session = Depends(get_db)):
         like_pattern = f"EXP-{year}-%"
         
         result = db.execute(text(seq_query), {
-            "org_id": DEFAULT_ORG_ID,
+            "org_id": org_id,
             "year": year,
             "pattern": pattern,
             "extract_pattern": extract_pattern,
@@ -285,7 +285,7 @@ async def get_expense_claims(
         """
         
         params = {
-            "org_id": DEFAULT_ORG_ID,
+            "org_id": org_id,
             "limit": limit,
             "offset": offset
         }
@@ -324,7 +324,7 @@ async def get_expense_claims(
             WHERE ec.org_id = :org_id
         """
         
-        count_params = {"org_id": DEFAULT_ORG_ID}
+        count_params = {"org_id": org_id}
         
         if status:
             count_query += " AND ec.claim_status = :status"
@@ -389,7 +389,7 @@ async def get_expense_claim_details(
         
         header_result = db.execute(text(header_query), {
             "claim_id": claim_id,
-            "org_id": DEFAULT_ORG_ID
+            "org_id": org_id
         }).first()
         
         if not header_result:
@@ -451,7 +451,7 @@ async def approve_expense_claim(
         
         claim = db.execute(text(check_query), {
             "claim_id": claim_id,
-            "org_id": DEFAULT_ORG_ID
+            "org_id": org_id
         }).first()
         
         if not claim:

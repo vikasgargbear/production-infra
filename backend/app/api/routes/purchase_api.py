@@ -10,12 +10,12 @@ from datetime import datetime, date
 import logging
 
 from ...core.database import get_db
+from ...core.auth_utils import get_org_id_from_header
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
 # Default organization ID
-DEFAULT_ORG_ID = "ad808530-1ddb-4377-ab20-67bef145d80d"
 
 @router.post("/purchases", response_model=Dict[str, Any])
 async def create_purchase_order(po_data: Dict[str, Any], db: Session = Depends(get_db)):
@@ -48,7 +48,7 @@ async def create_purchase_order(po_data: Dict[str, Any], db: Session = Depends(g
         """)
         
         result = db.execute(po_query, {
-            "org_id": DEFAULT_ORG_ID,
+            "org_id": org_id,
             "po_number": po_number,
             "supplier_id": po_data.get("supplier_id"),
             "po_date": po_data.get("po_date", datetime.now().date()),

@@ -45,7 +45,6 @@ def check_area_column_exists() -> bool:
     finally:
         db.close()
 
-
 @router.post("/")
 async def create_customer(
     customer: CustomerCreate,
@@ -184,7 +183,6 @@ async def create_customer(
         logger.error(f"Error creating customer: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to create customer: {str(e)}")
 
-
 @router.get("/", response_model=CustomerListResponse)
 async def list_customers(
     skip: int = Query(0, ge=0),
@@ -220,7 +218,7 @@ async def list_customers(
             # Full query for detailed view
             query = "SELECT * FROM parties.customers WHERE org_id = :org_id"
         count_query = "SELECT COUNT(*) FROM parties.customers WHERE org_id = :org_id"
-        params = {"org_id": DEFAULT_ORG_ID}
+        params = {"org_id": org_id}
         
         # Add filters
         if search:
@@ -348,7 +346,6 @@ async def list_customers(
         logger.error(f"Error listing customers: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to list customers: {str(e)}")
 
-
 @router.get("/{customer_id}", response_model=CustomerResponse)
 async def get_customer(
     customer_id: int,
@@ -387,7 +384,6 @@ async def get_customer(
     except Exception as e:
         logger.error(f"Error getting customer: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to get customer: {str(e)}")
-
 
 @router.put("/{customer_id}", response_model=CustomerResponse)
 async def update_customer(
@@ -446,7 +442,6 @@ async def update_customer(
         logger.error(f"Error updating customer: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to update customer: {str(e)}")
 
-
 @router.get("/{customer_id}/ledger", response_model=CustomerLedgerResponse)
 async def get_customer_ledger(
     customer_id: int,
@@ -463,7 +458,6 @@ async def get_customer_ledger(
         logger.error(f"Error getting customer ledger: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to get customer ledger: {str(e)}")
 
-
 @router.get("/{customer_id}/outstanding", response_model=CustomerOutstandingResponse)
 async def get_customer_outstanding(
     customer_id: int,
@@ -477,7 +471,6 @@ async def get_customer_outstanding(
     except Exception as e:
         logger.error(f"Error getting customer outstanding: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to get customer outstanding: {str(e)}")
-
 
 @router.get("/{customer_id}/addresses")
 async def get_customer_addresses(
@@ -526,7 +519,6 @@ async def get_customer_addresses(
         logger.error(f"Error getting customer addresses: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to get customer addresses: {str(e)}")
 
-
 @router.delete("/{customer_id}")
 async def delete_customer(
     customer_id: int,
@@ -544,7 +536,7 @@ async def delete_customer(
             SELECT customer_id, customer_name, is_active
             FROM parties.customers 
             WHERE customer_id = :customer_id AND org_id = :org_id
-        """), {"customer_id": customer_id, "org_id": DEFAULT_ORG_ID}).fetchone()
+        """), {"customer_id": customer_id, "org_id": org_id}).fetchone()
         
         if not customer:
             raise HTTPException(status_code=404, detail="Customer not found")
@@ -572,7 +564,7 @@ async def delete_customer(
             SET is_active = false,
                 updated_at = CURRENT_TIMESTAMP
             WHERE customer_id = :customer_id AND org_id = :org_id
-        """), {"customer_id": customer_id, "org_id": DEFAULT_ORG_ID})
+        """), {"customer_id": customer_id, "org_id": org_id})
         
         db.commit()
         
@@ -587,7 +579,6 @@ async def delete_customer(
         db.rollback()
         logger.error(f"Error deleting customer {customer_id}: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to delete customer: {str(e)}")
-
 
 @router.post("/{customer_id}/payment", response_model=PaymentResponse)
 async def record_customer_payment(
@@ -612,7 +603,6 @@ async def record_customer_payment(
         db.rollback()
         logger.error(f"Error recording payment: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to record payment: {str(e)}")
-
 
 @router.post("/{customer_id}/check-credit")
 async def check_credit_limit(

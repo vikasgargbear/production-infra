@@ -398,7 +398,7 @@ class ChallanToInvoiceService:
 async def create_invoice_from_challans(
     request: ChallanToInvoiceRequest,
     db: Session = Depends(get_db),
-    org_id: str = DEFAULT_ORG_ID  # TODO: Get from session
+    org_id: str = org_id  # TODO: Get from session
 ):
     """Create invoice from one or more delivered challans"""
     service = ChallanToInvoiceService(db, org_id)
@@ -410,7 +410,7 @@ async def get_eligible_challans(
     start_date: Optional[date] = None,
     end_date: Optional[date] = None,
     db: Session = Depends(get_db),
-    org_id: str = DEFAULT_ORG_ID
+    org_id: str = org_id
 ):
     """Get list of delivered challans that haven't been invoiced yet"""
     try:
@@ -473,7 +473,7 @@ async def get_eligible_challans(
 async def preview_invoice_from_challans(
     challan_ids: str,  # Comma-separated list
     db: Session = Depends(get_db),
-    org_id: str = DEFAULT_ORG_ID
+    org_id: str = org_id
 ):
     """Preview invoice that would be created from selected challans"""
     try:

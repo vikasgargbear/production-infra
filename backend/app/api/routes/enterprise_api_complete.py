@@ -803,7 +803,7 @@ async def generate_gstr1_data(
                 )
             """),
             {
-                "org_id": DEFAULT_ORG_ID,
+                "org_id": org_id,
                 "period": period,
                 "branch_id": branch_id
             }
@@ -867,7 +867,7 @@ async def get_license_expiry_alerts(
                 )
             """),
             {
-                "org_id": DEFAULT_ORG_ID,
+                "org_id": org_id,
                 "days_ahead": days_ahead,
                 "license_type": license_type
             }
@@ -945,7 +945,7 @@ async def get_executive_dashboard(
                 )
             """),
             {
-                "org_id": DEFAULT_ORG_ID,
+                "org_id": org_id,
                 "date_range": date_range,
                 "comparison": comparison
             }
@@ -984,7 +984,7 @@ async def get_detailed_sales_analytics(
                 )
             """),
             {
-                "org_id": DEFAULT_ORG_ID,
+                "org_id": org_id,
                 "from_date": from_date,
                 "to_date": to_date,
                 "group_by": group_by,
@@ -1022,7 +1022,7 @@ async def get_inventory_analytics(
                 )
             """),
             {
-                "org_id": DEFAULT_ORG_ID,
+                "org_id": org_id,
                 "analysis_type": analysis_type,
                 "branch_id": branch_id,
                 "category_id": category_id
@@ -1064,7 +1064,7 @@ async def get_customer_analytics(
                 )
             """),
             {
-                "org_id": DEFAULT_ORG_ID,
+                "org_id": org_id,
                 "from_date": from_date,
                 "to_date": to_date,
                 "customer_id": customer_id
@@ -1129,7 +1129,7 @@ async def get_system_settings(
                 )
             """),
             {
-                "org_id": DEFAULT_ORG_ID,
+                "org_id": org_id,
                 "category": category
             }
         ).scalar()

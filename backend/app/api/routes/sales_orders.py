@@ -28,7 +28,7 @@ router = APIRouter(prefix="/sales-orders", tags=["sales-orders"])
 @router.get("/generate-number")
 async def generate_sales_order_number(
     db: Session = Depends(get_db),
-    org_id: str = DEFAULT_ORG_ID
+    org_id: str = org_id
 ):
     """Generate next sales order number using unified service"""
     try:
@@ -46,7 +46,7 @@ async def generate_sales_order_number(
 @router.get("/employees")
 async def get_employees_for_created_by(
     db: Session = Depends(get_db),
-    org_id: str = DEFAULT_ORG_ID
+    org_id: str = org_id
 ):
     """Get list of employees for 'Created By' dropdown"""
     try:
@@ -80,7 +80,7 @@ async def create_sales_order(
     """
     try:
         # Set org_id early
-        org_id = order.org_id if order.org_id else DEFAULT_ORG_ID
+        org_id = order.org_id if order.org_id else org_id
         
         # Validate customer exists
         customer = db.execute(text("""
@@ -134,7 +134,7 @@ async def create_sales_order(
         
         # Ensure org_id and payment_terms
         if "org_id" not in order_data:
-            order_data["org_id"] = DEFAULT_ORG_ID
+            order_data["org_id"] = org_id
         if not order_data.get("payment_terms"):
             order_data["payment_terms"] = "credit"
         
@@ -311,7 +311,7 @@ async def list_sales_orders(
             WHERE o.org_id = :org_id AND o.order_type = 'regular'
         """
         
-        params = {"org_id": DEFAULT_ORG_ID}
+        params = {"org_id": org_id}
         
         # Add filters
         if customer_id:
@@ -395,7 +395,7 @@ async def get_sales_order(
             FROM sales.orders o
             JOIN parties.customers c ON o.customer_id = c.customer_id
             WHERE o.order_id = :id AND o.org_id = :org_id AND o.order_type = 'regular'
-        """), {"id": order_id, "org_id": DEFAULT_ORG_ID})
+        """), {"id": order_id, "org_id": org_id})
         
         order = result.fetchone()
         if not order:
@@ -438,7 +438,7 @@ async def update_sales_order(
         existing = db.execute(text("""
             SELECT order_status FROM sales.orders 
             WHERE order_id = :id AND org_id = :org_id AND order_type = 'sales'
-        """), {"id": order_id, "org_id": DEFAULT_ORG_ID}).fetchone()
+        """), {"id": order_id, "org_id": org_id}).fetchone()
         
         if not existing:
             raise HTTPException(status_code=404, detail=f"Sales order {order_id} not found")
@@ -451,7 +451,7 @@ async def update_sales_order(
         
         # Build update query
         update_fields = []
-        params = {"order_id": order_id, "org_id": DEFAULT_ORG_ID}
+        params = {"order_id": order_id, "org_id": org_id}
         
         update_data = order_data.dict(exclude_unset=True)
         for field, value in update_data.items():
@@ -499,7 +499,7 @@ async def approve_sales_order(
         order = db.execute(text("""
             SELECT order_status, customer_id FROM sales.orders 
             WHERE order_id = :id AND org_id = :org_id AND order_type = 'sales'
-        """), {"id": order_id, "org_id": DEFAULT_ORG_ID}).fetchone()
+        """), {"id": order_id, "org_id": org_id}).fetchone()
         
         if not order:
             raise HTTPException(status_code=404, detail=f"Sales order {order_id} not found")
@@ -520,7 +520,7 @@ async def approve_sales_order(
         items_dict = [dict(item._mapping) for item in items]
         
         # NOW validate inventory availability
-        inventory_check = OrderService.validate_inventory(db, items_dict, DEFAULT_ORG_ID)
+        inventory_check = OrderService.validate_inventory(db, items_dict, org_id)
         
         if not inventory_check["valid"]:
             failed_items = [
@@ -539,7 +539,7 @@ async def approve_sales_order(
         """), {"id": order_id}).scalar()
         
         credit_check = CustomerService.validate_credit_limit(
-            db, order.customer_id, total_amount, DEFAULT_ORG_ID
+            db, order.customer_id, total_amount, org_id
         )
         
         if not credit_check["valid"]:
@@ -552,10 +552,10 @@ async def approve_sales_order(
                 confirmed_at = CURRENT_TIMESTAMP,
                 updated_at = CURRENT_TIMESTAMP
             WHERE order_id = :id AND org_id = :org_id
-        """), {"id": order_id, "org_id": DEFAULT_ORG_ID})
+        """), {"id": order_id, "org_id": org_id})
         
         # NOW allocate inventory
-        OrderService.allocate_inventory(db, order_id, items_dict, DEFAULT_ORG_ID)
+        OrderService.allocate_inventory(db, order_id, items_dict, org_id)
         
         db.commit()
         
@@ -585,7 +585,7 @@ async def convert_to_invoice(
         order = db.execute(text("""
             SELECT order_status, order_number FROM sales.orders 
             WHERE order_id = :id AND org_id = :org_id AND order_type = 'sales'
-        """), {"id": order_id, "org_id": DEFAULT_ORG_ID}).fetchone()
+        """), {"id": order_id, "org_id": org_id}).fetchone()
         
         if not order:
             raise HTTPException(status_code=404, detail=f"Sales order {order_id} not found")
@@ -601,7 +601,7 @@ async def convert_to_invoice(
             db, 
             order_id, 
             invoice_request.invoice_date,
-            DEFAULT_ORG_ID
+            org_id
         )
         
         # Update order status
@@ -636,7 +636,7 @@ async def convert_to_challan(
         order = db.execute(text("""
             SELECT order_status FROM sales.orders 
             WHERE order_id = :id AND org_id = :org_id AND order_type = 'sales'
-        """), {"id": order_id, "org_id": DEFAULT_ORG_ID}).fetchone()
+        """), {"id": order_id, "org_id": org_id}).fetchone()
         
         if not order:
             raise HTTPException(status_code=404, detail=f"Sales order {order_id} not found")
@@ -679,7 +679,7 @@ async def validate_sales_order(
 ):
     """Validate sales order data without creating it"""
     try:
-        org_id = order_data.org_id if order_data.org_id else DEFAULT_ORG_ID
+        org_id = order_data.org_id if order_data.org_id else org_id
         
         # Validate customer
         customer = db.execute(text("""
@@ -721,7 +721,7 @@ async def get_sales_order_dashboard(db: Session = Depends(get_db)):
                 COALESCE(SUM(final_amount) FILTER (WHERE order_date = CURRENT_DATE), 0) as today_value
             FROM sales.orders 
             WHERE org_id = :org_id AND order_type = 'sales'
-        """), {"org_id": DEFAULT_ORG_ID}).fetchone()
+        """), {"org_id": org_id}).fetchone()
         
         return {
             "total_orders": stats.total_orders,

@@ -59,7 +59,7 @@ def get_stock_adjustments(
             WHERE movement_type IN ('stock_damage', 'stock_expiry', 'stock_count', 'stock_adjustment')
               AND org_id = :org_id
         """
-        params = {"org_id": DEFAULT_ORG_ID}
+        params = {"org_id": org_id}
         
         if product_id:
             query += " AND product_id = :product_id"
@@ -148,7 +148,7 @@ def create_stock_adjustment(adjustment_data: dict, db: Session = Depends(get_db)
                 ) RETURNING movement_id
             """),
             {
-                "org_id": DEFAULT_ORG_ID,
+                "org_id": org_id,
                 "movement_date": adjustment_data.get("adjustment_date", datetime.utcnow()),
                 "movement_type": movement_type,
                 "movement_direction": "in" if quantity_adjusted > 0 else "out",
@@ -237,7 +237,7 @@ def process_physical_count(count_data: dict, db: Session = Depends(get_db)):
                         ) RETURNING movement_id
                     """),
                     {
-                        "org_id": DEFAULT_ORG_ID,
+                        "org_id": org_id,
                         "movement_date": count_data.get("count_date", datetime.utcnow()),
                         "movement_direction": "in" if difference > 0 else "out",
                         "product_id": batch.product_id,
@@ -322,7 +322,7 @@ def expire_batches(db: Session = Depends(get_db)):
                     ) RETURNING movement_id
                 """),
                 {
-                    "org_id": DEFAULT_ORG_ID,
+                    "org_id": org_id,
                     "product_id": batch.product_id,
                     "batch_id": batch.batch_id,
                     "quantity": batch.quantity_available,

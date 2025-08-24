@@ -10,6 +10,7 @@ import logging
 from datetime import date
 
 from ...core.database import get_db
+from ...core.auth_utils import get_org_id_from_header
 from ...models import Purchase
 from ...core.crud_base import create_crud
 from ..services.document_number_service import DocumentNumberService
@@ -145,7 +146,7 @@ def create_purchase(purchase_data: dict, db: Session = Depends(get_db)):
         if 'po_type' not in purchase_data:
             purchase_data['po_type'] = 'regular'
         if 'org_id' not in purchase_data:
-            purchase_data['org_id'] = 'ad808530-1ddb-4377-ab20-67bef145d80d'  # DEFAULT_ORG_ID
+            purchase_data['org_id'] = 'ad808530-1ddb-4377-ab20-67bef145d80d'  # org_id
         if 'branch_id' not in purchase_data:
             purchase_data['branch_id'] = 1
         

@@ -48,7 +48,7 @@ async def create_grn(
     try:
         # Extract main GRN data
         main_data = {
-            "org_id": DEFAULT_ORG_ID,
+            "org_id": org_id,
             "branch_id": grn_data.get("branch_id", 1),
             "grn_number": grn_data.get("grn_no") or grn_data.get("grn_number"),
             "grn_date": grn_data.get("grn_date"),
@@ -151,7 +151,7 @@ async def create_grn(
             for item in items:
                 # Insert into batches table
                 batch_data = {
-                    "org_id": DEFAULT_ORG_ID,
+                    "org_id": org_id,
                     "product_id": item.get("product_id"),
                     "batch_number": item.get("batch_no") or item.get("batch_number"),
                     "manufacturing_date": item.get("mfg_date"),
@@ -228,7 +228,7 @@ def get_grns(
     try:
         # Build base query
         where_conditions = ["g.org_id = :org_id"]
-        params = {"org_id": DEFAULT_ORG_ID}
+        params = {"org_id": org_id}
         
         if search:
             where_conditions.append("(g.grn_number ILIKE :search OR s.supplier_name ILIKE :search)")
@@ -334,7 +334,7 @@ def get_grn_details(
             WHERE g.grn_id = :grn_id AND g.org_id = :org_id
         """
         
-        result = db.execute(text(grn_sql), {"grn_id": grn_id, "org_id": DEFAULT_ORG_ID})
+        result = db.execute(text(grn_sql), {"grn_id": grn_id, "org_id": org_id})
         grn = result.first()
         
         if not grn:
@@ -380,7 +380,7 @@ def update_grn(
     try:
         # Check if GRN exists
         check_sql = "SELECT grn_id FROM procurement.goods_receipt_notes WHERE grn_id = :grn_id AND org_id = :org_id"
-        existing = db.execute(text(check_sql), {"grn_id": grn_id, "org_id": DEFAULT_ORG_ID}).first()
+        existing = db.execute(text(check_sql), {"grn_id": grn_id, "org_id": org_id}).first()
         
         if not existing:
             raise HTTPException(status_code=404, detail="GRN not found")
@@ -428,7 +428,7 @@ def approve_grn(
             FROM procurement.goods_receipt_notes 
             WHERE grn_id = :grn_id AND org_id = :org_id
         """
-        grn = db.execute(text(check_sql), {"grn_id": grn_id, "org_id": DEFAULT_ORG_ID}).first()
+        grn = db.execute(text(check_sql), {"grn_id": grn_id, "org_id": org_id}).first()
         
         if not grn:
             raise HTTPException(status_code=404, detail="GRN not found")
@@ -464,7 +464,7 @@ def approve_grn(
                 
                 # Update batch inventory
                 batch_data = {
-                    "org_id": DEFAULT_ORG_ID,
+                    "org_id": org_id,
                     "product_id": item_dict["product_id"],
                     "batch_number": item_dict["batch_number"],
                     "manufacturing_date": item_dict["manufacturing_date"],

@@ -306,7 +306,7 @@ class EnterpriseChallanService:
 async def create_delivery_challan(
     request: ChallanCreationRequest,
     db: Session = Depends(get_db),
-    org_id: str = DEFAULT_ORG_ID  # TODO: Get from session
+    org_id: str = org_id  # TODO: Get from session
 ):
     """Create new delivery challan"""
     service = EnterpriseChallanService(db, org_id)
@@ -321,7 +321,7 @@ async def list_delivery_challans(
     start_date: Optional[date] = None,
     end_date: Optional[date] = None,
     db: Session = Depends(get_db),
-    org_id: str = DEFAULT_ORG_ID
+    org_id: str = org_id
 ):
     """List delivery challans with filters"""
     try:
@@ -380,7 +380,7 @@ async def list_delivery_challans(
 async def get_challan_details(
     challan_id: int,
     db: Session = Depends(get_db),
-    org_id: str = DEFAULT_ORG_ID
+    org_id: str = org_id
 ):
     """Get detailed challan information"""
     try:
@@ -431,7 +431,7 @@ async def dispatch_challan(
     challan_id: int,
     dispatch_data: Dict[str, Any],
     db: Session = Depends(get_db),
-    org_id: str = DEFAULT_ORG_ID
+    org_id: str = org_id
 ):
     """Mark challan as dispatched"""
     try:
@@ -496,7 +496,7 @@ async def deliver_challan(
     challan_id: int,
     delivery_data: Dict[str, Any],
     db: Session = Depends(get_db),
-    org_id: str = DEFAULT_ORG_ID
+    org_id: str = org_id
 ):
     """Mark challan as delivered"""
     try:
@@ -556,7 +556,7 @@ async def add_tracking_update(
     challan_id: int,
     tracking: ChallanTrackingRequest,
     db: Session = Depends(get_db),
-    org_id: str = DEFAULT_ORG_ID
+    org_id: str = org_id
 ):
     """Add tracking update to challan"""
     try:
@@ -590,7 +590,7 @@ async def get_challan_analytics(
     start_date: Optional[date] = None,
     end_date: Optional[date] = None,
     db: Session = Depends(get_db),
-    org_id: str = DEFAULT_ORG_ID
+    org_id: str = org_id
 ):
     """Get delivery challan analytics"""
     try:

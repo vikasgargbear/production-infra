@@ -341,7 +341,7 @@ async def create_purchase_return(
                 RETURNING return_id
             """),
             {
-                "org_id": DEFAULT_ORG_ID,  # Default org
+                "org_id": org_id,  # Default org
                 "return_number": return_number,
                 "return_date": return_data["return_date"],
                 "supplier_id": return_data.get("supplier_id"),
