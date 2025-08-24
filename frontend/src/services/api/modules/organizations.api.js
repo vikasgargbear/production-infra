@@ -81,9 +81,10 @@ export const organizationsApi = {
  */
 export const featureSettingsApi = {
   // Get feature settings
-  getFeatures: async (orgId = DEFAULT_ORG_ID) => {
+  getFeatures: async (orgId = null) => {
     try {
-      const response = await apiClient.get(`/organizations/${orgId}/features`);
+      const effectiveOrgId = orgId || getOrgId();
+      const response = await apiClient.get(`/organizations/${effectiveOrgId}/features`);
       return response.data;
     } catch (error) {
       console.error('Error fetching feature settings:', error);
@@ -92,9 +93,10 @@ export const featureSettingsApi = {
   },
 
   // Update feature settings
-  updateFeatures: async (features, orgId = DEFAULT_ORG_ID) => {
+  updateFeatures: async (features, orgId = null) => {
     try {
-      const response = await apiClient.put(`/organizations/${orgId}/features`, features);
+      const effectiveOrgId = orgId || getOrgId();
+      const response = await apiClient.put(`/organizations/${effectiveOrgId}/features`, features);
       return response.data;
     } catch (error) {
       console.error('Error updating feature settings:', error);
@@ -178,9 +180,7 @@ export const authApi = {
 
 // Helper function to get current org_id from token or default
 export const getCurrentOrgId = () => {
-  // In future, decode JWT token to get org_id
-  // For now, return default
-  return DEFAULT_ORG_ID;
+  return getOrgId();
 };
 
 export default {

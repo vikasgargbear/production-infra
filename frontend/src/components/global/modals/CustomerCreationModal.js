@@ -5,6 +5,7 @@ import DataTransformer from '../../../services/dataTransformer';
 import { APP_CONFIG } from '../../../config/app.config';
 
 const CustomerCreationModal = ({ show, onClose, onCustomerCreated }) => {
+  const [isBusinessCustomer, setIsBusinessCustomer] = useState(true); // Toggle for Business vs Individual
   const [newCustomer, setNewCustomer] = useState({
     customer_name: '',
     primary_phone: '',
@@ -61,7 +62,7 @@ const CustomerCreationModal = ({ show, onClose, onCustomerCreated }) => {
           primary_phone: '',
           primary_email: '',
           whatsapp_number: '',
-          customer_type: 'pharmacy',
+          customer_type: isBusinessCustomer ? 'pharmacy' : 'individual',
           gst_number: '',
           pan_number: '',
           drug_license_number: '',
@@ -132,6 +133,40 @@ const CustomerCreationModal = ({ show, onClose, onCustomerCreated }) => {
         {/* Content */}
         <div className="p-8 overflow-y-auto max-h-[calc(90vh-200px)]">
           <div className="space-y-6">
+            {/* Customer Type Toggle */}
+            <div className="flex items-center justify-center space-x-1 bg-gray-100 rounded-xl p-1">
+              <button
+                type="button"
+                onClick={() => {
+                  setIsBusinessCustomer(true);
+                  setNewCustomer({ ...newCustomer, customer_type: 'pharmacy' });
+                }}
+                className={`flex-1 px-4 py-2 rounded-lg font-medium transition-all duration-200 ${
+                  isBusinessCustomer
+                    ? 'bg-white text-blue-600 shadow-sm'
+                    : 'text-gray-600 hover:text-gray-800'
+                }`}
+              >
+                <Building className="inline-block w-4 h-4 mr-2" />
+                Business
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setIsBusinessCustomer(false);
+                  setNewCustomer({ ...newCustomer, customer_type: 'individual' });
+                }}
+                className={`flex-1 px-4 py-2 rounded-lg font-medium transition-all duration-200 ${
+                  !isBusinessCustomer
+                    ? 'bg-white text-blue-600 shadow-sm'
+                    : 'text-gray-600 hover:text-gray-800'
+                }`}
+              >
+                <User className="inline-block w-4 h-4 mr-2" />
+                Individual
+              </button>
+            </div>
+
             {/* Basic Information */}
             <div className="space-y-4">
               <h4 className="text-sm font-semibold text-gray-900 uppercase tracking-wider">Basic Information</h4>
@@ -289,7 +324,7 @@ const CustomerCreationModal = ({ show, onClose, onCustomerCreated }) => {
                   </div>
                 </div>
                 
-                <div className="grid grid-cols-2 gap-4">
+                <div className={`grid ${isBusinessCustomer ? 'grid-cols-2' : 'grid-cols-1'} gap-4`}>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
                       Pincode *
@@ -304,32 +339,35 @@ const CustomerCreationModal = ({ show, onClose, onCustomerCreated }) => {
                     />
                   </div>
                   
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Customer Type *
-                    </label>
-                    <select
-                      value={newCustomer.customer_type}
-                      onChange={(e) => setNewCustomer({ ...newCustomer, customer_type: e.target.value })}
-                      className="w-full px-3 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
-                    >
-                      <option value="pharmacy">Pharmacy</option>
-                      <option value="hospital">Hospital</option>
-                      <option value="clinic">Clinic</option>
-                      <option value="institution">Institution</option>
-                      <option value="doctor">Doctor</option>
-                    </select>
-                  </div>
+                  {isBusinessCustomer && (
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Business Type *
+                      </label>
+                      <select
+                        value={newCustomer.customer_type}
+                        onChange={(e) => setNewCustomer({ ...newCustomer, customer_type: e.target.value })}
+                        className="w-full px-3 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                      >
+                        <option value="pharmacy">Pharmacy</option>
+                        <option value="hospital">Hospital</option>
+                        <option value="clinic">Clinic</option>
+                        <option value="institution">Institution</option>
+                        <option value="doctor">Doctor</option>
+                      </select>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
             
-            {/* Compliance Information - CRITICAL */}
-            <div className="space-y-4">
-              <h4 className="text-sm font-semibold text-gray-900 uppercase tracking-wider flex items-center">
-                <Shield className="w-4 h-4 text-red-500 mr-2" />
-                Compliance Information (Required for Pharmacy/Hospital)
-              </h4>
+            {/* Compliance Information - CRITICAL - Only for Business Customers */}
+            {isBusinessCustomer && (
+              <div className="space-y-4">
+                <h4 className="text-sm font-semibold text-gray-900 uppercase tracking-wider flex items-center">
+                  <Shield className="w-4 h-4 text-red-500 mr-2" />
+                  Compliance Information (Required for Pharmacy/Hospital)
+                </h4>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -404,9 +442,11 @@ const CustomerCreationModal = ({ show, onClose, onCustomerCreated }) => {
                 </div>
               </div>
             </div>
+            )}
 
-            {/* Credit Management - CRITICAL */}
-            <div className="space-y-4">
+            {/* Credit Management - CRITICAL - Only for Business Customers */}
+            {isBusinessCustomer && (
+              <div className="space-y-4">
               <h4 className="text-sm font-semibold text-gray-900 uppercase tracking-wider flex items-center">
                 <CreditCard className="w-4 h-4 text-blue-500 mr-2" />
                 Credit Management
@@ -463,6 +503,7 @@ const CustomerCreationModal = ({ show, onClose, onCustomerCreated }) => {
                 </div>
               </div>
             </div>
+            )}
 
             {/* Sales & Territory Management removed - not essential for core customer creation */}
 
@@ -492,7 +533,7 @@ const CustomerCreationModal = ({ show, onClose, onCustomerCreated }) => {
           </button>
           <button
             onClick={saveCustomer}
-            disabled={saving || !newCustomer.customer_name || !newCustomer.primary_phone || !newCustomer.address.address_line1 || !newCustomer.address.city || !newCustomer.address.state || !newCustomer.address.pincode || !newCustomer.customer_type}
+            disabled={saving || !newCustomer.customer_name || !newCustomer.primary_phone || !newCustomer.address.address_line1 || !newCustomer.address.city || !newCustomer.address.state || !newCustomer.address.pincode || (isBusinessCustomer && !newCustomer.customer_type)}
             className="px-6 py-3 bg-blue-600 text-white rounded-xl hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 font-medium flex items-center space-x-2"
           >
             {saving ? (

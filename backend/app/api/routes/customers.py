@@ -48,7 +48,8 @@ def check_area_column_exists() -> bool:
 @router.post("/")
 async def create_customer(
     customer: CustomerCreate,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)
 ):
     """
     Create a new customer with GST details and credit limit
@@ -69,7 +70,7 @@ async def create_customer(
         
         # Map schema fields to database columns
         mapped_data = {
-            "org_id": customer_data.get("org_id"),
+            "org_id": org_id,  # Use org_id from header, not from request body
             "customer_code": customer_code,
             "customer_name": customer_data.get("customer_name"),
             "customer_type": customer_data.get("customer_type"),
@@ -119,7 +120,7 @@ async def create_customer(
             state_code = state_code_map.get(state_name.lower(), '27')  # Default to Maharashtra
             
             address_data = {
-                "org_id": customer_data.get("org_id"),
+                "org_id": org_id,  # Use org_id from header
                 "entity_type": "customer",
                 "entity_id": customer_id,
                 "address_type": "billing",  # Default billing address
@@ -194,7 +195,8 @@ async def list_customers(
     has_gstin: Optional[bool] = None,
     include_stats: bool = Query(False, description="Include business statistics (disabled by default for performance)"),
     fast_search: bool = Query(True, description="Use fast search mode (minimal data for quick response)"),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)
 ):
     """
     List customers with search, filter, and pagination
