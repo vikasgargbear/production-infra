@@ -44,16 +44,21 @@ async def get_payment_terms(db: Session = Depends(get_db),
     """Get all available payment terms"""
     return {
         "payment_terms": [
+            {"value": "CASH", "label": "Cash", "days": 0},
             {"value": "IMMEDIATE", "label": "Immediate", "days": 0},
-            {"value": "7_DAYS", "label": "7 Days", "days": 7},
-            {"value": "15_DAYS", "label": "15 Days", "days": 15},
-            {"value": "21_DAYS", "label": "21 Days", "days": 21},
-            {"value": "30_DAYS", "label": "30 Days", "days": 30},
-            {"value": "45_DAYS", "label": "45 Days", "days": 45},
-            {"value": "60_DAYS", "label": "60 Days", "days": 60},
-            {"value": "90_DAYS", "label": "90 Days", "days": 90},
+            {"value": "7_DAYS", "label": "Net 7 Days", "days": 7},
+            {"value": "10_DAYS", "label": "Net 10 Days", "days": 10},
+            {"value": "15_DAYS", "label": "Net 15 Days", "days": 15},
+            {"value": "21_DAYS", "label": "Net 21 Days", "days": 21},
+            {"value": "30_DAYS", "label": "Net 30 Days", "days": 30},
+            {"value": "45_DAYS", "label": "Net 45 Days", "days": 45},
+            {"value": "60_DAYS", "label": "Net 60 Days", "days": 60},
+            {"value": "90_DAYS", "label": "Net 90 Days", "days": 90},
+            {"value": "120_DAYS", "label": "Net 120 Days", "days": 120},
             {"value": "ADVANCE", "label": "Advance Payment", "days": -1},
             {"value": "COD", "label": "Cash on Delivery", "days": 0},
+            {"value": "2_10_NET_30", "label": "2/10 Net 30", "days": 30},
+            {"value": "EOM", "label": "End of Month", "days": 30},
             {"value": "CUSTOM", "label": "Custom Terms", "days": null}
         ]
     }
