@@ -22,8 +22,6 @@ router = APIRouter(tags=["goods-receipt-notes"])
 @router.get("/generate-number")
 def generate_grn_number(
     db: Session = Depends(get_db),
-    org_id: str = Depends(get_current_org_id)
-,
     org_id: str = Depends(get_org_id_from_header)
 ):
     """Generate next GRN number using unified service"""
@@ -43,10 +41,8 @@ def generate_grn_number(
 async def create_grn(
     grn_data: Dict[str, Any],
     db: Session = Depends(get_db),
-    org_id: str = Depends(get_current_org_id),
+    org_id: str = Depends(get_org_id_from_header),
     user_id: Optional[int] = Depends(get_current_user_id)
-,
-    org_id: str = Depends(get_org_id_from_header)
 ):
     """Create a new Goods Receipt Note"""
     try:
@@ -226,8 +222,6 @@ def get_grns(
     date_from: Optional[date] = Query(None, description="Filter from date"),
     date_to: Optional[date] = Query(None, description="Filter to date"),
     db: Session = Depends(get_db),
-    org_id: str = Depends(get_current_org_id),
-,
     org_id: str = Depends(get_org_id_from_header)
 ):
     """Get list of GRNs with filtering and pagination"""
@@ -319,8 +313,6 @@ def get_grns(
 def get_grn_details(
     grn_id: int,
     db: Session = Depends(get_db),
-    org_id: str = Depends(get_current_org_id),
-,
     org_id: str = Depends(get_org_id_from_header)
 ):
     """Get detailed GRN information"""
@@ -381,10 +373,8 @@ def update_grn(
     grn_id: int,
     grn_data: Dict[str, Any],
     db: Session = Depends(get_db),
-    org_id: str = Depends(get_current_org_id),
+    org_id: str = Depends(get_org_id_from_header),
     user_id: Optional[int] = Depends(get_current_user_id)
-,
-    org_id: str = Depends(get_org_id_from_header)
 ):
     """Update GRN details"""
     try:
@@ -427,10 +417,8 @@ def approve_grn(
     grn_id: int,
     approval_data: Dict[str, Any],
     db: Session = Depends(get_db),
-    org_id: str = Depends(get_current_org_id),
+    org_id: str = Depends(get_org_id_from_header),
     user_id: Optional[int] = Depends(get_current_user_id)
-,
-    org_id: str = Depends(get_org_id_from_header)
 ):
     """Approve GRN and update stock if not already done"""
     try:

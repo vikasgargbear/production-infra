@@ -355,7 +355,6 @@ def get_dashboard_kpis(
 
 @router.get("/sales-analytics")
 def get_sales_analytics(
-    org_id: Optional[str] = Query(None, description="Organization ID"),
     start_date: Optional[date] = Query(None, description="Start date"),
     end_date: Optional[date] = Query(None, description="End date"),
     db: Session = Depends(get_db),
@@ -371,7 +370,6 @@ def get_sales_analytics(
 
 @router.get("/inventory-summary")
 def get_inventory_summary(
-    org_id: Optional[str] = Query(None, description="Organization ID"),
     db: Session = Depends(get_db),
     org_id: str = Depends(get_org_id_from_header)
 ):
@@ -400,7 +398,6 @@ def get_inventory_summary(
 
 @router.get("/top-customers")
 def get_top_customers(
-    org_id: Optional[str] = Query(None, description="Organization ID"),
     limit: int = Query(10, description="Number of top customers"),
     db: Session = Depends(get_db),
     org_id: str = Depends(get_org_id_from_header)
@@ -415,7 +412,6 @@ def get_top_customers(
 
 @router.get("/expiry-alerts")
 def get_expiry_alerts(
-    org_id: Optional[str] = Query(None, description="Organization ID"),
     days: int = Query(90, description="Days ahead for expiry check"),
     db: Session = Depends(get_db),
     org_id: str = Depends(get_org_id_from_header)
@@ -450,7 +446,6 @@ def get_expiry_alerts(
 
 @router.get("/low-stock-alerts")
 def get_low_stock_alerts(
-    org_id: Optional[str] = Query(None, description="Organization ID"),
     db: Session = Depends(get_db),
     org_id: str = Depends(get_org_id_from_header)
 ):
@@ -483,7 +478,6 @@ def get_low_stock_alerts(
 
 @router.get("/pending-payments")
 def get_pending_payments(
-    org_id: Optional[str] = Query(None, description="Organization ID"),
     db: Session = Depends(get_db),
     org_id: str = Depends(get_org_id_from_header)
 ):
@@ -538,7 +532,6 @@ def get_pending_payments(
 
 @router.get("/recent-activities")
 def get_recent_activities(
-    org_id: Optional[str] = Query(None, description="Organization ID"),
     limit: int = Query(20, description="Number of recent activities"),
     db: Session = Depends(get_db),
     org_id: str = Depends(get_org_id_from_header)

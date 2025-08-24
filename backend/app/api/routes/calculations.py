@@ -8,6 +8,8 @@ from pydantic import BaseModel, Field
 from decimal import Decimal
 from uuid import UUID
 import logging
+from ...core.database import SessionLocal
+from ...core.auth_utils import get_org_id_from_header
 
 from ..services.gst_service import GSTService, GSTType
 from ..services.order_service import OrderService
@@ -96,8 +98,6 @@ async def calculate_sales_order(request: CalculationRequest):
             })
         
         # Use OrderService calculation logic (which is now corrected)
-        from ...core.database import SessionLocal
-from ...core.auth_utils import get_org_id_from_header
         db = SessionLocal()
         try:
             totals = OrderService.calculate_order_totals(

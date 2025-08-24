@@ -22,8 +22,6 @@ router = APIRouter(tags=["sale-returns"])
 @router.get("/generate-number")
 async def generate_sales_return_number(
     db: Session = Depends(get_db),
-    org_id: Optional[str] = None  # Will be provided via header
-,
     org_id: str = Depends(get_org_id_from_header)
 ):
     """Generate next sales return number using unified service"""

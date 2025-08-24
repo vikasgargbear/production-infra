@@ -20,9 +20,9 @@ router = APIRouter(prefix="/erp", tags=["Enterprise ERP"])
 # MASTER DATA MODULE APIs
 # =============================================
 
-@router.get("/organization/{org_id}")
+@router.get("/organization/{organization_id}")
 async def get_organization_details(
-    org_id: int = Path(..., description="Organization ID"),
+    organization_id: int = Path(..., description="Organization ID"),
     db: Session = Depends(get_db),
     org_id: str = Depends(get_org_id_from_header)
 ):
@@ -36,9 +36,9 @@ async def get_organization_details(
                 SELECT org_id, organization_name, business_type, gstin, 
                        phone, email, website, pan_number, is_active
                 FROM master.organizations 
-                WHERE org_id = :org_id AND is_active = true
+                WHERE org_id = :organization_id AND is_active = true
             """),
-            {"org_id": org_id}
+            {"organization_id": organization_id}
         ).fetchone()
         
         if not org_result:
@@ -1247,6 +1247,8 @@ async def export_data(
     format_type: str = Body("json", description="json/csv/excel"),
     filters: Dict[str, Any] = Body({}, description="Export filters"),
     db: Session = Depends(get_db)
+,
+    org_id: str = Depends(get_org_id_from_header)
 ):
     """
     Export data in various formats
