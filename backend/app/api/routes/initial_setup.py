@@ -12,7 +12,7 @@ from ...core.database import get_db
 from ...core.jwt_auth import get_password_hash
 from ...core.auth_utils import get_optional_org_id
 
-router = APIRouter(prefix="/setup", tags=["setup"])
+router = APIRouter(tags=["setup"])
 
 @router.get("/check")
 async def check_setup_status(db: Session = Depends(get_db)):
