@@ -177,14 +177,19 @@ async def initialize_organization(
                 logger.info("Supabase service role key not configured, skipping auth.users creation")
             
             # Create user in org_users table (linked to Supabase auth if available)
+            # Note: full_name is a generated column, so we don't insert it
+            admin_name_parts = setup_data.get("admin_name", "Administrator").split()
+            first_name = admin_name_parts[0] if admin_name_parts else "Admin"
+            last_name = " ".join(admin_name_parts[1:]) if len(admin_name_parts) > 1 else ""
+            
             db.execute(text("""
                 INSERT INTO master.org_users (
                     org_id, auth_user_id, username, email, mobile_number, 
-                    employee_code, first_name, full_name,
+                    employee_code, first_name, last_name,
                     is_active, is_admin, created_at, updated_at
                 ) VALUES (
                     :org_id, :auth_user_id, :username, :email, :mobile_number,
-                    'EMP001', :first_name, :full_name,
+                    'EMP001', :first_name, :last_name,
                     true, true, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
                 )
             """), {
@@ -193,8 +198,8 @@ async def initialize_organization(
                 "username": setup_data.get("admin_email", "").split('@')[0],  # Use email prefix as username
                 "email": setup_data["admin_email"],
                 "mobile_number": setup_data.get("phone", ""),
-                "first_name": setup_data.get("admin_name", "Administrator").split()[0] if setup_data.get("admin_name") else "Admin",
-                "full_name": setup_data.get("admin_name", "Administrator")
+                "first_name": first_name,
+                "last_name": last_name
             })
         
         # Create default system settings
