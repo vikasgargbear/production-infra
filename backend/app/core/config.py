@@ -10,7 +10,7 @@ class Settings:
     # Organization settings
     DEFAULT_ORG_ID: str = os.environ.get(
         "DEFAULT_ORG_ID", 
-        "ad808530-1ddb-4377-ab20-67bef145d80d"  # Demo Pharma Pvt Ltd
+        None  # No default - each org gets unique ID
     )
     
     # Database settings

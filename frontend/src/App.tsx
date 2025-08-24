@@ -19,6 +19,8 @@ import MasterHub from './components/master/MasterHub';
 import testBackendConnection from './utils/testBackendConnection';
 import { CompanyProvider } from './contexts/CompanyContext';
 import { EscapeKeyProvider } from './contexts/EscapeKeyContext';
+import InitialSetup from './components/InitialSetup';
+import apiClient from './services/api/apiClient';
 // import ReceivablesCollectionCenter from './components/receivables/ReceivablesCollectionCenter';
 
 // Lazy load components for better performance and code splitting
@@ -126,6 +128,26 @@ const CompliancePlaceholder = React.memo(() => (
 function App(): JSX.Element {
   const [activeTab, setActiveTab] = useState<TabName>('home');
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(true); // Bypass login for development
+  const [setupComplete, setSetupComplete] = useState<boolean | null>(null);
+  const [isCheckingSetup, setIsCheckingSetup] = useState<boolean>(true);
+
+  // Check if initial setup is complete
+  useEffect(() => {
+    checkSetupStatus();
+  }, []);
+
+  const checkSetupStatus = async () => {
+    try {
+      const response = await apiClient.get('/setup/check');
+      setSetupComplete(response.data.setup_complete);
+    } catch (error) {
+      console.error('Error checking setup status:', error);
+      // Assume setup is complete if we can't check (for backward compatibility)
+      setSetupComplete(true);
+    } finally {
+      setIsCheckingSetup(false);
+    }
+  };
 
   // Test backend connection on app load
   useEffect(() => {
@@ -197,6 +219,25 @@ function App(): JSX.Element {
         return <Home key="home-default" setActiveTab={(tab) => setActiveTab(tab as TabName)} />;
     }
   };
+
+  // Show loading while checking setup status
+  if (isCheckingSetup) {
+    return <LoadingSpinner />;
+  }
+
+  // Show initial setup if not complete
+  if (setupComplete === false) {
+    return (
+      <ErrorBoundary>
+        <ToastProvider>
+          <InitialSetup onSetupComplete={() => {
+            setSetupComplete(true);
+            window.location.reload();
+          }} />
+        </ToastProvider>
+      </ErrorBoundary>
+    );
+  }
 
   if (!isAuthenticated) {
     return (

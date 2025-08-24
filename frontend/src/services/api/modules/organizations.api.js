@@ -4,18 +4,29 @@
  */
 
 import apiClient from '../apiClient';
+import authService from '../../auth/authService';
 
-// For now, use hardcoded org_id until we implement proper auth
-const DEFAULT_ORG_ID = 'ad808530-1ddb-4377-ab20-67bef145d80d';
+// Get org_id dynamically from auth service
+const getOrgId = () => {
+  const orgId = authService.getOrgId();
+  if (!orgId) {
+    console.warn('No organization ID found. User may need to complete setup.');
+  }
+  return orgId;
+};
 
 /**
  * Organization Profile APIs
  */
 export const organizationsApi = {
   // Get organization profile
-  getProfile: async (orgId = DEFAULT_ORG_ID) => {
+  getProfile: async (orgId = null) => {
+    const organizationId = orgId || getOrgId();
+    if (!organizationId) {
+      throw new Error('No organization ID available');
+    }
     try {
-      const response = await apiClient.get(`/organizations/${orgId}`);
+      const response = await apiClient.get(`/organizations/${organizationId}`);
       return response.data;
     } catch (error) {
       console.error('Error fetching organization profile:', error);
@@ -24,9 +35,13 @@ export const organizationsApi = {
   },
 
   // Update organization profile
-  updateProfile: async (profileData, orgId = DEFAULT_ORG_ID) => {
+  updateProfile: async (profileData, orgId = null) => {
+    const organizationId = orgId || getOrgId();
+    if (!organizationId) {
+      throw new Error('No organization ID available');
+    }
     try {
-      const response = await apiClient.put(`/organizations/${orgId}`, profileData);
+      const response = await apiClient.put(`/organizations/${organizationId}`, profileData);
       return response.data;
     } catch (error) {
       console.error('Error updating organization profile:', error);
@@ -35,13 +50,17 @@ export const organizationsApi = {
   },
 
   // Upload organization logo
-  uploadLogo: async (file, orgId = DEFAULT_ORG_ID) => {
+  uploadLogo: async (file, orgId = null) => {
+    const organizationId = orgId || getOrgId();
+    if (!organizationId) {
+      throw new Error('No organization ID available');
+    }
     try {
       const formData = new FormData();
       formData.append('file', file);
       
       const response = await apiClient.post(
-        `/organizations/${orgId}/logo`,
+        `/organizations/${organizationId}/logo`,
         formData,
         {
           headers: {

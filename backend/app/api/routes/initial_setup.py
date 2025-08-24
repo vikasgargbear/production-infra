@@ -41,6 +41,9 @@ async def check_setup_status(db: Session = Depends(get_db)):
                     "gst_number": org.gst_number,
                     "pan_number": org.pan_number
                 }
+                
+                # Store org_id in environment or config for frontend to use
+                # This would be handled by auth/session in production
         
         return {
             "setup_complete": has_org,
@@ -86,8 +89,8 @@ async def initialize_organization(
         if existing and existing.count > 0:
             raise HTTPException(status_code=400, detail="Organization already exists")
         
-        # Use the hardcoded org_id that frontend expects
-        org_id = 'ad808530-1ddb-4377-ab20-67bef145d80d'
+        # Generate a unique org_id for this organization
+        org_id = str(uuid.uuid4())
         
         # Create organization
         db.execute(text("""

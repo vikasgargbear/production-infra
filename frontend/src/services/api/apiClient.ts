@@ -18,13 +18,21 @@ const apiClient: AxiosInstance = axios.create({
   },
 });
 
-// Request interceptor for auth token
+// Request interceptor for auth token and org_id
 apiClient.interceptors.request.use(
   (config) => {
+    // Add auth token if available
     const token = localStorage.getItem('auth_token');
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
+    
+    // Add org_id header if available
+    const orgId = sessionStorage.getItem('pharma_org_id') || localStorage.getItem('pharma_org_id');
+    if (orgId) {
+      config.headers['X-Org-Id'] = orgId;
+    }
+    
     return config;
   },
   (error) => {
