@@ -49,10 +49,14 @@ class DocumentNumberService {
       return response.data.purchase_number;
     }
     
-    // Fallback to client-side generation with PURCH prefix for Purchase Entry
+    // Fallback to client-side generation matching backend format
+    // Format: PUR-YY######## (year prefix + 8-digit number)
+    const now = new Date();
+    const year = now.getFullYear() % 100;
+    const yearPrefix = year.toString().padStart(2, '0');
     const timestamp = Date.now();
-    const year = new Date().getFullYear().toString().slice(-2);
-    return `PURCH-${year}${timestamp.toString().slice(-8)}`;
+    const uniqueNum = 10000000 + (timestamp % 90000000);
+    return `PUR-${yearPrefix}${uniqueNum}`;
   }
 
   /**
@@ -72,10 +76,14 @@ class DocumentNumberService {
       }
     }
     
-    // Fallback to client-side generation
+    // Fallback to client-side generation matching backend format
+    // Format: PO-YY######## (year prefix + 8-digit number)
+    const now = new Date();
+    const year = now.getFullYear() % 100;
+    const yearPrefix = year.toString().padStart(2, '0');
     const timestamp = Date.now();
-    const year = new Date().getFullYear();
-    return `PO-${year}-${timestamp.toString().slice(-6)}`;
+    const uniqueNum = 10000000 + (timestamp % 90000000);
+    return `PO-${yearPrefix}${uniqueNum}`;
   }
 
   /**
@@ -98,10 +106,14 @@ class DocumentNumberService {
       console.warn('Backend GRN number generation failed:', error);
     }
     
-    // Fallback to client-side generation
+    // Fallback to client-side generation matching backend format
+    // Format: GRN-YY######## (year prefix + 8-digit number)
+    const now = new Date();
+    const year = now.getFullYear() % 100;
+    const yearPrefix = year.toString().padStart(2, '0');
     const timestamp = Date.now();
-    const year = new Date().getFullYear();
-    return `GRN-${year}-${timestamp.toString().slice(-6)}`;
+    const uniqueNum = 10000000 + (timestamp % 90000000);
+    return `GRN-${yearPrefix}${uniqueNum}`;
   }
 
   /**
@@ -155,10 +167,14 @@ class DocumentNumberService {
       console.warn('Backend challan number generation failed:', error);
     }
     
-    // Fallback to client-side generation
+    // Fallback to client-side generation matching backend format
+    // Format: DC-YY######## (year prefix + 8-digit number)
+    const now = new Date();
+    const year = now.getFullYear() % 100;
+    const yearPrefix = year.toString().padStart(2, '0');
     const timestamp = Date.now();
-    const year = new Date().getFullYear() % 100;
-    return `DC-${year.toString().padStart(2, '0')}${timestamp.toString().slice(-6)}`;
+    const uniqueNum = 10000000 + (timestamp % 90000000);
+    return `DC-${yearPrefix}${uniqueNum}`;
   }
 
   /**
@@ -174,10 +190,14 @@ class DocumentNumberService {
       console.warn('Backend sales order number generation failed:', error);
     }
     
-    // Fallback to client-side generation
+    // Fallback to client-side generation matching backend format
+    // Format: SO-YY######## (year prefix + 8-digit number)
+    const now = new Date();
+    const year = now.getFullYear() % 100;
+    const yearPrefix = year.toString().padStart(2, '0');
     const timestamp = Date.now();
-    const year = new Date().getFullYear();
-    return `SO-${year}-${timestamp.toString().slice(-6)}`;
+    const uniqueNum = 10000000 + (timestamp % 90000000);
+    return `SO-${yearPrefix}${uniqueNum}`;
   }
 
   /**

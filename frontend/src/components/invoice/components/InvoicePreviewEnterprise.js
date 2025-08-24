@@ -260,26 +260,36 @@ const InvoicePreviewEnterprise = ({
                 <>
                   <p className="text-xs text-gray-600 mb-1">✓ Same as billing</p>
                   <p className="font-semibold text-gray-900 text-sm">{invoice.customer_name}</p>
+                  {/* Use exact same format as Bill To */}
                   {invoice.billing_address ? (
-                    <p className="text-xs text-gray-600 mt-1">{invoice.billing_address}</p>
+                    <>
+                      <p className="text-xs text-gray-600 mt-1">{invoice.billing_address}</p>
+                      {/* Always show phone for shipping */}
+                      {(invoice.customer_details?.phone || invoice.customer_details?.mobile || invoice.customer_details?.primary_phone) && (
+                        <p className="text-xs text-gray-600 mt-1">Ph: {invoice.customer_details?.phone || invoice.customer_details?.mobile || invoice.customer_details?.primary_phone}</p>
+                      )}
+                    </>
                   ) : invoice.customer_details ? (
                     <>
                       <p className="text-xs text-gray-600 mt-1">{invoice.customer_details.address}</p>
                       {invoice.customer_details.city && invoice.customer_details.state && (
                         <p className="text-xs text-gray-600">{invoice.customer_details.city}, {invoice.customer_details.state}</p>
                       )}
+                      {(invoice.customer_details?.phone || invoice.customer_details?.mobile || invoice.customer_details?.primary_phone) && (
+                        <p className="text-xs text-gray-600 mt-1">Ph: {invoice.customer_details?.phone || invoice.customer_details?.mobile || invoice.customer_details?.primary_phone}</p>
+                      )}
                     </>
                   ) : null}
-                  {(invoice.customer_details?.phone || invoice.customer_details?.mobile || invoice.customer_details?.primary_phone) && (
-                    <p className="text-xs text-gray-600 mt-1">Ph: {invoice.customer_details?.phone || invoice.customer_details?.mobile || invoice.customer_details?.primary_phone}</p>
-                  )}
                 </>
               ) : (
                 <>
                   <p className="font-semibold text-gray-900 text-sm">{invoice.shipping_contact_name || invoice.customer_name}</p>
-                  <p className="text-xs text-gray-600 mt-1">{invoice.shipping_address}</p>
-                  {(invoice.shipping_phone || invoice.customer_details?.phone || invoice.customer_details?.mobile) && (
-                    <p className="text-xs text-gray-600 mt-1">Ph: {invoice.shipping_phone || invoice.customer_details?.phone || invoice.customer_details?.mobile}</p>
+                  {invoice.shipping_address && (
+                    <p className="text-xs text-gray-600 mt-1">{invoice.shipping_address}</p>
+                  )}
+                  {/* Always show phone for different shipping address */}
+                  {(invoice.shipping_phone || invoice.customer_details?.phone || invoice.customer_details?.mobile || invoice.customer_details?.primary_phone) && (
+                    <p className="text-xs text-gray-600 mt-1">Ph: {invoice.shipping_phone || invoice.customer_details?.phone || invoice.customer_details?.mobile || invoice.customer_details?.primary_phone}</p>
                   )}
                 </>
               )}

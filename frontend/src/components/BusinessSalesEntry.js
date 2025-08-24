@@ -11,7 +11,15 @@ const BusinessSalesEntry = ({ open, onClose }) => {
   const toast = useToast();
   const { companyInfo } = useCompany();
   const [invoice, setInvoice] = useState({
-    invoiceNo: 'INV-' + Date.now().toString().slice(-6),
+    invoiceNo: (() => {
+      // Generate invoice number matching backend format: INV-YY########
+      const now = new Date();
+      const year = now.getFullYear() % 100;
+      const yearPrefix = year.toString().padStart(2, '0');
+      const timestamp = Date.now();
+      const uniqueNum = 10000000 + (timestamp % 90000000);
+      return `INV-${yearPrefix}${uniqueNum}`;
+    })(),
     invoiceDate: new Date().toISOString().split('T')[0],
     dueDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
     customerId: '',
@@ -214,7 +222,15 @@ const BusinessSalesEntry = ({ open, onClose }) => {
   // Reset form to initial state
   const resetForm = () => {
     setInvoice({
-      invoiceNo: 'INV-' + Date.now().toString().slice(-6),
+      invoiceNo: (() => {
+        // Generate invoice number matching backend format: INV-YY########
+        const now = new Date();
+        const year = now.getFullYear() % 100;
+        const yearPrefix = year.toString().padStart(2, '0');
+        const timestamp = Date.now();
+        const uniqueNum = 10000000 + (timestamp % 90000000);
+        return `INV-${yearPrefix}${uniqueNum}`;
+      })(),
       invoiceDate: new Date().toISOString().split('T')[0],
       dueDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
       customerId: '',

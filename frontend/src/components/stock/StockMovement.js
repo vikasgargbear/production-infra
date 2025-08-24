@@ -93,7 +93,12 @@ const StockMovement = ({ open = true, onClose }) => {
         movement_type: type,
         quantity: quantity,
         reference_no: type === 'receive' ? `PO-${Math.floor(Math.random() * 1000)}` : 
-                     type === 'issue' ? `INV-${Math.floor(Math.random() * 1000)}` : '',
+                     type === 'issue' ? (() => {
+                       const year = new Date().getFullYear() % 100;
+                       const yearPrefix = year.toString().padStart(2, '0');
+                       const num = 10000000 + Math.floor(Math.random() * 1000);
+                       return `INV-${yearPrefix}${num}`;
+                     })() : '',
         movement_date: new Date(Date.now() - Math.random() * 30 * 24 * 60 * 60 * 1000).toISOString(),
         reason: type === 'adjustment' ? 'Stock count correction' : '',
         batch_no: `B${Math.floor(Math.random() * 1000)}`,

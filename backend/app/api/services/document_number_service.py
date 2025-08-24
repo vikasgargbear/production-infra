@@ -174,17 +174,26 @@ class DocumentNumberService:
             # Calculate next sequence number
             if latest and latest[0]:
                 # Extract sequence number from existing format
+                # Format: PREFIX-YY######## where YY is year and ######## is sequence
                 parts = latest[0].split('-')
                 if len(parts) >= 2:
                     try:
-                        # Get the numeric part after prefix and year
-                        current_seq = int(parts[-1])
-                        # For migration: if old number is less than 10000000, start from 10000000
+                        # Remove the year prefix (first 2 digits) from the number part
+                        number_with_year = parts[-1]
+                        # Check if it starts with the year prefix
+                        if number_with_year.startswith(year_prefix):
+                            # Extract just the sequence number (remove year prefix)
+                            current_seq = int(number_with_year[len(year_prefix):])
+                        else:
+                            # Old format or corrupted, extract what we can
+                            current_seq = int(number_with_year) if len(number_with_year) <= 8 else int(number_with_year[-8:])
+                        
+                        # Increment for next sequence
                         if current_seq < 10000000:
                             next_seq = 10000000
                         else:
                             next_seq = current_seq + 1
-                    except ValueError:
+                    except (ValueError, IndexError):
                         next_seq = 10000000
                 else:
                     next_seq = 10000000
