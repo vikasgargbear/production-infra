@@ -8,7 +8,7 @@ import os
 
 # Import routers
 from .api.routes import (
-    auth, customers, products_consolidated, sales, inventory, 
+    auth_supabase, customers, products_consolidated, sales, inventory, 
     payments, dashboard, billing, api_wrapper
 )
 
@@ -106,7 +106,7 @@ from fastapi import APIRouter
 api = APIRouter(prefix="/api")
 
 # Register routes
-api.include_router(auth.router, prefix="/auth", tags=["Authentication"])
+api.include_router(auth_supabase.router, prefix="/auth", tags=["Authentication"])
 api.include_router(customers.router, prefix="/customers", tags=["Customers"])
 api.include_router(products_consolidated.router, prefix="/products", tags=["Products"])
 api.include_router(sales.router, prefix="/sales", tags=["Sales"])

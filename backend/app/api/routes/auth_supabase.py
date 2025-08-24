@@ -1,0 +1,318 @@
+"""
+Supabase-based Authentication endpoints
+Integrates with Supabase Auth for enterprise-grade authentication
+"""
+from fastapi import APIRouter, Depends, HTTPException, status, Header
+from sqlalchemy.orm import Session
+from sqlalchemy import text
+from typing import Dict, Any, Optional
+from pydantic import BaseModel
+import httpx
+import os
+import logging
+
+from ...core.database import get_db
+from ...core.supabase_auth import supabase_auth
+
+logger = logging.getLogger(__name__)
+
+router = APIRouter(tags=["authentication"])
+
+class LoginRequest(BaseModel):
+    email: str
+    password: str
+
+class RefreshRequest(BaseModel):
+    refresh_token: str
+
+@router.post("/login")
+async def login(
+    request: LoginRequest,
+    db: Session = Depends(get_db)
+) -> Dict[str, Any]:
+    """
+    Authenticate user via Supabase and return tokens
+    """
+    supabase_url = supabase_auth.supabase_url
+    supabase_key = supabase_auth.supabase_anon_key or supabase_auth.supabase_service_key
+    
+    if not supabase_url or not supabase_key:
+        # Fallback to local authentication if Supabase not configured
+        logger.warning("Supabase not configured, using local authentication")
+        
+        # Check user in database
+        user = db.execute(text("""
+            SELECT u.user_id, u.username, u.email, u.first_name, u.last_name,
+                   u.org_id, u.is_admin, u.is_active, u.auth_user_id,
+                   o.org_name, o.is_active as org_active
+            FROM master.org_users u
+            JOIN master.organizations o ON u.org_id = o.org_id
+            WHERE u.email = :email
+        """), {"email": request.email}).fetchone()
+        
+        if not user:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid credentials"
+            )
+        
+        if not user.is_active or not user.org_active:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Account is not active"
+            )
+        
+        # For local auth, create a simple token response
+        return {
+            "access_token": "local_token_" + str(user.user_id),
+            "token_type": "bearer",
+            "user": {
+                "id": user.user_id,
+                "email": user.email,
+                "name": f"{user.first_name} {user.last_name or ''}".strip(),
+                "org_id": str(user.org_id),
+                "org_name": user.org_name,
+                "is_admin": user.is_admin
+            }
+        }
+    
+    # Authenticate with Supabase
+    try:
+        url = f"{supabase_url}/auth/v1/token?grant_type=password"
+        headers = {
+            "apikey": supabase_key,
+            "Content-Type": "application/json"
+        }
+        payload = {
+            "email": request.email,
+            "password": request.password
+        }
+        
+        async with httpx.AsyncClient() as client:
+            response = await client.post(url, json=payload, headers=headers)
+            
+            if response.status_code != 200:
+                logger.error(f"Supabase auth failed: {response.text}")
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="Invalid credentials"
+                )
+            
+            auth_data = response.json()
+            
+            # Get user details from our database using auth_user_id
+            supabase_user_id = auth_data.get("user", {}).get("id")
+            
+            user = db.execute(text("""
+                SELECT u.user_id, u.username, u.email, u.first_name, u.last_name,
+                       u.org_id, u.is_admin, u.is_active,
+                       o.org_name, o.is_active as org_active
+                FROM master.org_users u
+                JOIN master.organizations o ON u.org_id = o.org_id
+                WHERE u.auth_user_id = :auth_user_id OR u.email = :email
+            """), {
+                "auth_user_id": supabase_user_id,
+                "email": request.email
+            }).fetchone()
+            
+            if not user:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="User not found in organization"
+                )
+            
+            if not user.is_active or not user.org_active:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="Account is not active"
+                )
+            
+            # Update last login
+            db.execute(text("""
+                UPDATE master.org_users 
+                SET last_login = CURRENT_TIMESTAMP,
+                    login_count = COALESCE(login_count, 0) + 1
+                WHERE user_id = :user_id
+            """), {"user_id": user.user_id})
+            db.commit()
+            
+            # Return Supabase tokens with our user info
+            return {
+                "access_token": auth_data.get("access_token"),
+                "refresh_token": auth_data.get("refresh_token"),
+                "token_type": "bearer",
+                "expires_in": auth_data.get("expires_in"),
+                "user": {
+                    "id": user.user_id,
+                    "email": user.email,
+                    "name": f"{user.first_name} {user.last_name or ''}".strip(),
+                    "org_id": str(user.org_id),
+                    "org_name": user.org_name,
+                    "is_admin": user.is_admin
+                }
+            }
+            
+    except httpx.RequestError as e:
+        logger.error(f"Network error authenticating with Supabase: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Authentication service unavailable"
+        )
+
+@router.post("/refresh")
+async def refresh_token(
+    request: RefreshRequest,
+    db: Session = Depends(get_db)
+) -> Dict[str, Any]:
+    """
+    Refresh access token using refresh token
+    """
+    supabase_url = supabase_auth.supabase_url
+    supabase_key = supabase_auth.supabase_anon_key or supabase_auth.supabase_service_key
+    
+    if not supabase_url or not supabase_key:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Authentication service not configured"
+        )
+    
+    try:
+        url = f"{supabase_url}/auth/v1/token?grant_type=refresh_token"
+        headers = {
+            "apikey": supabase_key,
+            "Content-Type": "application/json"
+        }
+        payload = {
+            "refresh_token": request.refresh_token
+        }
+        
+        async with httpx.AsyncClient() as client:
+            response = await client.post(url, json=payload, headers=headers)
+            
+            if response.status_code != 200:
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="Invalid refresh token"
+                )
+            
+            return response.json()
+            
+    except httpx.RequestError as e:
+        logger.error(f"Network error refreshing token: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Authentication service unavailable"
+        )
+
+@router.get("/profile")
+async def get_profile(
+    authorization: str = Header(None),
+    db: Session = Depends(get_db)
+) -> Dict[str, Any]:
+    """
+    Get current user profile from token
+    """
+    if not authorization or not authorization.startswith("Bearer "):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Missing or invalid authorization header"
+        )
+    
+    token = authorization.replace("Bearer ", "")
+    
+    # For local tokens
+    if token.startswith("local_token_"):
+        user_id = int(token.replace("local_token_", ""))
+        user = db.execute(text("""
+            SELECT u.user_id, u.username, u.email, u.first_name, u.last_name,
+                   u.org_id, u.is_admin, u.is_active,
+                   o.org_name
+            FROM master.org_users u
+            JOIN master.organizations o ON u.org_id = o.org_id
+            WHERE u.user_id = :user_id
+        """), {"user_id": user_id}).fetchone()
+        
+        if not user:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="User not found"
+            )
+        
+        return {
+            "id": user.user_id,
+            "email": user.email,
+            "name": f"{user.first_name} {user.last_name or ''}".strip(),
+            "org_id": str(user.org_id),
+            "org_name": user.org_name,
+            "is_admin": user.is_admin
+        }
+    
+    # For Supabase tokens, validate with Supabase
+    supabase_url = supabase_auth.supabase_url
+    supabase_key = supabase_auth.supabase_anon_key or supabase_auth.supabase_service_key
+    
+    if not supabase_url or not supabase_key:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Authentication service not configured"
+        )
+    
+    try:
+        url = f"{supabase_url}/auth/v1/user"
+        headers = {
+            "apikey": supabase_key,
+            "Authorization": f"Bearer {token}"
+        }
+        
+        async with httpx.AsyncClient() as client:
+            response = await client.get(url, headers=headers)
+            
+            if response.status_code != 200:
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="Invalid token"
+                )
+            
+            supabase_user = response.json()
+            
+            # Get our user data
+            user = db.execute(text("""
+                SELECT u.user_id, u.username, u.email, u.first_name, u.last_name,
+                       u.org_id, u.is_admin, u.is_active,
+                       o.org_name
+                FROM master.org_users u
+                JOIN master.organizations o ON u.org_id = o.org_id
+                WHERE u.auth_user_id = :auth_user_id OR u.email = :email
+            """), {
+                "auth_user_id": supabase_user.get("id"),
+                "email": supabase_user.get("email")
+            }).fetchone()
+            
+            if not user:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="User not found in organization"
+                )
+            
+            return {
+                "id": user.user_id,
+                "email": user.email,
+                "name": f"{user.first_name} {user.last_name or ''}".strip(),
+                "org_id": str(user.org_id),
+                "org_name": user.org_name,
+                "is_admin": user.is_admin
+            }
+            
+    except httpx.RequestError as e:
+        logger.error(f"Network error validating token: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Authentication service unavailable"
+        )
+
+@router.post("/logout")
+async def logout():
+    """
+    Logout (client should remove tokens)
+    """
+    return {"message": "Logged out successfully"}

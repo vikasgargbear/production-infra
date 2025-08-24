@@ -99,6 +99,53 @@ class AuthService {
     const authData = this.getAuthData();
     return authData?.user || null;
   }
+
+  /**
+   * Login with username/email and password
+   * @param {string} username - Email or username
+   * @param {string} password - Password
+   * @returns {Promise<boolean>} True if login successful
+   */
+  async login(username, password) {
+    try {
+      const response = await fetch(`${process.env.REACT_APP_API_URL || 'https://pharma-backend-production-0c09.up.railway.app'}/api/auth/login`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          email: username, // Frontend calls it username but we use email
+          password: password
+        })
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        console.error('Login failed:', error);
+        return false;
+      }
+
+      const data = await response.json();
+      
+      // Store authentication data
+      this.setAuthData({
+        access_token: data.access_token,
+        refresh_token: data.refresh_token,
+        token_type: data.token_type,
+        expires_in: data.expires_in,
+        user: data.user,
+        organization: {
+          org_id: data.user?.org_id,
+          org_name: data.user?.org_name
+        }
+      });
+
+      return true;
+    } catch (error) {
+      console.error('Login error:', error);
+      return false;
+    }
+  }
 }
 
 // Export singleton instance
