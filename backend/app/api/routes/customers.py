@@ -74,6 +74,7 @@ async def create_customer(
             "customer_code": customer_code,
             "customer_name": customer_data.get("customer_name"),
             "customer_type": customer_data.get("customer_type"),
+            "business_type": customer_data.get("business_type", "retail_pharmacy"),
             "primary_phone": customer_data.get("primary_phone"),
             "primary_email": customer_data.get("email"),
             "secondary_phone": customer_data.get("secondary_phone"),
@@ -84,6 +85,7 @@ async def create_customer(
             "gst_number": customer_data.get("gstin"),
             "pan_number": customer_data.get("pan_number"),
             "drug_license_number": customer_data.get("drug_license_number"),
+            "drug_license_validity": customer_data.get("drug_license_validity"),
             "credit_limit": customer_data.get("credit_limit", 0),
             "credit_days": customer_data.get("credit_days", 0),
             "credit_rating": customer_data.get("credit_rating", "NEW"),
@@ -95,18 +97,18 @@ async def create_customer(
         # Create customer with correct column names
         result = db.execute(text("""
             INSERT INTO parties.customers (
-                org_id, customer_code, customer_name, customer_type,
+                org_id, customer_code, customer_name, customer_type, business_type,
                 primary_phone, primary_email, secondary_phone, whatsapp_number,
                 contact_person_name, contact_person_phone, contact_person_email,
-                gst_number, pan_number, drug_license_number,
+                gst_number, pan_number, drug_license_number, drug_license_validity,
                 credit_limit, credit_days, credit_rating, payment_terms,
                 internal_notes, is_active,
                 created_at, updated_at
             ) VALUES (
-                :org_id, :customer_code, :customer_name, :customer_type,
+                :org_id, :customer_code, :customer_name, :customer_type, :business_type,
                 :primary_phone, :primary_email, :secondary_phone, :whatsapp_number,
                 :contact_person_name, :contact_person_phone, :contact_person_email,
-                :gst_number, :pan_number, :drug_license_number,
+                :gst_number, :pan_number, :drug_license_number, :drug_license_validity,
                 :credit_limit, :credit_days, :credit_rating, :payment_terms,
                 :internal_notes, :is_active,
                 CURRENT_TIMESTAMP, CURRENT_TIMESTAMP

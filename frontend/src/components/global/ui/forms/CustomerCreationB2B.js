@@ -217,12 +217,14 @@ const CustomerCreationB2B = ({ onClose, onCustomerCreated }) => {
         gstin: formData.gst_number || null,
         pan_number: formData.pan_number || null,
         drug_license_number: formData.drug_license_number || null,
+        drug_license_validity: formData.drug_license_validity || null,
+        business_type: formData.business_type || 'retail_pharmacy', // Send as its own field
         // Credit configuration - ALL fields saved to backend
         credit_limit: formData.credit_limit ? parseFloat(formData.credit_limit) : 0,
         credit_days: formData.credit_days ? parseInt(formData.credit_days) : 0,
         credit_rating: formData.credit_rating || 'NEW',  // Added - was missing!
         payment_terms: formData.payment_terms || 'CASH', // Added - was missing!
-        notes: `${customerType} customer. Business Type: ${formData.business_type || 'Not specified'}`,
+        notes: `${customerType} customer`, // Remove business_type from notes
         is_active: true
       };
 
@@ -597,13 +599,18 @@ const CustomerCreationB2B = ({ onClose, onCustomerCreated }) => {
                     placeholder="Drug License Number"
                     className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-green-500 bg-white"
                   />
-                  <input
-                    type="date"
-                    value={formData.drug_license_validity}
-                    onChange={(e) => handleInputChange('drug_license_validity', e.target.value)}
-                    title="Drug License Validity"
-                    className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-green-500 bg-white"
-                  />
+                  <div className="relative">
+                    <input
+                      type="date"
+                      value={formData.drug_license_validity}
+                      onChange={(e) => handleInputChange('drug_license_validity', e.target.value)}
+                      title="Drug License Validity Date"
+                      className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-green-500 bg-white"
+                    />
+                    <label className="absolute -top-2 left-2 px-1 bg-white text-xs text-gray-600">
+                      License Valid Until
+                    </label>
+                  </div>
                 </div>
               </div>
             )}

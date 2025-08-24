@@ -33,9 +33,11 @@ class CustomerBase(BaseModel):
     gstin: Optional[str] = Field(None, pattern=r"^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$")
     pan_number: Optional[str] = Field(None, pattern=r"^[A-Z]{5}[0-9]{4}[A-Z]{1}$")
     drug_license_number: Optional[str] = Field(None, max_length=50)
+    drug_license_validity: Optional[date] = Field(None, description="Drug license expiry date")
     
     # Business details
     customer_type: str = Field(..., pattern=r"^(retail|wholesale|hospital|clinic|pharmacy)$")
+    business_type: Optional[str] = Field(default="retail_pharmacy", max_length=100, description="Type of business")
     credit_limit: Decimal = Field(default=Decimal("0.00"), ge=0)
     credit_days: int = Field(default=0, ge=0, le=365)
     credit_rating: Optional[str] = Field(default="NEW", max_length=50)
