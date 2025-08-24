@@ -146,6 +146,10 @@ api.include_router(grn.router, prefix="/grn", tags=["Goods Receipt Notes"])
 api.include_router(journal_entries.router, prefix="/journal-entries", tags=["Journal Entries"])
 api.include_router(expense_claims.router, prefix="/expense-claims", tags=["Expense Claims"])
 
+# Initial setup route (doesn't require auth)
+from .api.routes import initial_setup
+api.include_router(initial_setup.router, prefix="/setup", tags=["Setup"])
+
 # Register new APIs
 api.include_router(master_settings.router, prefix="/master-settings", tags=["Master Settings"])
 api.include_router(schemes_discounts.router, prefix="/schemes-discounts", tags=["Schemes & Discounts"])

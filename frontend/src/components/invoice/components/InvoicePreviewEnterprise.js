@@ -95,6 +95,11 @@ const InvoicePreviewEnterprise = ({
           .no-print {
             display: none !important;
           }
+          /* Hide animations in print */
+          .animate-spin,
+          [class*="animate"] {
+            display: none !important;
+          }
           /* Show hidden elements during print */
           .print\\:block {
             display: block !important;
@@ -127,9 +132,9 @@ const InvoicePreviewEnterprise = ({
         }
       `}</style>
       <div id="invoice-preview" className="px-6 py-4">
-        {/* Calculation Status Indicator */}
+        {/* Calculation Status Indicator - Hidden in print/PDF */}
         {isCalculating && (
-          <div className="mb-4 bg-blue-50 border border-blue-200 rounded-lg p-3">
+          <div className="mb-4 bg-blue-50 border border-blue-200 rounded-lg p-3 no-print">
             <div className="flex items-center">
               <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600 mr-2"></div>
               <span className="text-sm text-blue-700">Calculating totals via enterprise API...</span>

@@ -12,7 +12,7 @@ const BusinessSalesEntry = ({ open, onClose }) => {
   const toast = useToast();
   const { companyInfo } = useCompany();
   const [invoice, setInvoice] = useState({
-    invoiceNo: 'LOADING...', // Will be fetched from backend
+    invoiceNo: 'INV-DRAFT', // Keep as draft until save
     invoiceDate: new Date().toISOString().split('T')[0],
     dueDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
     customerId: '',
@@ -79,9 +79,8 @@ const BusinessSalesEntry = ({ open, onClose }) => {
     setError(null);
     
     try {
-      // Fetch invoice number from backend first
-      const invoiceNumber = await documentNumberService.generateInvoiceNumber();
-      setInvoice(prev => ({ ...prev, invoiceNo: invoiceNumber }));
+      // Don't fetch invoice number on load - use temporary placeholder
+      setInvoice(prev => ({ ...prev, invoiceNo: 'INV-DRAFT' }));
       
       await Promise.all([
         loadCustomers(),
@@ -218,11 +217,10 @@ const BusinessSalesEntry = ({ open, onClose }) => {
 
   // Reset form to initial state
   const resetForm = async () => {
-    // Fetch new invoice number from backend
-    const invoiceNumber = await documentNumberService.generateInvoiceNumber();
+    // Don't fetch new invoice number - use temporary placeholder
     
     setInvoice({
-      invoiceNo: invoiceNumber,
+      invoiceNo: 'INV-DRAFT',
       invoiceDate: new Date().toISOString().split('T')[0],
       dueDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
       customerId: '',
@@ -436,7 +434,15 @@ const BusinessSalesEntry = ({ open, onClose }) => {
     setIsLoading(true);
 
     try {
-      const response = await ordersApi.create(invoice);
+      // Generate real invoice number only when saving
+      let finalInvoice = { ...invoice };
+      if (invoice.invoiceNo === 'INV-DRAFT' || invoice.invoiceNo.startsWith('INV-DRAFT')) {
+        const invoiceNumber = await documentNumberService.generateInvoiceNumber();
+        finalInvoice.invoiceNo = invoiceNumber;
+        setInvoice(prev => ({ ...prev, invoiceNo: invoiceNumber }));
+      }
+      
+      const response = await ordersApi.create(finalInvoice);
       
       if (response.success) {
         toast.created('Invoice', 4000, {

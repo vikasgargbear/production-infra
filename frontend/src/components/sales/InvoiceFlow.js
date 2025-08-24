@@ -30,8 +30,7 @@ import InvoicePreview from '../invoice/components/InvoicePreviewEnterprise';
 import ImportDocumentModal from './components/ImportDocumentModal';
 // Removed testBackendConnection - already tested in App.tsx
 import useEscapeKey from '../../hooks/useEscapeKey';
-import { jsPDF } from 'jspdf';
-import autoTable from 'jspdf-autotable';
+import html2pdf from 'html2pdf.js';
 
 const InvoiceFlow = ({ onClose, prefilledData = null }) => {
   const { companyInfo, getOrgId } = useCompany();
@@ -173,9 +172,8 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
         searchCache.preloadData('products', () => productAPI.search('', { limit: 100 }))
       ]);
       
-      // Generate invoice number
-      const invoiceNo = await generateInvoiceNumber();
-      setInvoice(prev => ({ ...prev, invoice_no: invoiceNo }));
+      // Don't generate invoice number here - keep it as TEMP until save
+      // This prevents wasting numbers on every component load
       
     } catch (error) {
       console.error('Error loading initial data:', error);
@@ -237,10 +235,8 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
       firstInputRef.current.focus();
     }
     
-    // Generate invoice number asynchronously
-    generateInvoiceNumber().then(invoiceNo => {
-      setInvoice(prev => ({ ...prev, invoice_no: invoiceNo }));
-    });
+    // Don't generate invoice number on mount - wait until save
+    // Keep as INV-TEMP to prevent wasting numbers
   }, []);
 
   // Preload data on mount
@@ -698,6 +694,13 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
 
     setSaving(true);
     try {
+      // Generate real invoice number only when saving
+      let finalInvoiceNumber = invoice.invoice_no;
+      if (invoice.invoice_no === 'INV-TEMP' || invoice.invoice_no.startsWith('INV-TEMP')) {
+        finalInvoiceNumber = await generateInvoiceNumber();
+        setInvoice(prev => ({ ...prev, invoice_no: finalInvoiceNumber }));
+      }
+      
       // Get org_id as UUID
       const orgId = getOrgId();
       
@@ -745,7 +748,7 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
           billing_address: invoice.billing_address || selectedCustomer?.address,
           
           // Invoice details
-          invoice_number: invoice.invoice_no, // Send our generated invoice number
+          invoice_number: finalInvoiceNumber, // Send the newly generated invoice number
           invoice_date: invoice.invoice_date || new Date().toISOString().split('T')[0],
           invoice_type: 'tax_invoice',
           payment_terms: invoice.payment_mode === 'Cash' ? 'cash' : 'credit',
@@ -977,213 +980,59 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
     window.print();
   };
 
-  // Direct PDF Download - generates optimized PDF directly
+  // Direct PDF Download - uses html2pdf.js with clean capture
   const handlePDFDownload = async (invoiceData = null) => {
     try {
       setToast({ show: true, message: 'Generating PDF...', type: 'info' });
       
-      // Use the invoice data (from success modal) or current invoice
-      const data = invoiceData || invoice;
-      const doc = new jsPDF('l', 'mm', 'a4'); // Landscape A4
-      
-      // Colors
-      const primaryColor = [37, 99, 235]; // Blue
-      const grayColor = [107, 114, 128];
-      const lightGray = [243, 244, 246];
-      
-      // Company Header
-      doc.setFillColor(...lightGray);
-      doc.rect(10, 10, 277, 25, 'F');
-      
-      // Company Info
-      doc.setFontSize(18);
-      doc.setTextColor(0, 0, 0);
-      doc.setFont(undefined, 'bold');
-      doc.text(companyInfo?.name || 'Your Company', 15, 20);
-      
-      doc.setFontSize(9);
-      doc.setFont(undefined, 'normal');
-      doc.setTextColor(...grayColor);
-      doc.text(companyInfo?.address || '', 15, 26);
-      doc.text(`GSTIN: ${companyInfo?.gstin || ''} | DL: ${companyInfo?.drugLicense || ''}`, 15, 31);
-      
-      // Invoice Info Box
-      doc.setFillColor(...primaryColor);
-      doc.setTextColor(255, 255, 255);
-      doc.rect(200, 12, 82, 20, 'F');
-      doc.setFontSize(11);
-      doc.setFont(undefined, 'bold');
-      doc.text('TAX INVOICE', 241, 19, { align: 'center' });
-      doc.setFontSize(9);
-      doc.setFont(undefined, 'normal');
-      doc.text(`No: ${data.invoice_no || createdInvoiceData?.invoiceNumber || ''}`, 241, 25, { align: 'center' });
-      doc.text(`Date: ${new Date(data.invoice_date || Date.now()).toLocaleDateString('en-IN')}`, 241, 30, { align: 'center' });
-      
-      // Customer Details Section
-      let yPos = 42;
-      
-      // Bill To
-      doc.setFillColor(...lightGray);
-      doc.rect(10, yPos, 90, 30, 'F');
-      doc.setTextColor(0, 0, 0);
-      doc.setFontSize(9);
-      doc.setFont(undefined, 'bold');
-      doc.text('BILL TO', 12, yPos + 5);
-      doc.setFont(undefined, 'normal');
-      doc.setFontSize(10);
-      doc.text(data.customer_name || '', 12, yPos + 11);
-      doc.setFontSize(8);
-      doc.setTextColor(...grayColor);
-      const billAddress = data.billing_address || data.customer_details?.address || '';
-      const billLines = doc.splitTextToSize(billAddress, 85);
-      billLines.forEach((line, i) => {
-        if (i < 2) doc.text(line, 12, yPos + 16 + (i * 4));
-      });
-      if (data.customer_details?.phone) {
-        doc.text(`Ph: ${data.customer_details.phone}`, 12, yPos + 26);
+      // Get the invoice preview element
+      const element = document.getElementById('invoice-preview');
+      if (!element) {
+        console.error('Invoice preview element not found');
+        setToast({ show: true, message: 'Please wait for the invoice to load', type: 'warning' });
+        return false;
       }
+
+      // Wait for any animations/calculations to complete
+      await new Promise(resolve => setTimeout(resolve, 800));
+
+      // Clone the element to avoid modifying the original
+      const clonedElement = element.cloneNode(true);
       
-      // Ship To
-      doc.rect(103, yPos, 90, 30, 'F');
-      doc.setTextColor(0, 0, 0);
-      doc.setFontSize(9);
-      doc.setFont(undefined, 'bold');
-      doc.text('SHIP TO', 105, yPos + 5);
-      doc.setFont(undefined, 'normal');
-      doc.setFontSize(10);
-      doc.text(data.customer_name || '', 105, yPos + 11);
-      doc.setFontSize(8);
-      doc.setTextColor(...grayColor);
-      const shipAddress = data.shipping_address || billAddress;
-      const shipLines = doc.splitTextToSize(shipAddress, 85);
-      shipLines.forEach((line, i) => {
-        if (i < 2) doc.text(line, 105, yPos + 16 + (i * 4));
-      });
-      if (data.customer_details?.phone) {
-        doc.text(`Ph: ${data.customer_details.phone}`, 105, yPos + 26);
-      }
-      
-      // Transport Details
-      doc.rect(196, yPos, 91, 30, 'F');
-      doc.setTextColor(0, 0, 0);
-      doc.setFontSize(9);
-      doc.setFont(undefined, 'bold');
-      doc.text('TRANSPORT', 198, yPos + 5);
-      doc.setFont(undefined, 'normal');
-      doc.setFontSize(8);
-      doc.setTextColor(...grayColor);
-      if (data.delivery_type) doc.text(`Type: ${data.delivery_type}`, 198, yPos + 11);
-      if (data.transport_company) doc.text(`Company: ${data.transport_company}`, 198, yPos + 16);
-      if (data.vehicle_number) doc.text(`Vehicle: ${data.vehicle_number}`, 198, yPos + 21);
-      if (data.lr_number) doc.text(`LR No: ${data.lr_number}`, 198, yPos + 26);
-      
-      // Items Table
-      yPos = 78;
-      const items = data.items || createdInvoiceData?.items || [];
-      
-      // Prepare table data
-      const tableData = items.map((item, index) => [
-        (index + 1).toString(),
-        item.product_name || '',
-        item.hsn_code || '3004',
-        item.batch_number || item.batch_no || '',
-        item.expiry_date ? new Date(item.expiry_date).toLocaleDateString('en-IN', { month: '2-digit', year: '2-digit' }) : '',
-        (item.quantity || 0).toString(),
-        (item.free_quantity || 0).toString(),
-        `₹${(parseFloat(item.sale_price || item.rate || item.unit_price || 0)).toFixed(2)}`,
-        `${item.discount_percent || 0}%`,
-        `${item.gst_percent || 12}%`,
-        `₹${(parseFloat(item.line_total || (item.quantity * (item.sale_price || item.rate || 0)))).toFixed(2)}`
-      ]);
-      
-      // Create table
-      autoTable(doc, {
-        startY: yPos,
-        head: [['#', 'Product', 'HSN', 'Batch', 'Exp', 'Qty', 'Free', 'Rate', 'Disc%', 'GST%', 'Amount']],
-        body: tableData,
-        theme: 'grid',
-        headStyles: { 
-          fillColor: [243, 244, 246],
-          textColor: [0, 0, 0],
-          fontSize: 8,
-          fontStyle: 'bold',
-          halign: 'center'
-        },
-        bodyStyles: {
-          fontSize: 8,
-          textColor: [0, 0, 0]
-        },
-        columnStyles: {
-          0: { cellWidth: 10, halign: 'center' },
-          1: { cellWidth: 70 },
-          2: { cellWidth: 20, halign: 'center' },
-          3: { cellWidth: 25, halign: 'center' },
-          4: { cellWidth: 20, halign: 'center' },
-          5: { cellWidth: 15, halign: 'center' },
-          6: { cellWidth: 15, halign: 'center' },
-          7: { cellWidth: 25, halign: 'right' },
-          8: { cellWidth: 20, halign: 'center' },
-          9: { cellWidth: 20, halign: 'center' },
-          10: { cellWidth: 30, halign: 'right' }
-        },
-        alternateRowStyles: {
-          fillColor: [249, 250, 251]
-        },
-        margin: { left: 10, right: 10 }
+      // Remove any loading indicators, animations, and no-print elements from the clone
+      clonedElement.querySelectorAll('.animate-spin, .no-print, [class*="animate"]').forEach(el => {
+        el.remove();
       });
       
-      // Totals Section
-      const finalY = doc.previousAutoTable?.finalY || 150;
-      const totalsX = 210;
-      
-      // Totals box background
-      doc.setFillColor(...lightGray);
-      doc.rect(totalsX - 5, finalY + 5, 82, 45, 'F');
-      
-      doc.setFontSize(9);
-      doc.setTextColor(0, 0, 0);
-      doc.setFont(undefined, 'normal');
-      
-      // Calculate totals
-      const subtotal = data.subtotal_amount || data.gross_amount || 0;
-      const taxAmount = data.tax_amount || data.total_tax_amount || 0;
-      const roundOff = data.round_off || 0;
-      const netAmount = data.net_amount || data.final_amount || data.total_amount || createdInvoiceData?.totalAmount || 0;
-      
-      doc.text('Subtotal:', totalsX, finalY + 12);
-      doc.text(`₹${subtotal.toFixed(2)}`, totalsX + 70, finalY + 12, { align: 'right' });
-      
-      if (data.discount_amount > 0) {
-        doc.text('Discount:', totalsX, finalY + 18);
-        doc.text(`-₹${data.discount_amount.toFixed(2)}`, totalsX + 70, finalY + 18, { align: 'right' });
-      }
-      
-      doc.text('GST:', totalsX, finalY + 24);
-      doc.text(`₹${taxAmount.toFixed(2)}`, totalsX + 70, finalY + 24, { align: 'right' });
-      
-      if (roundOff !== 0) {
-        doc.text('Round Off:', totalsX, finalY + 30);
-        doc.text(`${roundOff > 0 ? '+' : ''}₹${roundOff.toFixed(2)}`, totalsX + 70, finalY + 30, { align: 'right' });
-      }
-      
-      // Grand Total
-      doc.setFillColor(...primaryColor);
-      doc.rect(totalsX - 5, finalY + 35, 82, 10, 'F');
-      doc.setTextColor(255, 255, 255);
-      doc.setFont(undefined, 'bold');
-      doc.setFontSize(10);
-      doc.text('TOTAL:', totalsX, finalY + 42);
-      doc.text(`₹${netAmount.toFixed(2)}`, totalsX + 70, finalY + 42, { align: 'right' });
-      
-      // Footer
-      doc.setTextColor(...grayColor);
-      doc.setFont(undefined, 'normal');
-      doc.setFontSize(8);
-      doc.text('Thank you for your business!', 148.5, finalY + 55, { align: 'center' });
-      
-      // Save the PDF
-      const fileName = `Invoice_${data.invoice_no || createdInvoiceData?.invoiceNumber || 'draft'}.pdf`;
-      doc.save(fileName);
+      // Show hidden address elements in the clone
+      clonedElement.querySelectorAll('.hidden.print\\:block').forEach(el => {
+        el.classList.remove('hidden');
+      });
+
+      // Configure html2pdf options
+      const opt = {
+        margin: [5, 5, 5, 5],
+        filename: `Invoice_${invoice.invoice_no || createdInvoiceData?.invoiceNumber || 'draft'}.pdf`,
+        image: { type: 'jpeg', quality: 0.95 },
+        html2canvas: { 
+          scale: 2,
+          useCORS: true,
+          logging: false,
+          letterRendering: true,
+          windowWidth: 1200,
+          windowHeight: element.scrollHeight
+        },
+        jsPDF: { 
+          unit: 'mm', 
+          format: 'a4', 
+          orientation: 'landscape',
+          compress: true
+        },
+        pagebreak: { mode: ['avoid-all', 'css', 'legacy'] }
+      };
+
+      // Generate and download the PDF from the cloned element
+      await html2pdf().set(opt).from(clonedElement).save();
       
       setToast({ show: true, message: 'PDF downloaded successfully!', type: 'success' });
       return true;
