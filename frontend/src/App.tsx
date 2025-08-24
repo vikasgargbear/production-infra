@@ -142,8 +142,9 @@ function App(): JSX.Element {
       setSetupComplete(response.data.setup_complete);
     } catch (error) {
       console.error('Error checking setup status:', error);
-      // Assume setup is complete if we can't check (for backward compatibility)
-      setSetupComplete(true);
+      // If backend is down or endpoint doesn't exist, show setup page
+      // This allows users to set up even if backend is having issues
+      setSetupComplete(false);
     } finally {
       setIsCheckingSetup(false);
     }
