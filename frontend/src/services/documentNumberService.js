@@ -18,26 +18,32 @@ const safeApiCall = async (apiCall) => {
 class DocumentNumberService {
   
   /**
-   * Generate Invoice Number
+   * Generate Invoice Number - ALWAYS from backend to prevent duplicates
    */
   async generateInvoiceNumber() {
-    try {
-      const response = await apiClient.get('/invoices/generate-number');
-      if (response?.data?.invoice_number) {
-        return response.data.invoice_number;
+    let retries = 3;
+    let lastError = null;
+    
+    while (retries > 0) {
+      try {
+        const response = await apiClient.get('/invoices/generate-number');
+        if (response?.data?.invoice_number) {
+          return response.data.invoice_number;
+        }
+        throw new Error('Invalid response format');
+      } catch (error) {
+        lastError = error;
+        retries--;
+        if (retries > 0) {
+          console.warn(`Invoice number generation failed, retrying... (${retries} attempts left)`);
+          await new Promise(resolve => setTimeout(resolve, 1000)); // Wait 1 second before retry
+        }
       }
-    } catch (error) {
-      console.warn('Backend invoice number generation failed:', error);
     }
     
-    // Fallback to client-side generation matching backend format
-    // Format: INV-YY######## (year prefix + 8-digit number)
-    const now = new Date();
-    const year = now.getFullYear() % 100; // Get last 2 digits of year
-    const yearPrefix = year.toString().padStart(2, '0');
-    const timestamp = Date.now();
-    const uniqueNum = 10000000 + (timestamp % 90000000); // 8 digits starting from 10000000
-    return `INV-${yearPrefix}${uniqueNum}`;
+    console.error('Failed to generate invoice number after 3 attempts:', lastError);
+    // Return a temporary placeholder - the user should retry
+    return 'INV-TEMP-' + Date.now().toString().slice(-6);
   }
 
   /**

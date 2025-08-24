@@ -312,29 +312,12 @@ class InvoiceApiService {
         };
       }
       
-      // Fallback if API doesn't return expected format
+      // If API doesn't return expected format, throw error
       throw new Error('Invalid response from server');
     } catch (error) {
       console.error('Failed to generate invoice number from API:', error);
-      
-      // Fallback to local generation matching backend format
-      // Format: INV-YY########
-      const now = new Date();
-      const year = now.getFullYear() % 100; // Get last 2 digits of year
-      const yearPrefix = year.toString().padStart(2, '0');
-      
-      // Generate a unique number based on timestamp
-      const timestamp = Date.now();
-      const uniqueNum = 10000000 + (timestamp % 90000000); // Ensures 8 digits starting from 10000000
-      
-      const invoiceNumber = `INV-${yearPrefix}${uniqueNum}`;
-      
-      return {
-        success: true,
-        data: {
-          invoice_number: invoiceNumber
-        }
-      };
+      // NO FALLBACK - throw error to force backend usage
+      throw new Error('Unable to generate invoice number. Please check your connection and try again.');
     }
   }
 

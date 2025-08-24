@@ -6,7 +6,8 @@ const InvoicePreviewEnterprise = ({
   invoice, 
   onInvoiceUpdate,
   companyInfo,
-  showAddresses = true // Control whether to show Bill To/Ship To sections
+  showAddresses = true, // Control whether to show Bill To/Ship To sections
+  isPrintMode = false // New prop to determine if we're in print/PDF mode
 }) => {
   const [calculatedTotals, setCalculatedTotals] = useState(null);
   const [isCalculating, setIsCalculating] = useState(false);
@@ -93,6 +94,10 @@ const InvoicePreviewEnterprise = ({
           }
           .no-print {
             display: none !important;
+          }
+          /* Show hidden elements during print */
+          .print\\:block {
+            display: block !important;
           }
           @page {
             size: A4 landscape;
@@ -228,8 +233,9 @@ const InvoicePreviewEnterprise = ({
         </div>
 
         {/* Customer & Transport Section - Below header */}
+        {/* Hide in preview mode but show in print/PDF - use CSS class for print visibility */}
         {showAddresses && (
-          <div className="mb-4">
+          <div className={`mb-4 ${isPrintMode ? '' : 'hidden print:block'}`}>
             <div className="grid grid-cols-3 gap-3">
               {/* Bill To */}
               <div className="bg-gray-50 rounded-xl p-3 print-border print-bg-gray">

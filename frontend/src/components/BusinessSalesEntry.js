@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Search, Save, Printer, Plus, X, Calendar, AlertCircle, ChevronRight, ChevronLeft, Package, User, CreditCard, FileText, CheckCircle, Truck, Loader2, RefreshCw } from 'lucide-react';
 import { customersApi, productsApi, ordersApi, orderItemsApi, batchesApi } from '../services/api';
+import documentNumberService from '../services/documentNumberService';
 import CustomerCreationB2B from './global/ui/forms/CustomerCreationB2B';
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
@@ -11,15 +12,7 @@ const BusinessSalesEntry = ({ open, onClose }) => {
   const toast = useToast();
   const { companyInfo } = useCompany();
   const [invoice, setInvoice] = useState({
-    invoiceNo: (() => {
-      // Generate invoice number matching backend format: INV-YY########
-      const now = new Date();
-      const year = now.getFullYear() % 100;
-      const yearPrefix = year.toString().padStart(2, '0');
-      const timestamp = Date.now();
-      const uniqueNum = 10000000 + (timestamp % 90000000);
-      return `INV-${yearPrefix}${uniqueNum}`;
-    })(),
+    invoiceNo: 'LOADING...', // Will be fetched from backend
     invoiceDate: new Date().toISOString().split('T')[0],
     dueDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
     customerId: '',
@@ -86,6 +79,10 @@ const BusinessSalesEntry = ({ open, onClose }) => {
     setError(null);
     
     try {
+      // Fetch invoice number from backend first
+      const invoiceNumber = await documentNumberService.generateInvoiceNumber();
+      setInvoice(prev => ({ ...prev, invoiceNo: invoiceNumber }));
+      
       await Promise.all([
         loadCustomers(),
         loadProducts(),
@@ -220,17 +217,12 @@ const BusinessSalesEntry = ({ open, onClose }) => {
   };
 
   // Reset form to initial state
-  const resetForm = () => {
+  const resetForm = async () => {
+    // Fetch new invoice number from backend
+    const invoiceNumber = await documentNumberService.generateInvoiceNumber();
+    
     setInvoice({
-      invoiceNo: (() => {
-        // Generate invoice number matching backend format: INV-YY########
-        const now = new Date();
-        const year = now.getFullYear() % 100;
-        const yearPrefix = year.toString().padStart(2, '0');
-        const timestamp = Date.now();
-        const uniqueNum = 10000000 + (timestamp % 90000000);
-        return `INV-${yearPrefix}${uniqueNum}`;
-      })(),
+      invoiceNo: invoiceNumber,
       invoiceDate: new Date().toISOString().split('T')[0],
       dueDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
       customerId: '',

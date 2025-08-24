@@ -32,7 +32,6 @@ import ImportDocumentModal from './components/ImportDocumentModal';
 import useEscapeKey from '../../hooks/useEscapeKey';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
-import html2canvas from 'html2canvas';
 
 const InvoiceFlow = ({ onClose, prefilledData = null }) => {
   const { companyInfo, getOrgId } = useCompany();
@@ -978,57 +977,20 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
     window.print();
   };
 
-  // Direct PDF Download - captures the actual preview
+  // Direct PDF Download - uses print dialog for small file size and exact layout
   const handlePDFDownload = async (invoiceData = null) => {
     try {
-      // If invoiceData is provided, use the old PDF generation method
-      if (invoiceData) {
-        const doc = generateInvoicePDF(invoiceData);
-        const fileName = `Invoice_${invoiceData?.invoice_number || invoice.invoice_no || 'Draft'}.pdf`;
-        doc.save(fileName);
-        return true;
-      }
-
-      // Otherwise, capture the actual preview element
-      const element = document.getElementById('invoice-preview');
-      if (!element) {
-        console.error('Invoice preview element not found');
-        return false;
-      }
-
-      // Show a loading indicator
-      setToast({ show: true, message: 'Generating PDF...', type: 'info' });
-
-      // Capture the element as canvas with high quality
-      const canvas = await html2canvas(element, {
-        scale: 2, // Higher quality
-        useCORS: true,
-        logging: false,
-        backgroundColor: '#ffffff',
-        windowWidth: element.scrollWidth,
-        windowHeight: element.scrollHeight
-      });
-
-      // Create PDF
-      const imgData = canvas.toDataURL('image/png');
-      const pdf = new jsPDF('l', 'mm', 'a4'); // Landscape orientation
+      // Simply trigger the print dialog
+      // Users can choose "Save as PDF" which creates a perfectly formatted, small PDF
+      // This ensures consistency and small file size (350KB vs 12MB with canvas approach)
       
-      // Calculate dimensions
-      const pdfWidth = pdf.internal.pageSize.getWidth();
-      const pdfHeight = pdf.internal.pageSize.getHeight();
-      const imgWidth = canvas.width;
-      const imgHeight = canvas.height;
-      const ratio = Math.min(pdfWidth / imgWidth, pdfHeight / imgHeight) * 25.4; // Convert to mm
+      setToast({ show: true, message: 'Opening print dialog - Select "Save as PDF" to download', type: 'info' });
       
-      const imgX = (pdfWidth - imgWidth * ratio) / 2;
-      const imgY = 10;
-
-      pdf.addImage(imgData, 'PNG', imgX, imgY, imgWidth * ratio, imgHeight * ratio);
+      // Use a small delay to ensure the preview is ready
+      setTimeout(() => {
+        window.print();
+      }, 100);
       
-      // Download the PDF
-      pdf.save(`Invoice_${invoice.invoice_no || 'draft'}.pdf`);
-      
-      setToast({ show: true, message: 'PDF downloaded successfully!', type: 'success' });
       return true;
     } catch (error) {
       console.error('Error generating PDF:', error);
@@ -1425,115 +1387,6 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
     }
   };
 
-  // Generate PDF for download - Simple version
-  const generateInvoicePDF = (invoiceData = null) => {
-    const data = invoiceData || invoice;
-    const doc = new jsPDF();
-    
-    // Simple header
-    doc.setFontSize(16);
-    doc.setFont(undefined, 'bold');
-    doc.text(companyInfo?.name || 'AASO PHARMACEUTICALS', 14, 20);
-    
-    doc.setFontSize(10);
-    doc.setFont(undefined, 'normal');
-    if (companyInfo?.address) doc.text(companyInfo.address, 14, 26);
-    if (companyInfo?.phone) doc.text(`Phone: ${companyInfo.phone}`, 14, 32);
-    if (companyInfo?.gstin) doc.text(`GSTIN: ${companyInfo.gstin}`, 14, 38);
-    
-    
-    // Invoice details on right
-    doc.setFontSize(14);
-    doc.setFont(undefined, 'bold');
-    doc.text('TAX INVOICE', 140, 20);
-    doc.setFontSize(10);
-    doc.setFont(undefined, 'normal');
-    doc.text(`Invoice No: ${data.invoice_no || data.invoice_number || 'N/A'}`, 140, 28);
-    doc.text(`Date: ${new Date(data.invoice_date).toLocaleDateString('en-IN')}`, 140, 34);
-    
-    // Customer details
-    let yPos = 50;
-    doc.setFont(undefined, 'bold');
-    doc.text('Bill To:', 14, yPos);
-    doc.setFont(undefined, 'normal');
-    doc.text(data.customer_name || 'Customer', 14, yPos + 6);
-    if (data.billing_address) {
-      const addressLines = doc.splitTextToSize(data.billing_address, 80);
-      addressLines.forEach((line, index) => {
-        doc.text(line, 14, yPos + 12 + (index * 5));
-      });
-    }
-    
-    yPos = 85;
-    
-    // Items table - Simple version
-    const tableData = (data.items || []).map((item, index) => [
-      (index + 1).toString(),
-      item.product_name || '',
-      item.hsn_code || '',
-      item.batch_no || item.batch_number || '',
-      (item.quantity || 0).toString(),
-      (item.free_quantity || 0).toString(),
-      `₹${(item.rate || item.unit_price || 0).toFixed(2)}`,
-      `${item.discount_percent || 0}%`,
-      `${item.gst_percent || item.tax_percentage || 18}%`,
-      `₹${(item.line_total || item.total_amount || 0).toFixed(2)}`
-    ]);
-    
-    autoTable(doc, {
-      startY: yPos,
-      head: [['#', 'Product', 'HSN', 'Batch', 'Qty', 'Free', 'Rate', 'Disc%', 'GST%', 'Amount']],
-      body: tableData,
-      theme: 'grid',
-      headStyles: { 
-        fillColor: [41, 128, 185],
-        textColor: 255
-      },
-      columnStyles: {
-        0: { cellWidth: 10 },
-        1: { cellWidth: 50 },
-        2: { cellWidth: 20 },
-        3: { cellWidth: 20 },
-        4: { cellWidth: 15 },
-        5: { cellWidth: 15 },
-        6: { cellWidth: 20 },
-        7: { cellWidth: 15 },
-        8: { cellWidth: 15 },
-        9: { cellWidth: 25 }
-      }
-    });
-    
-    // Totals section - Simple
-    const finalY = (doc.previousAutoTable?.finalY || yPos + 100) + 10;
-    
-    // Right-align totals
-    const totalsX = 140;
-    doc.setFont(undefined, 'normal');
-    doc.setFontSize(10);
-    
-    doc.text('Subtotal:', totalsX, finalY);
-    doc.text(`₹${(data.subtotal_amount || 0).toFixed(2)}`, 195, finalY, { align: 'right' });
-    
-    doc.text('Tax Amount:', totalsX, finalY + 7);
-    doc.text(`₹${(data.tax_amount || 0).toFixed(2)}`, 195, finalY + 7, { align: 'right' });
-    
-    if (data.round_off) {
-      doc.text('Round Off:', totalsX, finalY + 14);
-      doc.text(`₹${(data.round_off || 0).toFixed(2)}`, 195, finalY + 14, { align: 'right' });
-    }
-    
-    doc.setFontSize(12);
-    doc.setFont(undefined, 'bold');
-    doc.text('Total Amount:', totalsX, finalY + 21);
-    doc.text(`₹${(data.net_amount || data.total_amount || 0).toFixed(2)}`, 195, finalY + 21, { align: 'right' });
-    
-    // Footer
-    doc.setFontSize(10);
-    doc.setFont(undefined, 'normal');
-    doc.text('Thank you for your business!', 105, 280, { align: 'center' });
-    
-    return doc;
-  };
 
   const handleWhatsAppShare = async (phoneOverride = null) => {
     // Use phoneOverride if provided (from success modal), otherwise use selectedCustomer
@@ -2482,6 +2335,33 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
           }}
           showCopy={true}
         />
+      )}
+
+      {/* Hidden Invoice Preview for PDF Generation - Always Available */}
+      {createdInvoiceData && showSuccessModal && (
+        <div className="hidden">
+          <InvoicePreview
+            invoice={{
+              ...invoice,
+              invoice_no: createdInvoiceData.invoiceNumber,
+              customer_name: createdInvoiceData.customerName,
+              customer_details: {
+                ...selectedCustomer,
+                address: invoice.billing_address,
+                gstin: selectedCustomer?.gstin,
+                phone: createdInvoiceData.customerPhone || selectedCustomer?.phone || selectedCustomer?.mobile
+              },
+              shipping_address: invoice.shipping_address,
+              is_same_address: invoice.billing_address === invoice.shipping_address,
+              items: createdInvoiceData.items || invoice.items,
+              net_amount: createdInvoiceData.totalAmount || invoice.net_amount,
+              payment_status: invoice.payment_status || 'Paid'
+            }}
+            companyInfo={companyInfo}
+            showAddresses={true}
+            isPrintMode={true} // This will ensure addresses are visible in PDF
+          />
+        </div>
       )}
     </div>
   );
