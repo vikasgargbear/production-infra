@@ -28,7 +28,7 @@ router = APIRouter(prefix="/sales-orders", tags=["sales-orders"])
 @router.get("/generate-number")
 async def generate_sales_order_number(
     db: Session = Depends(get_db),
-    org_id: str = org_id
+    org_id: str = Depends(get_org_id_from_header)
 ):
     """Generate next sales order number using unified service"""
     try:
@@ -46,7 +46,7 @@ async def generate_sales_order_number(
 @router.get("/employees")
 async def get_employees_for_created_by(
     db: Session = Depends(get_db),
-    org_id: str = org_id
+    org_id: str = Depends(get_org_id_from_header)
 ):
     """Get list of employees for 'Created By' dropdown"""
     try:
