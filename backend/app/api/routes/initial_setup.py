@@ -20,7 +20,7 @@ async def check_setup_status(db: Session = Depends(get_db)):
     try:
         # Check if any organization exists
         result = db.execute(text("""
-            SELECT COUNT(*) as count FROM parties.organizations
+            SELECT COUNT(*) as count FROM master.organizations
         """)).fetchone()
         
         has_org = result.count > 0 if result else False
@@ -30,7 +30,7 @@ async def check_setup_status(db: Session = Depends(get_db)):
         if has_org:
             org = db.execute(text("""
                 SELECT org_id, org_name, legal_name, gst_number, pan_number
-                FROM parties.organizations
+                FROM master.organizations
                 LIMIT 1
             """)).fetchone()
             
@@ -84,7 +84,7 @@ async def initialize_organization(
     try:
         # Check if org already exists
         existing = db.execute(text("""
-            SELECT COUNT(*) as count FROM parties.organizations
+            SELECT COUNT(*) as count FROM master.organizations
         """)).fetchone()
         
         if existing and existing.count > 0:
@@ -95,7 +95,7 @@ async def initialize_organization(
         
         # Create organization
         db.execute(text("""
-            INSERT INTO parties.organizations (
+            INSERT INTO master.organizations (
                 org_id, org_code, org_name, legal_name, business_type,
                 gst_number, pan_number, drug_license_number,
                 registered_address, contact_numbers, email_addresses,
@@ -126,7 +126,7 @@ async def initialize_organization(
         
         # Create default branch
         db.execute(text("""
-            INSERT INTO parties.org_branches (
+            INSERT INTO master.org_branches (
                 org_id, branch_code, branch_name, branch_type,
                 address, is_billing_location, is_shipping_location,
                 is_default_location, is_active, created_at, updated_at
@@ -145,7 +145,7 @@ async def initialize_organization(
             password_hash = get_password_hash(setup_data["admin_password"])
             
             db.execute(text("""
-                INSERT INTO parties.org_users (
+                INSERT INTO master.org_users (
                     org_id, user_code, full_name, email, phone,
                     password_hash, role, department,
                     is_active, is_admin, created_at, updated_at
