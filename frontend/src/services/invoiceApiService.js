@@ -299,17 +299,43 @@ class InvoiceApiService {
    * @returns {Promise<Object>} Generated invoice number
    */
   static async generateInvoiceNumber(options = {}) {
-    // Since the backend endpoint doesn't exist, use local generation
-    // This matches the pattern already in use
-    const timestamp = Date.now();
-    const invoiceNumber = `INV-${timestamp.toString().slice(-8)}`;
-    
-    return {
-      success: true,
-      data: {
-        invoice_number: invoiceNumber
+    try {
+      // Call backend API to generate invoice number
+      const response = await api.get('/invoices/generate-number');
+      
+      if (response.data && response.data.invoice_number) {
+        return {
+          success: true,
+          data: {
+            invoice_number: response.data.invoice_number
+          }
+        };
       }
-    };
+      
+      // Fallback if API doesn't return expected format
+      throw new Error('Invalid response from server');
+    } catch (error) {
+      console.error('Failed to generate invoice number from API:', error);
+      
+      // Fallback to local generation matching backend format
+      // Format: INV-YY########
+      const now = new Date();
+      const year = now.getFullYear() % 100; // Get last 2 digits of year
+      const yearPrefix = year.toString().padStart(2, '0');
+      
+      // Generate a unique number based on timestamp
+      const timestamp = Date.now();
+      const uniqueNum = 10000000 + (timestamp % 90000000); // Ensures 8 digits starting from 10000000
+      
+      const invoiceNumber = `INV-${yearPrefix}${uniqueNum}`;
+      
+      return {
+        success: true,
+        data: {
+          invoice_number: invoiceNumber
+        }
+      };
+    }
   }
 
   /**

@@ -30,9 +30,14 @@ class DocumentNumberService {
       console.warn('Backend invoice number generation failed:', error);
     }
     
-    // Fallback to client-side generation
+    // Fallback to client-side generation matching backend format
+    // Format: INV-YY######## (year prefix + 8-digit number)
+    const now = new Date();
+    const year = now.getFullYear() % 100; // Get last 2 digits of year
+    const yearPrefix = year.toString().padStart(2, '0');
     const timestamp = Date.now();
-    return `INV-${timestamp.toString().slice(-8)}`;
+    const uniqueNum = 10000000 + (timestamp % 90000000); // 8 digits starting from 10000000
+    return `INV-${yearPrefix}${uniqueNum}`;
   }
 
   /**

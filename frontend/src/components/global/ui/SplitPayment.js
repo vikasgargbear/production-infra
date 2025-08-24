@@ -137,7 +137,7 @@ const SplitPayment = ({
 
       {/* Single payment method - default view */}
       {paymentMethods.length === 1 && (
-        <div className="space-y-3">
+        <div className="space-y-2">
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="block text-xs text-gray-600 mb-1">Method</label>
@@ -170,26 +170,24 @@ const SplitPayment = ({
             </div>
           </div>
           
-          {/* Split payment button */}
-          {!readOnly && (
-            <button
-              onClick={addPaymentMethod}
-              className="text-sm text-blue-600 hover:text-blue-700 font-medium"
-            >
-              Split Payment
-            </button>
-          )}
-          
-          {/* Remaining amount indicator */}
-          {remaining !== 0 && (
-            <div className="text-xs">
-              <span className={`font-medium ${
+          {/* Split payment button and remaining amount on same line */}
+          <div className="flex items-center justify-between">
+            {!readOnly && (
+              <button
+                onClick={addPaymentMethod}
+                className="text-sm text-blue-600 hover:text-blue-700 font-medium"
+              >
+                Split Payment
+              </button>
+            )}
+            {remaining !== 0 && (
+              <span className={`text-xs font-medium ${
                 remaining > 0 ? 'text-orange-600' : 'text-red-600'
               }`}>
                 {remaining > 0 ? `Remaining: ₹${remaining.toFixed(2)}` : `Excess: ₹${Math.abs(remaining).toFixed(2)}`}
               </span>
-            </div>
-          )}
+            )}
+          </div>
         </div>
       )}
 

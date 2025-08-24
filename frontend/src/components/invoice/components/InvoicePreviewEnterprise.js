@@ -151,10 +151,10 @@ const InvoicePreviewEnterprise = ({
                     </div>
                   )}
                   <div className="flex-1">
-                    <h2 className="text-xl font-bold text-gray-900">{companyInfo.name}</h2>
-                    <p className="text-sm text-gray-600 mt-1">{companyInfo.address}</p>
-                    <p className="text-sm text-gray-600">GSTIN: {companyInfo.gstin}</p>
-                    <p className="text-sm text-gray-600">DL No: {companyInfo.drugLicense}</p>
+                    <h2 className="text-xl font-bold text-gray-900">{companyInfo.name || 'Your Company Name'}</h2>
+                    <p className="text-sm text-gray-600 mt-1">{companyInfo.address || 'Company Address'}</p>
+                    <p className="text-sm text-gray-600">GSTIN: {companyInfo.gstin || ''}</p>
+                    <p className="text-sm text-gray-600">DL No: {companyInfo.drugLicense || ''}</p>
                   </div>
                 </div>
               </div>
@@ -214,7 +214,12 @@ const InvoicePreviewEnterprise = ({
                   </p>
                   <p className="text-xs text-gray-700">
                     <span className="text-gray-500">Pay:</span>
-                    <span className="ml-1 font-medium">{invoice.payment_mode || 'CASH'}</span>
+                    <span className="ml-1 font-medium">
+                      {invoice.payment_status === 'Paid' ? 
+                        `${invoice.payment_mode || 'CASH'}` : 
+                        `${invoice.payment_status || 'Pending'}`
+                      }
+                    </span>
                   </p>
                 </div>
               </div>
@@ -229,40 +234,52 @@ const InvoicePreviewEnterprise = ({
               {/* Bill To */}
               <div className="bg-gray-50 rounded-xl p-3 print-border print-bg-gray">
                 <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">Bill To</h3>
-              <p className="font-semibold text-gray-900 text-sm">{invoice.customer_name}</p>
-              {invoice.customer_details && (
-                <>
-                  <p className="text-xs text-gray-600 mt-1">{invoice.customer_details.address}</p>
-                  <p className="text-xs text-gray-600">{invoice.customer_details.city}, {invoice.customer_details.state}</p>
-                  <p className="text-xs text-gray-600 mt-1">Ph: {invoice.customer_details.phone}</p>
-                  {invoice.customer_details.gst_number && (
-                    <p className="text-xs text-gray-600">GST: {invoice.customer_details.gst_number}</p>
-                  )}
-                </>
-              )}
-            </div>
+                <p className="font-semibold text-gray-900 text-sm">{invoice.customer_name}</p>
+                {invoice.billing_address ? (
+                  <p className="text-xs text-gray-600 mt-1">{invoice.billing_address}</p>
+                ) : invoice.customer_details ? (
+                  <>
+                    <p className="text-xs text-gray-600 mt-1">{invoice.customer_details.address}</p>
+                    {invoice.customer_details.city && invoice.customer_details.state && (
+                      <p className="text-xs text-gray-600">{invoice.customer_details.city}, {invoice.customer_details.state}</p>
+                    )}
+                  </>
+                ) : null}
+                {(invoice.customer_details?.phone || invoice.customer_details?.mobile || invoice.customer_details?.primary_phone) && (
+                  <p className="text-xs text-gray-600 mt-1">Ph: {invoice.customer_details?.phone || invoice.customer_details?.mobile || invoice.customer_details?.primary_phone}</p>
+                )}
+                {invoice.customer_details?.gstin && (
+                  <p className="text-xs text-gray-600">GST: {invoice.customer_details.gstin}</p>
+                )}
+              </div>
 
             {/* Ship To */}
             <div className="bg-gray-50 rounded-xl p-3 print-border print-bg-gray">
               <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">Ship To</h3>
-              {invoice.is_same_address !== false ? (
+              {invoice.is_same_address !== false || invoice.billing_address === invoice.shipping_address ? (
                 <>
                   <p className="text-xs text-gray-600 mb-1">✓ Same as billing</p>
                   <p className="font-semibold text-gray-900 text-sm">{invoice.customer_name}</p>
-                  {invoice.customer_details && (
+                  {invoice.billing_address ? (
+                    <p className="text-xs text-gray-600 mt-1">{invoice.billing_address}</p>
+                  ) : invoice.customer_details ? (
                     <>
                       <p className="text-xs text-gray-600 mt-1">{invoice.customer_details.address}</p>
-                      <p className="text-xs text-gray-600">{invoice.customer_details.city}, {invoice.customer_details.state}</p>
-                      <p className="text-xs text-gray-600 mt-1">Ph: {invoice.customer_details.phone}</p>
+                      {invoice.customer_details.city && invoice.customer_details.state && (
+                        <p className="text-xs text-gray-600">{invoice.customer_details.city}, {invoice.customer_details.state}</p>
+                      )}
                     </>
+                  ) : null}
+                  {(invoice.customer_details?.phone || invoice.customer_details?.mobile || invoice.customer_details?.primary_phone) && (
+                    <p className="text-xs text-gray-600 mt-1">Ph: {invoice.customer_details?.phone || invoice.customer_details?.mobile || invoice.customer_details?.primary_phone}</p>
                   )}
                 </>
               ) : (
                 <>
                   <p className="font-semibold text-gray-900 text-sm">{invoice.shipping_contact_name || invoice.customer_name}</p>
                   <p className="text-xs text-gray-600 mt-1">{invoice.shipping_address}</p>
-                  {invoice.shipping_phone && (
-                    <p className="text-xs text-gray-600 mt-1">Ph: {invoice.shipping_phone}</p>
+                  {(invoice.shipping_phone || invoice.customer_details?.phone || invoice.customer_details?.mobile) && (
+                    <p className="text-xs text-gray-600 mt-1">Ph: {invoice.shipping_phone || invoice.customer_details?.phone || invoice.customer_details?.mobile}</p>
                   )}
                 </>
               )}

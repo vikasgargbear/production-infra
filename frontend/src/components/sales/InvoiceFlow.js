@@ -32,6 +32,7 @@ import ImportDocumentModal from './components/ImportDocumentModal';
 import useEscapeKey from '../../hooks/useEscapeKey';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import html2canvas from 'html2canvas';
 
 const InvoiceFlow = ({ onClose, prefilledData = null }) => {
   const { companyInfo, getOrgId } = useCompany();
@@ -976,6 +977,65 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
     window.print();
   };
 
+  // Direct PDF Download - captures the actual preview
+  const handlePDFDownload = async (invoiceData = null) => {
+    try {
+      // If invoiceData is provided, use the old PDF generation method
+      if (invoiceData) {
+        const doc = generateInvoicePDF(invoiceData);
+        const fileName = `Invoice_${invoiceData?.invoice_number || invoice.invoice_no || 'Draft'}.pdf`;
+        doc.save(fileName);
+        return true;
+      }
+
+      // Otherwise, capture the actual preview element
+      const element = document.getElementById('invoice-preview');
+      if (!element) {
+        console.error('Invoice preview element not found');
+        return false;
+      }
+
+      // Show a loading indicator
+      setToast({ show: true, message: 'Generating PDF...', type: 'info' });
+
+      // Capture the element as canvas with high quality
+      const canvas = await html2canvas(element, {
+        scale: 2, // Higher quality
+        useCORS: true,
+        logging: false,
+        backgroundColor: '#ffffff',
+        windowWidth: element.scrollWidth,
+        windowHeight: element.scrollHeight
+      });
+
+      // Create PDF
+      const imgData = canvas.toDataURL('image/png');
+      const pdf = new jsPDF('l', 'mm', 'a4'); // Landscape orientation
+      
+      // Calculate dimensions
+      const pdfWidth = pdf.internal.pageSize.getWidth();
+      const pdfHeight = pdf.internal.pageSize.getHeight();
+      const imgWidth = canvas.width;
+      const imgHeight = canvas.height;
+      const ratio = Math.min(pdfWidth / imgWidth, pdfHeight / imgHeight) * 25.4; // Convert to mm
+      
+      const imgX = (pdfWidth - imgWidth * ratio) / 2;
+      const imgY = 10;
+
+      pdf.addImage(imgData, 'PNG', imgX, imgY, imgWidth * ratio, imgHeight * ratio);
+      
+      // Download the PDF
+      pdf.save(`Invoice_${invoice.invoice_no || 'draft'}.pdf`);
+      
+      setToast({ show: true, message: 'PDF downloaded successfully!', type: 'success' });
+      return true;
+    } catch (error) {
+      console.error('Error generating PDF:', error);
+      setToast({ show: true, message: 'Failed to generate PDF', type: 'error' });
+      return false;
+    }
+  };
+
   // Thermal Print - Black & White compact format
   const handleThermalPrint = (width = '80mm') => {
     // Create thermal print window
@@ -1472,21 +1532,6 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
     doc.text('Thank you for your business!', 105, 280, { align: 'center' });
     
     return doc;
-  };
-
-  // Handle PDF download
-  const handlePDFDownload = (invoiceData = null) => {
-    try {
-      const doc = generateInvoicePDF(invoiceData);
-      const fileName = `Invoice_${invoiceData?.invoice_number || invoice.invoice_no || 'Draft'}.pdf`;
-      doc.save(fileName);
-      return true;
-    } catch (error) {
-      console.error('Error generating PDF:', error);
-      setMessage('Failed to generate PDF. Please try again.');
-      setMessageType('error');
-      return false;
-    }
   };
 
   const handleWhatsAppShare = async (phoneOverride = null) => {
@@ -2018,12 +2063,19 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
                     amount: invoice.payment_mode === 'cash' ? (invoice.net_amount || 0) : 0
                   }
                 ]}
-                onChange={(payments) => {
+                onChange={(payments, paymentInfo) => {
                   const primaryPayment = payments[0];
                   setInvoice(prev => ({
                     ...prev,
                     payment_mode: primaryPayment?.method || 'cash',
-                    payment_amount: primaryPayment?.amount || 0
+                    payment_amount: primaryPayment?.amount || 0,
+                    payment_status: paymentInfo?.status || 'Pending'
+                  }));
+                }}
+                onPaymentStatusChange={(status) => {
+                  setInvoice(prev => ({
+                    ...prev,
+                    payment_status: status
                   }));
                 }}
                 allowSplit={false}  // Single payment for now
@@ -2352,6 +2404,7 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
           grandTotal={invoice.net_amount}
           onSave={handleSaveInvoice}
           onPrint={handlePrint}
+          onDownload={handlePDFDownload}
           onThermalPrint={handleThermalPrint}
           onWhatsApp={handleWhatsAppShare}
           isSaving={saving}
