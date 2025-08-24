@@ -12,7 +12,7 @@ from pydantic import BaseModel, Field
 import logging
 
 from ...core.database import get_db
-from ...core.config import DEFAULT_ORG_ID
+from ...core.auth_utils import get_org_id_from_header
 
 logger = logging.getLogger(__name__)
 
@@ -56,7 +56,7 @@ class PointsRedemption(BaseModel):
 @router.post("/programs", response_model=dict)
 async def create_loyalty_program(
     program: LoyaltyProgramCreate,
-    org_id: str = Query(DEFAULT_ORG_ID),
+    org_id: str = Depends(get_org_id_from_header),
     db: Session = Depends(get_db)
 ):
     """
@@ -111,7 +111,7 @@ async def create_loyalty_program(
 
 @router.get("/programs/active")
 async def get_active_program(
-    org_id: str = Query(DEFAULT_ORG_ID),
+    org_id: str = Depends(get_org_id_from_header),
     db: Session = Depends(get_db)
 ):
     """Get the active loyalty program for the organization"""

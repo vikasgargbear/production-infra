@@ -13,7 +13,7 @@ import logging
 import json
 
 from ...core.database import get_db
-from ...core.config import DEFAULT_ORG_ID
+from ...core.auth_utils import get_org_id_from_header
 
 logger = logging.getLogger(__name__)
 
@@ -78,7 +78,7 @@ class DiscountCalculation(BaseModel):
 @router.post("/", response_model=dict)
 async def create_scheme(
     scheme: SchemeCreate,
-    org_id: str = Query(DEFAULT_ORG_ID),
+    org_id: str = Depends(get_org_id_from_header),
     db: Session = Depends(get_db)
 ):
     """

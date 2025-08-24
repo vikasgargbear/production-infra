@@ -13,7 +13,7 @@ from sqlalchemy import text
 from pydantic import BaseModel, Field
 
 from ...core.database import get_db
-from ...core.config import DEFAULT_ORG_ID
+from ...core.auth_utils import get_org_id_from_header
 from ...dependencies import get_current_org
 
 # Default org ID for now
@@ -281,7 +281,7 @@ async def get_current_stock(
     Get current stock levels for all products
     This endpoint provides comprehensive stock information
     """
-    org_id = DEFAULT_ORG_ID
+    org_id: str = Depends(get_org_id_from_header)
     
     try:
         # Build query for stock data with batch-level pack configuration
@@ -417,7 +417,7 @@ async def update_product_properties(
     """
     Update product properties for stock management
     """
-    org_id = DEFAULT_ORG_ID
+    org_id: str = Depends(get_org_id_from_header)
     
     try:
         # Build update query dynamically
@@ -481,7 +481,7 @@ async def get_stock_alerts(
     """
     Get stock alerts for low stock, expiring items, etc.
     """
-    org_id = DEFAULT_ORG_ID
+    org_id: str = Depends(get_org_id_from_header)
     
     try:
         # Get products with low stock
@@ -585,7 +585,7 @@ async def get_batches(
     """
     Get batches with optional filters
     """
-    org_id = DEFAULT_ORG_ID
+    org_id: str = Depends(get_org_id_from_header)
     
     try:
         query = """
@@ -680,7 +680,7 @@ async def create_stock_adjustment(
     """
     Create stock adjustment for damage, loss, or corrections
     """
-    org_id = DEFAULT_ORG_ID
+    org_id: str = Depends(get_org_id_from_header)
     
     try:
         # Validate adjustment data

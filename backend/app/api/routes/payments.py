@@ -12,7 +12,7 @@ from pydantic import BaseModel, Field
 import logging
 
 from ...core.database import get_db
-from ...core.config import DEFAULT_ORG_ID
+from ...core.auth_utils import get_org_id_from_header
 from ..services.payment_service import PaymentService
 from ..services.document_number_service import DocumentNumberService
 

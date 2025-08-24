@@ -2,9 +2,10 @@ import React, { useState, useEffect } from 'react';
 import { Building, Mail, Lock, Phone, MapPin, FileText, Save, Loader2, CheckCircle } from 'lucide-react';
 import apiClient from '../services/api/apiClient';
 import authService from '../services/auth/authService';
-import { toast } from 'react-hot-toast';
+import { useToast } from './global/ui/feedback/Toast';
 
 const InitialSetup = ({ onSetupComplete }) => {
+  const toast = useToast();
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [setupComplete, setSetupComplete] = useState(false);
@@ -59,7 +60,7 @@ const InitialSetup = ({ onSetupComplete }) => {
     
     // Basic validation
     if (!formData.org_name || !formData.admin_email || !formData.admin_password) {
-      toast.error('Please fill in all required fields');
+      toast.error('Please fill in all required fields', 3000);
       return;
     }
 
@@ -74,7 +75,7 @@ const InitialSetup = ({ onSetupComplete }) => {
           authService.setOrgId(orgId);
         }
         
-        toast.success('Organization setup complete!');
+        toast.created('Organization setup complete!', 3000);
         setSetupComplete(true);
         
         // Reload after a short delay to let user see success
@@ -84,7 +85,7 @@ const InitialSetup = ({ onSetupComplete }) => {
       }
     } catch (error) {
       console.error('Setup error:', error);
-      toast.error(error.response?.data?.detail || 'Failed to complete setup');
+      toast.error(error.response?.data?.detail || 'Failed to complete setup', 3000);
     } finally {
       setIsSubmitting(false);
     }

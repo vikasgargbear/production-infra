@@ -13,7 +13,7 @@ import json
 import urllib.parse
 
 from ...core.database import get_db
-from ...core.config import DEFAULT_ORG_ID
+from ...core.auth_utils import get_org_id_from_header
 
 logger = logging.getLogger(__name__)
 

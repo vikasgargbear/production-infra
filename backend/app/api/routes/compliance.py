@@ -12,7 +12,7 @@ import logging
 import json
 
 from ...core.database import get_db
-from ...core.config import DEFAULT_ORG_ID
+from ...core.auth_utils import get_org_id_from_header
 
 logger = logging.getLogger(__name__)
 
@@ -68,7 +68,7 @@ class ComplianceDocument(BaseModel):
 @router.post("/drug-licenses", response_model=dict)
 async def create_drug_license(
     license: DrugLicenseCreate,
-    org_id: str = Query(DEFAULT_ORG_ID),
+    org_id: str = Depends(get_org_id_from_header),
     db: Session = Depends(get_db)
 ):
     """
@@ -199,7 +199,7 @@ async def create_drug_license(
 
 @router.get("/drug-licenses")
 async def get_drug_licenses(
-    org_id: str = Query(DEFAULT_ORG_ID),
+    org_id: str = Depends(get_org_id_from_header),
     include_expired: bool = Query(False),
     db: Session = Depends(get_db)
 ):
@@ -250,7 +250,7 @@ async def get_drug_licenses(
 @router.get("/drug-licenses/expiring")
 async def get_expiring_licenses(
     days_ahead: int = Query(90, description="Days to look ahead"),
-    org_id: str = Query(DEFAULT_ORG_ID),
+    org_id: str = Depends(get_org_id_from_header),
     db: Session = Depends(get_db)
 ):
     """Get licenses expiring within specified days"""
@@ -290,7 +290,7 @@ async def get_expiring_licenses(
 @router.post("/audits", response_model=dict)
 async def record_compliance_audit(
     audit: ComplianceAudit,
-    org_id: str = Query(DEFAULT_ORG_ID),
+    org_id: str = Depends(get_org_id_from_header),
     db: Session = Depends(get_db)
 ):
     """
@@ -395,7 +395,7 @@ async def record_compliance_audit(
 @router.post("/inspector-visits", response_model=dict)
 async def record_inspector_visit(
     visit: InspectorVisit,
-    org_id: str = Query(DEFAULT_ORG_ID),
+    org_id: str = Depends(get_org_id_from_header),
     db: Session = Depends(get_db)
 ):
     """
@@ -478,7 +478,7 @@ async def record_inspector_visit(
 
 @router.get("/checklist")
 async def get_compliance_checklist(
-    org_id: str = Query(DEFAULT_ORG_ID),
+    org_id: str = Depends(get_org_id_from_header),
     db: Session = Depends(get_db)
 ):
     """
@@ -614,7 +614,7 @@ async def get_compliance_checklist(
 async def get_compliance_alerts(
     alert_type: Optional[str] = Query(None),
     include_resolved: bool = Query(False),
-    org_id: str = Query(DEFAULT_ORG_ID),
+    org_id: str = Depends(get_org_id_from_header),
     db: Session = Depends(get_db)
 ):
     """Get active compliance alerts"""
@@ -672,7 +672,7 @@ async def get_compliance_alerts(
 async def upload_compliance_document(
     document: ComplianceDocument,
     file_data: Optional[str] = None,  # Base64 encoded file
-    org_id: str = Query(DEFAULT_ORG_ID),
+    org_id: str = Depends(get_org_id_from_header),
     db: Session = Depends(get_db)
 ):
     """Upload compliance-related documents"""
@@ -737,7 +737,7 @@ async def generate_regulatory_report(
     report_type: str = Query(..., description="Report type (monthly, quarterly, annual)"),
     from_date: Optional[date] = Query(None),
     to_date: Optional[date] = Query(None),
-    org_id: str = Query(DEFAULT_ORG_ID),
+    org_id: str = Depends(get_org_id_from_header),
     db: Session = Depends(get_db)
 ):
     """

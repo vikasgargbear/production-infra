@@ -12,7 +12,7 @@ from decimal import Decimal
 import uuid
 
 from ...core.database import get_db
-from ...core.config import DEFAULT_ORG_ID
+from ...core.auth_utils import get_org_id_from_header
 
 logger = logging.getLogger(__name__)
 
@@ -462,7 +462,7 @@ async def get_note_print_data(
         # Get organization details
         org_query = """
             SELECT * FROM parties.organizations 
-            WHERE org_id = DEFAULT_ORG_ID
+            WHERE org_id: str = Depends(get_org_id_from_header)
         """
         organization = db.execute(text(org_query)).first()
         

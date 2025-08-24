@@ -13,7 +13,7 @@ import uuid
 from pydantic import BaseModel, Field
 
 from ...core.database import get_db
-from ...core.config import DEFAULT_ORG_ID
+from ...core.auth_utils import get_org_id_from_header
 from ..services.gst_service import GSTService, GSTType
 
 logger = logging.getLogger(__name__)

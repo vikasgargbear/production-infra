@@ -14,14 +14,14 @@ import json
 
 from ...core.database import get_db
 from ...core.config import settings
+from ...core.auth_utils import get_org_id_from_header
 from ..schemas.product_schema import Product, ProductCreate, ProductUpdate, ProductResponse, ProductSearch
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
-# Default org_id - should come from auth in production
-DEFAULT_ORG_ID = "ad808530-1ddb-4377-ab20-67bef145d80d"
+# org_id now comes from request header dynamically
 
 def _format_composition(composition_value):
     """Convert composition to JSONB format for database"""
@@ -40,7 +40,8 @@ async def get_products(
     search: str = Query("", description="Search query"),
     product_type: str = Query("", description="Filter by product type"),
     manufacturer: str = Query("", description="Filter by manufacturer"),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)
 ):
     """
     Get products with optional filtering and search
@@ -163,7 +164,8 @@ async def search_products(
     q: str = Query("", description="Search query"),
     limit: int = Query(10, ge=1, le=100),
     offset: int = Query(0, ge=0),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)
 ):
     """
     Search products by name, brand, or HSN
@@ -201,7 +203,7 @@ async def search_products(
                 ORDER BY product_name
                 LIMIT :limit OFFSET :offset
             """), {
-                "org_id": DEFAULT_ORG_ID,
+                "org_id": org_id,
                 "search": f"%{q}%",
                 "limit": limit,
                 "offset": offset
@@ -228,7 +230,7 @@ async def search_products(
                 ORDER BY product_name
                 LIMIT :limit OFFSET :offset
             """), {
-                "org_id": DEFAULT_ORG_ID,
+                "org_id": org_id,
                 "limit": limit,
                 "offset": offset
             })
@@ -258,7 +260,8 @@ async def search_products(
 @router.post("/", status_code=status.HTTP_201_CREATED)
 async def create_product(
     product: dict,  # Accept dict to handle flexible fields
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)
 ):
     """
     Create a new product
@@ -399,7 +402,7 @@ async def create_product(
                 packages_per_box = int(product.get("packages_per_box"))
             
             batch_data = {
-                "org_id": DEFAULT_ORG_ID,
+                "org_id": org_id,
                 "product_id": created.product_id,
                 "batch_number": product.get("batch_number") or f"BATCH{random.randint(100000, 999999)}",
                 "manufacturing_date": product.get("manufacturing_date") or datetime.now().strftime("%Y-%m-%d"),
@@ -486,7 +489,8 @@ async def create_product(
 @router.get("/{product_id}")
 async def get_product(
     product_id: int,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)
 ):
     """Get product by ID"""
     try:
@@ -517,7 +521,8 @@ async def get_product(
 async def update_product(
     product_id: int,
     product: dict,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)
 ):
     """Update product"""
     try:
@@ -685,7 +690,8 @@ async def update_product(
 async def update_product_batches(
     product_id: int,
     batch_data: dict,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)
 ):
     """Update batch-level properties for all active batches of a product"""
     try:
@@ -758,7 +764,10 @@ async def update_product_batches(
         )
 
 @router.get("/master/categories")
-async def get_product_categories(db: Session = Depends(get_db)):
+async def get_product_categories(
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)
+):
     """Get all active product categories"""
     try:
         result = db.execute(text("""
@@ -779,7 +788,10 @@ async def get_product_categories(db: Session = Depends(get_db)):
         )
 
 @router.get("/master/types")
-async def get_product_types(db: Session = Depends(get_db)):
+async def get_product_types(
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)
+):
     """Get all active product types"""
     try:
         result = db.execute(text("""
@@ -802,7 +814,8 @@ async def get_product_types(db: Session = Depends(get_db)):
 @router.post("/master/categories")
 async def create_product_category(
     category_data: dict,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)
 ):
     """Create a new product category"""
     try:
@@ -871,7 +884,8 @@ async def create_product_category(
 @router.post("/master/types")
 async def create_product_type(
     type_data: dict,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)
 ):
     """Create a new product type"""
     try:
