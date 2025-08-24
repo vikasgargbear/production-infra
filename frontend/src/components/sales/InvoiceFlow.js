@@ -977,20 +977,215 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
     window.print();
   };
 
-  // Direct PDF Download - uses print dialog for small file size and exact layout
+  // Direct PDF Download - generates optimized PDF directly
   const handlePDFDownload = async (invoiceData = null) => {
     try {
-      // Simply trigger the print dialog
-      // Users can choose "Save as PDF" which creates a perfectly formatted, small PDF
-      // This ensures consistency and small file size (350KB vs 12MB with canvas approach)
+      setToast({ show: true, message: 'Generating PDF...', type: 'info' });
       
-      setToast({ show: true, message: 'Opening print dialog - Select "Save as PDF" to download', type: 'info' });
+      // Use the invoice data (from success modal) or current invoice
+      const data = invoiceData || invoice;
+      const doc = new jsPDF('l', 'mm', 'a4'); // Landscape A4
       
-      // Use a small delay to ensure the preview is ready
-      setTimeout(() => {
-        window.print();
-      }, 100);
+      // Colors
+      const primaryColor = [37, 99, 235]; // Blue
+      const grayColor = [107, 114, 128];
+      const lightGray = [243, 244, 246];
       
+      // Company Header
+      doc.setFillColor(...lightGray);
+      doc.rect(10, 10, 277, 25, 'F');
+      
+      // Company Info
+      doc.setFontSize(18);
+      doc.setTextColor(0, 0, 0);
+      doc.setFont(undefined, 'bold');
+      doc.text(companyInfo?.name || 'Your Company', 15, 20);
+      
+      doc.setFontSize(9);
+      doc.setFont(undefined, 'normal');
+      doc.setTextColor(...grayColor);
+      doc.text(companyInfo?.address || '', 15, 26);
+      doc.text(`GSTIN: ${companyInfo?.gstin || ''} | DL: ${companyInfo?.drugLicense || ''}`, 15, 31);
+      
+      // Invoice Info Box
+      doc.setFillColor(...primaryColor);
+      doc.setTextColor(255, 255, 255);
+      doc.rect(200, 12, 82, 20, 'F');
+      doc.setFontSize(11);
+      doc.setFont(undefined, 'bold');
+      doc.text('TAX INVOICE', 241, 19, { align: 'center' });
+      doc.setFontSize(9);
+      doc.setFont(undefined, 'normal');
+      doc.text(`No: ${data.invoice_no || createdInvoiceData?.invoiceNumber || ''}`, 241, 25, { align: 'center' });
+      doc.text(`Date: ${new Date(data.invoice_date || Date.now()).toLocaleDateString('en-IN')}`, 241, 30, { align: 'center' });
+      
+      // Customer Details Section
+      let yPos = 42;
+      
+      // Bill To
+      doc.setFillColor(...lightGray);
+      doc.rect(10, yPos, 90, 30, 'F');
+      doc.setTextColor(0, 0, 0);
+      doc.setFontSize(9);
+      doc.setFont(undefined, 'bold');
+      doc.text('BILL TO', 12, yPos + 5);
+      doc.setFont(undefined, 'normal');
+      doc.setFontSize(10);
+      doc.text(data.customer_name || '', 12, yPos + 11);
+      doc.setFontSize(8);
+      doc.setTextColor(...grayColor);
+      const billAddress = data.billing_address || data.customer_details?.address || '';
+      const billLines = doc.splitTextToSize(billAddress, 85);
+      billLines.forEach((line, i) => {
+        if (i < 2) doc.text(line, 12, yPos + 16 + (i * 4));
+      });
+      if (data.customer_details?.phone) {
+        doc.text(`Ph: ${data.customer_details.phone}`, 12, yPos + 26);
+      }
+      
+      // Ship To
+      doc.rect(103, yPos, 90, 30, 'F');
+      doc.setTextColor(0, 0, 0);
+      doc.setFontSize(9);
+      doc.setFont(undefined, 'bold');
+      doc.text('SHIP TO', 105, yPos + 5);
+      doc.setFont(undefined, 'normal');
+      doc.setFontSize(10);
+      doc.text(data.customer_name || '', 105, yPos + 11);
+      doc.setFontSize(8);
+      doc.setTextColor(...grayColor);
+      const shipAddress = data.shipping_address || billAddress;
+      const shipLines = doc.splitTextToSize(shipAddress, 85);
+      shipLines.forEach((line, i) => {
+        if (i < 2) doc.text(line, 105, yPos + 16 + (i * 4));
+      });
+      if (data.customer_details?.phone) {
+        doc.text(`Ph: ${data.customer_details.phone}`, 105, yPos + 26);
+      }
+      
+      // Transport Details
+      doc.rect(196, yPos, 91, 30, 'F');
+      doc.setTextColor(0, 0, 0);
+      doc.setFontSize(9);
+      doc.setFont(undefined, 'bold');
+      doc.text('TRANSPORT', 198, yPos + 5);
+      doc.setFont(undefined, 'normal');
+      doc.setFontSize(8);
+      doc.setTextColor(...grayColor);
+      if (data.delivery_type) doc.text(`Type: ${data.delivery_type}`, 198, yPos + 11);
+      if (data.transport_company) doc.text(`Company: ${data.transport_company}`, 198, yPos + 16);
+      if (data.vehicle_number) doc.text(`Vehicle: ${data.vehicle_number}`, 198, yPos + 21);
+      if (data.lr_number) doc.text(`LR No: ${data.lr_number}`, 198, yPos + 26);
+      
+      // Items Table
+      yPos = 78;
+      const items = data.items || createdInvoiceData?.items || [];
+      
+      // Prepare table data
+      const tableData = items.map((item, index) => [
+        (index + 1).toString(),
+        item.product_name || '',
+        item.hsn_code || '3004',
+        item.batch_number || item.batch_no || '',
+        item.expiry_date ? new Date(item.expiry_date).toLocaleDateString('en-IN', { month: '2-digit', year: '2-digit' }) : '',
+        (item.quantity || 0).toString(),
+        (item.free_quantity || 0).toString(),
+        `₹${(parseFloat(item.sale_price || item.rate || item.unit_price || 0)).toFixed(2)}`,
+        `${item.discount_percent || 0}%`,
+        `${item.gst_percent || 12}%`,
+        `₹${(parseFloat(item.line_total || (item.quantity * (item.sale_price || item.rate || 0)))).toFixed(2)}`
+      ]);
+      
+      // Create table
+      autoTable(doc, {
+        startY: yPos,
+        head: [['#', 'Product', 'HSN', 'Batch', 'Exp', 'Qty', 'Free', 'Rate', 'Disc%', 'GST%', 'Amount']],
+        body: tableData,
+        theme: 'grid',
+        headStyles: { 
+          fillColor: [243, 244, 246],
+          textColor: [0, 0, 0],
+          fontSize: 8,
+          fontStyle: 'bold',
+          halign: 'center'
+        },
+        bodyStyles: {
+          fontSize: 8,
+          textColor: [0, 0, 0]
+        },
+        columnStyles: {
+          0: { cellWidth: 10, halign: 'center' },
+          1: { cellWidth: 70 },
+          2: { cellWidth: 20, halign: 'center' },
+          3: { cellWidth: 25, halign: 'center' },
+          4: { cellWidth: 20, halign: 'center' },
+          5: { cellWidth: 15, halign: 'center' },
+          6: { cellWidth: 15, halign: 'center' },
+          7: { cellWidth: 25, halign: 'right' },
+          8: { cellWidth: 20, halign: 'center' },
+          9: { cellWidth: 20, halign: 'center' },
+          10: { cellWidth: 30, halign: 'right' }
+        },
+        alternateRowStyles: {
+          fillColor: [249, 250, 251]
+        },
+        margin: { left: 10, right: 10 }
+      });
+      
+      // Totals Section
+      const finalY = doc.previousAutoTable?.finalY || 150;
+      const totalsX = 210;
+      
+      // Totals box background
+      doc.setFillColor(...lightGray);
+      doc.rect(totalsX - 5, finalY + 5, 82, 45, 'F');
+      
+      doc.setFontSize(9);
+      doc.setTextColor(0, 0, 0);
+      doc.setFont(undefined, 'normal');
+      
+      // Calculate totals
+      const subtotal = data.subtotal_amount || data.gross_amount || 0;
+      const taxAmount = data.tax_amount || data.total_tax_amount || 0;
+      const roundOff = data.round_off || 0;
+      const netAmount = data.net_amount || data.final_amount || data.total_amount || createdInvoiceData?.totalAmount || 0;
+      
+      doc.text('Subtotal:', totalsX, finalY + 12);
+      doc.text(`₹${subtotal.toFixed(2)}`, totalsX + 70, finalY + 12, { align: 'right' });
+      
+      if (data.discount_amount > 0) {
+        doc.text('Discount:', totalsX, finalY + 18);
+        doc.text(`-₹${data.discount_amount.toFixed(2)}`, totalsX + 70, finalY + 18, { align: 'right' });
+      }
+      
+      doc.text('GST:', totalsX, finalY + 24);
+      doc.text(`₹${taxAmount.toFixed(2)}`, totalsX + 70, finalY + 24, { align: 'right' });
+      
+      if (roundOff !== 0) {
+        doc.text('Round Off:', totalsX, finalY + 30);
+        doc.text(`${roundOff > 0 ? '+' : ''}₹${roundOff.toFixed(2)}`, totalsX + 70, finalY + 30, { align: 'right' });
+      }
+      
+      // Grand Total
+      doc.setFillColor(...primaryColor);
+      doc.rect(totalsX - 5, finalY + 35, 82, 10, 'F');
+      doc.setTextColor(255, 255, 255);
+      doc.setFont(undefined, 'bold');
+      doc.setFontSize(10);
+      doc.text('TOTAL:', totalsX, finalY + 42);
+      doc.text(`₹${netAmount.toFixed(2)}`, totalsX + 70, finalY + 42, { align: 'right' });
+      
+      // Footer
+      doc.setTextColor(...grayColor);
+      doc.setFont(undefined, 'normal');
+      doc.setFontSize(8);
+      doc.text('Thank you for your business!', 148.5, finalY + 55, { align: 'center' });
+      
+      // Save the PDF
+      const fileName = `Invoice_${data.invoice_no || createdInvoiceData?.invoiceNumber || 'draft'}.pdf`;
+      doc.save(fileName);
+      
+      setToast({ show: true, message: 'PDF downloaded successfully!', type: 'success' });
       return true;
     } catch (error) {
       console.error('Error generating PDF:', error);

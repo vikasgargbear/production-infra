@@ -2217,4 +2217,45 @@ RAISE NOTICE '- Input "1*10" means: 1 package per box, 10 units per package';
 RAISE NOTICE '- packages_per_box: How many packages in a box';
 RAISE NOTICE '- units_per_pack: How many units in each package';
 RAISE NOTICE '- Total units per box = packages_per_box × units_per_pack';
+
+-- ========================================
+-- SECTION 19: DOCUMENT NUMBER SEQUENCES TABLE
+-- ========================================
+-- Date: 2025-08-24
+-- Purpose: Create atomic document number generation to prevent duplicates
+
+RAISE NOTICE '';
 RAISE NOTICE '========================================';
+RAISE NOTICE '🔧 SECTION 19: CREATING DOCUMENT NUMBER SEQUENCES TABLE';
+RAISE NOTICE '========================================';
+
+-- Create table to track and reserve document numbers atomically
+CREATE TABLE IF NOT EXISTS public.document_number_sequences (
+    sequence_id SERIAL PRIMARY KEY,
+    document_type VARCHAR(50) NOT NULL,
+    org_id UUID,
+    year_prefix VARCHAR(4) NOT NULL,
+    last_sequence_number BIGINT NOT NULL DEFAULT 10000000,
+    last_generated_number VARCHAR(50),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(document_type, org_id, year_prefix)
+);
+
+-- Create index for faster lookups
+CREATE INDEX IF NOT EXISTS idx_document_sequences_lookup 
+ON public.document_number_sequences(document_type, org_id, year_prefix);
+
+-- Add comment
+COMMENT ON TABLE public.document_number_sequences IS 'Tracks document number sequences to prevent duplicates';
+
+RAISE NOTICE '';
+RAISE NOTICE '========================================';
+RAISE NOTICE '✅ SECTION 19: DOCUMENT NUMBER SEQUENCES TABLE CREATED';
+RAISE NOTICE '========================================';
+RAISE NOTICE 'FEATURES:';
+RAISE NOTICE '1. Atomic number generation prevents duplicates';
+RAISE NOTICE '2. Supports multi-tenant with org_id';
+RAISE NOTICE '3. Year-based sequences (resets each year)';
+RAISE NOTICE '4. Tracks last generated number for audit';
+RAISE NOTICE '==========================================';

@@ -11,6 +11,7 @@ from typing import Optional
 
 from ...core.database import get_db
 from ..services.document_number_service import DocumentNumberService
+from ..services.document_number_service_v2 import DocumentNumberServiceV2
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/invoices", tags=["Invoices"])
@@ -21,14 +22,14 @@ ACTUAL_ORG_ID = "ad808530-1ddb-4377-ab20-67bef145d80d"
 async def generate_invoice_number(
     db: Session = Depends(get_db)
 ):
-    """Generate next invoice number using unified service"""
+    """Generate and reserve next invoice number atomically"""
     try:
-        # Use unified document number service
-        new_number = DocumentNumberService.generate_number(db, "invoice", ACTUAL_ORG_ID)
+        # Use V2 service for atomic number generation
+        new_number = DocumentNumberServiceV2.generate_and_reserve_number(db, "invoice", ACTUAL_ORG_ID)
         return {"invoice_number": new_number}
     except Exception as e:
         logger.error(f"Failed to generate invoice number: {e}")
-        # Use service's fallback mechanism
+        # Use service's fallback mechanism  
         current_year = datetime.now().year % 100
         timestamp = int(datetime.now().timestamp() * 1000) % 100000000
         fallback_number = f"INV-{current_year:02d}{timestamp:08d}"
