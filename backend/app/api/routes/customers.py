@@ -77,12 +77,15 @@ async def create_customer(
             "primary_phone": customer_data.get("primary_phone"),
             "primary_email": customer_data.get("email"),
             "secondary_phone": customer_data.get("secondary_phone"),
+            "whatsapp_number": customer_data.get("whatsapp_number", customer_data.get("secondary_phone")),
             "contact_person_name": customer_data.get("contact_person"),
             "gst_number": customer_data.get("gstin"),
             "pan_number": customer_data.get("pan_number"),
             "drug_license_number": customer_data.get("drug_license_number"),
             "credit_limit": customer_data.get("credit_limit", 0),
             "credit_days": customer_data.get("credit_days", 0),
+            "credit_rating": customer_data.get("credit_rating", "NEW"),
+            "payment_terms": customer_data.get("payment_terms", "CASH"),
             "internal_notes": customer_data.get("notes"),
             "is_active": customer_data.get("is_active", True)
         }
@@ -91,15 +94,17 @@ async def create_customer(
         result = db.execute(text("""
             INSERT INTO parties.customers (
                 org_id, customer_code, customer_name, customer_type,
-                primary_phone, primary_email, secondary_phone,
+                primary_phone, primary_email, secondary_phone, whatsapp_number,
                 contact_person_name, gst_number, pan_number, drug_license_number,
-                credit_limit, credit_days, internal_notes, is_active,
+                credit_limit, credit_days, credit_rating, payment_terms,
+                internal_notes, is_active,
                 created_at, updated_at
             ) VALUES (
                 :org_id, :customer_code, :customer_name, :customer_type,
-                :primary_phone, :primary_email, :secondary_phone,
+                :primary_phone, :primary_email, :secondary_phone, :whatsapp_number,
                 :contact_person_name, :gst_number, :pan_number, :drug_license_number,
-                :credit_limit, :credit_days, :internal_notes, :is_active,
+                :credit_limit, :credit_days, :credit_rating, :payment_terms,
+                :internal_notes, :is_active,
                 CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
             ) RETURNING customer_id
         """), mapped_data)

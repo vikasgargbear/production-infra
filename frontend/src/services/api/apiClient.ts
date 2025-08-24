@@ -6,11 +6,11 @@
 import axios, { AxiosInstance, AxiosError } from 'axios';
 
 // Get API URL from environment or use default
-// Use HTTP to avoid CORS preflight redirect issues with Railway
-const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || 'http://pharma-backend-production-0c09.up.railway.app';
+// Always use HTTPS for production Railway deployments
+const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || 'https://pharma-backend-production-0c09.up.railway.app';
 // Create axios instance with default config
 const apiClient: AxiosInstance = axios.create({
-  baseURL: `${API_BASE_URL}/api`,  // Consolidated API - no version
+  baseURL: `${API_BASE_URL}/api`,  // No trailing slash here since endpoints start with /
   timeout: 30000,
   headers: {
     'Content-Type': 'application/json',
@@ -27,8 +27,12 @@ apiClient.interceptors.request.use(
       config.headers.Authorization = `Bearer ${token}`;
     }
     
-    // ENTERPRISE: org_id is now embedded in the JWT token
-    // No need to send it as a separate header - backend extracts it from token
+    // TEMPORARY: Still send X-Org-Id for backward compatibility
+    // TODO: Remove once all backend endpoints migrate to get_org_id_from_token
+    const orgId = sessionStorage.getItem('pharma_org_id') || localStorage.getItem('pharma_org_id');
+    if (orgId) {
+      config.headers['X-Org-Id'] = orgId;
+    }
     
     return config;
   },

@@ -127,7 +127,7 @@ const CompliancePlaceholder = React.memo(() => (
 
 function App(): JSX.Element {
   const [activeTab, setActiveTab] = useState<TabName>('home');
-  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(true); // Bypass login for development
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false); // Require login for security
   const [setupComplete, setSetupComplete] = useState<boolean | null>(null);
   const [isCheckingSetup, setIsCheckingSetup] = useState<boolean>(true);
 

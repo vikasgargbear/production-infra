@@ -36,6 +36,8 @@ class CustomerBase(BaseModel):
     customer_type: str = Field(..., pattern=r"^(retail|wholesale|hospital|clinic|pharmacy)$")
     credit_limit: Decimal = Field(default=Decimal("0.00"), ge=0)
     credit_days: int = Field(default=0, ge=0, le=365)
+    credit_rating: Optional[str] = Field(default="NEW", max_length=50)
+    payment_terms: Optional[str] = Field(default="CASH", max_length=100)
     discount_percent: Decimal = Field(default=Decimal("0.00"), ge=0, le=100)
     
     # Status
@@ -59,7 +61,8 @@ class CustomerBase(BaseModel):
 
 class CustomerCreate(CustomerBase):
     """Schema for creating a new customer"""
-    org_id: UUID = Field(..., description="Organization ID")
+    # org_id removed - it comes from authentication token, not request body
+    pass
 
 
 class CustomerUpdate(BaseModel):

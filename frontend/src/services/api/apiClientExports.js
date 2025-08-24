@@ -26,7 +26,7 @@ apiClient.interceptors.request.use((config) => {
   }
   
   // Add org_id header for multi-tenant support
-  const orgId = sessionStorage.getItem('pharma_org_id') || localStorage.getItem('pharma_org_id') || 'ad808530-1ddb-4377-ab20-67bef145d80d';
+  const orgId = sessionStorage.getItem('pharma_org_id') || localStorage.getItem('pharma_org_id');
   if (orgId) {
     config.headers['X-Org-Id'] = orgId;
   } else {

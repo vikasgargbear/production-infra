@@ -200,13 +200,17 @@ const CustomerCreationB2B = ({ onClose, onCustomerCreated }) => {
     setLoading(true);
     setMessage('');
 
+    // Auto-fill WhatsApp number with primary phone if not provided
+    const whatsappNumber = formData.whatsapp_number || formData.primary_phone;
+    
     const customerData = {
-        org_id: localStorage.getItem('org_id') || 'ad808530-1ddb-4377-ab20-67bef145d80d',
+        // org_id should NOT be sent - backend gets it from auth token
         customer_name: formData.customer_name,
         customer_type: customerType === 'B2B' ? 'wholesale' : 'retail',
         primary_phone: formData.primary_phone.replace(/\D/g, ''),
         email: formData.primary_email || null,
-        secondary_phone: formData.whatsapp_number ? formData.whatsapp_number.replace(/\D/g, '') : null,
+        secondary_phone: whatsappNumber ? whatsappNumber.replace(/\D/g, '') : null,
+        whatsapp_number: whatsappNumber ? whatsappNumber.replace(/\D/g, '') : null, // Also save as whatsapp_number
         contact_person: formData.contact_person_name || null,
         gstin: formData.gst_number || null,
         pan_number: formData.pan_number || null,
@@ -340,9 +344,9 @@ const CustomerCreationB2B = ({ onClose, onCustomerCreated }) => {
           {message && (
             <div className={`
               mb-4 p-3 rounded-lg flex items-start text-sm animate-slide-down
-              ${messageType === 'success' ? 'bg-green-50 text-green-700 border border-green-200' : 
-                messageType === 'error' ? 'bg-red-50 text-red-700 border border-red-200' : 
-                'bg-blue-50 text-blue-700 border border-blue-200'
+              ${messageType === 'success' ? 'bg-gray-50 text-green-700 border border-green-200' : 
+                messageType === 'error' ? 'bg-gray-50 text-red-700 border border-red-200' : 
+                'bg-gray-50 text-blue-700 border border-blue-200'
               }
             `}>
               {messageType === 'success' && <CheckCircle className="w-4 h-4 mr-2 flex-shrink-0 mt-0.5" />}
@@ -356,7 +360,7 @@ const CustomerCreationB2B = ({ onClose, onCustomerCreated }) => {
 
           <div className="space-y-4">
             {/* Business Information Section */}
-            <div className="bg-gray-50 p-4 rounded-lg">
+            <div className="border border-gray-200 p-4 rounded-lg">
               <h3 className="text-sm font-semibold text-gray-900 mb-3 flex items-center">
                 <Building2 className="w-4 h-4 mr-2 text-green-600" />
                 Business Information
@@ -432,7 +436,7 @@ const CustomerCreationB2B = ({ onClose, onCustomerCreated }) => {
                       type="tel"
                       value={formData.whatsapp_number}
                       onChange={(e) => handleInputChange('whatsapp_number', e.target.value)}
-                      placeholder="WhatsApp Number"
+                      placeholder="WhatsApp (defaults to primary phone)"
                       className={`w-full pl-10 pr-3 py-2.5 text-sm border ${
                         errors.whatsapp_number ? 'border-red-300' : 'border-gray-200'
                       } rounded-lg focus:ring-2 focus:ring-green-500 bg-white`}
@@ -443,7 +447,7 @@ const CustomerCreationB2B = ({ onClose, onCustomerCreated }) => {
             </div>
             {/* Contact Person - B2B Only */}
             {customerType === 'B2B' && (
-              <div className="bg-purple-50 p-4 rounded-lg">
+              <div className="border border-gray-200 p-4 rounded-lg">
                 <div className="flex items-center justify-between mb-3">
                   <h3 className="text-sm font-semibold text-gray-900 flex items-center">
                     <User className="w-4 h-4 mr-2 text-purple-600" />
@@ -454,7 +458,7 @@ const CustomerCreationB2B = ({ onClose, onCustomerCreated }) => {
                       type="checkbox"
                       checked={useBusinessContactInfo}
                       onChange={(e) => setUseBusinessContactInfo(e.target.checked)}
-                      className="w-4 h-4 text-teal-600 rounded"
+                      className="w-4 h-4 text-gray-600 rounded"
                     />
                     Same as business
                   </label>
@@ -507,7 +511,7 @@ const CustomerCreationB2B = ({ onClose, onCustomerCreated }) => {
             )}
 
             {/* Address Section */}
-            <div className="bg-orange-50 p-4 rounded-lg">
+            <div className="border border-gray-200 p-4 rounded-lg">
               <h3 className="text-sm font-semibold text-gray-900 mb-3 flex items-center">
                 <MapPin className="w-4 h-4 mr-2 text-orange-600" />
                 Address Information
@@ -558,7 +562,7 @@ const CustomerCreationB2B = ({ onClose, onCustomerCreated }) => {
 
             {/* Compliance & Licensing - B2B Only */}
             {customerType === 'B2B' && (
-              <div className="bg-red-50 p-4 rounded-lg">
+              <div className="border border-gray-200 p-4 rounded-lg">
                 <h3 className="text-sm font-semibold text-gray-900 mb-3 flex items-center">
                   <Shield className="w-4 h-4 mr-2 text-red-600" />
                   Compliance & Licensing
@@ -604,7 +608,7 @@ const CustomerCreationB2B = ({ onClose, onCustomerCreated }) => {
 
             {/* Credit Terms - B2B Only */}
             {customerType === 'B2B' && (
-              <div className="bg-indigo-50 p-4 rounded-lg">
+              <div className="border border-gray-200 p-4 rounded-lg">
                 <h3 className="text-sm font-semibold text-gray-900 mb-3 flex items-center">
                   <CreditCard className="w-4 h-4 mr-2 text-indigo-600" />
                   Credit Terms
