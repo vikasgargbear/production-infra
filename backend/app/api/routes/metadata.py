@@ -185,19 +185,53 @@ async def get_transport_modes(db: Session = Depends(get_db),
 @router.get("/credit-plans")
 async def get_credit_plans(db: Session = Depends(get_db),
     org_id: str = Depends(get_org_id_from_header)):
-    """Get available credit plans"""
-    return {
-        "credit_plans": [
-            {"value": "CUSTOM", "label": "Custom - Manual Entry"},
-            {"value": "STANDARD", "label": "Standard Plan"},
-            {"value": "PREMIUM", "label": "Premium Plan"},
-            {"value": "VIP", "label": "VIP Plan"},
-            {"value": "RESTRICTED", "label": "Restricted Plan"},
-            {"value": "PREPAID", "label": "Prepaid Only"},
-            {"value": "POSTPAID", "label": "Postpaid"},
-            {"value": "HYBRID", "label": "Hybrid (Pre + Post)"}
-        ]
-    }
+    """Get available credit plans from customer groups"""
+    try:
+        # Fetch from customer_groups table which already exists
+        result = db.execute(
+            text("""
+                SELECT 
+                    group_code as value,
+                    group_name as label,
+                    credit_limit_multiplier,
+                    payment_terms_days,
+                    discount_percentage
+                FROM parties.customer_groups
+                WHERE org_id = :org_id AND is_active = true
+                ORDER BY group_name
+            """),
+            {"org_id": org_id}
+        )
+        
+        plans = []
+        for row in result:
+            plans.append({
+                "value": row.value,
+                "label": row.label,
+                "credit_limit_multiplier": float(row.credit_limit_multiplier) if row.credit_limit_multiplier else 1.0,
+                "payment_terms_days": row.payment_terms_days or 30,
+                "discount_percentage": float(row.discount_percentage) if row.discount_percentage else 0
+            })
+        
+        # Add default if no plans exist
+        if not plans:
+            plans = [
+                {"value": "STANDARD", "label": "Standard Plan", "credit_limit_multiplier": 1.0, "payment_terms_days": 30, "discount_percentage": 0},
+                {"value": "PREMIUM", "label": "Premium Plan", "credit_limit_multiplier": 2.0, "payment_terms_days": 45, "discount_percentage": 5},
+                {"value": "VIP", "label": "VIP Plan", "credit_limit_multiplier": 5.0, "payment_terms_days": 60, "discount_percentage": 10}
+            ]
+        
+        return {"credit_plans": plans}
+    except Exception as e:
+        logger.error(f"Error fetching credit plans: {str(e)}")
+        # Return hardcoded fallback
+        return {
+            "credit_plans": [
+                {"value": "STANDARD", "label": "Standard Plan"},
+                {"value": "PREMIUM", "label": "Premium Plan"},
+                {"value": "VIP", "label": "VIP Plan"}
+            ]
+        }
 
 @router.get("/credit-days")
 async def get_credit_days_options(db: Session = Depends(get_db),
@@ -223,15 +257,48 @@ async def get_credit_days_options(db: Session = Depends(get_db),
 @router.get("/credit-ratings")
 async def get_credit_ratings(db: Session = Depends(get_db),
     org_id: str = Depends(get_org_id_from_header)):
-    """Get credit rating options"""
+    """Get credit rating options from lookup values"""
+    try:
+        # Try to fetch from lookup_values table if it exists
+        result = db.execute(
+            text("""
+                SELECT 
+                    lookup_code as value,
+                    lookup_value as label,
+                    lookup_description as description,
+                    numeric_value1 as score
+                FROM master.lookup_values
+                WHERE (org_id = :org_id OR org_id = '00000000-0000-0000-0000-000000000000')
+                    AND lookup_type = 'CREDIT_RATING' 
+                    AND is_active = true
+                ORDER BY display_order, lookup_code
+            """),
+            {"org_id": org_id}
+        )
+        
+        ratings = []
+        for row in result:
+            ratings.append({
+                "value": row.value,
+                "label": row.label,
+                "description": row.description,
+                "score": float(row.score) if row.score else 0
+            })
+        
+        if ratings:
+            return {"credit_ratings": ratings}
+    except Exception as e:
+        logger.debug(f"Lookup table not available: {str(e)}")
+    
+    # Return hardcoded values as fallback
     return {
         "credit_ratings": [
-            {"value": "A", "label": "A - Excellent", "description": "Excellent payment history, high creditworthiness"},
-            {"value": "B", "label": "B - Good", "description": "Good payment history, reliable customer"},
-            {"value": "C", "label": "C - Average", "description": "Average payment history, standard terms"},
-            {"value": "D", "label": "D - Poor", "description": "Poor payment history, restricted credit"},
-            {"value": "NEW", "label": "New Customer", "description": "No credit history available"},
-            {"value": "BLOCKED", "label": "Blocked", "description": "Credit blocked due to payment issues"}
+            {"value": "A", "label": "A - Excellent", "description": "Excellent payment history, high creditworthiness", "score": 5},
+            {"value": "B", "label": "B - Good", "description": "Good payment history, reliable customer", "score": 4},
+            {"value": "C", "label": "C - Average", "description": "Average payment history, standard terms", "score": 3},
+            {"value": "D", "label": "D - Poor", "description": "Poor payment history, restricted credit", "score": 2},
+            {"value": "NEW", "label": "New Customer", "description": "No credit history available", "score": 1},
+            {"value": "BLOCKED", "label": "Blocked", "description": "Credit blocked due to payment issues", "score": 0}
         ]
     }
 

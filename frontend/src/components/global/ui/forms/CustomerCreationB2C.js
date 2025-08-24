@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { User, Phone, Mail, Save, X, AlertCircle, CheckCircle, MapPin, MessageCircle } from 'lucide-react';
+import { User, Phone, Mail, Save, X, AlertCircle, CheckCircle, MapPin, MessageCircle, ChevronDown, ChevronRight } from 'lucide-react';
 import { customersApi } from '../../../../services/api/modules/customers.api';
 import offlineStorage from '../../../../services/offlineStorage';
 
@@ -23,6 +23,7 @@ const CustomerCreationB2C = ({ onClose, onCustomerCreated }) => {
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState('');
   const [messageType, setMessageType] = useState('');
+  const [showAddressSection, setShowAddressSection] = useState(false);
 
   const [formData, setFormData] = useState({
     // Basic Details
@@ -96,6 +97,10 @@ const CustomerCreationB2C = ({ onClose, onCustomerCreated }) => {
           [addressField]: value
         }
       }));
+      // Auto-expand address section if user starts typing address
+      if (value && !showAddressSection) {
+        setShowAddressSection(true);
+      }
     } else {
       setFormData(prev => ({
         ...prev,
@@ -135,13 +140,13 @@ const CustomerCreationB2C = ({ onClose, onCustomerCreated }) => {
       credit_days: 0,
       credit_rating: 'A', // Good by default for B2C
       
-      // Address (if provided)
+      // Address (optional - for future deliveries)
       ...(formData.address.address_line1 && {
         address_line1: formData.address.address_line1,
-        address_line2: formData.address.address_line2,
-        city: formData.address.city,
-        state: formData.address.state,
-        pincode: formData.address.pincode
+        address_line2: formData.address.address_line2 || null,
+        city: formData.address.city || null,
+        state: formData.address.state || null,
+        pincode: formData.address.pincode || null
       }),
       
       // Additional B2C fields
@@ -172,7 +177,8 @@ const CustomerCreationB2C = ({ onClose, onCustomerCreated }) => {
       const response = await customersApi.create(customerData);
       
       if (response.data) {
-        setMessage('Customer created successfully!');
+        const hasAddress = formData.address.address_line1;
+        setMessage(`Customer created successfully!${hasAddress ? ' Address saved for future deliveries.' : ''}`);
         setMessageType('success');
         
         // Call the callback with the created customer
@@ -401,12 +407,32 @@ const CustomerCreationB2C = ({ onClose, onCustomerCreated }) => {
             </div>
           </div>
 
-          {/* Address (Optional for B2C) */}
+          {/* Address (Optional - for future deliveries) */}
           <div className="mb-6">
-            <h3 className="text-sm font-semibold text-gray-900 mb-3 uppercase tracking-wider">
-              Address (Optional)
-            </h3>
-            <div className="space-y-3">
+            <button
+              type="button"
+              onClick={() => setShowAddressSection(!showAddressSection)}
+              className="w-full text-left flex items-center justify-between p-3 bg-gray-50 hover:bg-gray-100 rounded-lg transition-colors"
+            >
+              <div className="flex items-center">
+                <h3 className="text-sm font-semibold text-gray-900 uppercase tracking-wider flex items-center">
+                  <MapPin className="w-4 h-4 mr-2 text-gray-500" />
+                  Address (Optional)
+                  <span className="ml-2 text-xs text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full normal-case">
+                    For deliveries
+                  </span>
+                </h3>
+              </div>
+              {showAddressSection ? (
+                <ChevronDown className="w-4 h-4 text-gray-500" />
+              ) : (
+                <ChevronRight className="w-4 h-4 text-gray-500" />
+              )}
+            </button>
+            
+            {showAddressSection && (
+            <>
+            <div className="space-y-3 mt-4">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 <div className="relative">
                   <MapPin className="absolute left-3 top-3 w-4 h-4 text-gray-400" />
@@ -463,6 +489,11 @@ const CustomerCreationB2C = ({ onClose, onCustomerCreated }) => {
                 </div>
               </div>
             </div>
+            <p className="text-xs text-gray-500 mt-2 text-center">
+              💡 Add address to enable home delivery for this customer in the future
+            </p>
+            </>
+            )}
           </div>
         </div>
 

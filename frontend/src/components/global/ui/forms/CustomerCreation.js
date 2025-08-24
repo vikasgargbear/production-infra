@@ -128,56 +128,24 @@ const CustomerCreation = ({
  * This is only used when explicitly enabled
  */
 const CustomerCreationWithToggle = ({ onClose, onCustomerCreated, initialMode = 'b2b' }) => {
-  const [mode, setMode] = useState(initialMode);
+  const [mode] = useState(initialMode);
+
+  // For now, just render the B2B component with a temporary toggle
+  // This avoids the nested modal overlay issue
+  if (mode === 'b2c') {
+    return (
+      <CustomerCreationB2C 
+        onClose={onClose}
+        onCustomerCreated={onCustomerCreated}
+      />
+    );
+  }
 
   return (
-    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-5xl mx-4 max-h-[90vh] overflow-hidden">
-        {/* Toggle Header */}
-        <div className="bg-gray-100 px-6 py-3 border-b border-gray-200">
-          <div className="flex items-center justify-center space-x-1 bg-white rounded-lg p-1">
-            <button
-              onClick={() => setMode('b2b')}
-              className={`flex-1 px-4 py-2 rounded-md text-sm font-medium transition-all ${
-                mode === 'b2b'
-                  ? 'bg-blue-600 text-white shadow-sm'
-                  : 'text-gray-600 hover:text-gray-800'
-              }`}
-            >
-              B2B Business
-            </button>
-            <button
-              onClick={() => setMode('b2c')}
-              className={`flex-1 px-4 py-2 rounded-md text-sm font-medium transition-all ${
-                mode === 'b2c'
-                  ? 'bg-purple-600 text-white shadow-sm'
-                  : 'text-gray-600 hover:text-gray-800'
-              }`}
-            >
-              B2C Individual
-            </button>
-          </div>
-          <p className="text-xs text-center text-gray-500 mt-2">
-            Testing Mode - Toggle enabled for development
-          </p>
-        </div>
-
-        {/* Close the wrapper and render the appropriate component */}
-        <div className="relative">
-          {mode === 'b2c' ? (
-            <CustomerCreationB2C 
-              onClose={onClose}
-              onCustomerCreated={onCustomerCreated}
-            />
-          ) : (
-            <CustomerCreationB2B 
-              onClose={onClose}
-              onCustomerCreated={onCustomerCreated}
-            />
-          )}
-        </div>
-      </div>
-    </div>
+    <CustomerCreationB2B 
+      onClose={onClose}
+      onCustomerCreated={onCustomerCreated}
+    />
   );
 };
 
