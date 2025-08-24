@@ -15,6 +15,8 @@ class CustomerBase(BaseModel):
     customer_name: str = Field(..., min_length=1, max_length=200)
     customer_code: Optional[str] = Field(None, max_length=50)
     contact_person: Optional[str] = Field(None, max_length=100)
+    contact_person_phone: Optional[str] = Field(None, pattern=r"^[0-9]{10}$", description="Contact person phone")
+    contact_person_email: Optional[str] = Field(None, pattern=r"^[\w\.-]+@[\w\.-]+\.\w+$", description="Contact person email")
     primary_phone: str = Field(..., pattern=r"^[0-9]{10}$", description="10-digit mobile number")
     secondary_phone: Optional[str] = Field(None, pattern=r"^[0-9]{10}$")
     email: Optional[str] = Field(None, pattern=r"^[\w\.-]+@[\w\.-]+\.\w+$")

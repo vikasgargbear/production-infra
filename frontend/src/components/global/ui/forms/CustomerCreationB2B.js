@@ -212,6 +212,8 @@ const CustomerCreationB2B = ({ onClose, onCustomerCreated }) => {
         secondary_phone: whatsappNumber ? whatsappNumber.replace(/\D/g, '') : null,
         whatsapp_number: whatsappNumber ? whatsappNumber.replace(/\D/g, '') : null, // Also save as whatsapp_number
         contact_person: formData.contact_person_name || null,
+        contact_person_phone: formData.contact_person_phone ? formData.contact_person_phone.replace(/\D/g, '') : null,
+        contact_person_email: formData.contact_person_email || null,
         gstin: formData.gst_number || null,
         pan_number: formData.pan_number || null,
         drug_license_number: formData.drug_license_number || null,
