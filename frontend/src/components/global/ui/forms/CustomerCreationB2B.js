@@ -281,108 +281,104 @@ const CustomerCreationB2B = ({ onClose, onCustomerCreated }) => {
 
   return (
     <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-5xl mx-4 max-h-[90vh] overflow-hidden transform transition-all animate-slide-up">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-5xl mx-4 max-h-[95vh] overflow-hidden transform transition-all animate-slide-up">
         
         {/* Header */}
-        <div className="bg-gradient-to-r from-green-50 to-blue-50 px-8 py-6 border-b border-gray-100">
+        <div className="bg-gradient-to-r from-green-50 to-blue-50 px-6 py-4 border-b border-gray-100">
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-4">
-              <div className="p-3 bg-gradient-to-br from-green-500 to-blue-500 rounded-2xl shadow-lg">
-                <User className="w-6 h-6 text-white" />
+            <div className="flex items-center gap-3">
+              <div className="p-2 bg-gradient-to-br from-green-500 to-blue-500 rounded-xl shadow-lg">
+                <User className="w-5 h-5 text-white" />
               </div>
               <div>
-                <h2 className="text-2xl font-bold text-gray-900">Create Customer</h2>
-                <p className="text-gray-600 mt-1">Add new customer to your business</p>
+                <h2 className="text-xl font-bold text-gray-900">Create Customer</h2>
+                <p className="text-gray-600 text-sm">Add new customer to your business</p>
               </div>
             </div>
             
             {/* B2B/B2C Toggle */}
-            <div className="flex items-center gap-6">
-              <div className="flex items-center bg-white rounded-xl p-1 shadow-sm border">
+            <div className="flex items-center gap-4">
+              <div className="flex items-center bg-white rounded-lg p-1 shadow-sm border">
                 <button
                   onClick={() => handleCustomerTypeToggle('B2B')}
-                  className={`px-6 py-2 rounded-lg text-sm font-medium transition-all ${
+                  className={`px-4 py-1.5 rounded-md text-sm font-medium transition-all ${
                     customerType === 'B2B'
                       ? 'bg-gradient-to-r from-green-500 to-green-600 text-white shadow-sm'
                       : 'text-gray-600 hover:text-gray-900'
                   }`}
                 >
-                  <Building2 className="w-4 h-4 inline mr-2" />
+                  <Building2 className="w-3.5 h-3.5 inline mr-1.5" />
                   B2B Business
                 </button>
                 <button
                   onClick={() => handleCustomerTypeToggle('B2C')}
-                  className={`px-6 py-2 rounded-lg text-sm font-medium transition-all ${
+                  className={`px-4 py-1.5 rounded-md text-sm font-medium transition-all ${
                     customerType === 'B2C'
                       ? 'bg-gradient-to-r from-blue-500 to-blue-600 text-white shadow-sm'
                       : 'text-gray-600 hover:text-gray-900'
                   }`}
                 >
-                  <User className="w-4 h-4 inline mr-2" />
+                  <User className="w-3.5 h-3.5 inline mr-1.5" />
                   B2C Individual
                 </button>
               </div>
               
               <button
                 onClick={onClose}
-                className="p-2 hover:bg-white/80 rounded-xl transition-colors"
+                className="p-1.5 hover:bg-white/80 rounded-lg transition-colors"
               >
-                <X className="w-6 h-6 text-gray-500" />
+                <X className="w-5 h-5 text-gray-500" />
               </button>
             </div>
           </div>
         </div>
 
-        {/* Content */}
-        <div className="p-8 max-h-[75vh] overflow-y-auto">
+        {/* Content - Optimized Height */}
+        <div className="p-6 max-h-[calc(95vh-120px)] overflow-y-auto">
           
           {/* Message Display */}
           {message && (
             <div className={`
-              mb-6 p-4 rounded-xl flex items-start text-sm animate-slide-down
+              mb-4 p-3 rounded-lg flex items-start text-sm animate-slide-down
               ${messageType === 'success' ? 'bg-green-50 text-green-700 border border-green-200' : 
                 messageType === 'error' ? 'bg-red-50 text-red-700 border border-red-200' : 
                 'bg-blue-50 text-blue-700 border border-blue-200'
               }
             `}>
-              {messageType === 'success' && <CheckCircle className="w-5 h-5 mr-3 flex-shrink-0 mt-0.5" />}
-              {messageType === 'error' && <AlertCircle className="w-5 h-5 mr-3 flex-shrink-0 mt-0.5" />}
+              {messageType === 'success' && <CheckCircle className="w-4 h-4 mr-2 flex-shrink-0 mt-0.5" />}
+              {messageType === 'error' && <AlertCircle className="w-4 h-4 mr-2 flex-shrink-0 mt-0.5" />}
               <div className="flex-1 font-medium">{message}</div>
-              <button onClick={clearMessage} className="ml-3 p-1 hover:bg-black/10 rounded-lg transition-colors">
-                <X className="w-4 h-4" />
+              <button onClick={clearMessage} className="ml-2 p-0.5 hover:bg-black/10 rounded transition-colors">
+                <X className="w-3.5 h-3.5" />
               </button>
             </div>
           )}
 
-          {/* Basic Information Section */}
-          <div className="mb-8">
-            <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
-              <User className="w-5 h-5 mr-2 text-green-600" />
-              Basic Information
-            </h3>
-            <div className="space-y-6">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="relative">
-                  <Building2 className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
-                  <input
-                    type="text"
-                    value={formData.customer_name}
-                    onChange={(e) => handleInputChange('customer_name', e.target.value)}
-                    placeholder={customerType === 'B2B' ? 'Business/Company Name' : 'Full Name'}
-                    className={`w-full pl-11 pr-3 py-3 border ${
-                      errors.customer_name ? 'border-red-300' : 'border-gray-200'
-                    } rounded-xl focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all`}
-                  />
-                  {errors.customer_name && (
-                    <p className="mt-1 text-sm text-red-600">{errors.customer_name}</p>
-                  )}
-                </div>
-
-                <div>
+          <div className="space-y-4">
+            {/* Business Information Section */}
+            <div className="bg-gray-50 p-4 rounded-lg">
+              <h3 className="text-sm font-semibold text-gray-900 mb-3 flex items-center">
+                <Building2 className="w-4 h-4 mr-2 text-green-600" />
+                Business Information
+              </h3>
+              <div className="space-y-3">
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="relative">
+                    <Building2 className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
+                    <input
+                      type="text"
+                      value={formData.customer_name}
+                      onChange={(e) => handleInputChange('customer_name', e.target.value)}
+                      placeholder={customerType === 'B2B' ? 'Business/Company Name' : 'Full Name'}
+                      className={`w-full pl-10 pr-3 py-2.5 text-sm border ${
+                        errors.customer_name ? 'border-red-300' : 'border-gray-200'
+                      } rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent bg-white`}
+                    />
+                  </div>
                   <select
                     value={formData.business_type}
                     onChange={(e) => handleInputChange('business_type', e.target.value)}
-                    className="w-full px-3 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all"
+                    className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-green-500 bg-white"
                   >
                     <option value="">{customerType === 'B2B' ? 'Select Business Type' : 'Customer Category'}</option>
                     {customerType === 'B2B' ? (
@@ -393,8 +389,6 @@ const CustomerCreationB2B = ({ onClose, onCustomerCreated }) => {
                         <option value="Distributor">Distributor</option>
                         <option value="Wholesaler">Wholesaler</option>
                         <option value="Medical Store">Medical Store</option>
-                        <option value="Nursing Home">Nursing Home</option>
-                        <option value="Other Business">Other Business</option>
                       </>
                     ) : (
                       <>
@@ -402,324 +396,233 @@ const CustomerCreationB2B = ({ onClose, onCustomerCreated }) => {
                         <option value="Consumer">Consumer</option>
                         <option value="Walk-in">Walk-in Customer</option>
                         <option value="Regular">Regular Customer</option>
-                        <option value="Other">Other</option>
                       </>
                     )}
                   </select>
                 </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Contact Information Section */}
-          <div className="mb-8">
-            <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
-              <Phone className="w-5 h-5 mr-2 text-blue-600" />
-              Contact Information
-            </h3>
-            <div className="space-y-6">
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div className="relative">
-                  <Phone className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
-                  <input
-                    type="tel"
-                    value={formData.primary_phone}
-                    onChange={(e) => handleInputChange('primary_phone', e.target.value)}
-                    placeholder="Primary Phone Number"
-                    className={`w-full pl-11 pr-3 py-3 border ${
-                      errors.primary_phone ? 'border-red-300' : 'border-gray-200'
-                    } rounded-xl focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all`}
-                  />
-                  {errors.primary_phone && (
-                    <p className="mt-1 text-sm text-red-600">{errors.primary_phone}</p>
-                  )}
-                </div>
-
-                <div className="relative">
-                  <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
-                  <input
-                    type="email"
-                    value={formData.primary_email}
-                    onChange={(e) => handleInputChange('primary_email', e.target.value)}
-                    placeholder="Primary Email Address"
-                    className={`w-full pl-11 pr-3 py-3 border ${
-                      errors.primary_email ? 'border-red-300' : 'border-gray-200'
-                    } rounded-xl focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all`}
-                  />
-                  {errors.primary_email && (
-                    <p className="mt-1 text-sm text-red-600">{errors.primary_email}</p>
-                  )}
-                </div>
-
-                <div className="relative">
-                  <MessageCircle className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
-                  <input
-                    type="tel"
-                    value={formData.whatsapp_number}
-                    onChange={(e) => handleInputChange('whatsapp_number', e.target.value)}
-                    placeholder="WhatsApp Number"
-                    className={`w-full pl-11 pr-3 py-3 border ${
-                      errors.whatsapp_number ? 'border-red-300' : 'border-gray-200'
-                    } rounded-xl focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all`}
-                  />
-                  {errors.whatsapp_number && (
-                    <p className="mt-1 text-sm text-red-600">{errors.whatsapp_number}</p>
-                  )}
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* B2B Contact Person Section - Only show for B2B */}
-          {customerType === 'B2B' && (
-            <div className="mb-8">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-lg font-semibold text-gray-900 flex items-center">
-                  <User className="w-5 h-5 mr-2 text-purple-600" />
-                  Contact Person Details
-                </h3>
                 
-                {/* Checkbox to copy business contact info */}
-                <div className="flex items-center gap-2">
-                  <input
-                    id="copyBusinessContact"
-                    type="checkbox"
-                    checked={useBusinessContactInfo}
-                    onChange={(e) => setUseBusinessContactInfo(e.target.checked)}
-                    className="w-4 h-4 text-purple-600 bg-gray-100 border-gray-300 rounded focus:ring-purple-500 focus:ring-2"
-                  />
-                  <label htmlFor="copyBusinessContact" className="text-sm text-gray-600 select-none cursor-pointer">
-                    Use same as business contact info
+                <div className="grid grid-cols-3 gap-3">
+                  <div className="relative">
+                    <Phone className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
+                    <input
+                      type="tel"
+                      value={formData.primary_phone}
+                      onChange={(e) => handleInputChange('primary_phone', e.target.value)}
+                      placeholder="Primary Phone Number"
+                      className={`w-full pl-10 pr-3 py-2.5 text-sm border ${
+                        errors.primary_phone ? 'border-red-300' : 'border-gray-200'
+                      } rounded-lg focus:ring-2 focus:ring-green-500 bg-white`}
+                    />
+                  </div>
+                  <div className="relative">
+                    <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
+                    <input
+                      type="email"
+                      value={formData.primary_email}
+                      onChange={(e) => handleInputChange('primary_email', e.target.value)}
+                      placeholder="Email Address"
+                      className={`w-full pl-10 pr-3 py-2.5 text-sm border ${
+                        errors.primary_email ? 'border-red-300' : 'border-gray-200'
+                      } rounded-lg focus:ring-2 focus:ring-green-500 bg-white`}
+                    />
+                  </div>
+                  <div className="relative">
+                    <MessageCircle className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
+                    <input
+                      type="tel"
+                      value={formData.whatsapp_number}
+                      onChange={(e) => handleInputChange('whatsapp_number', e.target.value)}
+                      placeholder="WhatsApp Number"
+                      className={`w-full pl-10 pr-3 py-2.5 text-sm border ${
+                        errors.whatsapp_number ? 'border-red-300' : 'border-gray-200'
+                      } rounded-lg focus:ring-2 focus:ring-green-500 bg-white`}
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+            {/* Contact Person - B2B Only */}
+            {customerType === 'B2B' && (
+              <div className="bg-purple-50 p-4 rounded-lg">
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="text-sm font-semibold text-gray-900 flex items-center">
+                    <User className="w-4 h-4 mr-2 text-purple-600" />
+                    Contact Person Details
+                  </h3>
+                  <label className="flex items-center gap-2 text-xs text-gray-600 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={useBusinessContactInfo}
+                      onChange={(e) => setUseBusinessContactInfo(e.target.checked)}
+                      className="w-4 h-4 text-teal-600 rounded"
+                    />
+                    Same as business
                   </label>
                 </div>
-              </div>
-              <div className="space-y-6">
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="grid grid-cols-3 gap-3">
                   <div className="relative">
-                    <User className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
+                    <User className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
                     <input
                       type="text"
                       value={formData.contact_person_name}
                       onChange={(e) => handleInputChange('contact_person_name', e.target.value)}
                       placeholder="Contact Person Name"
-                      className={`w-full pl-11 pr-3 py-3 border ${
+                      className={`w-full pl-10 pr-3 py-2.5 text-sm border ${
                         errors.contact_person_name ? 'border-red-300' : 'border-gray-200'
-                      } rounded-xl focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all`}
+                      } rounded-lg focus:ring-2 focus:ring-green-500 bg-white`}
                     />
-                    {errors.contact_person_name && (
-                      <p className="mt-1 text-sm text-red-600">{errors.contact_person_name}</p>
-                    )}
                   </div>
-
                   <div className="relative">
-                    <Phone className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
+                    <Phone className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
                     <input
                       type="tel"
                       value={formData.contact_person_phone}
                       onChange={(e) => handleInputChange('contact_person_phone', e.target.value)}
-                      placeholder="Contact Person Phone"
+                      placeholder="Contact Phone"
                       disabled={useBusinessContactInfo}
-                      className={`w-full pl-11 pr-3 py-3 border ${
+                      className={`w-full pl-10 pr-3 py-2.5 text-sm border ${
                         errors.contact_person_phone ? 'border-red-300' : 'border-gray-200'
-                      } rounded-xl focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all ${
-                        useBusinessContactInfo ? 'bg-gray-100 text-gray-500' : ''
+                      } rounded-lg focus:ring-2 focus:ring-green-500 ${
+                        useBusinessContactInfo ? 'bg-gray-100' : 'bg-white'
                       }`}
                     />
-                    {errors.contact_person_phone && (
-                      <p className="mt-1 text-sm text-red-600">{errors.contact_person_phone}</p>
-                    )}
                   </div>
-
                   <div className="relative">
-                    <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
+                    <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
                     <input
                       type="email"
                       value={formData.contact_person_email}
                       onChange={(e) => handleInputChange('contact_person_email', e.target.value)}
-                      placeholder="Contact Person Email"
+                      placeholder="Contact Email"
                       disabled={useBusinessContactInfo}
-                      className={`w-full pl-11 pr-3 py-3 border ${
+                      className={`w-full pl-10 pr-3 py-2.5 text-sm border ${
                         errors.contact_person_email ? 'border-red-300' : 'border-gray-200'
-                      } rounded-xl focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all ${
-                        useBusinessContactInfo ? 'bg-gray-100 text-gray-500' : ''
+                      } rounded-lg focus:ring-2 focus:ring-green-500 ${
+                        useBusinessContactInfo ? 'bg-gray-100' : 'bg-white'
                       }`}
                     />
-                    {errors.contact_person_email && (
-                      <p className="mt-1 text-sm text-red-600">{errors.contact_person_email}</p>
-                    )}
                   </div>
                 </div>
               </div>
-            </div>
-          )}
+            )}
 
-          {/* Address Information Section */}
-          <div className="mb-8">
-            <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
-              <MapPin className="w-5 h-5 mr-2 text-orange-600" />
-              Address Information
-            </h3>
-            <div className="space-y-6">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="relative">
-                  <MapPin className="absolute left-3 top-3 w-5 h-5 text-gray-400" />
+            {/* Address Section */}
+            <div className="bg-orange-50 p-4 rounded-lg">
+              <h3 className="text-sm font-semibold text-gray-900 mb-3 flex items-center">
+                <MapPin className="w-4 h-4 mr-2 text-orange-600" />
+                Address Information
+              </h3>
+              <div className="space-y-3">
+                <div className="grid grid-cols-2 gap-3">
                   <input
                     type="text"
                     value={formData.address.address_line1}
                     onChange={(e) => handleInputChange('address.address_line1', e.target.value)}
                     placeholder="Address Line 1"
-                    className="w-full pl-11 pr-3 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all"
+                    className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-green-500 bg-white"
                   />
-                </div>
-
-                <div>
                   <input
                     type="text"
                     value={formData.address.address_line2}
                     onChange={(e) => handleInputChange('address.address_line2', e.target.value)}
                     placeholder="Address Line 2 (Optional)"
-                    className="w-full px-3 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all"
+                    className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-green-500 bg-white"
                   />
                 </div>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div>
+                <div className="grid grid-cols-3 gap-3">
                   <input
                     type="text"
                     value={formData.address.city}
                     onChange={(e) => handleInputChange('address.city', e.target.value)}
                     placeholder="City"
-                    className="w-full px-3 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all"
+                    className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-green-500 bg-white"
                   />
-                </div>
-
-                <div>
                   <input
                     type="text"
                     value={formData.address.state}
                     onChange={(e) => handleInputChange('address.state', e.target.value)}
                     placeholder="State"
-                    className="w-full px-3 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all"
+                    className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-green-500 bg-white"
                   />
-                </div>
-
-                <div>
                   <input
                     type="text"
                     value={formData.address.pincode}
                     onChange={(e) => handleInputChange('address.pincode', e.target.value)}
                     placeholder="Pincode"
                     maxLength={6}
-                    className="w-full px-3 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all"
+                    className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-green-500 bg-white"
                   />
                 </div>
               </div>
             </div>
-          </div>
 
-          {/* Compliance & Licensing Section - Only for B2B */}
-          {customerType === 'B2B' && (
-            <div className="mb-8">
-              <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
-                <Shield className="w-5 h-5 mr-2 text-red-600" />
-                Compliance & Licensing
-              </h3>
-            <div className="space-y-6">
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div className="relative">
-                  <Shield className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
+            {/* Compliance & Licensing - B2B Only */}
+            {customerType === 'B2B' && (
+              <div className="bg-red-50 p-4 rounded-lg">
+                <h3 className="text-sm font-semibold text-gray-900 mb-3 flex items-center">
+                  <Shield className="w-4 h-4 mr-2 text-red-600" />
+                  Compliance & Licensing
+                </h3>
+                <div className="grid grid-cols-4 gap-3">
                   <input
                     type="text"
                     value={formData.gst_number}
                     onChange={(e) => handleInputChange('gst_number', e.target.value.toUpperCase())}
                     placeholder="GST Number"
                     maxLength={15}
-                    className={`w-full pl-11 pr-3 py-3 border ${
+                    className={`w-full px-3 py-2.5 text-sm border ${
                       errors.gst_number ? 'border-red-300' : 'border-gray-200'
-                    } rounded-xl focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all`}
+                    } rounded-lg focus:ring-2 focus:ring-green-500 bg-white`}
                   />
-                  {errors.gst_number && (
-                    <p className="mt-1 text-sm text-red-600">{errors.gst_number}</p>
-                  )}
-                </div>
-
-                <div className="relative">
-                  <FileText className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
                   <input
                     type="text"
                     value={formData.pan_number}
                     onChange={(e) => handleInputChange('pan_number', e.target.value.toUpperCase())}
                     placeholder="PAN Number"
                     maxLength={10}
-                    className={`w-full pl-11 pr-3 py-3 border ${
+                    className={`w-full px-3 py-2.5 text-sm border ${
                       errors.pan_number ? 'border-red-300' : 'border-gray-200'
-                    } rounded-xl focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all`}
+                    } rounded-lg focus:ring-2 focus:ring-green-500 bg-white`}
                   />
-                  {errors.pan_number && (
-                    <p className="mt-1 text-sm text-red-600">{errors.pan_number}</p>
-                  )}
-                </div>
-
-                <div className="relative">
-                  <FileText className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
                   <input
                     type="text"
                     value={formData.drug_license_number}
                     onChange={(e) => handleInputChange('drug_license_number', e.target.value)}
                     placeholder="Drug License Number"
-                    className="w-full pl-11 pr-3 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all"
+                    className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-green-500 bg-white"
                   />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div>
                   <input
                     type="date"
                     value={formData.drug_license_validity}
                     onChange={(e) => handleInputChange('drug_license_validity', e.target.value)}
-                    className="w-full px-3 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all"
+                    title="Drug License Validity"
+                    className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-green-500 bg-white"
                   />
-                  <p className="text-xs text-gray-500 mt-1">Drug License Validity</p>
                 </div>
               </div>
-            </div>
-          </div>
-          )}
+            )}
 
-          {/* Credit Terms Section - Only for B2B */}
-          {customerType === 'B2B' && (
-            <div className="mb-8">
-              <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
-                <CreditCard className="w-5 h-5 mr-2 text-indigo-600" />
-                Credit Terms
-              </h3>
-            <div className="space-y-6">
-              {/* Credit Details */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div>
-                  <label className="block text_sm font-medium text-gray-700 mb-1">Credit Limit (₹)</label>
+            {/* Credit Terms - B2B Only */}
+            {customerType === 'B2B' && (
+              <div className="bg-indigo-50 p-4 rounded-lg">
+                <h3 className="text-sm font-semibold text-gray-900 mb-3 flex items-center">
+                  <CreditCard className="w-4 h-4 mr-2 text-indigo-600" />
+                  Credit Terms
+                </h3>
+                <div className="grid grid-cols-4 gap-3">
                   <input
                     type="number"
                     value={formData.credit_limit}
-                    onChange={(e) => {
-                      handleInputChange('credit_limit', e.target.value);
-                    }}
-                    placeholder="Credit Limit"
+                    onChange={(e) => handleInputChange('credit_limit', e.target.value)}
+                    placeholder="Credit Limit (₹)"
                     min="0"
-                    className="w-full px-3 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all"
+                    className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-green-500 bg-white"
                   />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Credit Days</label>
                   <select
                     value={formData.credit_days}
-                    onChange={(e) => {
-                      handleInputChange('credit_days', e.target.value);
-                    }}
-                    className="w-full px-3 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all"
+                    onChange={(e) => handleInputChange('credit_days', e.target.value)}
+                    className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-green-500 bg-white"
+                    title="Credit Days"
                   >
                     <option value="0">Cash Only</option>
                     <option value="15">15 Days</option>
@@ -728,82 +631,68 @@ const CustomerCreationB2B = ({ onClose, onCustomerCreated }) => {
                     <option value="60">60 Days</option>
                     <option value="90">90 Days</option>
                   </select>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Credit Rating</label>
                   <select
                     value={formData.credit_rating}
-                    onChange={(e) => {
-                      handleInputChange('credit_rating', e.target.value);
-                    }}
-                    className="w-full px-3 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all"
+                    onChange={(e) => handleInputChange('credit_rating', e.target.value)}
+                    className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-green-500 bg-white"
+                    title="Credit Rating"
                   >
                     <option value="A">A - Excellent</option>
                     <option value="B">B - Good</option>
                     <option value="C">C - Fair</option>
                     <option value="D">D - Poor</option>
                   </select>
+                  <select
+                    value={formData.payment_terms}
+                    onChange={(e) => handleInputChange('payment_terms', e.target.value)}
+                    className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-green-500 bg-white"
+                    title="Payment Terms"
+                  >
+                    <option value="Cash">Cash</option>
+                    <option value="Credit">Credit</option>
+                    <option value="Advance">Advance</option>
+                    <option value="COD">Cash on Delivery</option>
+                  </select>
                 </div>
               </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Payment Terms</label>
-                <select
-                  value={formData.payment_terms}
-                  onChange={(e) => {
-                    handleInputChange('payment_terms', e.target.value);
-                  }}
-                  className={`w-full px-3 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all ${
-                    selectedCreditPlan !== 'custom' ? 'bg-gray-100' : ''
-                  }`}
-                  disabled={selectedCreditPlan !== 'custom'}
-                >
-                  <option value="Cash">Cash</option>
-                  <option value="Credit">Credit</option>
-                  <option value="Advance">Advance</option>
-                  <option value="COD">Cash on Delivery</option>
-                </select>
-              </div>
-            </div>
+            )}
           </div>
-          )}
         </div>
 
         {/* Footer */}
-        <div className="bg-gradient-to-r from-gray-50 to-gray-100 px-8 py-6 border-t border-gray-200">
+        <div className="bg-gradient-to-r from-gray-50 to-gray-100 px-6 py-4 border-t border-gray-200">
           <div className="flex justify-between items-center">
             <div className="text-sm text-gray-600">
-              <span className="font-medium">Customer Type:</span> {customerType}
+              <span className="font-medium">Type:</span> {customerType}
               {customerType === 'B2B' && formData.contact_person_name && (
-                <span className="ml-4">
+                <span className="ml-3">
                   <span className="font-medium">Contact:</span> {formData.contact_person_name}
                 </span>
               )}
             </div>
             
-            <div className="flex items-center gap-4">
+            <div className="flex items-center gap-3">
               <button
                 onClick={onClose}
                 disabled={loading}
-                className="px-6 py-3 border border-gray-300 text-gray-700 rounded-xl hover:bg-gray-50 transition-colors disabled:opacity-50 font-medium"
+                className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50 font-medium text-sm"
               >
                 Cancel
               </button>
               <button
                 onClick={handleSubmit}
                 disabled={loading}
-                className="px-8 py-3 bg-gradient-to-r from-green-600 to-green-700 text-white rounded-xl hover:from-green-700 hover:to-green-800 transition-all disabled:from-gray-400 disabled:to-gray-500 disabled:cursor-not-allowed flex items-center gap-3 font-medium shadow-lg"
+                className="px-5 py-2 bg-gradient-to-r from-green-600 to-green-700 text-white rounded-lg hover:from-green-700 hover:to-green-800 transition-all disabled:from-gray-400 disabled:to-gray-500 disabled:cursor-not-allowed flex items-center gap-2 font-medium text-sm shadow-lg"
               >
                 {loading ? (
                   <>
-                    <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
-                    Creating {customerType} Customer...
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                    Creating...
                   </>
                 ) : (
                   <>
-                    <Save className="w-5 h-5" />
-                    Create {customerType} Customer
+                    <Save className="w-4 h-4" />
+                    Create {customerType}
                   </>
                 )}
               </button>

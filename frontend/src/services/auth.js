@@ -39,6 +39,13 @@ class AuthService {
       localStorage.setItem('authToken', demoToken);
       localStorage.setItem('token', demoToken); // Also store as 'token' for compatibility
       localStorage.setItem('user', JSON.stringify(demoUserData));
+      
+      // For demo users, check if org_id already exists from initial setup
+      // If not, this means setup hasn't been done yet
+      const existingOrgId = localStorage.getItem('pharma_org_id');
+      if (!existingOrgId) {
+        console.warn('No organization setup found. Please complete initial setup.');
+      }
 
       // Set default authorization header
       this.setAuthHeader(demoToken);
@@ -53,7 +60,7 @@ class AuthService {
         password
       });
 
-      const { access_token, refresh_token, user } = response.data;
+      const { access_token, refresh_token, user, organization } = response.data;
 
       // Store tokens and user data
       this.token = access_token;
@@ -64,6 +71,12 @@ class AuthService {
       localStorage.setItem('token', access_token); // Also store as 'token' for compatibility
       localStorage.setItem('refreshToken', refresh_token);
       localStorage.setItem('user', JSON.stringify(user));
+      
+      // Store org_id from login response
+      if (organization?.org_id) {
+        localStorage.setItem('pharma_org_id', organization.org_id);
+        sessionStorage.setItem('pharma_org_id', organization.org_id);
+      }
 
       // Set default authorization header
       this.setAuthHeader(access_token);

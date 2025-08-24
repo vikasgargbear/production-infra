@@ -18,20 +18,17 @@ const apiClient: AxiosInstance = axios.create({
   },
 });
 
-// Request interceptor for auth token and org_id
+// Request interceptor for auth token
 apiClient.interceptors.request.use(
   (config) => {
     // Add auth token if available
-    const token = localStorage.getItem('auth_token');
+    const token = localStorage.getItem('auth_token') || localStorage.getItem('authToken');
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
     
-    // Add org_id header if available
-    const orgId = sessionStorage.getItem('pharma_org_id') || localStorage.getItem('pharma_org_id') || 'ad808530-1ddb-4377-ab20-67bef145d80d';
-    if (orgId) {
-      config.headers['X-Org-Id'] = orgId;
-    }
+    // ENTERPRISE: org_id is now embedded in the JWT token
+    // No need to send it as a separate header - backend extracts it from token
     
     return config;
   },
