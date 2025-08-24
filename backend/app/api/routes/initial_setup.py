@@ -142,18 +142,22 @@ async def initialize_organization(
         })
         
         # Create admin user
+        # Note: For production, integrate with Supabase Auth to create auth.users entry
+        # and link via auth_user_id. For now, storing password_hash directly.
         if setup_data.get("admin_email") and setup_data.get("admin_password"):
             password_hash = get_password_hash(setup_data["admin_password"])
             
+            # TODO: Create user in Supabase auth.users and get auth_user_id
+            # For now, create user in org_users with password_hash
             db.execute(text("""
                 INSERT INTO master.org_users (
                     org_id, username, email, mobile_number, 
                     employee_code, first_name, full_name,
-                    is_active, is_admin, created_at, updated_at
+                    password_hash, is_active, is_admin, created_at, updated_at
                 ) VALUES (
                     :org_id, :username, :email, :mobile_number,
                     'EMP001', :first_name, :full_name,
-                    true, true, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+                    :password_hash, true, true, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
                 )
             """), {
                 "org_id": org_id,
@@ -161,7 +165,8 @@ async def initialize_organization(
                 "email": setup_data["admin_email"],
                 "mobile_number": setup_data.get("phone", ""),
                 "first_name": setup_data.get("admin_name", "Administrator").split()[0] if setup_data.get("admin_name") else "Admin",
-                "full_name": setup_data.get("admin_name", "Administrator")
+                "full_name": setup_data.get("admin_name", "Administrator"),
+                "password_hash": password_hash
             })
         
         # Create default system settings
