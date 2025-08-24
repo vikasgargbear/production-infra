@@ -18,12 +18,21 @@ const apiClient = axios.create({
   },
 });
 
-// Add request interceptor for auth token
+// Add request interceptor for auth token and org_id
 apiClient.interceptors.request.use((config) => {
   const token = localStorage.getItem('auth_token');
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
   }
+  
+  // Add org_id header for multi-tenant support
+  const orgId = sessionStorage.getItem('pharma_org_id') || localStorage.getItem('pharma_org_id') || 'ad808530-1ddb-4377-ab20-67bef145d80d';
+  if (orgId) {
+    config.headers['X-Org-Id'] = orgId;
+  } else {
+    console.warn('No org_id found in storage - API requests may fail');
+  }
+  
   return config;
 });
 

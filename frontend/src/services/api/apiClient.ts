@@ -28,7 +28,7 @@ apiClient.interceptors.request.use(
     }
     
     // Add org_id header if available
-    const orgId = sessionStorage.getItem('pharma_org_id') || localStorage.getItem('pharma_org_id');
+    const orgId = sessionStorage.getItem('pharma_org_id') || localStorage.getItem('pharma_org_id') || 'ad808530-1ddb-4377-ab20-67bef145d80d';
     if (orgId) {
       config.headers['X-Org-Id'] = orgId;
     }
