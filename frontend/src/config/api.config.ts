@@ -69,10 +69,10 @@ export const API_CONFIG: APIConfig = {
     
     // Customers
     CUSTOMERS: {
-      BASE: '/customers/',  // Added trailing slash
-      SEARCH: '/customers/',  // Use same endpoint with search param - Added trailing slash
-      CREDIT_CHECK: '/customers/credit-check/',  // Added trailing slash
-      TRANSACTIONS: '/customers/transactions/',  // Added trailing slash
+      BASE: '/customers/',  // Keep trailing slash for Django
+      SEARCH: '/customers/',  // Use same endpoint with search param
+      CREDIT_CHECK: '/customers/credit-check/',
+      TRANSACTIONS: '/customers/transactions/',
     },
     
     // Suppliers

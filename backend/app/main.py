@@ -76,6 +76,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Disable automatic trailing slash redirects to avoid CORS preflight issues
+# This allows both /api/customers and /api/customers/ to work without redirects
+app.router.redirect_slashes = False
+
 # Health check endpoint
 @app.get("/")
 async def root():

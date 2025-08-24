@@ -10,7 +10,7 @@ import axios, { AxiosInstance, AxiosError } from 'axios';
 const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || 'https://pharma-backend-production-0c09.up.railway.app';
 // Create axios instance with default config
 const apiClient: AxiosInstance = axios.create({
-  baseURL: `${API_BASE_URL}/api`,  // No trailing slash here since endpoints start with /
+  baseURL: `${API_BASE_URL}/api/`,  // Add trailing slash for proper URL joining
   timeout: 30000,
   headers: {
     'Content-Type': 'application/json',

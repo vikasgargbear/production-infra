@@ -22,7 +22,9 @@ export const customersApi = {
   // Create new customer
   create: (data) => {
     const cleanedData = cleanData(data);
-    return apiHelpers.post(ENDPOINTS.BASE, cleanedData);
+    // Ensure trailing slash is preserved for Django
+    const url = ENDPOINTS.BASE.endsWith('/') ? ENDPOINTS.BASE : ENDPOINTS.BASE + '/';
+    return apiHelpers.post(url, cleanedData);
   },
   
   // Update customer
