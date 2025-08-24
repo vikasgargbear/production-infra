@@ -147,20 +147,21 @@ async def initialize_organization(
             
             db.execute(text("""
                 INSERT INTO master.org_users (
-                    org_id, user_code, full_name, email, phone,
-                    password_hash, role, department,
+                    org_id, username, email, mobile_number, 
+                    employee_code, first_name, full_name,
                     is_active, is_admin, created_at, updated_at
                 ) VALUES (
-                    :org_id, 'USR001', :full_name, :email, :phone,
-                    :password_hash, 'ADMIN', 'MANAGEMENT',
+                    :org_id, :username, :email, :mobile_number,
+                    'EMP001', :first_name, :full_name,
                     true, true, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
                 )
             """), {
                 "org_id": org_id,
-                "full_name": setup_data.get("admin_name", "Administrator"),
+                "username": setup_data.get("admin_email", "").split('@')[0],  # Use email prefix as username
                 "email": setup_data["admin_email"],
-                "phone": setup_data.get("phone", ""),
-                "password_hash": password_hash
+                "mobile_number": setup_data.get("phone", ""),
+                "first_name": setup_data.get("admin_name", "Administrator").split()[0] if setup_data.get("admin_name") else "Admin",
+                "full_name": setup_data.get("admin_name", "Administrator")
             })
         
         # Create default system settings
