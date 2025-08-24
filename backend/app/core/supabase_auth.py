@@ -19,6 +19,23 @@ class SupabaseAuthService:
         self.supabase_anon_key = os.getenv("SUPABASE_ANON_KEY")
         self.supabase_service_key = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
         
+        # If SUPABASE_URL not set, try to derive from DATABASE_URL
+        if not self.supabase_url:
+            database_url = os.getenv("DATABASE_URL")
+            if database_url and "supabase.co" in database_url:
+                # Extract project ref from DATABASE_URL
+                # Format: postgresql://postgres:[password]@db.[project-ref].supabase.co:5432/postgres
+                import re
+                match = re.search(r'@db\.([^.]+)\.supabase\.co', database_url)
+                if match:
+                    project_ref = match.group(1)
+                    self.supabase_url = f"https://{project_ref}.supabase.co"
+                    logger.info(f"Derived Supabase URL from DATABASE_URL: {self.supabase_url}")
+        
+        # Use JWT_SECRET_KEY as service key if SUPABASE_SERVICE_ROLE_KEY not set
+        if not self.supabase_service_key:
+            self.supabase_service_key = os.getenv("JWT_SECRET_KEY")
+        
         if not all([self.supabase_url, self.supabase_service_key]):
             logger.warning("Supabase configuration not complete. Auth features may be limited.")
     

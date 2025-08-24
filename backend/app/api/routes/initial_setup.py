@@ -7,6 +7,7 @@ from sqlalchemy import text
 from typing import Dict, Any
 import uuid
 import json
+import os
 from datetime import datetime
 import logging
 
@@ -148,26 +149,32 @@ async def initialize_organization(
         if setup_data.get("admin_email") and setup_data.get("admin_password"):
             auth_user_id = None
             
-            try:
-                # Create user in Supabase Auth
-                user_metadata = {
-                    "org_id": str(org_id),
-                    "org_name": setup_data["org_name"],
-                    "role": "admin",
-                    "full_name": setup_data.get("admin_name", "Administrator")
-                }
-                
-                auth_user_id = await supabase_auth.create_auth_user(
-                    email=setup_data["admin_email"],
-                    password=setup_data["admin_password"],
-                    user_metadata=user_metadata
-                )
-                
-                if not auth_user_id:
-                    logger.warning("Could not create Supabase auth user, creating local user only")
-            except Exception as e:
-                logger.error(f"Error creating Supabase auth user: {e}")
-                # Continue without Supabase auth if it fails
+            # Check if Supabase Auth is configured
+            if os.getenv("SUPABASE_SERVICE_ROLE_KEY"):
+                try:
+                    # Create user in Supabase Auth
+                    user_metadata = {
+                        "org_id": str(org_id),
+                        "org_name": setup_data["org_name"],
+                        "role": "admin",
+                        "full_name": setup_data.get("admin_name", "Administrator")
+                    }
+                    
+                    auth_user_id = await supabase_auth.create_auth_user(
+                        email=setup_data["admin_email"],
+                        password=setup_data["admin_password"],
+                        user_metadata=user_metadata
+                    )
+                    
+                    if auth_user_id:
+                        logger.info(f"Created Supabase auth user with ID: {auth_user_id}")
+                    else:
+                        logger.warning("Could not create Supabase auth user, creating local user only")
+                except Exception as e:
+                    logger.error(f"Error creating Supabase auth user: {e}")
+                    # Continue without Supabase auth if it fails
+            else:
+                logger.info("Supabase service role key not configured, skipping auth.users creation")
             
             # Create user in org_users table (linked to Supabase auth if available)
             db.execute(text("""
