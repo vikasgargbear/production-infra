@@ -122,9 +122,8 @@ const SplitPayment = ({
 
   return (
     <div className={`${className}`}>
-      {/* Header with status badge - matching other tiles */}
-      <div className="flex items-center justify-between mb-3">
-        <h3 className="text-sm font-medium text-gray-700">Payment Method</h3>
+      {/* Status badge only - no header since it should be outside */}
+      <div className="flex items-center justify-end mb-2">
         <div className={`px-2 py-0.5 rounded-full text-xs font-medium ${
           paymentStatus === 'Paid' ? 'bg-green-100 text-green-700' :
           paymentStatus === 'Partial' ? 'bg-yellow-100 text-yellow-700' :

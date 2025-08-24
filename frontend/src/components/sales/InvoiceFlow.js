@@ -49,6 +49,7 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
   const [sameAsShipping, setSameAsShipping] = useState(true);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [toast, setToast] = useState({ show: false, message: '', type: 'info' });
 
   // Refs for keyboard navigation
   const customerSearchRef = useRef(null);
@@ -2053,6 +2054,7 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
 
           {/* Payment Details - Using Global Component */}
           <div className="mb-4">
+            <h3 className="text-xs font-semibold text-gray-600 uppercase tracking-wider mb-1.5 px-1">PAYMENT METHOD</h3>
             <div className="bg-white rounded-lg border border-gray-200 p-3">
               <SplitPayment
                 totalAmount={invoice.net_amount || 0}
