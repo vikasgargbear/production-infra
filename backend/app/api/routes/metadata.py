@@ -182,6 +182,59 @@ async def get_transport_modes(db: Session = Depends(get_db),
         ]
     }
 
+@router.get("/credit-plans")
+async def get_credit_plans(db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)):
+    """Get available credit plans"""
+    return {
+        "credit_plans": [
+            {"value": "CUSTOM", "label": "Custom - Manual Entry"},
+            {"value": "STANDARD", "label": "Standard Plan"},
+            {"value": "PREMIUM", "label": "Premium Plan"},
+            {"value": "VIP", "label": "VIP Plan"},
+            {"value": "RESTRICTED", "label": "Restricted Plan"},
+            {"value": "PREPAID", "label": "Prepaid Only"},
+            {"value": "POSTPAID", "label": "Postpaid"},
+            {"value": "HYBRID", "label": "Hybrid (Pre + Post)"}
+        ]
+    }
+
+@router.get("/credit-days")
+async def get_credit_days_options(db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)):
+    """Get standard credit days options"""
+    return {
+        "credit_days": [
+            {"value": 0, "label": "0 Days (Cash Only)"},
+            {"value": 7, "label": "7 Days"},
+            {"value": 10, "label": "10 Days"},
+            {"value": 15, "label": "15 Days"},
+            {"value": 21, "label": "21 Days"},
+            {"value": 30, "label": "30 Days"},
+            {"value": 45, "label": "45 Days"},
+            {"value": 60, "label": "60 Days"},
+            {"value": 90, "label": "90 Days"},
+            {"value": 120, "label": "120 Days"},
+            {"value": 180, "label": "180 Days"},
+            {"value": 365, "label": "365 Days"}
+        ]
+    }
+
+@router.get("/credit-ratings")
+async def get_credit_ratings(db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)):
+    """Get credit rating options"""
+    return {
+        "credit_ratings": [
+            {"value": "A", "label": "A - Excellent", "description": "Excellent payment history, high creditworthiness"},
+            {"value": "B", "label": "B - Good", "description": "Good payment history, reliable customer"},
+            {"value": "C", "label": "C - Average", "description": "Average payment history, standard terms"},
+            {"value": "D", "label": "D - Poor", "description": "Poor payment history, restricted credit"},
+            {"value": "NEW", "label": "New Customer", "description": "No credit history available"},
+            {"value": "BLOCKED", "label": "Blocked", "description": "Credit blocked due to payment issues"}
+        ]
+    }
+
 @router.get("/all")
 async def get_all_metadata(db: Session = Depends(get_db),
     org_id: str = Depends(get_org_id_from_header)):
@@ -191,6 +244,9 @@ async def get_all_metadata(db: Session = Depends(get_db),
             "pack_types": (await get_pack_types(db))["pack_types"],
             "payment_terms": (await get_payment_terms(db))["payment_terms"],
             "payment_modes": (await get_payment_modes(db))["payment_modes"],
+            "credit_plans": (await get_credit_plans(db))["credit_plans"],
+            "credit_days": (await get_credit_days_options(db))["credit_days"],
+            "credit_ratings": (await get_credit_ratings(db))["credit_ratings"],
             "document_statuses": await get_document_statuses(db),
             "units_of_measure": (await get_units_of_measure(db))["units"],
             "return_reasons": await get_return_reasons(db),
