@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import text
 from typing import Dict, Any
 import uuid
+import json
 from datetime import datetime
 
 from ...core.database import get_db
@@ -105,7 +106,7 @@ async def initialize_organization(
             ) VALUES (
                 :org_id, :org_code, :org_name, :legal_name, :business_type,
                 :gst_number, :pan_number, :drug_license_number,
-                :address::jsonb, :contact_numbers::jsonb, :email_addresses::jsonb,
+                :address, :contact_numbers, :email_addresses,
                 'INR', 'DD/MM/YYYY', 'Asia/Kolkata',
                 'PREMIUM', 'ACTIVE', 100,
                 true, true, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
@@ -119,9 +120,9 @@ async def initialize_organization(
             "gst_number": setup_data.get("gst_number"),
             "pan_number": setup_data.get("pan_number"),
             "drug_license_number": setup_data.get("drug_license_number"),
-            "address": setup_data.get("address", {}),
-            "contact_numbers": {"primary": setup_data.get("phone", "")},
-            "email_addresses": {"primary": setup_data.get("admin_email", "")}
+            "address": json.dumps(setup_data.get("address", {})),
+            "contact_numbers": json.dumps({"primary": setup_data.get("phone", "")}),
+            "email_addresses": json.dumps({"primary": setup_data.get("admin_email", "")})
         })
         
         # Create default branch
@@ -132,12 +133,12 @@ async def initialize_organization(
                 is_default_location, is_active, created_at, updated_at
             ) VALUES (
                 :org_id, 'BR001', 'Main Branch', 'HEAD_OFFICE',
-                :address::jsonb, true, true, true, true,
+                :address, true, true, true, true,
                 CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
             )
         """), {
             "org_id": org_id,
-            "address": setup_data.get("address", {})
+            "address": json.dumps(setup_data.get("address", {}))
         })
         
         # Create admin user
