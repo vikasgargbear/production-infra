@@ -310,21 +310,32 @@ async def get_credit_ratings(db: Session = Depends(get_db),
 @router.get("/all")
 async def get_all_metadata(db: Session = Depends(get_db),
     org_id: str = Depends(get_org_id_from_header)):
-    """Get all metadata in one call for caching"""
+    """Get all metadata in one call for caching - Enterprise approach"""
     try:
-        return {
-            "pack_types": (await get_pack_types(db))["pack_types"],
-            "payment_terms": (await get_payment_terms(db))["payment_terms"],
-            "payment_modes": (await get_payment_modes(db))["payment_modes"],
-            "credit_plans": (await get_credit_plans(db))["credit_plans"],
-            "credit_days": (await get_credit_days_options(db))["credit_days"],
-            "credit_ratings": (await get_credit_ratings(db))["credit_ratings"],
-            "document_statuses": await get_document_statuses(db),
-            "units_of_measure": (await get_units_of_measure(db))["units"],
-            "return_reasons": await get_return_reasons(db),
-            "tax_types": (await get_tax_types(db))["tax_types"],
-            "transport_modes": (await get_transport_modes(db))["transport_modes"]
+        # Fetch all metadata in one go for better performance
+        metadata = {
+            "pack_types": (await get_pack_types(db, org_id))["pack_types"],
+            "payment_terms": (await get_payment_terms(db, org_id))["payment_terms"],
+            "payment_modes": (await get_payment_modes(db, org_id))["payment_modes"],
+            "credit_plans": (await get_credit_plans(db, org_id))["credit_plans"],
+            "credit_days": (await get_credit_days_options(db, org_id))["credit_days"],
+            "credit_ratings": (await get_credit_ratings(db, org_id))["credit_ratings"],
+            "document_statuses": await get_document_statuses(db, org_id),
+            "units_of_measure": (await get_units_of_measure(db, org_id))["units"],
+            "return_reasons": await get_return_reasons(db, org_id),
+            "tax_types": (await get_tax_types(db, org_id))["tax_types"],
+            "transport_modes": (await get_transport_modes(db, org_id))["transport_modes"],
+            
+            # Combined credit configuration for easy frontend consumption
+            "credit_configuration": {
+                "plans": (await get_credit_plans(db, org_id))["credit_plans"],
+                "ratings": (await get_credit_ratings(db, org_id))["credit_ratings"],
+                "days_options": (await get_credit_days_options(db, org_id))["credit_days"],
+                "payment_terms": (await get_payment_terms(db, org_id))["payment_terms"]
+            }
         }
+        
+        return metadata
     except Exception as e:
         logger.error(f"Error fetching metadata: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to fetch metadata: {str(e)}")

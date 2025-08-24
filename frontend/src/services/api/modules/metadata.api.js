@@ -29,6 +29,11 @@ export const metadataApi = {
   // Transport Modes
   getTransportModes: () => apiClient.get('/metadata/transport-modes'),
   
+  // Credit Configuration
+  getCreditPlans: () => apiClient.get('/metadata/credit-plans'),
+  getCreditRatings: () => apiClient.get('/metadata/credit-ratings'),
+  getCreditDays: () => apiClient.get('/metadata/credit-days'),
+  
   // Get all metadata in one call (for caching)
   getAll: () => apiClient.get('/metadata/all'),
   

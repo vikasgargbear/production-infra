@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Building2, User, Phone, Mail, Save, X, AlertCircle, CheckCircle, MapPin, Shield, MessageCircle, FileText, CreditCard, ToggleLeft, ToggleRight, Check } from 'lucide-react';
 import { customersApi } from '../../../../services/api/modules/customers.api';
+import { metadataApi } from '../../../../services/api/modules/metadata.api';
 import offlineStorage from '../../../../services/offlineStorage';
 
 /**
@@ -67,42 +68,48 @@ const CustomerCreationB2B = ({ onClose, onCustomerCreated }) => {
 
   const [errors, setErrors] = useState({});
 
-  // Load credit plans on component mount (backend + offline cache)
+  // Load all metadata including credit configuration on component mount
   useEffect(() => {
-    const loadCreditPlans = async () => {
+    const loadMetadata = async () => {
       try {
-        // Try backend first
-        if (customersApi?.getCreditPlans) {
-          const response = await customersApi.getCreditPlans();
-          const plans = response.data || [];
-          if (Array.isArray(plans) && plans.length > 0) {
-            setCreditPlans(plans);
-            await offlineStorage.storeOffline('credit_plans', plans, { persistent: true });
-            return;
+        // Try to get all metadata in one call (enterprise approach)
+        const response = await metadataApi.getAll();
+        if (response?.data) {
+          // Extract credit configuration
+          const creditConfig = response.data.credit_configuration || {};
+          
+          // Set credit plans
+          if (creditConfig.plans && Array.isArray(creditConfig.plans)) {
+            setCreditPlans(creditConfig.plans);
           }
-        }
-        // Fallback to offline cache
-        const offline = await offlineStorage.getOffline('credit_plans', { persistent: true });
-        if (offline && Array.isArray(offline.data) && offline.data.length > 0) {
-          setCreditPlans(offline.data);
-        } else {
-          setMessage('Unable to load credit plans. Please configure in backend.');
-          setMessageType('error');
+          
+          // Cache all metadata for offline use
+          await offlineStorage.storeOffline('metadata_all', response.data, { persistent: true });
+          return;
         }
       } catch (error) {
-        // Final fallback to offline cache
-        const offline = await offlineStorage.getOffline('credit_plans', { persistent: true });
-        if (offline && Array.isArray(offline.data) && offline.data.length > 0) {
-          setCreditPlans(offline.data);
+        console.error('Error loading metadata:', error);
+      }
+      
+      // Fallback to cached data
+      try {
+        const cached = await offlineStorage.getOffline('metadata_all', { persistent: true });
+        if (cached?.data?.credit_configuration?.plans) {
+          setCreditPlans(cached.data.credit_configuration.plans);
         } else {
-          console.error('Error loading credit plans:', error);
-          setMessage('Failed to load credit plans');
-          setMessageType('error');
+          // Last resort - use hardcoded defaults
+          setCreditPlans([
+            { id: 'STANDARD', name: 'Standard Plan', credit_limit: 50000, credit_days: 30 },
+            { id: 'PREMIUM', name: 'Premium Plan', credit_limit: 100000, credit_days: 45 },
+            { id: 'VIP', name: 'VIP Plan', credit_limit: 500000, credit_days: 60 }
+          ]);
         }
+      } catch (err) {
+        console.error('Failed to load cached metadata:', err);
       }
     };
 
-    loadCreditPlans();
+    loadMetadata();
   }, []);
 
   // Handle copying business contact info to contact person
