@@ -21,8 +21,6 @@ const CustomerCreationB2B = ({ onClose, onCustomerCreated }) => {
   const [messageType, setMessageType] = useState('');
   const [customerType, setCustomerType] = useState('B2B'); // B2B or B2C toggle
   const [useBusinessContactInfo, setUseBusinessContactInfo] = useState(false);
-  const [selectedCreditPlan, setSelectedCreditPlan] = useState('custom');
-  const [creditPlans, setCreditPlans] = useState([]);
 
   const [formData, setFormData] = useState({
     // Basic Details (aligned with schema)
@@ -68,12 +66,6 @@ const CustomerCreationB2B = ({ onClose, onCustomerCreated }) => {
 
   const [errors, setErrors] = useState({});
 
-  // No metadata loading - just manual entry
-  useEffect(() => {
-    // Set default to custom/manual entry - no predefined plans
-    setSelectedCreditPlan('custom');
-    // No metadata fetching - all manual entry
-  }, []);
 
   // Handle copying business contact info to contact person
   useEffect(() => {
@@ -189,23 +181,6 @@ const CustomerCreationB2B = ({ onClose, onCustomerCreated }) => {
     setUseBusinessContactInfo(false);
   };
 
-  const handleCreditPlanChange = (planId) => {
-    setSelectedCreditPlan(planId);
-    
-    if (planId !== 'custom') {
-      const plan = creditPlans.find(p => p.id === planId || p.plan_id === planId);
-      if (plan) {
-        setFormData(prev => ({
-          ...prev,
-          credit_limit: plan.credit_limit,
-          credit_days: plan.credit_days,
-          credit_rating: plan.credit_rating,
-          payment_terms: plan.payment_terms,
-          customer_category: plan.customer_category
-        }));
-      }
-    }
-  };
 
   const generateCustomerCode = () => {
     // Generate customer code based on business name
@@ -721,17 +696,7 @@ const CustomerCreationB2B = ({ onClose, onCustomerCreated }) => {
                 Credit Terms
               </h3>
             <div className="space-y-6">
-              {/* Credit Configuration - Manual Entry Only */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Credit Configuration</label>
-                <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-4">
-                  <p className="text-sm text-blue-700">
-                    Manual Entry - Configure credit terms for this customer
-                  </p>
-                </div>
-              </div>
-
-              {/* Credit Details - Editable when Custom is selected */}
+              {/* Credit Details */}
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div>
                   <label className="block text_sm font-medium text-gray-700 mb-1">Credit Limit (₹)</label>
@@ -740,7 +705,6 @@ const CustomerCreationB2B = ({ onClose, onCustomerCreated }) => {
                     value={formData.credit_limit}
                     onChange={(e) => {
                       handleInputChange('credit_limit', e.target.value);
-                      if (selectedCreditPlan !== 'custom') setSelectedCreditPlan('custom');
                     }}
                     placeholder="Credit Limit"
                     min="0"
@@ -754,7 +718,6 @@ const CustomerCreationB2B = ({ onClose, onCustomerCreated }) => {
                     value={formData.credit_days}
                     onChange={(e) => {
                       handleInputChange('credit_days', e.target.value);
-                      if (selectedCreditPlan !== 'custom') setSelectedCreditPlan('custom');
                     }}
                     className="w-full px-3 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all"
                   >
@@ -773,7 +736,6 @@ const CustomerCreationB2B = ({ onClose, onCustomerCreated }) => {
                     value={formData.credit_rating}
                     onChange={(e) => {
                       handleInputChange('credit_rating', e.target.value);
-                      if (selectedCreditPlan !== 'custom') setSelectedCreditPlan('custom');
                     }}
                     className="w-full px-3 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all"
                   >
@@ -791,7 +753,6 @@ const CustomerCreationB2B = ({ onClose, onCustomerCreated }) => {
                   value={formData.payment_terms}
                   onChange={(e) => {
                     handleInputChange('payment_terms', e.target.value);
-                    if (selectedCreditPlan !== 'custom') setSelectedCreditPlan('custom');
                   }}
                   className={`w-full px-3 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all ${
                     selectedCreditPlan !== 'custom' ? 'bg-gray-100' : ''
@@ -804,15 +765,6 @@ const CustomerCreationB2B = ({ onClose, onCustomerCreated }) => {
                   <option value="COD">Cash on Delivery</option>
                 </select>
               </div>
-              
-              {selectedCreditPlan !== 'custom' && (
-                <div className="bg-green-50 border border-green-200 rounded-lg p-3">
-                  <p className="text-sm text-green-700">
-                    <span className="font-medium">Selected Plan:</span> {creditPlans.find(p => (p.id || p.plan_id) === selectedCreditPlan)?.name} 
-                    - ₹{formData.credit_limit?.toLocaleString()} credit limit with {formData.credit_days} days payment terms
-                  </p>
-                </div>
-              )}
             </div>
           </div>
           )}
