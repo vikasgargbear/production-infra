@@ -18,7 +18,7 @@ import {
   AddressForm,
   PrintUtility
 } from '../global';
-import CustomerCreationB2B from '../global/ui/forms/CustomerCreationB2B';
+import CustomerCreation from '../global/ui/forms/CustomerCreation';
 import { ordersApi, salesApi, api, apiClient, usersApi } from '../../services/api';
 import salesOrdersAPI from '../../services/api/modules/salesOrders.api';
 import { invoicesApi as invoicesApiModule } from '../../services/api/modules/invoices.api';
@@ -1047,8 +1047,7 @@ Expected Delivery: ${order.expected_delivery_date}
 
         {/* Modals */}
         {showCustomerModal && (
-          <CustomerCreationB2B
-            show={showCustomerModal}
+          <CustomerCreation
             onClose={() => setShowCustomerModal(false)}
             onCustomerCreated={(customer) => {
               handleCustomerSelect(customer);

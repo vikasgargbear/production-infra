@@ -22,7 +22,6 @@ def get_org_users(
     skip: int = 0,
     limit: int = 100,
     search: Optional[str] = Query(None, description="Search by name or email"),
-    org_id: Optional[str] = Query(None, description="Organization ID"),
     db: Session = Depends(get_db),
     org_id: str = Depends(get_org_id_from_header)
 ):

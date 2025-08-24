@@ -18,7 +18,8 @@ const CompanySettings = ({ open = true, onClose }) => {
     bankName: companyInfo.bank_name || '',
     accountNumber: companyInfo.account_number || '',
     ifscCode: companyInfo.ifsc_code || '',
-    digitalSignature: companyInfo.logo || ''
+    digitalSignature: companyInfo.logo || '',
+    businessType: companyInfo.business_settings?.business_type || 'b2b'
   });
 
   const [logoPreview, setLogoPreview] = useState(settings.companyLogo);
@@ -36,7 +37,8 @@ const CompanySettings = ({ open = true, onClose }) => {
         bankName: companyInfo.bank_name || '',
         accountNumber: companyInfo.account_number || '',
         ifscCode: companyInfo.ifsc_code || '',
-        digitalSignature: companyInfo.logo || ''
+        digitalSignature: companyInfo.logo || '',
+        businessType: companyInfo.business_settings?.business_type || 'b2b'
       });
       setLogoPreview(companyInfo.logo || '');
       setSignaturePreview(companyInfo.logo || '');
@@ -83,7 +85,11 @@ const CompanySettings = ({ open = true, onClose }) => {
         bank_name: settings.bankName,
         account_number: settings.accountNumber,
         ifsc_code: settings.ifscCode,
-        upi_id: companyInfo.upi_id || ''
+        upi_id: companyInfo.upi_id || '',
+        business_settings: {
+          ...(companyInfo.business_settings || {}),
+          business_type: settings.businessType
+        }
       };
 
       await updateCompanyInfo(companyData);
@@ -230,6 +236,28 @@ const CompanySettings = ({ open = true, onClose }) => {
               <option value="Telangana">Telangana</option>
               <option value="Kerala">Kerala</option>
             </select>
+          </div>
+
+          {/* Business Type */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Business Type
+            </label>
+            <select
+              value={settings.businessType}
+              onChange={(e) => setSettings({ ...settings, businessType: e.target.value })}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="b2b">B2B (Wholesale/Distribution)</option>
+              <option value="b2c">B2C (Retail/Individual Sales)</option>
+              <option value="retail">Retail Store</option>
+              <option value="pharmacy">Pharmacy</option>
+              <option value="wholesale">Wholesale</option>
+              <option value="distributor">Distributor</option>
+            </select>
+            <p className="text-xs text-gray-500 mt-1">
+              This controls the customer creation form type. B2B shows business fields (GST, credit terms), B2C shows simplified individual customer fields.
+            </p>
           </div>
 
           {/* Bank Details Section */}

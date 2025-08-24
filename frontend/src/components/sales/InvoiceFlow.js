@@ -19,7 +19,7 @@ import DataTransformer from '../../services/dataTransformer';
 import DateFormatter from '../../services/dateFormatter';
 import InvoiceApiService from '../../services/invoiceApiService';
 import { ProductSearchSimple, ItemsTable, ModuleHeader, CustomerSearch, ProductCreationModal, ViewHistoryButton, GSTCalculator, DocumentFooter, GenericSuccessModal, AddressForm, NotesSection, PrintUtility } from '../global';
-import CustomerCreationB2B from '../global/ui/forms/CustomerCreationB2B';
+import CustomerCreation from '../global/ui/forms/CustomerCreation';
 import { useCompany } from '../../contexts/CompanyContext';
 // import InvoiceSuccessModal from './InvoiceSuccessModal'; // Replaced with GenericSuccessModal
 import SplitPayment from '../global/ui/SplitPayment';
@@ -1850,8 +1850,7 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
 
         {/* Modals */}
         {showCustomerModal && (
-          <CustomerCreationB2B
-            show={showCustomerModal}
+          <CustomerCreation
             onClose={() => setShowCustomerModal(false)}
             onCustomerCreated={(customer) => {
               handleCustomerSelect(customer);

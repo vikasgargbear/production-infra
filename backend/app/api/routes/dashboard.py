@@ -342,7 +342,6 @@ def get_financial_summary(
 
 @router.get("/kpis")
 def get_dashboard_kpis(
-    org_id: Optional[str] = Query(None, description="Organization ID"),
     db: Session = Depends(get_db),
     org_id: str = Depends(get_org_id_from_header)
 ):

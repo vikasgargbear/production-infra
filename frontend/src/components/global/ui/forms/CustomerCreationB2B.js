@@ -420,7 +420,7 @@ const CustomerCreationB2B = ({ onClose, onCustomerCreated }) => {
                     type="text"
                     value={formData.customer_name}
                     onChange={(e) => handleInputChange('customer_name', e.target.value)}
-                    placeholder={customerType === 'B2B' ? 'Business/Party Name' : 'Customer Name'}
+                    placeholder={customerType === 'B2B' ? 'Business/Company Name' : 'Full Name'}
                     className={`w-full pl-11 pr-3 py-3 border ${
                       errors.customer_name ? 'border-red-300' : 'border-gray-200'
                     } rounded-xl focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all`}
@@ -858,6 +858,7 @@ const CustomerCreationB2B = ({ onClose, onCustomerCreated }) => {
               )}
             </div>
           </div>
+          )}
         </div>
 
         {/* Footer */}

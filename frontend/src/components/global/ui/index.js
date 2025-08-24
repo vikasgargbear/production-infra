@@ -7,7 +7,7 @@ export { default as NumberInput } from './forms/NumberInput';
 export { default as CurrencyInput } from './forms/CurrencyInput';
 export { default as SearchBar } from './SearchBar';
 export { default as AddNewButton } from './AddNewButton';
-export { default as CustomerCreationB2B } from './forms/CustomerCreationB2B';
+export { default as CustomerCreation } from './forms/CustomerCreation';
 
 // Enhanced Input Components
 export { default as NumericInput } from './inputs/NumericInput';
