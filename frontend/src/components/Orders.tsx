@@ -92,8 +92,8 @@ interface OrderInvoicesState {
   [orderId: number]: InvoiceDetails;
 }
 
-// Organization ID - This should be managed in a global context or environment variable
-const ORG_ID = 'ad808530-1ddb-4377-ab20-67bef145d80d';
+// Get org_id from auth storage (set during login/setup)
+const ORG_ID = sessionStorage.getItem('pharma_org_id') || localStorage.getItem('pharma_org_id') || '';
 
 // Define the Orders component with uncontrolled inputs for better typing performance
 const Orders: React.FC = () => {

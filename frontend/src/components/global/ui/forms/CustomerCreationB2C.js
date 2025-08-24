@@ -128,7 +128,7 @@ const CustomerCreationB2C = ({ onClose, onCustomerCreated }) => {
     setMessage('');
 
     const customerData = {
-      org_id: localStorage.getItem('org_id') || 'ad808530-1ddb-4377-ab20-67bef145d80d',
+      // org_id comes from auth token, not request body
       customer_name: formData.customer_name,
       customer_type: 'retail', // Always retail for B2C
       primary_phone: formData.primary_phone.replace(/\D/g, ''),

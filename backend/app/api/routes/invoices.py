@@ -17,7 +17,7 @@ from ..services.document_number_service_v2 import DocumentNumberServiceV2
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/invoices", tags=["Invoices"])
 
-ACTUAL_ORG_ID = "ad808530-1ddb-4377-ab20-67bef145d80d"
+# org_id should come from authentication, not hardcoded
 
 @router.get("/generate-number")
 async def generate_invoice_number(

@@ -150,7 +150,7 @@ def create_purchase(purchase_data: dict, db: Session = Depends(get_db),
         if 'po_type' not in purchase_data:
             purchase_data['po_type'] = 'regular'
         if 'org_id' not in purchase_data:
-            purchase_data['org_id'] = 'ad808530-1ddb-4377-ab20-67bef145d80d'  # org_id
+            purchase_data['org_id'] = org_id  # Use org_id from header/auth
         if 'branch_id' not in purchase_data:
             purchase_data['branch_id'] = 1
         
