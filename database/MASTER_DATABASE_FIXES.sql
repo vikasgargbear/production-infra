@@ -2268,18 +2268,22 @@ RAISE NOTICE '4. Tracks last generated number for audit';
 DO $$
 BEGIN
 
--- Add default customer groups for credit plans if they don't exist
-INSERT INTO parties.customer_groups (
-    org_id, group_code, group_name, group_type,
-    credit_limit_multiplier, payment_terms_days, discount_percentage,
-    is_active
-) VALUES 
-    ('00000000-0000-0000-0000-000000000000', 'STANDARD', 'Standard Plan', 'CREDIT_PLAN', 1.0, 30, 0, true),
-    ('00000000-0000-0000-0000-000000000000', 'PREMIUM', 'Premium Plan', 'CREDIT_PLAN', 2.0, 45, 5, true),
-    ('00000000-0000-0000-0000-000000000000', 'VIP', 'VIP Plan', 'CREDIT_PLAN', 5.0, 60, 10, true),
-    ('00000000-0000-0000-0000-000000000000', 'RESTRICTED', 'Restricted Plan', 'CREDIT_PLAN', 0.5, 15, 0, true),
-    ('00000000-0000-0000-0000-000000000000', 'PREPAID', 'Prepaid Only', 'CREDIT_PLAN', 0, 0, 0, true)
-ON CONFLICT (org_id, group_code) DO NOTHING;
+-- Create function to seed default data for new organizations
+CREATE OR REPLACE FUNCTION master.seed_org_default_data(p_org_id UUID)
+RETURNS void AS $$
+BEGIN
+    -- Add default customer groups for this specific org
+    INSERT INTO parties.customer_groups (
+        org_id, group_code, group_name, group_type,
+        credit_limit_multiplier, payment_terms_days, discount_percentage,
+        is_active
+    ) VALUES 
+        (p_org_id, 'STANDARD', 'Standard Plan', 'CREDIT_PLAN', 1.0, 30, 0, true),
+        (p_org_id, 'PREMIUM', 'Premium Plan', 'CREDIT_PLAN', 2.0, 45, 5, true),
+        (p_org_id, 'VIP', 'VIP Plan', 'CREDIT_PLAN', 5.0, 60, 10, true),
+        (p_org_id, 'RESTRICTED', 'Restricted Plan', 'CREDIT_PLAN', 0.5, 15, 0, true),
+        (p_org_id, 'PREPAID', 'Prepaid Only', 'CREDIT_PLAN', 0, 0, 0, true)
+    ON CONFLICT (org_id, group_code) DO NOTHING;
 
 -- Add credit rating groups (using customer_groups for consistency)
 INSERT INTO parties.customer_groups (

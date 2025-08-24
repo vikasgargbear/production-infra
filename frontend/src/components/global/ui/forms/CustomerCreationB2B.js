@@ -68,48 +68,11 @@ const CustomerCreationB2B = ({ onClose, onCustomerCreated }) => {
 
   const [errors, setErrors] = useState({});
 
-  // Load all metadata including credit configuration on component mount
+  // No metadata loading - just manual entry
   useEffect(() => {
-    const loadMetadata = async () => {
-      try {
-        // Try to get all metadata in one call (enterprise approach)
-        const response = await metadataApi.getAll();
-        if (response?.data) {
-          // Extract credit configuration
-          const creditConfig = response.data.credit_configuration || {};
-          
-          // Set credit plans
-          if (creditConfig.plans && Array.isArray(creditConfig.plans)) {
-            setCreditPlans(creditConfig.plans);
-          }
-          
-          // Cache all metadata for offline use
-          await offlineStorage.storeOffline('metadata_all', response.data, { persistent: true });
-          return;
-        }
-      } catch (error) {
-        console.error('Error loading metadata:', error);
-      }
-      
-      // Fallback to cached data
-      try {
-        const cached = await offlineStorage.getOffline('metadata_all', { persistent: true });
-        if (cached?.data?.credit_configuration?.plans) {
-          setCreditPlans(cached.data.credit_configuration.plans);
-        } else {
-          // Last resort - use hardcoded defaults
-          setCreditPlans([
-            { id: 'STANDARD', name: 'Standard Plan', credit_limit: 50000, credit_days: 30 },
-            { id: 'PREMIUM', name: 'Premium Plan', credit_limit: 100000, credit_days: 45 },
-            { id: 'VIP', name: 'VIP Plan', credit_limit: 500000, credit_days: 60 }
-          ]);
-        }
-      } catch (err) {
-        console.error('Failed to load cached metadata:', err);
-      }
-    };
-
-    loadMetadata();
+    // Set default to custom/manual entry - no predefined plans
+    setSelectedCreditPlan('custom');
+    // No metadata fetching - all manual entry
   }, []);
 
   // Handle copying business contact info to contact person
@@ -265,16 +228,19 @@ const CustomerCreationB2B = ({ onClose, onCustomerCreated }) => {
     const customerData = {
         org_id: localStorage.getItem('org_id') || 'ad808530-1ddb-4377-ab20-67bef145d80d',
         customer_name: formData.customer_name,
-        customer_type: customerType === 'B2B' ? 'wholesale' : 'retail', // Map to backend validation values
+        customer_type: customerType === 'B2B' ? 'wholesale' : 'retail',
         primary_phone: formData.primary_phone.replace(/\D/g, ''),
-        email: formData.primary_email || null, // Backend expects 'email' not 'primary_email'
+        email: formData.primary_email || null,
         secondary_phone: formData.whatsapp_number ? formData.whatsapp_number.replace(/\D/g, '') : null,
-        contact_person: formData.contact_person_name || null, // Backend expects 'contact_person' not 'contact_person_name'
-        gstin: formData.gst_number || null, // Backend expects 'gstin' not 'gst_number'
+        contact_person: formData.contact_person_name || null,
+        gstin: formData.gst_number || null,
         pan_number: formData.pan_number || null,
         drug_license_number: formData.drug_license_number || null,
-        credit_limit: formData.credit_limit ? parseFloat(formData.credit_limit) : 50000,
-        credit_days: formData.credit_days ? parseInt(formData.credit_days) : 30,
+        // Credit configuration - ALL fields saved to backend
+        credit_limit: formData.credit_limit ? parseFloat(formData.credit_limit) : 0,
+        credit_days: formData.credit_days ? parseInt(formData.credit_days) : 0,
+        credit_rating: formData.credit_rating || 'NEW',  // Added - was missing!
+        payment_terms: formData.payment_terms || 'CASH', // Added - was missing!
         notes: `${customerType} customer. Business Type: ${formData.business_type || 'Not specified'}`,
         is_active: true
       };
@@ -755,21 +721,14 @@ const CustomerCreationB2B = ({ onClose, onCustomerCreated }) => {
                 Credit Terms
               </h3>
             <div className="space-y-6">
-              {/* Credit Plan Selection - Compact Dropdown */}
+              {/* Credit Configuration - Manual Entry Only */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Credit Plan</label>
-                <select
-                  value={selectedCreditPlan}
-                  onChange={(e) => handleCreditPlanChange(e.target.value)}
-                  className="w-full px-3 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all"
-                >
-                  {creditPlans.map((plan) => (
-                    <option key={plan.id || plan.plan_id} value={plan.id || plan.plan_id}>
-                      {plan.name} - ₹{(plan.credit_limit / 1000)}K credit, {plan.credit_days} days
-                    </option>
-                  ))}
-                  <option value="custom">Custom - Manual Entry</option>
-                </select>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Credit Configuration</label>
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-4">
+                  <p className="text-sm text-blue-700">
+                    Manual Entry - Configure credit terms for this customer
+                  </p>
+                </div>
               </div>
 
               {/* Credit Details - Editable when Custom is selected */}
@@ -785,10 +744,7 @@ const CustomerCreationB2B = ({ onClose, onCustomerCreated }) => {
                     }}
                     placeholder="Credit Limit"
                     min="0"
-                    className={`w-full px-3 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all ${
-                      selectedCreditPlan !== 'custom' ? 'bg-gray-100' : ''
-                    }`}
-                    readOnly={selectedCreditPlan !== 'custom'}
+                    className="w-full px-3 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all"
                   />
                 </div>
 
@@ -800,10 +756,7 @@ const CustomerCreationB2B = ({ onClose, onCustomerCreated }) => {
                       handleInputChange('credit_days', e.target.value);
                       if (selectedCreditPlan !== 'custom') setSelectedCreditPlan('custom');
                     }}
-                    className={`w-full px-3 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all ${
-                      selectedCreditPlan !== 'custom' ? 'bg-gray-100' : ''
-                    }`}
-                    disabled={selectedCreditPlan !== 'custom'}
+                    className="w-full px-3 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all"
                   >
                     <option value="0">Cash Only</option>
                     <option value="15">15 Days</option>
@@ -822,10 +775,7 @@ const CustomerCreationB2B = ({ onClose, onCustomerCreated }) => {
                       handleInputChange('credit_rating', e.target.value);
                       if (selectedCreditPlan !== 'custom') setSelectedCreditPlan('custom');
                     }}
-                    className={`w-full px-3 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all ${
-                      selectedCreditPlan !== 'custom' ? 'bg-gray-100' : ''
-                    }`}
-                    disabled={selectedCreditPlan !== 'custom'}
+                    className="w-full px-3 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all"
                   >
                     <option value="A">A - Excellent</option>
                     <option value="B">B - Good</option>
