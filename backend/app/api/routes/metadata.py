@@ -59,7 +59,7 @@ async def get_payment_terms(db: Session = Depends(get_db),
             {"value": "COD", "label": "Cash on Delivery", "days": 0},
             {"value": "2_10_NET_30", "label": "2/10 Net 30", "days": 30},
             {"value": "EOM", "label": "End of Month", "days": 30},
-            {"value": "CUSTOM", "label": "Custom Terms", "days": null}
+            {"value": "CUSTOM", "label": "Custom Terms", "days": None}
         ]
     }
 
