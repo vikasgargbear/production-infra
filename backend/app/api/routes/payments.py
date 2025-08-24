@@ -21,7 +21,10 @@ logger = logging.getLogger(__name__)
 router = APIRouter(tags=["payments"])
 
 @router.get("/")
-async def get_payments_overview(db: Session = Depends(get_db)):
+async def get_payments_overview(
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)
+):
     """Get payments overview"""
     try:
         # Simple payments overview
@@ -86,7 +89,7 @@ async def generate_receipt_number(
         like_pattern = f"{prefix}-{date_part}-%"
         
         result = db.execute(text(seq_query), {
-            "org_id": DEFAULT_ORG_ID,
+            "org_id": org_id,
             "payment_date": current_date,
             "pattern": pattern,
             "extract_pattern": extract_pattern,
@@ -128,7 +131,7 @@ class PaymentCreate(BaseModel):
 
 class GeneralPaymentCreate(BaseModel):
     """Schema for creating a general payment (advance or against multiple invoices)"""
-    org_id: str = Field(default=DEFAULT_ORG_ID)
+    org_id: Optional[str] = None  # Will be provided via header
     payment_number: Optional[str] = None
     payment_date: date = Field(default_factory=date.today)
     customer_id: Optional[int] = None
@@ -374,7 +377,7 @@ async def get_payment_summary(
     """
     try:
         summary = PaymentService.get_payment_summary(
-            db, DEFAULT_ORG_ID, from_date, to_date
+            db, org_id, from_date, to_date
         )
         return PaymentSummaryResponse(**summary)
     except Exception as e:
@@ -438,7 +441,7 @@ async def create_customer_receipt(
                 :reference_number, 'cleared', :notes
             ) RETURNING payment_id, payment_number, payment_amount
         """), {
-            "org_id": DEFAULT_ORG_ID,
+            "org_id": org_id,
             "receipt_number": receipt_number,
             "payment_date": receipt_data.get("payment_date", date.today()),
             "customer_id": receipt_data.get("customer_id"),
@@ -512,7 +515,7 @@ async def get_outstanding_invoices(
                 AND i.payment_status IN ('unpaid', 'partial')
         """
         
-        params = {"org_id": DEFAULT_ORG_ID}
+        params = {"org_id": org_id}
         
         if customer_id:
             query += " AND c.customer_id = :customer_id"
@@ -576,7 +579,7 @@ async def create_bank_reconciliation(
         """
         
         result = db.execute(text(recon_query), {
-            "org_id": DEFAULT_ORG_ID,
+            "org_id": org_id,
             "bank_account": bank_account,
             "statement_date": statement_date,
             "opening_balance": opening_balance,
@@ -603,7 +606,7 @@ async def create_bank_reconciliation(
             """
             
             match_result = db.execute(text(match_query), {
-                "org_id": DEFAULT_ORG_ID,
+                "org_id": org_id,
                 "amount": abs(txn.get("amount", 0)),
                 "date": txn.get("date")
             })
@@ -820,7 +823,7 @@ async def get_aging_report(
         """
         
         params = {
-            "org_id": DEFAULT_ORG_ID,
+            "org_id": org_id,
             "aging_date": aging_date
         }
         
