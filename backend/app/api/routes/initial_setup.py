@@ -8,10 +8,13 @@ from typing import Dict, Any
 import uuid
 import json
 from datetime import datetime
+import logging
 
 from ...core.database import get_db
-from ...core.jwt_auth import get_password_hash
+from ...core.supabase_auth import supabase_auth
 from ...core.auth_utils import get_optional_org_id
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["setup"])
 
@@ -141,32 +144,50 @@ async def initialize_organization(
             "address": json.dumps(setup_data.get("address", {}))
         })
         
-        # Create admin user
-        # Note: For production, integrate with Supabase Auth to create auth.users entry
-        # and link via auth_user_id. For now, storing password_hash directly.
+        # Create admin user with proper Supabase Auth integration
         if setup_data.get("admin_email") and setup_data.get("admin_password"):
-            password_hash = get_password_hash(setup_data["admin_password"])
+            auth_user_id = None
             
-            # TODO: Create user in Supabase auth.users and get auth_user_id
-            # For now, create user in org_users with password_hash
+            try:
+                # Create user in Supabase Auth
+                user_metadata = {
+                    "org_id": str(org_id),
+                    "org_name": setup_data["org_name"],
+                    "role": "admin",
+                    "full_name": setup_data.get("admin_name", "Administrator")
+                }
+                
+                auth_user_id = await supabase_auth.create_auth_user(
+                    email=setup_data["admin_email"],
+                    password=setup_data["admin_password"],
+                    user_metadata=user_metadata
+                )
+                
+                if not auth_user_id:
+                    logger.warning("Could not create Supabase auth user, creating local user only")
+            except Exception as e:
+                logger.error(f"Error creating Supabase auth user: {e}")
+                # Continue without Supabase auth if it fails
+            
+            # Create user in org_users table (linked to Supabase auth if available)
             db.execute(text("""
                 INSERT INTO master.org_users (
-                    org_id, username, email, mobile_number, 
+                    org_id, auth_user_id, username, email, mobile_number, 
                     employee_code, first_name, full_name,
-                    password_hash, is_active, is_admin, created_at, updated_at
+                    is_active, is_admin, created_at, updated_at
                 ) VALUES (
-                    :org_id, :username, :email, :mobile_number,
+                    :org_id, :auth_user_id, :username, :email, :mobile_number,
                     'EMP001', :first_name, :full_name,
-                    :password_hash, true, true, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+                    true, true, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
                 )
             """), {
                 "org_id": org_id,
+                "auth_user_id": auth_user_id,  # Links to Supabase auth.users
                 "username": setup_data.get("admin_email", "").split('@')[0],  # Use email prefix as username
                 "email": setup_data["admin_email"],
                 "mobile_number": setup_data.get("phone", ""),
                 "first_name": setup_data.get("admin_name", "Administrator").split()[0] if setup_data.get("admin_name") else "Admin",
-                "full_name": setup_data.get("admin_name", "Administrator"),
-                "password_hash": password_hash
+                "full_name": setup_data.get("admin_name", "Administrator")
             })
         
         # Create default system settings

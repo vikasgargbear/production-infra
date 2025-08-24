@@ -2260,29 +2260,15 @@ RAISE NOTICE '3. Year-based sequences (resets each year)';
 RAISE NOTICE '4. Tracks last generated number for audit';
 
 -- ========================================
--- SECTION 20: ADD PASSWORD_HASH TO ORG_USERS
+-- Note: Authentication is handled by Supabase Auth
 -- ========================================
--- Date: 2025-08-24
--- Purpose: Add password_hash column for secure password storage
-
-RAISE NOTICE '';
-RAISE NOTICE '========================================';
-RAISE NOTICE '🔧 SECTION 20: ADDING PASSWORD_HASH TO ORG_USERS';
-RAISE NOTICE '========================================';
-
--- Add password_hash column if it doesn't exist
-ALTER TABLE master.org_users 
-ADD COLUMN IF NOT EXISTS password_hash TEXT;
-
--- Add comment
-COMMENT ON COLUMN master.org_users.password_hash IS 'Bcrypt hashed password for user authentication';
-
-RAISE NOTICE '';
-RAISE NOTICE '========================================';
-RAISE NOTICE '✅ SECTION 20: PASSWORD_HASH COLUMN ADDED';
-RAISE NOTICE '========================================';
-RAISE NOTICE 'SECURITY FEATURES:';
-RAISE NOTICE '1. Passwords stored using bcrypt hash';
-RAISE NOTICE '2. Passwords never stored in plain text';
-RAISE NOTICE '3. Column added to master.org_users table';
+-- The master.org_users table has an auth_user_id column that
+-- links to Supabase's auth.users table. Passwords are managed
+-- by Supabase Auth service, not stored in our application database.
+-- This provides enterprise-grade security with features like:
+-- - Secure password hashing (bcrypt)
+-- - Email verification
+-- - Password reset flows
+-- - Multi-factor authentication
+-- - OAuth providers integration
 RAISE NOTICE '==========================================';
