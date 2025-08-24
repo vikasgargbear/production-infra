@@ -24,7 +24,8 @@ logger = logging.getLogger(__name__)
 router = APIRouter(tags=["Billing & GST"])
 
 @router.get("/")
-async def billing_overview(db: Session = Depends(get_db)):
+async def billing_overview(db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)):
     """Get billing overview and available services"""
     try:
         # Simple billing stats

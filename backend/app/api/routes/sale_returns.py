@@ -23,6 +23,8 @@ router = APIRouter(tags=["sale-returns"])
 async def generate_sales_return_number(
     db: Session = Depends(get_db),
     org_id: Optional[str] = None  # Will be provided via header
+,
+    org_id: str = Depends(get_org_id_from_header)
 ):
     """Generate next sales return number using unified service"""
     try:
@@ -44,7 +46,8 @@ async def get_sale_returns(
     party_id: Optional[str] = None,
     from_date: Optional[str] = None,
     to_date: Optional[str] = None,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)
 ):
     """
     Get list of sale returns with optional filters
@@ -117,7 +120,8 @@ async def get_sale_returns(
 async def get_returnable_invoices(
     party_id: Optional[str] = None,
     invoice_number: Optional[str] = None,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)
 ):
     """
     Get sales invoices that can be returned
@@ -184,7 +188,8 @@ async def get_returnable_invoices(
 @router.get("/invoice/{invoice_id}/items")
 async def get_invoice_items_for_return(
     invoice_id: str,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)
 ):
     """
     Get items from a specific invoice for return
@@ -242,7 +247,8 @@ async def get_invoice_items_for_return(
 @router.post("/")
 async def create_sale_return(
     return_data: dict,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)
 ):
     """
     Create a new sale return and generate credit note if customer has GST
@@ -402,7 +408,8 @@ async def create_sale_return(
 @router.get("/{return_id}")
 async def get_sale_return_detail(
     return_id: str,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)
 ):
     """
     Get detailed information about a specific sale return
@@ -458,7 +465,8 @@ async def get_sale_return_detail(
 @router.delete("/{return_id}")
 async def cancel_sale_return(
     return_id: str,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)
 ):
     """
     Cancel a sale return (if allowed by business rules)

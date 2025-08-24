@@ -67,7 +67,8 @@ async def get_employees_for_created_by(
 @router.post("/", response_model=OrderResponse)
 async def create_sales_order(
     order: OrderCreate,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)
 ):
     """
     Create a new sales order (no inventory reduction)
@@ -293,7 +294,8 @@ async def list_sales_orders(
     status: Optional[str] = None,
     from_date: Optional[date] = None,
     to_date: Optional[date] = None,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)
 ):
     """
     List sales orders with filters and pagination
@@ -385,7 +387,8 @@ async def list_sales_orders(
 @router.get("/{order_id}", response_model=OrderResponse)
 async def get_sales_order(
     order_id: int,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)
 ):
     """Get sales order details with items"""
     try:
@@ -430,7 +433,8 @@ async def get_sales_order(
 async def update_sales_order(
     order_id: int,
     order_data: OrderUpdate,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)
 ):
     """Update sales order details (only for pending orders)"""
     try:
@@ -488,7 +492,8 @@ async def update_sales_order(
 @router.post("/{order_id}/approve")
 async def approve_sales_order(
     order_id: int,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)
 ):
     """
     Approve sales order and allocate inventory
@@ -577,7 +582,8 @@ async def approve_sales_order(
 async def convert_to_invoice(
     order_id: int,
     invoice_request: InvoiceRequest,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)
 ):
     """Convert approved sales order to invoice"""
     try:
@@ -628,7 +634,8 @@ async def convert_to_invoice(
 async def convert_to_challan(
     order_id: int,
     challan_date: Optional[date] = None,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)
 ):
     """Convert approved sales order to delivery challan"""
     try:
@@ -675,7 +682,8 @@ async def convert_to_challan(
 @router.post("/validate")
 async def validate_sales_order(
     order_data: OrderCreate,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)
 ):
     """Validate sales order data without creating it"""
     try:
@@ -707,7 +715,8 @@ async def validate_sales_order(
         return {"valid": False, "message": f"Validation error: {str(e)}"}
 
 @router.get("/dashboard/stats")
-async def get_sales_order_dashboard(db: Session = Depends(get_db)):
+async def get_sales_order_dashboard(db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)):
     """Get sales order dashboard statistics"""
     try:
         # Get sales order specific stats

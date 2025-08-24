@@ -23,6 +23,8 @@ router = APIRouter(tags=["goods-receipt-notes"])
 def generate_grn_number(
     db: Session = Depends(get_db),
     org_id: str = Depends(get_current_org_id)
+,
+    org_id: str = Depends(get_org_id_from_header)
 ):
     """Generate next GRN number using unified service"""
     try:
@@ -43,6 +45,8 @@ async def create_grn(
     db: Session = Depends(get_db),
     org_id: str = Depends(get_current_org_id),
     user_id: Optional[int] = Depends(get_current_user_id)
+,
+    org_id: str = Depends(get_org_id_from_header)
 ):
     """Create a new Goods Receipt Note"""
     try:
@@ -223,6 +227,8 @@ def get_grns(
     date_to: Optional[date] = Query(None, description="Filter to date"),
     db: Session = Depends(get_db),
     org_id: str = Depends(get_current_org_id),
+,
+    org_id: str = Depends(get_org_id_from_header)
 ):
     """Get list of GRNs with filtering and pagination"""
     try:
@@ -314,6 +320,8 @@ def get_grn_details(
     grn_id: int,
     db: Session = Depends(get_db),
     org_id: str = Depends(get_current_org_id),
+,
+    org_id: str = Depends(get_org_id_from_header)
 ):
     """Get detailed GRN information"""
     try:
@@ -375,6 +383,8 @@ def update_grn(
     db: Session = Depends(get_db),
     org_id: str = Depends(get_current_org_id),
     user_id: Optional[int] = Depends(get_current_user_id)
+,
+    org_id: str = Depends(get_org_id_from_header)
 ):
     """Update GRN details"""
     try:
@@ -419,6 +429,8 @@ def approve_grn(
     db: Session = Depends(get_db),
     org_id: str = Depends(get_current_org_id),
     user_id: Optional[int] = Depends(get_current_user_id)
+,
+    org_id: str = Depends(get_org_id_from_header)
 ):
     """Approve GRN and update stock if not already done"""
     try:

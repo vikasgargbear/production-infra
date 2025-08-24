@@ -25,7 +25,8 @@ def get_purchases(
     po_status: Optional[str] = Query(None, description="Filter by PO status"),
     supplier_id: Optional[int] = Query(None, description="Filter by supplier"),
     dateFilter: Optional[str] = Query(None, description="Date filter"),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)
 ):
     """Get list of purchase orders with pagination and filtering"""
     try:
@@ -160,7 +161,8 @@ def get_purchases(
         raise HTTPException(status_code=500, detail=f"Failed to fetch purchases: {str(e)}")
 
 @router.post("/direct-purchase-entry")
-def create_direct_purchase_entry(purchase_data: dict, db: Session = Depends(get_db)):
+def create_direct_purchase_entry(purchase_data: dict, db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)):
     """
     Direct Purchase Entry (Bill Entry) - When goods are received with supplier invoice
     This creates supplier invoice and adds stock to inventory via batches
@@ -276,7 +278,8 @@ def create_direct_purchase_entry(purchase_data: dict, db: Session = Depends(get_
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/with-items")
-def create_purchase_with_items(purchase_data: dict, db: Session = Depends(get_db)):
+def create_purchase_with_items(purchase_data: dict, db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)):
     """
     Create a purchase order with line items
     Supports both manual entry and parsed invoice data
@@ -443,7 +446,8 @@ def create_purchase_with_items(purchase_data: dict, db: Session = Depends(get_db
         raise HTTPException(status_code=500, detail=f"Failed to create purchase: {str(e)}")
 
 @router.get("/{purchase_id}/items")
-def get_purchase_items(purchase_id: int, db: Session = Depends(get_db)):
+def get_purchase_items(purchase_id: int, db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)):
     """Get all items for a purchase order"""
     try:
         items = db.execute(
@@ -473,7 +477,8 @@ def update_purchase_item(
     purchase_id: int,
     item_id: int,
     item_data: dict,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)
 ):
     """Update a purchase item"""
     try:
@@ -531,7 +536,8 @@ def update_purchase_item(
 def receive_purchase_items(
     purchase_id: int,
     receive_data: dict,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)
 ):
     """
     Receive items from a purchase order
@@ -686,7 +692,8 @@ def receive_purchase_items(
 def receive_purchase_items_fixed(
     purchase_id: int,
     receive_data: dict,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)
 ):
     """
     Receive items - Fixed version that works with auto batch trigger
@@ -781,7 +788,8 @@ def receive_purchase_items_fixed(
 @router.get("/pending-receipts")
 def get_pending_receipts(
     supplier_id: Optional[int] = Query(None),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)
 ):
     """Get purchases pending receipt"""
     try:

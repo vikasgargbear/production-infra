@@ -11,6 +11,7 @@ from sqlalchemy import text
 import json
 
 from ...core.database import get_db
+from ...core.auth_utils import get_org_id_from_header
 from ...core.auth import get_current_org
 from ..services.invoice_service import InvoiceService
 
@@ -25,6 +26,8 @@ async def smart_invoice_generation(
     invoice_data: Optional[dict] = None,
     db: Session = Depends(get_db),
     current_org = Depends(get_current_org)
+,
+    org_id: str = Depends(get_org_id_from_header)
 ):
     """
     Smart invoice generation that handles missing orders gracefully
@@ -148,6 +151,8 @@ async def smart_invoice_generation(
 async def debug_sequence_issue(
     db: Session = Depends(get_db),
     current_org = Depends(get_current_org)
+,
+    org_id: str = Depends(get_org_id_from_header)
 ):
     """
     Debug endpoint to understand the order sequence issue

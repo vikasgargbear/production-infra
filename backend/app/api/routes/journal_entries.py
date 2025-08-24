@@ -60,7 +60,8 @@ class JournalEntryCreate(BaseModel):
         return v
 
 @router.get("/generate-journal-number")
-async def generate_journal_number(db: Session = Depends(get_db)):
+async def generate_journal_number(db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)):
     """
     Generate unique journal entry number
     
@@ -121,7 +122,8 @@ async def get_chart_of_accounts(
     search: Optional[str] = Query(None, description="Search account name or code"),
     account_type: Optional[str] = Query(None, description="Filter by account type"),
     active_only: bool = Query(True, description="Show only active accounts"),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)
 ):
     """
     Get chart of accounts for journal entry selection
@@ -182,7 +184,8 @@ async def get_chart_of_accounts(
 @router.post("", response_model=dict)
 async def create_journal_entry(
     journal_entry: JournalEntryCreate,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)
 ):
     """
     Create a new journal entry
@@ -320,7 +323,8 @@ async def get_journal_entries(
     from_date: Optional[date] = Query(None),
     to_date: Optional[date] = Query(None),
     search: Optional[str] = Query(None),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)
 ):
     """
     Get list of journal entries with pagination and filters
@@ -411,7 +415,8 @@ async def get_journal_entries(
 @router.get("/{journal_id}", response_model=dict)
 async def get_journal_entry_details(
     journal_id: int,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)
 ):
     """
     Get detailed journal entry with all line items
@@ -477,7 +482,8 @@ async def get_journal_entry_details(
 async def delete_journal_entry(
     journal_id: int,
     reason: str = Query(..., description="Deletion reason"),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)
 ):
     """
     Delete/cancel journal entry

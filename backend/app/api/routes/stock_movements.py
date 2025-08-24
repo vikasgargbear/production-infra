@@ -28,7 +28,8 @@ def get_inventory_movements(
     location_id: Optional[int] = Query(None, description="Location ID filter"),
     from_date: Optional[str] = Query(None, description="Start date (YYYY-MM-DD)"),
     to_date: Optional[str] = Query(None, description="End date (YYYY-MM-DD)"),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)
 ):
     """
     Get inventory movements using the database API function
@@ -152,7 +153,8 @@ def get_movement_reasons():
 @router.post("/receive")
 def create_stock_receive(
     receive_data: dict,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)
 ):
     """
     Create a stock receive entry (increase inventory)
@@ -261,7 +263,8 @@ def create_stock_receive(
 @router.post("/issue")
 def create_stock_issue(
     issue_data: dict,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)
 ):
     """
     Create a stock issue entry (decrease inventory)
@@ -352,7 +355,8 @@ def create_stock_issue(
 @router.post("/transfer")
 def create_stock_transfer(
     transfer_data: dict,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)
 ):
     """
     Transfer stock between locations/warehouses
@@ -411,7 +415,8 @@ def create_stock_transfer(
 @router.get("/product/{product_id}/batches")
 def get_product_batches(
     product_id: str,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)
 ):
     """
     Get available batches for a product with stock info
@@ -452,7 +457,8 @@ def get_product_batches(
 @router.get("/near-expiry")
 def get_near_expiry_stock(
     days: int = Query(90, description="Days to expiry"),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)
 ):
     """
     Get products nearing expiry
@@ -493,7 +499,8 @@ def get_near_expiry_stock(
 
 @router.get("/low-stock")
 def get_low_stock_items(
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)
 ):
     """
     Get products with low stock based on reorder level

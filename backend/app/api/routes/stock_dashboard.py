@@ -17,7 +17,8 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/stock", tags=["stock-dashboard"])
 
 @router.get("/dashboard")
-def get_stock_dashboard(db: Session = Depends(get_db)):
+def get_stock_dashboard(db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)):
     """Get stock dashboard metrics"""
     try:
         dashboard_data = {}
@@ -111,7 +112,8 @@ def get_current_stock(
     search: Optional[str] = Query(None, description="Search products"),
     category: Optional[str] = Query(None, description="Filter by category"),
     low_stock_only: bool = Query(False, description="Show only low stock items"),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)
 ):
     """Get current stock levels for all products"""
     try:
@@ -221,7 +223,8 @@ def get_current_stock(
         raise HTTPException(status_code=500, detail=f"Failed to get current stock: {str(e)}")
 
 @router.get("/alerts")
-def get_stock_alerts(db: Session = Depends(get_db)):
+def get_stock_alerts(db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)):
     """Get stock alerts for low stock and out of stock items"""
     try:
         query = """
@@ -293,7 +296,8 @@ def get_stock_alerts(db: Session = Depends(get_db)):
 @router.get("/recent-movements")
 def get_recent_movements(
     limit: int = Query(10, ge=1, le=50),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)
 ):
     """Get recent stock movements"""
     try:

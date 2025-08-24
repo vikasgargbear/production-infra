@@ -11,6 +11,7 @@ from datetime import datetime, date, timedelta
 from decimal import Decimal
 
 from ...core.database import get_db
+from ...core.auth_utils import get_org_id_from_header
 
 logger = logging.getLogger(__name__)
 
@@ -21,7 +22,8 @@ async def get_party_balance(
     party_id: str,
     party_type: str = Query(..., regex="^(customer|supplier)$"),
     as_of_date: Optional[str] = None,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)
 ):
     """
     Get current balance for a party
@@ -129,7 +131,8 @@ async def get_party_statement(
     to_date: Optional[str] = None,
     skip: int = Query(0, ge=0),
     limit: int = Query(50, ge=1, le=200),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)
 ):
     """
     Get detailed statement for a party
@@ -313,7 +316,8 @@ async def get_outstanding_bills(
     party_id: str,
     party_type: str = Query(..., regex="^(customer|supplier)$"),
     status: Optional[str] = Query(None, regex="^(outstanding|partial|overdue|paid)$"),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)
 ):
     """
     Get outstanding bills for a party

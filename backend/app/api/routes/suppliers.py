@@ -28,7 +28,8 @@ def get_suppliers(
     skip: int = 0,
     limit: int = 100,
     search: Optional[str] = Query(None, description="Search by supplier name"),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)
 ):
     """Get suppliers with optional search"""
     try:
@@ -85,7 +86,8 @@ def get_suppliers(
         raise HTTPException(status_code=500, detail=f"Failed to get suppliers: {str(e)}")
 
 @router.get("/{supplier_id}")
-def get_supplier(supplier_id: int, db: Session = Depends(get_db)):
+def get_supplier(supplier_id: int, db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)):
     """Get a single supplier by ID"""
     try:
         result = db.execute(text("""
@@ -133,7 +135,8 @@ def get_supplier(supplier_id: int, db: Session = Depends(get_db)):
         raise HTTPException(status_code=500, detail=f"Failed to get supplier: {str(e)}")
 
 @router.post("/")
-def create_supplier(supplier_data: SupplierCreate, db: Session = Depends(get_db)):
+def create_supplier(supplier_data: SupplierCreate, db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)):
     """Create a new supplier"""
     try:
         # Generate supplier code if not provided
@@ -271,7 +274,8 @@ def create_supplier(supplier_data: SupplierCreate, db: Session = Depends(get_db)
         raise HTTPException(status_code=500, detail=f"Failed to create supplier: {str(e)}")
 
 @router.put("/{supplier_id}")
-def update_supplier(supplier_id: int, supplier_data: SupplierUpdate, db: Session = Depends(get_db)):
+def update_supplier(supplier_id: int, supplier_data: SupplierUpdate, db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)):
     """Update a supplier"""
     try:
         # Check if supplier exists
@@ -328,7 +332,8 @@ def update_supplier(supplier_id: int, supplier_data: SupplierUpdate, db: Session
         raise HTTPException(status_code=500, detail=f"Failed to update supplier: {str(e)}")
 
 @router.delete("/{supplier_id}")
-def delete_supplier(supplier_id: int, db: Session = Depends(get_db)):
+def delete_supplier(supplier_id: int, db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)):
     """Delete a supplier"""
     try:
         # Check if supplier exists
@@ -356,7 +361,8 @@ def delete_supplier(supplier_id: int, db: Session = Depends(get_db)):
         raise HTTPException(status_code=500, detail=f"Failed to delete supplier: {str(e)}")
 
 @router.get("/{supplier_id}/products")
-def get_supplier_products(supplier_id: int, db: Session = Depends(get_db)):
+def get_supplier_products(supplier_id: int, db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)):
     """Get products from a specific supplier"""
     try:
         result = db.execute(
@@ -376,7 +382,8 @@ def get_supplier_products(supplier_id: int, db: Session = Depends(get_db)):
         raise HTTPException(status_code=500, detail=f"Failed to get supplier products: {str(e)}")
 
 @router.get("/{supplier_id}/purchases")
-def get_supplier_purchases(supplier_id: int, skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
+def get_supplier_purchases(supplier_id: int, skip: int = 0, limit: int = 100, db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)):
     """Get purchase history for a supplier"""
     try:
         result = db.execute(

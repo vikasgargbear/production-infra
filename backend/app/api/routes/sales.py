@@ -76,7 +76,8 @@ class SaleResponse(BaseModel):
 @router.post("/", response_model=SaleResponse)
 async def create_direct_sale(
     sale_data: SaleCreate,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)
 ):
     """
     Create a direct sale/cash sale with invoice
@@ -295,6 +296,7 @@ async def get_sales(
     limit: int = Query(20, ge=1, le=100),
     party_id: Optional[int] = None,
     from_date: Optional[str] = None,
+    org_id: str = Depends(get_org_id_from_header),
     to_date: Optional[str] = None,
     payment_method: Optional[str] = None,
     db: Session = Depends(get_db)
@@ -367,7 +369,8 @@ async def get_sales(
 @router.get("/outstanding")
 async def get_outstanding_sales(
     customer_id: Optional[int] = Query(None),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)
 ):
     """
     Get outstanding sales/invoices for payments
@@ -428,7 +431,8 @@ async def get_outstanding_sales(
 @router.get("/{sale_id}")
 async def get_sale_detail(
     sale_id: str,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)
 ):
     """
     Get detailed sale information including items
@@ -478,7 +482,8 @@ async def get_sale_detail(
 @router.post("/calculate")
 async def calculate_sale_totals(
     sale_data: SaleCreate,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)
 ):
     """
     Calculate sale totals without creating the sale
@@ -533,7 +538,8 @@ async def calculate_sale_totals(
 @router.get("/invoice/{invoice_number}")
 async def get_sale_by_invoice(
     invoice_number: str,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)
 ):
     """
     Get sale by invoice number
@@ -563,7 +569,8 @@ async def get_sale_by_invoice(
 @router.post("/{sale_id}/print")
 async def get_sale_print_data(
     sale_id: str,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)
 ):
     """
     Get sale data formatted for printing

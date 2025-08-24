@@ -27,7 +27,8 @@ router = APIRouter(prefix="/orders", tags=["orders"])
 @router.post("/", response_model=OrderResponse)
 async def create_order(
     order: OrderCreate,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)
 ):
     """
     Create a new order with items
@@ -213,7 +214,8 @@ async def list_orders(
     status: Optional[str] = None,
     from_date: Optional[date] = None,
     to_date: Optional[date] = None,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)
 ):
     """
     List orders with filters and pagination
@@ -318,7 +320,8 @@ async def list_orders(
 @router.get("/{order_id}", response_model=OrderResponse)
 async def get_order(
     order_id: int,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)
 ):
     """Get order details with items"""
     try:
@@ -369,7 +372,8 @@ async def get_order(
 async def update_order(
     order_id: int,
     order_data: dict,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)
 ):
     """Update order details"""
     try:
@@ -433,7 +437,8 @@ async def update_order(
 @router.put("/{order_id}/confirm")
 async def confirm_order(
     order_id: int,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)
 ):
     """Confirm a pending order"""
     try:
@@ -476,7 +481,8 @@ async def confirm_order(
 async def generate_invoice(
     order_id: int,
     invoice_request: InvoiceRequest,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)
 ):
     """Generate invoice for an order"""
     try:
@@ -536,7 +542,8 @@ async def generate_invoice(
 async def mark_delivered(
     order_id: int,
     delivery: DeliveryUpdate,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)
 ):
     """Mark order as delivered"""
     try:
@@ -597,7 +604,8 @@ async def mark_delivered(
 async def process_return(
     order_id: int,
     return_request: ReturnRequest,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)
 ):
     """Process order return"""
     try:
@@ -615,7 +623,8 @@ async def process_return(
         raise HTTPException(status_code=500, detail=f"Failed to process return: {str(e)}")
 
 @router.get("/dashboard/stats")
-async def get_order_dashboard(db: Session = Depends(get_db)):
+async def get_order_dashboard(db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)):
     """Get order dashboard statistics"""
     try:
         stats = OrderService.get_order_dashboard(db, org_id)

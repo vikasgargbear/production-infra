@@ -10,6 +10,7 @@ import uuid
 from datetime import datetime
 
 from ...core.database import get_db
+from ...core.auth_utils import get_org_id_from_header
 from ...core.auth import get_current_org
 
 router = APIRouter(prefix="/organizations", tags=["organizations"])
@@ -19,6 +20,8 @@ async def get_organization_profile(
     org_id: str,
     db: Session = Depends(get_db),
     current_org: Dict = Depends(get_current_org)
+,
+    org_id: str = Depends(get_org_id_from_header)
 ):
     """Get organization profile and settings"""
     try:
@@ -96,6 +99,8 @@ async def update_organization_profile(
     profile_data: Dict[str, Any],
     db: Session = Depends(get_db),
     current_org: Dict = Depends(get_current_org)
+,
+    org_id: str = Depends(get_org_id_from_header)
 ):
     """Update organization profile and basic settings"""
     try:
@@ -180,6 +185,8 @@ async def get_feature_settings(
     org_id: str,
     db: Session = Depends(get_db),
     current_org: Dict = Depends(get_current_org)
+,
+    org_id: str = Depends(get_org_id_from_header)
 ):
     """Get organization feature settings"""
     try:
@@ -283,6 +290,8 @@ async def update_feature_settings(
     features: Dict[str, Any],
     db: Session = Depends(get_db),
     current_org: Dict = Depends(get_current_org)
+,
+    org_id: str = Depends(get_org_id_from_header)
 ):
     """Update organization feature settings"""
     try:
@@ -341,6 +350,8 @@ async def upload_organization_logo(
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
     current_org: Dict = Depends(get_current_org)
+,
+    org_id: str = Depends(get_org_id_from_header)
 ):
     """Upload organization logo"""
     try:

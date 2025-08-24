@@ -13,6 +13,7 @@ from sqlalchemy import text
 from pydantic import BaseModel, Field
 
 from ...core.database import get_db
+from ...core.auth_utils import get_org_id_from_header
 from ...dependencies import get_current_org
 
 router = APIRouter(
@@ -63,6 +64,8 @@ async def create_direct_invoice(
     invoice_data: DirectInvoiceCreate,
     db: Session = Depends(get_db),
     current_org = Depends(get_current_org)
+,
+    org_id: str = Depends(get_org_id_from_header)
 ):
     """
     Create an invoice directly without requiring an order

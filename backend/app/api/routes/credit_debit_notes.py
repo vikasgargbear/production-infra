@@ -26,7 +26,8 @@ async def get_notes(
     party_id: Optional[str] = None,
     from_date: Optional[str] = None,
     to_date: Optional[str] = None,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)
 ):
     """
     Get list of credit/debit notes with optional filters
@@ -156,7 +157,8 @@ async def get_notes(
 @router.post("/credit-note")
 async def create_credit_note(
     note_data: dict,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)
 ):
     """
     Create a credit note (reduce customer liability)
@@ -270,7 +272,8 @@ async def create_credit_note(
 @router.post("/debit-note")
 async def create_debit_note(
     note_data: dict,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)
 ):
     """
     Create a debit note (increase customer liability or reduce supplier liability)
@@ -417,7 +420,8 @@ async def create_debit_note(
 @router.get("/{note_id}")
 async def get_note_detail(
     note_id: str,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)
 ):
     """
     Get detailed information about a specific note
@@ -453,7 +457,8 @@ async def get_note_detail(
 @router.get("/{note_id}/print")
 async def get_note_print_data(
     note_id: str,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)
 ):
     """
     Get note data formatted for printing
@@ -489,7 +494,8 @@ async def get_note_print_data(
 async def cancel_note(
     note_id: str,
     cancellation_reason: str,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)
 ):
     """
     Cancel a credit/debit note
@@ -648,7 +654,8 @@ async def get_party_invoices_for_linking(
     page: int = Query(1, ge=1, description="Page number (1-based)"),
     limit: int = Query(5, ge=1, le=50, description="Items per page"),
     search: str = Query("", description="Search invoice number"),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)
 ):
     """
     Get invoices for a party that can be linked to notes
@@ -785,7 +792,8 @@ async def get_party_invoices_for_linking(
 @router.get("/invoice-items/{invoice_id}")
 async def get_invoice_items_for_notes(
     invoice_id: str,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)
 ):
     """
     Get invoice items for creating credit/debit notes

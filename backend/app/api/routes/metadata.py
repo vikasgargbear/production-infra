@@ -15,7 +15,8 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 @router.get("/pack-types")
-async def get_pack_types(db: Session = Depends(get_db)):
+async def get_pack_types(db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)):
     """Get all available pack types for products"""
     return {
         "pack_types": [
@@ -38,7 +39,8 @@ async def get_pack_types(db: Session = Depends(get_db)):
     }
 
 @router.get("/payment-terms")
-async def get_payment_terms(db: Session = Depends(get_db)):
+async def get_payment_terms(db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)):
     """Get all available payment terms"""
     return {
         "payment_terms": [
@@ -57,7 +59,8 @@ async def get_payment_terms(db: Session = Depends(get_db)):
     }
 
 @router.get("/payment-modes")
-async def get_payment_modes(db: Session = Depends(get_db)):
+async def get_payment_modes(db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)):
     """Get all available payment modes"""
     return {
         "payment_modes": [
@@ -76,7 +79,8 @@ async def get_payment_modes(db: Session = Depends(get_db)):
     }
 
 @router.get("/document-statuses")
-async def get_document_statuses(db: Session = Depends(get_db)):
+async def get_document_statuses(db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)):
     """Get all document status options"""
     return {
         "invoice_statuses": ["draft", "pending", "paid", "partial", "overdue", "cancelled"],
@@ -88,7 +92,8 @@ async def get_document_statuses(db: Session = Depends(get_db)):
     }
 
 @router.get("/units-of-measure")
-async def get_units_of_measure(db: Session = Depends(get_db)):
+async def get_units_of_measure(db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)):
     """Get all units of measure"""
     return {
         "units": [
@@ -111,7 +116,8 @@ async def get_units_of_measure(db: Session = Depends(get_db)):
     }
 
 @router.get("/return-reasons")
-async def get_return_reasons(db: Session = Depends(get_db)):
+async def get_return_reasons(db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)):
     """Get all return reason options"""
     return {
         "sales_return_reasons": [
@@ -138,7 +144,8 @@ async def get_return_reasons(db: Session = Depends(get_db)):
     }
 
 @router.get("/tax-types")
-async def get_tax_types(db: Session = Depends(get_db)):
+async def get_tax_types(db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)):
     """Get all tax type options"""
     return {
         "tax_types": [
@@ -155,7 +162,8 @@ async def get_tax_types(db: Session = Depends(get_db)):
     }
 
 @router.get("/transport-modes")
-async def get_transport_modes(db: Session = Depends(get_db)):
+async def get_transport_modes(db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)):
     """Get all transport mode options"""
     return {
         "transport_modes": [
@@ -170,7 +178,8 @@ async def get_transport_modes(db: Session = Depends(get_db)):
     }
 
 @router.get("/all")
-async def get_all_metadata(db: Session = Depends(get_db)):
+async def get_all_metadata(db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)):
     """Get all metadata in one call for caching"""
     try:
         return {

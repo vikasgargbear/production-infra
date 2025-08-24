@@ -26,7 +26,8 @@ def get_stock_adjustments(
     adjustment_type: Optional[str] = Query(None, description="Filter by type: damage, expiry, count, other"),
     start_date: Optional[date] = Query(None, description="Filter from date"),
     end_date: Optional[date] = Query(None, description="Filter to date"),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)
 ):
     """Get stock adjustments from inventory movements"""
     try:
@@ -95,7 +96,8 @@ def get_stock_adjustments(
         raise HTTPException(status_code=500, detail=f"Failed to get stock adjustments: {str(e)}")
 
 @router.post("/")
-def create_stock_adjustment(adjustment_data: dict, db: Session = Depends(get_db)):
+def create_stock_adjustment(adjustment_data: dict, db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)):
     """
     Create a stock adjustment using inventory movements
     """
@@ -195,7 +197,8 @@ def create_stock_adjustment(adjustment_data: dict, db: Session = Depends(get_db)
         raise HTTPException(status_code=500, detail=f"Failed to create stock adjustment: {str(e)}")
 
 @router.post("/physical-count")
-def process_physical_count(count_data: dict, db: Session = Depends(get_db)):
+def process_physical_count(count_data: dict, db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)):
     """
     Process physical inventory count
     Creates stock adjustments for differences
@@ -285,7 +288,8 @@ def process_physical_count(count_data: dict, db: Session = Depends(get_db)):
         raise HTTPException(status_code=500, detail=f"Failed to process physical count: {str(e)}")
 
 @router.post("/expire-batches")
-def expire_batches(db: Session = Depends(get_db)):
+def expire_batches(db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)):
     """
     Mark expired batches and create stock adjustments
     """
@@ -370,7 +374,8 @@ def expire_batches(db: Session = Depends(get_db)):
 def get_adjustment_analytics(
     start_date: Optional[date] = Query(None),
     end_date: Optional[date] = Query(None),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)
 ):
     """Get stock adjustment analytics"""
     try:

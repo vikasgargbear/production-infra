@@ -21,7 +21,8 @@ router = APIRouter()
 # ============== CUSTOMER ENDPOINTS ==============
 
 @router.post("/customers", response_model=Dict[str, Any])
-async def create_customer(customer_data: Dict[str, Any], db: Session = Depends(get_db)):
+async def create_customer(customer_data: Dict[str, Any], db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)):
     """Create a new customer"""
     try:
         # Insert into parties.customers table with actual column names
@@ -87,7 +88,8 @@ async def create_customer(customer_data: Dict[str, Any], db: Session = Depends(g
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/customers/{customer_id}")
-async def get_customer(customer_id: int, db: Session = Depends(get_db)):
+async def get_customer(customer_id: int, db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)):
     """Get customer by ID"""
     try:
         query = text("""
@@ -110,7 +112,8 @@ async def get_customer(customer_id: int, db: Session = Depends(get_db)):
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.put("/customers/{customer_id}")
-async def update_customer(customer_id: int, customer_data: Dict[str, Any], db: Session = Depends(get_db)):
+async def update_customer(customer_id: int, customer_data: Dict[str, Any], db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)):
     """Update customer"""
     try:
         # Build update query dynamically
@@ -167,7 +170,8 @@ async def update_customer(customer_id: int, customer_data: Dict[str, Any], db: S
 # ============== SUPPLIER ENDPOINTS ==============
 
 @router.post("/suppliers", response_model=Dict[str, Any])
-async def create_supplier(supplier_data: Dict[str, Any], db: Session = Depends(get_db)):
+async def create_supplier(supplier_data: Dict[str, Any], db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)):
     """Create a new supplier"""
     try:
         query = text("""
@@ -235,7 +239,8 @@ async def list_suppliers(
     limit: int = Query(100, ge=1, le=1000),
     offset: int = Query(0, ge=0),
     search: Optional[str] = None,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)
 ):
     """List all suppliers with pagination"""
     try:
@@ -285,7 +290,8 @@ async def list_suppliers(
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/suppliers/{supplier_id}")
-async def get_supplier(supplier_id: int, db: Session = Depends(get_db)):
+async def get_supplier(supplier_id: int, db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)):
     """Get supplier by ID"""
     try:
         query = text("""
@@ -310,7 +316,8 @@ async def get_supplier(supplier_id: int, db: Session = Depends(get_db)):
 # ============== PRODUCT ENDPOINTS ==============
 
 @router.post("/products", response_model=Dict[str, Any])
-async def create_product(product_data: Dict[str, Any], db: Session = Depends(get_db)):
+async def create_product(product_data: Dict[str, Any], db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)):
     """Create a new product"""
     try:
         query = text("""
@@ -409,7 +416,8 @@ async def list_products(
     offset: int = Query(0, ge=0),
     search: Optional[str] = None,
     category: Optional[str] = None,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)
 ):
     """List all products with pagination and search"""
     try:
@@ -469,7 +477,8 @@ async def list_products(
 async def search_products(
     q: str = Query(..., description="Search query"),
     limit: int = Query(20, ge=1, le=100),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)
 ):
     """Search products by name or code"""
     try:
@@ -508,7 +517,8 @@ async def search_products(
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/products/{product_id}")
-async def get_product(product_id: int, db: Session = Depends(get_db)):
+async def get_product(product_id: int, db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)):
     """Get product by ID"""
     try:
         query = text("""

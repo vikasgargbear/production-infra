@@ -132,7 +132,8 @@ async def get_outstanding_list(
     search: Optional[str] = None,
     skip: int = Query(0, ge=0),
     limit: int = Query(50, ge=1, le=200),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)
 ):
     """
     Get list of outstanding receivables/payables
@@ -231,7 +232,8 @@ async def get_outstanding_list(
 @router.post("/reminders/generate-links")
 async def generate_reminder_links(
     reminder_data: dict,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)
 ):
     """
     Generate clickable WhatsApp/SMS links for payment reminders
@@ -371,7 +373,8 @@ async def get_reminder_history(
     to_date: Optional[str] = None,
     skip: int = Query(0, ge=0),
     limit: int = Query(50, ge=1, le=200),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)
 ):
     """
     Get history of sent reminders
@@ -435,7 +438,8 @@ async def get_reminder_history(
 @router.post("/payment/record")
 async def record_payment_collection(
     payment_data: dict,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)
 ):
     """
     Record a payment collection

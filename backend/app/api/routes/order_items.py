@@ -9,6 +9,7 @@ from sqlalchemy import text
 import logging
 
 from ...core.database import get_db
+from ...core.auth_utils import get_org_id_from_header
 from ...models import OrderItem
 from ...core.crud_base import create_crud
 
@@ -25,7 +26,8 @@ def get_order_items(
     limit: int = 100,
     order_id: Optional[int] = Query(None, description="Filter by order ID"),
     product_id: Optional[int] = Query(None, description="Filter by product ID"),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)
 ):
     """Get order items with optional filtering"""
     try:
@@ -53,7 +55,8 @@ def get_order_items(
         raise HTTPException(status_code=500, detail=f"Failed to get order items: {str(e)}")
 
 @router.get("/{order_item_id}")
-def get_order_item(order_item_id: int, db: Session = Depends(get_db)):
+def get_order_item(order_item_id: int, db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)):
     """Get a single order item by ID"""
     try:
         order_item = db.query(OrderItem).filter(OrderItem.order_item_id == order_item_id).first()
@@ -67,7 +70,8 @@ def get_order_item(order_item_id: int, db: Session = Depends(get_db)):
         raise HTTPException(status_code=500, detail=f"Failed to get order item: {str(e)}")
 
 @router.post("/")
-def create_order_item(order_item_data: dict, db: Session = Depends(get_db)):
+def create_order_item(order_item_data: dict, db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)):
     """Create a new order item"""
     try:
         order_item = OrderItem(**order_item_data)
@@ -81,7 +85,8 @@ def create_order_item(order_item_data: dict, db: Session = Depends(get_db)):
         raise HTTPException(status_code=500, detail=f"Failed to create order item: {str(e)}")
 
 @router.put("/{order_item_id}")
-def update_order_item(order_item_id: int, order_item_data: dict, db: Session = Depends(get_db)):
+def update_order_item(order_item_id: int, order_item_data: dict, db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)):
     """Update an order item"""
     try:
         order_item = db.query(OrderItem).filter(OrderItem.order_item_id == order_item_id).first()
@@ -102,7 +107,8 @@ def update_order_item(order_item_id: int, order_item_data: dict, db: Session = D
         raise HTTPException(status_code=500, detail=f"Failed to update order item: {str(e)}")
 
 @router.delete("/{order_item_id}")
-def delete_order_item(order_item_id: int, db: Session = Depends(get_db)):
+def delete_order_item(order_item_id: int, db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)):
     """Delete an order item"""
     try:
         order_item = db.query(OrderItem).filter(OrderItem.order_item_id == order_item_id).first()

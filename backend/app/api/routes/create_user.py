@@ -5,11 +5,13 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 from sqlalchemy import text
 from ...core.database import get_db
+from ...core.auth_utils import get_org_id_from_header
 
 router = APIRouter(prefix="/setup", tags=["setup"])
 
 @router.post("/create-default-user")
-async def create_default_user(db: Session = Depends(get_db)):
+async def create_default_user(db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)):
     """Create a default user for testing"""
     try:
         # Check if user already exists

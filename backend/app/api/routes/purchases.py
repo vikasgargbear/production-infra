@@ -23,7 +23,8 @@ router = APIRouter(tags=["purchases"])
 purchase_crud = create_crud(Purchase)
 
 @router.get("/generate-number")
-def generate_purchase_number(db: Session = Depends(get_db)):
+def generate_purchase_number(db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)):
     """Generate next purchase number using unified service"""
     try:
         # Use unified document number service
@@ -47,7 +48,8 @@ def get_purchases(
     product_id: Optional[int] = Query(None, description="Filter by product"),
     start_date: Optional[date] = Query(None, description="Filter from date"),
     end_date: Optional[date] = Query(None, description="Filter to date"),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)
 ):
     """Get purchases with optional filtering"""
     try:
@@ -94,7 +96,8 @@ def get_purchases(
         raise HTTPException(status_code=500, detail=f"Failed to get purchases: {str(e)}")
 
 @router.get("/{purchase_id}")
-def get_purchase(purchase_id: int, db: Session = Depends(get_db)):
+def get_purchase(purchase_id: int, db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)):
     """Get a single purchase by ID with related data"""
     try:
         result = db.execute(
@@ -117,7 +120,8 @@ def get_purchase(purchase_id: int, db: Session = Depends(get_db)):
         raise HTTPException(status_code=500, detail=f"Failed to get purchase: {str(e)}")
 
 @router.post("/")
-def create_purchase(purchase_data: dict, db: Session = Depends(get_db)):
+def create_purchase(purchase_data: dict, db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)):
     """Create a new purchase order"""
     try:
         items = purchase_data.pop('items', [])
@@ -243,7 +247,8 @@ def create_purchase(purchase_data: dict, db: Session = Depends(get_db)):
         raise HTTPException(status_code=500, detail=f"Failed to create purchase: {str(e)}")
 
 @router.put("/{purchase_id}")
-def update_purchase(purchase_id: int, purchase_data: dict, db: Session = Depends(get_db)):
+def update_purchase(purchase_id: int, purchase_data: dict, db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)):
     """Update a purchase order"""
     try:
         # Check if PO exists
@@ -289,7 +294,8 @@ def update_purchase(purchase_id: int, purchase_data: dict, db: Session = Depends
         raise HTTPException(status_code=500, detail=f"Failed to update purchase: {str(e)}")
 
 @router.delete("/{purchase_id}")
-def delete_purchase(purchase_id: int, db: Session = Depends(get_db)):
+def delete_purchase(purchase_id: int, db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)):
     """Delete a purchase order"""
     try:
         # Check if PO exists
@@ -316,7 +322,8 @@ def delete_purchase(purchase_id: int, db: Session = Depends(get_db)):
         raise HTTPException(status_code=500, detail=f"Failed to delete purchase: {str(e)}")
 
 @router.get("/{purchase_id}/items")
-def get_purchase_items(purchase_id: int, db: Session = Depends(get_db)):
+def get_purchase_items(purchase_id: int, db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)):
     """Get items for a specific purchase order"""
     try:
         query = text("""
@@ -336,7 +343,8 @@ def get_purchase_items(purchase_id: int, db: Session = Depends(get_db)):
         raise HTTPException(status_code=500, detail=f"Failed to get purchase items: {str(e)}")
 
 @router.post("/{purchase_id}/items")
-def add_purchase_item(purchase_id: int, item_data: dict, db: Session = Depends(get_db)):
+def add_purchase_item(purchase_id: int, item_data: dict, db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)):
     """Add an item to a purchase order"""
     try:
         item_data['po_id'] = purchase_id
@@ -365,7 +373,8 @@ def add_purchase_item(purchase_id: int, item_data: dict, db: Session = Depends(g
         raise HTTPException(status_code=500, detail=f"Failed to add purchase item: {str(e)}")
 
 @router.delete("/{purchase_id}/items/{item_id}")
-def delete_purchase_item(purchase_id: int, item_id: int, db: Session = Depends(get_db)):
+def delete_purchase_item(purchase_id: int, item_id: int, db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)):
     """Delete an item from a purchase order"""
     try:
         query = text("""
@@ -394,7 +403,8 @@ def get_purchase_analytics(
     start_date: Optional[date] = Query(None),
     end_date: Optional[date] = Query(None),
     supplier_id: Optional[int] = Query(None),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)
 ):
     """Get purchase analytics and summary"""
     try:
@@ -438,7 +448,8 @@ def get_purchases_by_supplier(
     start_date: Optional[date] = Query(None),
     end_date: Optional[date] = Query(None),
     limit: int = Query(10, description="Number of top suppliers"),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)
 ):
     """Get purchase summary grouped by supplier"""
     try:

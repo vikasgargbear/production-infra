@@ -26,7 +26,8 @@ async def get_purchase_returns(
     supplier_id: Optional[str] = None,
     from_date: Optional[str] = None,
     to_date: Optional[str] = None,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)
 ):
     """
     Get list of purchase returns with optional filters
@@ -73,7 +74,8 @@ async def get_purchase_returns(
 async def get_returnable_purchases(
     supplier_id: Optional[str] = None,
     invoice_number: Optional[str] = None,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)
 ):
     """
     Get purchase bills that can be returned
@@ -156,7 +158,8 @@ async def get_returnable_purchases(
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/test-purchases/")
-async def test_purchases(db: Session = Depends(get_db)):
+async def test_purchases(db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)):
     """Test endpoint to check purchases in database"""
     try:
         # Count total purchases
@@ -184,7 +187,8 @@ async def test_purchases(db: Session = Depends(get_db)):
 @router.get("/purchase/{purchase_id}/items")
 async def get_purchase_items_for_return(
     purchase_id: str,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)
 ):
     """
     Get items from a specific purchase for return
@@ -259,7 +263,8 @@ async def get_purchase_items_for_return(
 @router.post("/")
 async def create_purchase_return(
     return_data: dict,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)
 ):
     """
     Create a new purchase return (RTV - Return to Vendor)
@@ -420,7 +425,8 @@ async def create_purchase_return(
 @router.post("/{return_id}/cancel")
 async def cancel_purchase_return(
     return_id: int,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)
 ):
     """
     Cancel a purchase return
@@ -486,7 +492,8 @@ async def cancel_purchase_return(
 @router.get("/{return_id}")
 async def get_purchase_return_details(
     return_id: int,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)
 ):
     """
     Get details of a specific purchase return

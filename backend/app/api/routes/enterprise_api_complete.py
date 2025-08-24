@@ -23,7 +23,8 @@ router = APIRouter(prefix="/erp", tags=["Enterprise ERP"])
 @router.get("/organization/{org_id}")
 async def get_organization_details(
     org_id: int = Path(..., description="Organization ID"),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)
 ):
     """
     Get complete organization details - simplified version using actual schema
@@ -95,7 +96,8 @@ async def advanced_product_search(
     expiring_in_days: Optional[int] = Query(None, description="Expiring within days"),
     limit: int = Query(100, ge=1, le=500),
     offset: int = Query(0, ge=0),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)
 ):
     """
     Advanced product search with multiple filters
@@ -135,7 +137,8 @@ async def get_comprehensive_product_details(
     include_batches: bool = Query(True, description="Include batch information"),
     include_suppliers: bool = Query(True, description="Include supplier information"),
     include_pricing: bool = Query(True, description="Include pricing history"),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)
 ):
     """
     Get comprehensive product details with all related information
@@ -167,7 +170,8 @@ async def get_stock_availability(
     location_id: Optional[int] = Query(None, description="Specific location ID"),
     include_reserved: bool = Query(False, description="Include reserved stock"),
     low_stock_only: bool = Query(False, description="Show only low stock items"),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)
 ):
     """
     Real-time stock availability across all locations
@@ -203,7 +207,8 @@ async def get_batch_information(
     product_id: Optional[int] = Query(None, description="All batches for product"),
     expiry_days: Optional[int] = Query(None, description="Batches expiring within days"),
     include_expired: bool = Query(False, description="Include expired batches"),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)
 ):
     """
     Detailed batch information with expiry tracking
@@ -238,7 +243,8 @@ async def get_reorder_alerts(
     branch_id: Optional[int] = Query(None, description="Specific branch"),
     category_id: Optional[int] = Query(None, description="Specific category"),
     urgency_level: Optional[str] = Query(None, description="critical/high/medium/low"),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)
 ):
     """
     Products requiring reorder with urgency classification
@@ -270,7 +276,8 @@ async def get_expiry_alerts(
     branch_id: Optional[int] = Query(None, description="Specific branch"),
     include_expired: bool = Query(True, description="Include already expired"),
     risk_level: Optional[str] = Query(None, description="high/medium/low"),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)
 ):
     """
     Batch expiry alerts with risk assessment
@@ -312,7 +319,8 @@ async def advanced_customer_search(
     location: Optional[str] = Query(None, description="City/State filter"),
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)
 ):
     """
     Advanced customer search with credit and outstanding info
@@ -348,7 +356,8 @@ async def advanced_customer_search(
 async def create_sales_order(
     order_data: Dict[str, Any] = Body(..., description="Sales order data"),
     auto_invoice: bool = Query(False, description="Auto-generate invoice"),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)
 ):
     """
     Create sales order with automatic calculations
@@ -372,7 +381,8 @@ async def create_sales_order(
 async def create_sales_invoice(
     invoice_data: Dict[str, Any] = Body(..., description="Invoice data"),
     batch_allocation_method: str = Query("FEFO", description="FEFO/LIFO/MANUAL"),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)
 ):
     """
     Create invoice with automatic batch allocation
@@ -398,7 +408,8 @@ async def get_sales_dashboard(
     from_date: Optional[date] = Query(None, description="Start date"),
     to_date: Optional[date] = Query(None, description="End date"),
     comparison_period: bool = Query(True, description="Include period comparison"),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)
 ):
     """
     Comprehensive sales analytics dashboard
@@ -444,7 +455,8 @@ async def search_suppliers(
     performance_rating: Optional[str] = Query(None, description="excellent/good/average/poor"),
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)
 ):
     """
     Search suppliers with product mapping and performance info
@@ -480,7 +492,8 @@ async def search_suppliers(
 async def create_purchase_order(
     po_data: Dict[str, Any] = Body(..., description="Purchase order data"),
     validate_credit_limit: bool = Query(True, description="Validate supplier credit"),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)
 ):
     """
     Create purchase order with supplier credit validation
@@ -505,7 +518,8 @@ async def create_goods_receipt(
     grn_data: Dict[str, Any] = Body(..., description="GRN data"),
     auto_quality_check: bool = Query(True, description="Auto quality verification"),
     create_batches: bool = Query(True, description="Auto-create product batches"),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)
 ):
     """
     Create GRN with batch creation and quality checks
@@ -531,7 +545,8 @@ async def get_pending_deliveries(
     branch_id: Optional[int] = Query(None, description="Specific branch"),
     days_overdue: Optional[int] = Query(None, description="Filter overdue deliveries"),
     urgency_level: Optional[str] = Query(None, description="critical/high/medium"),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)
 ):
     """
     Track pending deliveries with overdue analysis
@@ -565,7 +580,8 @@ async def get_supplier_performance(
     from_date: Optional[date] = Query(None, description="Analysis start date"),
     to_date: Optional[date] = Query(None, description="Analysis end date"),
     performance_metrics: str = Query("all", description="all/delivery/quality/pricing"),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)
 ):
     """
     Supplier performance metrics and scoring
@@ -608,7 +624,8 @@ async def record_payment_transaction(
     payment_data: Dict[str, Any] = Body(..., description="Payment data"),
     auto_allocate: bool = Query(True, description="Auto-allocate to invoices"),
     create_journal_entry: bool = Query(True, description="Auto journal entry"),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)
 ):
     """
     Record payment with automatic journal entry creation
@@ -634,7 +651,8 @@ async def get_customer_outstanding(
     as_on_date: Optional[date] = Query(None, description="Outstanding as on date"),
     aging_buckets: bool = Query(True, description="Include aging analysis"),
     include_pdc: bool = Query(True, description="Include post-dated cheques"),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)
 ):
     """
     Customer outstanding with aging analysis
@@ -673,7 +691,8 @@ async def get_cash_flow_forecast(
     to_date: Optional[date] = Query(None, description="Forecast end date"),
     branch_id: Optional[int] = Query(None, description="Specific branch"),
     include_projections: bool = Query(True, description="Include projected flows"),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)
 ):
     """
     Cash flow forecast based on receivables and payables
@@ -714,7 +733,8 @@ async def get_profit_loss_statement(
     branch_id: Optional[int] = Query(None, description="Specific branch"),
     comparison_period: bool = Query(False, description="Include previous period comparison"),
     detailed_view: bool = Query(False, description="Detailed account-wise breakdown"),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)
 ):
     """
     Profit & Loss statement with period comparison
@@ -749,7 +769,8 @@ async def get_balance_sheet(
     as_on_date: Optional[date] = Query(None, description="Balance sheet date"),
     branch_id: Optional[int] = Query(None, description="Specific branch"),
     detailed_view: bool = Query(False, description="Detailed account breakdown"),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)
 ):
     """
     Balance sheet as on specific date
@@ -787,7 +808,8 @@ async def generate_gstr1_data(
     period: str = Path(..., description="Period in MMYYYY format"),
     branch_id: Optional[int] = Query(None, description="Specific branch"),
     include_amendments: bool = Query(True, description="Include amendments"),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)
 ):
     """
     Generate GSTR-1 data for GST filing
@@ -819,7 +841,8 @@ async def generate_gstr1_data(
 async def generate_eway_bill(
     invoice_id: int = Body(..., description="Invoice ID"),
     transport_details: Dict[str, Any] = Body(..., description="Transport details"),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)
 ):
     """
     Generate e-way bill for eligible invoices
@@ -851,7 +874,8 @@ async def generate_eway_bill(
 async def get_license_expiry_alerts(
     days_ahead: int = Query(90, ge=1, le=365, description="Days to look ahead"),
     license_type: Optional[str] = Query(None, description="Specific license type"),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)
 ):
     """
     Business license expiry tracking and alerts
@@ -885,7 +909,8 @@ async def get_narcotic_register(
     from_date: Optional[date] = Query(None, description="Register start date"),
     to_date: Optional[date] = Query(None, description="Register end date"),
     include_balance_check: bool = Query(True, description="Include balance verification"),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)
 ):
     """
     Narcotic drug register with balance verification
@@ -929,7 +954,8 @@ async def get_narcotic_register(
 async def get_executive_dashboard(
     date_range: str = Query("current_month", description="today/current_week/current_month/current_quarter/current_year"),
     comparison: bool = Query(True, description="Include period comparison"),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)
 ):
     """
     Executive dashboard with key metrics and alerts
@@ -965,7 +991,8 @@ async def get_detailed_sales_analytics(
     branch_id: Optional[int] = Query(None, description="Specific branch"),
     category_id: Optional[int] = Query(None, description="Specific category"),
     trend_analysis: bool = Query(True, description="Include trend analysis"),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)
 ):
     """
     Detailed sales analytics with trends and breakdowns
@@ -1005,7 +1032,8 @@ async def get_inventory_analytics(
     branch_id: Optional[int] = Query(None, description="Specific branch"),
     category_id: Optional[int] = Query(None, description="Specific category"),
     include_forecasting: bool = Query(False, description="Include demand forecasting"),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)
 ):
     """
     Inventory analytics including ABC analysis and movement
@@ -1041,7 +1069,8 @@ async def get_customer_analytics(
     to_date: Optional[date] = Query(None, description="Analysis end date"),
     customer_id: Optional[int] = Query(None, description="Specific customer"),
     rfm_analysis: bool = Query(True, description="Include RFM segmentation"),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)
 ):
     """
     Customer analytics with RFM segmentation
@@ -1085,7 +1114,8 @@ async def get_customer_analytics(
 async def authenticate_user(
     username: str = Body(..., description="Username"),
     password: str = Body(..., description="Password"),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)
 ):
     """
     User authentication with session management
@@ -1114,7 +1144,8 @@ async def authenticate_user(
 @router.get("/system/settings/{category}")
 async def get_system_settings(
     category: str = Path(..., description="Settings category"),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)
 ):
     """
     Retrieve system settings by organization and category
@@ -1149,7 +1180,8 @@ async def get_audit_log(
     to_date: Optional[datetime] = Query(None, description="End datetime"),
     limit: int = Query(100, ge=1, le=1000),
     offset: int = Query(0, ge=0),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)
 ):
     """
     Audit trail with comprehensive filters
@@ -1192,7 +1224,8 @@ async def get_audit_log(
         raise HTTPException(status_code=500, detail=f"Failed to get audit log: {str(e)}")
 
 @router.get("/system/health-check")
-async def system_health_check(db: Session = Depends(get_db)):
+async def system_health_check(db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)):
     """
     System health status and performance metrics
     Wraps: api.system_health_check()

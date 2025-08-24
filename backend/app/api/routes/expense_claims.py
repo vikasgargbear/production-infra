@@ -38,7 +38,8 @@ class ExpenseClaimCreate(BaseModel):
     created_by: Optional[int] = None
 
 @router.get("/generate-claim-number")
-async def generate_claim_number(db: Session = Depends(get_db)):
+async def generate_claim_number(db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)):
     """
     Generate unique expense claim number
     
@@ -117,7 +118,8 @@ async def get_expense_types():
 @router.post("", response_model=dict)
 async def create_expense_claim(
     claim: ExpenseClaimCreate,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)
 ):
     """
     Create a new expense claim
@@ -257,7 +259,8 @@ async def get_expense_claims(
     employee_id: Optional[int] = Query(None, description="Filter by employee"),
     from_date: Optional[date] = Query(None),
     to_date: Optional[date] = Query(None),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)
 ):
     """
     Get list of expense claims with pagination and filters
@@ -358,7 +361,8 @@ async def get_expense_claims(
 @router.get("/{claim_id}", response_model=dict)
 async def get_expense_claim_details(
     claim_id: int,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)
 ):
     """
     Get detailed expense claim with all line items
@@ -429,7 +433,8 @@ async def get_expense_claim_details(
 async def approve_expense_claim(
     claim_id: int,
     approval_data: dict,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)
 ):
     """
     Approve expense claim
@@ -502,7 +507,8 @@ async def approve_expense_claim(
 async def reject_expense_claim(
     claim_id: int,
     rejection_data: dict,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)
 ):
     """
     Reject expense claim

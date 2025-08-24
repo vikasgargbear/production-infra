@@ -97,6 +97,7 @@ async def calculate_sales_order(request: CalculationRequest):
         
         # Use OrderService calculation logic (which is now corrected)
         from ...core.database import SessionLocal
+from ...core.auth_utils import get_org_id_from_header
         db = SessionLocal()
         try:
             totals = OrderService.calculate_order_totals(

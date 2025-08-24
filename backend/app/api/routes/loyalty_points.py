@@ -151,7 +151,8 @@ async def get_active_program(
 async def add_program_tier(
     program_id: int,
     tier: CustomerTier,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)
 ):
     """Add a tier to a loyalty program"""
     try:
@@ -206,7 +207,8 @@ async def add_program_tier(
 @router.get("/customers/{customer_id}/points")
 async def get_customer_points(
     customer_id: int,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)
 ):
     """
     Get customer's loyalty points summary
@@ -324,7 +326,8 @@ async def get_customer_points(
 @router.post("/earn")
 async def earn_points(
     transaction: PointsTransaction,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)
 ):
     """
     Record points earned by customer
@@ -411,7 +414,8 @@ async def earn_points(
 @router.post("/redeem")
 async def redeem_points(
     redemption: PointsRedemption,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)
 ):
     """
     Redeem loyalty points for invoice discount
@@ -549,7 +553,8 @@ async def redeem_points(
 
 @router.post("/points/expire")
 async def expire_points(
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)
 ):
     """
     Process expired points
@@ -621,7 +626,8 @@ async def expire_points(
 async def get_loyalty_analytics(
     from_date: Optional[date] = Query(None),
     to_date: Optional[date] = Query(None),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)
 ):
     """
     Get loyalty program analytics
@@ -714,7 +720,8 @@ async def get_loyalty_analytics(
 @router.post("/campaigns/bonus")
 async def run_bonus_campaign(
     campaign_data: dict,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)
 ):
     """
     Run a bonus points campaign

@@ -9,6 +9,7 @@ from typing import List, Optional, Dict, Any
 from datetime import date, datetime
 import json
 from ...core.database import get_db
+from ...core.auth_utils import get_org_id_from_header
 
 router = APIRouter()
 
@@ -20,7 +21,8 @@ async def search_customers(
     customer_type: Optional[str] = Query(None, description="Customer type filter"),
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)
 ):
     """
     Search customers using PostgreSQL function
@@ -52,7 +54,8 @@ async def search_customers(
 @router.get("/customers/{customer_id}")
 async def get_customer_details(
     customer_id: int,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)
 ):
     """
     Get customer details with ledger summary
@@ -75,7 +78,8 @@ async def get_customer_details(
 @router.post("/customers")
 async def create_customer(
     customer_data: Dict[str, Any] = Body(...),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)
 ):
     """
     Create new customer
@@ -103,7 +107,8 @@ async def search_products(
     is_narcotic: Optional[bool] = None,
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)
 ):
     """
     Search products with filters
@@ -139,7 +144,8 @@ async def get_product_stock(
     product_id: int,
     branch_id: Optional[int] = None,
     include_reserved: bool = Query(False),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)
 ):
     """
     Get real-time stock availability
@@ -171,7 +177,8 @@ async def get_product_stock(
 @router.post("/invoices")
 async def create_invoice(
     invoice_data: Dict[str, Any] = Body(...),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)
 ):
     """
     Create new invoice with all calculations
@@ -197,7 +204,8 @@ async def create_invoice(
 @router.get("/invoices/{invoice_id}")
 async def get_invoice_details(
     invoice_id: int,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)
 ):
     """
     Get complete invoice details
@@ -225,7 +233,8 @@ async def search_invoices(
     status: Optional[str] = None,
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)
 ):
     """
     Search invoices with filters
@@ -266,7 +275,8 @@ async def search_invoices(
 @router.post("/payments")
 async def record_payment(
     payment_data: Dict[str, Any] = Body(...),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)
 ):
     """
     Record customer payment with auto-allocation
@@ -291,7 +301,8 @@ async def record_payment(
 @router.get("/customers/{customer_id}/outstanding")
 async def get_outstanding_invoices(
     customer_id: int,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)
 ):
     """
     Get outstanding invoices for payment allocation
@@ -314,7 +325,8 @@ async def get_outstanding_invoices(
 async def get_reorder_alerts(
     branch_id: Optional[int] = None,
     category_id: Optional[int] = None,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)
 ):
     """
     Get products requiring reorder
@@ -343,7 +355,8 @@ async def get_reorder_alerts(
 async def get_expiring_items(
     days_to_expiry: int = Query(30, ge=1, le=365),
     branch_id: Optional[int] = None,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)
 ):
     """
     Get items expiring soon
@@ -373,7 +386,8 @@ async def get_expiring_items(
 @router.get("/dashboard/stats")
 async def get_dashboard_stats(
     branch_id: Optional[int] = None,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)
 ):
     """
     Get comprehensive dashboard statistics
@@ -396,7 +410,8 @@ async def get_sales_analytics(
     to_date: date,
     group_by: str = Query("day", regex="^(day|week|month)$"),
     branch_id: Optional[int] = None,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)
 ):
     """
     Get sales analytics with trends
@@ -431,7 +446,8 @@ async def get_sales_analytics(
 async def generate_gstr1(
     month: int = Query(..., ge=1, le=12),
     year: int = Query(..., ge=2000),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)
 ):
     """
     Generate GSTR-1 data

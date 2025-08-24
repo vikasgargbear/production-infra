@@ -111,7 +111,8 @@ def get_parser_version():
 async def check_supplier(
     gstin: Optional[str] = None,
     name: Optional[str] = None,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)
 ):
     """
     Check if supplier exists by GSTIN or name
@@ -177,7 +178,8 @@ async def check_supplier(
 @router.post("/parse-invoice-safe")
 async def parse_purchase_invoice_safe(
     file: UploadFile = File(...),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)
 ):
     """
     Parse a purchase invoice PDF with better error handling
@@ -374,7 +376,8 @@ async def parse_purchase_invoice_safe(
 @router.post("/parse-invoice")
 async def parse_purchase_invoice(
     file: UploadFile = File(...),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)
 ):
     """
     Upload and parse a purchase invoice (PDF/image)
@@ -516,7 +519,8 @@ async def parse_purchase_invoice(
 @router.post("/create-from-parsed")
 def create_purchase_from_parsed(
     purchase_data: dict,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)
 ):
     """
     Create purchase order from parsed/verified invoice data
@@ -687,7 +691,8 @@ def create_purchase_from_parsed(
 def get_parse_history(
     skip: int = 0,
     limit: int = 10,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)
 ):
     """
     Get history of parsed invoices (for future enhancement)
@@ -702,7 +707,8 @@ def get_parse_history(
 @router.post("/validate-invoice")
 def validate_invoice_data(
     invoice_data: dict,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)
 ):
     """
     Validate parsed invoice data before creation

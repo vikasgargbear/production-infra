@@ -10,6 +10,7 @@ import logging
 from datetime import date, datetime
 
 from ...core.database import get_db
+from ...core.auth_utils import get_org_id_from_header
 from ..services.document_number_service import DocumentNumberService
 
 logger = logging.getLogger(__name__)
@@ -18,7 +19,8 @@ router = APIRouter(prefix="/delivery-challan", tags=["delivery-challan"])
 
 @router.get("/generate-number")
 def generate_delivery_challan_number(
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)
 ):
     """Generate next delivery challan number using unified service"""
     try:
@@ -41,7 +43,8 @@ def get_delivery_challans(
     status: Optional[str] = Query(None, description="Filter by status"),
     start_date: Optional[date] = Query(None, description="Filter from date"),
     end_date: Optional[date] = Query(None, description="Filter to date"),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)
 ):
     """Get delivery challans with optional filtering"""
     try:
@@ -93,7 +96,8 @@ def get_delivery_challans(
         raise HTTPException(status_code=500, detail=f"Failed to get delivery challans: {str(e)}")
 
 @router.get("/{challan_id}")
-def get_delivery_challan(challan_id: int, db: Session = Depends(get_db)):
+def get_delivery_challan(challan_id: int, db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)):
     """Get a single delivery challan by ID"""
     try:
         result = db.execute(
@@ -151,7 +155,8 @@ def get_delivery_challan(challan_id: int, db: Session = Depends(get_db)):
         raise HTTPException(status_code=500, detail=f"Failed to get delivery challan: {str(e)}")
 
 @router.post("/")
-def create_delivery_challan(challan_data: dict, db: Session = Depends(get_db)):
+def create_delivery_challan(challan_data: dict, db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)):
     """Create a new delivery challan (actually creates an order)"""
     try:
         # Calculate totals from items if provided
@@ -199,7 +204,8 @@ def create_delivery_challan(challan_data: dict, db: Session = Depends(get_db)):
         raise HTTPException(status_code=500, detail=f"Failed to create delivery challan: {str(e)}")
 
 @router.put("/{challan_id}")
-def update_delivery_challan(challan_id: int, challan_data: dict, db: Session = Depends(get_db)):
+def update_delivery_challan(challan_id: int, challan_data: dict, db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)):
     """Update a delivery challan"""
     try:
         # Check if order exists
@@ -244,7 +250,8 @@ def update_delivery_challan(challan_id: int, challan_data: dict, db: Session = D
         raise HTTPException(status_code=500, detail=f"Failed to update delivery challan: {str(e)}")
 
 @router.delete("/{challan_id}")
-def delete_delivery_challan(challan_id: int, db: Session = Depends(get_db)):
+def delete_delivery_challan(challan_id: int, db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)):
     """Delete a delivery challan"""
     try:
         result = db.execute(
@@ -265,7 +272,8 @@ def delete_delivery_challan(challan_id: int, db: Session = Depends(get_db)):
         raise HTTPException(status_code=500, detail=f"Failed to delete delivery challan: {str(e)}")
 
 @router.put("/{challan_id}/mark-delivered")
-def mark_challan_delivered(challan_id: int, db: Session = Depends(get_db)):
+def mark_challan_delivered(challan_id: int, db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)):
     """Mark a delivery challan as delivered"""
     try:
         result = db.execute(
@@ -294,7 +302,8 @@ def mark_challan_delivered(challan_id: int, db: Session = Depends(get_db)):
 def get_delivery_analytics(
     start_date: Optional[date] = Query(None),
     end_date: Optional[date] = Query(None),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)
 ):
     """Get delivery analytics and summary"""
     try:
@@ -331,7 +340,8 @@ def get_delivery_analytics(
 def generate_eway_bill(
     challan_id: int,
     eway_data: dict,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)
 ):
     """
     Generate e-way bill for delivery challan
@@ -429,7 +439,8 @@ def generate_eway_bill(
 def record_proof_of_delivery(
     challan_id: int,
     pod_data: dict,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)
 ):
     """
     Record Proof of Delivery (POD)
@@ -515,7 +526,8 @@ def record_proof_of_delivery(
         raise HTTPException(status_code=500, detail=f"Failed to record POD: {str(e)}")
 
 @router.get("/{challan_id}/tracking")
-def get_delivery_tracking(challan_id: int, db: Session = Depends(get_db)):
+def get_delivery_tracking(challan_id: int, db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)):
     """
     Get real-time delivery tracking information
     
@@ -598,7 +610,8 @@ def get_delivery_tracking(challan_id: int, db: Session = Depends(get_db)):
 def update_delivery_tracking(
     challan_id: int,
     tracking_data: dict,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)
 ):
     """
     Update delivery tracking status
@@ -675,7 +688,8 @@ def update_delivery_tracking(
 def get_pending_deliveries(
     driver_id: Optional[int] = Query(None),
     date_filter: Optional[date] = Query(None),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)
 ):
     """
     Get list of pending deliveries

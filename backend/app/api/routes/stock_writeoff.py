@@ -33,7 +33,8 @@ WRITE_OFF_GST_ACTIONS = {
 async def get_expiry_report(
     days_ahead: int = Query(90, description="Days ahead to check for expiry"),
     include_expired: bool = Query(True, description="Include already expired items"),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)
 ):
     """
     Get report of expiring and expired stock
@@ -103,7 +104,8 @@ async def get_expiry_report(
 @router.post("/")
 async def create_stock_writeoff(
     writeoff_data: dict,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)
 ):
     """
     Create a stock write-off entry with ITC reversal tracking
@@ -293,7 +295,8 @@ async def get_writeoffs(
     from_date: Optional[date] = None,
     to_date: Optional[date] = None,
     reason: Optional[str] = None,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)
 ):
     """
     Get list of stock write-offs with filters
@@ -357,7 +360,8 @@ async def get_writeoffs(
 async def get_itc_reversal_summary(
     from_date: Optional[date] = None,
     to_date: Optional[date] = None,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)
 ):
     """
     Get summary of ITC reversals for GST filing

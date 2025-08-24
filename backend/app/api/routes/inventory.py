@@ -24,7 +24,10 @@ logger = logging.getLogger(__name__)
 router = APIRouter(tags=["inventory"])
 
 @router.get("/")
-async def get_inventory_overview(db: Session = Depends(get_db)):
+async def get_inventory_overview(
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)
+):
     """Get inventory overview"""
     try:
         # Simple inventory overview
@@ -53,7 +56,8 @@ async def get_inventory_overview(db: Session = Depends(get_db)):
 @router.post("/batches", response_model=BatchResponse)
 async def create_batch(
     batch: BatchCreate,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)
 ):
     """
     Create a new batch for a product
@@ -74,7 +78,8 @@ async def create_batch(
 @router.get("/batches/{batch_id}", response_model=BatchResponse)
 async def get_batch(
     batch_id: int,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)
 ):
     """Get batch details with stock calculations"""
     try:
@@ -93,7 +98,8 @@ async def list_batches(
     include_expired: bool = False,
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=1000),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)
 ):
     """
     List batches with filters
@@ -157,7 +163,8 @@ async def list_batches(
 @router.get("/stock/current/{product_id}", response_model=CurrentStock)
 async def get_current_stock(
     product_id: int,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)
 ):
     """Get current stock summary for a product"""
     try:
@@ -174,7 +181,8 @@ async def list_current_stock(
     low_stock_only: bool = False,
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=1000),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)
 ):
     """
     List current stock levels for all products
@@ -251,7 +259,8 @@ async def list_current_stock(
 @router.post("/movements", response_model=StockMovementResponse)
 async def record_stock_movement(
     movement: StockMovementCreate,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)
 ):
     """
     Record a stock movement
@@ -276,7 +285,8 @@ async def list_stock_movements(
     to_date: Optional[date] = None,
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=1000),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)
 ):
     """List stock movements with filters"""
     try:
@@ -367,7 +377,8 @@ async def list_stock_movements(
 @router.post("/stock/adjustment", response_model=StockMovementResponse)
 async def adjust_stock(
     adjustment: StockAdjustment,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)
 ):
     """
     Adjust stock for damage, expiry, counting, etc.
@@ -388,7 +399,8 @@ async def adjust_stock(
 async def get_expiry_alerts(
     days_ahead: int = Query(180, ge=1, le=365),
     alert_level: Optional[str] = None,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)
 ):
     """
     Get expiry alerts for products
@@ -412,7 +424,8 @@ async def get_expiry_alerts(
 @router.get("/valuation", response_model=StockValuation)
 async def get_stock_valuation(
     as_of_date: Optional[date] = None,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)
 ):
     """
     Get stock valuation report
@@ -429,7 +442,8 @@ async def get_stock_valuation(
         raise HTTPException(status_code=500, detail=f"Failed to get valuation: {str(e)}")
 
 @router.get("/dashboard", response_model=InventoryDashboard)
-async def get_inventory_dashboard(db: Session = Depends(get_db)):
+async def get_inventory_dashboard(db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)):
     """
     Get inventory dashboard summary
     

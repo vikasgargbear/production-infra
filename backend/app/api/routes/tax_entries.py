@@ -24,7 +24,8 @@ def get_tax_entries(
     entry_type: Optional[str] = Query(None, description="Filter by type: sales, purchase"),
     start_date: Optional[date] = Query(None, description="Filter from date"),
     end_date: Optional[date] = Query(None, description="Filter to date"),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)
 ):
     """Get tax entries from sales invoices and purchase records"""
     try:
@@ -80,7 +81,8 @@ def get_tax_entries(
         raise HTTPException(status_code=500, detail=f"Failed to get tax entries: {str(e)}")
 
 @router.get("/{entry_id}")
-def get_tax_entry(entry_id: int, db: Session = Depends(get_db)):
+def get_tax_entry(entry_id: int, db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)):
     """Get a single tax entry by invoice ID"""
     try:
         result = db.execute(
@@ -119,7 +121,8 @@ def get_tax_entry(entry_id: int, db: Session = Depends(get_db)):
         raise HTTPException(status_code=500, detail=f"Failed to get tax entry: {str(e)}")
 
 @router.post("/calculate")
-def calculate_tax(calculation_data: dict, db: Session = Depends(get_db)):
+def calculate_tax(calculation_data: dict, db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)):
     """Calculate tax for given parameters"""
     try:
         taxable_amount = Decimal(str(calculation_data.get("taxable_amount", 0)))
@@ -157,7 +160,8 @@ def calculate_tax(calculation_data: dict, db: Session = Depends(get_db)):
 def get_gstr1_summary(
     month: int = Query(..., description="Month (1-12)"),
     year: int = Query(..., description="Year"),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)
 ):
     """Get GSTR-1 summary for the specified month using sales data"""
     try:
@@ -263,7 +267,8 @@ def get_gstr1_summary(
 def get_tax_analytics(
     start_date: Optional[date] = Query(None),
     end_date: Optional[date] = Query(None),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)
 ):
     """Get tax analytics and summary from sales data"""
     try:

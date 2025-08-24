@@ -27,7 +27,8 @@ logger = logging.getLogger(__name__)
 @router.get("/aging-data")
 async def get_aging_data(
     org_id: str,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)
 ):
     """
     Get comprehensive aging data for smart dashboard
@@ -224,7 +225,8 @@ async def send_whatsapp_reminder(
     customer_id: int,
     template_type: str,
     variables: Dict[str, Any],
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)
 ):
     """
     Send WhatsApp reminder to customer
@@ -273,7 +275,8 @@ async def send_sms_reminder(
     customer_id: int,
     template_type: str,
     variables: Dict[str, Any],
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)
 ):
     """
     Send SMS reminder to customer
@@ -305,7 +308,8 @@ async def get_collection_performance(
     org_id: str,
     start_date: date = Query(...),
     end_date: date = Query(...),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)
 ):
     """
     Get collection performance analytics
@@ -359,7 +363,8 @@ async def get_agent_performance(
     org_id: str,
     start_date: date = Query(...),
     end_date: date = Query(...),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)
 ):
     """
     Get field agent performance metrics
@@ -404,7 +409,8 @@ async def get_agent_performance(
 async def get_customer_outstanding(
     customer_id: int,
     org_id: str,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)
 ):
     """
     Get detailed outstanding for a specific customer
@@ -459,7 +465,8 @@ async def get_customer_outstanding(
 async def record_customer_payment(
     customer_id: int,
     payment_data: Dict[str, Any],
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)
 ):
     """
     Record payment for customer
@@ -502,7 +509,8 @@ async def record_customer_payment(
 @router.get("/hub-stats")
 async def get_hub_statistics(
     org_id: str,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)
 ):
     """
     Get comprehensive hub statistics for dashboard
@@ -552,7 +560,8 @@ async def get_hub_statistics(
 async def get_hub_notifications(
     org_id: str,
     limit: int = 10,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)
 ):
     """
     Get real-time notifications for hub dashboard
@@ -614,7 +623,8 @@ async def get_hub_notifications(
 @router.get("/campaigns")
 async def get_collection_campaigns(
     org_id: str,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)
 ):
     """
     Get active collection campaigns
@@ -660,7 +670,8 @@ async def get_collection_campaigns(
 @router.post("/campaigns")
 async def create_collection_campaign(
     campaign_data: Dict[str, Any],
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)
 ):
     """
     Create new collection campaign

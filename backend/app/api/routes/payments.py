@@ -56,7 +56,8 @@ async def get_payments_overview(
 @router.get("/generate-receipt-number")
 async def generate_receipt_number(
     payment_type: str = Query("receipt", description="Type: receipt or payment"),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)
 ):
     """
     Generate unique receipt/payment number
@@ -174,7 +175,8 @@ class PaymentSummaryResponse(BaseModel):
 @router.post("/", response_model=dict)
 async def create_payment(
     payment: GeneralPaymentCreate,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)
 ):
     """
     Create a general payment (advance payment, invoice payment, or adjustment)
@@ -329,7 +331,8 @@ async def create_payment(
 @router.post("/record", response_model=PaymentResponse)
 async def record_payment(
     payment: PaymentCreate,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)
 ):
     """
     Record a payment against an invoice
@@ -352,7 +355,8 @@ async def record_payment(
 @router.get("/invoice/{invoice_id}", response_model=PaymentListResponse)
 async def get_invoice_payments(
     invoice_id: int,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)
 ):
     """Get all payments for a specific invoice"""
     try:
@@ -366,7 +370,8 @@ async def get_invoice_payments(
 async def get_payment_summary(
     from_date: Optional[date] = Query(None),
     to_date: Optional[date] = Query(None),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)
 ):
     """
     Get payment summary and analytics
@@ -388,7 +393,8 @@ async def get_payment_summary(
 async def cancel_payment(
     payment_id: int,
     reason: str = Query(..., description="Cancellation reason"),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)
 ):
     """
     Cancel a payment
@@ -411,7 +417,8 @@ async def cancel_payment(
 @router.post("/customer-receipt", response_model=dict)
 async def create_customer_receipt(
     receipt_data: dict,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)
 ):
     """
     Create a customer payment receipt
@@ -486,7 +493,8 @@ async def create_customer_receipt(
 async def get_outstanding_invoices(
     customer_id: Optional[int] = None,
     overdue_only: bool = False,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)
 ):
     """
     Get list of outstanding invoices
@@ -550,7 +558,8 @@ async def get_outstanding_invoices(
 @router.post("/bank-reconciliation")
 async def create_bank_reconciliation(
     reconciliation_data: dict,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)
 ):
     """
     Create bank reconciliation entry
@@ -664,7 +673,8 @@ async def create_bank_reconciliation(
 @router.post("/payment-allocation")
 async def allocate_payment(
     allocation_data: dict,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)
 ):
     """
     Allocate a payment to multiple invoices
@@ -782,7 +792,8 @@ async def allocate_payment(
 async def get_aging_report(
     as_of_date: Optional[date] = Query(None, description="Aging as of date"),
     customer_id: Optional[int] = Query(None, description="Filter by customer"),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)
 ):
     """
     Get detailed aging report for outstanding invoices

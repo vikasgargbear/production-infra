@@ -670,12 +670,13 @@ const CustomerCreationB2B = ({ onClose, onCustomerCreated }) => {
             </div>
           </div>
 
-          {/* Compliance & Licensing Section */}
-          <div className="mb-8">
-            <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
-              <Shield className="w-5 h-5 mr-2 text-red-600" />
-              Compliance & Licensing
-            </h3>
+          {/* Compliance & Licensing Section - Only for B2B */}
+          {customerType === 'B2B' && (
+            <div className="mb-8">
+              <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
+                <Shield className="w-5 h-5 mr-2 text-red-600" />
+                Compliance & Licensing
+              </h3>
             <div className="space-y-6">
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div className="relative">
@@ -737,13 +738,15 @@ const CustomerCreationB2B = ({ onClose, onCustomerCreated }) => {
               </div>
             </div>
           </div>
+          )}
 
-          {/* Credit Terms Section */}
-          <div className="mb-8">
-            <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
-              <CreditCard className="w-5 h-5 mr-2 text-indigo-600" />
-              Credit Terms
-            </h3>
+          {/* Credit Terms Section - Only for B2B */}
+          {customerType === 'B2B' && (
+            <div className="mb-8">
+              <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
+                <CreditCard className="w-5 h-5 mr-2 text-indigo-600" />
+                Credit Terms
+              </h3>
             <div className="space-y-6">
               {/* Credit Plan Selection - Compact Dropdown */}
               <div>

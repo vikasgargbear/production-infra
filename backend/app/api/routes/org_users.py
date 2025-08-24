@@ -11,6 +11,7 @@ import bcrypt
 from datetime import datetime
 
 from ...core.database import get_db
+from ...core.auth_utils import get_org_id_from_header
 
 logger = logging.getLogger(__name__)
 
@@ -22,7 +23,8 @@ def get_org_users(
     limit: int = 100,
     search: Optional[str] = Query(None, description="Search by name or email"),
     org_id: Optional[str] = Query(None, description="Organization ID"),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)
 ):
     """Get organization users with optional search"""
     try:
@@ -70,7 +72,8 @@ def get_org_users(
         raise HTTPException(status_code=500, detail=f"Failed to get org users: {str(e)}")
 
 @router.get("/{user_id}")
-def get_org_user(user_id: int, db: Session = Depends(get_db)):
+def get_org_user(user_id: int, db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)):
     """Get a single org user by ID"""
     try:
         result = db.execute(
@@ -108,7 +111,8 @@ def get_org_user(user_id: int, db: Session = Depends(get_db)):
         raise HTTPException(status_code=500, detail=f"Failed to get org user: {str(e)}")
 
 @router.post("/")
-def create_org_user(user_data: dict, db: Session = Depends(get_db)):
+def create_org_user(user_data: dict, db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)):
     """Create a new org user"""
     try:
         # Hash password if provided
@@ -169,7 +173,8 @@ def create_org_user(user_data: dict, db: Session = Depends(get_db)):
         raise HTTPException(status_code=500, detail=f"Failed to create org user: {str(e)}")
 
 @router.put("/{user_id}")
-def update_org_user(user_id: int, user_data: dict, db: Session = Depends(get_db)):
+def update_org_user(user_id: int, user_data: dict, db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)):
     """Update an org user"""
     try:
         # Don't allow updating password through this endpoint
@@ -227,7 +232,8 @@ def update_org_user(user_id: int, user_data: dict, db: Session = Depends(get_db)
         raise HTTPException(status_code=500, detail=f"Failed to update org user: {str(e)}")
 
 @router.delete("/{user_id}")
-def delete_org_user(user_id: int, db: Session = Depends(get_db)):
+def delete_org_user(user_id: int, db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)):
     """Delete an org user"""
     try:
         result = db.execute(
@@ -249,7 +255,8 @@ def delete_org_user(user_id: int, db: Session = Depends(get_db)):
         raise HTTPException(status_code=500, detail=f"Failed to delete org user: {str(e)}")
 
 @router.post("/{user_id}/reset-password")
-def reset_password(user_id: int, db: Session = Depends(get_db)):
+def reset_password(user_id: int, db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)):
     """Reset user password (send reset email)"""
     try:
         # In a real implementation, this would:

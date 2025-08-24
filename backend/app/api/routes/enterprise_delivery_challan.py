@@ -656,7 +656,8 @@ async def get_challan_analytics(
 async def get_legacy_delivery_challans(
     skip: int = 0,
     limit: int = 100,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)
 ):
     """Legacy endpoint for backward compatibility"""
     # Redirect to main challan list endpoint

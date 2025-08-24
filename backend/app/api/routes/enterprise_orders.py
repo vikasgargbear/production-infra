@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 import logging
 
 from ...core.database import get_db
+from ...core.auth_utils import get_org_id_from_header
 from ...core.auth import get_current_org
 from ..services.enterprise_order_service import (
     EnterpriseOrderService,
@@ -54,6 +55,8 @@ async def create_enterprise_order(
     order_request: OrderCreationRequest,
     db: Session = Depends(get_db),
     current_org = Depends(get_current_org)
+,
+    org_id: str = Depends(get_org_id_from_header)
 ):
     """
     Create a complete order with comprehensive validation and data integrity
@@ -117,6 +120,8 @@ async def create_quick_sale_compatible(
     request_data: dict,
     db: Session = Depends(get_db),
     current_org = Depends(get_current_org)
+,
+    org_id: str = Depends(get_org_id_from_header)
 ):
     """
     Backwards compatible endpoint that maps old quick-sale requests to enterprise format
@@ -235,6 +240,8 @@ async def get_order_details(
     order_id: int,
     db: Session = Depends(get_db),
     current_org = Depends(get_current_org)
+,
+    org_id: str = Depends(get_org_id_from_header)
 ):
     """Get comprehensive order details"""
     try:

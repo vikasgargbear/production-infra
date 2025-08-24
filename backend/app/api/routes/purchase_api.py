@@ -18,7 +18,8 @@ router = APIRouter()
 # Default organization ID
 
 @router.post("/purchases", response_model=Dict[str, Any])
-async def create_purchase_order(po_data: Dict[str, Any], db: Session = Depends(get_db)):
+async def create_purchase_order(po_data: Dict[str, Any], db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)):
     """Create a new purchase order"""
     try:
         # Generate PO number if not provided
@@ -142,7 +143,8 @@ async def list_purchase_orders(
     offset: int = Query(0, ge=0),
     supplier_id: Optional[int] = None,
     status: Optional[str] = None,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)
 ):
     """List purchase orders with filtering"""
     try:
@@ -191,7 +193,8 @@ async def list_purchase_orders(
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/purchases/{po_id}")
-async def get_purchase_order(po_id: int, db: Session = Depends(get_db)):
+async def get_purchase_order(po_id: int, db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)):
     """Get purchase order details"""
     try:
         # Get purchase order

@@ -23,7 +23,8 @@ router = APIRouter(
 )
 
 @router.get("/")
-async def stock_overview(db: Session = Depends(get_db)):
+async def stock_overview(db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)):
     """Get stock overview and available operations"""
     try:
         # Simple stock stats
@@ -87,6 +88,8 @@ async def receive_stock(
     stock_data: StockReceiveRequest,
     db: Session = Depends(get_db),
     current_org = Depends(get_current_org)
+,
+    org_id: str = Depends(get_org_id_from_header)
 ):
     """
     Receive stock for a product by creating a new batch
@@ -208,6 +211,8 @@ async def check_stock(
     product_id: int,
     db: Session = Depends(get_db),
     current_org = Depends(get_current_org)
+,
+    org_id: str = Depends(get_org_id_from_header)
 ):
     """
     Check available stock for a product
@@ -275,7 +280,8 @@ async def get_current_stock(
     low_stock_only: bool = False,
     skip: int = 0,
     limit: int = 100,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)
 ):
     """
     Get current stock levels for all products
@@ -412,7 +418,8 @@ async def update_product_properties(
     sub_unit_quantity: Optional[int] = None,
     purchase_unit: Optional[str] = None,
     sale_unit: Optional[str] = None,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)
 ):
     """
     Update product properties for stock management
@@ -476,7 +483,8 @@ async def update_product_properties(
 @router.get("/alerts")
 async def get_stock_alerts(
     alert_type: Optional[str] = None,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)
 ):
     """
     Get stock alerts for low stock, expiring items, etc.
@@ -580,7 +588,8 @@ async def get_batches(
     include_product_details: bool = True,
     skip: int = 0,
     limit: int = 100,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)
 ):
     """
     Get batches with optional filters
@@ -675,7 +684,8 @@ async def get_batches(
 @router.post("/adjustments")
 async def create_stock_adjustment(
     adjustment_data: dict,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)
 ):
     """
     Create stock adjustment for damage, loss, or corrections

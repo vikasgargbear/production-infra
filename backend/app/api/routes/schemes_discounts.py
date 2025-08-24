@@ -191,7 +191,8 @@ async def create_scheme(
 async def get_active_schemes(
     customer_id: Optional[int] = None,
     product_id: Optional[int] = None,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)
 ):
     """
     Get all active schemes
@@ -286,7 +287,8 @@ async def get_active_schemes(
 @router.post("/calculate-discount")
 async def calculate_discount(
     calculation: DiscountCalculation,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)
 ):
     """
     Calculate applicable discounts for given products
@@ -431,7 +433,8 @@ async def calculate_discount(
 @router.post("/apply-to-invoice")
 async def apply_scheme_to_invoice(
     invoice_data: dict,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)
 ):
     """
     Apply schemes to an invoice
@@ -529,7 +532,8 @@ async def apply_scheme_to_invoice(
 @router.get("/{scheme_id}")
 async def get_scheme_details(
     scheme_id: int,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)
 ):
     """Get detailed information about a specific scheme"""
     try:
@@ -595,7 +599,8 @@ async def get_scheme_details(
 async def update_scheme(
     scheme_id: int,
     update_data: dict,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)
 ):
     """Update scheme details"""
     try:
@@ -635,7 +640,8 @@ async def update_scheme(
 @router.delete("/{scheme_id}")
 async def deactivate_scheme(
     scheme_id: int,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)
 ):
     """Deactivate a scheme (soft delete)"""
     try:
@@ -666,7 +672,8 @@ async def get_scheme_usage_report(
     from_date: Optional[date] = Query(None),
     to_date: Optional[date] = Query(None),
     scheme_id: Optional[int] = Query(None),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)
 ):
     """
     Get scheme usage analytics and report

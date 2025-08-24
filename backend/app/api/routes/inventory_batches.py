@@ -22,7 +22,8 @@ async def get_batches(
     product_id: Optional[int] = Query(None, description="Filter by product"),
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=500),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)
 ):
     """
     Get batches for a product or all batches
@@ -157,7 +158,8 @@ async def get_batches(
 @router.get("/available/{product_id}")
 async def get_available_batches(
     product_id: int,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)
 ):
     """
     Get available (non-expired, with stock) batches for a product
@@ -194,7 +196,8 @@ async def get_available_batches(
 @router.get("/expiring")
 async def get_expiring_batches(
     days: int = Query(30, description="Days until expiry"),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)
 ):
     """
     Get batches expiring within specified days
@@ -236,7 +239,8 @@ async def get_expiring_batches(
 @router.post("/")
 async def create_batch(
     batch_data: dict,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)
 ):
     """
     Create a new batch
@@ -299,7 +303,8 @@ async def create_batch(
 async def update_batch_quantity(
     batch_id: str,
     quantity_data: dict,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)
 ):
     """
     Update batch quantity

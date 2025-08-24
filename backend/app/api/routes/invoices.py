@@ -10,6 +10,7 @@ import time
 from typing import Optional
 
 from ...core.database import get_db
+from ...core.auth_utils import get_org_id_from_header
 from ..services.document_number_service import DocumentNumberService
 from ..services.document_number_service_v2 import DocumentNumberServiceV2
 
@@ -20,7 +21,8 @@ ACTUAL_ORG_ID = "ad808530-1ddb-4377-ab20-67bef145d80d"
 
 @router.get("/generate-number")
 async def generate_invoice_number(
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)
 ):
     """Generate and reserve next invoice number atomically"""
     try:
@@ -38,7 +40,8 @@ async def generate_invoice_number(
 @router.post("/simple")
 async def create_invoice_simple(
     invoice_data: dict,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)
 ):
     """
     Simple invoice creation that bypasses problematic triggers
@@ -91,7 +94,8 @@ async def create_invoice_simple(
 @router.post("/")
 async def create_invoice(
     invoice_data: dict,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)
 ):
     """
     Create invoice using only columns that exist in the database
@@ -562,7 +566,8 @@ async def get_invoices(
     limit: int = 50,
     offset: int = 0,
     customer_id: Optional[int] = None,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)
 ):
     """Get list of invoices with pagination"""
     try:
@@ -612,7 +617,8 @@ async def get_invoices(
 @router.get("/{invoice_id}")
 async def get_invoice(
     invoice_id: int,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)
 ):
     """Get invoice by ID"""
     try:
@@ -661,7 +667,8 @@ async def get_invoice(
 async def list_invoices(
     limit: int = 100,
     skip: int = 0,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)
 ):
     """List invoices with pagination"""
     try:
@@ -700,7 +707,8 @@ async def list_invoices(
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/drop-problematic-triggers")
-async def drop_problematic_triggers(db: Session = Depends(get_db)):
+async def drop_problematic_triggers(db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)):
     """Drop all remaining problematic triggers on invoices table"""
     try:
         triggers_to_drop = [
@@ -741,7 +749,8 @@ async def drop_problematic_triggers(db: Session = Depends(get_db)):
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/fix-invoice-trigger")
-async def fix_invoice_trigger(db: Session = Depends(get_db)):
+async def fix_invoice_trigger(db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)):
     """Fix the calculate_invoice_totals trigger to use correct column names"""
     try:
         # Drop the problematic trigger first

@@ -11,6 +11,7 @@ import logging
 import time
 
 from ...core.database import get_db
+from ...core.auth_utils import get_org_id_from_header
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/calculations", tags=["Enterprise Calculations"])
@@ -22,7 +23,8 @@ router = APIRouter(prefix="/calculations", tags=["Enterprise Calculations"])
 @router.post("/purchase")
 async def calculate_purchase_totals(
     purchase_data: Dict[str, Any],
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)
 ):
     """
     Enterprise purchase calculation endpoint
@@ -132,7 +134,8 @@ async def calculate_purchase_totals(
 @router.post("/sales-order")
 async def calculate_sales_order_totals(
     order_data: Dict[str, Any],
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)
 ):
     """
     Enterprise sales order calculation endpoint
@@ -236,7 +239,8 @@ async def calculate_sales_order_totals(
 @router.post("/sales-return")
 async def calculate_sales_return_totals(
     return_data: Dict[str, Any],
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)
 ):
     """
     Enterprise sales return calculation endpoint
@@ -338,7 +342,8 @@ async def calculate_sales_return_totals(
 @router.post("/purchase-return")
 async def calculate_purchase_return_totals(
     return_data: Dict[str, Any],
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)
 ):
     """
     Enterprise purchase return calculation endpoint
@@ -440,7 +445,8 @@ async def calculate_purchase_return_totals(
 @router.post("/challan")
 async def calculate_challan_totals(
     challan_data: Dict[str, Any],
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)
 ):
     """
     Enterprise challan calculation endpoint

@@ -351,7 +351,8 @@ async def list_customers(
 @router.get("/{customer_id}", response_model=CustomerResponse)
 async def get_customer(
     customer_id: int,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)
 ):
     """Get customer details with outstanding balance and statistics"""
     try:
@@ -391,7 +392,8 @@ async def get_customer(
 async def update_customer(
     customer_id: int,
     customer_update: CustomerUpdate,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)
 ):
     """Update customer details"""
     try:
@@ -449,7 +451,8 @@ async def get_customer_ledger(
     customer_id: int,
     from_date: Optional[date] = Query(None, description="Start date for ledger"),
     to_date: Optional[date] = Query(None, description="End date for ledger"),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)
 ):
     """Get customer transaction history (ledger)"""
     try:
@@ -463,7 +466,8 @@ async def get_customer_ledger(
 @router.get("/{customer_id}/outstanding", response_model=CustomerOutstandingResponse)
 async def get_customer_outstanding(
     customer_id: int,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)
 ):
     """Get outstanding invoices for a customer"""
     try:
@@ -477,7 +481,8 @@ async def get_customer_outstanding(
 @router.get("/{customer_id}/addresses")
 async def get_customer_addresses(
     customer_id: int,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)
 ):
     """Get all addresses for a customer"""
     try:
@@ -524,7 +529,8 @@ async def get_customer_addresses(
 @router.delete("/{customer_id}")
 async def delete_customer(
     customer_id: int,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)
 ):
     """
     Delete a customer (soft delete)
@@ -586,7 +592,8 @@ async def delete_customer(
 async def record_customer_payment(
     customer_id: int,
     payment: PaymentRecord,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)
 ):
     """
     Record payment from customer
@@ -610,7 +617,8 @@ async def record_customer_payment(
 async def check_credit_limit(
     customer_id: int,
     order_amount: float,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)
 ):
     """Check if customer has sufficient credit for a new order"""
     try:

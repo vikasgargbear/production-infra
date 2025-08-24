@@ -9,6 +9,7 @@ from sqlalchemy import text
 import logging
 
 from ...core.database import get_db
+from ...core.auth_utils import get_org_id_from_header
 
 logger = logging.getLogger(__name__)
 
@@ -21,7 +22,8 @@ def get_users(
     skip: int = 0,
     limit: int = 100,
     search: Optional[str] = Query(None, description="Search by username or email"),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)
 ):
     """Get users with optional search"""
     try:
@@ -45,7 +47,8 @@ def get_users(
         raise HTTPException(status_code=500, detail=f"Failed to get users: {str(e)}")
 
 @router.get("/{user_id}")
-def get_user(user_id: int, db: Session = Depends(get_db)):
+def get_user(user_id: int, db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)):
     """Get a single user by ID (excluding password)"""
     try:
         result = db.execute(
@@ -63,7 +66,8 @@ def get_user(user_id: int, db: Session = Depends(get_db)):
         raise HTTPException(status_code=500, detail=f"Failed to get user: {str(e)}")
 
 @router.post("/")
-def create_user(user_data: dict, db: Session = Depends(get_db)):
+def create_user(user_data: dict, db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)):
     """Create a new user"""
     try:
         # Insert into master.org_users
@@ -90,7 +94,8 @@ def create_user(user_data: dict, db: Session = Depends(get_db)):
         raise HTTPException(status_code=500, detail=f"Failed to create user: {str(e)}")
 
 @router.put("/{user_id}")
-def update_user(user_id: int, user_data: dict, db: Session = Depends(get_db)):
+def update_user(user_id: int, user_data: dict, db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)):
     """Update a user"""
     try:
         # Check if user exists
@@ -144,7 +149,8 @@ def update_user(user_id: int, user_data: dict, db: Session = Depends(get_db)):
         raise HTTPException(status_code=500, detail=f"Failed to update user: {str(e)}")
 
 @router.delete("/{user_id}")
-def delete_user(user_id: int, db: Session = Depends(get_db)):
+def delete_user(user_id: int, db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)):
     """Delete a user"""
     try:
         # Check if user exists
