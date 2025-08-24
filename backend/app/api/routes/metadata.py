@@ -187,7 +187,7 @@ async def get_credit_plans(db: Session = Depends(get_db),
     org_id: str = Depends(get_org_id_from_header)):
     """Get available credit plans from customer groups"""
     try:
-        # Fetch from customer_groups table which already exists
+        # Fetch from customer_groups table filtered by group_type
         result = db.execute(
             text("""
                 SELECT 
@@ -197,8 +197,10 @@ async def get_credit_plans(db: Session = Depends(get_db),
                     payment_terms_days,
                     discount_percentage
                 FROM parties.customer_groups
-                WHERE org_id = :org_id AND is_active = true
-                ORDER BY group_name
+                WHERE (org_id = :org_id OR org_id = '00000000-0000-0000-0000-000000000000')
+                    AND group_type = 'CREDIT_PLAN'
+                    AND is_active = true
+                ORDER BY credit_limit_multiplier
             """),
             {"org_id": org_id}
         )
@@ -257,21 +259,24 @@ async def get_credit_days_options(db: Session = Depends(get_db),
 @router.get("/credit-ratings")
 async def get_credit_ratings(db: Session = Depends(get_db),
     org_id: str = Depends(get_org_id_from_header)):
-    """Get credit rating options from lookup values"""
+    """Get credit rating options from customer_groups table"""
     try:
-        # Try to fetch from lookup_values table if it exists
+        # Fetch from customer_groups table with group_type = 'CREDIT_RATING'
         result = db.execute(
             text("""
                 SELECT 
-                    lookup_code as value,
-                    lookup_value as label,
-                    lookup_description as description,
-                    numeric_value1 as score
-                FROM master.lookup_values
+                    CASE 
+                        WHEN group_code LIKE 'RATING_%' THEN SUBSTRING(group_code FROM 8)
+                        ELSE group_code
+                    END as value,
+                    group_name as label,
+                    eligibility_criteria->>'description' as description,
+                    (eligibility_criteria->>'score')::numeric as score
+                FROM parties.customer_groups
                 WHERE (org_id = :org_id OR org_id = '00000000-0000-0000-0000-000000000000')
-                    AND lookup_type = 'CREDIT_RATING' 
+                    AND group_type = 'CREDIT_RATING' 
                     AND is_active = true
-                ORDER BY display_order, lookup_code
+                ORDER BY group_code
             """),
             {"org_id": org_id}
         )
@@ -288,7 +293,7 @@ async def get_credit_ratings(db: Session = Depends(get_db),
         if ratings:
             return {"credit_ratings": ratings}
     except Exception as e:
-        logger.debug(f"Lookup table not available: {str(e)}")
+        logger.debug(f"Database fetch failed: {str(e)}")
     
     # Return hardcoded values as fallback
     return {

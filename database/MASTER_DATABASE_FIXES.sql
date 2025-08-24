@@ -2260,81 +2260,46 @@ RAISE NOTICE '3. Year-based sequences (resets each year)';
 RAISE NOTICE '4. Tracks last generated number for audit';
 
 -- ========================================
--- SECTION 20: UNIVERSAL LOOKUP VALUES TABLE
+-- SECTION 20: CUSTOMER GROUP CONFIGURATIONS
 -- ========================================
--- Purpose: Store all configurable dropdown values and master data
--- This includes credit ratings, payment terms, and other configurations
+-- Purpose: Use existing customer_groups table for credit configurations
+-- This is more enterprise-like - using existing infrastructure
 
 DO $$
 BEGIN
 
--- Create lookup values table for all master configurations
-CREATE TABLE IF NOT EXISTS master.lookup_values (
-    lookup_id SERIAL PRIMARY KEY,
-    org_id UUID NOT NULL,
-    
-    -- Categorization
-    lookup_type TEXT NOT NULL, -- 'CREDIT_RATING', 'PAYMENT_TERMS', etc.
-    lookup_category TEXT, -- Optional sub-category
-    
-    -- Core fields
-    lookup_code TEXT NOT NULL, -- Unique code (e.g., 'A', 'NET_30')
-    lookup_value TEXT NOT NULL, -- Display label
-    lookup_description TEXT,
-    
-    -- Numeric values for calculations
-    numeric_value1 NUMERIC(15,2), -- e.g., days for payment terms
-    numeric_value2 NUMERIC(15,2), -- e.g., interest rate
-    
-    -- Additional config
-    text_value1 TEXT,
-    text_value2 TEXT,
-    config_json JSONB,
-    
-    -- Display and ordering
-    display_order INTEGER DEFAULT 0,
-    is_default BOOLEAN DEFAULT FALSE,
-    is_active BOOLEAN DEFAULT TRUE,
-    
-    -- Hierarchy support
-    parent_lookup_id INTEGER REFERENCES master.lookup_values(lookup_id),
-    
-    -- Audit
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    created_by INTEGER,
-    updated_by INTEGER,
-    
-    CONSTRAINT unique_lookup_code UNIQUE(org_id, lookup_type, lookup_code)
-);
+-- Add default customer groups for credit plans if they don't exist
+INSERT INTO parties.customer_groups (
+    org_id, group_code, group_name, group_type,
+    credit_limit_multiplier, payment_terms_days, discount_percentage,
+    is_active
+) VALUES 
+    ('00000000-0000-0000-0000-000000000000', 'STANDARD', 'Standard Plan', 'CREDIT_PLAN', 1.0, 30, 0, true),
+    ('00000000-0000-0000-0000-000000000000', 'PREMIUM', 'Premium Plan', 'CREDIT_PLAN', 2.0, 45, 5, true),
+    ('00000000-0000-0000-0000-000000000000', 'VIP', 'VIP Plan', 'CREDIT_PLAN', 5.0, 60, 10, true),
+    ('00000000-0000-0000-0000-000000000000', 'RESTRICTED', 'Restricted Plan', 'CREDIT_PLAN', 0.5, 15, 0, true),
+    ('00000000-0000-0000-0000-000000000000', 'PREPAID', 'Prepaid Only', 'CREDIT_PLAN', 0, 0, 0, true)
+ON CONFLICT (org_id, group_code) DO NOTHING;
 
--- Create indexes
-CREATE INDEX IF NOT EXISTS idx_lookup_type ON master.lookup_values(org_id, lookup_type, is_active);
-CREATE INDEX IF NOT EXISTS idx_lookup_category ON master.lookup_values(lookup_category) WHERE lookup_category IS NOT NULL;
+-- Add credit rating groups (using customer_groups for consistency)
+INSERT INTO parties.customer_groups (
+    org_id, group_code, group_name, group_type,
+    eligibility_criteria, is_active
+) VALUES 
+    ('00000000-0000-0000-0000-000000000000', 'RATING_A', 'A - Excellent', 'CREDIT_RATING', 
+     '{"score": 5, "description": "Excellent payment history"}', true),
+    ('00000000-0000-0000-0000-000000000000', 'RATING_B', 'B - Good', 'CREDIT_RATING',
+     '{"score": 4, "description": "Good payment history"}', true),
+    ('00000000-0000-0000-0000-000000000000', 'RATING_C', 'C - Average', 'CREDIT_RATING',
+     '{"score": 3, "description": "Average payment history"}', true),
+    ('00000000-0000-0000-0000-000000000000', 'RATING_D', 'D - Poor', 'CREDIT_RATING',
+     '{"score": 2, "description": "Poor payment history"}', true),
+    ('00000000-0000-0000-0000-000000000000', 'RATING_NEW', 'New Customer', 'CREDIT_RATING',
+     '{"score": 1, "description": "No credit history"}', true)
+ON CONFLICT (org_id, group_code) DO NOTHING;
 
--- Insert default configurations
-INSERT INTO master.lookup_values (org_id, lookup_type, lookup_code, lookup_value, lookup_description, numeric_value1, display_order, is_default) VALUES
--- Credit Ratings
-('00000000-0000-0000-0000-000000000000', 'CREDIT_RATING', 'A', 'A - Excellent', 'Excellent payment history', 5, 1, false),
-('00000000-0000-0000-0000-000000000000', 'CREDIT_RATING', 'B', 'B - Good', 'Good payment history', 4, 2, true),
-('00000000-0000-0000-0000-000000000000', 'CREDIT_RATING', 'C', 'C - Average', 'Average payment history', 3, 3, false),
-('00000000-0000-0000-0000-000000000000', 'CREDIT_RATING', 'D', 'D - Poor', 'Poor payment history', 2, 4, false),
-('00000000-0000-0000-0000-000000000000', 'CREDIT_RATING', 'NEW', 'New Customer', 'No credit history', 1, 5, false),
-('00000000-0000-0000-0000-000000000000', 'CREDIT_RATING', 'BLOCKED', 'Blocked', 'Credit blocked', 0, 6, false),
-
--- Payment Terms
-('00000000-0000-0000-0000-000000000000', 'PAYMENT_TERMS', 'CASH', 'Cash', 'Immediate payment', 0, 1, false),
-('00000000-0000-0000-0000-000000000000', 'PAYMENT_TERMS', 'NET_7', 'Net 7 Days', 'Payment due in 7 days', 7, 2, false),
-('00000000-0000-0000-0000-000000000000', 'PAYMENT_TERMS', 'NET_15', 'Net 15 Days', 'Payment due in 15 days', 15, 3, false),
-('00000000-0000-0000-0000-000000000000', 'PAYMENT_TERMS', 'NET_30', 'Net 30 Days', 'Payment due in 30 days', 30, 4, true),
-('00000000-0000-0000-0000-000000000000', 'PAYMENT_TERMS', 'NET_45', 'Net 45 Days', 'Payment due in 45 days', 45, 5, false),
-('00000000-0000-0000-0000-000000000000', 'PAYMENT_TERMS', 'NET_60', 'Net 60 Days', 'Payment due in 60 days', 60, 6, false),
-('00000000-0000-0000-0000-000000000000', 'PAYMENT_TERMS', 'NET_90', 'Net 90 Days', 'Payment due in 90 days', 90, 7, false),
-('00000000-0000-0000-0000-000000000000', 'PAYMENT_TERMS', 'ADVANCE', 'Advance Payment', 'Payment before delivery', -1, 8, false),
-('00000000-0000-0000-0000-000000000000', 'PAYMENT_TERMS', 'COD', 'Cash on Delivery', 'Payment on delivery', 0, 9, false)
-ON CONFLICT (org_id, lookup_type, lookup_code) DO NOTHING;
-
-RAISE NOTICE '✅ SECTION 20: LOOKUP VALUES TABLE CREATED';
+RAISE NOTICE '✅ SECTION 20: CUSTOMER GROUP CONFIGURATIONS ADDED';
+RAISE NOTICE 'Using existing customer_groups table - more enterprise approach';
 
 END $$;
 
