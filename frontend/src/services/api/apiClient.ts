@@ -21,17 +21,41 @@ const apiClient: AxiosInstance = axios.create({
 // Request interceptor for auth token
 apiClient.interceptors.request.use(
   (config) => {
-    // Add auth token if available
-    const token = localStorage.getItem('auth_token') || localStorage.getItem('authToken');
-    if (token) {
-      config.headers.Authorization = `Bearer ${token}`;
-    }
+    // Get auth token - use consistent key
+    const token = localStorage.getItem('authToken');
     
-    // TEMPORARY: Still send X-Org-Id for backward compatibility
-    // TODO: Remove once all backend endpoints migrate to get_org_id_from_token
-    const orgId = sessionStorage.getItem('pharma_org_id') || localStorage.getItem('pharma_org_id');
-    if (orgId) {
-      config.headers['X-Org-Id'] = orgId;
+    // Check if token exists and is not expired
+    if (token) {
+      try {
+        // Decode token to check expiry (without verification)
+        const payload = JSON.parse(atob(token.split('.')[1]));
+        const expiry = payload.exp * 1000; // Convert to milliseconds
+        
+        if (Date.now() < expiry) {
+          config.headers.Authorization = `Bearer ${token}`;
+        } else {
+          // Token expired - remove and redirect to login
+          localStorage.removeItem('authToken');
+          window.location.href = '/login?reason=token_expired';
+          return Promise.reject(new Error('Token expired'));
+        }
+      } catch (e) {
+        // Invalid token format - remove and redirect
+        localStorage.removeItem('authToken');
+        window.location.href = '/login?reason=invalid_token';
+        return Promise.reject(new Error('Invalid token'));
+      }
+    } else {
+      // No token - must be logged in for API calls
+      // Allow only auth endpoints without token
+      const isAuthEndpoint = config.url?.includes('/auth/') || 
+                             config.url?.includes('/login') || 
+                             config.url?.includes('/register');
+      
+      if (!isAuthEndpoint) {
+        window.location.href = '/login?reason=not_authenticated';
+        return Promise.reject(new Error('Authentication required'));
+      }
     }
     
     return config;
@@ -47,9 +71,10 @@ apiClient.interceptors.response.use(
   (error: AxiosError) => {
     // Handle specific status codes
     if (error.response?.status === 401) {
-      // Handle unauthorized - redirect to login
-      localStorage.removeItem('auth_token');
-      window.location.href = '/login';
+      // Handle unauthorized - clear token and redirect to login
+      localStorage.removeItem('authToken');
+      sessionStorage.clear(); // Clear any session data
+      window.location.href = '/login?reason=session_expired';
     } else if (error.response?.status === 404) {
       // For 404 errors, return a rejected promise with a custom flag
       // This prevents uncaught errors while allowing handlers to detect 404s
