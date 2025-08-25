@@ -267,7 +267,8 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
       const invoiceData = {
         ...invoice,
         items,
-        customer_id: selectedCustomer?.customer_id
+        customer_id: selectedCustomer?.customer_id,
+        delivery_charges: invoice.delivery_charges || 0  // Include delivery charges in calculation
       };
 
       const result = await InvoiceCalculator.calculateSmart(invoiceData, { validateWithBackend: true });
@@ -295,7 +296,12 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
         setInvoice(prev => ({
           ...prev,
           items: updatedItems,
-          ...formattedTotals,
+          totals: formattedTotals,  // Store totals in a nested object
+          // Also set individual fields for backward compatibility
+          net_amount: formattedTotals.final_amount || formattedTotals.net_amount,
+          subtotal_amount: formattedTotals.taxable_amount,
+          tax_amount: formattedTotals.total_gst || formattedTotals.tax_amount,
+          round_off: formattedTotals.round_off,
           calculatedLineItems: result.line_items
         }));
       } else {
@@ -365,12 +371,12 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
     };
   };
 
-  // Calculate totals when items are added/removed (not on every field change)
+  // Calculate totals when items are added/removed or delivery charges change
   React.useEffect(() => {
     if (invoice.items && invoice.items.length > 0) {
       calculateInvoiceTotals(invoice.items);
     }
-  }, [invoice.items.length]); // Only watch length, not individual item changes
+  }, [invoice.items.length, invoice.delivery_charges]); // Recalculate when delivery charges change
 
   // Update item field with debounced calculation  
   const handleUpdateItem = (index, field, value) => {
