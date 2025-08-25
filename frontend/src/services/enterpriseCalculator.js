@@ -14,14 +14,16 @@ class EnterpriseCalculator {
   static calculateItem(item, options = {}) {
     const gstType = options.gst_type || 'CGST/SGST';
     
-    // Parse inputs once
+    // Parse inputs once - CRITICAL: Use base_quantity for billing
     const rate = parseFloat(item.sale_price || item.rate || item.selling_price || item.unit_price) || 0;
-    const baseQuantity = parseFloat(item.base_quantity || item.quantity) || 0;
+    // CRITICAL: base_quantity is what customer pays for (excludes free items)
+    const baseQuantity = parseFloat(item.base_quantity) || 0;
     const freeQuantity = parseFloat(item.free_quantity) || 0;
     const discountPercent = parseFloat(item.discount_percent || item.discount) || 0;
     const gstPercent = parseFloat(item.gst_percent || item.tax_rate || item.gst) || 12;
     
-    // Core calculations - base quantity only (free is truly free)
+    // PRODUCTION LOGIC: Use base_quantity ONLY for billing calculations
+    // Free items are truly FREE and don't affect pricing
     const subtotal = rate * baseQuantity;
     const discountAmount = (subtotal * discountPercent) / 100;
     const taxableAmount = subtotal - discountAmount;

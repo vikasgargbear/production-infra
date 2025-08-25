@@ -5,6 +5,7 @@
  */
 
 import EnterpriseCalculator from './enterpriseCalculator';
+import api from './api';
 
 class InvoiceCalculator {
   /**
@@ -21,29 +22,24 @@ class InvoiceCalculator {
    */
   static async calculateWithBackend(invoiceData) {
     try {
-      const response = await fetch('/api/invoices/calculate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          customer_id: invoiceData.customer_id,
-          items: invoiceData.items.map(item => ({
-            product_id: item.product_id,
-            quantity: parseFloat(item.quantity) || 0,
-            free_quantity: parseFloat(item.free_quantity) || 0,
-            unit_price: parseFloat(item.rate || item.sale_price) || 0,
-            discount_percent: parseFloat(item.discount_percent) || 0,
-            gst_percent: parseFloat(item.gst_percent) || 12
-          })),
-          delivery_charges: parseFloat(invoiceData.delivery_charges) || 0,
-          discount_amount: parseFloat(invoiceData.discount_amount) || 0
-        })
+      const response = await api.post('/invoices/calculate', {
+        customer_id: invoiceData.customer_id,
+        items: invoiceData.items.map(item => ({
+          product_id: item.product_id,
+          quantity: parseFloat(item.quantity) || 0,
+          free_quantity: parseFloat(item.free_quantity) || 0,
+          unit_price: parseFloat(item.rate || item.sale_price) || 0,
+          discount_percent: parseFloat(item.discount_percent) || 0,
+          gst_percent: parseFloat(item.gst_percent) || 12
+        })),
+        delivery_charges: parseFloat(invoiceData.delivery_charges) || 0,
+        discount_amount: parseFloat(invoiceData.discount_amount) || 0
       });
 
-      if (response.ok) {
-        const data = await response.json();
+      if (response.data && response.data.success) {
         return {
           success: true,
-          ...data,
+          ...response.data,
           source: 'backend'
         };
       }

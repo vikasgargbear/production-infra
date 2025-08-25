@@ -63,7 +63,7 @@ const DocumentFooter = ({
             </span>
             {roundOffAmount !== 0 && (
               <span className="text-gray-600">
-                Round Off: <strong>₹{roundOffAmount.toFixed(2)}</strong>
+                Round Off: <strong>{roundOffAmount >= 0 ? '+' : '-'}₹{Math.abs(roundOffAmount).toFixed(2)}</strong>
               </span>
             )}
             <span className="text-lg font-semibold text-gray-900">

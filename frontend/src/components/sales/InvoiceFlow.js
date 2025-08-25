@@ -12,6 +12,10 @@ import { searchCache, smartSearch } from '../../utils/searchCache';
 // MIGRATED: Using enterprise API-only calculations
 // MIGRATED: Use new enterprise calculation architecture  
 import InvoiceCalculator from '../../services/InvoiceCalculator';
+import { calculateFinalAmount } from '../../services/SINGLE_CALCULATION';
+import { getInvoiceDisplayValues } from './getInvoiceDisplayValues';
+import { debugCalculation } from '../../services/debugCalculation';
+import { runTestCalculation } from './TEST_CALCULATION';
 import { useInvoiceCalculation } from '../../hooks/useInvoiceCalculation';
 import InvoiceValidator from '../../services/invoiceValidator';
 import DataTransformer from '../../services/dataTransformer';
@@ -323,12 +327,13 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
     let totalTax = 0;
 
     items.forEach(item => {
-      const quantity = parseFloat(item.quantity) || 0;
+      // CRITICAL: Use base_quantity for billing (what customer pays for)
+      const baseQuantity = parseFloat(item.base_quantity) || 0;
       const rate = parseFloat(item.rate || item.sale_price) || 0;
-      const discountPercent = parseFloat(item.discount_percentage) || 0;
-      const taxPercent = parseFloat(item.tax_percentage) || 0;
+      const discountPercent = parseFloat(item.discount_percent || item.discount_percentage) || 0;
+      const taxPercent = parseFloat(item.gst_percent || item.tax_rate || item.tax_percentage) || 12;
 
-      const lineTotal = quantity * rate;
+      const lineTotal = baseQuantity * rate;
       const discountAmount = (lineTotal * discountPercent) / 100;
       const taxableAmount = lineTotal - discountAmount;
       const taxAmount = (taxableAmount * taxPercent) / 100;
@@ -342,7 +347,8 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
     const invoiceDiscount = parseFloat(invoice.discount_amount) || 0;
     
     // Calculate pre-round total
-    const preRoundTotal = subtotal + totalTax + deliveryCharges - invoiceDiscount;
+    // Note: subtotal is already AFTER discount, don't subtract again
+    const preRoundTotal = subtotal + totalTax + deliveryCharges;
     const finalAmount = Math.round(preRoundTotal);
     const roundOff = parseFloat((finalAmount - preRoundTotal).toFixed(2));
 
@@ -352,11 +358,13 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
       subtotal_amount: subtotal,
       taxable_amount: subtotal,
       tax_amount: totalTax,
+      total_tax: totalTax,
       delivery_charges: deliveryCharges,
       discount_amount: invoiceDiscount,
       invoice_discount: invoiceDiscount,
-      round_off: roundOff
-      // Don't set net_amount or final_amount - let components calculate them
+      round_off: roundOff,
+      final_amount: finalAmount,
+      net_amount: finalAmount
     };
   };
 
@@ -393,18 +401,16 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
       });
       
       // Merge calculated values back into items for immediate display
-      const itemsWithCalculations = updatedItems.map((item, i) => ({
-        ...item,
-        ...instantResult.line_items[i] // Merge calculated values
-      }));
+      const itemsWithCalculations = instantResult.items || updatedItems;
       
       // Update UI instantly with local calculation
-      const formattedTotals = InvoiceCalculatorEnterprise.formatTotalsForDisplay(instantResult.totals);
+      // Just use the totals directly - no need for complex formatting
+      const formattedTotals = instantResult.totals;
       setInvoice(prev => ({
         ...prev,
         items: itemsWithCalculations, // Use items with calculations
         ...formattedTotals,
-        calculatedLineItems: instantResult.line_items
+        calculatedLineItems: instantResult.items
       }));
     } catch (error) {
       console.error('Instant calculation failed:', error);
@@ -426,17 +432,15 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
       });
       
       // Merge calculated values back into remaining items
-      const itemsWithCalculations = updatedItems.map((item, i) => ({
-        ...item,
-        ...instantResult.line_items[i]
-      }));
+      const itemsWithCalculations = instantResult.items || updatedItems;
       
-      const formattedTotals = InvoiceCalculatorEnterprise.formatTotalsForDisplay(instantResult.totals);
+      // Just use the totals directly - no need for complex formatting
+      const formattedTotals = instantResult.totals;
       setInvoice(prev => ({
         ...prev,
         items: itemsWithCalculations,
         ...formattedTotals,
-        calculatedLineItems: instantResult.line_items
+        calculatedLineItems: instantResult.items
       }));
     } catch (error) {
       console.error('Instant calculation failed:', error);
@@ -605,17 +609,15 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
         });
         
         // Merge calculated values back into items
-        const itemsWithCalculations = updatedItems.map((item, i) => ({
-          ...item,
-          ...instantResult.line_items[i]
-        }));
+        const itemsWithCalculations = instantResult.items || updatedItems;
         
-        const formattedTotals = InvoiceCalculatorEnterprise.formatTotalsForDisplay(instantResult.totals);
+        // Just use the totals directly - no need for complex formatting
+        const formattedTotals = instantResult.totals;
         setInvoice(prev => ({
           ...prev,
           items: itemsWithCalculations,
           ...formattedTotals,
-          calculatedLineItems: instantResult.line_items
+          calculatedLineItems: instantResult.items
         }));
       } catch (error) {
         console.error('Instant calculation failed:', error);
@@ -755,7 +757,7 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
               hsn_code: item.hsn_code,
               
               // Batch info
-              batch_id: item.batch_id,
+              batch_id: (item.batch_id && !item.batch_id.includes('default')) ? item.batch_id : null,
               batch_number: item.batch_number || item.batch_no,
               expiry_date: item.expiry_date,
               
@@ -1928,24 +1930,13 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
             <h3 className="text-xs font-semibold text-gray-600 uppercase tracking-wider mb-1.5 px-1">PAYMENT METHOD</h3>
             <div className="bg-white rounded-lg border border-gray-200 p-3">
               <SplitPayment
-                totalAmount={
-                  // Simple calculation: taxable + tax + roundoff + delivery
-                  // Discount is already included in taxable_amount
-                  (invoice.subtotal_amount || invoice.taxable_amount || 0) + 
-                  (invoice.tax_amount || 0) + 
-                  (invoice.round_off || 0) + 
-                  (invoice.delivery_charges || 0)
-                }
+                totalAmount={getInvoiceDisplayValues(invoice).netAmount}
                 payments={[
                   {
                     id: '1',
                     method: invoice.payment_mode || 'cash',
                     amount: invoice.payment_mode === 'cash' ? 
-                      ((invoice.subtotal_amount || invoice.taxable_amount || 0) + 
-                       (invoice.tax_amount || 0) + 
-                       (invoice.round_off || 0) + 
-                       (invoice.delivery_charges || 0) - 
-                       (invoice.invoice_discount || 0)) : 0
+                      getInvoiceDisplayValues(invoice).netAmount : 0
                   }
                 ]}
                 onChange={(payments, paymentInfo) => {
@@ -2281,12 +2272,19 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
 
         {/* Footer */}
         <DocumentFooter
-          totalItems={invoice.items.length}
-          totalAmount={invoice.net_amount}
-          subtotalAmount={invoice.subtotal_amount || invoice.taxable_amount || 0}
-          taxAmount={invoice.tax_amount || 0}
-          roundOffAmount={invoice.round_off || 0}
-          grandTotal={(invoice.subtotal_amount || invoice.taxable_amount || 0) + (invoice.tax_amount || 0) + (invoice.round_off || 0)}
+          totalItems={(() => {
+            const values = getInvoiceDisplayValues(invoice);
+            console.log('DocumentFooter values:', values);
+            console.log('Invoice state:', invoice);
+            debugCalculation(invoice.items);
+            runTestCalculation();
+            return values.itemCount;
+          })()}
+          totalAmount={getInvoiceDisplayValues(invoice).netAmount}
+          subtotalAmount={getInvoiceDisplayValues(invoice).taxableAmount}
+          taxAmount={getInvoiceDisplayValues(invoice).taxAmount}
+          roundOffAmount={getInvoiceDisplayValues(invoice).roundOff}
+          grandTotal={getInvoiceDisplayValues(invoice).netAmount}
           onSave={handleSaveInvoice}
           onPrint={handlePrint}
           onDownload={handlePDFDownload}

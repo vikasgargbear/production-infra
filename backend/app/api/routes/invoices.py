@@ -297,6 +297,9 @@ async def create_invoice(
             
             # Get batch_id if not provided (for inventory trigger)
             batch_id = item.get("batch_id")
+            # Filter out invalid batch_id values like 'default_123' or empty strings
+            if batch_id and (isinstance(batch_id, str) and ('default' in batch_id.lower() or batch_id == '')):
+                batch_id = None
             if not batch_id:
                 # Try to get FIFO batch
                 batch_result = db.execute(text("""
@@ -417,7 +420,7 @@ async def create_invoice(
                             """), {
                                 "org_id": org_id,
                                 "product_id": product_id,
-                                "batch_id": int(batch_id) if batch_id else None,
+                                "batch_id": int(batch_id) if batch_id and str(batch_id).isdigit() else None,
                                 "quantity": quantity,  # Full quantity moved
                                 "invoice_id": invoice_id,
                                 "invoice_number": f"INV-{invoice_id}",

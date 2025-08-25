@@ -1,0 +1,346 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Invoice Calculation Verification</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .container {
+            background: white;
+            border-radius: 8px;
+            padding: 24px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+        h1 {
+            color: #1e40af;
+            margin-bottom: 8px;
+        }
+        h2 {
+            color: #334155;
+            margin-top: 24px;
+            margin-bottom: 16px;
+            border-bottom: 2px solid #e5e7eb;
+            padding-bottom: 8px;
+        }
+        .test-item {
+            background: #f8fafc;
+            border: 1px solid #e2e8f0;
+            border-radius: 6px;
+            padding: 12px;
+            margin-bottom: 12px;
+        }
+        .calculation-step {
+            margin: 8px 0;
+            padding: 8px;
+            background: white;
+            border-left: 3px solid #3b82f6;
+            font-family: 'Courier New', monospace;
+        }
+        .result {
+            font-weight: bold;
+            color: #059669;
+        }
+        .error {
+            color: #dc2626;
+            font-weight: bold;
+        }
+        .success {
+            color: #059669;
+            font-weight: bold;
+        }
+        .summary {
+            background: #eff6ff;
+            border: 2px solid #3b82f6;
+            border-radius: 6px;
+            padding: 16px;
+            margin-top: 20px;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 12px;
+        }
+        th, td {
+            text-align: left;
+            padding: 8px;
+            border-bottom: 1px solid #e5e7eb;
+        }
+        th {
+            background: #f1f5f9;
+            font-weight: 600;
+        }
+        .status-badge {
+            display: inline-block;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+        .status-pass {
+            background: #dcfce7;
+            color: #166534;
+        }
+        .status-fail {
+            background: #fee2e2;
+            color: #991b1b;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Invoice Calculation Verification</h1>
+        <p>Testing with exact user data to ensure base_quantity is used correctly</p>
+    </div>
+
+    <div class="container">
+        <h2>Test Data</h2>
+        <div id="testData"></div>
+    </div>
+
+    <div class="container">
+        <h2>Item-wise Calculations</h2>
+        <div id="itemCalculations"></div>
+    </div>
+
+    <div class="container">
+        <h2>Total Calculations</h2>
+        <div id="totalCalculations"></div>
+    </div>
+
+    <div class="container">
+        <h2>Calculator Comparison</h2>
+        <div id="comparison"></div>
+    </div>
+
+    <script type="module">
+        // Import the calculator
+        import EnterpriseCalculator from './src/services/enterpriseCalculator.js';
+        
+        // Test data from user
+        const testItems = [
+            {
+                product_name: 'iPhone',
+                base_quantity: 2,  // What customer pays for
+                free_quantity: 1,  // Free items
+                quantity: 3,       // Total quantity (base + free)
+                rate: 20,
+                sale_price: 20,
+                mrp: 25,
+                discount_percent: 20,
+                gst_percent: 12
+            },
+            {
+                product_name: 'Airpods Pro',
+                base_quantity: 1,  // What customer pays for
+                free_quantity: 0,  // No free items
+                quantity: 1,       // Total quantity
+                rate: 40,
+                sale_price: 40,
+                mrp: 45,
+                discount_percent: 25,
+                gst_percent: 12
+            }
+        ];
+
+        // Display test data
+        document.getElementById('testData').innerHTML = `
+            <table>
+                <thead>
+                    <tr>
+                        <th>Product</th>
+                        <th>Base Qty</th>
+                        <th>Free Qty</th>
+                        <th>Total Qty</th>
+                        <th>Rate</th>
+                        <th>Discount %</th>
+                        <th>GST %</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${testItems.map(item => `
+                        <tr>
+                            <td>${item.product_name}</td>
+                            <td>${item.base_quantity}</td>
+                            <td>${item.free_quantity}</td>
+                            <td>${item.quantity}</td>
+                            <td>₹${item.rate}</td>
+                            <td>${item.discount_percent}%</td>
+                            <td>${item.gst_percent}%</td>
+                        </tr>
+                    `).join('')}
+                </tbody>
+            </table>
+        `;
+
+        // Manual calculation for verification
+        function manualCalculation() {
+            const results = [];
+            let totalGross = 0;
+            let totalTaxable = 0;
+            let totalTax = 0;
+
+            testItems.forEach(item => {
+                // CRITICAL: Use base_quantity for billing
+                const gross = item.base_quantity * item.rate;
+                const discount = (gross * item.discount_percent) / 100;
+                const taxable = gross - discount;
+                const tax = (taxable * item.gst_percent) / 100;
+                const lineTotal = taxable + tax;
+
+                totalGross += gross;
+                totalTaxable += taxable;
+                totalTax += tax;
+
+                results.push({
+                    name: item.product_name,
+                    calculation: `${item.base_quantity} × ₹${item.rate} = ₹${gross}`,
+                    discount: `${item.discount_percent}% of ₹${gross} = ₹${discount}`,
+                    taxable: `₹${gross} - ₹${discount} = ₹${taxable}`,
+                    tax: `${item.gst_percent}% of ₹${taxable} = ₹${tax.toFixed(2)}`,
+                    lineTotal: `₹${taxable} + ₹${tax.toFixed(2)} = ₹${lineTotal.toFixed(2)}`
+                });
+            });
+
+            const preRound = totalTaxable + totalTax;
+            const final = Math.round(preRound);
+            const roundOff = final - preRound;
+
+            return {
+                items: results,
+                totals: {
+                    gross: totalGross,
+                    taxable: totalTaxable,
+                    tax: totalTax,
+                    preRound: preRound,
+                    roundOff: roundOff,
+                    final: final
+                }
+            };
+        }
+
+        // Test EnterpriseCalculator
+        function testEnterpriseCalculator() {
+            const result = EnterpriseCalculator.calculateTotals(testItems);
+            return result;
+        }
+
+        // Display manual calculations
+        const manual = manualCalculation();
+        document.getElementById('itemCalculations').innerHTML = `
+            ${manual.items.map(item => `
+                <div class="test-item">
+                    <h3>${item.name}</h3>
+                    <div class="calculation-step">Gross: ${item.calculation}</div>
+                    <div class="calculation-step">Discount: ${item.discount}</div>
+                    <div class="calculation-step">Taxable: ${item.taxable}</div>
+                    <div class="calculation-step">Tax: ${item.tax}</div>
+                    <div class="calculation-step result">Line Total: ${item.lineTotal}</div>
+                </div>
+            `).join('')}
+        `;
+
+        // Display totals
+        document.getElementById('totalCalculations').innerHTML = `
+            <div class="summary">
+                <h3>Expected Results (Manual Calculation)</h3>
+                <table>
+                    <tr><td>Gross Amount:</td><td><strong>₹${manual.totals.gross.toFixed(2)}</strong></td></tr>
+                    <tr><td>Taxable Amount:</td><td><strong>₹${manual.totals.taxable.toFixed(2)}</strong></td></tr>
+                    <tr><td>Tax Amount:</td><td><strong>₹${manual.totals.tax.toFixed(2)}</strong></td></tr>
+                    <tr><td>Pre-Round Total:</td><td><strong>₹${manual.totals.preRound.toFixed(2)}</strong></td></tr>
+                    <tr><td>Round Off:</td><td><strong>${manual.totals.roundOff >= 0 ? '+' : ''}₹${manual.totals.roundOff.toFixed(2)}</strong></td></tr>
+                    <tr><td>Final Amount:</td><td><strong>₹${manual.totals.final.toFixed(2)}</strong></td></tr>
+                </table>
+            </div>
+        `;
+
+        // Test and compare
+        const enterprise = testEnterpriseCalculator();
+        
+        // Compare results
+        const comparison = {
+            grossMatch: Math.abs(enterprise.totals.gross_amount - manual.totals.gross) < 0.01,
+            taxableMatch: Math.abs(enterprise.totals.taxable_amount - manual.totals.taxable) < 0.01,
+            taxMatch: Math.abs(enterprise.totals.total_gst - manual.totals.tax) < 0.01,
+            roundOffMatch: Math.abs(enterprise.totals.round_off - manual.totals.roundOff) < 0.01,
+            finalMatch: Math.abs(enterprise.totals.final_amount - manual.totals.final) < 0.01
+        };
+
+        const allMatch = Object.values(comparison).every(v => v);
+
+        document.getElementById('comparison').innerHTML = `
+            <h3>EnterpriseCalculator Results</h3>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Field</th>
+                        <th>Expected</th>
+                        <th>Actual</th>
+                        <th>Status</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>Gross Amount</td>
+                        <td>₹${manual.totals.gross.toFixed(2)}</td>
+                        <td>₹${enterprise.totals.gross_amount.toFixed(2)}</td>
+                        <td><span class="status-badge ${comparison.grossMatch ? 'status-pass' : 'status-fail'}">${comparison.grossMatch ? 'PASS' : 'FAIL'}</span></td>
+                    </tr>
+                    <tr>
+                        <td>Taxable Amount</td>
+                        <td>₹${manual.totals.taxable.toFixed(2)}</td>
+                        <td>₹${enterprise.totals.taxable_amount.toFixed(2)}</td>
+                        <td><span class="status-badge ${comparison.taxableMatch ? 'status-pass' : 'status-fail'}">${comparison.taxableMatch ? 'PASS' : 'FAIL'}</span></td>
+                    </tr>
+                    <tr>
+                        <td>Tax Amount</td>
+                        <td>₹${manual.totals.tax.toFixed(2)}</td>
+                        <td>₹${enterprise.totals.total_gst.toFixed(2)}</td>
+                        <td><span class="status-badge ${comparison.taxMatch ? 'status-pass' : 'status-fail'}">${comparison.taxMatch ? 'PASS' : 'FAIL'}</span></td>
+                    </tr>
+                    <tr>
+                        <td>Round Off</td>
+                        <td>${manual.totals.roundOff >= 0 ? '+' : ''}₹${manual.totals.roundOff.toFixed(2)}</td>
+                        <td>${enterprise.totals.round_off >= 0 ? '+' : ''}₹${enterprise.totals.round_off.toFixed(2)}</td>
+                        <td><span class="status-badge ${comparison.roundOffMatch ? 'status-pass' : 'status-fail'}">${comparison.roundOffMatch ? 'PASS' : 'FAIL'}</span></td>
+                    </tr>
+                    <tr>
+                        <td>Final Amount</td>
+                        <td>₹${manual.totals.final.toFixed(2)}</td>
+                        <td>₹${enterprise.totals.final_amount.toFixed(2)}</td>
+                        <td><span class="status-badge ${comparison.finalMatch ? 'status-pass' : 'status-fail'}">${comparison.finalMatch ? 'PASS' : 'FAIL'}</span></td>
+                    </tr>
+                </tbody>
+            </table>
+            
+            <div style="margin-top: 20px; padding: 12px; border-radius: 6px; ${allMatch ? 'background: #dcfce7; border: 2px solid #059669;' : 'background: #fee2e2; border: 2px solid #dc2626;'}">
+                <h3 style="${allMatch ? 'color: #059669' : 'color: #dc2626'}">
+                    ${allMatch ? '✓ All Calculations PASS' : '✗ Some Calculations FAIL'}
+                </h3>
+                ${allMatch ? 
+                    '<p>EnterpriseCalculator is correctly using base_quantity for all billing calculations!</p>' : 
+                    '<p>There are discrepancies in the calculations. Please review the implementation.</p>'
+                }
+            </div>
+
+            <div style="margin-top: 20px;">
+                <h4>Verification Details:</h4>
+                <ul>
+                    <li>iPhone: 2 base_quantity × ₹20 = ₹40 (customer pays for 2, gets 1 free)</li>
+                    <li>Airpods: 1 base_quantity × ₹40 = ₹40 (customer pays for 1)</li>
+                    <li>Total Gross: ₹80 (calculated on base_quantity only)</li>
+                    <li>Free items (1 iPhone) are NOT included in price calculation</li>
+                </ul>
+            </div>
+        `;
+    </script>
+</body>
+</html>
