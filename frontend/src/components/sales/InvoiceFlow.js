@@ -279,7 +279,11 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
         // Just use the totals directly - no need for complex formatting
         const formattedTotals = result.totals;
         
-        console.log('Invoice calculation result:', result);
+        console.log('Invoice calculation result:', {
+          totals: result.totals,
+          delivery_charges_in: invoice.delivery_charges,
+          delivery_charges_out: result.totals?.delivery_charges
+        });
 
         // Update items with calculated values from backend
         const updatedItems = items.map((item, index) => {
@@ -2295,6 +2299,15 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
         </div>
 
         {/* Footer */}
+        {currentStep === 2 && console.log('Footer props:', {
+          subtotalAmount: invoice.totals?.taxable_amount || invoice.subtotal_amount,
+          taxAmount: invoice.totals?.total_gst || invoice.totals?.tax_amount || invoice.tax_amount,
+          deliveryCharges: invoice.totals?.delivery_charges || invoice.delivery_charges,
+          roundOffAmount: invoice.totals?.round_off || invoice.round_off,
+          grandTotal: invoice.totals?.final_amount || invoice.net_amount,
+          invoice_totals: invoice.totals,
+          invoice_delivery_charges: invoice.delivery_charges
+        })}
         <DocumentFooter
           totalItems={invoice.items?.length || 0}
           totalAmount={parseFloat(invoice.totals?.net_amount || invoice.net_amount) || 0}
