@@ -7,41 +7,52 @@ from typing import Optional, Dict
 from jose import JWTError, jwt
 from .jwt_auth import SECRET_KEY, ALGORITHM
 
-# Bearer token scheme
-security = HTTPBearer()
+# Bearer token scheme - auto_error=False makes it optional
+security = HTTPBearer(auto_error=False)
 
 def get_org_id_from_token(
-    credentials: HTTPAuthorizationCredentials = Depends(security)
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(security),
+    x_org_id: Optional[str] = Header(None, alias="X-Org-Id")
 ) -> str:
     """
     ENTERPRISE: Extract organization ID from JWT token
-    This is the secure way - org_id comes from authenticated token, not from client headers
+    Falls back to header for backward compatibility during migration
     """
-    try:
-        token = credentials.credentials
-        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        org_id = payload.get("org_id")
-        
-        if not org_id:
-            raise HTTPException(
-                status_code=401,
-                detail="Token does not contain organization information"
-            )
-        
-        return org_id
-    except JWTError:
-        raise HTTPException(
-            status_code=401,
-            detail="Invalid authentication token"
-        )
+    # Try to get from JWT token first (secure)
+    if credentials:
+        try:
+            token = credentials.credentials
+            payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+            org_id = payload.get("org_id")
+            
+            if org_id:
+                return org_id
+        except JWTError:
+            pass  # Fall through to header check
+    
+    # Fall back to header (temporary for migration)
+    if x_org_id:
+        return x_org_id
+    
+    # If neither available, raise error
+    raise HTTPException(
+        status_code=401,
+        detail="Authentication required. Please provide Bearer token or X-Org-Id header."
+    )
 
 def get_user_context_from_token(
-    credentials: HTTPAuthorizationCredentials = Depends(security)
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(security)
 ) -> Dict[str, str]:
     """
     ENTERPRISE: Extract full user context from JWT token
     Returns user_id, org_id, role, email
     """
+    if not credentials:
+        raise HTTPException(
+            status_code=401,
+            detail="Authentication required"
+        )
+    
     try:
         token = credentials.credentials
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
