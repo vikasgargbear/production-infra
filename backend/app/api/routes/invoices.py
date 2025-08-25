@@ -213,15 +213,33 @@ async def create_invoice(
         cust = cust_result.fetchone()
         customer_name = cust[0] if cust else f"Customer {invoice_data['customer_id']}"
         
-        # Get customer addresses
-        addr_result = db.execute(text("""
-            SELECT billing_address_id, shipping_address_id
-            FROM parties.customers
-            WHERE customer_id = :customer_id
+        # Get customer addresses from master.addresses table
+        # Addresses are linked via entity_type='customer' and entity_id=customer_id
+        billing_addr_result = db.execute(text("""
+            SELECT address_id 
+            FROM master.addresses
+            WHERE entity_type = 'customer' 
+            AND entity_id = :customer_id
+            AND address_type = 'billing'
+            AND is_active = true
+            ORDER BY is_default DESC, created_at DESC
+            LIMIT 1
         """), {"customer_id": invoice_data["customer_id"]})
-        addr = addr_result.fetchone()
-        billing_address_id = addr[0] if addr else None
-        shipping_address_id = addr[1] if addr else None
+        billing_addr = billing_addr_result.fetchone()
+        billing_address_id = billing_addr[0] if billing_addr else None
+        
+        shipping_addr_result = db.execute(text("""
+            SELECT address_id 
+            FROM master.addresses
+            WHERE entity_type = 'customer' 
+            AND entity_id = :customer_id
+            AND address_type = 'shipping'
+            AND is_active = true
+            ORDER BY is_default DESC, created_at DESC
+            LIMIT 1
+        """), {"customer_id": invoice_data["customer_id"]})
+        shipping_addr = shipping_addr_result.fetchone()
+        shipping_address_id = shipping_addr[0] if shipping_addr else None
         
         # Calculate due date based on payment terms
         from datetime import timedelta

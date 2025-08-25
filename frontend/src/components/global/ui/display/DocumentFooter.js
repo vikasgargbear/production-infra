@@ -9,6 +9,8 @@ const DocumentFooter = ({
   totalItems = 0,
   totalAmount = 0,
   subtotalAmount = 0,
+  discountAmount = 0,
+  deliveryCharges = 0,
   taxAmount = 0,
   roundOffAmount = 0,
   grandTotal = 0,
@@ -58,6 +60,16 @@ const DocumentFooter = ({
             <span className="text-gray-600">
               Sub Total: <strong>₹{subtotalAmount.toFixed(2)}</strong>
             </span>
+            {discountAmount > 0 && (
+              <span className="text-gray-600">
+                Discount: <strong>-₹{discountAmount.toFixed(2)}</strong>
+              </span>
+            )}
+            {deliveryCharges > 0 && (
+              <span className="text-gray-600">
+                Delivery: <strong>+₹{deliveryCharges.toFixed(2)}</strong>
+              </span>
+            )}
             <span className="text-gray-600">
               Tax: <strong>₹{taxAmount.toFixed(2)}</strong>
             </span>
