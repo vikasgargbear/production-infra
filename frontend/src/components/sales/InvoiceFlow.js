@@ -2306,13 +2306,14 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
           roundOffAmount: invoice.totals?.round_off || invoice.round_off,
           grandTotal: invoice.totals?.final_amount || invoice.net_amount,
           invoice_totals: invoice.totals,
-          invoice_delivery_charges: invoice.delivery_charges
+          invoice_delivery_charges: invoice.delivery_charges,
+          total_tax_available: invoice.totals?.total_tax
         })}
         <DocumentFooter
           totalItems={invoice.items?.length || 0}
           totalAmount={parseFloat(invoice.totals?.net_amount || invoice.net_amount) || 0}
           subtotalAmount={parseFloat(invoice.totals?.taxable_amount || invoice.subtotal_amount) || 0}
-          taxAmount={parseFloat(invoice.totals?.total_gst || invoice.totals?.tax_amount || invoice.tax_amount) || 0}
+          taxAmount={parseFloat(invoice.totals?.total_gst || invoice.totals?.total_tax || invoice.totals?.tax_amount || invoice.tax_amount) || 0}
           roundOffAmount={parseFloat(invoice.totals?.round_off || invoice.round_off) || 0}
           grandTotal={parseFloat(invoice.totals?.final_amount || invoice.net_amount) || 0}
           discountAmount={parseFloat(invoice.totals?.total_discount || invoice.discount_amount) || 0}
