@@ -386,9 +386,14 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
         
         // CRITICAL: Ensure base_quantity is correctly set for billing
         if (field === 'quantity') {
-          // When quantity is updated, set base_quantity to the same value
-          // This assumes quantity field represents what customer pays for
+          // Quantity is the billable quantity (what customer pays for)
           updatedItem.base_quantity = parseFloat(value) || 0;
+          updatedItem.quantity = parseFloat(value) || 0;
+        } else if (field === 'free_quantity') {
+          // Free quantity doesn't affect base_quantity (billing)
+          // Keep base_quantity as is - it's what customer pays for
+          updatedItem.free_quantity = parseFloat(value) || 0;
+          // Don't change base_quantity when free_quantity changes!
         }
         
         return updatedItem;
@@ -2288,9 +2293,9 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
         <DocumentFooter
           totalItems={invoice.items?.length || 0}
           totalAmount={parseFloat(invoice.totals?.net_amount || invoice.net_amount) || 0}
-          subtotalAmount={parseFloat(invoice.totals?.subtotal_amount || invoice.taxable_amount) || 0}
-          taxAmount={parseFloat(invoice.totals?.tax_amount || invoice.tax_amount) || 0}
-          roundOffAmount={parseFloat(invoice.totals?.round_off || invoice.round_off_amount) || 0}
+          subtotalAmount={parseFloat(invoice.totals?.taxable_amount || invoice.subtotal_amount) || 0}
+          taxAmount={parseFloat(invoice.totals?.total_gst || invoice.totals?.tax_amount || invoice.tax_amount) || 0}
+          roundOffAmount={parseFloat(invoice.totals?.round_off || invoice.round_off) || 0}
           grandTotal={parseFloat(invoice.totals?.final_amount || invoice.net_amount) || 0}
           discountAmount={parseFloat(invoice.totals?.total_discount || invoice.discount_amount) || 0}
           deliveryCharges={parseFloat(invoice.totals?.delivery_charges || invoice.delivery_charges) || 0}

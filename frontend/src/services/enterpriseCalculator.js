@@ -17,8 +17,9 @@ class EnterpriseCalculator {
     // Parse inputs once - CRITICAL: Use base_quantity for billing
     const rate = parseFloat(item.sale_price || item.rate || item.selling_price || item.unit_price) || 0;
     // CRITICAL: base_quantity is what customer pays for (excludes free items)
-    // Use quantity as base_quantity if base_quantity not explicitly set
-    const baseQuantity = parseFloat(item.base_quantity || item.quantity) || 0;
+    // base_quantity should ALWAYS be set by the UI
+    // If not set, use quantity as fallback (assumes quantity = billable qty)
+    const baseQuantity = parseFloat(item.base_quantity !== undefined ? item.base_quantity : item.quantity) || 0;
     const freeQuantity = parseFloat(item.free_quantity) || 0;
     const discountPercent = parseFloat(item.discount_percent || item.discount) || 0;
     const gstPercent = parseFloat(item.gst_percent || item.tax_rate || item.gst) || 12;
