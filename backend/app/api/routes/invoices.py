@@ -109,6 +109,8 @@ async def create_invoice(
     - discount_amount: decimal (defaults to 0)
     """
     try:
+        # Start a new transaction
+        db.rollback()  # Clear any failed transaction state
         logger.info(f"Creating invoice for customer {invoice_data.get('customer_id')}")
         
         # Step 1: Get valid branch_id and created_by
@@ -411,8 +413,11 @@ async def create_invoice(
             # Get batch_id if not provided (for inventory trigger)
             batch_id = item.get("batch_id")
             # Filter out invalid batch_id values like 'default_123' or empty strings
-            if batch_id and (isinstance(batch_id, str) and ('default' in batch_id.lower() or batch_id == '')):
+            if batch_id and (isinstance(batch_id, str) and ('default' in str(batch_id).lower() or batch_id == '')):
                 batch_id = None
+            # Convert batch_id to integer if it's a valid numeric string
+            elif batch_id and str(batch_id).isdigit():
+                batch_id = int(batch_id)
             # Get batch details including MRP
             batch_number = None
             mrp = item.get("mrp", 0)
@@ -438,17 +443,21 @@ async def create_invoice(
                     expiry_date = batch[4] or expiry_date
             else:
                 # Get batch details for provided batch_id
-                batch_result = db.execute(text("""
-                    SELECT batch_number, mrp_per_unit, manufacturing_date, expiry_date
-                    FROM inventory.batches
-                    WHERE batch_id = :batch_id
-                """), {"batch_id": batch_id})
-                batch = batch_result.fetchone()
-                if batch:
-                    batch_number = batch[0]
-                    mrp = float(batch[1]) if batch[1] else mrp
-                    manufacturing_date = batch[2]
-                    expiry_date = batch[3] or expiry_date
+                try:
+                    batch_result = db.execute(text("""
+                        SELECT batch_number, mrp_per_unit, manufacturing_date, expiry_date
+                        FROM inventory.batches
+                        WHERE batch_id = :batch_id
+                    """), {"batch_id": batch_id})
+                    batch = batch_result.fetchone()
+                    if batch:
+                        batch_number = batch[0]
+                        mrp = float(batch[1]) if batch[1] else mrp
+                        manufacturing_date = batch[2]
+                        expiry_date = batch[3] or expiry_date
+                except Exception as batch_error:
+                    logger.warning(f"Could not fetch batch {batch_id} details: {batch_error}")
+                    # Continue without batch details rather than failing the entire invoice
             
             # Calculate amounts - use base_quantity for billing (production logic)
             line_total = (base_quantity * unit_price) - discount_amt
