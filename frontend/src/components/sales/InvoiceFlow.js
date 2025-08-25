@@ -11,9 +11,8 @@ import { customerAPI, productAPI, invoiceAPI, ordersAPI, salesOrdersAPI, apiClie
 import { searchCache, smartSearch } from '../../utils/searchCache';
 // MIGRATED: Using enterprise API-only calculations
 // MIGRATED: Use new enterprise calculation architecture  
-import InvoiceCalculator from '../../services/InvoiceCalculator';
+import SimpleInvoiceCalculator from '../../services/SimpleInvoiceCalculator';
 // Removed debug imports - use enterprise calculator instead
-import { useInvoiceCalculation } from '../../hooks/useInvoiceCalculation';
 import InvoiceValidator from '../../services/invoiceValidator';
 import DataTransformer from '../../services/dataTransformer';
 import DateFormatter from '../../services/dateFormatter';
@@ -249,101 +248,38 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
   // Backend handles all calculations when invoice is created
   // Frontend only collects user inputs and displays results
 
-  // Calculate invoice totals using enterprise calculator
-  const calculateInvoiceTotals = async (items) => {
-    console.log('calculateInvoiceTotals called with:', items);
-    if (!items || items.length === 0) {
+  // SIMPLE calculation function - inspired by backend
+  const calculateInvoice = () => {
+    if (!invoice.items || invoice.items.length === 0) {
       setInvoice(prev => ({
         ...prev,
-        subtotal_amount: 0,
-        tax_amount: 0,
-        round_off: 0,
-        net_amount: 0,
-        items: []
+        totals: null,
+        net_amount: 0
       }));
       return;
     }
 
-    try {
-      // Clean items to ensure no corrupted values
-      const cleanItems = items.map(item => ({
-        ...item,
-        // Ensure base_quantity is what we charge for
-        base_quantity: parseFloat(item.base_quantity) || parseFloat(item.quantity) || 0,
-        quantity: parseFloat(item.quantity) || 0,
-        free_quantity: parseFloat(item.free_quantity) || 0,
-        rate: parseFloat(item.rate || item.sale_price) || 0,
-        discount_percent: parseFloat(item.discount_percent) || 0,
-        gst_percent: parseFloat(item.gst_percent || item.tax_rate) || 12
-      }));
-      
-      // Only pass necessary fields to avoid circular dependencies
-      const invoiceData = {
-        items: cleanItems,
-        customer_id: selectedCustomer?.customer_id,
-        delivery_charges: invoice.delivery_charges || 0,  // Include delivery charges in calculation
-        gst_type: invoice.gst_type || 'CGST/SGST',
-        discount_amount: invoice.discount_amount || 0
-      };
-      
-      console.log('Calling InvoiceCalculator with:', invoiceData);
+    // Just call the simple calculator
+    const result = SimpleInvoiceCalculator.calculate(
+      invoice.items,
+      invoice.delivery_charges || 0,
+      invoice.gst_type || 'CGST/SGST'
+    );
 
-      const result = await InvoiceCalculator.calculateSmart(invoiceData, { validateWithBackend: true });
-      
-      if (result.success && result.totals) {
-        // Just use the totals directly - no need for complex formatting
-        const formattedTotals = result.totals;
-        
-        console.log('Invoice calculation result:', {
-          totals: result.totals,
-          delivery_charges_in: invoice.delivery_charges,
-          delivery_charges_out: result.totals?.delivery_charges
-        });
-
-        // Update items with calculated values from calculator
-        const updatedItems = cleanItems.map((item, index) => {
-          const calculatedItem = result.items?.[index];
-          if (calculatedItem) {
-            return {
-              ...item,
-              calculated_total: calculatedItem.line_total,
-              line_total: calculatedItem.line_total,
-              tax_amount: calculatedItem.tax_amount || calculatedItem.gst_amount,
-              discount_amount: calculatedItem.discount_amount
-            };
-          }
-          return item;
-        });
-
-        setInvoice(prev => ({
-          ...prev,
-          items: updatedItems,
-          totals: formattedTotals,  // Store totals in a nested object
-          // Also set individual fields for backward compatibility
-          net_amount: formattedTotals.final_amount || formattedTotals.net_amount,
-          subtotal_amount: formattedTotals.taxable_amount,
-          tax_amount: formattedTotals.total_gst || formattedTotals.tax_amount,
-          round_off: formattedTotals.round_off,
-          calculatedLineItems: result.line_items
-        }));
-      } else {
-        console.error('Invoice calculation failed:', result.error);
-        // Fallback calculation if the enterprise calculator fails
-        const fallbackTotals = calculateFallbackTotals(items);
-        setInvoice(prev => ({
-          ...prev,
-          ...fallbackTotals
-        }));
-      }
-    } catch (error) {
-      console.error('Error calculating invoice totals:', error);
-      // Fallback calculation on error
-      const fallbackTotals = calculateFallbackTotals(items);
-      setInvoice(prev => ({
-        ...prev,
-        ...fallbackTotals
-      }));
-    }
+    // Update state with calculated values - DON'T update items to prevent infinite loop
+    setInvoice(prev => ({
+      ...prev,
+      // Don't update items here - they already have the input values
+      // items: result.items,  // REMOVED - this causes infinite loop
+      totals: result.totals, // Store totals object
+      // Set individual fields for components that use them
+      net_amount: result.finalAmount,
+      subtotal_amount: result.subtotal,
+      tax_amount: result.tax,
+      round_off: result.roundOff,
+      // Store calculated items separately if needed for display
+      calculatedItems: result.items
+    }));
   };
 
   // Fallback calculation method (frontend-only)
@@ -393,14 +329,10 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
     };
   };
 
-  // Calculate totals when items are added/removed or delivery charges change
+  // Calculate totals when items or delivery charges change
   React.useEffect(() => {
-    console.log('useEffect triggered - items:', invoice.items?.length, 'delivery:', invoice.delivery_charges);
-    if (invoice.items && invoice.items.length > 0) {
-      console.log('Calling calculateInvoiceTotals with items:', invoice.items);
-      calculateInvoiceTotals(invoice.items);
-    }
-  }, [invoice.items.length, invoice.delivery_charges]); // Recalculate when delivery charges change
+    calculateInvoice();
+  }, [invoice.items, invoice.delivery_charges]); // Now safe since we don't update items in calculateInvoice
 
   // Update item field with debounced calculation  
   const handleUpdateItem = (index, field, value) => {
@@ -425,33 +357,9 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
       return item;
     });
     
-    // INSTANT: Calculate locally immediately for instant UI feedback
-    try {
-      const instantResult = InvoiceCalculator.calculate({ 
-        items: updatedItems,
-        delivery_charges: invoice.delivery_charges || 0,  // Ensure delivery charges are included
-        gst_type: invoice.gst_type || 'CGST/SGST'
-      });
-      
-      // Merge calculated values back into items for immediate display
-      const itemsWithCalculations = instantResult.items || updatedItems;
-      
-      // Update UI instantly with local calculation
-      setInvoice(prev => ({
-        ...prev,
-        items: itemsWithCalculations,
-        totals: instantResult.totals,  // Store the totals object
-        // Don't spread totals at root level - causes confusion
-        net_amount: instantResult.totals.final_amount,
-        subtotal_amount: instantResult.totals.taxable_amount,
-        tax_amount: instantResult.totals.total_gst || instantResult.totals.tax_amount,
-        round_off: instantResult.totals.round_off,
-        calculatedLineItems: instantResult.items
-      }));
-    } catch (error) {
-      console.error('Instant calculation failed:', error);
-      setInvoice(prev => ({ ...prev, items: updatedItems }));
-    }
+    // Update items
+    setInvoice(prev => ({ ...prev, items: updatedItems }));
+    // Calculation will happen via useEffect
     
     // Backend validation removed - calculations are instant now
     // Backend validation only happens on save
@@ -459,34 +367,8 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
 
   const handleRemoveItem = (index) => {
     const updatedItems = invoice.items.filter((_, i) => i !== index);
-    
-    // INSTANT: Calculate locally for immediate feedback
-    try {
-      const instantResult = InvoiceCalculator.calculate({ 
-        items: updatedItems,
-        delivery_charges: invoice.delivery_charges || 0,  // Ensure delivery charges are included
-        gst_type: invoice.gst_type || 'CGST/SGST'
-      });
-      
-      // Merge calculated values back into remaining items
-      const itemsWithCalculations = instantResult.items || updatedItems;
-      
-      // Store both totals object and spread for backward compatibility
-      setInvoice(prev => ({
-        ...prev,
-        items: itemsWithCalculations,
-        totals: instantResult.totals,  // Store the totals object
-        // Don't spread totals at root level - causes confusion
-        net_amount: instantResult.totals.final_amount,
-        subtotal_amount: instantResult.totals.taxable_amount,
-        tax_amount: instantResult.totals.total_gst || instantResult.totals.tax_amount,
-        round_off: instantResult.totals.round_off,
-        calculatedLineItems: instantResult.items
-      }));
-    } catch (error) {
-      console.error('Instant calculation failed:', error);
-      setInvoice(prev => ({ ...prev, items: updatedItems }));
-    }
+    setInvoice(prev => ({ ...prev, items: updatedItems }));
+    // Calculation will happen via useEffect
     
     // Backend calculation for verification
     // Backend validation removed for real-time updates
@@ -642,35 +524,8 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
       
       const updatedItems = [...invoice.items, newItem];
       
-      // INSTANT: Calculate locally for immediate feedback
-      try {
-        const instantResult = InvoiceCalculator.calculate({ 
-          items: updatedItems,
-          delivery_charges: invoice.delivery_charges || 0,  // Ensure delivery charges are included
-          gst_type: invoice.gst_type || 'CGST/SGST'
-        });
-        
-        // Merge calculated values back into items
-        const itemsWithCalculations = instantResult.items || updatedItems;
-        
-        setInvoice(prev => ({
-          ...prev,
-          items: itemsWithCalculations,
-          totals: instantResult.totals,  // Store the totals object
-          // Don't spread totals at root level - causes confusion
-          net_amount: instantResult.totals.final_amount,
-          subtotal_amount: instantResult.totals.taxable_amount,
-          tax_amount: instantResult.totals.total_gst || instantResult.totals.tax_amount,
-          round_off: instantResult.totals.round_off,
-          calculatedLineItems: instantResult.items
-        }));
-      } catch (error) {
-        console.error('Instant calculation failed:', error);
-        setInvoice(prev => ({
-          ...prev,
-          items: updatedItems
-        }));
-      }
+      // Simply update items - calculation happens in useEffect
+      setInvoice(prev => ({ ...prev, items: updatedItems }));
       
       // Backend validation removed - instant local calculations only
     }
@@ -1678,7 +1533,7 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
         }));
         
         // Then calculate totals
-        calculateInvoiceTotals(transformedItems);
+        calculateInvoice();
       }, 50);
     }
     
@@ -2329,16 +2184,7 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
         </div>
 
         {/* Footer */}
-        {currentStep === 2 && console.log('Footer props:', {
-          subtotalAmount: invoice.totals?.taxable_amount || invoice.subtotal_amount,
-          taxAmount: invoice.totals?.total_gst || invoice.totals?.tax_amount || invoice.tax_amount,
-          deliveryCharges: invoice.totals?.delivery_charges || invoice.delivery_charges,
-          roundOffAmount: invoice.totals?.round_off || invoice.round_off,
-          grandTotal: invoice.totals?.final_amount || invoice.net_amount,
-          invoice_totals: invoice.totals,
-          invoice_delivery_charges: invoice.delivery_charges,
-          total_tax_available: invoice.totals?.total_tax
-        })}
+        {currentStep === 2 && (
         <DocumentFooter
           totalItems={invoice.items?.length || 0}
           totalAmount={parseFloat(invoice.totals?.net_amount || invoice.net_amount) || 0}
@@ -2358,6 +2204,7 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
           showActionButtons={true}
           saveLabel="Generate Invoice"
         />
+        )}
 
       </div>
       

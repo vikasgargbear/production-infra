@@ -320,28 +320,58 @@ async def create_invoice(
                 
                 if payment_amount > 0:
                     try:
-                        # Insert payment record
+                        # Get payment_method_id for the given payment method
+                        # Default to 1 (cash) if not found
+                        method_result = db.execute(text("""
+                            SELECT payment_method_id FROM financial.payment_methods
+                            WHERE org_id = :org_id 
+                            AND LOWER(method_name) = LOWER(:method)
+                            LIMIT 1
+                        """), {"org_id": org_id, "method": payment_method})
+                        method = method_result.fetchone()
+                        payment_method_id = method[0] if method else 1  # Default to cash
+                        
+                        # Generate payment number
+                        payment_num_result = db.execute(text("""
+                            SELECT COALESCE(MAX(CAST(SUBSTRING(payment_number FROM '[0-9]+') AS INTEGER)), 0) + 1
+                            FROM financial.payments
+                            WHERE org_id = :org_id
+                        """), {"org_id": org_id})
+                        payment_num = payment_num_result.scalar() or 1
+                        payment_number = f"PAY-{payment_num:06d}"
+                        
+                        # Get customer name
+                        cust_name_result = db.execute(text("""
+                            SELECT customer_name FROM parties.customers
+                            WHERE customer_id = :customer_id
+                        """), {"customer_id": invoice_data["customer_id"]})
+                        cust_name = cust_name_result.fetchone()
+                        party_name = cust_name[0] if cust_name else f"Customer {invoice_data['customer_id']}"
+                        
+                        # Insert payment record with proper columns
                         db.execute(text("""
                             INSERT INTO financial.payments (
-                                org_id, payment_type, payment_date, 
-                                reference_type, reference_id, reference_number,
-                                party_type, party_id,
-                                payment_method, amount,
+                                org_id, branch_id, payment_number, payment_type, payment_date, 
+                                party_type, party_id, party_name,
+                                payment_method_id, payment_amount,
+                                reference_number, payment_status,
                                 created_by, created_at
                             ) VALUES (
-                                :org_id, 'receipt', CURRENT_DATE,
-                                'invoice', :invoice_id, :invoice_number,
-                                'customer', :customer_id,
-                                :payment_method, :amount,
+                                :org_id, :branch_id, :payment_number, 'receipt', CURRENT_DATE,
+                                'customer', :customer_id, :party_name,
+                                :payment_method_id, :amount,
+                                :invoice_number, 'processed',
                                 :created_by, CURRENT_TIMESTAMP
                             )
                         """), {
                             "org_id": org_id,
-                            "invoice_id": invoice_id,
-                            "invoice_number": invoice_number,
+                            "branch_id": branch_id,
+                            "payment_number": payment_number,
                             "customer_id": invoice_data["customer_id"],
-                            "payment_method": payment_method,
+                            "party_name": party_name,
+                            "payment_method_id": payment_method_id,
                             "amount": payment_amount,
+                            "invoice_number": invoice_number,
                             "created_by": created_by
                         })
                         total_paid += payment_amount
