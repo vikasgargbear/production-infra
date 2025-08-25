@@ -405,7 +405,8 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
     try {
       const instantResult = InvoiceCalculator.calculate({ 
         ...invoice, 
-        items: updatedItems 
+        items: updatedItems,
+        delivery_charges: invoice.delivery_charges || 0  // Ensure delivery charges are included
       });
       
       // Merge calculated values back into items for immediate display
@@ -435,7 +436,8 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
     try {
       const instantResult = InvoiceCalculator.calculate({ 
         ...invoice, 
-        items: updatedItems 
+        items: updatedItems,
+        delivery_charges: invoice.delivery_charges || 0  // Ensure delivery charges are included
       });
       
       // Merge calculated values back into remaining items
@@ -612,7 +614,8 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
       try {
         const instantResult = InvoiceCalculator.calculate({ 
           ...invoice, 
-          items: updatedItems 
+          items: updatedItems,
+          delivery_charges: invoice.delivery_charges || 0  // Ensure delivery charges are included
         });
         
         // Merge calculated values back into items
@@ -2290,6 +2293,11 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
         </div>
 
         {/* Footer */}
+        {console.log('Footer values:', {
+          subtotalAmount: invoice.totals?.taxable_amount || invoice.subtotal_amount,
+          grandTotal: invoice.totals?.final_amount || invoice.net_amount,
+          totals: invoice.totals
+        })}
         <DocumentFooter
           totalItems={invoice.items?.length || 0}
           totalAmount={parseFloat(invoice.totals?.net_amount || invoice.net_amount) || 0}
