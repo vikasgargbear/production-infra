@@ -401,12 +401,11 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
       const itemsWithCalculations = instantResult.items || updatedItems;
       
       // Update UI instantly with local calculation
-      // Just use the totals directly - no need for complex formatting
-      const formattedTotals = instantResult.totals;
       setInvoice(prev => ({
         ...prev,
-        items: itemsWithCalculations, // Use items with calculations
-        ...formattedTotals,
+        items: itemsWithCalculations,
+        totals: instantResult.totals,  // Store the totals object
+        ...instantResult.totals,        // Also spread for direct access
         calculatedLineItems: instantResult.items
       }));
     } catch (error) {
@@ -431,12 +430,12 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
       // Merge calculated values back into remaining items
       const itemsWithCalculations = instantResult.items || updatedItems;
       
-      // Just use the totals directly - no need for complex formatting
-      const formattedTotals = instantResult.totals;
+      // Store both totals object and spread for backward compatibility
       setInvoice(prev => ({
         ...prev,
         items: itemsWithCalculations,
-        ...formattedTotals,
+        totals: instantResult.totals,  // Store the totals object
+        ...instantResult.totals,        // Also spread for direct access
         calculatedLineItems: instantResult.items
       }));
     } catch (error) {
@@ -608,12 +607,11 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
         // Merge calculated values back into items
         const itemsWithCalculations = instantResult.items || updatedItems;
         
-        // Just use the totals directly - no need for complex formatting
-        const formattedTotals = instantResult.totals;
         setInvoice(prev => ({
           ...prev,
           items: itemsWithCalculations,
-          ...formattedTotals,
+          totals: instantResult.totals,  // Store the totals object
+          ...instantResult.totals,        // Also spread for direct access
           calculatedLineItems: instantResult.items
         }));
       } catch (error) {
@@ -1927,13 +1925,13 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
             <h3 className="text-xs font-semibold text-gray-600 uppercase tracking-wider mb-1.5 px-1">PAYMENT METHOD</h3>
             <div className="bg-white rounded-lg border border-gray-200 p-3">
               <SplitPayment
-                totalAmount={parseFloat(invoice.net_amount) || 0}
+                totalAmount={parseFloat(invoice.totals?.final_amount || invoice.net_amount) || 0}
                 payments={[
                   {
                     id: '1',
                     method: invoice.payment_mode || 'cash',
                     amount: invoice.payment_mode === 'cash' ? 
-                      parseFloat(invoice.net_amount) || 0 : 0
+                      parseFloat(invoice.totals?.final_amount || invoice.net_amount) || 0 : 0
                   }
                 ]}
                 onChange={(payments, paymentInfo) => {
@@ -2270,11 +2268,12 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
         {/* Footer */}
         <DocumentFooter
           totalItems={invoice.items?.length || 0}
-          totalAmount={parseFloat(invoice.net_amount) || 0}
-          subtotalAmount={parseFloat(invoice.taxable_amount) || 0}
-          taxAmount={parseFloat(invoice.tax_amount) || 0}
-          roundOffAmount={parseFloat(invoice.round_off_amount) || 0}
-          grandTotal={parseFloat(invoice.net_amount) || 0}
+          totalAmount={parseFloat(invoice.totals?.net_amount || invoice.net_amount) || 0}
+          subtotalAmount={parseFloat(invoice.totals?.taxable_amount || invoice.taxable_amount) || 0}
+          taxAmount={parseFloat(invoice.totals?.tax_amount || invoice.tax_amount) || 0}
+          roundOffAmount={parseFloat(invoice.totals?.round_off || invoice.round_off_amount) || 0}
+          grandTotal={parseFloat(invoice.totals?.final_amount || invoice.net_amount) || 0}
+          discountAmount={parseFloat(invoice.totals?.total_discount || invoice.discount_amount) || 0}
           onSave={handleSaveInvoice}
           onPrint={handlePrint}
           onDownload={handlePDFDownload}
