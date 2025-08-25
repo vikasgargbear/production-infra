@@ -21,10 +21,16 @@ const apiClient: AxiosInstance = axios.create({
 // Request interceptor for auth token
 apiClient.interceptors.request.use(
   (config) => {
+    // Check if this is an auth endpoint that doesn't need token
+    const isAuthEndpoint = config.url?.includes('/auth/') || 
+                          config.url?.includes('/login') || 
+                          config.url?.includes('/register') ||
+                          config.url?.includes('/organizations/check') ||
+                          config.url?.includes('/organizations/create');
+    
     // Get auth token - use consistent key
     const token = localStorage.getItem('authToken');
     
-    // Check if token exists and is not expired
     if (token) {
       try {
         // Decode token to check expiry (without verification)
@@ -33,31 +39,47 @@ apiClient.interceptors.request.use(
         
         if (Date.now() < expiry) {
           config.headers.Authorization = `Bearer ${token}`;
-        } else {
-          // Token expired - remove and redirect to login
+          // Also add org_id from token to header (temporary)
+          if (payload.org_id) {
+            config.headers['X-Org-Id'] = payload.org_id;
+          }
+        } else if (!isAuthEndpoint) {
+          // Token expired - only redirect if not an auth endpoint
           localStorage.removeItem('authToken');
-          window.location.href = '/login?reason=token_expired';
+          // Prevent redirect loop
+          if (!window.location.pathname.includes('/login')) {
+            window.location.href = '/login?reason=token_expired';
+          }
           return Promise.reject(new Error('Token expired'));
         }
       } catch (e) {
-        // Invalid token format - remove and redirect
+        // Invalid token format
         localStorage.removeItem('authToken');
-        window.location.href = '/login?reason=invalid_token';
+        if (!isAuthEndpoint && !window.location.pathname.includes('/login')) {
+          window.location.href = '/login?reason=invalid_token';
+        }
         return Promise.reject(new Error('Invalid token'));
       }
-    } else {
-      // No token - must be logged in for API calls
-      // Allow only auth endpoints without token
-      const isAuthEndpoint = config.url?.includes('/auth/') || 
-                             config.url?.includes('/login') || 
-                             config.url?.includes('/register');
-      
-      if (!isAuthEndpoint) {
+    } else if (!isAuthEndpoint) {
+      // No token and not an auth endpoint
+      // Only redirect if we're not already on the login page
+      if (!window.location.pathname.includes('/login') && 
+          !window.location.pathname.includes('/register') &&
+          !window.location.pathname.includes('/setup')) {
         window.location.href = '/login?reason=not_authenticated';
         return Promise.reject(new Error('Authentication required'));
       }
     }
     
+    // Add X-Org-Id from storage as fallback (temporary)
+    if (!config.headers['X-Org-Id']) {
+      const orgId = sessionStorage.getItem('pharma_org_id') || localStorage.getItem('pharma_org_id');
+      if (orgId) {
+        config.headers['X-Org-Id'] = orgId;
+      }
+    }
+    
+    // For auth endpoints or valid token, continue
     return config;
   },
   (error) => {
@@ -74,7 +96,12 @@ apiClient.interceptors.response.use(
       // Handle unauthorized - clear token and redirect to login
       localStorage.removeItem('authToken');
       sessionStorage.clear(); // Clear any session data
-      window.location.href = '/login?reason=session_expired';
+      // Only redirect if not already on login/register/setup pages
+      if (!window.location.pathname.includes('/login') && 
+          !window.location.pathname.includes('/register') &&
+          !window.location.pathname.includes('/setup')) {
+        window.location.href = '/login?reason=session_expired';
+      }
     } else if (error.response?.status === 404) {
       // For 404 errors, return a rejected promise with a custom flag
       // This prevents uncaught errors while allowing handlers to detect 404s
