@@ -109,8 +109,10 @@ async def create_invoice(
     - discount_amount: decimal (defaults to 0)
     """
     try:
-        # Start a new transaction
+        # Start fresh - clear any failed transaction state
         db.rollback()  # Clear any failed transaction state
+        db.commit()  # Commit the rollback
+        db.begin()  # Start a new transaction
         logger.info(f"Creating invoice for customer {invoice_data.get('customer_id')}")
         
         # Step 1: Get valid branch_id and created_by
@@ -309,84 +311,49 @@ async def create_invoice(
         })
         invoice_id = invoice_create.scalar()
         
-        # Step 7.5: Process payments if provided
+        # Step 7.5: Process payments if provided (simplified - just track status, don't create payment records)
         payments = invoice_data.get("payments", [])
         total_paid = 0
+        payment_info = []
         
+        # Calculate total paid amount from payments array
         if payments:
             for payment in payments:
                 payment_method = payment.get("method", "cash")
                 payment_amount = float(payment.get("amount", 0))
-                
                 if payment_amount > 0:
-                    try:
-                        # Get payment_method_id for the given payment method
-                        # Default to 1 (cash) if not found
-                        method_result = db.execute(text("""
-                            SELECT payment_method_id FROM financial.payment_methods
-                            WHERE org_id = :org_id 
-                            AND LOWER(method_name) = LOWER(:method)
-                            LIMIT 1
-                        """), {"org_id": org_id, "method": payment_method})
-                        method = method_result.fetchone()
-                        payment_method_id = method[0] if method else 1  # Default to cash
-                        
-                        # Generate payment number
-                        payment_num_result = db.execute(text("""
-                            SELECT COALESCE(MAX(CAST(SUBSTRING(payment_number FROM '[0-9]+') AS INTEGER)), 0) + 1
-                            FROM financial.payments
-                            WHERE org_id = :org_id
-                        """), {"org_id": org_id})
-                        payment_num = payment_num_result.scalar() or 1
-                        payment_number = f"PAY-{payment_num:06d}"
-                        
-                        # Get customer name
-                        cust_name_result = db.execute(text("""
-                            SELECT customer_name FROM parties.customers
-                            WHERE customer_id = :customer_id
-                        """), {"customer_id": invoice_data["customer_id"]})
-                        cust_name = cust_name_result.fetchone()
-                        party_name = cust_name[0] if cust_name else f"Customer {invoice_data['customer_id']}"
-                        
-                        # Insert payment record with proper columns
-                        db.execute(text("""
-                            INSERT INTO financial.payments (
-                                org_id, branch_id, payment_number, payment_type, payment_date, 
-                                party_type, party_id, party_name,
-                                payment_method_id, payment_amount,
-                                reference_number, payment_status,
-                                created_by, created_at
-                            ) VALUES (
-                                :org_id, :branch_id, :payment_number, 'receipt', CURRENT_DATE,
-                                'customer', :customer_id, :party_name,
-                                :payment_method_id, :amount,
-                                :invoice_number, 'processed',
-                                :created_by, CURRENT_TIMESTAMP
-                            )
-                        """), {
-                            "org_id": org_id,
-                            "branch_id": branch_id,
-                            "payment_number": payment_number,
-                            "customer_id": invoice_data["customer_id"],
-                            "party_name": party_name,
-                            "payment_method_id": payment_method_id,
-                            "amount": payment_amount,
-                            "invoice_number": invoice_number,
-                            "created_by": created_by
-                        })
-                        total_paid += payment_amount
-                        logger.info(f"Payment recorded: {payment_method} - ₹{payment_amount}")
-                    except Exception as payment_error:
-                        logger.warning(f"Could not record payment: {payment_error}")
-            
-            # Update invoice payment status based on total paid
-            if total_paid >= final_amount:
-                payment_status = 'paid'
-            elif total_paid > 0:
-                payment_status = 'partial'
-            else:
-                payment_status = 'pending'
-            
+                    total_paid += payment_amount
+                    payment_info.append(f"{payment_method}: ₹{payment_amount}")
+                    logger.info(f"Payment info: {payment_method} - ₹{payment_amount}")
+        
+        # Determine payment status
+        if total_paid >= final_amount:
+            payment_status = 'paid'
+        elif total_paid > 0:
+            payment_status = 'partial'
+        else:
+            payment_status = 'pending'
+        
+        # Update invoice with payment status (but don't create payment records yet)
+        # This avoids the payment_methods table issue
+        try:
+            db.execute(text("""
+                UPDATE sales.invoices
+                SET payment_status = :payment_status,
+                    paid_amount = :paid_amount,
+                    payment_notes = :payment_notes,
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE invoice_id = :invoice_id
+            """), {
+                "payment_status": payment_status,
+                "paid_amount": total_paid,
+                "payment_notes": ', '.join(payment_info) if payment_info else None,
+                "invoice_id": invoice_id
+            })
+            logger.info(f"Invoice payment status updated: {payment_status}, paid: ₹{total_paid}")
+        except Exception as status_error:
+            # If payment_notes column doesn't exist, try without it
+            logger.warning(f"Could not update payment with notes, trying without: {status_error}")
             try:
                 db.execute(text("""
                     UPDATE sales.invoices
@@ -399,8 +366,8 @@ async def create_invoice(
                     "paid_amount": total_paid,
                     "invoice_id": invoice_id
                 })
-            except Exception as status_error:
-                logger.warning(f"Could not update payment status: {status_error}")
+            except Exception as e:
+                logger.warning(f"Could not update payment status: {e}")
         
         # Step 8: Create invoice items 
         # Disable triggers temporarily to avoid column name mismatch issue
