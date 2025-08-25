@@ -24,15 +24,6 @@ class EnterpriseCalculator {
     const discountPercent = parseFloat(item.discount_percent || item.discount) || 0;
     const gstPercent = parseFloat(item.gst_percent || item.tax_rate || item.gst) || 12;
     
-    console.log('calculateItem input:', {
-      product_name: item.product_name,
-      rate,
-      base_quantity: item.base_quantity,
-      quantity: item.quantity,
-      baseQuantity,
-      freeQuantity
-    });
-    
     // PRODUCTION LOGIC: Use base_quantity ONLY for billing calculations
     // Free items are truly FREE and don't affect pricing
     const subtotal = rate * baseQuantity;

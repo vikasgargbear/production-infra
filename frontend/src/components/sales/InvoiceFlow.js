@@ -251,6 +251,7 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
 
   // Calculate invoice totals using enterprise calculator
   const calculateInvoiceTotals = async (items) => {
+    console.log('calculateInvoiceTotals called with:', items);
     if (!items || items.length === 0) {
       setInvoice(prev => ({
         ...prev,
@@ -272,6 +273,8 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
         gst_type: invoice.gst_type || 'CGST/SGST',
         discount_amount: invoice.discount_amount || 0
       };
+      
+      console.log('Calling InvoiceCalculator with:', invoiceData);
 
       const result = await InvoiceCalculator.calculateSmart(invoiceData, { validateWithBackend: true });
       
@@ -379,7 +382,9 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
 
   // Calculate totals when items are added/removed or delivery charges change
   React.useEffect(() => {
+    console.log('useEffect triggered - items:', invoice.items?.length, 'delivery:', invoice.delivery_charges);
     if (invoice.items && invoice.items.length > 0) {
+      console.log('Calling calculateInvoiceTotals with items:', invoice.items);
       calculateInvoiceTotals(invoice.items);
     }
   }, [invoice.items.length, invoice.delivery_charges]); // Recalculate when delivery charges change
@@ -423,7 +428,11 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
         ...prev,
         items: itemsWithCalculations,
         totals: instantResult.totals,  // Store the totals object
-        ...instantResult.totals,        // Also spread for direct access
+        // Don't spread totals at root level - causes confusion
+        net_amount: instantResult.totals.final_amount,
+        subtotal_amount: instantResult.totals.taxable_amount,
+        tax_amount: instantResult.totals.total_gst || instantResult.totals.tax_amount,
+        round_off: instantResult.totals.round_off,
         calculatedLineItems: instantResult.items
       }));
     } catch (error) {
@@ -454,7 +463,11 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
         ...prev,
         items: itemsWithCalculations,
         totals: instantResult.totals,  // Store the totals object
-        ...instantResult.totals,        // Also spread for direct access
+        // Don't spread totals at root level - causes confusion
+        net_amount: instantResult.totals.final_amount,
+        subtotal_amount: instantResult.totals.taxable_amount,
+        tax_amount: instantResult.totals.total_gst || instantResult.totals.tax_amount,
+        round_off: instantResult.totals.round_off,
         calculatedLineItems: instantResult.items
       }));
     } catch (error) {
@@ -631,7 +644,11 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
           ...prev,
           items: itemsWithCalculations,
           totals: instantResult.totals,  // Store the totals object
-          ...instantResult.totals,        // Also spread for direct access
+          // Don't spread totals at root level - causes confusion
+          net_amount: instantResult.totals.final_amount,
+          subtotal_amount: instantResult.totals.taxable_amount,
+          tax_amount: instantResult.totals.total_gst || instantResult.totals.tax_amount,
+          round_off: instantResult.totals.round_off,
           calculatedLineItems: instantResult.items
         }));
       } catch (error) {
