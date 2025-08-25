@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Calculator, X, IndianRupee, Percent, Info, Copy, Check } from 'lucide-react';
 // MIGRATED: Using enterprise API-only calculations
-import InvoiceCalculatorEnterprise from '../../../services/invoiceCalculatorEnterprise';
+import InvoiceCalculator from '../../../services/InvoiceCalculator';
 import { INVOICE_CONFIG } from '../../../config/invoice.config';
 import { APP_CONFIG, formatCurrency } from '../../../config/app.config';
 import { cx } from '../../invoice/styles/invoiceStyles';

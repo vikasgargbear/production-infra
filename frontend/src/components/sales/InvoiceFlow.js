@@ -2269,7 +2269,7 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
         <DocumentFooter
           totalItems={invoice.items?.length || 0}
           totalAmount={parseFloat(invoice.totals?.net_amount || invoice.net_amount) || 0}
-          subtotalAmount={parseFloat(invoice.totals?.taxable_amount || invoice.taxable_amount) || 0}
+          subtotalAmount={parseFloat(invoice.totals?.subtotal_amount || invoice.taxable_amount) || 0}
           taxAmount={parseFloat(invoice.totals?.tax_amount || invoice.tax_amount) || 0}
           roundOffAmount={parseFloat(invoice.totals?.round_off || invoice.round_off_amount) || 0}
           grandTotal={parseFloat(invoice.totals?.final_amount || invoice.net_amount) || 0}

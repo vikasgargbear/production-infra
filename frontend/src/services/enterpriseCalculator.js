@@ -148,7 +148,7 @@ class EnterpriseCalculator {
     return this.calculateTotals(invoiceData.items || [], {
       gst_type: invoiceData.gst_type,
       delivery_charges: invoiceData.delivery_charges,
-      additional_discount: invoiceData.discount_amount
+      additional_discount: 0  // Don't apply header discount - items already have discounts
     });
   }
   
