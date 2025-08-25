@@ -264,11 +264,13 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
     }
 
     try {
+      // Only pass necessary fields to avoid circular dependencies
       const invoiceData = {
-        ...invoice,
         items,
         customer_id: selectedCustomer?.customer_id,
-        delivery_charges: invoice.delivery_charges || 0  // Include delivery charges in calculation
+        delivery_charges: invoice.delivery_charges || 0,  // Include delivery charges in calculation
+        gst_type: invoice.gst_type || 'CGST/SGST',
+        discount_amount: invoice.discount_amount || 0
       };
 
       const result = await InvoiceCalculator.calculateSmart(invoiceData, { validateWithBackend: true });
@@ -404,9 +406,9 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
     // INSTANT: Calculate locally immediately for instant UI feedback
     try {
       const instantResult = InvoiceCalculator.calculate({ 
-        ...invoice, 
         items: updatedItems,
-        delivery_charges: invoice.delivery_charges || 0  // Ensure delivery charges are included
+        delivery_charges: invoice.delivery_charges || 0,  // Ensure delivery charges are included
+        gst_type: invoice.gst_type || 'CGST/SGST'
       });
       
       // Merge calculated values back into items for immediate display
@@ -435,9 +437,9 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
     // INSTANT: Calculate locally for immediate feedback
     try {
       const instantResult = InvoiceCalculator.calculate({ 
-        ...invoice, 
         items: updatedItems,
-        delivery_charges: invoice.delivery_charges || 0  // Ensure delivery charges are included
+        delivery_charges: invoice.delivery_charges || 0,  // Ensure delivery charges are included
+        gst_type: invoice.gst_type || 'CGST/SGST'
       });
       
       // Merge calculated values back into remaining items
@@ -613,9 +615,9 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
       // INSTANT: Calculate locally for immediate feedback
       try {
         const instantResult = InvoiceCalculator.calculate({ 
-          ...invoice, 
           items: updatedItems,
-          delivery_charges: invoice.delivery_charges || 0  // Ensure delivery charges are included
+          delivery_charges: invoice.delivery_charges || 0,  // Ensure delivery charges are included
+          gst_type: invoice.gst_type || 'CGST/SGST'
         });
         
         // Merge calculated values back into items
@@ -2293,11 +2295,6 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
         </div>
 
         {/* Footer */}
-        {console.log('Footer values:', {
-          subtotalAmount: invoice.totals?.taxable_amount || invoice.subtotal_amount,
-          grandTotal: invoice.totals?.final_amount || invoice.net_amount,
-          totals: invoice.totals
-        })}
         <DocumentFooter
           totalItems={invoice.items?.length || 0}
           totalAmount={parseFloat(invoice.totals?.net_amount || invoice.net_amount) || 0}
