@@ -292,26 +292,26 @@ const ProductCreationModal = ({
       console.log('Pack Config state:', packConfig);
       console.log('Pack fields being sent:');
       console.log('  pack_input:', productData.pack_input);
-      console.log('  pack_quantity:', productData.pack_quantity);
-      console.log('  pack_multiplier:', productData.pack_multiplier);
-      console.log('  pack_unit_type:', productData.pack_unit_type);
+      console.log('  units_per_pack:', packConfig.qty_per_strip);
+      console.log('  packages_per_box (strips_per_box):', packConfig.strips_per_box);
       console.log('Sending product data to API:', productData);
-      console.log('Products API:', productsApi);
       
       // Ensure pack fields are properly typed before sending
       const apiData = {
         ...productData,
-        // Make sure ALL pack fields are included
+        // Make sure ALL pack fields are included with correct mapping
         pack_input: productData.pack_input,
+        units_per_pack: packConfig.qty_per_strip ? parseInt(packConfig.qty_per_strip) : null,
+        packages_per_box: packConfig.strips_per_box ? parseInt(packConfig.strips_per_box) : null,
         pack_quantity: productData.pack_quantity ? parseInt(productData.pack_quantity) : null,
         pack_multiplier: productData.pack_multiplier ? parseInt(productData.pack_multiplier) : null,
         pack_unit_type: productData.pack_unit_type,
         unit_count: productData.unit_count ? parseInt(productData.unit_count) : null,
-        unit_measurement: productData.unit_measurement,
-        packages_per_box: productData.packages_per_box ? parseInt(productData.packages_per_box) : null
+        unit_measurement: productData.unit_measurement
       };
       
-      const productResponse = await productAPI.create(productData);
+      console.log('Final API data being sent:', apiData);
+      const productResponse = await productAPI.create(apiData);
       console.log('Product creation response:', productResponse);
       
       // API returns the product directly, not wrapped in data

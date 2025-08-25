@@ -19,7 +19,12 @@ class DataTransformer {
       sale_price: parseFloat(product.sale_price || product.selling_price || product.rate || product.mrp || 0),
       manufacturer: product.manufacturer || product.company || '',
       category: product.category || '',
-      quantity_available: product.quantity_available || product.quantity || product.stock || 0
+      quantity_available: product.quantity_available || product.quantity || product.stock || 0,
+      // Pack information
+      packages_per_box: product.packages_per_box || null,
+      units_per_pack: product.units_per_pack || null,
+      pack_type: product.pack_type || null,
+      pack_size: product.pack_size || null
     };
 
     switch (context) {

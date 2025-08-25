@@ -98,8 +98,9 @@ async def get_products(
                 COALESCE(ba.avg_cost_price, 0) as cost_price,
                 COALESCE(ba.avg_mrp, 0) as mrp,
                 COALESCE(ba.batch_count, 0) as batch_count,
-                -- Batch-level pack and category data
-                bd.category_name,
+                -- Category name from product_categories table
+                pc.category_name,
+                -- Batch-level pack data
                 bd.pack_type,
                 bd.pack_size,
                 bd.pack_uom,
@@ -110,6 +111,7 @@ async def get_products(
             FROM inventory.products p
             LEFT JOIN batch_aggregates ba ON p.product_id = ba.product_id
             LEFT JOIN batch_details bd ON p.product_id = bd.product_id
+            LEFT JOIN inventory.product_categories pc ON p.category_id = pc.category_id
             WHERE 1=1
         """
         

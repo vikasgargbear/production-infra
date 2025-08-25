@@ -91,7 +91,7 @@ class OfflineCalculator {
     
     // Final totals
     const netAmount = taxableAmount + totalGst + deliveryCharges - additionalDiscount;
-    const roundOff = Math.round(netAmount) - netAmount;
+    const roundOff = parseFloat((Math.round(netAmount) - netAmount).toFixed(2));
     const finalAmount = Math.round(netAmount);
     
     return {

@@ -12,7 +12,6 @@ import { searchCache, smartSearch } from '../../utils/searchCache';
 // MIGRATED: Using enterprise API-only calculations
 // MIGRATED: Use new enterprise calculation architecture  
 import InvoiceCalculatorEnterprise from '../../services/invoiceCalculatorEnterprise';
-import EnterpriseInvoiceCalculator from '../../services/enterpriseInvoiceCalculator';
 import { useInvoiceCalculation } from '../../hooks/useInvoiceCalculation';
 import InvoiceValidator from '../../services/invoiceValidator';
 import DataTransformer from '../../services/dataTransformer';
@@ -337,15 +336,26 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
       totalTax += taxAmount;
     });
 
-    const grossTotal = subtotal + totalTax;
-    const roundOff = Math.round(grossTotal) - grossTotal;
-    const netAmount = grossTotal + roundOff;
+    // Include delivery charges and invoice discount
+    const deliveryCharges = parseFloat(invoice.delivery_charges) || 0;
+    const invoiceDiscount = parseFloat(invoice.discount_amount) || 0;
+    
+    // Calculate pre-round total
+    const preRoundTotal = subtotal + totalTax + deliveryCharges - invoiceDiscount;
+    const finalAmount = Math.round(preRoundTotal);
+    const roundOff = parseFloat((finalAmount - preRoundTotal).toFixed(2));
+
+    console.log('Fallback - Taxable:', subtotal, 'Tax:', totalTax, 'PreRound:', preRoundTotal, 'Final:', finalAmount, 'Round:', roundOff);
 
     return {
       subtotal_amount: subtotal,
+      taxable_amount: subtotal,
       tax_amount: totalTax,
-      round_off: roundOff,
-      net_amount: netAmount
+      delivery_charges: deliveryCharges,
+      discount_amount: invoiceDiscount,
+      invoice_discount: invoiceDiscount,
+      round_off: roundOff
+      // Don't set net_amount or final_amount - let components calculate them
     };
   };
 
@@ -603,6 +613,12 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
         free_quantity: 0,
         gst_percent: product.gst_percent || 12,
         tax_rate: product.gst_percent || 12,
+        // Pack information
+        packages_per_box: product.packages_per_box || null,
+        units_per_pack: product.units_per_pack || null,
+        pack_type: product.pack_type || null,
+        pack_size: product.pack_size || null,
+        category: product.category || '',
         available_quantity: product.available_quantity || product.quantity_available || 0
       };
       
@@ -1470,7 +1486,7 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
     const invoiceDiscount = parseFloat(invoice.discount_amount) || 0;
     const taxableAmount = subtotal - invoiceDiscount;
     const totalWithTax = taxableAmount + totalTax + deliveryCharges;
-    const roundOff = Math.round(totalWithTax) - totalWithTax;
+    const roundOff = parseFloat((Math.round(totalWithTax) - totalWithTax).toFixed(2));
     const totalAmount = Math.round(totalWithTax);
 
     // Debug logging
@@ -1953,12 +1969,23 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
             <h3 className="text-xs font-semibold text-gray-600 uppercase tracking-wider mb-1.5 px-1">PAYMENT METHOD</h3>
             <div className="bg-white rounded-lg border border-gray-200 p-3">
               <SplitPayment
-                totalAmount={invoice.net_amount || 0}
+                totalAmount={
+                  (invoice.subtotal_amount || invoice.taxable_amount || 0) + 
+                  (invoice.tax_amount || 0) + 
+                  (invoice.round_off || 0) + 
+                  (invoice.delivery_charges || 0) - 
+                  (invoice.invoice_discount || 0)
+                }
                 payments={[
                   {
                     id: '1',
                     method: invoice.payment_mode || 'cash',
-                    amount: invoice.payment_mode === 'cash' ? (invoice.net_amount || 0) : 0
+                    amount: invoice.payment_mode === 'cash' ? 
+                      ((invoice.subtotal_amount || invoice.taxable_amount || 0) + 
+                       (invoice.tax_amount || 0) + 
+                       (invoice.round_off || 0) + 
+                       (invoice.delivery_charges || 0) - 
+                       (invoice.invoice_discount || 0)) : 0
                   }
                 ]}
                 onChange={(payments, paymentInfo) => {
@@ -2296,10 +2323,10 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
         <DocumentFooter
           totalItems={invoice.items.length}
           totalAmount={invoice.net_amount}
-          subtotalAmount={invoice.subtotal_amount}
-          taxAmount={invoice.tax_amount}
-          roundOffAmount={invoice.round_off}
-          grandTotal={invoice.net_amount}
+          subtotalAmount={invoice.subtotal_amount || invoice.taxable_amount || 0}
+          taxAmount={invoice.tax_amount || 0}
+          roundOffAmount={invoice.round_off || 0}
+          grandTotal={(invoice.subtotal_amount || invoice.taxable_amount || 0) + (invoice.tax_amount || 0) + (invoice.round_off || 0)}
           onSave={handleSaveInvoice}
           onPrint={handlePrint}
           onDownload={handlePDFDownload}

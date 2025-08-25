@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Plus, Search, Edit, Trash2, ShoppingCart, Loader2, FileText, Download } from 'lucide-react';
 import api from '../services/api';
-import invoiceService from '../services/invoiceService';
+import InvoiceApiService from '../services/invoiceApiService';
 import { downloadInvoicePDF } from '../utils/invoicePdfGenerator';
 
 // Type definitions
@@ -262,7 +262,7 @@ const Orders: React.FC = () => {
     const orderId = order.order_id;
     
     // Check if order is eligible
-    if (!invoiceService.isOrderEligibleForInvoice(order)) {
+    if (order.status !== 'confirmed' && order.status !== 'delivered') {
       setError('Order must be confirmed before generating invoice');
       return;
     }
@@ -272,7 +272,7 @@ const Orders: React.FC = () => {
     
     try {
       // Generate invoice and get details
-      const invoiceDetails = await invoiceService.generateInvoiceForOrder(orderId);
+      const invoiceDetails = await InvoiceApiService.generateFromOrder(orderId);
       
       // Store invoice info
       setOrderInvoices(prev => ({
@@ -651,7 +651,7 @@ const Orders: React.FC = () => {
                             >
                               <Edit className="h-5 w-5" />
                             </button>
-                            {invoiceService.isOrderEligibleForInvoice(order) && (
+                            {(order.status === 'confirmed' || order.status === 'delivered') && (
                               <button
                                 onClick={() => handleGenerateInvoice(order)}
                                 disabled={generatingInvoice[order.order_id]}

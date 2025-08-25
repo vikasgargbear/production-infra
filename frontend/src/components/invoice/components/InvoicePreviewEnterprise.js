@@ -65,14 +65,15 @@ const InvoicePreviewEnterprise = ({
   const totals = calculatedTotals || {
     gross_amount: invoice.gross_amount || 0,
     total_discount: invoice.discount_amount || 0,
-    taxable_amount: invoice.taxable_amount || 0,
-    total_tax: invoice.total_tax_amount || 0,
+    taxable_amount: invoice.taxable_amount || invoice.subtotal_amount || 0,
+    total_tax: invoice.total_tax_amount || invoice.tax_amount || 0,
     cgst_amount: invoice.cgst_amount || 0,
     sgst_amount: invoice.sgst_amount || 0,
     igst_amount: invoice.igst_amount || 0,
     delivery_charges: invoice.delivery_charges || 0,
     round_off: invoice.round_off || 0,
-    final_amount: invoice.net_amount || invoice.final_amount || 0
+    net_amount: invoice.net_amount || 0,  // Net amount (before rounding)
+    final_amount: invoice.final_amount || invoice.net_amount || 0  // Final amount (after rounding)
   };
 
   return (
@@ -507,7 +508,15 @@ const InvoicePreviewEnterprise = ({
               <div className="bg-gradient-to-r from-blue-600 to-blue-700 rounded-lg p-3 shadow-lg">
                 <div className="flex justify-between items-center">
                   <span className="text-white font-semibold text-sm">Net Amount</span>
-                  <span className="text-xl font-bold text-white">{formatCurrency(totals.final_amount)}</span>
+                  <span className="text-xl font-bold text-white">
+                    {formatCurrency(
+                      (totals.taxable_amount || 0) + 
+                      (totals.total_tax || totals.tax_amount || 0) + 
+                      (totals.round_off || 0) + 
+                      (totals.delivery_charges || 0) -
+                      (totals.invoice_discount || 0)
+                    )}
+                  </span>
                   {isCalculating && (
                     <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white ml-2"></div>
                   )}

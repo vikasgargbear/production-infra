@@ -49,8 +49,10 @@ const InvoicePreview = ({
     const discount = parseFloat(invoice.discount_amount) || 0;
     
     const taxableAmount = subtotal - discount;
-    // Use the pre-calculated final_amount if available (which includes rounding), otherwise calculate
-    const totalAmount = invoice.final_amount || invoice.net_amount || Math.round(taxableAmount + totalTax + deliveryCharges);
+    // Calculate the final amount correctly: taxable + tax + delivery - roundoff
+    const grossAmount = taxableAmount + totalTax + deliveryCharges;
+    const roundOff = invoice.round_off || (Math.round(grossAmount) - grossAmount);
+    const totalAmount = invoice.final_amount || invoice.net_amount || (grossAmount + roundOff);
     
     return {
       subtotal: subtotal,
@@ -60,7 +62,9 @@ const InvoicePreview = ({
       sgstAmount: invoice.gst_type !== 'IGST' ? totalTax / 2 : 0,
       igstAmount: invoice.gst_type === 'IGST' ? totalTax : 0,
       totalAmount: totalAmount,
-      deliveryCharges: deliveryCharges
+      deliveryCharges: deliveryCharges,
+      discount: discount,
+      roundOff: roundOff
     };
   };
 
@@ -431,11 +435,11 @@ const InvoicePreview = ({
                 <div className="space-y-1.5 text-xs">
                   <div className="flex justify-between">
                     <span className="text-gray-600">Subtotal</span>
-                    <span className="font-medium text-gray-900">{formatCurrency(invoice.gross_amount)}</span>
+                    <span className="font-medium text-gray-900">{formatCurrency(totals.subtotal)}</span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-gray-600">Discount</span>
-                    <span className="font-medium text-gray-900">-{formatCurrency(invoice.discount_amount || 0)}</span>
+                    <span className="font-medium text-gray-900">-{formatCurrency(totals.discount)}</span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-gray-600">Taxable Amount</span>
@@ -445,16 +449,16 @@ const InvoicePreview = ({
                     <span className="text-gray-600">GST (12%)</span>
                     <span className="font-medium text-gray-900">{formatCurrency(totals.totalTax)}</span>
                   </div>
-                  {invoice.delivery_charges > 0 && (
+                  {totals.deliveryCharges > 0 && (
                     <div className="flex justify-between">
                       <span className="text-gray-600">Delivery Charges</span>
-                      <span className="font-medium text-gray-900">{formatCurrency(invoice.delivery_charges)}</span>
+                      <span className="font-medium text-gray-900">{formatCurrency(totals.deliveryCharges)}</span>
                     </div>
                   )}
                   <div className="flex justify-between">
                     <span className="text-gray-600">Round Off</span>
                     <span className="font-medium text-gray-900">
-                      {invoice.round_off >= 0 ? '+' : '-'}{formatCurrency(Math.abs(invoice.round_off || 0))}
+                      {totals.roundOff >= 0 ? '+' : '-'}{formatCurrency(Math.abs(totals.roundOff || 0))}
                     </span>
                   </div>
                 </div>

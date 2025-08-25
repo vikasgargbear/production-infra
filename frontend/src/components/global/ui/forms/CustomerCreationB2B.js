@@ -219,6 +219,12 @@ const CustomerCreationB2B = ({ onClose, onCustomerCreated }) => {
         drug_license_number: formData.drug_license_number || null,
         drug_license_validity: formData.drug_license_validity || null,
         business_type: formData.business_type || 'retail_pharmacy', // Send as its own field
+        // Address fields
+        address_line1: formData.address.address_line1 || null,
+        address_line2: formData.address.address_line2 || null,
+        city: formData.address.city || null,
+        state: formData.address.state || null,
+        pincode: formData.address.pincode || null,
         // Credit configuration - ALL fields saved to backend
         credit_limit: formData.credit_limit ? parseFloat(formData.credit_limit) : 0,
         credit_days: formData.credit_days ? parseInt(formData.credit_days) : 0,

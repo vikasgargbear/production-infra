@@ -65,6 +65,15 @@ const ItemsTable = ({
               Batch: {item.batch || item.batch_number || item.batch_no}
             </p>
           )}
+          {/* Pack info display */}
+          {(item.packages_per_box || item.units_per_pack || item.category) && (
+            <p className="text-xs text-gray-500 mt-0.5">
+              {item.category && <span>{item.category}</span>}
+              {item.packages_per_box && item.units_per_pack && (
+                <span>{item.category ? ' • ' : ''}{item.packages_per_box}×{item.units_per_pack}</span>
+              )}
+            </p>
+          )}
         </div>
       )
     },

@@ -54,6 +54,9 @@ class InvoiceCalculatorEnterprise {
       try {
         const result = EnterpriseCalculator.calculateInvoice(invoiceData);
         
+        // Local calc already has correct values, just log them
+        console.log('Local fallback totals:', result.totals);
+        
         return {
           success: true,
           line_items: result.items,
@@ -167,7 +170,7 @@ class InvoiceCalculatorEnterprise {
     // Calculate final totals
     const deliveryCharges = parseFloat(invoiceData.delivery_charges) || 0;
     const netAmount = taxableAmount + totalTax + deliveryCharges;
-    const roundOff = Math.round(netAmount) - netAmount;
+    const roundOff = parseFloat((Math.round(netAmount) - netAmount).toFixed(2));
     const finalAmount = Math.round(netAmount);
     
     return {
@@ -219,19 +222,26 @@ class InvoiceCalculatorEnterprise {
    * @returns {Object} Formatted totals for invoice component
    */
   static formatTotalsForDisplay(totals) {
-    return {
-      subtotal_amount: totals.taxable_amount || 0, // Frontend expects subtotal_amount
+    // Simply pass through the values from backend without modifying
+    const formatted = {
+      subtotal_amount: totals.taxable_amount || 0,
+      taxable_amount: totals.taxable_amount || 0,
       discount_amount: totals.total_discount || 0,
-      tax_amount: totals.total_tax || 0,
-      net_amount: totals.final_amount || 0, // Frontend expects net_amount
-      final_amount: totals.final_amount || 0,
+      tax_amount: totals.total_tax || totals.tax_amount || 0,
+      delivery_charges: totals.delivery_charges || 0,
+      invoice_discount: totals.invoice_discount || 0,
       cgst_amount: totals.cgst_amount || 0,
       sgst_amount: totals.sgst_amount || 0,
       igst_amount: totals.igst_amount || 0,
-      round_off: totals.round_off || 0,
-      delivery_charges: totals.delivery_charges || 0,
+      round_off: parseFloat((totals.round_off || 0).toFixed(2)),
+      // Don't set net_amount or final_amount - let components calculate them
       gross_amount: totals.gross_amount || 0
     };
+    
+    console.log('Totals from backend:', totals);
+    console.log('Formatted for display:', formatted);
+    
+    return formatted;
   }
   
   /**

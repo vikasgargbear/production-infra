@@ -49,12 +49,14 @@ const SplitPayment = ({
       }
     }
     setPaymentStatus(newStatus);
-    
-    // Notify parent of status change
+  }, [totalPaid, totalAmount, isFullyPaid, isOverPaid]);
+
+  // Notify parent of status change in a separate effect
+  useEffect(() => {
     if (onPaymentStatusChange) {
-      onPaymentStatusChange(newStatus);
+      onPaymentStatusChange(paymentStatus);
     }
-  }, [totalPaid, totalAmount, isFullyPaid, isOverPaid, onPaymentStatusChange]);
+  }, [paymentStatus]); // Only depend on paymentStatus, not onPaymentStatusChange
 
   // Update parent whenever payments change
   useEffect(() => {
@@ -68,7 +70,7 @@ const SplitPayment = ({
         isPartial: !isFullyPaid && totalPaid > 0
       });
     }
-  }, [paymentMethods, totalPaid, remaining, paymentStatus, isFullyPaid]);
+  }, [paymentMethods, totalPaid, remaining, paymentStatus, isFullyPaid]); // onChange not in deps to avoid loops
 
   // Add new payment method
   const addPaymentMethod = () => {
