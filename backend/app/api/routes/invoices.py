@@ -168,6 +168,7 @@ async def create_invoice(
         # Item-level discounts are handled individually, no invoice-level discount needed
         taxable_amount = subtotal
         tax_amount = total_cgst + total_sgst
+        # Include freight charges in final amount calculation
         amount_before_round = taxable_amount + tax_amount + freight_charges + insurance_charges + other_charges
         final_amount = round(amount_before_round)  # Round to nearest integer
         round_off_amount = final_amount - amount_before_round
@@ -295,16 +296,79 @@ async def create_invoice(
             "freight": freight_charges,
             "insurance": insurance_charges,
             "other": other_charges,
+            "round_off": round_off_amount,
             "final": final_amount,
             "billing_address_id": billing_address_id,
             "shipping_address_id": shipping_address_id,
-            "round_off": round_off_amount,
             "payment_terms": payment_terms,
             "due_date": due_date,
             "notes": invoice_data.get("notes"),
             "created_by": created_by
         })
         invoice_id = invoice_create.scalar()
+        
+        # Step 7.5: Process payments if provided
+        payments = invoice_data.get("payments", [])
+        total_paid = 0
+        
+        if payments:
+            for payment in payments:
+                payment_method = payment.get("method", "cash")
+                payment_amount = float(payment.get("amount", 0))
+                
+                if payment_amount > 0:
+                    try:
+                        # Insert payment record
+                        db.execute(text("""
+                            INSERT INTO financial.payments (
+                                org_id, payment_type, payment_date, 
+                                reference_type, reference_id, reference_number,
+                                party_type, party_id,
+                                payment_method, amount,
+                                created_by, created_at
+                            ) VALUES (
+                                :org_id, 'receipt', CURRENT_DATE,
+                                'invoice', :invoice_id, :invoice_number,
+                                'customer', :customer_id,
+                                :payment_method, :amount,
+                                :created_by, CURRENT_TIMESTAMP
+                            )
+                        """), {
+                            "org_id": org_id,
+                            "invoice_id": invoice_id,
+                            "invoice_number": invoice_number,
+                            "customer_id": invoice_data["customer_id"],
+                            "payment_method": payment_method,
+                            "amount": payment_amount,
+                            "created_by": created_by
+                        })
+                        total_paid += payment_amount
+                        logger.info(f"Payment recorded: {payment_method} - ₹{payment_amount}")
+                    except Exception as payment_error:
+                        logger.warning(f"Could not record payment: {payment_error}")
+            
+            # Update invoice payment status based on total paid
+            if total_paid >= final_amount:
+                payment_status = 'paid'
+            elif total_paid > 0:
+                payment_status = 'partial'
+            else:
+                payment_status = 'pending'
+            
+            try:
+                db.execute(text("""
+                    UPDATE sales.invoices
+                    SET payment_status = :payment_status,
+                        paid_amount = :paid_amount,
+                        updated_at = CURRENT_TIMESTAMP
+                    WHERE invoice_id = :invoice_id
+                """), {
+                    "payment_status": payment_status,
+                    "paid_amount": total_paid,
+                    "invoice_id": invoice_id
+                })
+            except Exception as status_error:
+                logger.warning(f"Could not update payment status: {status_error}")
         
         # Step 8: Create invoice items 
         # Disable triggers temporarily to avoid column name mismatch issue
@@ -434,7 +498,7 @@ async def create_invoice(
                 "quantity": float(quantity),  # Ensure proper type
                 "uom": item.get("uom", "PCS"),
                 "pack_type": item.get("pack_type", "UNIT"),
-                "pack_size": int(item.get("pack_size")) if item.get("pack_size") else None,
+                "pack_size": int(item.get("pack_size")) if item.get("pack_size") and str(item.get("pack_size")).isdigit() else 1,
                 "base_quantity": float(base_quantity),  # Use the corrected variable
                 "mrp": float(mrp),
                 "unit_price": float(unit_price),
@@ -477,18 +541,32 @@ async def create_invoice(
                         new_qty = result[0]
                         logger.info(f"✅ Inventory deducted: Batch {batch_id} quantity reduced by {quantity}, billed: {base_quantity}, new available: {new_qty}")
                         
-                        # Create inventory movement record for audit trail
+                        # Create inventory movement record with all required fields
                         try:
+                            # Get item details for movement record
+                            pack_type = item.get("pack_type", "UNIT")
+                            pack_size = int(item.get("pack_size")) if item.get("pack_size") and str(item.get("pack_size")).isdigit() else 1
+                            
+                            # Calculate costs (you may need to fetch these from batch)
+                            unit_cost = float(item.get("unit_cost", unit_price * 0.7))  # Rough estimate
+                            total_cost = unit_cost * quantity
+                            
                             db.execute(text("""
                                 INSERT INTO inventory.inventory_movements (
                                     org_id, movement_type, movement_direction, 
                                     product_id, batch_id, quantity,
+                                    pack_type, base_quantity,
+                                    unit_cost, total_cost,
                                     reference_type, reference_id, reference_number,
+                                    transfer_type, reason,
                                     location_id, created_by, movement_date
                                 ) VALUES (
                                     :org_id, 'sale', 'out',
                                     :product_id, :batch_id, :quantity,
+                                    :pack_type, :base_quantity,
+                                    :unit_cost, :total_cost,
                                     'invoice', :invoice_id, :invoice_number,
+                                    'sale', 'Customer Sale',
                                     1, :created_by, CURRENT_TIMESTAMP
                                 )
                             """), {
@@ -496,6 +574,10 @@ async def create_invoice(
                                 "product_id": product_id,
                                 "batch_id": int(batch_id) if batch_id and str(batch_id).isdigit() else None,
                                 "quantity": quantity,  # Full quantity moved
+                                "pack_type": pack_type,
+                                "base_quantity": base_quantity,
+                                "unit_cost": unit_cost,
+                                "total_cost": total_cost,
                                 "invoice_id": invoice_id,
                                 "invoice_number": f"INV-{invoice_id}",
                                 "created_by": created_by
@@ -574,7 +656,12 @@ async def create_invoice(
                         WHERE invoice_id = :invoice_id
                     ),
                     final_amount = (
-                        SELECT COALESCE(SUM(line_total), 0) 
+                        SELECT 
+                            COALESCE(SUM(line_total), 0) + 
+                            COALESCE((SELECT freight_charges FROM sales.invoices WHERE invoice_id = :invoice_id), 0) +
+                            COALESCE((SELECT insurance_charges FROM sales.invoices WHERE invoice_id = :invoice_id), 0) +
+                            COALESCE((SELECT other_charges FROM sales.invoices WHERE invoice_id = :invoice_id), 0) +
+                            COALESCE((SELECT round_off_amount FROM sales.invoices WHERE invoice_id = :invoice_id), 0)
                         FROM sales.invoice_items 
                         WHERE invoice_id = :invoice_id
                     ),

@@ -777,7 +777,18 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
           irn: invoice.irn || null,
           qr_code: invoice.qr_code || null,
           ack_no: invoice.ack_no || null,
-          ack_date: invoice.ack_date || null
+          ack_date: invoice.ack_date || null,
+          
+          // Payment details - for split payments
+          payments: invoice.payments || (invoice.payment_amount > 0 ? [
+            {
+              method: invoice.payment_mode || 'cash',
+              amount: invoice.payment_amount
+            }
+          ] : []),
+          
+          // Additional charges (using correct field names)
+          freight_charges: invoice.delivery_charges || 0
         };
         
         console.log('Sending invoice to backend:', JSON.stringify(invoiceData, null, 2));
@@ -1936,11 +1947,12 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
                   }
                 ]}
                 onChange={(payments, paymentInfo) => {
-                  const primaryPayment = payments[0];
+                  // Store all payments for split payment support
                   setInvoice(prev => ({
                     ...prev,
-                    payment_mode: primaryPayment?.method || 'cash',
-                    payment_amount: primaryPayment?.amount || 0,
+                    payments: payments, // Store all payment methods
+                    payment_mode: payments[0]?.method || 'cash', // Keep primary for backward compat
+                    payment_amount: payments.reduce((sum, p) => sum + (p.amount || 0), 0), // Total paid
                     payment_status: paymentInfo?.status || 'Pending'
                   }));
                 }}
@@ -1950,7 +1962,7 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
                     payment_status: status
                   }));
                 }}
-                allowSplit={false}  // Single payment for now
+                allowSplit={true}  // Enable split payments
               />
             </div>
           </div>
