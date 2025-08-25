@@ -311,22 +311,113 @@ async def create_invoice(
         })
         invoice_id = invoice_create.scalar()
         
-        # Step 7.5: Process payments if provided (simplified - just track status, don't create payment records)
+        # Step 7.5: First ensure we have basic payment methods
+        # Check if cash payment method exists, create if not
+        try:
+            cash_method = db.execute(text("""
+                SELECT payment_method_id FROM financial.payment_methods
+                WHERE org_id = :org_id AND method_code = 'CASH'
+            """), {"org_id": org_id}).fetchone()
+            
+            if not cash_method:
+                # Create basic payment methods
+                db.execute(text("""
+                    INSERT INTO financial.payment_methods 
+                    (org_id, method_code, method_name, method_type, requires_reference, processing_days)
+                    VALUES 
+                    (:org_id, 'CASH', 'Cash', 'instant', false, 0),
+                    (:org_id, 'CHECK', 'Check', 'bank', true, 3),
+                    (:org_id, 'BANK', 'Bank Transfer', 'bank', true, 1),
+                    (:org_id, 'UPI', 'UPI', 'digital', true, 0)
+                    ON CONFLICT (org_id, method_code) DO NOTHING
+                """), {"org_id": org_id})
+                db.flush()  # Ensure methods are created before we use them
+        except Exception as e:
+            logger.warning(f"Could not ensure payment methods exist: {e}")
+        
+        # Step 7.6: Process actual payments (NOT credit amounts)
         payments = invoice_data.get("payments", [])
         total_paid = 0
-        payment_info = []
         
-        # Calculate total paid amount from payments array
         if payments:
             for payment in payments:
-                payment_method = payment.get("method", "cash")
+                payment_method = payment.get("method", "cash").upper()
                 payment_amount = float(payment.get("amount", 0))
-                if payment_amount > 0:
-                    total_paid += payment_amount
-                    payment_info.append(f"{payment_method}: ₹{payment_amount}")
-                    logger.info(f"Payment info: {payment_method} - ₹{payment_amount}")
+                
+                # Only create payment record for actual money received (not credit)
+                if payment_amount > 0 and payment_method != 'CREDIT':
+                    try:
+                        # Get payment method ID
+                        method_id = 1  # Default to cash
+                        if payment_method in ['CASH', 'CHECK', 'BANK', 'UPI']:
+                            method_result = db.execute(text("""
+                                SELECT payment_method_id FROM financial.payment_methods
+                                WHERE org_id = :org_id AND method_code = :method_code
+                            """), {"org_id": org_id, "method_code": payment_method})
+                            method = method_result.fetchone()
+                            if method:
+                                method_id = method[0]
+                        
+                        # Generate payment number
+                        payment_num = db.execute(text("""
+                            SELECT COALESCE(MAX(CAST(SUBSTRING(payment_number FROM '[0-9]+') AS INTEGER)), 0) + 1
+                            FROM financial.payments WHERE org_id = :org_id
+                        """), {"org_id": org_id}).scalar() or 1
+                        payment_number = f"PAY-{payment_num:06d}"
+                        
+                        # Insert actual payment record
+                        payment_id = db.execute(text("""
+                            INSERT INTO financial.payments (
+                                org_id, branch_id, payment_number, payment_date,
+                                payment_type, party_type, party_id, party_name,
+                                payment_amount, payment_method_id, 
+                                reference_number, payment_status,
+                                created_by, created_at
+                            ) VALUES (
+                                :org_id, :branch_id, :payment_number, CURRENT_DATE,
+                                'receipt', 'customer', :customer_id, :customer_name,
+                                :amount, :method_id,
+                                :invoice_number, 'processed',
+                                :created_by, CURRENT_TIMESTAMP
+                            ) RETURNING payment_id
+                        """), {
+                            "org_id": org_id,
+                            "branch_id": branch_id,
+                            "payment_number": payment_number,
+                            "customer_id": invoice_data["customer_id"],
+                            "customer_name": customer_name,
+                            "amount": payment_amount,
+                            "method_id": method_id,
+                            "invoice_number": invoice_number,
+                            "created_by": created_by
+                        }).scalar()
+                        
+                        # Create payment allocation linking payment to invoice
+                        if payment_id:
+                            db.execute(text("""
+                                INSERT INTO financial.payment_allocations (
+                                    payment_id, reference_type, reference_id, 
+                                    reference_number, allocated_amount, created_by
+                                ) VALUES (
+                                    :payment_id, 'invoice', :invoice_id,
+                                    :invoice_number, :amount, :created_by
+                                )
+                            """), {
+                                "payment_id": payment_id,
+                                "invoice_id": invoice_id,
+                                "invoice_number": invoice_number,
+                                "amount": payment_amount,
+                                "created_by": created_by
+                            })
+                        
+                        total_paid += payment_amount
+                        logger.info(f"Payment recorded: {payment_method} - ₹{payment_amount}")
+                        
+                    except Exception as payment_error:
+                        logger.warning(f"Could not record payment: {payment_error}")
+                        # Don't fail the whole transaction for payment issues
         
-        # Determine payment status
+        # Determine payment status based on actual money received vs invoice total
         if total_paid >= final_amount:
             payment_status = 'paid'
         elif total_paid > 0:
@@ -334,40 +425,21 @@ async def create_invoice(
         else:
             payment_status = 'pending'
         
-        # Update invoice with payment status (but don't create payment records yet)
-        # This avoids the payment_methods table issue
+        # Update invoice payment status
         try:
             db.execute(text("""
                 UPDATE sales.invoices
                 SET payment_status = :payment_status,
                     paid_amount = :paid_amount,
-                    payment_notes = :payment_notes,
                     updated_at = CURRENT_TIMESTAMP
                 WHERE invoice_id = :invoice_id
             """), {
                 "payment_status": payment_status,
                 "paid_amount": total_paid,
-                "payment_notes": ', '.join(payment_info) if payment_info else None,
                 "invoice_id": invoice_id
             })
-            logger.info(f"Invoice payment status updated: {payment_status}, paid: ₹{total_paid}")
-        except Exception as status_error:
-            # If payment_notes column doesn't exist, try without it
-            logger.warning(f"Could not update payment with notes, trying without: {status_error}")
-            try:
-                db.execute(text("""
-                    UPDATE sales.invoices
-                    SET payment_status = :payment_status,
-                        paid_amount = :paid_amount,
-                        updated_at = CURRENT_TIMESTAMP
-                    WHERE invoice_id = :invoice_id
-                """), {
-                    "payment_status": payment_status,
-                    "paid_amount": total_paid,
-                    "invoice_id": invoice_id
-                })
-            except Exception as e:
-                logger.warning(f"Could not update payment status: {e}")
+        except Exception as e:
+            logger.warning(f"Could not update payment status: {e}")
         
         # Step 8: Create invoice items 
         # Disable triggers temporarily to avoid column name mismatch issue
