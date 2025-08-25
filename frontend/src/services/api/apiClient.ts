@@ -21,12 +21,14 @@ const apiClient: AxiosInstance = axios.create({
 // Request interceptor for auth token
 apiClient.interceptors.request.use(
   (config) => {
-    // Check if this is an auth endpoint that doesn't need token
-    const isAuthEndpoint = config.url?.includes('/auth/') || 
-                          config.url?.includes('/login') || 
-                          config.url?.includes('/register') ||
-                          config.url?.includes('/organizations/check') ||
-                          config.url?.includes('/organizations/create');
+    // Check if this is an endpoint that doesn't need token
+    const isPublicEndpoint = config.url?.includes('/auth/') || 
+                            config.url?.includes('/login') || 
+                            config.url?.includes('/register') ||
+                            config.url?.includes('/organizations/check') ||
+                            config.url?.includes('/organizations/create') ||
+                            config.url?.includes('/setup/check') ||  // Allow setup check without auth
+                            config.url?.includes('/health');  // Allow health checks
     
     // Get auth token - use consistent key
     const token = localStorage.getItem('authToken');
@@ -53,7 +55,7 @@ apiClient.interceptors.request.use(
           const hoursRemaining = ((expiry - now) / (1000 * 60 * 60)).toFixed(1);
           console.log(`Token valid for ${hoursRemaining} more hours`);
           
-        } else if (!isAuthEndpoint) {
+        } else if (!isPublicEndpoint) {
           // Token expired - only redirect if not an auth endpoint
           console.error('Token expired:', new Date(expiry), 'Current time:', new Date(now));
           localStorage.removeItem('authToken');
@@ -69,12 +71,15 @@ apiClient.interceptors.request.use(
         // Still try to use the token
         config.headers.Authorization = `Bearer ${token}`;
       }
-    } else if (!isAuthEndpoint) {
-      // No token and not an auth endpoint
-      // Only redirect if we're not already on the login page
-      if (!window.location.pathname.includes('/login') && 
-          !window.location.pathname.includes('/register') &&
-          !window.location.pathname.includes('/setup')) {
+    } else if (!isPublicEndpoint) {
+      // No token and not a public endpoint
+      // Check if we're on a page that requires authentication
+      const currentPath = window.location.pathname;
+      const publicPaths = ['/login', '/register', '/setup', '/'];
+      const isPublicPath = publicPaths.some(path => currentPath === path || currentPath.startsWith(path + '?'));
+      
+      if (!isPublicPath) {
+        console.log('No token found, redirecting to login from:', currentPath);
         window.location.href = '/login?reason=not_authenticated';
         return Promise.reject(new Error('Authentication required'));
       }
