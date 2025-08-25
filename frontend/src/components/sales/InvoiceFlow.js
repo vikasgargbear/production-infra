@@ -12,10 +12,7 @@ import { searchCache, smartSearch } from '../../utils/searchCache';
 // MIGRATED: Using enterprise API-only calculations
 // MIGRATED: Use new enterprise calculation architecture  
 import InvoiceCalculator from '../../services/InvoiceCalculator';
-import { calculateFinalAmount } from '../../services/SINGLE_CALCULATION';
-import { getInvoiceDisplayValues } from './getInvoiceDisplayValues';
-import { debugCalculation } from '../../services/debugCalculation';
-import { runTestCalculation } from './TEST_CALCULATION';
+// Removed debug imports - use enterprise calculator instead
 import { useInvoiceCalculation } from '../../hooks/useInvoiceCalculation';
 import InvoiceValidator from '../../services/invoiceValidator';
 import DataTransformer from '../../services/dataTransformer';
@@ -1930,13 +1927,13 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
             <h3 className="text-xs font-semibold text-gray-600 uppercase tracking-wider mb-1.5 px-1">PAYMENT METHOD</h3>
             <div className="bg-white rounded-lg border border-gray-200 p-3">
               <SplitPayment
-                totalAmount={getInvoiceDisplayValues(invoice).netAmount}
+                totalAmount={parseFloat(invoice.net_amount) || 0}
                 payments={[
                   {
                     id: '1',
                     method: invoice.payment_mode || 'cash',
                     amount: invoice.payment_mode === 'cash' ? 
-                      getInvoiceDisplayValues(invoice).netAmount : 0
+                      parseFloat(invoice.net_amount) || 0 : 0
                   }
                 ]}
                 onChange={(payments, paymentInfo) => {
@@ -2272,19 +2269,12 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
 
         {/* Footer */}
         <DocumentFooter
-          totalItems={(() => {
-            const values = getInvoiceDisplayValues(invoice);
-            console.log('DocumentFooter values:', values);
-            console.log('Invoice state:', invoice);
-            debugCalculation(invoice.items);
-            runTestCalculation();
-            return values.itemCount;
-          })()}
-          totalAmount={getInvoiceDisplayValues(invoice).netAmount}
-          subtotalAmount={getInvoiceDisplayValues(invoice).taxableAmount}
-          taxAmount={getInvoiceDisplayValues(invoice).taxAmount}
-          roundOffAmount={getInvoiceDisplayValues(invoice).roundOff}
-          grandTotal={getInvoiceDisplayValues(invoice).netAmount}
+          totalItems={invoice.items?.length || 0}
+          totalAmount={parseFloat(invoice.net_amount) || 0}
+          subtotalAmount={parseFloat(invoice.taxable_amount) || 0}
+          taxAmount={parseFloat(invoice.tax_amount) || 0}
+          roundOffAmount={parseFloat(invoice.round_off_amount) || 0}
+          grandTotal={parseFloat(invoice.net_amount) || 0}
           onSave={handleSaveInvoice}
           onPrint={handlePrint}
           onDownload={handlePDFDownload}
