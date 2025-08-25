@@ -168,7 +168,9 @@ async def create_invoice(
         # Item-level discounts are handled individually, no invoice-level discount needed
         taxable_amount = subtotal
         tax_amount = total_cgst + total_sgst
-        final_amount = taxable_amount + tax_amount + freight_charges + insurance_charges + other_charges
+        amount_before_round = taxable_amount + tax_amount + freight_charges + insurance_charges + other_charges
+        final_amount = round(amount_before_round)  # Round to nearest integer
+        round_off_amount = final_amount - amount_before_round
         
         # Step 4: Create order (using ONLY columns that exist)
         order_create = db.execute(text("""
@@ -211,24 +213,49 @@ async def create_invoice(
         cust = cust_result.fetchone()
         customer_name = cust[0] if cust else f"Customer {invoice_data['customer_id']}"
         
+        # Get customer addresses
+        addr_result = db.execute(text("""
+            SELECT billing_address_id, shipping_address_id
+            FROM parties.customers
+            WHERE customer_id = :customer_id
+        """), {"customer_id": invoice_data["customer_id"]})
+        addr = addr_result.fetchone()
+        billing_address_id = addr[0] if addr else None
+        shipping_address_id = addr[1] if addr else None
+        
+        # Calculate due date based on payment terms
+        from datetime import timedelta
+        payment_terms = invoice_data.get("payment_terms", "cash")
+        invoice_date = date.today()
+        if payment_terms == "credit":
+            due_date = invoice_date + timedelta(days=30)  # 30 days credit
+        elif payment_terms == "cash":
+            due_date = invoice_date  # Same day
+        else:
+            due_date = invoice_date + timedelta(days=7)  # Default 7 days
+        
         # Step 7: Create invoice with ALL important fields
         invoice_create = db.execute(text("""
             INSERT INTO sales.invoices (
                 org_id, branch_id, invoice_number, invoice_date, invoice_type,
                 order_id, customer_id, customer_name,
+                billing_address_id, shipping_address_id,
                 subtotal_amount, discount_amount, taxable_amount,
                 igst_amount, cgst_amount, sgst_amount, total_tax_amount, 
-                freight_charges, insurance_charges, other_charges, final_amount,
-                payment_terms, notes, 
+                freight_charges, insurance_charges, other_charges, 
+                round_off_amount, final_amount,
+                payment_terms, due_date, notes, 
                 invoice_status, payment_status,
                 created_by, created_at
             ) VALUES (
                 :org_id, :branch_id, :invoice_number, :invoice_date, 'tax_invoice',
                 :order_id, :customer_id, :customer_name,
+                :billing_address_id, :shipping_address_id,
                 :subtotal, :discount, :taxable,
                 :igst, :cgst, :sgst, :tax,
-                :freight, :insurance, :other, :final,
-                :payment_terms, :notes,
+                :freight, :insurance, :other, 
+                :round_off, :final,
+                :payment_terms, :due_date, :notes,
                 'posted', 'pending',
                 :created_by, CURRENT_TIMESTAMP
             ) RETURNING invoice_id
@@ -251,7 +278,11 @@ async def create_invoice(
             "insurance": insurance_charges,
             "other": other_charges,
             "final": final_amount,
-            "payment_terms": invoice_data.get("payment_terms", "cash"),
+            "billing_address_id": billing_address_id,
+            "shipping_address_id": shipping_address_id,
+            "round_off": round_off_amount,
+            "payment_terms": payment_terms,
+            "due_date": due_date,
             "notes": invoice_data.get("notes"),
             "created_by": created_by
         })
@@ -300,17 +331,42 @@ async def create_invoice(
             # Filter out invalid batch_id values like 'default_123' or empty strings
             if batch_id and (isinstance(batch_id, str) and ('default' in batch_id.lower() or batch_id == '')):
                 batch_id = None
+            # Get batch details including MRP
+            batch_number = None
+            mrp = item.get("mrp", 0)
+            manufacturing_date = None
+            expiry_date = item.get("expiry_date")
+            
             if not batch_id:
-                # Try to get FIFO batch
+                # Try to get FIFO batch with all details
                 batch_result = db.execute(text("""
-                    SELECT batch_id FROM inventory.batches
+                    SELECT batch_id, batch_number, mrp_per_unit, manufacturing_date, expiry_date
+                    FROM inventory.batches
                     WHERE product_id = :product_id
                     AND quantity_available > 0
                     ORDER BY expiry_date NULLS LAST, batch_id
                     LIMIT 1
                 """), {"product_id": product_id})
                 batch = batch_result.fetchone()
-                batch_id = batch[0] if batch else None
+                if batch:
+                    batch_id = batch[0]
+                    batch_number = batch[1]
+                    mrp = float(batch[2]) if batch[2] else mrp
+                    manufacturing_date = batch[3]
+                    expiry_date = batch[4] or expiry_date
+            else:
+                # Get batch details for provided batch_id
+                batch_result = db.execute(text("""
+                    SELECT batch_number, mrp_per_unit, manufacturing_date, expiry_date
+                    FROM inventory.batches
+                    WHERE batch_id = :batch_id
+                """), {"batch_id": batch_id})
+                batch = batch_result.fetchone()
+                if batch:
+                    batch_number = batch[0]
+                    mrp = float(batch[1]) if batch[1] else mrp
+                    manufacturing_date = batch[2]
+                    expiry_date = batch[3] or expiry_date
             
             # Calculate amounts - use base_quantity for billing (production logic)
             line_total = (base_quantity * unit_price) - discount_amt
@@ -354,15 +410,15 @@ async def create_invoice(
                 "product_id": product_id,
                 "product_name": product_name,
                 "hsn_code": item.get("hsn_code"),
-                "batch_number": item.get("batch_number"),
-                "manufacturing_date": item.get("manufacturing_date"),
-                "expiry_date": item.get("expiry_date"),
+                "batch_number": batch_number or item.get("batch_number"),
+                "manufacturing_date": manufacturing_date or item.get("manufacturing_date"),
+                "expiry_date": expiry_date or item.get("expiry_date"),
                 "quantity": float(quantity),  # Ensure proper type
                 "uom": item.get("uom", "PCS"),
                 "pack_type": item.get("pack_type", "UNIT"),
                 "pack_size": int(item.get("pack_size")) if item.get("pack_size") else None,
                 "base_quantity": float(base_quantity),  # Use the corrected variable
-                "mrp": float(item.get("mrp", 0)),
+                "mrp": float(mrp),
                 "unit_price": float(unit_price),
                 "discount_percent": float(item.get("discount_percent", 0)),
                 "discount_amount": float(discount_amt),
