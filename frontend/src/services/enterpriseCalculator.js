@@ -17,7 +17,8 @@ class EnterpriseCalculator {
     // Parse inputs once - CRITICAL: Use base_quantity for billing
     const rate = parseFloat(item.sale_price || item.rate || item.selling_price || item.unit_price) || 0;
     // CRITICAL: base_quantity is what customer pays for (excludes free items)
-    const baseQuantity = parseFloat(item.base_quantity) || 0;
+    // Use quantity as base_quantity if base_quantity not explicitly set
+    const baseQuantity = parseFloat(item.base_quantity || item.quantity) || 0;
     const freeQuantity = parseFloat(item.free_quantity) || 0;
     const discountPercent = parseFloat(item.discount_percent || item.discount) || 0;
     const gstPercent = parseFloat(item.gst_percent || item.tax_rate || item.gst) || 12;
@@ -110,8 +111,8 @@ class EnterpriseCalculator {
     
     // Final calculations
     const netAmount = taxableAmount + totalGst + deliveryCharges - additionalDiscount;
-    const roundOff = parseFloat((Math.round(netAmount) - netAmount).toFixed(2));
     const finalAmount = Math.round(netAmount);
+    const roundOff = parseFloat((finalAmount - netAmount).toFixed(2));
     
     return {
       items: calculatedItems,
