@@ -265,9 +265,21 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
     }
 
     try {
+      // Clean items to ensure no corrupted values
+      const cleanItems = items.map(item => ({
+        ...item,
+        // Ensure base_quantity is what we charge for
+        base_quantity: parseFloat(item.base_quantity) || parseFloat(item.quantity) || 0,
+        quantity: parseFloat(item.quantity) || 0,
+        free_quantity: parseFloat(item.free_quantity) || 0,
+        rate: parseFloat(item.rate || item.sale_price) || 0,
+        discount_percent: parseFloat(item.discount_percent) || 0,
+        gst_percent: parseFloat(item.gst_percent || item.tax_rate) || 12
+      }));
+      
       // Only pass necessary fields to avoid circular dependencies
       const invoiceData = {
-        items,
+        items: cleanItems,
         customer_id: selectedCustomer?.customer_id,
         delivery_charges: invoice.delivery_charges || 0,  // Include delivery charges in calculation
         gst_type: invoice.gst_type || 'CGST/SGST',
@@ -288,14 +300,15 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
           delivery_charges_out: result.totals?.delivery_charges
         });
 
-        // Update items with calculated values from backend
-        const updatedItems = items.map((item, index) => {
-          const calculatedItem = result.line_items?.[index];
+        // Update items with calculated values from calculator
+        const updatedItems = cleanItems.map((item, index) => {
+          const calculatedItem = result.items?.[index];
           if (calculatedItem) {
             return {
               ...item,
               calculated_total: calculatedItem.line_total,
-              tax_amount: calculatedItem.tax_amount,
+              line_total: calculatedItem.line_total,
+              tax_amount: calculatedItem.tax_amount || calculatedItem.gst_amount,
               discount_amount: calculatedItem.discount_amount
             };
           }
