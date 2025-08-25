@@ -27,7 +27,7 @@ async def generate_invoice_number(
     """Generate and reserve next invoice number atomically"""
     try:
         # Use V2 service for atomic number generation
-        new_number = DocumentNumberServiceV2.generate_and_reserve_number(db, "invoice", ACTUAL_ORG_ID)
+        new_number = DocumentNumberServiceV2.generate_and_reserve_number(db, "invoice", org_id)
         return {"invoice_number": new_number}
     except Exception as e:
         logger.error(f"Failed to generate invoice number: {e}")
@@ -115,14 +115,14 @@ async def create_invoice(
         branch_result = db.execute(text("""
             SELECT branch_id FROM master.org_branches 
             WHERE org_id = :org_id LIMIT 1
-        """), {"org_id": ACTUAL_ORG_ID})
+        """), {"org_id": org_id})
         branch = branch_result.fetchone()
         branch_id = branch[0] if branch else 1
         
         user_result = db.execute(text("""
             SELECT user_id FROM master.org_users 
             WHERE org_id = :org_id LIMIT 1
-        """), {"org_id": ACTUAL_ORG_ID})
+        """), {"org_id": org_id})
         user = user_result.fetchone()
         created_by = user[0] if user else 1
         
@@ -131,7 +131,7 @@ async def create_invoice(
             SELECT COALESCE(MAX(CAST(SUBSTRING(order_number FROM '[0-9]+') AS INTEGER)), 0) + 1
             FROM sales.orders
             WHERE org_id = :org_id
-        """), {"org_id": ACTUAL_ORG_ID})
+        """), {"org_id": org_id})
         order_num = order_result.scalar() or 1
         order_number = f"ORD-{order_num:06d}"
         
@@ -184,7 +184,7 @@ async def create_invoice(
                 :created_by, CURRENT_TIMESTAMP
             ) RETURNING order_id
         """), {
-            "org_id": ACTUAL_ORG_ID,
+            "org_id": org_id,
             "branch_id": branch_id,
             "order_number": order_number,
             "order_date": date.today(),
@@ -201,7 +201,7 @@ async def create_invoice(
         order_id = order_create.scalar()
         
         # Step 5: Generate invoice number using unified service
-        invoice_number = DocumentNumberService.generate_number(db, "invoice", ACTUAL_ORG_ID)
+        invoice_number = DocumentNumberService.generate_number(db, "invoice", org_id)
         
         # Step 6: Get customer name for invoice
         cust_result = db.execute(text("""
@@ -233,7 +233,7 @@ async def create_invoice(
                 :created_by, CURRENT_TIMESTAMP
             ) RETURNING invoice_id
         """), {
-            "org_id": ACTUAL_ORG_ID,
+            "org_id": org_id,
             "branch_id": branch_id,
             "invoice_number": invoice_number,
             "invoice_date": date.today(),
@@ -415,7 +415,7 @@ async def create_invoice(
                                     1, :created_by, CURRENT_TIMESTAMP
                                 )
                             """), {
-                                "org_id": ACTUAL_ORG_ID,
+                                "org_id": org_id,
                                 "product_id": product_id,
                                 "batch_id": int(batch_id) if batch_id else None,
                                 "quantity": quantity,  # Full quantity moved
@@ -585,7 +585,7 @@ async def get_invoices(
             WHERE i.org_id = :org_id
         """
         
-        params = {"org_id": ACTUAL_ORG_ID, "limit": limit, "offset": offset}
+        params = {"org_id": org_id, "limit": limit, "offset": offset}
         
         if customer_id:
             query += " AND i.customer_id = :customer_id"
@@ -601,7 +601,7 @@ async def get_invoices(
         if customer_id:
             count_query += " AND customer_id = :customer_id"
         
-        total = db.execute(text(count_query), {"org_id": ACTUAL_ORG_ID, "customer_id": customer_id} if customer_id else {"org_id": ACTUAL_ORG_ID}).scalar()
+        total = db.execute(text(count_query), {"org_id": org_id, "customer_id": customer_id} if customer_id else {"org_id": org_id}).scalar()
         
         return {
             "invoices": invoices,
@@ -686,13 +686,13 @@ async def list_invoices(
             LIMIT :limit OFFSET :skip
         """)
         
-        result = db.execute(query, {"org_id": ACTUAL_ORG_ID, "limit": limit, "skip": skip})
+        result = db.execute(query, {"org_id": org_id, "limit": limit, "skip": skip})
         invoices = [dict(row._mapping) for row in result]
         
         # Get total
         total = db.execute(
             text("SELECT COUNT(*) FROM sales.invoices WHERE org_id = :org_id"),
-            {"org_id": ACTUAL_ORG_ID}
+            {"org_id": org_id}
         ).scalar()
         
         return {

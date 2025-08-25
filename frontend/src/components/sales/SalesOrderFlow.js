@@ -24,7 +24,7 @@ import salesOrdersAPI from '../../services/api/modules/salesOrders.api';
 import { invoicesApi as invoicesApiModule } from '../../services/api/modules/invoices.api';
 import { challansApi as challansApiModule } from '../../services/api/modules/challans.api';
 import debugLogger from '../../utils/debugLogger';
-import SalesOrderCalculatorEnterprise from '../../services/salesOrderCalculatorEnterprise';
+import EnterpriseCalculator from '../../services/enterpriseCalculator'; // Use unified calculator
 import { useCompany } from '../../contexts/CompanyContext';
 import ImportFromDocumentModal from './components/ImportFromDocumentModal';
 
@@ -582,10 +582,10 @@ const SalesOrderFlow = ({ open = true, onClose }) => {
         customer_id: selectedCustomer?.customer_id
       };
 
-      const result = await SalesOrderCalculatorEnterprise.calculateSalesOrder(orderData);
+      const result = await EnterpriseCalculator.calculateSalesOrder(orderData);
       
       if (result.success && result.totals) {
-        const formattedTotals = SalesOrderCalculatorEnterprise.formatTotalsForDisplay(result.totals);
+        const formattedTotals = result.totals; // Use totals directly
         
         console.log('Calculation result:', result);
         console.log('Formatted totals:', formattedTotals);

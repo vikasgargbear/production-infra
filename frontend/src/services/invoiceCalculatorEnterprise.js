@@ -7,7 +7,7 @@ import { useState, useCallback } from 'react';
 import api from './api';
 import { getApiUrl } from '../config/api.config';
 import EnterpriseCalculator from './enterpriseCalculator';
-import OfflineCalculator from './offlineCalculator';
+// import OfflineCalculator from './offlineCalculator'; // Removed - using EnterpriseCalculator instead
 
 class InvoiceCalculatorEnterprise {
   static debounceTimeouts = new Map();
@@ -292,7 +292,7 @@ class InvoiceCalculatorEnterprise {
    */
   static calculateInstant(invoiceData) {
     // Always use OfflineCalculator for instant results
-    return OfflineCalculator.calculate(invoiceData);
+    return EnterpriseCalculator.calculateInvoice(invoiceData);
   }
   
   /**

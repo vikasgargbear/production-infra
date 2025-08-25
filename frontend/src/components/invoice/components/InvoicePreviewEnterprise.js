@@ -72,8 +72,9 @@ const InvoicePreviewEnterprise = ({
     igst_amount: invoice.igst_amount || 0,
     delivery_charges: invoice.delivery_charges || 0,
     round_off: invoice.round_off || 0,
-    net_amount: invoice.net_amount || 0,  // Net amount (before rounding)
-    final_amount: invoice.final_amount || invoice.net_amount || 0  // Final amount (after rounding)
+    // Don't use net_amount from invoice - calculate it
+    net_amount: 0,  // Will be calculated in display
+    final_amount: 0  // Will be calculated in display
   };
 
   return (
@@ -510,11 +511,12 @@ const InvoicePreviewEnterprise = ({
                   <span className="text-white font-semibold text-sm">Net Amount</span>
                   <span className="text-xl font-bold text-white">
                     {formatCurrency(
+                      // Net Amount = taxable + tax + roundoff + delivery
+                      // Note: discount is already applied in taxable_amount calculation
                       (totals.taxable_amount || 0) + 
                       (totals.total_tax || totals.tax_amount || 0) + 
                       (totals.round_off || 0) + 
-                      (totals.delivery_charges || 0) -
-                      (totals.invoice_discount || 0)
+                      (totals.delivery_charges || 0)
                     )}
                   </span>
                   {isCalculating && (

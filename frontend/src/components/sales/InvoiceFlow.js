@@ -11,7 +11,7 @@ import { customerAPI, productAPI, invoiceAPI, ordersAPI, salesOrdersAPI, apiClie
 import { searchCache, smartSearch } from '../../utils/searchCache';
 // MIGRATED: Using enterprise API-only calculations
 // MIGRATED: Use new enterprise calculation architecture  
-import InvoiceCalculatorEnterprise from '../../services/invoiceCalculatorEnterprise';
+import InvoiceCalculator from '../../services/InvoiceCalculator';
 import { useInvoiceCalculation } from '../../hooks/useInvoiceCalculation';
 import InvoiceValidator from '../../services/invoiceValidator';
 import DataTransformer from '../../services/dataTransformer';
@@ -269,10 +269,11 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
         customer_id: selectedCustomer?.customer_id
       };
 
-      const result = await InvoiceCalculatorEnterprise.calculateInvoice(invoiceData);
+      const result = await InvoiceCalculator.calculateSmart(invoiceData, { validateWithBackend: true });
       
       if (result.success && result.totals) {
-        const formattedTotals = InvoiceCalculatorEnterprise.formatTotalsForDisplay(result.totals);
+        // Just use the totals directly - no need for complex formatting
+        const formattedTotals = result.totals;
         
         console.log('Invoice calculation result:', result);
 
@@ -386,7 +387,7 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
     
     // INSTANT: Calculate locally immediately for instant UI feedback
     try {
-      const instantResult = InvoiceCalculatorEnterprise.calculateInstant({ 
+      const instantResult = InvoiceCalculator.calculate({ 
         ...invoice, 
         items: updatedItems 
       });
@@ -410,22 +411,8 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
       setInvoice(prev => ({ ...prev, items: updatedItems }));
     }
     
-    // Backend calculation for verification (non-blocking)
-    InvoiceCalculatorEnterprise.calculateDebounced(
-      { ...invoice, items: updatedItems },
-      (error, result) => {
-        if (!error && result.success && !result.isLocal) {
-          // Only update if this is backend result
-          const formattedTotals = InvoiceCalculatorEnterprise.formatTotalsForDisplay(result.totals);
-          setInvoice(prev => ({
-            ...prev,
-            ...formattedTotals,
-            calculatedLineItems: result.line_items
-          }));
-        }
-      },
-      800 // Longer delay since we have instant feedback
-    );
+    // Backend validation removed - calculations are instant now
+    // Backend validation only happens on save
   };
 
   const handleRemoveItem = (index) => {
@@ -433,7 +420,7 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
     
     // INSTANT: Calculate locally for immediate feedback
     try {
-      const instantResult = InvoiceCalculatorEnterprise.calculateInstant({ 
+      const instantResult = InvoiceCalculator.calculate({ 
         ...invoice, 
         items: updatedItems 
       });
@@ -457,22 +444,8 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
     }
     
     // Backend calculation for verification
-    if (updatedItems.length > 0) {
-      InvoiceCalculatorEnterprise.calculateDebounced(
-        { ...invoice, items: updatedItems },
-        (error, result) => {
-          if (!error && result.success && !result.isLocal) {
-            const formattedTotals = InvoiceCalculatorEnterprise.formatTotalsForDisplay(result.totals);
-            setInvoice(prev => ({
-              ...prev,
-              ...formattedTotals,
-              calculatedLineItems: result.line_items
-            }));
-          }
-        },
-        800
-      );
-    }
+    // Backend validation removed for real-time updates
+    // Calculations are instant using local calculator
   };
 
   // ENTERPRISE CALCULATION: Real-time frontend calculations with backend validation
@@ -626,7 +599,7 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
       
       // INSTANT: Calculate locally for immediate feedback
       try {
-        const instantResult = InvoiceCalculatorEnterprise.calculateInstant({ 
+        const instantResult = InvoiceCalculator.calculate({ 
           ...invoice, 
           items: updatedItems 
         });
@@ -652,21 +625,7 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
         }));
       }
       
-      // Backend calculation for verification
-      InvoiceCalculatorEnterprise.calculateDebounced(
-        { ...invoice, items: updatedItems },
-        (error, result) => {
-          if (!error && result.success && !result.isLocal) {
-            const formattedTotals = InvoiceCalculatorEnterprise.formatTotalsForDisplay(result.totals);
-            setInvoice(prev => ({
-              ...prev,
-              ...formattedTotals,
-              calculatedLineItems: result.line_items
-            }));
-          }
-        },
-        800
-      );
+      // Backend validation removed - instant local calculations only
     }
   };
 
@@ -1970,11 +1929,12 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
             <div className="bg-white rounded-lg border border-gray-200 p-3">
               <SplitPayment
                 totalAmount={
+                  // Simple calculation: taxable + tax + roundoff + delivery
+                  // Discount is already included in taxable_amount
                   (invoice.subtotal_amount || invoice.taxable_amount || 0) + 
                   (invoice.tax_amount || 0) + 
                   (invoice.round_off || 0) + 
-                  (invoice.delivery_charges || 0) - 
-                  (invoice.invoice_discount || 0)
+                  (invoice.delivery_charges || 0)
                 }
                 payments={[
                   {

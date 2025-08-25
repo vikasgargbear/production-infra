@@ -49,10 +49,11 @@ const InvoicePreview = ({
     const discount = parseFloat(invoice.discount_amount) || 0;
     
     const taxableAmount = subtotal - discount;
-    // Calculate the final amount correctly: taxable + tax + delivery - roundoff
+    // Calculate the final amount correctly: taxable + tax + delivery + roundoff
     const grossAmount = taxableAmount + totalTax + deliveryCharges;
-    const roundOff = invoice.round_off || (Math.round(grossAmount) - grossAmount);
-    const totalAmount = invoice.final_amount || invoice.net_amount || (grossAmount + roundOff);
+    const roundOff = invoice.round_off || parseFloat((Math.round(grossAmount) - grossAmount).toFixed(2));
+    // IMPORTANT: totalAmount should be taxable + tax + delivery + roundoff
+    const totalAmount = grossAmount + roundOff;
     
     return {
       subtotal: subtotal,

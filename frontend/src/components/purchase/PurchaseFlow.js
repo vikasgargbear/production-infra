@@ -5,7 +5,7 @@ import { searchCache } from '../../utils/searchCache';
 import { ProductCreationModal, MonthYearPicker, ViewHistoryButton, ItemsTable, SupplierCreationModal, PurchaseFlow as GlobalPurchaseFlow, ContentCard, AddNewButton, StandardDatePicker, StandardFormInput, StandardSelect } from '../global';
 import PurchaseSummaryTop from './components/PurchaseSummaryTop';
 import documentNumberService from '../../services/documentNumberService';
-import PurchaseCalculatorEnterprise from '../../services/purchaseCalculatorEnterprise';
+import EnterpriseCalculator from '../../services/enterpriseCalculator'; // Use unified calculator
 import { useCompany } from '../../contexts/CompanyContext';
 
 const PurchaseFlow = ({ onClose }) => {
@@ -116,10 +116,10 @@ const PurchaseFlow = ({ onClose }) => {
     }
 
     try {
-      const result = await PurchaseCalculatorEnterprise.calculatePurchase(purchase);
+      const result = await EnterpriseCalculator.calculateTotals(purchase.items || [], purchase);
       
       if (result.success && result.totals) {
-        const formattedTotals = PurchaseCalculatorEnterprise.formatTotalsForDisplay(result.totals);
+        const formattedTotals = result.totals; // Use totals directly
         
         setPurchase(prev => ({
           ...prev,

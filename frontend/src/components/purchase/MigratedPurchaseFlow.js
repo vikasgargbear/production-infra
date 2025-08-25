@@ -13,7 +13,7 @@ import {
   GenericSuccessModal,
   useToast
 } from '../global';
-import PurchaseCalculatorEnterprise from '../../services/purchaseCalculatorEnterprise';
+import EnterpriseCalculator from '../../services/enterpriseCalculator'; // Use unified calculator
 
 /**
  * MigratedPurchaseFlow - Purchase Entry using the new global document system
@@ -75,10 +75,10 @@ const MigratedPurchaseFlow = ({ onClose, prefilledData = null }) => {
     }
 
     try {
-      const result = await PurchaseCalculatorEnterprise.calculatePurchase(purchase);
+      const result = await EnterpriseCalculator.calculateTotals(purchase.items || [], purchase);
       
       if (result.success && result.totals) {
-        const formattedTotals = PurchaseCalculatorEnterprise.formatTotalsForDisplay(result.totals);
+        const formattedTotals = result.totals; // Use totals directly
         
         setPurchase(prev => ({
           ...prev,
