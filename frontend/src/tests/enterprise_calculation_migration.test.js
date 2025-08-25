@@ -7,7 +7,7 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import '@testing-library/jest-dom';
 // All calculators now use EnterpriseCalculator
 import EnterpriseCalculator from '../services/enterpriseCalculator';
-import InvoiceCalculatorEnterprise from '../services/invoiceCalculatorEnterprise';
+import InvoiceCalculator from '../services/InvoiceCalculator';
 
 // Mock API calls
 jest.mock('../services/api', () => ({
