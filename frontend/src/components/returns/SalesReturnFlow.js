@@ -759,6 +759,7 @@ const SalesReturnFlow = ({ onClose }) => {
                           onChange={(value) => setReturnData(prev => ({ ...prev, return_reason: value }))}
                           options={returnReasons}
                           placeholder="Select return reason..."
+                          size="lg"
                           className="w-full"
                         />
                       </div>
@@ -771,7 +772,7 @@ const SalesReturnFlow = ({ onClose }) => {
                           value={returnData.return_reason_notes}
                           onChange={(e) => setReturnData(prev => ({ ...prev, return_reason_notes: e.target.value }))}
                           placeholder="Additional details..."
-                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                          className="w-full px-4 py-3 text-lg border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                         />
                       </div>
                     </div>

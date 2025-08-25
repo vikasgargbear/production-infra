@@ -505,6 +505,7 @@ const PurchaseReturnFlow = ({ onClose }) => {
                       onChange={(value) => setReturnData(prev => ({ ...prev, return_reason: value }))}
                       options={returnReasons}
                       placeholder="Select reason..."
+                      size="lg"
                     />
                   </div>
 
@@ -532,6 +533,7 @@ const PurchaseReturnFlow = ({ onClose }) => {
                             { value: 'COURIER', label: 'Courier' }
                           ]}
                           placeholder="Select mode..."
+                          size="md"
                         />
                       </div>
                       <div>
