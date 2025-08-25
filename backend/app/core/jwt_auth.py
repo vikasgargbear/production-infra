@@ -12,7 +12,7 @@ from fastapi.security import OAuth2PasswordBearer
 # Configuration
 SECRET_KEY = os.getenv("JWT_SECRET_KEY", "your-secret-key-here")
 ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 1440  # 24 hours for better UX
+ACCESS_TOKEN_EXPIRE_MINUTES = 720  # 12 hours as requested
 
 # Password hashing
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")

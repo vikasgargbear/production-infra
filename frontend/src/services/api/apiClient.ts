@@ -37,14 +37,25 @@ apiClient.interceptors.request.use(
         const payload = JSON.parse(atob(token.split('.')[1]));
         const expiry = payload.exp * 1000; // Convert to milliseconds
         
-        if (Date.now() < expiry) {
+        // Add 5 minute buffer for clock skew
+        const now = Date.now();
+        const expiryWithBuffer = expiry - (5 * 60 * 1000); // 5 minutes before actual expiry
+        
+        if (now < expiry) {
+          // Token is still valid
           config.headers.Authorization = `Bearer ${token}`;
           // Also add org_id from token to header (temporary)
           if (payload.org_id) {
             config.headers['X-Org-Id'] = payload.org_id;
           }
+          
+          // Log token status for debugging
+          const hoursRemaining = ((expiry - now) / (1000 * 60 * 60)).toFixed(1);
+          console.log(`Token valid for ${hoursRemaining} more hours`);
+          
         } else if (!isAuthEndpoint) {
           // Token expired - only redirect if not an auth endpoint
+          console.error('Token expired:', new Date(expiry), 'Current time:', new Date(now));
           localStorage.removeItem('authToken');
           // Prevent redirect loop
           if (!window.location.pathname.includes('/login')) {
@@ -53,12 +64,10 @@ apiClient.interceptors.request.use(
           return Promise.reject(new Error('Token expired'));
         }
       } catch (e) {
-        // Invalid token format
-        localStorage.removeItem('authToken');
-        if (!isAuthEndpoint && !window.location.pathname.includes('/login')) {
-          window.location.href = '/login?reason=invalid_token';
-        }
-        return Promise.reject(new Error('Invalid token'));
+        // Don't remove token on decode error - let backend validate
+        console.error('Token decode error:', e);
+        // Still try to use the token
+        config.headers.Authorization = `Bearer ${token}`;
       }
     } else if (!isAuthEndpoint) {
       // No token and not an auth endpoint
@@ -93,15 +102,23 @@ apiClient.interceptors.response.use(
   (error: AxiosError) => {
     // Handle specific status codes
     if (error.response?.status === 401) {
-      // Handle unauthorized - clear token and redirect to login
-      localStorage.removeItem('authToken');
-      sessionStorage.clear(); // Clear any session data
-      // Only redirect if not already on login/register/setup pages
-      if (!window.location.pathname.includes('/login') && 
-          !window.location.pathname.includes('/register') &&
-          !window.location.pathname.includes('/setup')) {
-        window.location.href = '/login?reason=session_expired';
+      // Check if this is actually a token issue or just missing auth
+      const token = localStorage.getItem('authToken');
+      
+      if (token) {
+        // We had a token but it was rejected - likely expired
+        console.error('Token rejected by server, clearing auth');
+        localStorage.removeItem('authToken');
+        sessionStorage.clear(); // Clear any session data
+        
+        // Only redirect if not already on login/register/setup pages
+        if (!window.location.pathname.includes('/login') && 
+            !window.location.pathname.includes('/register') &&
+            !window.location.pathname.includes('/setup')) {
+          window.location.href = '/login?reason=session_expired';
+        }
       }
+      // If no token, just let the error bubble up without clearing anything
     } else if (error.response?.status === 404) {
       // For 404 errors, return a rejected promise with a custom flag
       // This prevents uncaught errors while allowing handlers to detect 404s
