@@ -85,7 +85,7 @@ class OrderBase(BaseModel):
 
 class OrderCreate(OrderBase):
     """Schema for creating an order"""
-    org_id: UUID = Field(..., description="Organization ID")
+    org_id: Optional[UUID] = Field(None, description="Organization ID - optional, derived from token")
     items: List[OrderItemCreate] = Field(..., min_items=1)
     
     @validator('delivery_date')

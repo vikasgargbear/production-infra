@@ -64,7 +64,7 @@ export const challansApi = {
     
     // Otherwise, create order first
     const orderData = {
-      org_id: localStorage.getItem('org_id') || 'ad808530-1ddb-4377-ab20-67bef145d80d',
+      // Don't send org_id - let backend get it from token/header
       customer_id: data.customer_id,
       order_date: data.challan_date,
       order_type: 'sales',

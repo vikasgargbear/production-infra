@@ -197,6 +197,30 @@ In Network tab, check that requests include:
 - Add org switching for users with multiple orgs
 - Implement row-level security in database
 
+## Common Issues After Migration
+
+### Orders/Challans Failing
+**Problem**: Orders endpoint returns 404 "Customer not found"
+**Cause**: 
+- Frontend sends hardcoded org_id in request body
+- Backend uses different org_id from token/header
+- Customer exists for one org_id but not the other
+
+**Solution**:
+1. Remove org_id from frontend request body
+2. Make org_id optional in OrderCreate schema
+3. Use org_id from token in backend: `get_org_id_from_token`
+4. Ensure X-Org-Id header matches customer's org_id
+
+### Invoice Creation Issues
+**Problem**: Invoice saves fail with foreign key violations
+**Cause**: Product/Customer IDs don't exist for the org_id being used
+
+**Solution**:
+1. Use consistent org_id: `e78d6777-35f6-4b19-994f-caaede2f021a`
+2. Ensure test data exists for this org_id
+3. Check X-Org-Id header in requests
+
 ## Key Takeaways
 
 1. **Never trust client-provided org_id** - Always derive from authentication
@@ -204,6 +228,7 @@ In Network tab, check that requests include:
 3. **Schema alignment is critical** - Frontend and backend must match exactly
 4. **Test with real org_id** - Not hardcoded test values
 5. **Multi-tenancy is about security** - Not just data separation
+6. **Schemas should not require org_id** - Backend gets it from token
 
 ## Debugging Checklist
 
@@ -236,6 +261,8 @@ When customer creation fails:
 - `/backend/app/main.py`
 - `/backend/app/api/routes/invoices.py`
 - `/backend/app/api/routes/purchases.py`
+- `/backend/app/api/routes/orders.py` - Updated to use get_org_id_from_token
+- `/backend/app/api/schemas/order.py` - NEEDS FIX: Remove required org_id from OrderCreate
 
 ## References
 - JWT Best Practices: https://tools.ietf.org/html/rfc8725
