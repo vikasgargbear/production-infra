@@ -750,7 +750,7 @@ async def get_invoices(
                 i.customer_name,
                 i.final_amount,
                 i.paid_amount,
-                COALESCE(i.credit_amount, GREATEST(0, i.final_amount - COALESCE(i.paid_amount, 0))) as credit_amount,
+                GREATEST(0, i.final_amount - COALESCE(i.paid_amount, 0)) as credit_amount,
                 i.payment_status,
                 i.invoice_status
             FROM sales.invoices i
