@@ -46,6 +46,7 @@ class ChallanCreationRequest(BaseModel):
     transport_company: Optional[str] = None
     lr_number: Optional[str] = None
     freight_amount: Optional[Decimal] = Field(default=0, ge=0)
+    freight_charges: Optional[Decimal] = Field(default=0, ge=0)  # Alias for freight_amount
     delivery_address: str
     delivery_city: str
     delivery_state: str
@@ -126,6 +127,12 @@ class EnterpriseChallanService:
             order = None
             branch_id = 1  # Default branch_id
             customer_name = None
+            taxable_amount = Decimal("0")
+            gst_amount = Decimal("0")
+            total_amount = Decimal("0")
+            
+            # Use freight_charges if provided, otherwise freight_amount (backward compatibility)
+            freight = request.freight_charges if request.freight_charges else (request.freight_amount or Decimal("0"))
             
             # Get created_by user - same approach as invoices
             created_by_user = self._get_created_by_user()
@@ -161,10 +168,34 @@ class EnterpriseChallanService:
                 if customer:
                     customer_name = customer.customer_name
             
+            # Calculate amounts for independent challans
+            if not request.order_id:
+                # Calculate taxable amount (sum of item totals)
+                for item in request.items:
+                    item_total = item.unit_price * item.dispatched_quantity
+                    taxable_amount += item_total
+                    
+                    # Get GST rate from product/batch if needed
+                    # For now using a default 12% GST for independent challans
+                    # In production, this should come from product master
+                    gst_rate = Decimal("12")  # Default GST rate
+                    item_gst = item_total * gst_rate / 100
+                    gst_amount += item_gst
+                
+                total_amount = taxable_amount + gst_amount + freight
+            else:
+                # For order-based challans, use order's amounts
+                if order:
+                    total_amount = order.final_amount + freight
+                    # Estimate taxable and GST from order total
+                    # Assuming GST is ~10.7% of taxable (12% GST rate)
+                    taxable_amount = (order.final_amount - freight) / Decimal("1.12")
+                    gst_amount = order.final_amount - freight - taxable_amount
+            
             # Generate challan number
             challan_number = self._generate_challan_number()
             
-            # Create challan record WITH proper created_by field
+            # Create challan record WITH proper created_by field and new financial fields
             challan_result = self.db.execute(
                 text("""
                     INSERT INTO sales.delivery_challans (
@@ -172,12 +203,14 @@ class EnterpriseChallanService:
                         challan_date, dispatch_date, challan_status,
                         vehicle_number, transporter_name, lr_number, 
                         freight_charges, total_quantity, total_amount,
+                        taxable_amount, gst_amount,
                         delivery_status, notes, created_by
                     ) VALUES (
                         :org_id, :branch_id, :order_id, :customer_id, :challan_number,
                         :challan_date, :dispatch_date, :challan_status,
                         :vehicle_number, :transporter_name, :lr_number,
                         :freight_charges, :total_quantity, :total_amount,
+                        :taxable_amount, :gst_amount,
                         :delivery_status, :notes, :created_by
                     )
                     RETURNING challan_id
@@ -185,7 +218,7 @@ class EnterpriseChallanService:
                 {
                     "org_id": self.org_id,
                     "branch_id": branch_id,
-                    "order_id": request.order_id,
+                    "order_id": request.order_id,  # Can be NULL for independent challans
                     "customer_id": request.customer_id,
                     "challan_number": challan_number,
                     "challan_date": date.today(),
@@ -194,13 +227,11 @@ class EnterpriseChallanService:
                     "vehicle_number": request.vehicle_number,
                     "transporter_name": request.transport_company,
                     "lr_number": request.lr_number,
-                    "freight_charges": request.freight_amount or 0,
-                    "total_quantity": sum(item.dispatched_quantity for item in request.items),  # Sum of quantities
-                    # Calculate total with GST (assuming 12% if not specified) and freight
-                    "total_amount": (
-                        sum(item.unit_price * item.dispatched_quantity * Decimal('1.12') for item in request.items) +
-                        (request.freight_amount or 0)
-                    ),
+                    "freight_charges": freight,
+                    "total_quantity": sum(item.dispatched_quantity for item in request.items),
+                    "total_amount": total_amount,
+                    "taxable_amount": taxable_amount,
+                    "gst_amount": gst_amount,
                     "delivery_status": "pending",
                     "notes": f"Delivery to: {request.delivery_address}, {request.delivery_city}",
                     "created_by": created_by_user
@@ -290,11 +321,12 @@ class EnterpriseChallanService:
                 "challan_number": challan_number,
                 "customer_name": customer_name,
                 "status": "draft",
-                "total_amount": (
-                    sum(item.unit_price * item.dispatched_quantity * Decimal('1.12') for item in request.items) +
-                    (request.freight_amount or 0)
-                ),
-                "items": len(request.items)
+                "total_amount": total_amount,
+                "taxable_amount": taxable_amount,
+                "gst_amount": gst_amount,
+                "freight_charges": freight,
+                "items": len(request.items),
+                "is_independent": request.order_id is None  # Flag to indicate independent challan
             }
             
         except HTTPException:
@@ -347,6 +379,9 @@ async def list_delivery_challans(
                 c.lr_number,
                 c.total_quantity,
                 c.total_amount,
+                c.taxable_amount,
+                c.gst_amount,
+                c.freight_charges,
                 c.delivery_status,
                 c.notes
             FROM sales.delivery_challans c

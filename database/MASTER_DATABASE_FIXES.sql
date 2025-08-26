@@ -2378,6 +2378,86 @@ BEGIN
 END $$;
 
 -- ========================================
+-- SECTION 23: CHALLAN TABLE ENHANCEMENTS
+-- ========================================
+-- Add financial tracking columns to delivery_challans table
+-- Support independent challans (without orders)
+
+DO $$
+BEGIN
+    -- Add financial tracking columns to delivery_challans
+    ALTER TABLE sales.delivery_challans 
+    ADD COLUMN IF NOT EXISTS taxable_amount NUMERIC(15,2) DEFAULT 0,
+    ADD COLUMN IF NOT EXISTS gst_amount NUMERIC(15,2) DEFAULT 0,
+    ADD COLUMN IF NOT EXISTS freight_charges NUMERIC(15,2) DEFAULT 0;
+    
+    -- Make order_id optional to support independent challans
+    ALTER TABLE sales.delivery_challans 
+    ALTER COLUMN order_id DROP NOT NULL;
+    
+    -- Update existing challans to calculate taxable_amount
+    UPDATE sales.delivery_challans dc
+    SET 
+        taxable_amount = COALESCE(
+            (SELECT SUM(dci.quantity * dci.unit_price) 
+             FROM sales.delivery_challan_items dci 
+             WHERE dci.challan_id = dc.challan_id), 0
+        ),
+        gst_amount = CASE 
+            WHEN dc.total_amount > 0 AND dc.freight_amount IS NOT NULL 
+            THEN dc.total_amount - dc.freight_amount - COALESCE(
+                (SELECT SUM(dci.quantity * dci.unit_price) 
+                 FROM sales.delivery_challan_items dci 
+                 WHERE dci.challan_id = dc.challan_id), 0
+            )
+            ELSE 0
+        END
+    WHERE taxable_amount IS NULL OR taxable_amount = 0;
+    
+    -- Create function to auto-calculate challan amounts
+    CREATE OR REPLACE FUNCTION sales.calculate_challan_amounts()
+    RETURNS TRIGGER AS $func$
+    DECLARE
+        v_taxable_amount NUMERIC(15,2);
+        v_gst_amount NUMERIC(15,2);
+    BEGIN
+        -- Calculate taxable amount from items
+        SELECT COALESCE(SUM(quantity * unit_price), 0)
+        INTO v_taxable_amount
+        FROM sales.delivery_challan_items
+        WHERE challan_id = NEW.challan_id;
+        
+        -- Calculate GST amount (total - taxable - freight)
+        v_gst_amount := NEW.total_amount - v_taxable_amount - COALESCE(NEW.freight_charges, 0);
+        
+        -- Update the challan
+        NEW.taxable_amount := v_taxable_amount;
+        NEW.gst_amount := v_gst_amount;
+        
+        RETURN NEW;
+    END;
+    $func$ LANGUAGE plpgsql;
+    
+    -- Create trigger for auto-calculation
+    DROP TRIGGER IF EXISTS calculate_challan_amounts_trigger ON sales.delivery_challans;
+    CREATE TRIGGER calculate_challan_amounts_trigger
+        BEFORE INSERT OR UPDATE OF total_amount, freight_charges
+        ON sales.delivery_challans
+        FOR EACH ROW
+        EXECUTE FUNCTION sales.calculate_challan_amounts();
+    
+    -- Add comments
+    COMMENT ON COLUMN sales.delivery_challans.taxable_amount IS 'Sum of item quantities × unit prices before tax';
+    COMMENT ON COLUMN sales.delivery_challans.gst_amount IS 'Total GST/tax amount on the challan';
+    COMMENT ON COLUMN sales.delivery_challans.freight_charges IS 'Freight/delivery charges';
+    COMMENT ON COLUMN sales.delivery_challans.order_id IS 'Optional link to order - challans can exist independently';
+    
+    RAISE NOTICE '✅ SECTION 23: CHALLAN TABLE ENHANCEMENTS COMPLETE';
+    RAISE NOTICE 'Added: taxable_amount, gst_amount, freight_charges columns';
+    RAISE NOTICE 'Made order_id optional to support independent challans';
+END $$;
+
+-- ========================================
 -- Note: Authentication is handled by Supabase Auth
 -- ========================================
 -- The master.org_users table has an auth_user_id column that

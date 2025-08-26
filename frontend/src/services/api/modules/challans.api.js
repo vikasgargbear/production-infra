@@ -33,74 +33,13 @@ export const challansApi = {
   
   // Create new challan
   create: async (data) => {
-    // If order_id is provided, use it directly
-    if (data.order_id) {
-      const challanData = {
-        order_id: data.order_id,
-        customer_id: data.customer_id,
-        challan_date: data.challan_date,
-        expected_delivery_date: data.expected_delivery_date || data.challan_date,
-        delivery_address: data.delivery_address || '',
-        delivery_city: data.delivery_city || 'Mumbai',
-        delivery_state: data.delivery_state || 'Maharashtra',
-        delivery_pincode: data.delivery_pincode || '400001',
-        transport_company: data.transport_company,
-        vehicle_number: data.vehicle_number,
-        lr_number: data.lr_number,
-        notes: data.notes,
-        items: data.items.map((item, index) => ({
-          order_item_id: item.order_item_id || index + 1, // Use index+1 if no order_item_id
-          product_id: item.product_id,
-          product_name: item.product_name || item.name || 'Unknown Product', // Required field
-          quantity: parseFloat(item.quantity),
-          unit_price: parseFloat(item.unit_price || 0),
-          ordered_quantity: parseFloat(item.quantity), // Same as quantity for direct challans
-          dispatched_quantity: parseFloat(item.quantity) // Same as quantity for direct challans
-        }))
-      };
-      
-      return apiHelpers.post(CHALLAN_ENDPOINT, challanData);
-    }
-    
-    // Otherwise, create order first
-    const orderData = {
-      // Don't send org_id - let backend get it from token/header
-      customer_id: data.customer_id,
-      order_date: data.challan_date,
-      order_type: 'sales',
-      order_status: 'confirmed',
-      payment_terms: 'cash',
-      payment_status: 'pending',
-      delivery_address: data.delivery_address,
-      items: data.items.map(item => ({
-        product_id: item.product_id,
-        quantity: parseFloat(item.quantity),
-        unit_price: parseFloat(item.unit_price || 0),
-        tax_percent: parseFloat(item.gst_percent || 0),
-        tax_amount: parseFloat(item.tax_amount || 0),
-        discount_percent: 0
-      }))
-    };
-    
-    let orderId;
-    try {
-      const orderResponse = await apiHelpers.post('/orders/', orderData);
-      orderId = orderResponse.data.order_id || orderResponse.data.id;
-    } catch (error) {
-      // If error includes "Order X not found", it means order was created but inventory failed
-      const match = error.response?.data?.detail?.match(/Order (\d+) not found/);
-      if (match) {
-        orderId = parseInt(match[1]);
-      } else {
-        throw error;
-      }
-    }
-    
-    // Now create challan with the order
+    // Direct challan creation - no order required
     const challanData = {
-      order_id: orderId,
+      // order_id is optional - challan can be independent
+      order_id: data.order_id || null,
       customer_id: data.customer_id,
-      challan_date: data.challan_date,
+      challan_date: data.challan_date || new Date().toISOString().split('T')[0],
+      dispatch_date: data.dispatch_date || data.challan_date,
       expected_delivery_date: data.expected_delivery_date || data.challan_date,
       delivery_address: data.delivery_address || '',
       delivery_city: data.delivery_city || 'Mumbai',
@@ -109,15 +48,51 @@ export const challansApi = {
       transport_company: data.transport_company,
       vehicle_number: data.vehicle_number,
       lr_number: data.lr_number,
+      freight_charges: parseFloat(data.freight_charges || 0),
       notes: data.notes,
       items: data.items.map((item, index) => ({
-        order_item_id: item.order_item_id || orderId * 1000 + index + 1, // Generate unique order_item_id
+        order_item_id: item.order_item_id || null, // Optional for independent challans
         product_id: item.product_id,
-        product_name: item.product_name || item.name || 'Unknown Product', // Required field
-        quantity: parseFloat(item.quantity),
+        product_name: item.product_name || item.name || 'Unknown Product',
+        batch_id: item.batch_id || null,
+        batch_number: item.batch_number || null,
+        quantity: parseFloat(item.quantity || 0),
         unit_price: parseFloat(item.unit_price || 0),
-        ordered_quantity: parseFloat(item.quantity), // Same as quantity for new challans
-        dispatched_quantity: parseFloat(item.quantity) // Same as quantity for new challans
+        ordered_quantity: parseFloat(item.ordered_quantity || item.quantity || 0),
+        dispatched_quantity: parseFloat(item.dispatched_quantity || item.quantity || 0)
+      }))
+    };
+    
+    return apiHelpers.post(CHALLAN_ENDPOINT, challanData);
+  },
+  
+  // Create challan from order (legacy support)
+  createFromOrder: async (orderId, data) => {
+    const challanData = {
+      order_id: orderId,
+      customer_id: data.customer_id,
+      challan_date: data.challan_date || new Date().toISOString().split('T')[0],
+      dispatch_date: data.dispatch_date || data.challan_date,
+      expected_delivery_date: data.expected_delivery_date || data.challan_date,
+      delivery_address: data.delivery_address || '',
+      delivery_city: data.delivery_city || 'Mumbai', 
+      delivery_state: data.delivery_state || 'Maharashtra',
+      delivery_pincode: data.delivery_pincode || '400001',
+      transport_company: data.transport_company,
+      vehicle_number: data.vehicle_number,
+      lr_number: data.lr_number,
+      freight_charges: parseFloat(data.freight_charges || 0),
+      notes: data.notes,
+      items: data.items.map((item, index) => ({
+        order_item_id: item.order_item_id || index + 1,
+        product_id: item.product_id,
+        product_name: item.product_name || item.name || 'Unknown Product',
+        batch_id: item.batch_id || null,
+        batch_number: item.batch_number || null,
+        quantity: parseFloat(item.quantity || 0),
+        unit_price: parseFloat(item.unit_price || 0),
+        ordered_quantity: parseFloat(item.ordered_quantity || item.quantity || 0),
+        dispatched_quantity: parseFloat(item.dispatched_quantity || item.quantity || 0)
       }))
     };
     
