@@ -16,18 +16,18 @@ const SplitPayment = ({
   readOnly = false 
 }) => {
   const [paymentMethods, setPaymentMethods] = useState(payments.length > 0 ? payments : [
-    { id: 1, method: 'Cash', amount: 0, reference: '' }
+    { id: 1, method: 'cash', amount: 0, reference: '' }
   ]);
   const [paymentStatus, setPaymentStatus] = useState('Pending');
 
-  // Payment method options with icons
+  // Payment method options with icons - aligned with backend method_code
   const paymentOptions = [
-    { value: 'Cash', label: 'Cash', icon: Banknote, color: 'green' },
-    { value: 'Card', label: 'Card', icon: CreditCard, color: 'blue' },
-    { value: 'UPI', label: 'UPI', icon: Smartphone, color: 'purple' },
-    { value: 'Bank Transfer', label: 'Bank Transfer', icon: Building2, color: 'indigo' },
-    { value: 'Cheque', label: 'Cheque', icon: FileText, color: 'gray' },
-    { value: 'Credit', label: 'Credit', icon: FileText, color: 'orange' }
+    { value: 'cash', label: 'Cash', icon: Banknote, color: 'green' },
+    { value: 'card', label: 'Card', icon: CreditCard, color: 'blue' },
+    { value: 'upi', label: 'UPI', icon: Smartphone, color: 'purple' },
+    { value: 'bank', label: 'Bank Transfer', icon: Building2, color: 'indigo' },
+    { value: 'check', label: 'Cheque', icon: FileText, color: 'gray' }
+    // Note: Credit removed - it's a payment term, not a payment method
   ];
 
   // Calculate total paid and remaining
@@ -77,7 +77,7 @@ const SplitPayment = ({
     if (readOnly) return;
     
     const newId = Math.max(...paymentMethods.map(p => p.id), 0) + 1;
-    const defaultMethod = paymentMethods.length === 0 ? 'Cash' : 'Card';
+    const defaultMethod = paymentMethods.length === 0 ? 'cash' : 'card';
     
     setPaymentMethods([...paymentMethods, {
       id: newId,

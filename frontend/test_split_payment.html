@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Split Payment Test</title>
+    <style>
+        body { font-family: Arial; padding: 20px; }
+        .test { margin: 20px 0; padding: 15px; border: 1px solid #ddd; }
+        .success { background: #d4edda; }
+        .error { background: #f8d7da; }
+        button { padding: 10px 20px; margin: 5px; }
+    </style>
+</head>
+<body>
+    <h1>Split Payment Test</h1>
+    
+    <div class="test">
+        <h2>Test 1: Single Cash Payment (₹100)</h2>
+        <button onclick="testSinglePayment()">Run Test</button>
+        <div id="result1"></div>
+    </div>
+    
+    <div class="test">
+        <h2>Test 2: Split Payment (₹60 Cash + ₹40 UPI)</h2>
+        <button onclick="testSplitPayment()">Run Test</button>
+        <div id="result2"></div>
+    </div>
+    
+    <div class="test">
+        <h2>Test 3: Three-way Split (₹30 Cash + ₹20 UPI + ₹50 Credit)</h2>
+        <button onclick="testThreeWaySplit()">Run Test</button>
+        <div id="result3"></div>
+    </div>
+
+    <script>
+        const API_URL = 'https://pharma-backend-production-0c09.up.railway.app/api';
+        
+        async function testSinglePayment() {
+            const data = {
+                customer_id: 108,
+                items: [{
+                    product_id: 123,
+                    quantity: 1,
+                    unit_price: 100,
+                    discount_percent: 0
+                }],
+                payments: [
+                    { method: "cash", amount: 100 }
+                ]
+            };
+            
+            const result = await sendInvoice(data);
+            document.getElementById('result1').innerHTML = formatResult(result);
+        }
+        
+        async function testSplitPayment() {
+            const data = {
+                customer_id: 108,
+                items: [{
+                    product_id: 123,
+                    quantity: 1,
+                    unit_price: 100,
+                    discount_percent: 0
+                }],
+                payments: [
+                    { method: "cash", amount: 60 },
+                    { method: "upi", amount: 40 }
+                ]
+            };
+            
+            const result = await sendInvoice(data);
+            document.getElementById('result2').innerHTML = formatResult(result);
+        }
+        
+        async function testThreeWaySplit() {
+            const data = {
+                customer_id: 108,
+                items: [{
+                    product_id: 123,
+                    quantity: 1,
+                    unit_price: 100,
+                    discount_percent: 0
+                }],
+                payments: [
+                    { method: "cash", amount: 30 },
+                    { method: "upi", amount: 20 }
+                    // Note: Credit of ₹50 means customer owes ₹50
+                    // This is tracked by payment_status = 'partial'
+                ]
+            };
+            
+            const result = await sendInvoice(data);
+            document.getElementById('result3').innerHTML = formatResult(result);
+        }
+        
+        async function sendInvoice(data) {
+            try {
+                const response = await fetch(`${API_URL}/invoices/create`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(data)
+                });
+                
+                const result = await response.json();
+                
+                if (response.ok) {
+                    return {
+                        success: true,
+                        data: result,
+                        message: `Invoice ${result.invoice_number} created successfully!`
+                    };
+                } else {
+                    return {
+                        success: false,
+                        error: result.detail || 'Failed to create invoice'
+                    };
+                }
+            } catch (error) {
+                return {
+                    success: false,
+                    error: error.message
+                };
+            }
+        }
+        
+        function formatResult(result) {
+            if (result.success) {
+                return `
+                    <div class="success">
+                        <strong>✅ Success!</strong><br>
+                        ${result.message}<br>
+                        Invoice ID: ${result.data.invoice_id}<br>
+                        Total Amount: ₹${result.data.total_amount}
+                    </div>
+                `;
+            } else {
+                return `
+                    <div class="error">
+                        <strong>❌ Error:</strong><br>
+                        ${result.error}
+                    </div>
+                `;
+            }
+        }
+    </script>
+</body>
+</html>
