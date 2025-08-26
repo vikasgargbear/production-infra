@@ -2308,6 +2308,39 @@ RAISE NOTICE 'Using existing customer_groups table - more enterprise approach';
 END $$;
 
 -- ========================================
+-- SECTION 21: PAYMENT METHODS SETUP
+-- ========================================
+-- Populate standard payment methods for all organizations
+-- This ensures invoices can properly track payments
+
+DO $$
+DECLARE
+    v_org_id UUID;
+    v_org_name TEXT;
+BEGIN
+    -- Loop through all organizations and create payment methods
+    FOR v_org_id, v_org_name IN 
+        SELECT org_id, org_name FROM master.organizations
+    LOOP
+        -- Insert standard payment methods for each org
+        INSERT INTO financial.payment_methods 
+        (org_id, method_code, method_name, method_type, requires_reference, requires_approval, processing_days, is_active)
+        VALUES 
+        (v_org_id, 'CASH', 'Cash', 'instant', false, false, 0, true),
+        (v_org_id, 'UPI', 'UPI Payment', 'digital', true, false, 0, true),
+        (v_org_id, 'BANK', 'Bank Transfer', 'bank', true, false, 1, true),
+        (v_org_id, 'CHECK', 'Cheque', 'bank', true, true, 3, true),
+        (v_org_id, 'CARD', 'Credit/Debit Card', 'digital', true, false, 0, true),
+        (v_org_id, 'CREDIT', 'Credit Sale', 'credit', false, false, 0, true)
+        ON CONFLICT (org_id, method_code) DO NOTHING;
+        
+        RAISE NOTICE 'Created payment methods for org: %', v_org_name;
+    END LOOP;
+END $$;
+
+RAISE NOTICE '✅ SECTION 21: PAYMENT METHODS POPULATED FOR ALL ORGANIZATIONS';
+
+-- ========================================
 -- Note: Authentication is handled by Supabase Auth
 -- ========================================
 -- The master.org_users table has an auth_user_id column that
