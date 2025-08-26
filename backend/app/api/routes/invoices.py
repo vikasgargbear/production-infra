@@ -111,8 +111,6 @@ async def create_invoice(
     try:
         # Start fresh - clear any failed transaction state
         db.rollback()  # Clear any failed transaction state
-        db.commit()  # Commit the rollback
-        db.begin()  # Start a new transaction
         logger.info(f"Creating invoice for customer {invoice_data.get('customer_id')}")
         
         # Step 1: Get valid branch_id and created_by
@@ -314,7 +312,8 @@ async def create_invoice(
         # Step 7.5: Payment methods should already exist (populated via MASTER_DATABASE_FIXES.sql)
         # No need to check or create them on every invoice
         
-        # Step 7.6: Process payments and create records for actual money received
+        # Step 7.6: Track payments without creating records (to avoid transaction issues)
+        # TODO: Re-enable payment record creation once payment_methods are properly linked
         payments = invoice_data.get("payments", [])
         total_paid = 0
         
@@ -323,82 +322,10 @@ async def create_invoice(
                 payment_method = payment.get("method", "cash").upper()
                 payment_amount = float(payment.get("amount", 0))
                 
-                # Only create payment record for actual money received
-                # Credit is not a payment - it means no payment yet
+                # Count actual money received (not credit)
                 if payment_amount > 0:
-                    try:
-                        # Get payment method ID
-                        method_result = db.execute(text("""
-                            SELECT payment_method_id FROM financial.payment_methods
-                            WHERE org_id = :org_id AND method_code = :method_code
-                        """), {"org_id": org_id, "method_code": payment_method})
-                        method = method_result.fetchone()
-                        
-                        if method:
-                            method_id = method[0]
-                            
-                            # Generate payment number
-                            payment_num = db.execute(text("""
-                                SELECT COALESCE(MAX(CAST(SUBSTRING(payment_number FROM '[0-9]+') AS INTEGER)), 0) + 1
-                                FROM financial.payments WHERE org_id = :org_id
-                            """), {"org_id": org_id}).scalar() or 1
-                            payment_number = f"PAY-{payment_num:06d}"
-                            
-                            # Insert payment record
-                            payment_id = db.execute(text("""
-                                INSERT INTO financial.payments (
-                                    org_id, branch_id, payment_number, payment_date,
-                                    payment_type, party_type, party_id, party_name,
-                                    payment_amount, payment_method_id, 
-                                    reference_number, payment_status,
-                                    created_by, created_at
-                                ) VALUES (
-                                    :org_id, :branch_id, :payment_number, CURRENT_DATE,
-                                    'receipt', 'customer', :customer_id, :customer_name,
-                                    :amount, :method_id,
-                                    :invoice_number, 'processed',
-                                    :created_by, CURRENT_TIMESTAMP
-                                ) RETURNING payment_id
-                            """), {
-                                "org_id": org_id,
-                                "branch_id": branch_id,
-                                "payment_number": payment_number,
-                                "customer_id": invoice_data["customer_id"],
-                                "customer_name": customer_name,
-                                "amount": payment_amount,
-                                "method_id": method_id,
-                                "invoice_number": invoice_number,
-                                "created_by": created_by
-                            }).scalar()
-                            
-                            # Create payment allocation
-                            if payment_id:
-                                db.execute(text("""
-                                    INSERT INTO financial.payment_allocations (
-                                        payment_id, reference_type, reference_id, 
-                                        reference_number, allocated_amount, created_by
-                                    ) VALUES (
-                                        :payment_id, 'invoice', :invoice_id,
-                                        :invoice_number, :amount, :created_by
-                                    )
-                                """), {
-                                    "payment_id": payment_id,
-                                    "invoice_id": invoice_id,
-                                    "invoice_number": invoice_number,
-                                    "amount": payment_amount,
-                                    "created_by": created_by
-                                })
-                            
-                            logger.info(f"Payment {payment_number} created: {payment_method} - ₹{payment_amount}")
-                        else:
-                            logger.warning(f"Payment method {payment_method} not found, skipping payment record")
-                        
-                        total_paid += payment_amount
-                        
-                    except Exception as payment_error:
-                        logger.warning(f"Could not create payment record: {payment_error}")
-                        # Still count the payment towards total even if record creation fails
-                        total_paid += payment_amount
+                    total_paid += payment_amount
+                    logger.info(f"Payment tracked: {payment_method} - ₹{payment_amount}")
         
         # If no payments array, check legacy payment_mode field  
         elif invoice_data.get("payment_mode"):
