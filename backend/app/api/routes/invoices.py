@@ -119,14 +119,14 @@ async def create_invoice(
             WHERE org_id = :org_id LIMIT 1
         """), {"org_id": org_id})
         branch = branch_result.fetchone()
-        branch_id = branch[0] if branch else 1
+        branch_id = branch[0] if branch else None  # Use NULL if no branch found
         
         user_result = db.execute(text("""
             SELECT user_id FROM master.org_users 
             WHERE org_id = :org_id LIMIT 1
         """), {"org_id": org_id})
         user = user_result.fetchone()
-        created_by = user[0] if user else 1
+        created_by = user[0] if user else None  # Use NULL if no user found
         
         # Step 2: Generate order number
         order_result = db.execute(text("""

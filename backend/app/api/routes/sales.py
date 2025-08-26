@@ -95,7 +95,7 @@ async def create_direct_sale(
                 text("SELECT gst_number FROM parties.organizations WHERE org_id = :org_id"),
                 {"org_id": org_id}
             ).first()
-            seller_gstin = org.gst_number if org else "27AABCU9603R1ZM"  # Default Maharashtra GSTIN
+            seller_gstin = org.gst_number if org else None  # No default GSTIN
         else:
             seller_gstin = sale_data.seller_gstin
             
@@ -496,7 +496,7 @@ async def calculate_sale_totals(
                 text("SELECT gst_number FROM parties.organizations WHERE org_id = :org_id"),
                 {"org_id": org_id}
             ).first()
-            seller_gstin = org.gst_number if org else "27AABCU9603R1ZM"
+            seller_gstin = org.gst_number if org else None
         else:
             seller_gstin = sale_data.seller_gstin
             

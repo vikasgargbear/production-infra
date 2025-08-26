@@ -130,7 +130,7 @@ class EnterpriseChallanService:
         """Create new delivery challan - supports both order-based and direct creation"""
         try:
             order = None
-            branch_id = 5  # Using branch_id 5 as default (confirmed to exist)
+            branch_id = None  # Will try to get from org, otherwise NULL
             customer_name = None
             taxable_amount = Decimal("0")
             gst_amount = Decimal("0")
@@ -141,6 +141,19 @@ class EnterpriseChallanService:
             
             # Get created_by user - same approach as invoices
             created_by_user = self._get_created_by_user()
+            
+            # Try to get branch_id from org_branches (but allow NULL if not found)
+            try:
+                branch_result = self.db.execute(
+                    text("SELECT branch_id FROM master.org_branches WHERE org_id = :org_id LIMIT 1"),
+                    {"org_id": self.org_id}
+                )
+                branch = branch_result.fetchone()
+                if branch:
+                    branch_id = branch[0]
+            except Exception as e:
+                logger.info(f"No branch found for org {self.org_id}, using NULL")
+                branch_id = None
             
             # If order_id is provided, validate and get order details
             if request.order_id:
@@ -309,8 +322,8 @@ class EnterpriseChallanService:
                         "delivered_quantity": None,  # Will be updated when delivered
                         "returned_quantity": 0,
                         "damaged_quantity": 0,
-                        "uom": "PCS",  # Default unit, could be from product or item data
-                        "pack_type": item.package_type or "Strip",  # Use package_type from request
+                        "uom": item.uom if hasattr(item, 'uom') else None,  # From frontend or NULL
+                        "pack_type": item.package_type,  # From frontend or NULL
                         "item_status": "dispatched",
                         "item_notes": f"Product: {item.product_name}",  # Store product name in notes
                         "display_order": idx + 1,
