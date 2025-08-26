@@ -195,8 +195,12 @@ class EnterpriseChallanService:
                     "transporter_name": request.transport_company,
                     "lr_number": request.lr_number,
                     "freight_charges": request.freight_amount or 0,
-                    "total_quantity": len(request.items),  # Count of items for now
-                    "total_amount": sum(item.unit_price * item.dispatched_quantity for item in request.items),
+                    "total_quantity": sum(item.dispatched_quantity for item in request.items),  # Sum of quantities
+                    # Calculate total with GST (assuming 12% if not specified) and freight
+                    "total_amount": (
+                        sum(item.unit_price * item.dispatched_quantity * Decimal('1.12') for item in request.items) +
+                        (request.freight_amount or 0)
+                    ),
                     "delivery_status": "pending",
                     "notes": f"Delivery to: {request.delivery_address}, {request.delivery_city}",
                     "created_by": created_by_user
@@ -286,7 +290,10 @@ class EnterpriseChallanService:
                 "challan_number": challan_number,
                 "customer_name": customer_name,
                 "status": "draft",
-                "total_amount": sum(item.unit_price * item.dispatched_quantity for item in request.items),
+                "total_amount": (
+                    sum(item.unit_price * item.dispatched_quantity * Decimal('1.12') for item in request.items) +
+                    (request.freight_amount or 0)
+                ),
                 "items": len(request.items)
             }
             

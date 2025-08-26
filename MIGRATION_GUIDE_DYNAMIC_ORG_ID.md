@@ -200,17 +200,56 @@ In Network tab, check that requests include:
 ## Common Issues After Migration
 
 ### Orders/Challans Failing
-**Problem**: Orders endpoint returns 404 "Customer not found"
+**Problem**: Orders endpoint returns 404 "Customer not found" or null constraint violations
 **Cause**: 
 - Frontend sends hardcoded org_id in request body
 - Backend uses different org_id from token/header
 - Customer exists for one org_id but not the other
+- Schema validation issues with response models
 
-**Solution**:
-1. Remove org_id from frontend request body
-2. Make org_id optional in OrderCreate schema
-3. Use org_id from token in backend: `get_org_id_from_token`
-4. Ensure X-Org-Id header matches customer's org_id
+**Solutions Applied**:
+1. **Frontend**: Remove hardcoded org_id from challans.api.js
+   ```javascript
+   // WRONG
+   org_id: localStorage.getItem('org_id') || 'ad808530-1ddb-4377-ab20-67bef145d80d',
+   // RIGHT - Don't send org_id at all
+   ```
+
+2. **Backend Schema**: Make org_id optional in OrderCreate
+   ```python
+   # /backend/app/api/schemas/order.py
+   org_id: Optional[UUID] = Field(None, description="Organization ID - optional, derived from token")
+   ```
+
+3. **Backend Route**: Always use org_id from token
+   ```python
+   # /backend/app/api/routes/orders.py
+   # NEVER use order.org_id from request body
+   # ALWAYS use org_id from Depends(get_org_id_from_token)
+   order_data["org_id"] = org_id  # Force it from token
+   ```
+
+4. **Response Validation**: Match schema expectations
+   ```python
+   # Schema expects total_amount, DB has final_amount
+   order_dict["total_amount"] = order_dict.get("final_amount", 0)
+   # Ensure no None values for required string fields
+   if item_dict.get("product_code") is None:
+       item_dict["product_code"] = ""
+   ```
+
+5. **Cannot call Depends functions directly**:
+   ```python
+   # WRONG - Can't call function with Depends from another function
+   return await get_order(order_id, db)
+   # RIGHT - Execute the query directly
+   result = db.execute(text("SELECT..."), {"id": order_id, "org_id": org_id})
+   ```
+
+### Test Data Requirements
+- Use consistent org_id: `e78d6777-35f6-4b19-994f-caaede2f021a`
+- Customer IDs that exist: 108, 109
+- Product IDs that exist: 124
 
 ### Invoice Creation Issues
 **Problem**: Invoice saves fail with foreign key violations
@@ -221,6 +260,28 @@ In Network tab, check that requests include:
 2. Ensure test data exists for this org_id
 3. Check X-Org-Id header in requests
 
+## Quick Fix Checklist
+
+When things were working before and break after org_id migration:
+
+1. **Check all routes use `get_org_id_from_token`**:
+   ```bash
+   grep -r "get_org_id_from_header" backend/
+   # Should return nothing - all should be get_org_id_from_token
+   ```
+
+2. **Remove org_id from all request schemas**:
+   - Make org_id Optional in Create schemas
+   - Never send org_id from frontend
+
+3. **Ensure consistent test data**:
+   - org_id: `e78d6777-35f6-4b19-994f-caaede2f021a`
+   - Run MASTER_DATABASE_FIXES.sql to populate data
+
+4. **Fix response validation**:
+   - Check schema field names match DB columns
+   - Handle None values for non-nullable fields
+
 ## Key Takeaways
 
 1. **Never trust client-provided org_id** - Always derive from authentication
@@ -229,6 +290,7 @@ In Network tab, check that requests include:
 4. **Test with real org_id** - Not hardcoded test values
 5. **Multi-tenancy is about security** - Not just data separation
 6. **Schemas should not require org_id** - Backend gets it from token
+7. **Response models must match DB exactly** - Or transform the data
 
 ## Debugging Checklist
 
