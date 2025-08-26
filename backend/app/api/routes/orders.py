@@ -195,8 +195,31 @@ async def create_order(
         
         db.commit()
         
-        # Return created order
-        return await get_order(order_id, db)
+        # Return created order details
+        # Can't call get_order directly because it uses Depends
+        result = db.execute(text("""
+            SELECT o.*, c.customer_name, c.customer_code, c.primary_phone as customer_phone
+            FROM sales.orders o
+            JOIN parties.customers c ON o.customer_id = c.customer_id
+            WHERE o.order_id = :id AND o.org_id = :org_id
+        """), {"id": order_id, "org_id": org_id})
+        
+        order = result.fetchone()
+        if not order:
+            raise HTTPException(status_code=404, detail=f"Order {order_id} not found")
+        
+        order_dict = dict(order._mapping)
+        
+        # Get order items
+        items_result = db.execute(text("""
+            SELECT * FROM sales.order_items 
+            WHERE order_id = :order_id
+            ORDER BY order_item_id
+        """), {"order_id": order_id})
+        
+        order_dict["items"] = [dict(item._mapping) for item in items_result]
+        
+        return order_dict
         
     except HTTPException:
         db.rollback()
