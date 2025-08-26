@@ -192,10 +192,15 @@ class EnterpriseChallanService:
             # Calculate amounts for independent challans
             if not request.order_id:
                 # Calculate taxable amount and GST from items
-                logger.info(f"Calculating amounts for independent challan with {len(request.items)} items")
-                logger.info(f"Freight charges: {freight}")
+                logger.info(f"=== INDEPENDENT CHALLAN CALCULATION START ===")
+                logger.info(f"Number of items: {len(request.items)}")
+                logger.info(f"Freight charges from request: freight_charges={request.freight_charges}, freight_amount={request.freight_amount}")
+                logger.info(f"Calculated freight: {freight}")
                 
-                for item in request.items:
+                for idx, item in enumerate(request.items):
+                    logger.info(f"Processing item {idx+1}: {item.product_name}")
+                    logger.info(f"  Raw values - Price: {item.unit_price}, Qty: {item.dispatched_quantity}, GST%: {item.gst_percent}")
+                    
                     item_total = Decimal(str(item.unit_price)) * Decimal(str(item.dispatched_quantity))
                     taxable_amount += item_total
                     
@@ -204,11 +209,17 @@ class EnterpriseChallanService:
                     item_gst = item_total * gst_rate / 100
                     gst_amount += item_gst
                     
-                    logger.info(f"Item: {item.product_name}, Price: {item.unit_price}, Qty: {item.dispatched_quantity}, GST%: {gst_rate}, Item Total: {item_total}, Item GST: {item_gst}")
+                    logger.info(f"  Calculated - Item Total: {item_total}, Item GST: {item_gst}")
+                    logger.info(f"  Running totals - Taxable: {taxable_amount}, GST: {gst_amount}")
                 
                 # Total amount includes taxable + GST + freight
                 total_amount = taxable_amount + gst_amount + freight
-                logger.info(f"Final Calculation - Taxable: {taxable_amount}, GST: {gst_amount}, Freight: {freight}, Total: {total_amount}")
+                logger.info(f"=== FINAL CALCULATION ===")
+                logger.info(f"  Taxable Amount: {taxable_amount}")
+                logger.info(f"  GST Amount: {gst_amount}")
+                logger.info(f"  Freight Charges: {freight}")
+                logger.info(f"  Grand Total: {total_amount}")
+                logger.info(f"=== CALCULATION END ===")
             else:
                 # For order-based challans, use order's amounts
                 if order:
@@ -220,6 +231,14 @@ class EnterpriseChallanService:
             
             # Generate challan number
             challan_number = self._generate_challan_number()
+            
+            # Log values before INSERT
+            logger.info(f"=== VALUES BEFORE INSERT ===")
+            logger.info(f"  taxable_amount: {taxable_amount}")
+            logger.info(f"  gst_amount: {gst_amount}")
+            logger.info(f"  freight_charges: {freight}")
+            logger.info(f"  total_amount: {total_amount}")
+            logger.info(f"=== END VALUES ===")
             
             # Create challan record WITH proper created_by field and new financial fields
             challan_result = self.db.execute(
