@@ -286,12 +286,12 @@ class EnterpriseChallanService:
                             challan_id, order_item_id, product_id, batch_id,
                             ordered_quantity, dispatched_quantity, delivered_quantity,
                             returned_quantity, damaged_quantity, uom, pack_type,
-                            item_status, item_notes, display_order
+                            item_status, item_notes, display_order, unit_price
                         ) VALUES (
                             :challan_id, :order_item_id, :product_id, :batch_id,
                             :ordered_quantity, :dispatched_quantity, :delivered_quantity,
                             :returned_quantity, :damaged_quantity, :uom, :pack_type,
-                            :item_status, :item_notes, :display_order
+                            :item_status, :item_notes, :display_order, :unit_price
                         )
                     """),
                     {
@@ -308,7 +308,8 @@ class EnterpriseChallanService:
                         "pack_type": item.package_type or "Strip",  # Use package_type from request
                         "item_status": "dispatched",
                         "item_notes": f"Product: {item.product_name}",  # Store product name in notes
-                        "display_order": idx + 1
+                        "display_order": idx + 1,
+                        "unit_price": item.unit_price  # Store unit price for independent challans
                     }
                 )
             

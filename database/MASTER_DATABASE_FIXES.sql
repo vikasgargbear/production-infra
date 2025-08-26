@@ -2391,22 +2391,27 @@ BEGIN
     ADD COLUMN IF NOT EXISTS gst_amount NUMERIC(15,2) DEFAULT 0,
     ADD COLUMN IF NOT EXISTS freight_charges NUMERIC(15,2) DEFAULT 0;
     
+    -- Add unit_price column to delivery_challan_items if it doesn't exist
+    ALTER TABLE sales.delivery_challan_items
+    ADD COLUMN IF NOT EXISTS unit_price NUMERIC(15,2) DEFAULT 0;
+    
     -- Make order_id optional to support independent challans
     ALTER TABLE sales.delivery_challans 
     ALTER COLUMN order_id DROP NOT NULL;
     
     -- Update existing challans to calculate taxable_amount
+    -- Using dispatched_quantity since that's the actual column name
     UPDATE sales.delivery_challans dc
     SET 
         taxable_amount = COALESCE(
-            (SELECT SUM(dci.quantity * dci.unit_price) 
+            (SELECT SUM(dci.dispatched_quantity * dci.unit_price) 
              FROM sales.delivery_challan_items dci 
              WHERE dci.challan_id = dc.challan_id), 0
         ),
         gst_amount = CASE 
             WHEN dc.total_amount > 0 AND dc.freight_amount IS NOT NULL 
             THEN dc.total_amount - dc.freight_amount - COALESCE(
-                (SELECT SUM(dci.quantity * dci.unit_price) 
+                (SELECT SUM(dci.dispatched_quantity * dci.unit_price) 
                  FROM sales.delivery_challan_items dci 
                  WHERE dci.challan_id = dc.challan_id), 0
             )
@@ -2421,8 +2426,8 @@ BEGIN
         v_taxable_amount NUMERIC(15,2);
         v_gst_amount NUMERIC(15,2);
     BEGIN
-        -- Calculate taxable amount from items
-        SELECT COALESCE(SUM(quantity * unit_price), 0)
+        -- Calculate taxable amount from items using dispatched_quantity
+        SELECT COALESCE(SUM(dispatched_quantity * unit_price), 0)
         INTO v_taxable_amount
         FROM sales.delivery_challan_items
         WHERE challan_id = NEW.challan_id;
