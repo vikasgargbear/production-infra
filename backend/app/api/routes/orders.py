@@ -210,6 +210,9 @@ async def create_order(
         
         order_dict = dict(order._mapping)
         
+        # Add total_amount field (schema expects this, not final_amount)
+        order_dict["total_amount"] = order_dict.get("final_amount", 0)
+        
         # Get order items
         items_result = db.execute(text("""
             SELECT * FROM sales.order_items 
@@ -217,7 +220,16 @@ async def create_order(
             ORDER BY order_item_id
         """), {"order_id": order_id})
         
-        order_dict["items"] = [dict(item._mapping) for item in items_result]
+        # Process items to ensure product_code is not None
+        items = []
+        for item in items_result:
+            item_dict = dict(item._mapping)
+            # Ensure product_code is a string, not None
+            if item_dict.get("product_code") is None:
+                item_dict["product_code"] = ""
+            items.append(item_dict)
+        
+        order_dict["items"] = items
         
         return order_dict
         
