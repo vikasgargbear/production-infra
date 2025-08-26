@@ -37,6 +37,7 @@ class ChallanItemRequest(BaseModel):
     cgst_percent: Optional[Decimal] = Field(default=0, ge=0)  # CGST percent (usually gst/2)
     sgst_percent: Optional[Decimal] = Field(default=0, ge=0)  # SGST percent (usually gst/2)
     igst_percent: Optional[Decimal] = Field(default=0, ge=0)  # IGST percent (inter-state)
+    uom: Optional[str] = None  # Unit of measure from product
     package_type: Optional[str] = None
     packages_count: Optional[int] = None
 
@@ -298,6 +299,33 @@ class EnterpriseChallanService:
                 # For direct challans or items not in order, order_item_id will be NULL
                 pending_qty = item.ordered_quantity - item.dispatched_quantity if item.ordered_quantity else 0
                 
+                # Get product UOM and pack type if not provided
+                uom = item.uom if hasattr(item, 'uom') and item.uom else None
+                pack_type = item.package_type if item.package_type else None
+                
+                if not uom or not pack_type:
+                    # Try to get from product master
+                    product_result = self.db.execute(
+                        text("""
+                            SELECT sale_unit, pack_type
+                            FROM inventory.products 
+                            WHERE product_id = :product_id
+                        """),
+                        {"product_id": item.product_id}
+                    ).fetchone()
+                    
+                    if product_result:
+                        if not uom and product_result.sale_unit:
+                            uom = product_result.sale_unit
+                        if not pack_type and product_result.pack_type:
+                            pack_type = product_result.pack_type
+                    
+                    # Final fallback if still not found
+                    if not uom:
+                        uom = "NOS"  # Numbers
+                    if not pack_type:
+                        pack_type = "UNIT"
+                
                 self.db.execute(
                     text("""
                         INSERT INTO sales.delivery_challan_items (
@@ -322,8 +350,8 @@ class EnterpriseChallanService:
                         "delivered_quantity": None,  # Will be updated when delivered
                         "returned_quantity": 0,
                         "damaged_quantity": 0,
-                        "uom": item.uom if hasattr(item, 'uom') else None,  # From frontend or NULL
-                        "pack_type": item.package_type,  # From frontend or NULL
+                        "uom": uom,
+                        "pack_type": pack_type,
                         "item_status": "dispatched",
                         "item_notes": f"Product: {item.product_name}",  # Store product name in notes
                         "display_order": idx + 1,

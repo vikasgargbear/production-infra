@@ -63,6 +63,8 @@ export const challansApi = {
         cgst_percent: parseFloat(item.cgst_percent || (item.gst_percent ? item.gst_percent/2 : 0) || 0),
         sgst_percent: parseFloat(item.sgst_percent || (item.gst_percent ? item.gst_percent/2 : 0) || 0),
         igst_percent: parseFloat(item.igst_percent || 0), // For inter-state
+        uom: item.uom || item.unit || item.sale_unit || null, // Send UOM from product
+        package_type: item.package_type || item.pack_type || null, // Send pack type from product
         ordered_quantity: parseFloat(item.ordered_quantity || item.quantity || 0),
         dispatched_quantity: parseFloat(item.dispatched_quantity || item.quantity || 0)
       }))
