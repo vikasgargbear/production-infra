@@ -624,7 +624,7 @@ def create_purchase_from_parsed(
                         "purchase_price": Decimal(str(item.get("rate", 0))),
                         "sale_price": Decimal(str(item.get("rate", 0) * 1.2)), # 20% markup default
                         "mrp": Decimal(str(item.get("mrp", 0))),
-                        "gst": Decimal(str(item.get("tax_percent", 12)))
+                        "gst": Decimal(str(item.get("tax_percent", 0)))  # No default GST
                     }
                 ).scalar()
             

@@ -43,7 +43,7 @@ const BulkUploadInline = ({ onProductsUploaded }) => {
     // Valid options for dropdowns
     const validOptions = {
       packTypes: ['STRIP', 'BOX', 'BOTTLE', 'VIAL', 'TUBE', 'SACHET', 'INJECTION', 'AMPOULE', 'TABLET', 'CAPSULE'],
-      gstRates: ['0', '5', '12', '18', '28'],
+      gstRates: [],  // Will be loaded from products
       scheduleTypes: ['OTC', 'H', 'H1', 'X', 'G', 'J'],
       storageConditions: ['Room Temperature', 'Cool & Dry', 'Refrigerated (2-8°C)', 'Frozen (-20°C)']
     };
@@ -234,7 +234,7 @@ const BulkUploadInline = ({ onProductsUploaded }) => {
                       // Don't error, just default to 12%
                       product[col.field] = 12;
                     } else {
-                      product[col.field] = gst || 12;
+                      product[col.field] = gst || 0;  // No default GST
                     }
                     break;
                   case 'discount_percent':
@@ -316,7 +316,7 @@ const BulkUploadInline = ({ onProductsUploaded }) => {
               product.batch_number = `AUTO-${dateStr}-${(index + 1).toString().padStart(3, '0')}`;
             }
             
-            if (!product.gst_percent) product.gst_percent = 12;
+            if (!product.gst_percent) product.gst_percent = 0;  // No default GST
             if (!product.sale_price && product.mrp) product.sale_price = product.mrp;
             if (!product.pack_type) product.pack_type = 'STRIP';
             if (!product.units_per_pack) product.units_per_pack = 10;

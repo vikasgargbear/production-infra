@@ -149,7 +149,7 @@ const EnhancedGRNFlow = ({ onClose, prefilledData = null }) => {
       manufacturer: product.manufacturer || '',
       ordered_qty: 0,
       received_qty: 1,
-      unit: product.unit || product.uom || 'Strip',
+      unit: product.unit || product.uom || '',  // No default unit
       unit_price: product.purchase_price || (product.mrp || 0) * 0.7,
       mrp: product.mrp || 0,
       selling_price: product.sale_price || product.selling_price || product.mrp || 0,
@@ -731,8 +731,8 @@ const EnhancedGRNFlow = ({ onClose, prefilledData = null }) => {
           <div className="text-center mb-6 pb-4 border-b-2 border-gray-300">
             <h1 className="text-3xl font-bold text-green-600 mb-2">PHARMA SOLUTIONS PVT. LTD.</h1>
             <p className="text-sm text-gray-600">Wholesale Pharmaceutical Distributor</p>
-            <p className="text-sm text-gray-600">GST: 27AAACP1234B1Z5 | Drug License: 20B/123456</p>
-            <p className="text-sm text-gray-600">123 Business Park, Mumbai - 400001 | Tel: +91-22-12345678</p>
+            <p className="text-sm text-gray-600">GST: {localStorage.getItem('company_gstin') || ''} | Drug License: {localStorage.getItem('drug_license') || ''}</p>
+            <p className="text-sm text-gray-600">{localStorage.getItem('company_address') || ''}</p>
           </div>
 
           <div className="text-center mb-6">
@@ -748,8 +748,8 @@ const EnhancedGRNFlow = ({ onClose, prefilledData = null }) => {
             <div className="p-4 bg-green-50 rounded-lg">
               <h3 className="font-semibold mb-2 text-green-900">Receiver:</h3>
               <p className="text-green-900 font-medium">Pharma Solutions Pvt. Ltd.</p>
-              <p className="text-green-800 text-sm">123 Business Park</p>
-              <p className="text-green-800 text-sm">Mumbai - 400001</p>
+              <p className="text-green-800 text-sm">{localStorage.getItem('company_address_line1') || ''}</p>
+              <p className="text-green-800 text-sm">{localStorage.getItem('company_address_line2') || ''}</p>
               <p className="text-green-800 text-sm">Warehouse: Main Branch</p>
             </div>
 

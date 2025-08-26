@@ -301,7 +301,7 @@ const SimplifiedPurchaseContent = ({ onClose }) => {
                 purchase_price: product.purchase_price || (product.mrp || 0) * 0.7,
                 selling_price: product.sale_price || product.mrp || 0,
                 discount_percent: 0,
-                tax_percent: product.gst_percent || product.tax_rate || 12
+                tax_percent: product.gst_percent || product.tax_rate || 0  // No default GST
               };
               addItem(newItem);
             }}

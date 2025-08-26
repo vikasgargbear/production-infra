@@ -144,7 +144,7 @@ async def create_stock_writeoff(
             
             if requires_itc_reversal:
                 # Calculate ITC to be reversed
-                itc_amount = item_cost * Decimal(str(item.get("gst_percent", 18))) / 100
+                itc_amount = item_cost * Decimal(str(item.get("gst_percent", 0))) / 100  # No default GST
                 total_itc_reversal += itc_amount
         
         # Create write-off record
@@ -196,7 +196,7 @@ async def create_stock_writeoff(
                     "batch_id": item["batch_id"],
                     "quantity": item["quantity"],
                     "cost_price": item["cost_price"],
-                    "gst_percent": item.get("gst_percent", 18)
+                    "gst_percent": item.get("gst_percent", 0)  # No default GST
                 }
             )
             

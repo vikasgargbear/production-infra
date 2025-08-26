@@ -444,7 +444,7 @@ const SalesReturnFlow = ({ onClose }) => {
       return_reason: '',
       selected: true,
       hsn_code: product.hsn_code || '',
-      unit: product.unit || 'PCS',
+      unit: product.unit || '',  // No default unit
       manufacturer: product.manufacturer || '',
       // Additional fields for manual entry
       is_manual: true,
@@ -519,7 +519,7 @@ const SalesReturnFlow = ({ onClose }) => {
           product_name: item.product_name || item.product?.name,
           batch_id: item.batch_id,
           rate: item.rate || item.sale_price || item.price || item.unit_price,
-          tax_percent: item.tax_percent || item.gst_percent || 18,
+          tax_percent: item.tax_percent || item.gst_percent || 0,  // No default GST
           quantity: item.quantity,
           // Auto-populate with max returnable quantity
           return_quantity: maxReturnable,
@@ -944,7 +944,7 @@ const SalesReturnFlow = ({ onClose }) => {
                                         invoice.status === 'paid' ? 'text-green-600' : 
                                         invoice.status === 'partial' ? 'text-yellow-600' : 'text-red-600'
                                       }`}>
-                                        {invoice.status?.charAt(0).toUpperCase() + invoice.status?.slice(1) || 'Unknown'}
+                                        {invoice.status?.charAt(0).toUpperCase() + invoice.status?.slice(1) || ''}
                                       </span>
                                     </p>
                                   </div>

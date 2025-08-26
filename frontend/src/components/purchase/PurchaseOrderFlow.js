@@ -474,7 +474,7 @@ const PurchaseOrderFlow = ({ onClose, prefilledData = null }) => {
       quantity: 1,
       free_quantity: 0,
       discount_percent: 0,
-      tax_percent: product.gst_percent || product.tax_rate || 18
+      tax_percent: product.gst_percent || product.tax_rate || 0  // No default GST
     };
 
     setPurchaseOrder(prev => ({

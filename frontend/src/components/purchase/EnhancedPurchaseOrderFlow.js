@@ -147,7 +147,7 @@ const EnhancedPurchaseOrderFlow = ({ onClose, prefilledData = null }) => {
       batch_number: product.batch_number || '',
       expiry_date: product.expiry_date || '',
       quantity: 1,
-      unit: product.unit || product.uom || 'Strip',
+      unit: product.unit || product.uom || '',  // No default unit
       unit_price: product.purchase_price || (product.mrp || 0) * 0.7,
       mrp: product.mrp || 0,
       expected_rate: product.sale_price || product.selling_price || product.mrp || 0,

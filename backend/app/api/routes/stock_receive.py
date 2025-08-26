@@ -325,7 +325,7 @@ async def get_current_stock(
                 COALESCE(bs.sub_unit_quantity, 1) as sub_unit_quantity,
                 COALESCE(bs.sale_unit, 'Units') as unit,
                 COALESCE(bs.purchase_unit, 'Box') as purchase_unit,
-                COALESCE(bs.sale_unit, 'Strip') as sale_unit,
+                bs.sale_unit as sale_unit,  -- No default unit
                 COALESCE(bs.category_name, 'General') as category,
                 COALESCE(bs.avg_mrp, 0) as mrp,
                 COALESCE(bs.avg_sale_price, 0) as price,

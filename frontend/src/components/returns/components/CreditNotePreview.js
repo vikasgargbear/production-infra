@@ -90,7 +90,7 @@ const CreditNotePreview = ({ returnData, customer, invoice, includeGst = true, c
                 </h2>
                 <div className="text-sm text-gray-600 space-y-1">
                   <p>{localStorage.getItem('company_address') || '123 Business Street, City'}</p>
-                  <p>GSTIN: {localStorage.getItem('company_gstin') || '24XXXXX1234Z5'}</p>
+                  <p>GSTIN: {localStorage.getItem('company_gstin') || ''}</p>
                   <p>DL No: {localStorage.getItem('company_drug_license') || '20B/21B-XXX'}</p>
                   <p>Phone: {localStorage.getItem('company_phone') || '+91 99999 99999'}</p>
                 </div>

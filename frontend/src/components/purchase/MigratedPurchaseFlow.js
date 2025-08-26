@@ -141,7 +141,7 @@ const MigratedPurchaseFlow = ({ onClose, prefilledData = null }) => {
         purchase_price: product.purchase_price || (product.mrp || 0) * 0.7,
         selling_price: product.sale_price || product.mrp || 0,
         discount_percent: 0,
-        tax_percent: product.gst_percent || 12,
+        tax_percent: product.gst_percent || 0,  // No default GST
         tax_amount: 0
       };
       
@@ -189,7 +189,7 @@ const MigratedPurchaseFlow = ({ onClose, prefilledData = null }) => {
           mrp: parseFloat(item.mrp) || 0,
           selling_price: parseFloat(item.selling_price) || 0,
           discount_percent: parseFloat(item.discount_percent) || 0,
-          tax_percent: parseFloat(item.tax_percent) || 12
+          tax_percent: parseFloat(item.tax_percent) || 0  // No default GST
         }))
       };
 
