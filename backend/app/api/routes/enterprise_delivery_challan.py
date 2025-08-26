@@ -304,21 +304,8 @@ class EnterpriseChallanService:
                 pack_type = item.package_type if item.package_type else None
                 
                 if not uom or not pack_type:
-                    # Try to get from product master
-                    product_result = self.db.execute(
-                        text("""
-                            SELECT sale_unit, pack_type
-                            FROM inventory.products 
-                            WHERE product_id = :product_id
-                        """),
-                        {"product_id": item.product_id}
-                    ).fetchone()
-                    
-                    if product_result:
-                        if not uom and product_result.sale_unit:
-                            uom = product_result.sale_unit
-                        if not pack_type and product_result.pack_type:
-                            pack_type = product_result.pack_type
+                    # Since products table doesn't have sale_unit, use defaults
+                    # UOM and pack_type should come from the request or order items
                     
                     # Final fallback if still not found
                     if not uom:
