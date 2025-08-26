@@ -478,26 +478,34 @@ const ModularChallanCreatorV5 = ({ open = true, onClose }) => {
         return;
       }
 
-      // Transform items for API
+      // Transform items for API - matching backend's ChallanItemRequest model
       const apiItems = challan.items.map(item => ({
         product_id: item.product_id,
         product_name: item.product_name,
-        hsn_code: item.hsn_code,
-        quantity: item.quantity,
-        unit: item.unit || item.base_uom || 'Unit',
-        unit_price: item.unit_price || item.rate || item.sale_price || 0,
-        mrp: item.mrp || 0,
-        gst_percent: item.gst_percent || 0,
-        tax_amount: ((item.unit_price || 0) * item.quantity * (item.gst_percent || 0)) / 100,
         batch_id: item.batch_id || null,
         batch_number: item.batch_number || null,
-        expiry_date: item.expiry_date || null
+        expiry_date: item.expiry_date || null,
+        ordered_quantity: null, // For direct challan
+        dispatched_quantity: item.quantity,
+        unit_price: item.unit_price || item.rate || item.sale_price || 0,
+        gst_percent: item.gst_percent || 0,
+        cgst_percent: (item.gst_percent || 0) / 2,
+        sgst_percent: (item.gst_percent || 0) / 2,
+        igst_percent: 0, // Intra-state
+        uom: item.unit || item.base_uom || 'NOS',
+        package_type: 'UNIT'
       }));
 
       // Calculate total amount
       const totalAmount = apiItems.reduce((sum, item) => 
-        sum + (item.quantity * item.unit_price), 0
+        sum + (item.dispatched_quantity * item.unit_price), 0
       ) + (parseFloat(challan.freight_amount) || 0);
+
+      // Debug freight amount
+      console.log('=== CHALLAN SAVE DEBUG ===');
+      console.log('challan.freight_amount:', challan.freight_amount);
+      console.log('parsed freight_amount:', parseFloat(challan.freight_amount) || 0);
+      console.log('totalAmount:', totalAmount);
 
       // Prepare challan data with complete delivery address
       const challanData = {
@@ -521,6 +529,9 @@ const ModularChallanCreatorV5 = ({ open = true, onClose }) => {
         total_amount: totalAmount
       };
 
+      console.log('Final challanData being sent:', challanData);
+      console.log('Freight in data:', challanData.freight_amount);
+      
       const response = await challansApi.create(challanData);
       
       if (response.data) {
