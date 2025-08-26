@@ -2401,6 +2401,7 @@ BEGIN
     
     -- Update existing challans to calculate taxable_amount
     -- Using dispatched_quantity since that's the actual column name
+    -- Using freight_charges since that's the actual column name
     UPDATE sales.delivery_challans dc
     SET 
         taxable_amount = COALESCE(
@@ -2409,8 +2410,8 @@ BEGIN
              WHERE dci.challan_id = dc.challan_id), 0
         ),
         gst_amount = CASE 
-            WHEN dc.total_amount > 0 AND dc.freight_amount IS NOT NULL 
-            THEN dc.total_amount - dc.freight_amount - COALESCE(
+            WHEN dc.total_amount > 0 AND dc.freight_charges IS NOT NULL 
+            THEN dc.total_amount - dc.freight_charges - COALESCE(
                 (SELECT SUM(dci.dispatched_quantity * dci.unit_price) 
                  FROM sales.delivery_challan_items dci 
                  WHERE dci.challan_id = dc.challan_id), 0
