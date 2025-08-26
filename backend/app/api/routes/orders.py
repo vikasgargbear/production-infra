@@ -39,8 +39,8 @@ async def create_order(
     - Allocates inventory using FIFO
     """
     try:
-        # Set org_id early
-        org_id = order.org_id if order.org_id else org_id
+        # Use org_id from token (never trust client-provided org_id)
+        # org_id parameter comes from Depends(get_org_id_from_token)
         
         # Validate customer exists and has credit
         credit_check = CustomerService.validate_credit_limit(
@@ -106,8 +106,8 @@ async def create_order(
         })
         
         # Ensure org_id is set (critical for multi-tenant queries)
-        if "org_id" not in order_data:
-            order_data["org_id"] = org_id
+        # Always use org_id from token, not from request
+        order_data["org_id"] = org_id
         
         # Ensure payment_terms has a value (it might be None even with schema default)
         if not order_data.get("payment_terms"):
