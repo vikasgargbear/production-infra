@@ -2358,12 +2358,12 @@ BEGIN
     
     -- Create or replace function to auto-update credit amount
     CREATE OR REPLACE FUNCTION sales.update_invoice_credit_amount()
-    RETURNS TRIGGER AS $$
+    RETURNS TRIGGER AS $func$
     BEGIN
         NEW.credit_amount := GREATEST(0, NEW.final_amount - COALESCE(NEW.paid_amount, 0));
         RETURN NEW;
     END;
-    $$ LANGUAGE plpgsql;
+    $func$ LANGUAGE plpgsql;
     
     -- Create trigger to auto-calculate credit_amount
     DROP TRIGGER IF EXISTS update_invoice_credit_trigger ON sales.invoices;

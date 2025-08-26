@@ -11,7 +11,7 @@ from sqlalchemy import text
 import logging
 
 from ...core.database import get_db
-from ...core.auth_utils import get_org_id_from_header
+from ...core.auth_utils import get_org_id_from_token
 from ..schemas.order import (
     OrderCreate, OrderResponse, OrderListResponse, InvoiceRequest,
     InvoiceResponse, DeliveryUpdate, ReturnRequest
@@ -28,7 +28,7 @@ router = APIRouter(prefix="/orders", tags=["orders"])
 async def create_order(
     order: OrderCreate,
     db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    org_id: str = Depends(get_org_id_from_token)
 ):
     """
     Create a new order with items
@@ -215,7 +215,7 @@ async def list_orders(
     from_date: Optional[date] = None,
     to_date: Optional[date] = None,
     db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    org_id: str = Depends(get_org_id_from_token)
 ):
     """
     List orders with filters and pagination
@@ -321,7 +321,7 @@ async def list_orders(
 async def get_order(
     order_id: int,
     db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    org_id: str = Depends(get_org_id_from_token)
 ):
     """Get order details with items"""
     try:
@@ -373,7 +373,7 @@ async def update_order(
     order_id: int,
     order_data: dict,
     db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    org_id: str = Depends(get_org_id_from_token)
 ):
     """Update order details"""
     try:
@@ -438,7 +438,7 @@ async def update_order(
 async def confirm_order(
     order_id: int,
     db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    org_id: str = Depends(get_org_id_from_token)
 ):
     """Confirm a pending order"""
     try:
@@ -482,7 +482,7 @@ async def generate_invoice(
     order_id: int,
     invoice_request: InvoiceRequest,
     db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    org_id: str = Depends(get_org_id_from_token)
 ):
     """Generate invoice for an order"""
     try:
@@ -543,7 +543,7 @@ async def mark_delivered(
     order_id: int,
     delivery: DeliveryUpdate,
     db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    org_id: str = Depends(get_org_id_from_token)
 ):
     """Mark order as delivered"""
     try:
@@ -605,7 +605,7 @@ async def process_return(
     order_id: int,
     return_request: ReturnRequest,
     db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    org_id: str = Depends(get_org_id_from_token)
 ):
     """Process order return"""
     try:
@@ -624,7 +624,7 @@ async def process_return(
 
 @router.get("/dashboard/stats")
 async def get_order_dashboard(db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)):
+    org_id: str = Depends(get_org_id_from_token)):
     """Get order dashboard statistics"""
     try:
         stats = OrderService.get_order_dashboard(db, org_id)
