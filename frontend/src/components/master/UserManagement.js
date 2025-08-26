@@ -217,7 +217,7 @@ const UserManagement = ({ open, onClose }) => {
       // Prepare data for both table structures
       const userData = {
         // REQUIRED: org_id for org_users table
-        org_id: 'ad808530-1ddb-4377-ab20-67bef145d80d', // Demo organization ID
+        org_id: localStorage.getItem('pharma_org_id') || sessionStorage.getItem('pharma_org_id'), // Get org_id from storage
         
         // Common fields
         email: formData.email,

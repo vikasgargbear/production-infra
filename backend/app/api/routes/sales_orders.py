@@ -224,8 +224,8 @@ async def create_sales_order(
                 "product_name": product_details.product_name if product_details else f"Product {item_data['product_id']}",
                 "hsn_code": product_details.hsn_code if product_details else None,
                 "quantity": float(quantity),
-                "uom": item_data.get("uom", "PCS"),
-                "pack_type": item_data.get("pack_type", "Strip"),
+                "uom": item_data.get("uom"),  # No default UOM
+                "pack_type": item_data.get("pack_type"),  # No default pack type
                 "pack_size": item_data.get("pack_size", 1),
                 "base_quantity": float(base_quantity),  # Billable quantity (total - free)
                 "unit_price": float(unit_price),

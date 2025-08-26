@@ -41,7 +41,7 @@ const CustomerCreationModal = ({ show, onClose, onCustomerCreated }) => {
     try {
       const customerData = DataTransformer.prepareCustomerForAPI({
         ...newCustomer,
-        org_id: APP_CONFIG?.DEFAULT_ORG_ID || 'ad808530-1ddb-4377-ab20-67bef145d80d'
+        org_id: localStorage.getItem('pharma_org_id') || sessionStorage.getItem('pharma_org_id')
       });
 
       const response = await customerAPI.create(customerData);

@@ -587,17 +587,7 @@ async def get_sale_print_data(
         
         # Format for printing
         print_data = {
-            "organization": dict(org._mapping) if org else {
-                "organization_name": "AASO Pharma",
-                "address": "123 Business Park",
-                "city": "Mumbai",
-                "state": "Maharashtra",
-                "pincode": "400001",
-                "gst_number": "27AABCU9603R1ZM",
-                "drug_license": "MH-123456",
-                "phone": "9876543210",
-                "email": "info@aasopharma.com"
-            },
+            "organization": dict(org._mapping) if org else {},  # Empty if no org data
             "invoice": sale_data,
             "print_date": datetime.now().isoformat()
         }

@@ -61,7 +61,7 @@ async def create_invoice_simple(
         for item in items:
             quantity = float(item.get("quantity", 1))
             unit_price = float(item.get("unit_price", 0))
-            gst_percent = float(item.get("gst_percent", 12))
+            gst_percent = float(item.get("gst_percent", 0))  # Default to 0 if not provided
             
             line_total = quantity * unit_price
             tax_amount = line_total * gst_percent / 100
@@ -148,7 +148,7 @@ async def create_invoice(
             quantity = float(item.get("quantity", 1))
             unit_price = float(item.get("unit_price", 0))
             discount_percent = float(item.get("discount_percent", 0))
-            gst_percent = float(item.get("gst_percent", 12))
+            gst_percent = float(item.get("gst_percent", 0))  # Default to 0 if not provided
             
             # CRITICAL FIX: Use base_quantity for billing (already accounts for free items)
             if "base_quantity" in item:
@@ -458,7 +458,7 @@ async def create_invoice(
             
             # Calculate amounts - use base_quantity for billing (production logic)
             line_total = (base_quantity * unit_price) - discount_amt
-            gst_percent = item.get("gst_percent", 12)
+            gst_percent = item.get("gst_percent", 0)  # Default to 0 if not provided
             taxable_amount = line_total
             
             # Calculate GST amounts based on customer type
@@ -502,7 +502,7 @@ async def create_invoice(
                 "manufacturing_date": manufacturing_date or item.get("manufacturing_date"),
                 "expiry_date": expiry_date or item.get("expiry_date"),
                 "quantity": float(quantity),  # Ensure proper type
-                "uom": item.get("uom", "PCS"),
+                "uom": item.get("uom"),  # No default UOM
                 "pack_type": item.get("pack_type", "UNIT"),
                 "pack_size": int(item.get("pack_size")) if item.get("pack_size") and str(item.get("pack_size")).isdigit() else 1,
                 "base_quantity": float(base_quantity),  # Use the corrected variable

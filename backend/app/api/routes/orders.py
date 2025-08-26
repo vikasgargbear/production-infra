@@ -123,7 +123,7 @@ async def create_order(
         if branch_result:
             order_data["branch_id"] = branch_result.branch_id
         else:
-            order_data["branch_id"] = 1  # Default branch
+            order_data["branch_id"] = None  # No default branch
         
         # Insert order
         result = db.execute(text("""
