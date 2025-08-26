@@ -323,8 +323,9 @@ async def create_invoice(
                 payment_method = payment.get("method", "cash").upper()
                 payment_amount = float(payment.get("amount", 0))
                 
-                # Only create payment record for actual money received (not credit)
-                if payment_amount > 0 and payment_method != 'CREDIT':
+                # Only create payment record for actual money received
+                # Credit is not a payment - it means no payment yet
+                if payment_amount > 0:
                     try:
                         # Get payment method ID
                         method_result = db.execute(text("""

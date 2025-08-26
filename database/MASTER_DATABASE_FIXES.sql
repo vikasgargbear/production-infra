@@ -2330,8 +2330,7 @@ BEGIN
         (v_org_id, 'UPI', 'UPI Payment', 'digital', true, false, 0, true),
         (v_org_id, 'BANK', 'Bank Transfer', 'bank', true, false, 1, true),
         (v_org_id, 'CHECK', 'Cheque', 'bank', true, true, 3, true),
-        (v_org_id, 'CARD', 'Credit/Debit Card', 'digital', true, false, 0, true),
-        (v_org_id, 'CREDIT', 'Credit Sale', 'credit', false, false, 0, true)
+        (v_org_id, 'CARD', 'Credit/Debit Card', 'digital', true, false, 0, true)
         ON CONFLICT (org_id, method_code) DO NOTHING;
         
         RAISE NOTICE 'Created payment methods for org: %', v_org_name;
