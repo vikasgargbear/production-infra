@@ -32,6 +32,11 @@ class ChallanItemRequest(BaseModel):
     ordered_quantity: Optional[int] = None  # Optional for direct challan
     dispatched_quantity: int
     unit_price: Decimal = Field(ge=0)
+    # GST structure matching invoices
+    gst_percent: Optional[Decimal] = Field(default=0, ge=0)  # Total GST percent
+    cgst_percent: Optional[Decimal] = Field(default=0, ge=0)  # CGST percent (usually gst/2)
+    sgst_percent: Optional[Decimal] = Field(default=0, ge=0)  # SGST percent (usually gst/2)
+    igst_percent: Optional[Decimal] = Field(default=0, ge=0)  # IGST percent (inter-state)
     package_type: Optional[str] = None
     packages_count: Optional[int] = None
 
@@ -172,15 +177,13 @@ class EnterpriseChallanService:
             
             # Calculate amounts for independent challans
             if not request.order_id:
-                # Calculate taxable amount (sum of item totals)
+                # Calculate taxable amount and GST from items (GST comes from frontend)
                 for item in request.items:
                     item_total = item.unit_price * item.dispatched_quantity
                     taxable_amount += item_total
                     
-                    # Get GST rate from product/batch if needed
-                    # For now using a default 12% GST for independent challans
-                    # In production, this should come from product master
-                    gst_rate = Decimal("12")  # Default GST rate
+                    # Use GST rate provided by frontend (already loaded from product/batch selection)
+                    gst_rate = item.gst_percent if item.gst_percent else Decimal("0")
                     item_gst = item_total * gst_rate / 100
                     gst_amount += item_gst
                 
@@ -433,7 +436,7 @@ async def get_challan_details(
         challan_result = db.execute(
             text("""
                 SELECT c.*, cust.customer_name, cust.gstin as customer_gstin,
-                       cust.billing_address as customer_address, cust.phone as customer_phone
+                       cust.address_line1 as customer_address, cust.primary_phone as customer_phone
                 FROM sales.delivery_challans c
                 JOIN parties.customers cust ON c.customer_id = cust.customer_id
                 WHERE c.challan_id = :challan_id

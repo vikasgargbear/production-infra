@@ -58,6 +58,11 @@ export const challansApi = {
         batch_number: item.batch_number || null,
         quantity: parseFloat(item.quantity || 0),
         unit_price: parseFloat(item.unit_price || 0),
+        // GST structure matching invoices - comes from product/batch selection
+        gst_percent: parseFloat(item.gst_percent || item.tax_percent || 0),
+        cgst_percent: parseFloat(item.cgst_percent || (item.gst_percent ? item.gst_percent/2 : 0) || 0),
+        sgst_percent: parseFloat(item.sgst_percent || (item.gst_percent ? item.gst_percent/2 : 0) || 0),
+        igst_percent: parseFloat(item.igst_percent || 0), // For inter-state
         ordered_quantity: parseFloat(item.ordered_quantity || item.quantity || 0),
         dispatched_quantity: parseFloat(item.dispatched_quantity || item.quantity || 0)
       }))
