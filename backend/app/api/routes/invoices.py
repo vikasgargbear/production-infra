@@ -140,12 +140,14 @@ async def create_invoice(
         # Step 3: Calculate totals from items
         items = invoice_data.get("items", [])
         subtotal = 0
+        total_discount = 0
         total_cgst = 0
         total_sgst = 0
         
         for item in items:
             quantity = float(item.get("quantity", 1))
             unit_price = float(item.get("unit_price", 0))
+            discount_percent = float(item.get("discount_percent", 0))
             gst_percent = float(item.get("gst_percent", 12))
             
             # CRITICAL FIX: Use base_quantity for billing (already accounts for free items)
@@ -155,10 +157,16 @@ async def create_invoice(
                 base_quantity = float(quantity)  # fallback only if not provided
             
             line_total = base_quantity * unit_price
-            cgst = line_total * (gst_percent / 2) / 100
-            sgst = line_total * (gst_percent / 2) / 100
+            # Apply discount to get taxable amount
+            discount_amount = line_total * discount_percent / 100
+            taxable_line_total = line_total - discount_amount
             
-            subtotal += line_total
+            # Calculate GST on discounted amount
+            cgst = taxable_line_total * (gst_percent / 2) / 100
+            sgst = taxable_line_total * (gst_percent / 2) / 100
+            
+            subtotal += line_total  # Subtotal is before discount
+            total_discount += discount_amount
             total_cgst += cgst
             total_sgst += sgst
         
@@ -167,8 +175,8 @@ async def create_invoice(
         insurance_charges = float(invoice_data.get("insurance_charges", 0))
         other_charges = float(invoice_data.get("other_charges", 0))
         
-        # Item-level discounts are handled individually, no invoice-level discount needed
-        taxable_amount = subtotal
+        # Taxable amount is subtotal minus discounts
+        taxable_amount = subtotal - total_discount
         tax_amount = total_cgst + total_sgst
         # Include freight charges in final amount calculation
         amount_before_round = taxable_amount + tax_amount + freight_charges + insurance_charges + other_charges
@@ -195,7 +203,7 @@ async def create_invoice(
             "order_date": date.today(),
             "customer_id": invoice_data["customer_id"],
             "subtotal": subtotal,
-            "discount": 0,  # Item-level discounts only
+            "discount": total_discount,  # Sum of item-level discounts
             "taxable": taxable_amount,
             "cgst": total_cgst,
             "sgst": total_sgst,
@@ -289,7 +297,7 @@ async def create_invoice(
             "customer_id": invoice_data["customer_id"],
             "customer_name": customer_name,
             "subtotal": subtotal,
-            "discount": 0,  # Item-level discounts only
+            "discount": total_discount,  # Sum of item-level discounts
             "taxable": taxable_amount,
             "igst": invoice_data.get("igst_amount", 0),
             "cgst": total_cgst,

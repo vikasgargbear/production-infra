@@ -598,8 +598,8 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
           discount_percent: parseFloat(item.discount_percent) || 0,
           batch_id: item.batch_id ? parseInt(item.batch_id) : null
         })),
-        payment_mode: invoice.payment_mode || 'Cash',
-        payment_amount: invoice.payment_mode === 'Cash' ? parseFloat(invoice.net_amount) : 0,
+        payment_mode: invoice.payment_mode || 'cash',
+        payment_amount: invoice.payment_mode === 'cash' ? parseFloat(invoice.net_amount) : 0,
         discount_amount: parseFloat(invoice.discount_amount) || 0,
         other_charges: parseFloat(invoice.delivery_charges) || 0,
         notes: `${invoice.notes || ''}\nDelivery: ${invoice.delivery_type || ''}\nTransport: ${invoice.transport_company || ''}\nVehicle: ${invoice.vehicle_number || ''}\nLR: ${invoice.lr_number || ''}`.trim(),
@@ -628,7 +628,7 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
           invoice_number: finalInvoiceNumber, // Send the newly generated invoice number
           invoice_date: invoice.invoice_date || new Date().toISOString().split('T')[0],
           invoice_type: 'tax_invoice',
-          payment_terms: invoice.payment_mode === 'Cash' ? 'cash' : 'credit',
+          payment_terms: invoice.payment_mode === 'cash' ? 'cash' : 'credit',
           delivery_priority: 'normal',
           
           // ENTERPRISE STRUCTURE: Frontend sends NO calculated totals

@@ -127,6 +127,12 @@ const SplitPayment = ({
       {/* Single payment method - default view */}
       {paymentMethods.length === 1 && (
         <div className="space-y-2">
+          {/* Helper text for credit */}
+          {totalAmount > 0 && (
+            <div className="text-xs text-gray-500 italic">
+              Leave amount as 0 or partial for credit sale
+            </div>
+          )}
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="block text-xs text-gray-600 mb-1">Method</label>
@@ -169,11 +175,19 @@ const SplitPayment = ({
                 Split Payment
               </button>
             )}
-            {remaining !== 0 && (
+            {/* Always show credit info when there's remaining amount or no payment */}
+            {(remaining > 0 || totalPaid === 0) && (
               <span className={`text-xs font-medium ${
-                remaining > 0 ? 'text-orange-600' : 'text-red-600'
+                totalPaid === 0 ? 'text-gray-500' : 'text-orange-600'
               }`}>
-                {remaining > 0 ? `Remaining: ₹${remaining.toFixed(2)}` : `Excess: ₹${Math.abs(remaining).toFixed(2)}`}
+                {totalPaid === 0 ? 
+                  `Full amount (₹${totalAmount.toFixed(2)}) goes to credit` :
+                  `₹${remaining.toFixed(2)} goes to credit`}
+              </span>
+            )}
+            {remaining < 0 && (
+              <span className="text-xs font-medium text-red-600">
+                Excess: ₹{Math.abs(remaining).toFixed(2)}
               </span>
             )}
           </div>
@@ -238,7 +252,7 @@ const SplitPayment = ({
               </div>
               {remaining !== 0 && (
                 <div className="flex justify-between">
-                  <span className="text-gray-600">{remaining > 0 ? 'Remaining:' : 'Excess:'}</span>
+                  <span className="text-gray-600">{remaining > 0 ? 'Credit Amount:' : 'Excess:'}</span>
                   <span className={`font-medium ${
                     remaining > 0 ? 'text-orange-600' : 'text-red-600'
                   }`}>
