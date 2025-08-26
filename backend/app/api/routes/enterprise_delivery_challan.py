@@ -138,7 +138,7 @@ class EnterpriseChallanService:
             total_amount = Decimal("0")
             
             # Use freight_charges if provided, otherwise freight_amount (backward compatibility)
-            freight = request.freight_charges if request.freight_charges else (request.freight_amount or Decimal("0"))
+            freight = Decimal(str(request.freight_charges)) if request.freight_charges else (Decimal(str(request.freight_amount)) if request.freight_amount else Decimal("0"))
             
             # Get created_by user - same approach as invoices
             created_by_user = self._get_created_by_user()
@@ -191,17 +191,24 @@ class EnterpriseChallanService:
             
             # Calculate amounts for independent challans
             if not request.order_id:
-                # Calculate taxable amount and GST from items (GST comes from frontend)
+                # Calculate taxable amount and GST from items
+                logger.info(f"Calculating amounts for independent challan with {len(request.items)} items")
+                logger.info(f"Freight charges: {freight}")
+                
                 for item in request.items:
-                    item_total = item.unit_price * item.dispatched_quantity
+                    item_total = Decimal(str(item.unit_price)) * Decimal(str(item.dispatched_quantity))
                     taxable_amount += item_total
                     
-                    # Use GST rate provided by frontend (already loaded from product/batch selection)
-                    gst_rate = item.gst_percent if item.gst_percent else Decimal("0")
+                    # Use GST rate provided by frontend
+                    gst_rate = Decimal(str(item.gst_percent)) if item.gst_percent else Decimal("0")
                     item_gst = item_total * gst_rate / 100
                     gst_amount += item_gst
+                    
+                    logger.info(f"Item: {item.product_name}, Price: {item.unit_price}, Qty: {item.dispatched_quantity}, GST%: {gst_rate}, Item Total: {item_total}, Item GST: {item_gst}")
                 
+                # Total amount includes taxable + GST + freight
                 total_amount = taxable_amount + gst_amount + freight
+                logger.info(f"Final Calculation - Taxable: {taxable_amount}, GST: {gst_amount}, Freight: {freight}, Total: {total_amount}")
             else:
                 # For order-based challans, use order's amounts
                 if order:
