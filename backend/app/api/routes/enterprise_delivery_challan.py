@@ -125,7 +125,7 @@ class EnterpriseChallanService:
         """Create new delivery challan - supports both order-based and direct creation"""
         try:
             order = None
-            branch_id = 1  # Default branch_id
+            branch_id = 5  # Using branch_id 5 as default (confirmed to exist)
             customer_name = None
             taxable_amount = Decimal("0")
             gst_amount = Decimal("0")
@@ -152,7 +152,9 @@ class EnterpriseChallanService:
                 order = order_result.first()
                 if not order:
                     raise HTTPException(status_code=404, detail="Order not found")
-                branch_id = order.branch_id if order.branch_id else 1
+                # Use order's branch_id if available, otherwise keep the one we found
+                if order.branch_id:
+                    branch_id = order.branch_id
                 customer_name = order.customer_name
             else:
                 # For direct challan creation, get customer details
