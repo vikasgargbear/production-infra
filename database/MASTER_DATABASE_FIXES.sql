@@ -2340,6 +2340,44 @@ END $$;
 RAISE NOTICE '✅ SECTION 21: PAYMENT METHODS POPULATED FOR ALL ORGANIZATIONS';
 
 -- ========================================
+-- SECTION 22: ADD CREDIT AMOUNT TO INVOICES
+-- ========================================
+-- Track credit/outstanding amount directly in invoices table
+-- This makes reporting and queries much more efficient
+
+DO $$
+BEGIN
+    -- Add credit_amount column if it doesn't exist
+    ALTER TABLE sales.invoices 
+    ADD COLUMN IF NOT EXISTS credit_amount NUMERIC(15,2) DEFAULT 0;
+    
+    -- Update existing invoices to set credit_amount
+    UPDATE sales.invoices 
+    SET credit_amount = GREATEST(0, final_amount - COALESCE(paid_amount, 0))
+    WHERE credit_amount IS NULL OR credit_amount = 0;
+    
+    -- Create or replace function to auto-update credit amount
+    CREATE OR REPLACE FUNCTION sales.update_invoice_credit_amount()
+    RETURNS TRIGGER AS $$
+    BEGIN
+        NEW.credit_amount := GREATEST(0, NEW.final_amount - COALESCE(NEW.paid_amount, 0));
+        RETURN NEW;
+    END;
+    $$ LANGUAGE plpgsql;
+    
+    -- Create trigger to auto-calculate credit_amount
+    DROP TRIGGER IF EXISTS update_invoice_credit_trigger ON sales.invoices;
+    CREATE TRIGGER update_invoice_credit_trigger
+        BEFORE INSERT OR UPDATE OF final_amount, paid_amount
+        ON sales.invoices
+        FOR EACH ROW
+        EXECUTE FUNCTION sales.update_invoice_credit_amount();
+    
+    RAISE NOTICE '✅ SECTION 22: CREDIT AMOUNT COLUMN ADDED TO INVOICES';
+    RAISE NOTICE 'Credit amount will be auto-calculated as: final_amount - paid_amount';
+END $$;
+
+-- ========================================
 -- Note: Authentication is handled by Supabase Auth
 -- ========================================
 -- The master.org_users table has an auth_user_id column that

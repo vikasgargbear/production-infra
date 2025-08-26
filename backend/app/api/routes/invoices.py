@@ -358,6 +358,7 @@ async def create_invoice(
                 UPDATE sales.invoices
                 SET payment_status = :payment_status,
                     paid_amount = :paid_amount,
+                    credit_amount = GREATEST(0, final_amount - :paid_amount),
                     updated_at = CURRENT_TIMESTAMP
                 WHERE invoice_id = :invoice_id
             """), {
@@ -748,6 +749,8 @@ async def get_invoices(
                 i.customer_id,
                 i.customer_name,
                 i.final_amount,
+                i.paid_amount,
+                COALESCE(i.credit_amount, GREATEST(0, i.final_amount - COALESCE(i.paid_amount, 0))) as credit_amount,
                 i.payment_status,
                 i.invoice_status
             FROM sales.invoices i
