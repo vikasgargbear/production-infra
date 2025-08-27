@@ -376,6 +376,28 @@ class EnterpriseChallanService:
             
             self.db.commit()
             
+            # FIX: Update the values AFTER commit to bypass the broken trigger
+            # The trigger incorrectly calculates values, so we update them after
+            logger.info(f"Fixing values corrupted by trigger...")
+            self.db.execute(
+                text("""
+                    UPDATE sales.delivery_challans
+                    SET taxable_amount = :taxable_amount,
+                        gst_amount = :gst_amount,
+                        freight_charges = :freight_charges,
+                        total_amount = :total_amount
+                    WHERE challan_id = :challan_id
+                """),
+                {
+                    "challan_id": challan_id,
+                    "taxable_amount": taxable_amount,
+                    "gst_amount": gst_amount,
+                    "freight_charges": freight,
+                    "total_amount": total_amount
+                }
+            )
+            self.db.commit()
+            
             # Verify what was actually stored
             verify_result = self.db.execute(
                 text("""
@@ -387,7 +409,7 @@ class EnterpriseChallanService:
             ).fetchone()
             
             if verify_result:
-                logger.info(f"=== VERIFICATION AFTER INSERT ===")
+                logger.info(f"=== VERIFICATION AFTER FIX ===")
                 logger.info(f"  DB taxable_amount: {verify_result.taxable_amount}")
                 logger.info(f"  DB gst_amount: {verify_result.gst_amount}")
                 logger.info(f"  DB freight_charges: {verify_result.freight_charges}")
