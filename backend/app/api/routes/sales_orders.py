@@ -170,21 +170,28 @@ async def create_sales_order(
         
         branch_id = branch[0] if branch else None  # Use NULL if no branch found (like invoice does)
         
-        # Create sales order data with ONLY columns that exist
-        # Following invoice pattern - using actual schema columns
+        # Create sales order data with ALL actual schema columns
         order_data = order.dict(exclude={"items"})
         order_data.update({
             "order_number": order_number,
             "order_status": "draft",  # Match schema values
             "branch_id": branch_id,  # Use actual branch from DB
+            "customer_name": customer.customer_name,  # Schema has this column!
+            "customer_phone": customer.primary_phone,  # Schema has this column!
             "delivery_address_id": delivery_address_id,  # Add address reference
             "subtotal_amount": totals["subtotal"],
             "discount_amount": totals["discount"],
             "tax_amount": totals["tax"],
+            "cgst_amount": totals.get("cgst", Decimal("0")),  # Schema has this!
+            "sgst_amount": totals.get("sgst", Decimal("0")),  # Schema has this!
+            "igst_amount": totals.get("igst", Decimal("0")),  # Schema has this!
             "round_off_amount": totals.get("round_off", Decimal("0")),
             "final_amount": totals["total"],
             "fulfillment_status": "pending",
             "payment_status": "pending",  # Match schema enum
+            "paid_amount": Decimal("0"),  # Schema has this!
+            "balance_amount": totals["total"],  # Schema has this!
+            "payment_mode": "credit",  # Schema has this with default!
             "created_at": datetime.now(),
             "updated_at": datetime.now()
         })
@@ -215,19 +222,25 @@ async def create_sales_order(
         
         created_by_user = user[0] if user else None  # Use NULL if no user found (like invoice does)
         
-        # Insert sales order with address IDs if available
+        # Insert sales order using actual schema columns
         result = db.execute(text("""
             INSERT INTO sales.orders (
                 org_id, branch_id, order_number, order_date, customer_id,
+                customer_name, customer_phone,
                 order_type, delivery_date, delivery_address_id, payment_terms,
                 subtotal_amount, discount_amount, tax_amount, round_off_amount, final_amount,
+                cgst_amount, sgst_amount, igst_amount,
                 order_status, payment_status, fulfillment_status,
+                paid_amount, balance_amount, payment_mode,
                 notes, created_by, created_at, updated_at
             ) VALUES (
                 :org_id, :branch_id, :order_number, :order_date, :customer_id,
+                :customer_name, :customer_phone,
                 :order_type, :delivery_date, :delivery_address_id, :payment_terms,
                 :subtotal_amount, :discount_amount, :tax_amount, :round_off_amount, :final_amount,
+                :cgst_amount, :sgst_amount, :igst_amount,
                 :order_status, :payment_status, :fulfillment_status,
+                :paid_amount, :balance_amount, :payment_mode,
                 :notes, :created_by, :created_at, :updated_at
             ) RETURNING order_id
         """), {**order_data, "created_by": created_by_user})
@@ -312,7 +325,11 @@ async def create_sales_order(
                 "igst_percent": float(igst_percent),
                 "cgst_percent": float(cgst_percent),
                 "sgst_percent": float(sgst_percent),
+                "cgst_amount": float(cgst_amount),  # Schema has this column!
+                "sgst_amount": float(sgst_amount),  # Schema has this column!
+                "igst_amount": float(igst_amount),  # Schema has this column!
                 "cess_percent": item_data.get("cess_percent", 0),
+                "cess_amount": item_data.get("cess_amount", 0),  # Schema has this column!
                 "line_total": float(line_total)
             }
             
@@ -329,6 +346,7 @@ async def create_sales_order(
                     scheme_discount_percent, scheme_discount_amount, free_quantity, scheme_code,
                     taxable_amount, tax_percent, tax_amount,
                     igst_percent, cgst_percent, sgst_percent, cess_percent,
+                    cgst_amount, sgst_amount, igst_amount, cess_amount,
                     line_total
                 ) VALUES (
                     :order_id, :product_id, :product_name, :hsn_code,
@@ -337,6 +355,7 @@ async def create_sales_order(
                     :scheme_discount_percent, :scheme_discount_amount, :free_quantity, :scheme_code,
                     :taxable_amount, :tax_percent, :tax_amount,
                     :igst_percent, :cgst_percent, :sgst_percent, :cess_percent,
+                    :cgst_amount, :sgst_amount, :igst_amount, :cess_amount,
                     :line_total
                 )
             """), complete_item_data)
