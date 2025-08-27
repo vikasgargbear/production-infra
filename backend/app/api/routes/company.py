@@ -73,6 +73,14 @@ def get_company_info(
                 except:
                     email_addrs = {}
             
+            # Parse business_settings
+            business_settings = {}
+            if org_data.business_settings:
+                try:
+                    business_settings = json.loads(org_data.business_settings) if isinstance(org_data.business_settings, str) else org_data.business_settings
+                except:
+                    business_settings = {}
+            
             # Return formatted data matching frontend expectations
             return {
                 "name": org_data.org_name or "Your Company",
@@ -88,22 +96,31 @@ def get_company_info(
                 "pan": org_data.pan_number or "",
                 "drug_license_no": org_data.drug_license_number or "",
                 "fssai_no": org_data.fssai_number or "",
-                "logo": None
+                "logo": None,
+                # Additional fields from business_settings
+                "tagline": business_settings.get("tagline", ""),
+                "financial_year_start": business_settings.get("financial_year_start", "2024-04-01"),
+                "financial_year_end": business_settings.get("financial_year_end", "2025-03-31"),
+                "currency": business_settings.get("currency", "INR"),
+                "currency_symbol": business_settings.get("currency_symbol", "₹"),
+                "bank_name": business_settings.get("bank_name", ""),
+                "account_number": business_settings.get("account_number", ""),
+                "ifsc_code": business_settings.get("ifsc_code", ""),
+                "branch_name": business_settings.get("branch_name", ""),
+                "invoice_prefix": business_settings.get("invoice_prefix", "INV/"),
+                "challan_prefix": business_settings.get("challan_prefix", "DC/"),
+                "po_prefix": business_settings.get("po_prefix", "PO/"),
+                "return_prefix": business_settings.get("return_prefix", "RTN/"),
+                "credit_note_prefix": business_settings.get("credit_note_prefix", "CN/"),
+                "debit_note_prefix": business_settings.get("debit_note_prefix", "DN/"),
+                "default_terms": business_settings.get("default_terms", ""),
+                "default_footer": business_settings.get("default_footer", ""),
+                "print_format": business_settings.get("print_format", "A4"),
+                "show_signature": business_settings.get("show_signature", True),
+                "show_logo": business_settings.get("show_logo", True),
+                "show_bank_details": business_settings.get("show_bank_details", True)
             }
         
-        # If not found, try settings table
-        settings_query = """
-            SELECT 
-                setting_value
-            FROM settings.organization_settings
-            WHERE org_id = :org_id AND setting_key = 'company_info'
-        """
-        
-        settings_result = db.execute(text(settings_query), {"org_id": org_id})
-        settings_data = settings_result.first()
-        
-        if settings_data and settings_data.setting_value:
-            return json.loads(settings_data.setting_value)
         
         # Return default values if nothing found
         return {
@@ -215,17 +232,39 @@ def update_company_info(
         
         db.commit()
         
-        # Also store in settings for backward compatibility
-        settings_query = """
-            INSERT INTO settings.organization_settings (org_id, setting_key, setting_value)
-            VALUES (:org_id, 'company_info', :setting_value)
-            ON CONFLICT (org_id, setting_key) 
-            DO UPDATE SET setting_value = :setting_value, updated_at = CURRENT_TIMESTAMP
-        """
+        # Also update business_settings JSONB column with additional settings
+        business_settings = {
+            "tagline": company_data.get("tagline", ""),
+            "financial_year_start": company_data.get("financial_year_start", "2024-04-01"),
+            "financial_year_end": company_data.get("financial_year_end", "2025-03-31"),
+            "currency": company_data.get("currency", "INR"),
+            "currency_symbol": company_data.get("currency_symbol", "₹"),
+            "bank_name": company_data.get("bank_name", ""),
+            "account_number": company_data.get("account_number", ""),
+            "ifsc_code": company_data.get("ifsc_code", ""),
+            "branch_name": company_data.get("branch_name", ""),
+            "invoice_prefix": company_data.get("invoice_prefix", "INV/"),
+            "challan_prefix": company_data.get("challan_prefix", "DC/"),
+            "po_prefix": company_data.get("po_prefix", "PO/"),
+            "return_prefix": company_data.get("return_prefix", "RTN/"),
+            "credit_note_prefix": company_data.get("credit_note_prefix", "CN/"),
+            "debit_note_prefix": company_data.get("debit_note_prefix", "DN/"),
+            "default_terms": company_data.get("default_terms", ""),
+            "default_footer": company_data.get("default_footer", ""),
+            "print_format": company_data.get("print_format", "A4"),
+            "show_signature": company_data.get("show_signature", True),
+            "show_logo": company_data.get("show_logo", True),
+            "show_bank_details": company_data.get("show_bank_details", True)
+        }
         
-        db.execute(text(settings_query), {
+        # Update business_settings column
+        db.execute(text("""
+            UPDATE master.organizations
+            SET business_settings = CAST(:business_settings AS jsonb)
+            WHERE org_id = :org_id
+        """), {
             "org_id": org_id,
-            "setting_value": json.dumps(company_data)
+            "business_settings": json.dumps(business_settings)
         })
         
         db.commit()
