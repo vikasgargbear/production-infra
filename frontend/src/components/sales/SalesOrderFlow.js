@@ -742,10 +742,8 @@ const SalesOrderFlow = ({ open = true, onClose }) => {
         balance_amount: parseFloat(order.total_amount) || 0,
         
         // Metadata
-        notes: order.notes || '',
-        
-        // Organization
-        org_id: getOrgId()
+        notes: order.notes || ''
+        // NOTE: org_id comes from auth header, NOT request body (per migration guide)
       };
 
       debugLogger.debug('ORDER CREATION DEBUG - Raw order state:', order);
@@ -753,10 +751,8 @@ const SalesOrderFlow = ({ open = true, onClose }) => {
       debugLogger.debug('ORDER CREATION DEBUG - API payload:', JSON.stringify(orderData, null, 2));
 
       // Create sales order data matching the backend OrderCreate schema
+      // NOTE: org_id comes from auth header, NOT request body (per migration guide)
       const salesOrderData = {
-        // Required org_id as UUID
-        org_id: getOrgId(),
-        
         // Customer info
         customer_id: parseInt(order.customer_id),
         
