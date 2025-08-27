@@ -5,7 +5,7 @@ import {
   CreditCard, Globe, Image, Loader2,
   AlertCircle, RefreshCw
 } from 'lucide-react';
-import { organizationsApi } from '../../services/api';
+import { companyAPI } from '../../services/api';
 
 const CompanyProfile = ({ open, onClose }) => {
   const fileInputRef = useRef(null);
@@ -81,49 +81,49 @@ const CompanyProfile = ({ open, onClose }) => {
       setIsLoading(true);
       setError(null);
       
-      console.log('🔍 Fetching organization profile...');
-      const response = await organizationsApi.getProfile();
-      console.log('📥 Organization API Response:', response);
+      console.log('🔍 Fetching company profile...');
+      const response = await companyAPI.getCompanyInfo();
+      console.log('📥 Company API Response:', response);
       
-      if (response?.data) {
-        const data = response.data;
+      if (response) {
+        const data = response;
         
-        // Map API response to component state
+        // Map API response to component state (matching backend company.py response)
         setCompanyData({
           // Basic Details
-          businessName: data.org_name || data.business_name || '',
-          tagline: data.business_settings?.tagline || '',
-          logo: data.business_settings?.logo_url || null,
+          businessName: data.name || '',
+          tagline: data.tagline || '',
+          logo: data.logo || null,
           
           // Registration Details
-          pan: data.pan_number || data.pan || '',
-          gstin: data.gst_number || data.gstin || '',
-          drugLicenseNo: data.drug_license_number || data.drug_license_no || '',
-          fssaiNo: data.business_settings?.fssai_number || data.fssai_no || '',
+          pan: data.pan || '',
+          gstin: data.gst || '',
+          drugLicenseNo: data.drug_license_no || '',
+          fssaiNo: data.fssai_no || '',
           
           // Contact Details
-          address: data.business_address?.line1 || data.address || '',
-          city: data.business_address?.city || data.city || '',
-          state: data.business_address?.state || data.state || '',
-          stateCode: data.business_address?.state_code || data.state_code || '',
-          pincode: data.business_address?.pincode || data.pincode || '',
-          country: data.business_address?.country || data.country || 'India',
-          phone: data.primary_phone || data.phone || '',
-          altPhone: data.business_settings?.alternate_phone || data.alt_phone || '',
-          email: data.primary_email || data.email || '',
-          website: data.business_settings?.website || data.website || '',
+          address: data.address || '',
+          city: data.city || '',
+          state: data.state || '',
+          stateCode: data.state_code || '',
+          pincode: data.pincode || '',
+          country: data.country || 'India',
+          phone: data.phone || '',
+          altPhone: data.alt_phone || '',
+          email: data.email || '',
+          website: data.website || '',
           
           // Financial Settings
-          financialYearStart: data.business_settings?.financial_year_start || data.financial_year_start || '2024-04-01',
-          financialYearEnd: data.business_settings?.financial_year_end || data.financial_year_end || '2025-03-31',
-          defaultCurrency: data.business_settings?.currency || data.currency || 'INR',
-          currencySymbol: data.business_settings?.currency_symbol || data.currency_symbol || '₹',
+          financialYearStart: data.financial_year_start || '2024-04-01',
+          financialYearEnd: data.financial_year_end || '2025-03-31',
+          defaultCurrency: data.currency || 'INR',
+          currencySymbol: data.currency_symbol || '₹',
           
           // Bank Details
-          bankName: data.business_settings?.bank_name || data.bank_name || '',
-          accountNumber: data.business_settings?.account_number || data.account_number || '',
-          ifscCode: data.business_settings?.ifsc_code || data.ifsc_code || '',
-          branchName: data.business_settings?.branch_name || data.branch_name || '',
+          bankName: data.bank_name || '',
+          accountNumber: data.account_number || '',
+          ifscCode: data.ifsc_code || '',
+          branchName: data.branch_name || '',
           
           // Invoice Settings
           invoicePrefix: data.business_settings?.invoice_prefix || data.invoice_prefix || 'INV/',
@@ -245,9 +245,9 @@ const CompanyProfile = ({ open, onClose }) => {
         }
       };
       
-      const response = await organizationsApi.updateProfile(profileData);
+      const response = await companyAPI.updateCompanyInfo(profileData);
       
-      if (response.success) {
+      if (response) {
         setSuccessMessage('Company profile saved successfully!');
         setTimeout(() => {
           setSuccessMessage('');
