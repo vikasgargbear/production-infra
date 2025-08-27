@@ -49,6 +49,8 @@ const CompanyProfile = ({ open, onClose }) => {
     // Bank Details
     bankName: '',
     accountNumber: '',
+    accountName: '',
+    accountType: 'CURRENT',
     ifscCode: '',
     branchName: '',
     
@@ -122,6 +124,8 @@ const CompanyProfile = ({ open, onClose }) => {
           // Bank Details
           bankName: data.bank_name || '',
           accountNumber: data.account_number || '',
+          accountName: data.account_name || '',
+          accountType: data.account_type || 'CURRENT',
           ifscCode: data.ifsc_code || '',
           branchName: data.branch_name || '',
           
@@ -225,6 +229,8 @@ const CompanyProfile = ({ open, onClose }) => {
         currency_symbol: companyData.currencySymbol,
         bank_name: companyData.bankName,
         account_number: companyData.accountNumber,
+        account_name: companyData.accountName,
+        account_type: companyData.accountType,
         ifsc_code: companyData.ifscCode,
         branch_name: companyData.branchName,
         invoice_prefix: companyData.invoicePrefix,

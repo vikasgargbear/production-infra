@@ -82,12 +82,15 @@ async def create_sales_order(
     """
     try:
         # Set org_id early - ensure it's a UUID object
+        # org_id from header is a string, need to convert to UUID
         if order.org_id:
-            org_id = order.org_id if isinstance(order.org_id, UUID) else UUID(order.org_id)
+            org_id = order.org_id if isinstance(order.org_id, UUID) else UUID(str(order.org_id))
+        elif org_id:  # From header/token
+            org_id = UUID(str(org_id)) if not isinstance(org_id, UUID) else org_id
         else:
-            org_id = UUID(org_id) if isinstance(org_id, str) else org_id
+            raise HTTPException(status_code=400, detail="Organization ID is required")
         
-        logger.info(f"Creating sales order for customer_id={order.customer_id}, org_id={org_id}")
+        logger.info(f"Creating sales order for customer_id={order.customer_id}, org_id={org_id}, type={type(org_id)}")
         
         # Handle addresses if provided (create in master.addresses if they're new)
         billing_address_id = None
@@ -187,8 +190,8 @@ async def create_sales_order(
         })
         
         # Ensure org_id and payment_terms
-        if "org_id" not in order_data:
-            order_data["org_id"] = org_id
+        # IMPORTANT: Always set org_id from authenticated source, not from request
+        order_data["org_id"] = org_id  # Use the UUID we converted above
         if not order_data.get("payment_terms"):
             order_data["payment_terms"] = "credit"
         
