@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from sqlalchemy import text
 import logging
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 
 from ...core.database import get_db
 from ...core.auth_utils import get_org_id_from_header
@@ -688,7 +688,9 @@ def get_system_health(
         # If there was activity in the last hour, sync is working
         sync_status = "synced"
         if last_activity:
-            time_diff = datetime.now() - last_activity
+            # Make both datetimes timezone-aware or naive for comparison
+            current_time = datetime.now(timezone.utc) if hasattr(last_activity, 'tzinfo') and last_activity.tzinfo else datetime.now()
+            time_diff = current_time - last_activity
             if time_diff.total_seconds() > 3600:  # More than 1 hour
                 sync_status = "delayed"
         
@@ -735,7 +737,7 @@ def get_recent_activity(
                 SELECT 
                     'order' as activity_type,
                     o.order_id::text as activity_id,
-                    'New order #' || o.invoice_number as description,
+                    'New order #' || o.order_number as description,
                     c.customer_name as entity_name,
                     o.final_amount as value,
                     o.created_at as activity_time,
