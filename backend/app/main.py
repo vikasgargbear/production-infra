@@ -123,7 +123,7 @@ api.include_router(payments.router, prefix="/payments", tags=["Payments"])
 api.include_router(dashboard.router, prefix="/dashboard", tags=["Dashboard"])
 api.include_router(billing.router, prefix="/billing", tags=["Billing"])
 api.include_router(company.router, prefix="/company", tags=["Company"])
-api.include_router(bank_accounts.router, tags=["Bank Accounts"])
+api.include_router(bank_accounts.router, prefix="/bank-accounts", tags=["Bank Accounts"])
 # Register additional routes from __init__.py
 api.include_router(orders_router, tags=["Orders"])
 api.include_router(invoices_router, tags=["Invoices"])

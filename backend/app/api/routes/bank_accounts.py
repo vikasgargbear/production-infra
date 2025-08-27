@@ -14,7 +14,7 @@ from ...core.auth_utils import get_org_id_from_header
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/bank-accounts", tags=["Bank Accounts"])
+router = APIRouter(tags=["Bank Accounts"])
 
 @router.get("/")
 def get_bank_accounts(
