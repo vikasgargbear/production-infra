@@ -245,14 +245,14 @@ class EnterpriseChallanService:
                 text("""
                     INSERT INTO sales.delivery_challans (
                         org_id, branch_id, order_id, customer_id, challan_number,
-                        challan_date, dispatch_date, challan_status,
+                        challan_date, dispatch_date, challan_status, challan_type,
                         vehicle_number, transporter_name, lr_number, 
                         freight_charges, total_quantity, total_amount,
                         taxable_amount, gst_amount,
                         delivery_status, notes, created_by
                     ) VALUES (
                         :org_id, :branch_id, :order_id, :customer_id, :challan_number,
-                        :challan_date, :dispatch_date, :challan_status,
+                        :challan_date, :dispatch_date, :challan_status, :challan_type,
                         :vehicle_number, :transporter_name, :lr_number,
                         :freight_charges, :total_quantity, :total_amount,
                         :taxable_amount, :gst_amount,
@@ -269,6 +269,7 @@ class EnterpriseChallanService:
                     "challan_date": date.today(),
                     "dispatch_date": request.dispatch_date or date.today(),
                     "challan_status": "draft",
+                    "challan_type": "delivery",
                     "vehicle_number": request.vehicle_number,
                     "transporter_name": request.transport_company,
                     "lr_number": request.lr_number,

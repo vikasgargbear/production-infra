@@ -1013,14 +1013,20 @@ Expected Delivery: ${challan.expected_delivery_date}
                   <div className="relative">
                     <span className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-500 text-sm">₹</span>
                     <input
-                      type="text"
+                      type="number"
                       value={challan.freight_amount || ''}
                       onChange={(e) => {
-                        const value = e.target.value.replace(/[^\d.]/g, '');
-                        setChallan(prev => ({ ...prev, freight_amount: value ? parseFloat(value) : 0 }));
+                        const value = parseFloat(e.target.value) || 0;
+                        console.log('Freight input changed to:', value);
+                        setChallan(prev => ({ 
+                          ...prev, 
+                          freight_amount: value 
+                        }));
                       }}
                       className="w-full pl-8 pr-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                       placeholder="0"
+                      step="0.01"
+                      min="0"
                     />
                   </div>
                 </div>
