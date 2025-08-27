@@ -138,7 +138,12 @@ class EnterpriseChallanService:
             total_amount = Decimal("0")
             
             # Use freight_charges if provided, otherwise freight_amount (backward compatibility)
+            logger.info(f"=== FREIGHT DEBUG ===")
+            logger.info(f"request.freight_charges: {request.freight_charges}")
+            logger.info(f"request.freight_amount: {request.freight_amount}")
             freight = Decimal(str(request.freight_charges)) if request.freight_charges else (Decimal(str(request.freight_amount)) if request.freight_amount else Decimal("0"))
+            logger.info(f"Calculated freight variable: {freight}")
+            logger.info(f"=== END FREIGHT DEBUG ===")
             
             # Get created_by user - same approach as invoices
             created_by_user = self._get_created_by_user()
