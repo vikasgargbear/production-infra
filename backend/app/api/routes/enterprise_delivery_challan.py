@@ -376,15 +376,33 @@ class EnterpriseChallanService:
             
             self.db.commit()
             
+            # Verify what was actually stored
+            verify_result = self.db.execute(
+                text("""
+                    SELECT taxable_amount, gst_amount, freight_charges, total_amount
+                    FROM sales.delivery_challans
+                    WHERE challan_id = :challan_id
+                """),
+                {"challan_id": challan_id}
+            ).fetchone()
+            
+            if verify_result:
+                logger.info(f"=== VERIFICATION AFTER INSERT ===")
+                logger.info(f"  DB taxable_amount: {verify_result.taxable_amount}")
+                logger.info(f"  DB gst_amount: {verify_result.gst_amount}")
+                logger.info(f"  DB freight_charges: {verify_result.freight_charges}")
+                logger.info(f"  DB total_amount: {verify_result.total_amount}")
+                logger.info(f"=== END VERIFICATION ===")
+            
             return {
                 "challan_id": challan_id,
                 "challan_number": challan_number,
                 "customer_name": customer_name,
                 "status": "draft",
-                "total_amount": total_amount,
-                "taxable_amount": taxable_amount,
-                "gst_amount": gst_amount,
-                "freight_charges": freight,
+                "total_amount": float(total_amount),
+                "taxable_amount": float(taxable_amount),
+                "gst_amount": float(gst_amount),
+                "freight_charges": float(freight),
                 "items": len(request.items),
                 "is_independent": request.order_id is None  # Flag to indicate independent challan
             }
