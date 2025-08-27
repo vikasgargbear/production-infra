@@ -503,9 +503,10 @@ const ModularChallanCreatorV5 = ({ open = true, onClose }) => {
 
       // Debug freight amount
       console.log('=== CHALLAN SAVE DEBUG ===');
-      console.log('challan.freight_amount:', challan.freight_amount);
+      console.log('Current challan state:', challan);
+      console.log('challan.freight_amount from state:', challan.freight_amount);
       console.log('parsed freight_amount:', parseFloat(challan.freight_amount) || 0);
-      console.log('totalAmount:', totalAmount);
+      console.log('totalAmount (with freight):', totalAmount);
 
       // Prepare challan data with complete delivery address
       const challanData = {
