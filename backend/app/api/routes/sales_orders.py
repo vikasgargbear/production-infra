@@ -176,20 +176,19 @@ async def create_sales_order(
                 WHERE product_id = :product_id AND org_id = :org_id
             """), {"product_id": item_data["product_id"], "org_id": org_id}).fetchone()
             
-            # Enhanced calculation logic - consistent with invoice calculation
+            # CORRECTED calculation logic - matching invoice pattern
             quantity = Decimal(str(item_data["quantity"]))
             unit_price = Decimal(str(item_data["unit_price"]))
             discount_percent = Decimal(str(item_data.get("discount_percent", 0)))
             tax_percent = Decimal(str(item_data.get("tax_percent", 18)))
             free_quantity = Decimal(str(item_data.get("free_quantity", 0)))
             
-            # Calculate billable quantity (total quantity minus free quantity)
-            base_quantity = quantity - free_quantity
-            if base_quantity < 0:
-                base_quantity = Decimal("0")
+            # CORRECT: quantity is what customer PAYS for
+            # free_quantity is ADDITIONAL items (doesn't reduce price)
+            # Total items delivered = quantity + free_quantity
             
-            # Step 1: Base amount calculation using billable quantity only
-            gross_amount = base_quantity * unit_price
+            # Step 1: Base amount calculation using quantity (what customer pays for)
+            gross_amount = quantity * unit_price
             
             # Step 2: Discount calculation
             discount_amount = (gross_amount * discount_percent) / 100
@@ -227,7 +226,7 @@ async def create_sales_order(
                 "uom": item_data.get("uom"),  # No default UOM
                 "pack_type": item_data.get("pack_type"),  # No default pack type
                 "pack_size": item_data.get("pack_size", 1),
-                "base_quantity": float(base_quantity),  # Billable quantity (total - free)
+                "base_quantity": float(quantity),  # CORRECT: Quantity customer pays for
                 "unit_price": float(unit_price),
                 "mrp": item_data.get("mrp", float(unit_price * Decimal("1.2"))),  # Default MRP calculation
                 "discount_percent": float(discount_percent),

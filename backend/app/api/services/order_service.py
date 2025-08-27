@@ -171,18 +171,17 @@ class OrderService:
                 """), {"product_id": item['product_id']}).fetchone()
             
             if product:
+                # CORRECT: quantity is what customer PAYS for
+                # free_quantity is ADDITIONAL items given free (doesn't affect price)
                 quantity = Decimal(str(item['quantity']))
                 free_quantity = Decimal(str(item.get('free_quantity', 0)))
-                # Calculate billable quantity (total - free)
-                base_quantity = quantity - free_quantity
-                if base_quantity < 0:
-                    base_quantity = Decimal("0")
                 
                 unit_price = Decimal(str(item.get('unit_price', product.mrp)))
                 discount_percent = Decimal(str(item.get('discount_percent', 0)))
                 
-                # Calculate line subtotal using billable quantity only
-                line_subtotal = base_quantity * unit_price
+                # Calculate line subtotal - use quantity (what customer pays for)
+                # NOT quantity - free_quantity (that would be wrong)
+                line_subtotal = quantity * unit_price
                 
                 # Apply item discount
                 item_discount = line_subtotal * discount_percent / 100
@@ -203,16 +202,17 @@ class OrderService:
                 total_tax += tax_amount
         
         # Calculate final amounts correctly
-        gross_total = subtotal  # This is the sum of (quantity * unit_price) for all items
-        taxable_total = gross_total - total_discount  # Amount after discount
+        gross_total = subtotal  # Sum of (quantity * unit_price) before any discount
+        taxable_total = gross_total - total_discount  # Amount after discount (on which tax is calculated)
         final_total = taxable_total + total_tax  # Final amount including tax
         
         return {
-            "subtotal": taxable_total,  # Frontend expects this to be taxable amount (after discount)
+            "subtotal": gross_total,  # CORRECT: Subtotal is before discount
             "discount": total_discount,
+            "taxable_amount": taxable_total,  # Amount after discount
             "tax": total_tax,
             "total": final_total,
-            "gross_amount": gross_total  # Keep gross for reference
+            "gross_amount": gross_total  # Same as subtotal
         }
     
     @staticmethod

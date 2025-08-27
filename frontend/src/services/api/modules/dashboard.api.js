@@ -24,6 +24,15 @@ export const dashboardApi = {
   
   // Get expiring products
   getExpiringProducts: (days = 30) => apiClient.get(`/dashboard/expiring-products?days=${days}`),
+  
+  // Get data quality metrics
+  getDataQuality: () => apiClient.get('/dashboard/data-quality'),
+  
+  // Get system health status
+  getSystemHealth: () => apiClient.get('/dashboard/system-health'),
+  
+  // Get recent activity
+  getRecentActivity: (limit = 20) => apiClient.get(`/dashboard/recent-activity?limit=${limit}`),
 };
 
 export default dashboardApi;

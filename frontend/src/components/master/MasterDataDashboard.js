@@ -39,25 +39,27 @@ const MasterDataDashboard = ({ onNavigateToModule }) => {
       setIsLoading(true);
       setError(null);
 
-      // Fetch all master data in parallel
+      // Fetch dashboard data with error handling for each endpoint
+      const fetchWithFallback = async (promise, fallback = null) => {
+        try {
+          return await promise;
+        } catch (error) {
+          console.warn('API call failed:', error.message);
+          return fallback;
+        }
+      };
+
+      // Fetch all master data in parallel with fallbacks
       const [
         statsResponse,
-        productsResponse,
-        customersResponse,
-        suppliersResponse,
-        warehousesResponse,
         dataQualityResponse,
         systemHealthResponse,
         recentActivityResponse
       ] = await Promise.all([
-        dashboardApi.getStats(),
-        reportsApi.inventory.stock({ limit: 1 }), // Just get count
-        reportsApi.sales.byCustomer({ limit: 1 }), // Just get count
-        reportsApi.inventory.stock({ limit: 1 }), // Just get count for suppliers
-        reportsApi.inventory.stock({ limit: 1 }), // Just get count for warehouses
-        dashboardApi.getDataQuality(),
-        dashboardApi.getSystemHealth(),
-        dashboardApi.getRecentActivity()
+        fetchWithFallback(dashboardApi.getStats(), { data: {} }),
+        fetchWithFallback(dashboardApi.getDataQuality(), { data: {} }),
+        fetchWithFallback(dashboardApi.getSystemHealth(), { data: {} }),
+        fetchWithFallback(dashboardApi.getRecentActivity(), { data: [] })
       ]);
 
       // Update summary data
@@ -106,8 +108,9 @@ const MasterDataDashboard = ({ onNavigateToModule }) => {
       }
 
     } catch (error) {
-      console.error('Error fetching master data:', error);
-      setError('Failed to load master data. Please try again.');
+      console.error('Error fetching master data:', error.message || error);
+      const errorMessage = error.response?.data?.message || error.message || 'Failed to load master data. Please try again.';
+      setError(errorMessage);
     } finally {
       setIsLoading(false);
     }
