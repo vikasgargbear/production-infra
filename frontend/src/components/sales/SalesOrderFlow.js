@@ -19,7 +19,7 @@ import {
   PrintUtility
 } from '../global';
 import CustomerCreation from '../global/ui/forms/CustomerCreation';
-import { ordersApi, salesApi, api, apiClient, usersApi } from '../../services/api';
+import { ordersApi, salesApi, api, apiClient, usersApi, authApi } from '../../services/api';
 import salesOrdersAPI from '../../services/api/modules/salesOrders.api';
 import { invoicesApi as invoicesApiModule } from '../../services/api/modules/invoices.api';
 import { challansApi as challansApiModule } from '../../services/api/modules/challans.api';
@@ -183,19 +183,26 @@ const SalesOrderFlow = ({ open = true, onClose }) => {
         }
       } catch (error) {
         console.error('Error loading employees:', error);
-        // Fallback to default - use company context if available
-        const defaultUser = {
-          user_id: 1,
-          full_name: companyInfo.name ? `${companyInfo.name} Admin` : 'Admin User',
-          email: companyInfo.email || 'admin@company.com'
-        };
-        setEmployees([defaultUser]);
+        // Try to get current user from auth
+        const currentUser = authApi.getCurrentUser();
         
-        if (!order.created_by) {
+        const fallbackUser = currentUser ? {
+          user_id: currentUser.user_id || currentUser.id,
+          full_name: currentUser.full_name || currentUser.name || 'Current User',
+          email: currentUser.email
+        } : {
+          user_id: null, // Don't hardcode, let backend handle
+          full_name: companyInfo.name ? `${companyInfo.name} User` : 'User',
+          email: companyInfo.email || ''
+        };
+        
+        setEmployees([fallbackUser]);
+        
+        if (!order.created_by && fallbackUser.user_id) {
           setOrder(prev => ({
             ...prev,
-            created_by: defaultUser.user_id,
-            created_by_name: defaultUser.full_name
+            created_by: fallbackUser.user_id,
+            created_by_name: fallbackUser.full_name
           }));
         }
       }

@@ -124,7 +124,9 @@ async def create_sales_order(
             LIMIT 1
         """), {"org_id": org_id})
         branch = branch_result.fetchone()
-        branch_id = branch.branch_id if branch else 1
+        if not branch:
+            raise HTTPException(status_code=400, detail="No active branch found for organization")
+        branch_id = branch.branch_id
         
         # Create sales order (no inventory allocation)
         order_data = order.dict(exclude={"items"})
@@ -155,7 +157,9 @@ async def create_sales_order(
             LIMIT 1
         """), {"org_id": org_id})
         user = user_result.fetchone()
-        created_by_user = user.user_id if user else 1
+        if not user:
+            raise HTTPException(status_code=400, detail="No active user found for organization")
+        created_by_user = user.user_id
         
         # Insert sales order with correct schema columns
         result = db.execute(text("""
@@ -209,7 +213,8 @@ async def create_sales_order(
             # For intra-state: CGST + SGST, for inter-state: IGST
             cgst_percent = tax_percent / 2
             sgst_percent = tax_percent / 2 
-            igst_percent = Decimal("0")  # Assume intra-state for now
+            # TODO: Determine IGST based on customer state vs org state
+            igst_percent = Decimal("0")  # Currently using CGST+SGST
             
             cgst_amount = (taxable_amount * cgst_percent) / 100
             sgst_amount = (taxable_amount * sgst_percent) / 100
@@ -234,10 +239,10 @@ async def create_sales_order(
                 "quantity": float(quantity),
                 "uom": item_data.get("uom"),  # No default UOM
                 "pack_type": item_data.get("pack_type"),  # No default pack type
-                "pack_size": item_data.get("pack_size", 1),
+                "pack_size": item_data.get("pack_size"),  # No default pack size
                 "base_quantity": float(quantity),  # CORRECT: Quantity customer pays for
                 "unit_price": float(unit_price),
-                "mrp": item_data.get("mrp", float(unit_price * Decimal("1.2"))),  # Default MRP calculation
+                "mrp": item_data.get("mrp", float(unit_price)),  # Use unit price if MRP not provided
                 "discount_percent": float(discount_percent),
                 "discount_amount": float(discount_amount),
                 "scheme_discount_percent": item_data.get("scheme_discount_percent", 0),
@@ -297,7 +302,7 @@ async def create_sales_order(
 @router.get("/", response_model=OrderListResponse)
 async def list_sales_orders(
     skip: int = Query(0, ge=0),
-    limit: int = Query(100, ge=1, le=1000),
+    limit: int = Query(100, ge=1, le=500),  # Reasonable limit for performance
     customer_id: Optional[int] = None,
     status: Optional[str] = None,
     from_date: Optional[date] = None,

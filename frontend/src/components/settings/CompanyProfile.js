@@ -140,9 +140,11 @@ const CompanyProfile = () => {
   }
 
   return (
-    <div className="bg-white rounded-lg shadow-sm p-6">
-      {/* Header */}
-      <div className="flex justify-between items-center mb-6">
+    <div className="h-full w-full overflow-auto" style={{ maxHeight: 'calc(100vh - 64px)' }}>
+      <div className="max-w-4xl mx-auto p-4">
+        <div className="bg-white rounded-lg shadow-sm p-6">
+        {/* Header */}
+        <div className="flex justify-between items-center mb-6">
         <h2 className="text-xl font-semibold text-gray-900 flex items-center gap-2">
           <Building2 className="w-5 h-5" />
           Company Profile
@@ -421,6 +423,8 @@ const CompanyProfile = () => {
             disabled={!isEditing}
             className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-50 disabled:text-gray-500"
           />
+        </div>
+      </div>
         </div>
       </div>
     </div>
