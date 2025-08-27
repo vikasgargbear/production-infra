@@ -147,6 +147,9 @@ def update_company_info(
 ):
     """Update company information"""
     try:
+        logger.info(f"Updating company info for org_id: {org_id}")
+        logger.info(f"Received data: {company_data}")
+        
         # First, check if organization exists
         check_query = """
             SELECT org_id FROM master.organizations 
@@ -177,9 +180,9 @@ def update_company_info(
                 UPDATE master.organizations
                 SET 
                     org_name = :name,
-                    registered_address = :registered_address::jsonb,
-                    contact_numbers = :contact_numbers::jsonb,
-                    email_addresses = :email_addresses::jsonb,
+                    registered_address = CAST(:registered_address AS jsonb),
+                    contact_numbers = CAST(:contact_numbers AS jsonb),
+                    email_addresses = CAST(:email_addresses AS jsonb),
                     website = :website,
                     gst_number = :gst,
                     pan_number = :pan,
@@ -232,8 +235,17 @@ def update_company_info(
         
     except Exception as e:
         logger.error(f"Error updating company info: {str(e)}")
+        logger.error(f"Query parameters: org_id={org_id}, data={company_data}")
         db.rollback()
-        raise HTTPException(status_code=500, detail=f"Failed to update company info: {str(e)}")
+        
+        # Check if it's a specific database error
+        error_message = str(e)
+        if "jsonb" in error_message.lower():
+            error_message = "Error updating company data. Invalid JSON format."
+        elif "syntax" in error_message.lower():
+            error_message = "Database query syntax error. Please contact support."
+        
+        raise HTTPException(status_code=500, detail=f"Failed to update company info: {error_message}")
 
 @router.get("/org-id")
 def get_organization_id(
