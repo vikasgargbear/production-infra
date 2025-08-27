@@ -42,7 +42,7 @@ def get_company_info(
                 business_settings,
                 created_at,
                 updated_at
-            FROM organizations.organizations
+            FROM master.organizations
             WHERE org_id = :org_id
         """
         
@@ -149,7 +149,7 @@ def update_company_info(
     try:
         # First, check if organization exists
         check_query = """
-            SELECT org_id FROM organizations.organizations 
+            SELECT org_id FROM master.organizations 
             WHERE org_id = :org_id
         """
         
@@ -174,7 +174,7 @@ def update_company_info(
         if exists:
             # Update existing organization
             update_query = """
-                UPDATE organizations.organizations
+                UPDATE master.organizations
                 SET 
                     org_name = :name,
                     registered_address = :registered_address::jsonb,
@@ -227,26 +227,7 @@ def update_company_info(
         
         db.commit()
         
-        # Return updated data
-        updated = result.first()
-        if updated:
-            response_data = dict(updated._mapping)
-            # Map database columns back to expected format
-            return {
-                "name": response_data.get("org_name", ""),
-                "address": response_data.get("address", ""),
-                "city": response_data.get("city", ""),
-                "state": response_data.get("state", ""),
-                "pincode": response_data.get("pincode", ""),
-                "country": response_data.get("country", "India"),
-                "phone": response_data.get("phone", ""),
-                "email": response_data.get("email", ""),
-                "website": response_data.get("website", ""),
-                "gst": response_data.get("gst_number", ""),
-                "pan": response_data.get("pan_number", ""),
-                "logo": response_data.get("logo")
-            }
-        
+        # Return the data in same format as GET
         return company_data
         
     except Exception as e:
