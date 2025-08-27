@@ -85,6 +85,27 @@ async def create_sales_order(
         
         logger.info(f"Creating sales order for customer_id={order.customer_id}, org_id={org_id}")
         
+        # Handle addresses if provided (create in master.addresses if they're new)
+        billing_address_id = None
+        shipping_address_id = None
+        delivery_address_id = None
+        
+        if order.billing_address:
+            # Check if address exists or create new one
+            billing_address_id = _get_or_create_address(
+                db, org_id, order.customer_id, 
+                order.billing_address, 'billing'
+            )
+        
+        if order.shipping_address:
+            # Check if address exists or create new one
+            shipping_address_id = _get_or_create_address(
+                db, org_id, order.customer_id,
+                order.shipping_address, 'shipping'
+            )
+            # Use shipping as delivery address
+            delivery_address_id = shipping_address_id
+        
         # Validate customer exists and get all details
         # NOTE: Following invoice pattern - don't filter by org_id since we have dynamic org_id
         # and customers might have been created with different org_id values
@@ -149,6 +170,7 @@ async def create_sales_order(
             "order_number": order_number,
             "order_status": "draft",  # Match schema values
             "branch_id": branch_id,  # Use actual branch from DB
+            "delivery_address_id": delivery_address_id,  # Add address reference
             "subtotal_amount": totals["subtotal"],
             "discount_amount": totals["discount"],
             "tax_amount": totals["tax"],
@@ -186,18 +208,17 @@ async def create_sales_order(
         
         created_by_user = user[0] if user else None  # Use NULL if no user found (like invoice does)
         
-        # Insert sales order using ONLY columns that exist in the table
-        # Following invoice pattern - using actual schema columns only
+        # Insert sales order with address IDs if available
         result = db.execute(text("""
             INSERT INTO sales.orders (
                 org_id, branch_id, order_number, order_date, customer_id,
-                order_type, delivery_date, payment_terms,
+                order_type, delivery_date, delivery_address_id, payment_terms,
                 subtotal_amount, discount_amount, tax_amount, round_off_amount, final_amount,
                 order_status, payment_status, fulfillment_status,
                 notes, created_by, created_at, updated_at
             ) VALUES (
                 :org_id, :branch_id, :order_number, :order_date, :customer_id,
-                :order_type, :delivery_date, :payment_terms,
+                :order_type, :delivery_date, :delivery_address_id, :payment_terms,
                 :subtotal_amount, :discount_amount, :tax_amount, :round_off_amount, :final_amount,
                 :order_status, :payment_status, :fulfillment_status,
                 :notes, :created_by, :created_at, :updated_at
@@ -786,3 +807,63 @@ async def get_sales_order_dashboard(db: Session = Depends(get_db),
     except Exception as e:
         logger.error(f"Error getting sales order dashboard: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to get dashboard: {str(e)}")
+
+def _get_or_create_address(db: Session, org_id: str, customer_id: int, 
+                           address_text: str, address_type: str) -> Optional[int]:
+    """
+    Helper function to get existing address or create new one
+    Follows customer creation pattern for address management
+    """
+    if not address_text:
+        return None
+    
+    try:
+        # First check if similar address exists for this customer
+        existing = db.execute(text("""
+            SELECT address_id FROM master.addresses
+            WHERE entity_type = 'customer'
+            AND entity_id = :customer_id
+            AND address_type = :address_type
+            AND is_active = true
+            LIMIT 1
+        """), {
+            "customer_id": customer_id,
+            "address_type": address_type
+        }).fetchone()
+        
+        if existing:
+            return existing[0]
+        
+        # Parse address text (simple parsing - could be enhanced)
+        # Expected format: "Line1, Line2, City, State, Pincode"
+        parts = [p.strip() for p in address_text.split(',')]
+        
+        # Create new address
+        result = db.execute(text("""
+            INSERT INTO master.addresses (
+                org_id, entity_type, entity_id, address_type,
+                address_line1, address_line2, city, state_name, pincode,
+                country, is_default, is_active,
+                created_at, updated_at
+            ) VALUES (
+                :org_id, 'customer', :customer_id, :address_type,
+                :line1, :line2, :city, :state, :pincode,
+                'India', false, true,
+                CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+            ) RETURNING address_id
+        """), {
+            "org_id": org_id,
+            "customer_id": customer_id,
+            "address_type": address_type,
+            "line1": parts[0] if len(parts) > 0 else address_text,
+            "line2": parts[1] if len(parts) > 1 else None,
+            "city": parts[-3] if len(parts) >= 3 else None,
+            "state": parts[-2] if len(parts) >= 2 else None,
+            "pincode": parts[-1] if len(parts) >= 1 and parts[-1].isdigit() else None
+        })
+        
+        return result.scalar()
+        
+    except Exception as e:
+        logger.warning(f"Could not create address: {str(e)}")
+        return None
