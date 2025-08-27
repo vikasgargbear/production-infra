@@ -19,6 +19,7 @@ import DateFormatter from '../../services/dateFormatter';
 import InvoiceApiService from '../../services/invoiceApiService';
 import { ProductSearchSimple, ItemsTable, ModuleHeader, CustomerSearch, ProductCreationModal, ViewHistoryButton, GSTCalculator, DocumentFooter, GenericSuccessModal, AddressForm, NotesSection, PrintUtility } from '../global';
 import CustomerCreation from '../global/ui/forms/CustomerCreation';
+import BankAccountSelector from '../common/BankAccountSelector';
 import { useCompany } from '../../contexts/CompanyContext';
 // import InvoiceSuccessModal from './InvoiceSuccessModal'; // Replaced with GenericSuccessModal
 import SplitPayment from '../global/ui/SplitPayment';
@@ -122,6 +123,7 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
     shipping_address: prefilledData?.shipping_address || '',
     place_of_supply: prefilledData?.place_of_supply || '',  // NEW: Critical for GST
     sales_person_id: prefilledData?.sales_person_id || '',  // NEW: For tracking
+    bank_account_id: null,  // NEW: Selected bank account for receiving payment
     items: prefilledData?.items || [],
     payment_mode: '',
     payment_status: 'Pending',
@@ -693,7 +695,10 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
           ] : []),
           
           // Additional charges (using correct field names)
-          freight_charges: invoice.delivery_charges || 0
+          freight_charges: invoice.delivery_charges || 0,
+          
+          // Bank account for receiving payment
+          bank_account_id: invoice.bank_account_id || null
         };
         
         console.log('Sending invoice to backend:', JSON.stringify(invoiceData, null, 2));
@@ -1836,6 +1841,26 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
             </div>
           )}
 
+
+          {/* Bank Account Selection */}
+          <div className="mb-4">
+            <h3 className="text-xs font-semibold text-gray-600 uppercase tracking-wider mb-1.5 px-1">RECEIVING BANK ACCOUNT</h3>
+            <div className="bg-white rounded-lg border border-gray-200 p-3">
+              <BankAccountSelector
+                value={invoice.bank_account_id}
+                onChange={(accountData) => {
+                  setInvoice(prev => ({
+                    ...prev,
+                    bank_account_id: accountData.bank_account_id,
+                    selected_bank_details: accountData // Store full details for display
+                  }));
+                }}
+                transactionType="receipt"
+                autoSelectDefault={true}
+                placeholder="Select account to receive payment"
+              />
+            </div>
+          </div>
 
           {/* Payment Details - Using Global Component */}
           <div className="mb-4">

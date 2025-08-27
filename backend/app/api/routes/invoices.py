@@ -274,6 +274,7 @@ async def create_invoice(
                 freight_charges, insurance_charges, other_charges, 
                 round_off_amount, final_amount,
                 payment_terms, due_date, notes, 
+                bank_account_id,
                 invoice_status, payment_status,
                 created_by, created_at
             ) VALUES (
@@ -285,6 +286,7 @@ async def create_invoice(
                 :freight, :insurance, :other, 
                 :round_off, :final,
                 :payment_terms, :due_date, :notes,
+                :bank_account_id,
                 'posted', 'pending',
                 :created_by, CURRENT_TIMESTAMP
             ) RETURNING invoice_id
@@ -313,6 +315,7 @@ async def create_invoice(
             "payment_terms": payment_terms,
             "due_date": due_date,
             "notes": invoice_data.get("notes"),
+            "bank_account_id": invoice_data.get("bank_account_id"),
             "created_by": created_by
         })
         invoice_id = invoice_create.scalar()

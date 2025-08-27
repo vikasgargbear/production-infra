@@ -147,10 +147,61 @@ async def create_sales_order(
                     detail=f"Product {item['product_id']} not found"
                 )
         
-        # Calculate totals
-        totals = OrderService.calculate_order_totals(
-            db, items_dict, customer_discount, org_id
-        )
+        # Calculate totals by summing up item values
+        total_subtotal = Decimal("0")
+        total_discount = Decimal("0")
+        total_taxable = Decimal("0")
+        total_cgst = Decimal("0")
+        total_sgst = Decimal("0")
+        total_igst = Decimal("0")
+        total_tax = Decimal("0")
+        
+        for item in order.items:
+            quantity = Decimal(str(item.quantity))
+            unit_price = Decimal(str(item.unit_price))
+            discount_percent = Decimal(str(item.discount_percent or 0))
+            tax_percent = Decimal(str(item.tax_percent or 18))
+            gst_type = getattr(item, 'gst_type', 'CGST/SGST')
+            
+            gross_amount = quantity * unit_price
+            discount_amount = (gross_amount * discount_percent) / 100
+            taxable_amount = gross_amount - discount_amount
+            
+            # Calculate GST components based on type
+            if gst_type == "IGST":
+                igst_amount = (taxable_amount * tax_percent) / 100
+                cgst_amount = Decimal("0")
+                sgst_amount = Decimal("0")
+            else:
+                cgst_amount = (taxable_amount * tax_percent / 2) / 100
+                sgst_amount = (taxable_amount * tax_percent / 2) / 100
+                igst_amount = Decimal("0")
+            
+            tax_amount = cgst_amount + sgst_amount + igst_amount
+            
+            # Add to totals
+            total_subtotal += gross_amount
+            total_discount += discount_amount
+            total_taxable += taxable_amount
+            total_cgst += cgst_amount
+            total_sgst += sgst_amount
+            total_igst += igst_amount
+            total_tax += tax_amount
+        
+        # Final amount calculation
+        final_amount = total_taxable + total_tax
+        
+        totals = {
+            "subtotal": total_subtotal,
+            "discount": total_discount,
+            "taxable": total_taxable,
+            "cgst": total_cgst,
+            "sgst": total_sgst,
+            "igst": total_igst,
+            "tax": total_tax,
+            "total": final_amount,
+            "round_off": Decimal("0")
+        }
         
         # Generate order number
         order_number = OrderService.generate_order_number(db, org_id)
@@ -185,10 +236,12 @@ async def create_sales_order(
             "delivery_address_id": delivery_address_id,  # Add address reference
             "subtotal_amount": totals["subtotal"],
             "discount_amount": totals["discount"],
+            "taxable_amount": totals["taxable"],  # Add taxable amount!
             "tax_amount": totals["tax"],
             "cgst_amount": totals.get("cgst", Decimal("0")),  # Schema has this!
             "sgst_amount": totals.get("sgst", Decimal("0")),  # Schema has this!
             "igst_amount": totals.get("igst", Decimal("0")),  # Schema has this!
+            "items_count": len(order.items),  # Add items count!
             "round_off_amount": totals.get("round_off", Decimal("0")),
             "final_amount": totals["total"],
             "fulfillment_status": "pending",
@@ -232,20 +285,20 @@ async def create_sales_order(
                 org_id, branch_id, order_number, order_date, customer_id,
                 customer_name, customer_phone,
                 order_type, delivery_date, delivery_address_id, payment_terms,
-                subtotal_amount, discount_amount, tax_amount, round_off_amount, final_amount,
+                subtotal_amount, discount_amount, taxable_amount, tax_amount, round_off_amount, final_amount,
                 cgst_amount, sgst_amount, igst_amount,
                 order_status, payment_status, fulfillment_status,
                 paid_amount, balance_amount, payment_mode,
-                notes, created_by, created_at, updated_at
+                notes, created_by, created_at, updated_at, items_count
             ) VALUES (
                 :org_id, :branch_id, :order_number, :order_date, :customer_id,
                 :customer_name, :customer_phone,
                 :order_type, :delivery_date, :delivery_address_id, :payment_terms,
-                :subtotal_amount, :discount_amount, :tax_amount, :round_off_amount, :final_amount,
+                :subtotal_amount, :discount_amount, :taxable_amount, :tax_amount, :round_off_amount, :final_amount,
                 :cgst_amount, :sgst_amount, :igst_amount,
                 :order_status, :payment_status, :fulfillment_status,
                 :paid_amount, :balance_amount, :payment_mode,
-                :notes, :created_by, :created_at, :updated_at
+                :notes, :created_by, :created_at, :updated_at, :items_count
             ) RETURNING order_id
         """), {**order_data, "created_by": created_by_user})
         
@@ -256,10 +309,10 @@ async def create_sales_order(
             item_data = item.dict()
             item_data["order_id"] = order_id
             
-            # Get product details including HSN code
+            # Get product details including HSN code and product_code
             # NOTE: Following invoice pattern - don't filter by org_id
             product_details = db.execute(text("""
-                SELECT product_name, hsn_code FROM inventory.products 
+                SELECT product_name, hsn_code, product_code FROM inventory.products 
                 WHERE product_id = :product_id
             """), {"product_id": item_data["product_id"]}).fetchone()
             
@@ -284,15 +337,25 @@ async def create_sales_order(
             taxable_amount = gross_amount - discount_amount
             
             # Step 4: Tax calculations (GST components)
-            # For intra-state: CGST + SGST, for inter-state: IGST
-            cgst_percent = tax_percent / 2
-            sgst_percent = tax_percent / 2 
-            # TODO: Determine IGST based on customer state vs org state
-            igst_percent = Decimal("0")  # Currently using CGST+SGST
+            # Determine GST type based on item data or default to CGST/SGST
+            gst_type = item_data.get("gst_type", "CGST/SGST")
             
-            cgst_amount = (taxable_amount * cgst_percent) / 100
-            sgst_amount = (taxable_amount * sgst_percent) / 100
-            igst_amount = (taxable_amount * igst_percent) / 100
+            if gst_type == "IGST":
+                # Inter-state: Full tax as IGST
+                igst_percent = tax_percent
+                cgst_percent = Decimal("0")
+                sgst_percent = Decimal("0")
+                igst_amount = (taxable_amount * igst_percent) / 100
+                cgst_amount = Decimal("0")
+                sgst_amount = Decimal("0")
+            else:
+                # Intra-state: Split tax between CGST and SGST
+                cgst_percent = tax_percent / 2
+                sgst_percent = tax_percent / 2 
+                igst_percent = Decimal("0")
+                cgst_amount = (taxable_amount * cgst_percent) / 100
+                sgst_amount = (taxable_amount * sgst_percent) / 100
+                igst_amount = Decimal("0")
             
             tax_amount = cgst_amount + sgst_amount + igst_amount
             
@@ -309,7 +372,10 @@ async def create_sales_order(
                 "order_id": order_id,
                 "product_id": item_data["product_id"],
                 "product_name": product_details.product_name if product_details else f"Product {item_data['product_id']}",
+                "product_code": product_details.product_code if product_details else item_data.get("product_code"),  # Add product_code!
                 "hsn_code": product_details.hsn_code if product_details else None,
+                "batch_id": item_data.get("batch_id"),  # Add batch_id from request
+                "batch_number": item_data.get("batch_number"),  # Add batch_number from request
                 "quantity": float(quantity),
                 "uom": item_data.get("uom"),  # No default UOM
                 "pack_type": item_data.get("pack_type"),  # No default pack type
@@ -344,7 +410,8 @@ async def create_sales_order(
             
             db.execute(text("""
                 INSERT INTO sales.order_items (
-                    order_id, product_id, product_name, hsn_code,
+                    order_id, product_id, product_name, product_code, hsn_code,
+                    batch_id, batch_number,
                     quantity, uom, pack_type, pack_size, base_quantity,
                     unit_price, mrp, discount_percent, discount_amount,
                     scheme_discount_percent, scheme_discount_amount, free_quantity, scheme_code,
@@ -353,7 +420,8 @@ async def create_sales_order(
                     cgst_amount, sgst_amount, igst_amount, cess_amount,
                     line_total
                 ) VALUES (
-                    :order_id, :product_id, :product_name, :hsn_code,
+                    :order_id, :product_id, :product_name, :product_code, :hsn_code,
+                    :batch_id, :batch_number,
                     :quantity, :uom, :pack_type, :pack_size, :base_quantity,
                     :unit_price, :mrp, :discount_percent, :discount_amount,
                     :scheme_discount_percent, :scheme_discount_amount, :free_quantity, :scheme_code,

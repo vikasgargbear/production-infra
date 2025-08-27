@@ -767,6 +767,7 @@ const SalesOrderFlow = ({ open = true, onClose }) => {
         // Items matching OrderItemCreate schema
         items: order.items.map(item => {
           const quantity = parseInt(item.quantity) || 1;
+          const freeQuantity = parseInt(item.free_quantity) || 0;
           const unitPrice = parseFloat(item.unit_price) || 0;
           const discountPercent = parseFloat(item.discount_percent) || 0;
           const taxPercent = parseFloat(item.gst_percent) || 0;
@@ -779,13 +780,21 @@ const SalesOrderFlow = ({ open = true, onClose }) => {
           
           return {
             product_id: parseInt(item.product_id),
+            product_code: item.product_code || null,
             batch_id: item.batch_id ? parseInt(item.batch_id) : null,
+            batch_number: item.batch_number || null,
             quantity: quantity,
+            free_quantity: freeQuantity,  // Add free quantity!
             unit_price: unitPrice,
+            mrp: parseFloat(item.mrp) || unitPrice,  // Add MRP
             discount_percent: discountPercent,
             discount_amount: discountAmount,
             tax_percent: taxPercent,
-            tax_amount: taxAmount
+            tax_amount: taxAmount,
+            gst_type: order.gst_type || 'CGST/SGST',  // Add GST type!
+            uom: item.uom || null,  // Add UOM
+            pack_type: item.pack_type || null,  // Add pack type
+            pack_size: item.pack_size || null   // Add pack size
           };
         }),
         
@@ -805,6 +814,13 @@ const SalesOrderFlow = ({ open = true, onClose }) => {
       if (response?.data) {
         const createdOrderId = response.data.order_id || response.data.id;
         const createdOrderNumber = response.data.order_number || response.data.order_no || `ORD-${createdOrderId}`;
+        
+        // Update the order state with the backend-generated order number
+        setOrder(prevOrder => ({
+          ...prevOrder,
+          order_number: createdOrderNumber,
+          order_id: createdOrderId
+        }));
         
         // Store order data for success modal
         setCreatedOrderData({
