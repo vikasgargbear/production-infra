@@ -142,28 +142,18 @@ async def create_sales_order(
         
         branch_id = branch[0] if branch else None  # Use NULL if no branch found (like invoice does)
         
-        # Create sales order with ALL required fields (no nulls)
+        # Create sales order data with ONLY columns that exist
+        # Following invoice pattern - using actual schema columns
         order_data = order.dict(exclude={"items"})
         order_data.update({
             "order_number": order_number,
             "order_status": "draft",  # Match schema values
             "branch_id": branch_id,  # Use actual branch from DB
-            "customer_name": customer.customer_name,  # Populate from customer record
-            "customer_phone": customer.primary_phone,  # Populate from customer record
             "subtotal_amount": totals["subtotal"],
             "discount_amount": totals["discount"],
             "tax_amount": totals["tax"],
             "round_off_amount": totals.get("round_off", Decimal("0")),
             "final_amount": totals["total"],
-            "delivery_charges": order.delivery_charges,  # Schema has default Decimal("0")
-            "other_charges": order.other_charges,  # Schema has default Decimal("0")
-            "billing_address": order.billing_address or "",  # Address comes from frontend
-            "billing_gstin": order.billing_gstin or customer.gst_number or "",
-            "billing_name": order.billing_name or customer.customer_name or "",
-            "shipping_address": order.shipping_address or "",  # Address comes from frontend
-            "shipping_name": order.shipping_name or customer.customer_name or "",
-            "shipping_phone": order.shipping_phone or customer.primary_phone or "",
-            "delivery_address": order.shipping_address or "",  # Use shipping_address from frontend
             "fulfillment_status": "pending",
             "payment_status": "pending",  # Match schema enum
             "created_at": datetime.now(),
@@ -196,27 +186,20 @@ async def create_sales_order(
         
         created_by_user = user[0] if user else None  # Use NULL if no user found (like invoice does)
         
-        # Insert sales order with ALL fields populated (no nulls)
+        # Insert sales order using ONLY columns that exist in the table
+        # Following invoice pattern - using actual schema columns only
         result = db.execute(text("""
             INSERT INTO sales.orders (
                 org_id, branch_id, order_number, order_date, customer_id,
-                customer_name, customer_phone,
-                order_type, delivery_date, delivery_address, payment_terms, 
+                order_type, delivery_date, payment_terms,
                 subtotal_amount, discount_amount, tax_amount, round_off_amount, final_amount,
-                delivery_charges, other_charges,
-                order_status, fulfillment_status, payment_status,
-                billing_name, billing_address, billing_gstin,
-                shipping_name, shipping_address, shipping_phone,
+                order_status, payment_status, fulfillment_status,
                 notes, created_by, created_at, updated_at
             ) VALUES (
                 :org_id, :branch_id, :order_number, :order_date, :customer_id,
-                :customer_name, :customer_phone,
-                :order_type, :delivery_date, :delivery_address, :payment_terms,
+                :order_type, :delivery_date, :payment_terms,
                 :subtotal_amount, :discount_amount, :tax_amount, :round_off_amount, :final_amount,
-                :delivery_charges, :other_charges,
-                :order_status, :fulfillment_status, :payment_status,
-                :billing_name, :billing_address, :billing_gstin,
-                :shipping_name, :shipping_address, :shipping_phone,
+                :order_status, :payment_status, :fulfillment_status,
                 :notes, :created_by, :created_at, :updated_at
             ) RETURNING order_id
         """), {**order_data, "created_by": created_by_user})
