@@ -291,6 +291,30 @@ When things were working before and break after org_id migration:
 5. **Multi-tenancy is about security** - Not just data separation
 6. **Schemas should not require org_id** - Backend gets it from token
 7. **Response models must match DB exactly** - Or transform the data
+8. **UUID Type Handling** - Database expects UUID objects, not strings
+
+## Common Database Issues
+
+### Foreign Key Constraint: org_id
+**Error**: `insert or update on table "orders" violates foreign key constraint "orders_org_id_fkey"`
+
+**Cause**: The org_id value is a string but database expects UUID type
+
+**Solution**:
+```python
+from uuid import UUID
+
+# Convert string to UUID before database operations
+if isinstance(org_id, str):
+    org_id = UUID(org_id)
+```
+
+**Important Notes**:
+- The organization DOES exist in the database (invoices work fine)
+- The issue is type mismatch: string vs UUID
+- `get_org_id_from_header` returns string
+- `get_org_id_from_token` also returns string
+- Database foreign keys expect UUID type
 
 ## Debugging Checklist
 

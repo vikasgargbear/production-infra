@@ -81,8 +81,18 @@ def get_company_info(
                 except:
                     business_settings = {}
             
+            # Get default bank account if exists
+            bank_query = """
+                SELECT account_name, account_number, bank_name, branch_name, ifsc_code, account_type
+                FROM master.org_bank_accounts
+                WHERE org_id = :org_id AND is_default_account = true AND is_active = true
+                LIMIT 1
+            """
+            bank_result = db.execute(text(bank_query), {"org_id": org_id})
+            bank_data = bank_result.first()
+            
             # Return formatted data matching frontend expectations
-            return {
+            response = {
                 "name": org_data.org_name or "Your Company",
                 "address": registered_addr.get("line1", ""),
                 "city": registered_addr.get("city", ""),
@@ -103,10 +113,6 @@ def get_company_info(
                 "financial_year_end": business_settings.get("financial_year_end", "2025-03-31"),
                 "currency": business_settings.get("currency", "INR"),
                 "currency_symbol": business_settings.get("currency_symbol", "₹"),
-                "bank_name": business_settings.get("bank_name", ""),
-                "account_number": business_settings.get("account_number", ""),
-                "ifsc_code": business_settings.get("ifsc_code", ""),
-                "branch_name": business_settings.get("branch_name", ""),
                 "invoice_prefix": business_settings.get("invoice_prefix", "INV/"),
                 "challan_prefix": business_settings.get("challan_prefix", "DC/"),
                 "po_prefix": business_settings.get("po_prefix", "PO/"),
@@ -120,6 +126,28 @@ def get_company_info(
                 "show_logo": business_settings.get("show_logo", True),
                 "show_bank_details": business_settings.get("show_bank_details", True)
             }
+            
+            # Add bank details if found
+            if bank_data:
+                response.update({
+                    "bank_name": bank_data.bank_name or "",
+                    "account_number": bank_data.account_number or "",
+                    "account_name": bank_data.account_name or "",
+                    "ifsc_code": bank_data.ifsc_code or "",
+                    "branch_name": bank_data.branch_name or "",
+                    "account_type": bank_data.account_type or ""
+                })
+            else:
+                response.update({
+                    "bank_name": "",
+                    "account_number": "",
+                    "account_name": "",
+                    "ifsc_code": "",
+                    "branch_name": "",
+                    "account_type": ""
+                })
+            
+            return response
         
         
         # Return default values if nothing found
@@ -232,17 +260,65 @@ def update_company_info(
         
         db.commit()
         
-        # Also update business_settings JSONB column with additional settings
+        # Handle bank account data separately
+        if any([company_data.get("bank_name"), company_data.get("account_number"), company_data.get("ifsc_code")]):
+            # Check if bank account exists
+            existing_bank = db.execute(text("""
+                SELECT bank_account_id FROM master.org_bank_accounts
+                WHERE org_id = :org_id AND is_default_account = true
+                LIMIT 1
+            """), {"org_id": org_id}).first()
+            
+            if existing_bank:
+                # Update existing bank account
+                db.execute(text("""
+                    UPDATE master.org_bank_accounts
+                    SET account_name = :account_name,
+                        account_number = :account_number,
+                        bank_name = :bank_name,
+                        branch_name = :branch_name,
+                        ifsc_code = :ifsc_code,
+                        account_type = :account_type,
+                        updated_at = CURRENT_TIMESTAMP
+                    WHERE bank_account_id = :bank_account_id
+                """), {
+                    "bank_account_id": existing_bank.bank_account_id,
+                    "account_name": company_data.get("account_name", company_data.get("name", "")),
+                    "account_number": company_data.get("account_number", ""),
+                    "bank_name": company_data.get("bank_name", ""),
+                    "branch_name": company_data.get("branch_name", ""),
+                    "ifsc_code": company_data.get("ifsc_code", ""),
+                    "account_type": company_data.get("account_type", "CURRENT")
+                })
+            elif company_data.get("account_number") and company_data.get("ifsc_code"):
+                # Create new bank account only if required fields are present
+                db.execute(text("""
+                    INSERT INTO master.org_bank_accounts (
+                        org_id, account_name, account_number, account_type,
+                        bank_name, branch_name, ifsc_code,
+                        is_default_account, is_active
+                    ) VALUES (
+                        :org_id, :account_name, :account_number, :account_type,
+                        :bank_name, :branch_name, :ifsc_code,
+                        true, true
+                    )
+                """), {
+                    "org_id": org_id,
+                    "account_name": company_data.get("account_name", company_data.get("name", "")),
+                    "account_number": company_data.get("account_number"),
+                    "account_type": company_data.get("account_type", "CURRENT"),
+                    "bank_name": company_data.get("bank_name", ""),
+                    "branch_name": company_data.get("branch_name", ""),
+                    "ifsc_code": company_data.get("ifsc_code")
+                })
+        
+        # Update business_settings JSONB column (excluding bank data)
         business_settings = {
             "tagline": company_data.get("tagline", ""),
             "financial_year_start": company_data.get("financial_year_start", "2024-04-01"),
             "financial_year_end": company_data.get("financial_year_end", "2025-03-31"),
             "currency": company_data.get("currency", "INR"),
             "currency_symbol": company_data.get("currency_symbol", "₹"),
-            "bank_name": company_data.get("bank_name", ""),
-            "account_number": company_data.get("account_number", ""),
-            "ifsc_code": company_data.get("ifsc_code", ""),
-            "branch_name": company_data.get("branch_name", ""),
             "invoice_prefix": company_data.get("invoice_prefix", "INV/"),
             "challan_prefix": company_data.get("challan_prefix", "DC/"),
             "po_prefix": company_data.get("po_prefix", "PO/"),
