@@ -85,7 +85,7 @@ async def create_sales_order(
         
         # Validate customer exists and get all details
         customer = db.execute(text("""
-            SELECT customer_id, customer_name, primary_phone, address, gstin
+            SELECT customer_id, customer_name, primary_phone, gst_number
             FROM parties.customers 
             WHERE customer_id = :id AND org_id = :org_id
         """), {"id": order.customer_id, "org_id": org_id}).fetchone()
@@ -143,13 +143,13 @@ async def create_sales_order(
             "final_amount": totals["total"],
             "delivery_charges": order.delivery_charges,  # Schema has default Decimal("0")
             "other_charges": order.other_charges,  # Schema has default Decimal("0")
-            "billing_address": order.billing_address or customer.address or "",
-            "billing_gstin": order.billing_gstin or customer.gstin or "",
+            "billing_address": order.billing_address or "",  # Address comes from frontend
+            "billing_gstin": order.billing_gstin or customer.gst_number or "",
             "billing_name": order.billing_name or customer.customer_name or "",
-            "shipping_address": order.shipping_address or customer.address or "",
+            "shipping_address": order.shipping_address or "",  # Address comes from frontend
             "shipping_name": order.shipping_name or customer.customer_name or "",
             "shipping_phone": order.shipping_phone or customer.primary_phone or "",
-            "delivery_address": order.shipping_address or customer.address or "",  # Use shipping_address
+            "delivery_address": order.shipping_address or "",  # Use shipping_address from frontend
             "fulfillment_status": "pending",
             "payment_status": "pending",  # Match schema enum
             "created_at": datetime.now(),
