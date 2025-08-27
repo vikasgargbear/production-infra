@@ -39,6 +39,7 @@ import utilsApi, { apiUtils } from './modules/utils.api';
 import organizationsApi from './modules/organizations.api';
 import partyLedgerApi from './partyLedgerApi';
 import { companyAPI, DEFAULT_COMPANY_INFO } from './company.api';
+import { bankAccountsAPI } from './bankAccounts.api';
 import { journalApi } from './modules/journal.api';
 import { expensesApi } from './modules/expenses.api';
 import { metadataApi } from './modules/metadata.api';
@@ -81,6 +82,7 @@ export {
   organizationsApi,
   partyLedgerApi,
   companyAPI,
+  bankAccountsAPI,
   DEFAULT_COMPANY_INFO,
   journalApi,
   expensesApi,
@@ -127,6 +129,7 @@ const apiModules = {
   organizations: organizationsApi.organizations,
   features: organizationsApi.features,
   partyLedger: partyLedgerApi,
+  bankAccounts: bankAccountsAPI,
   metadata: metadataApi,
 };
 

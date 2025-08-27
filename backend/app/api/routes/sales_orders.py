@@ -368,8 +368,36 @@ async def create_sales_order(
         
         db.commit()
         
-        # Return created order
-        return await get_sales_order(order_id, db, org_id)
+        # Return created order by fetching it directly
+        result = db.execute(text("""
+            SELECT o.*, c.customer_name, c.customer_code, c.primary_phone as customer_phone
+            FROM sales.orders o
+            JOIN parties.customers c ON o.customer_id = c.customer_id
+            WHERE o.order_id = :id AND o.org_id = :org_id AND o.order_type = 'sales'
+        """), {"id": order_id, "org_id": org_id})
+        
+        order = result.fetchone()
+        if not order:
+            raise HTTPException(status_code=404, detail=f"Sales order {order_id} not found")
+        
+        order_dict = dict(order._mapping)
+        
+        # Get order items
+        items_result = db.execute(text("""
+            SELECT oi.*, p.product_name, p.product_code,
+                   b.batch_number, b.expiry_date
+            FROM sales.order_items oi
+            JOIN inventory.products p ON oi.product_id = p.product_id
+            LEFT JOIN inventory.batches b ON oi.batch_id = b.batch_id
+            WHERE oi.order_id = :order_id
+        """), {"order_id": order_id})
+        
+        order_dict["items"] = [dict(item._mapping) for item in items_result]
+        order_dict["total_amount"] = order_dict.get("final_amount", 0)
+        order_dict["confirmed_at"] = order_dict.get("confirmed_at", None)
+        order_dict["delivered_at"] = order_dict.get("delivered_at", None)
+        
+        return OrderResponse(**order_dict)
         
     except HTTPException:
         db.rollback()
@@ -576,7 +604,36 @@ async def update_sales_order(
         db.execute(text(update_query), params)
         db.commit()
         
-        return await get_sales_order(order_id, db, org_id)
+        # Return updated order by fetching it directly
+        result = db.execute(text("""
+            SELECT o.*, c.customer_name, c.customer_code, c.primary_phone as customer_phone
+            FROM sales.orders o
+            JOIN parties.customers c ON o.customer_id = c.customer_id
+            WHERE o.order_id = :id AND o.org_id = :org_id AND o.order_type = 'sales'
+        """), {"id": order_id, "org_id": org_id})
+        
+        order = result.fetchone()
+        if not order:
+            raise HTTPException(status_code=404, detail=f"Sales order {order_id} not found")
+        
+        order_dict = dict(order._mapping)
+        
+        # Get order items
+        items_result = db.execute(text("""
+            SELECT oi.*, p.product_name, p.product_code,
+                   b.batch_number, b.expiry_date
+            FROM sales.order_items oi
+            JOIN inventory.products p ON oi.product_id = p.product_id
+            LEFT JOIN inventory.batches b ON oi.batch_id = b.batch_id
+            WHERE oi.order_id = :order_id
+        """), {"order_id": order_id})
+        
+        order_dict["items"] = [dict(item._mapping) for item in items_result]
+        order_dict["total_amount"] = order_dict.get("final_amount", 0)
+        order_dict["confirmed_at"] = order_dict.get("confirmed_at", None)
+        order_dict["delivered_at"] = order_dict.get("delivered_at", None)
+        
+        return OrderResponse(**order_dict)
         
     except HTTPException:
         db.rollback()
