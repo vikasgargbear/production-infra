@@ -34,9 +34,15 @@ const BankAccountManager = ({ companyData, onUpdate }) => {
       setAccounts(data || []);
     } catch (error) {
       console.error('Error fetching bank accounts:', error);
-      setError('Failed to load bank accounts');
-      // If no accounts exist, that's okay - show empty state
-      setAccounts([]);
+      // Check if it's a 404 (API not deployed yet) vs actual error
+      if (error.response?.status === 404) {
+        console.log('Bank accounts API not available yet - showing empty state');
+        // Don't show error for 404, just show empty state
+        setAccounts([]);
+      } else {
+        setError('Failed to load bank accounts');
+        setAccounts([]);
+      }
     } finally {
       setIsLoading(false);
     }
@@ -94,7 +100,11 @@ const BankAccountManager = ({ companyData, onUpdate }) => {
       }
     } catch (error) {
       console.error('Error saving bank account:', error);
-      setError('Failed to save bank account. Please try again.');
+      if (error.response?.status === 404) {
+        setError('Bank account service is being deployed. Please try again in a few moments.');
+      } else {
+        setError('Failed to save bank account. Please try again.');
+      }
     }
   };
 

@@ -2,7 +2,7 @@
 Order schemas for the enterprise pharma system
 Handles complete order workflow from creation to delivery
 """
-from typing import Optional, List
+from typing import Optional, List, Union
 from pydantic import BaseModel, Field, validator
 from datetime import datetime, date
 from decimal import Decimal
@@ -23,13 +23,19 @@ class OrderItemBase(BaseModel):
     tax_percent: Optional[Decimal] = Field(None, ge=0)
     tax_amount: Optional[Decimal] = Field(None, ge=0)
     gst_type: Optional[str] = Field(default="CGST/SGST")  # Add GST type!
-    uom: Optional[str] = None  # Add UOM!
-    pack_type: Optional[str] = None  # Add pack_type!
-    pack_size: Optional[str] = None  # Add pack_size!
-    product_code: Optional[str] = None  # Add product_code!
+    uom: Optional[Union[str, None]] = None  # Add UOM!
+    pack_type: Optional[Union[str, None]] = None  # Add pack_type!
+    product_code: Optional[Union[str, None]] = None  # Add product_code!
     
     # Computed fields
     line_total: Optional[Decimal] = None
+    
+    @validator('pack_type', 'uom', 'product_code', 'batch_number', pre=True)
+    def convert_null_to_none(cls, v):
+        """Convert null/undefined to None"""
+        if v in ['null', 'undefined', '']:
+            return None
+        return v
     
     @validator('line_total', always=True)
     def calculate_line_total(cls, v, values):

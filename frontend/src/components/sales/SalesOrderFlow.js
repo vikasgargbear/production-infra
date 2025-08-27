@@ -793,8 +793,8 @@ const SalesOrderFlow = ({ open = true, onClose }) => {
             tax_amount: taxAmount,
             gst_type: order.gst_type || 'CGST/SGST',  // Add GST type!
             uom: item.uom || null,  // Add UOM
-            pack_type: item.pack_type || null,  // Add pack type
-            pack_size: item.pack_size || null   // Add pack size
+            pack_type: item.pack_type || null  // Add pack type
+            // pack_size removed - not needed for now
           };
         }),
         

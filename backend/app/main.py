@@ -55,7 +55,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="Pharma ERP API",
     description="Enterprise Pharma ERP System API",
-    version="2.0.4",  # Force re-deploy with purchase routes fix
+    version="2.0.5",  # Added bank accounts management API
     lifespan=lifespan
 )
 
@@ -89,9 +89,9 @@ app.router.redirect_slashes = False
 async def root():
     return {
         "message": "Pharma ERP API",
-        "version": "2.0.4",
+        "version": "2.0.5",
         "status": "healthy",
-        "deployment": "latest-with-purchases",
+        "deployment": "latest-with-bank-accounts",
         "endpoints": {
             "health": "/health",
             "docs": "/docs",
