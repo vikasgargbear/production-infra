@@ -5,6 +5,7 @@ Handles sales order lifecycle from creation to conversion
 from typing import Optional, List
 from datetime import date, datetime
 from decimal import Decimal
+from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from sqlalchemy import text
@@ -80,13 +81,13 @@ async def create_sales_order(
     - NO inventory allocation until approval
     """
     try:
-        # Set org_id early
-        org_id = order.org_id if order.org_id else org_id
+        # Set org_id early - ensure it's a UUID object
+        if order.org_id:
+            org_id = order.org_id if isinstance(order.org_id, UUID) else UUID(order.org_id)
+        else:
+            org_id = UUID(org_id) if isinstance(org_id, str) else org_id
         
         logger.info(f"Creating sales order for customer_id={order.customer_id}, org_id={org_id}")
-        
-        # Ensure organization exists (create if missing for development)
-        _ensure_organization_exists(db, org_id)
         
         # Handle addresses if provided (create in master.addresses if they're new)
         billing_address_id = None
@@ -810,39 +811,6 @@ async def get_sales_order_dashboard(db: Session = Depends(get_db),
     except Exception as e:
         logger.error(f"Error getting sales order dashboard: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to get dashboard: {str(e)}")
-
-def _ensure_organization_exists(db: Session, org_id: str):
-    """
-    Ensure organization exists in master.organizations table
-    This is a development helper - in production, orgs should be properly set up
-    """
-    try:
-        # Check if org exists
-        existing = db.execute(text("""
-            SELECT org_id FROM master.organizations 
-            WHERE org_id = :org_id
-        """), {"org_id": org_id}).fetchone()
-        
-        if not existing:
-            logger.info(f"Creating organization {org_id} (development mode)")
-            # Create a basic organization entry
-            db.execute(text("""
-                INSERT INTO master.organizations (
-                    org_id, org_code, org_name, business_type, 
-                    is_active, created_at
-                ) VALUES (
-                    :org_id, :org_code, :org_name, 'pharmacy',
-                    true, CURRENT_TIMESTAMP
-                )
-            """), {
-                "org_id": org_id,
-                "org_code": f"ORG-{str(org_id)[:8]}",
-                "org_name": "Default Organization"
-            })
-            db.commit()
-    except Exception as e:
-        logger.warning(f"Could not ensure organization exists: {str(e)}")
-        # Continue anyway - let the actual INSERT fail if there's a real problem
 
 def _get_or_create_address(db: Session, org_id: str, customer_id: int, 
                            address_text: str, address_type: str) -> Optional[int]:
