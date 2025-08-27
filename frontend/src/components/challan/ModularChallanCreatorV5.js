@@ -505,7 +505,7 @@ const ModularChallanCreatorV5 = ({ open = true, onClose }) => {
       console.log('=== CHALLAN SAVE DEBUG ===');
       console.log('Current challan state:', challan);
       console.log('challan.freight_charges from state:', challan.freight_charges);
-      console.log('parsed freight_amount:', parseFloat(challan.freight_charges) || 0);
+      console.log('parsed freight_charges:', parseFloat(challan.freight_charges) || 0);
       console.log('totalAmount (with freight):', totalAmount);
 
       // Prepare challan data with complete delivery address
@@ -524,14 +524,14 @@ const ModularChallanCreatorV5 = ({ open = true, onClose }) => {
         transport_company: challan.transport_company || '',
         vehicle_number: challan.vehicle_number || '',
         driver_phone: challan.driver_phone || '',
-        freight_amount: parseFloat(challan.freight_charges) || 0,
+        freight_charges: parseFloat(challan.freight_charges) || 0,
         lr_number: challan.lr_number || '',
         notes: challan.notes || '',
         total_amount: totalAmount
       };
 
       console.log('Final challanData being sent:', challanData);
-      console.log('Freight in data:', challanData.freight_amount);
+      console.log('Freight in data:', challanData.freight_charges);
       
       const response = await challansApi.create(challanData);
       
