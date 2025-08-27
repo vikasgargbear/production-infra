@@ -83,6 +83,8 @@ async def create_sales_order(
         # Set org_id early
         org_id = order.org_id if order.org_id else org_id
         
+        logger.info(f"Creating sales order for customer_id={order.customer_id}, org_id={org_id}")
+        
         # Validate customer exists and get all details
         customer = db.execute(text("""
             SELECT customer_id, customer_name, primary_phone, gst_number
@@ -91,7 +93,19 @@ async def create_sales_order(
         """), {"id": order.customer_id, "org_id": org_id}).fetchone()
         
         if not customer:
-            raise HTTPException(status_code=404, detail="Customer not found")
+            # Check if customer exists at all (without org_id filter) for debugging
+            any_customer = db.execute(text("""
+                SELECT customer_id, org_id 
+                FROM parties.customers 
+                WHERE customer_id = :id
+            """), {"id": order.customer_id}).fetchone()
+            
+            if any_customer:
+                logger.error(f"Customer {order.customer_id} exists but with different org_id: {any_customer.org_id}")
+                raise HTTPException(status_code=404, detail=f"Customer not found in your organization")
+            else:
+                logger.error(f"Customer {order.customer_id} does not exist at all")
+                raise HTTPException(status_code=404, detail="Customer not found")
         
         customer_discount = Decimal("0")  # Default to no customer discount for now
         
