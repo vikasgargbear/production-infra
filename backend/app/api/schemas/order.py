@@ -13,12 +13,20 @@ class OrderItemBase(BaseModel):
     """Base order item model"""
     product_id: int = Field(..., gt=0)
     batch_id: Optional[int] = Field(None, gt=0)
+    batch_number: Optional[str] = None  # Add batch_number!
     quantity: int = Field(..., gt=0)
+    free_quantity: Optional[int] = Field(default=0, ge=0)  # Add free_quantity!
     unit_price: Decimal = Field(..., ge=0)
+    mrp: Optional[Decimal] = Field(None, ge=0)  # Add MRP!
     discount_percent: Decimal = Field(default=Decimal("0.00"), ge=0, le=100)
     discount_amount: Decimal = Field(default=Decimal("0.00"), ge=0)
     tax_percent: Optional[Decimal] = Field(None, ge=0)
     tax_amount: Optional[Decimal] = Field(None, ge=0)
+    gst_type: Optional[str] = Field(default="CGST/SGST")  # Add GST type!
+    uom: Optional[str] = None  # Add UOM!
+    pack_type: Optional[str] = None  # Add pack_type!
+    pack_size: Optional[str] = None  # Add pack_size!
+    product_code: Optional[str] = None  # Add product_code!
     
     # Computed fields
     line_total: Optional[Decimal] = None

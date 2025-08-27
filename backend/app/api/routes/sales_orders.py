@@ -309,6 +309,13 @@ async def create_sales_order(
             item_data = item.dict()
             item_data["order_id"] = order_id
             
+            # DEBUG: Log raw item data from frontend
+            logger.info(f"RAW ITEM DATA from frontend: {item_data}")
+            logger.info(f"  - MRP: {item_data.get('mrp')}")
+            logger.info(f"  - Discount %: {item_data.get('discount_percent')}")
+            logger.info(f"  - Free Qty: {item_data.get('free_quantity')}")
+            logger.info(f"  - Batch Number: {item_data.get('batch_number')}")
+            
             # Get product details including HSN code and product_code
             # NOTE: Following invoice pattern - don't filter by org_id
             product_details = db.execute(text("""
@@ -404,9 +411,13 @@ async def create_sales_order(
             }
             
             # Logging for debugging calculations
-            logger.info(f"Item {item_data['product_id']}: Qty={quantity}, Free={free_quantity}, "
-                       f"Base={float(quantity)}, Price={unit_price}, Gross={gross_amount}, "
-                       f"Discount={discount_amount}, Taxable={taxable_amount}, Tax={tax_amount}, Total={line_total}")
+            logger.info(f"SAVING ITEM {item_data['product_id']}:")
+            logger.info(f"  - Qty={quantity}, Free={free_quantity}, Base={float(quantity)}")
+            logger.info(f"  - MRP={item_data.get('mrp')}, Unit Price={unit_price}")
+            logger.info(f"  - Discount %={discount_percent}, Discount Amt={discount_amount}")
+            logger.info(f"  - Gross={gross_amount}, Taxable={taxable_amount}")
+            logger.info(f"  - Tax={tax_amount}, Total={line_total}")
+            logger.info(f"  - Batch ID={item_data.get('batch_id')}, Batch No={item_data.get('batch_number')}")
             
             db.execute(text("""
                 INSERT INTO sales.order_items (

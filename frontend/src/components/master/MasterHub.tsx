@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { 
-  Settings2, Building, Package, Users, 
+  Building, Package, Users, 
   Calculator, UserCheck, Bell, Cog,
   Plug, Database, Receipt, Settings,
   Ruler, Warehouse, Package2, Truck
@@ -19,7 +19,6 @@ import ThirdPartyIntegrations from './ThirdPartyIntegrations';
 import UnitMaster from './UnitMaster';
 import WarehouseMaster from './WarehouseMaster';
 import BatchMaster from './BatchMaster';
-import MasterDataDashboard from './MasterDataDashboard';
 import DataValidationEngine from './DataValidationEngine';
 import BulkOperations from './BulkOperations';
 
@@ -43,26 +42,6 @@ const MasterHub: React.FC<MasterHubProps> = ({ open = true, onClose }) => {
   const [showBulkOperations, setShowBulkOperations] = useState(false);
 
   const masterModules: MasterModule[] = [
-    {
-      id: 'dashboard',
-      label: 'Dashboard',
-      fullLabel: 'Master Data Dashboard',
-      description: 'Overview & analytics',
-      icon: Settings2,
-      color: 'gray',
-      component: (props: any) => (
-        <MasterDataDashboard 
-          {...props} 
-          onNavigateToModule={(moduleId: string) => {
-            if (moduleId === 'data-validation') {
-              setShowValidationEngine(true);
-            } else if (moduleId === 'bulk-operations') {
-              setShowBulkOperations(true);
-            }
-          }}
-        />
-      )
-    },
     {
       id: 'company-profile',
       label: 'Company',
