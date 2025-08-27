@@ -287,7 +287,7 @@ def update_company_info(
                     "account_number": company_data.get("account_number", ""),
                     "bank_name": company_data.get("bank_name", ""),
                     "branch_name": company_data.get("branch_name", ""),
-                    "ifsc_code": company_data.get("ifsc_code", ""),
+                    "ifsc_code": company_data.get("ifsc_code", "").upper() if company_data.get("ifsc_code") else "",
                     "account_type": company_data.get("account_type", "CURRENT")
                 })
             elif company_data.get("account_number") and company_data.get("ifsc_code"):
@@ -309,7 +309,7 @@ def update_company_info(
                     "account_type": company_data.get("account_type", "CURRENT"),
                     "bank_name": company_data.get("bank_name", ""),
                     "branch_name": company_data.get("branch_name", ""),
-                    "ifsc_code": company_data.get("ifsc_code")
+                    "ifsc_code": company_data.get("ifsc_code", "").upper()
                 })
         
         # Update business_settings JSONB column (excluding bank data)

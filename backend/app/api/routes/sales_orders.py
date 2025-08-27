@@ -51,6 +51,10 @@ async def get_employees_for_created_by(
 ):
     """Get list of employees for 'Created By' dropdown"""
     try:
+        # Convert org_id to UUID if needed
+        if isinstance(org_id, str):
+            org_id = UUID(org_id)
+            
         result = db.execute(text("""
             SELECT user_id, full_name, email, role_id, is_active
             FROM master.org_users 
@@ -365,7 +369,7 @@ async def create_sales_order(
         db.commit()
         
         # Return created order
-        return await get_sales_order(order_id, db)
+        return await get_sales_order(order_id, db, org_id)
         
     except HTTPException:
         db.rollback()
@@ -481,12 +485,16 @@ async def get_sales_order(
 ):
     """Get sales order details with items"""
     try:
+        # Convert org_id to UUID if it's a string
+        if isinstance(org_id, str):
+            org_id = UUID(org_id)
+        
         # Get order with customer details - only sales orders
         result = db.execute(text("""
             SELECT o.*, c.customer_name, c.customer_code, c.primary_phone as customer_phone
             FROM sales.orders o
             JOIN parties.customers c ON o.customer_id = c.customer_id
-            WHERE o.order_id = :id AND o.org_id = :org_id AND o.order_type = 'regular'
+            WHERE o.order_id = :id AND o.org_id = :org_id AND o.order_type = 'sales'
         """), {"id": order_id, "org_id": org_id})
         
         order = result.fetchone()
@@ -568,7 +576,7 @@ async def update_sales_order(
         db.execute(text(update_query), params)
         db.commit()
         
-        return await get_sales_order(order_id, db)
+        return await get_sales_order(order_id, db, org_id)
         
     except HTTPException:
         db.rollback()
