@@ -1021,7 +1021,7 @@ Expected Delivery: ${challan.expected_delivery_date}
                         console.log('Freight input changed to:', value);
                         setChallan(prev => ({ 
                           ...prev, 
-                          freight_amount: value 
+                          freight_charges: value 
                         }));
                       }}
                       className="w-full pl-8 pr-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
