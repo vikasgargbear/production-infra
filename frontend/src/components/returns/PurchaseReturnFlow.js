@@ -5,7 +5,8 @@ import {
 } from 'lucide-react';
 import { 
   SupplierSearch, ProductSearchSimple, ItemsTable, ModuleHeader,
-  DatePicker, Select, NumberInput, NotesSection, useToast, PurchaseSearch, ViewHistoryButton
+  DatePicker, Select, NumberInput, NotesSection, useToast, PurchaseSearch, ViewHistoryButton,
+  ProceedToReviewComponent
 } from '../global';
 import { returnsApi, purchasesApi, suppliersApi, settingsApi, metadataApi } from '../../services/api';
 import PurchaseInvoiceSelector from './components/PurchaseInvoiceSelector';
@@ -604,27 +605,33 @@ const PurchaseReturnFlow = ({ onClose }) => {
                   />
                 </div>
               )}
-
-
-              {/* Action Buttons */}
-              <div className="flex justify-end gap-3">
-                <button
-                  onClick={onClose}
-                  className="px-6 py-2 border border-gray-300 text-blue-700 rounded-lg hover:bg-blue-50"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={handleProceedToReview}
-                  disabled={!returnData.items.some(item => item.selected && item.return_quantity > 0)}
-                  className="px-6 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-                >
-                  Proceed to Review
-                  <ChevronRight className="w-4 h-4" />
-                </button>
-              </div>
             </div>
           </div>
+
+          {/* Footer - Using Global Component */}
+          <ProceedToReviewComponent
+            currentStep={1}
+            canProceed={selectedSupplier && selectedPurchase && returnData.items.some(item => item.selected && item.return_quantity > 0)}
+            onBack={null}
+            onProceed={handleProceedToReview}
+            onReset={() => {
+              setSelectedSupplier(null);
+              setSelectedPurchase(null);
+              setReturnData(prev => ({
+                ...prev,
+                supplier_id: '',
+                supplier_details: null,
+                purchase_id: '',
+                items: [],
+                return_reason: '',
+                return_reason_notes: ''
+              }));
+            }}
+            totalItems={returnData.items.filter(item => item.selected).length}
+            totalAmount={returnData.total_amount}
+            proceedText="Proceed to Review"
+            saving={false}
+          />
         </div>
       </div>
     );
@@ -678,38 +685,18 @@ const PurchaseReturnFlow = ({ onClose }) => {
           </div>
         </div>
 
-        {/* Footer */}
-        <div className="flex justify-between items-center p-4 border-t border-blue-200 bg-white">
-          <div className="text-lg font-semibold text-gray-900">
-            Total Debit Amount: ₹{returnData.total_amount.toFixed(2)}
-          </div>
-          
-          <div className="flex items-center gap-3">
-            <button
-              onClick={() => setCurrentStep(1)}
-              className="px-6 py-2 border border-gray-300 text-blue-700 rounded-lg hover:bg-blue-50"
-            >
-              Back to Edit
-            </button>
-            <button
-              onClick={handleSaveReturn}
-              disabled={saving}
-              className="px-6 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 disabled:opacity-50 flex items-center gap-2"
-            >
-              {saving ? (
-                <>
-                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                  Processing...
-                </>
-              ) : (
-                <>
-                  <Save className="w-4 h-4" />
-                  Generate Debit Note
-                </>
-              )}
-            </button>
-          </div>
-        </div>
+        {/* Footer - Using Global Component */}
+        <ProceedToReviewComponent
+          currentStep={2}
+          canProceed={true}
+          onBack={() => setCurrentStep(1)}
+          onProceed={handleSaveReturn}
+          onReset={null}
+          totalItems={returnData.items.filter(item => item.selected).length}
+          totalAmount={returnData.total_amount}
+          proceedText="Generate Debit Note"
+          saving={saving}
+        />
       </div>
       
       {/* Hidden History Button - Triggered by ModuleHeader action */}

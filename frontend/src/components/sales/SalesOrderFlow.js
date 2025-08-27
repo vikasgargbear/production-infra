@@ -23,7 +23,6 @@ import { ordersApi, salesApi, api, apiClient, usersApi, authApi } from '../../se
 import salesOrdersAPI from '../../services/api/modules/salesOrders.api';
 import { invoicesApi as invoicesApiModule } from '../../services/api/modules/invoices.api';
 import { challansApi as challansApiModule } from '../../services/api/modules/challans.api';
-import debugLogger from '../../utils/debugLogger';
 import EnterpriseCalculator from '../../services/enterpriseCalculator'; // Use unified calculator
 import { useCompany } from '../../contexts/CompanyContext';
 import ImportFromDocumentModal from './components/ImportFromDocumentModal';
@@ -746,9 +745,6 @@ const SalesOrderFlow = ({ open = true, onClose }) => {
         // NOTE: org_id comes from auth header, NOT request body (per migration guide)
       };
 
-      debugLogger.debug('ORDER CREATION DEBUG - Raw order state:', order);
-      debugLogger.debug('ORDER CREATION DEBUG - Order items:', order.items);
-      debugLogger.debug('ORDER CREATION DEBUG - API payload:', JSON.stringify(orderData, null, 2));
 
       // Create sales order data matching the backend OrderCreate schema
       // NOTE: org_id comes from auth header, NOT request body (per migration guide)
@@ -805,8 +801,6 @@ const SalesOrderFlow = ({ open = true, onClose }) => {
         discount_amount: parseFloat(order.discount_amount) || 0,
         other_charges: parseFloat(order.other_charges) || 0
       };
-      
-      debugLogger.debug('Sales order data to send:', salesOrderData);
       
       // Use sales-orders endpoint with proper API client (like invoice does)
       const response = await apiClient.post('/sales-orders/', salesOrderData);
@@ -918,7 +912,6 @@ Expected Delivery: ${order.expected_delivery_date}
             historyType="order"
             showSaveDraft={true}
             onSaveDraft={() => {
-              debugLogger.debug('Save draft clicked');
             }}
           />
 
@@ -1863,6 +1856,7 @@ Expected Delivery: ${order.expected_delivery_date}
           isOpen={showSuccessModal}
           onClose={() => {
             setShowSuccessModal(false);
+            // Close the entire component after successful creation
             onClose();
           }}
           title="Sales Order Created!"
@@ -1871,6 +1865,36 @@ Expected Delivery: ${order.expected_delivery_date}
           documentType="sales-order"
           customerName={createdOrderData?.customerName}
           totalAmount={createdOrderData?.totalAmount}
+          additionalActions={[
+            {
+              label: "Create Another Order",
+              onClick: () => {
+                setShowSuccessModal(false);
+                // Reset for new order
+                setOrder({
+                  order_number: generateOrderNumber(),
+                  order_date: new Date().toISOString().split('T')[0],
+                  expected_delivery_date: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+                  customer_name: '',
+                  customer_id: null,
+                  items: [],
+                  subtotal_amount: 0,
+                  discount_amount: 0,
+                  tax_amount: 0,
+                  total_amount: 0,
+                  cgst_amount: 0,
+                  sgst_amount: 0,
+                  igst_amount: 0,
+                  round_off: 0,
+                  gst_type: 'CGST/SGST',
+                  place_of_supply: ''
+                });
+                setSelectedCustomer(null);
+                setCurrentStep(1);
+              },
+              variant: "primary"
+            }
+          ]}
           onPrint={() => {
             printOrder();
             setShowSuccessModal(false);

@@ -316,6 +316,53 @@ if isinstance(org_id, str):
 - `get_org_id_from_token` also returns string
 - Database foreign keys expect UUID type
 
+### UUID Conversion Pattern for All Components
+
+**ALWAYS convert org_id to UUID at the start of every function that uses database operations:**
+
+```python
+# Standard pattern for ALL route handlers
+@router.post("/", response_model=OrderResponse)
+async def create_order(
+    order: OrderCreate,
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)  # Comes as string
+):
+    """Create new order"""
+    # FIRST THING: Convert org_id to UUID
+    from uuid import UUID
+    if isinstance(org_id, str):
+        org_id = UUID(org_id)
+    
+    # Now use org_id safely in all database operations
+    order_data = {
+        "org_id": org_id,  # This is now UUID type
+        ...
+    }
+```
+
+**Apply this pattern in:**
+- ✅ Sales Orders (completed)
+- ⏳ Purchase Orders
+- ⏳ Delivery Challans  
+- ⏳ GRN (Goods Receipt Note)
+- ⏳ Returns (Sales & Purchase)
+- ⏳ Stock Management
+- ⏳ Any other component with org_id foreign keys
+
+**Why this happens:**
+1. FastAPI Depends returns string from headers/tokens
+2. PostgreSQL foreign keys require UUID type
+3. SQLAlchemy doesn't auto-convert string to UUID
+4. The error only appears on INSERT/UPDATE, not SELECT
+
+**Testing for UUID issues:**
+```python
+# Quick test in any route
+logger.info(f"org_id type: {type(org_id)}")  # Should be <class 'uuid.UUID'>
+logger.info(f"org_id value: {org_id}")  # Should be valid UUID format
+```
+
 ## Debugging Checklist
 
 When customer creation fails:

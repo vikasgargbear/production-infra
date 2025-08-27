@@ -1,6 +1,7 @@
 """
 Bank Accounts API Router
 Handles multiple bank accounts for organizations
+Version: 1.0.0
 """
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Body

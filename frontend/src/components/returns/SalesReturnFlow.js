@@ -1031,7 +1031,6 @@ const SalesReturnFlow = ({ onClose }) => {
                   </div>
                 </div>
               )}
-              </div>
 
               {/* Return Items - Show when invoice is selected or manual entry */}
               {(selectedInvoice || showManualEntry) && (
@@ -1181,31 +1180,32 @@ const SalesReturnFlow = ({ onClose }) => {
             </div>
           </div>
 
-        {/* Footer - Using Global Component */}
-        <ProceedToReviewComponent
-          currentStep={1}
-          canProceed={selectedCustomer && (selectedInvoice || showManualEntry) && returnData.items.some(item => item.selected && item.return_quantity > 0)}
-          onBack={null}
-          onProceed={handleProceedToReview}
-          onReset={() => {
-            setSelectedCustomer(null);
-            setSelectedInvoice(null);
-            setReturnData(prev => ({
-              ...prev,
-              customer_id: '',
-              customer_details: null,
-              invoice_id: '',
-              items: [],
-              return_reason: '',
-              return_reason_notes: ''
-            }));
-            setShowManualEntry(false);
-          }}
-          totalItems={returnData.items.filter(item => item.selected).length}
-          totalAmount={returnData.total_amount}
-          proceedText="Proceed to Review"
-          saving={false}
-        />
+          {/* Footer - Using Global Component */}
+          <ProceedToReviewComponent
+            currentStep={1}
+            canProceed={selectedCustomer && (selectedInvoice || showManualEntry) && returnData.items.some(item => item.selected && item.return_quantity > 0)}
+            onBack={null}
+            onProceed={handleProceedToReview}
+            onReset={() => {
+              setSelectedCustomer(null);
+              setSelectedInvoice(null);
+              setReturnData(prev => ({
+                ...prev,
+                customer_id: '',
+                customer_details: null,
+                invoice_id: '',
+                items: [],
+                return_reason: '',
+                return_reason_notes: ''
+              }));
+              setShowManualEntry(false);
+            }}
+            totalItems={returnData.items.filter(item => item.selected).length}
+            totalAmount={returnData.total_amount}
+            proceedText="Proceed to Review"
+            saving={false}
+          />
+        </div>
       </div>
     );
   }
