@@ -168,9 +168,9 @@ const MasterHub: React.FC<MasterHubProps> = ({ open = true, onClose }) => {
         onClose={onClose || (() => {})}
         title="Master Settings"
         subtitle="Configure your platform"
-        icon={Settings2}
+        icon={Settings}
         modules={masterModules}
-        defaultModule="dashboard"
+        defaultModule="company-profile"
       />
       
       {/* Enterprise Components */}
