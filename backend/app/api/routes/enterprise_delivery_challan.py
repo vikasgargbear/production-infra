@@ -194,7 +194,7 @@ class EnterpriseChallanService:
                 # Calculate taxable amount and GST from items
                 logger.info(f"=== INDEPENDENT CHALLAN CALCULATION START ===")
                 logger.info(f"Number of items: {len(request.items)}")
-                logger.info(f"Freight charges from request: freight_charges={request.freight_charges}, freight_amount={request.freight_amount}")
+                logger.info(f"Freight charges from request: {request.freight_charges}")
                 logger.info(f"Calculated freight: {freight}")
                 
                 for idx, item in enumerate(request.items):
@@ -744,7 +744,7 @@ async def get_challan_analytics(
                 COUNT(CASE WHEN challan_status = 'dispatched' THEN 1 END) as dispatched_count,
                 COUNT(CASE WHEN challan_status = 'delivered' THEN 1 END) as delivered_count,
                 COUNT(CASE WHEN challan_status = 'cancelled' THEN 1 END) as cancelled_count,
-                SUM(freight_amount) as total_freight,
+                SUM(freight_charges) as total_freight,
                 AVG(CASE 
                     WHEN challan_status = 'delivered' AND dispatch_time IS NOT NULL 
                     THEN EXTRACT(EPOCH FROM (delivery_time - dispatch_time))/3600 
