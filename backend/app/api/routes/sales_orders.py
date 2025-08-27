@@ -318,7 +318,7 @@ async def create_sales_order(
             
             # Logging for debugging calculations
             logger.info(f"Item {item_data['product_id']}: Qty={quantity}, Free={free_quantity}, "
-                       f"Base={base_quantity}, Price={unit_price}, Gross={gross_amount}, "
+                       f"Base={float(quantity)}, Price={unit_price}, Gross={gross_amount}, "
                        f"Discount={discount_amount}, Taxable={taxable_amount}, Tax={tax_amount}, Total={line_total}")
             
             db.execute(text("""

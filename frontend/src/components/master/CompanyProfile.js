@@ -615,13 +615,14 @@ const CompanyProfile = ({ open, onClose }) => {
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Bank Name
+                  Account Name
                 </label>
                 <input
                   type="text"
-                  value={companyData.bankName}
-                  onChange={(e) => handleInputChange('bankName', e.target.value)}
+                  value={companyData.accountName}
+                  onChange={(e) => handleInputChange('accountName', e.target.value)}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                  placeholder="Account holder name"
                 />
               </div>
               
@@ -635,6 +636,34 @@ const CompanyProfile = ({ open, onClose }) => {
                   onChange={(e) => handleInputChange('accountNumber', e.target.value)}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
                 />
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Bank Name
+                </label>
+                <input
+                  type="text"
+                  value={companyData.bankName}
+                  onChange={(e) => handleInputChange('bankName', e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Account Type
+                </label>
+                <select
+                  value={companyData.accountType}
+                  onChange={(e) => handleInputChange('accountType', e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="SAVINGS">Savings</option>
+                  <option value="CURRENT">Current</option>
+                  <option value="CASH_CREDIT">Cash Credit</option>
+                  <option value="OVERDRAFT">Overdraft</option>
+                </select>
               </div>
               
               <div>
