@@ -20,7 +20,7 @@ from .api.routes import (
     dashboard_router, stock_adjustments_router, tax_entries_router,
     purchase_upload_router, purchase_enhanced_router, sale_returns_api_router,
     purchase_returns_router, stock_movements_router, party_ledger_router,
-    credit_debit_notes_router, sales_router, enterprise_orders_router,
+    credit_debit_notes_router, sales_router,
     collection_center_router
 )
 
@@ -140,7 +140,6 @@ api.include_router(purchase_returns_router, prefix="/purchase-returns", tags=["P
 api.include_router(stock_movements_router, prefix="/stock-movements", tags=["Stock Movements"])
 api.include_router(party_ledger_router, prefix="/party-ledger", tags=["Party Ledger"])
 api.include_router(credit_debit_notes_router, prefix="/credit-debit-notes", tags=["Credit/Debit Notes"])
-api.include_router(enterprise_orders_router, prefix="/enterprise-orders", tags=["Enterprise Orders"])
 api.include_router(collection_center_router, prefix="/collection-center", tags=["Collection Center"])
 api.include_router(stock_receive.router, prefix="/stock", tags=["Stock Receive"])
 api.include_router(enterprise_delivery_challan.router, prefix="/enterprise-delivery-challan", tags=["Enterprise Delivery Challan"])

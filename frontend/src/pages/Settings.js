@@ -1,13 +1,10 @@
 import React from 'react';
-import CompanyProfile from '../components/settings/CompanyProfile';
+import CompanySettings from '../components/settings/CompanySettings';
 
 const Settings = () => {
   return (
-    <div className="h-screen overflow-hidden">
-      {/* This wrapper ensures proper scrolling */}
-      <div className="h-full overflow-y-auto">
-        <CompanyProfile />
-      </div>
+    <div className="h-screen overflow-y-auto bg-gray-50">
+      <CompanySettings />
     </div>
   );
 };

@@ -83,9 +83,9 @@ async def create_sales_order(
         # Set org_id early
         org_id = order.org_id if order.org_id else org_id
         
-        # Validate customer exists
+        # Validate customer exists and get all details
         customer = db.execute(text("""
-            SELECT customer_id, customer_name, primary_phone 
+            SELECT customer_id, customer_name, primary_phone, address, gstin
             FROM parties.customers 
             WHERE customer_id = :id AND org_id = :org_id
         """), {"id": order.customer_id, "org_id": org_id}).fetchone()
@@ -128,16 +128,28 @@ async def create_sales_order(
             raise HTTPException(status_code=400, detail="No active branch found for organization")
         branch_id = branch.branch_id
         
-        # Create sales order (no inventory allocation)
+        # Create sales order with ALL required fields (no nulls)
         order_data = order.dict(exclude={"items"})
         order_data.update({
             "order_number": order_number,
             "order_status": "draft",  # Match schema values
             "branch_id": branch_id,  # Use actual branch from DB
+            "customer_name": customer.customer_name,  # Populate from customer record
+            "customer_phone": customer.primary_phone,  # Populate from customer record
             "subtotal_amount": totals["subtotal"],
             "discount_amount": totals["discount"],
             "tax_amount": totals["tax"],
+            "round_off_amount": totals.get("round_off", Decimal("0")),
             "final_amount": totals["total"],
+            "delivery_charges": order.delivery_charges,  # Schema has default Decimal("0")
+            "other_charges": order.other_charges,  # Schema has default Decimal("0")
+            "billing_address": order.billing_address or customer.address or "",
+            "billing_gstin": order.billing_gstin or customer.gstin or "",
+            "billing_name": order.billing_name or customer.customer_name or "",
+            "shipping_address": order.shipping_address or customer.address or "",
+            "shipping_name": order.shipping_name or customer.customer_name or "",
+            "shipping_phone": order.shipping_phone or customer.primary_phone or "",
+            "delivery_address": order.shipping_address or customer.address or "",  # Use shipping_address
             "fulfillment_status": "pending",
             "payment_status": "pending",  # Match schema enum
             "created_at": datetime.now(),
@@ -161,17 +173,27 @@ async def create_sales_order(
             raise HTTPException(status_code=400, detail="No active user found for organization")
         created_by_user = user.user_id
         
-        # Insert sales order with correct schema columns
+        # Insert sales order with ALL fields populated (no nulls)
         result = db.execute(text("""
             INSERT INTO sales.orders (
                 org_id, branch_id, order_number, order_date, customer_id,
-                order_type, delivery_date, payment_terms, subtotal_amount, discount_amount,
-                tax_amount, final_amount, order_status, fulfillment_status, payment_status,
+                customer_name, customer_phone,
+                order_type, delivery_date, delivery_address, payment_terms, 
+                subtotal_amount, discount_amount, tax_amount, round_off_amount, final_amount,
+                delivery_charges, other_charges,
+                order_status, fulfillment_status, payment_status,
+                billing_name, billing_address, billing_gstin,
+                shipping_name, shipping_address, shipping_phone,
                 notes, created_by, created_at, updated_at
             ) VALUES (
                 :org_id, :branch_id, :order_number, :order_date, :customer_id,
-                :order_type, :delivery_date, :payment_terms, :subtotal_amount, :discount_amount,
-                :tax_amount, :final_amount, :order_status, :fulfillment_status, :payment_status,
+                :customer_name, :customer_phone,
+                :order_type, :delivery_date, :delivery_address, :payment_terms,
+                :subtotal_amount, :discount_amount, :tax_amount, :round_off_amount, :final_amount,
+                :delivery_charges, :other_charges,
+                :order_status, :fulfillment_status, :payment_status,
+                :billing_name, :billing_address, :billing_gstin,
+                :shipping_name, :shipping_address, :shipping_phone,
                 :notes, :created_by, :created_at, :updated_at
             ) RETURNING order_id
         """), {**order_data, "created_by": created_by_user})
