@@ -52,13 +52,19 @@ async def calculate_invoice_totals(
         
         # Process each line item
         for idx, item in enumerate(items):
-            quantity = float(item.get("quantity", 0))
-            base_quantity = float(item.get("base_quantity", quantity - float(item.get("free_quantity", 0))))
+            # CORRECT: base_quantity is what customer PAYS for
+            # If base_quantity is provided, use it. Otherwise use quantity.
+            # free_quantity is ADDITIONAL items that don't affect price
+            base_quantity = float(item.get("base_quantity", item.get("quantity", 0)))
+            free_quantity = float(item.get("free_quantity", 0))
+            # Total quantity delivered = base_quantity + free_quantity
+            total_quantity = base_quantity + free_quantity
+            
             unit_price = float(item.get("unit_price", 0))
             discount_percent = float(item.get("discount_percent", 0))
             gst_percent = float(item.get("gst_percent", 12))
             
-            # Line calculations
+            # Line calculations - use base_quantity (what customer pays for)
             subtotal = base_quantity * unit_price
             discount_amount = (subtotal * discount_percent) / 100
             taxable_amount = subtotal - discount_amount
@@ -73,9 +79,9 @@ async def calculate_invoice_totals(
             line_item = {
                 "line_number": idx + 1,
                 "product_id": item.get("product_id"),
-                "quantity": quantity,
-                "base_quantity": base_quantity,
-                "free_quantity": item.get("free_quantity", 0),
+                "base_quantity": base_quantity,  # What customer pays for
+                "free_quantity": free_quantity,   # Additional free items
+                "total_quantity": total_quantity, # Total delivered (base + free)
                 "unit_price": unit_price,
                 "subtotal": round(subtotal, 2),
                 "discount_percent": discount_percent,
