@@ -21,7 +21,7 @@ from .api.routes import (
     purchase_upload_router, purchase_enhanced_router, sale_returns_api_router,
     purchase_returns_router, stock_movements_router, party_ledger_router,
     credit_debit_notes_router, sales_router,
-    collection_center_router
+    collection_center_router, bank_accounts_router
 )
 
 # Import additional routers not in __init__.py
@@ -36,8 +36,6 @@ from .api.routes import invoice_calculation, enterprise_calculations
 from .api.routes import company_simple
 # Import company API for company profile management
 from .api.routes import company
-# Import bank accounts API for multi-account management
-from .api.routes import bank_accounts
 # Import master data API
 from .api.routes import master_data
 # All temporary endpoints removed - using main endpoints only
@@ -123,7 +121,7 @@ api.include_router(payments.router, prefix="/payments", tags=["Payments"])
 api.include_router(dashboard.router, prefix="/dashboard", tags=["Dashboard"])
 api.include_router(billing.router, prefix="/billing", tags=["Billing"])
 api.include_router(company.router, prefix="/company", tags=["Company"])
-api.include_router(bank_accounts.router, prefix="/bank-accounts", tags=["Bank Accounts"])
+api.include_router(bank_accounts_router, prefix="/bank-accounts", tags=["Bank Accounts"])
 # Register additional routes from __init__.py
 api.include_router(orders_router, tags=["Orders"])
 api.include_router(invoices_router, tags=["Invoices"])
