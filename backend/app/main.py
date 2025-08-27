@@ -21,8 +21,11 @@ from .api.routes import (
     purchase_upload_router, purchase_enhanced_router, sale_returns_api_router,
     purchase_returns_router, stock_movements_router, party_ledger_router,
     credit_debit_notes_router, sales_router,
-    collection_center_router, bank_accounts_router
+    collection_center_router
 )
+
+# Import bank accounts directly
+from .api.routes.bank_accounts import router as bank_accounts_router
 
 # Import additional routers not in __init__.py
 from .api.routes import stock_receive, enterprise_delivery_challan, inventory_batches, create_user, delivery_challan, stock_dashboard, sales_orders, grn, journal_entries, expense_claims
@@ -53,7 +56,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="Pharma ERP API",
     description="Enterprise Pharma ERP System API",
-    version="2.0.7",  # Force rebuild with bank accounts router
+    version="2.0.8",  # Direct import of bank accounts router
     lifespan=lifespan
 )
 
@@ -87,9 +90,9 @@ app.router.redirect_slashes = False
 async def root():
     return {
         "message": "Pharma ERP API",
-        "version": "2.0.7",
+        "version": "2.0.8",
         "status": "healthy",
-        "deployment": "bank-accounts-force-rebuild",
+        "deployment": "bank-accounts-direct-import",
         "endpoints": {
             "health": "/health",
             "docs": "/docs",

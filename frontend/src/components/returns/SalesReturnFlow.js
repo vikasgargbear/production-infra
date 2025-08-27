@@ -533,20 +533,26 @@ const SalesReturnFlow = ({ onClose }) => {
     }));
   };
 
-  // Update return item
-  const updateReturnItem = (itemId, field, value) => {
-    console.log('updateReturnItem called:', { itemId, field, value });
+  // Update return item - handle both index and id based updates
+  const updateReturnItem = (indexOrId, field, value) => {
+    console.log('updateReturnItem called:', { indexOrId, field, value });
+    
+    // For returns module, we want to update return_quantity when quantity is changed
+    const actualField = (field === 'quantity') ? 'return_quantity' : field;
+    
     setReturnData(prev => {
       console.log('Current items before update:', prev.items);
-      const updatedItems = prev.items.map(item => {
-        if (item.id === itemId) {
+      const updatedItems = prev.items.map((item, index) => {
+        // Check if it's an index (number) or id match
+        if (index === indexOrId || item.id === indexOrId) {
           console.log('Found item to update:', { 
-            id: item.id, 
-            currentValue: item[field], 
+            id: item.id,
+            index: index,
+            currentValue: item[actualField], 
             newValue: value,
-            field: field
+            field: actualField
           });
-          const updatedItem = { ...item, [field]: value };
+          const updatedItem = { ...item, [actualField]: value };
           console.log('Updated item:', updatedItem);
           return updatedItem;
         }

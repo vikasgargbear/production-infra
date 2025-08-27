@@ -22,6 +22,7 @@ import {
 import { authApi } from './modules/auth.api';
 import { batchesApi } from './modules/batches.api';
 import { challansApi as challansApiModule } from './modules/challans.api';
+import { customersApi as customersApiModule } from './modules/customers.api';
 import { deliveryApi } from './modules/delivery.api';
 import { ledgerApi } from './modules/ledger.api';
 import { notesApi } from './modules/notes.api';
@@ -89,7 +90,8 @@ export {
   metadataApi,
   
   // Aliases for backward compatibility
-  customerAPI as customersApi,
+  customerAPI as customersApiOld,
+  customersApiModule as customersApi,
   productAPI as productsApi,
   supplierAPI as suppliersApi,
   invoiceAPI as invoicesApi,
@@ -109,7 +111,7 @@ export {
 // API object with all modules grouped (for named export)
 const apiModules = {
   auth: authApi,
-  customers: customerAPI,
+  customers: customersApiModule,
   products: productAPI,
   suppliers: supplierAPI,
   invoices: invoiceAPI,
