@@ -796,8 +796,8 @@ const SalesOrderFlow = ({ open = true, onClose }) => {
       
       debugLogger.debug('Sales order data to send:', salesOrderData);
       
-      // Use enterprise orders endpoint (same as invoice/challan pattern)  
-      const response = await api.post('/enterprise-orders/', salesOrderData);
+      // Use sales-orders endpoint  
+      const response = await api.post('/sales-orders/', salesOrderData);
       
       if (response?.data) {
         const createdOrderId = response.data.order_id || response.data.id;
