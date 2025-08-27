@@ -34,7 +34,7 @@ class OrderItemBase(BaseModel):
     @validator('line_total', always=True)
     def calculate_line_total(cls, v, values):
         """Calculate line total"""
-        quantity = values.get('quantity', 0)
+        quantity = values.get('quantity', Decimal("0"))
         unit_price = values.get('unit_price', Decimal("0"))
         discount_amount = values.get('discount_amount', Decimal("0"))
         tax_amount = values.get('tax_amount') or Decimal("0")  # Handle None

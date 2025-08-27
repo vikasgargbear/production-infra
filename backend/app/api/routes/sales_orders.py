@@ -157,13 +157,13 @@ async def create_sales_order(
         total_tax = Decimal("0")
         
         for item in order.items:
-            quantity = Decimal(str(item.quantity))
+            base_quantity = Decimal(str(item.quantity))  # What customer pays for
             unit_price = Decimal(str(item.unit_price))
             discount_percent = Decimal(str(item.discount_percent or 0))
             tax_percent = Decimal(str(item.tax_percent or 18))
             gst_type = getattr(item, 'gst_type', 'CGST/SGST')
             
-            gross_amount = quantity * unit_price
+            gross_amount = base_quantity * unit_price  # Calculate on what customer pays for
             discount_amount = (gross_amount * discount_percent) / 100
             taxable_amount = gross_amount - discount_amount
             
@@ -324,18 +324,20 @@ async def create_sales_order(
             """), {"product_id": item_data["product_id"]}).fetchone()
             
             # CORRECTED calculation logic - matching invoice pattern
-            quantity = Decimal(str(item_data["quantity"]))
+            base_quantity = Decimal(str(item_data["quantity"]))  # What customer PAYS for
+            free_quantity = Decimal(str(item_data.get("free_quantity", 0)))  # ADDITIONAL free items
+            total_quantity = base_quantity + free_quantity  # TOTAL items to deliver
+            
             unit_price = Decimal(str(item_data["unit_price"]))
             discount_percent = Decimal(str(item_data.get("discount_percent", 0)))
             tax_percent = Decimal(str(item_data.get("tax_percent", 18)))
-            free_quantity = Decimal(str(item_data.get("free_quantity", 0)))
             
-            # CORRECT: quantity is what customer PAYS for
-            # free_quantity is ADDITIONAL items (doesn't reduce price)
-            # Total items delivered = quantity + free_quantity
+            # CORRECT: base_quantity is what customer PAYS for (2)
+            # free_quantity is ADDITIONAL items (4)
+            # quantity (total) = base_quantity + free_quantity (6)
             
-            # Step 1: Base amount calculation using quantity (what customer pays for)
-            gross_amount = quantity * unit_price
+            # Step 1: Base amount calculation using base_quantity (what customer pays for)
+            gross_amount = base_quantity * unit_price
             
             # Step 2: Discount calculation
             discount_amount = (gross_amount * discount_percent) / 100
@@ -371,7 +373,7 @@ async def create_sales_order(
             
             # Ensure no zero calculations
             if line_total <= 0:
-                logger.warning(f"Line total is zero for product {item_data['product_id']}: qty={quantity}, price={unit_price}")
+                logger.warning(f"Line total is zero for product {item_data['product_id']}: qty={base_quantity}, price={unit_price}")
                 line_total = Decimal("0.01")  # Minimum value to prevent zero
             
             # Build complete item data with all required fields - ensure proper decimal conversion
@@ -383,18 +385,18 @@ async def create_sales_order(
                 "hsn_code": product_details.hsn_code if product_details else None,
                 "batch_id": item_data.get("batch_id"),  # Add batch_id from request
                 "batch_number": item_data.get("batch_number"),  # Add batch_number from request
-                "quantity": float(quantity),
+                "quantity": float(total_quantity),  # TOTAL quantity (base + free)
                 "uom": item_data.get("uom"),  # No default UOM
                 "pack_type": item_data.get("pack_type"),  # No default pack type
                 "pack_size": item_data.get("pack_size"),  # No default pack size
-                "base_quantity": float(quantity),  # CORRECT: Quantity customer pays for
+                "base_quantity": float(base_quantity),  # What customer PAYS for
                 "unit_price": float(unit_price),
-                "mrp": item_data.get("mrp", float(unit_price)),  # Use unit price if MRP not provided
+                "mrp": float(item_data.get("mrp", unit_price)),  # MRP from frontend!
                 "discount_percent": float(discount_percent),
                 "discount_amount": float(discount_amount),
                 "scheme_discount_percent": item_data.get("scheme_discount_percent", 0),
                 "scheme_discount_amount": item_data.get("scheme_discount_amount", 0),
-                "free_quantity": float(free_quantity),
+                "free_quantity": float(free_quantity),  # ADDITIONAL free items
                 "scheme_code": item_data.get("scheme_code"),
                 "taxable_amount": float(taxable_amount),
                 "tax_percent": float(tax_percent),
@@ -412,7 +414,7 @@ async def create_sales_order(
             
             # Logging for debugging calculations
             logger.info(f"SAVING ITEM {item_data['product_id']}:")
-            logger.info(f"  - Qty={quantity}, Free={free_quantity}, Base={float(quantity)}")
+            logger.info(f"  - Total Qty={total_quantity}, Base={base_quantity}, Free={free_quantity}")
             logger.info(f"  - MRP={item_data.get('mrp')}, Unit Price={unit_price}")
             logger.info(f"  - Discount %={discount_percent}, Discount Amt={discount_amount}")
             logger.info(f"  - Gross={gross_amount}, Taxable={taxable_amount}")
