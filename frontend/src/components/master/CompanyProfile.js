@@ -326,8 +326,8 @@ const CompanyProfile = ({ open, onClose }) => {
       )}
 
       {/* Content */}
-      <div className="flex-1 overflow-y-auto p-6">
-        <div className="max-w-5xl mx-auto space-y-6">
+      <div className="flex-1 overflow-y-auto">
+        <div className="max-w-5xl mx-auto p-6 space-y-6">
           
           {/* Business Identity */}
           <div className="bg-white rounded-lg border border-gray-200 p-6">
