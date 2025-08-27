@@ -123,16 +123,24 @@ async def create_sales_order(
         # Generate order number
         order_number = OrderService.generate_order_number(db, org_id)
         
-        # Get valid branch_id for the org
+        # Get valid branch_id for the org (following invoice pattern)
+        # Try with org_id first, then without (for legacy data)
         branch_result = db.execute(text("""
             SELECT branch_id FROM master.org_branches 
             WHERE org_id = :org_id 
             LIMIT 1
         """), {"org_id": org_id})
         branch = branch_result.fetchone()
+        
         if not branch:
-            raise HTTPException(status_code=400, detail="No active branch found for organization")
-        branch_id = branch.branch_id
+            # Try without org_id filter (for legacy data)
+            branch_result = db.execute(text("""
+                SELECT branch_id FROM master.org_branches 
+                LIMIT 1
+            """))
+            branch = branch_result.fetchone()
+        
+        branch_id = branch[0] if branch else None  # Use NULL if no branch found (like invoice does)
         
         # Create sales order with ALL required fields (no nulls)
         order_data = order.dict(exclude={"items"})
@@ -168,16 +176,25 @@ async def create_sales_order(
         if not order_data.get("payment_terms"):
             order_data["payment_terms"] = "credit"
         
-        # Get a valid user ID for created_by field
+        # Get a valid user ID for created_by field (following invoice pattern)
+        # Try with org_id first, then without (for legacy data)
         user_result = db.execute(text("""
             SELECT user_id FROM master.org_users 
             WHERE org_id = :org_id AND is_active = true 
             LIMIT 1
         """), {"org_id": org_id})
         user = user_result.fetchone()
+        
         if not user:
-            raise HTTPException(status_code=400, detail="No active user found for organization")
-        created_by_user = user.user_id
+            # Try without org_id filter (for legacy data)
+            user_result = db.execute(text("""
+                SELECT user_id FROM master.org_users 
+                WHERE is_active = true 
+                LIMIT 1
+            """))
+            user = user_result.fetchone()
+        
+        created_by_user = user[0] if user else None  # Use NULL if no user found (like invoice does)
         
         # Insert sales order with ALL fields populated (no nulls)
         result = db.execute(text("""

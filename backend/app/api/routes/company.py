@@ -28,18 +28,18 @@ def get_company_info(
         org_query = """
             SELECT 
                 org_id,
-                org_name as name,
-                address,
-                city,
-                state,
-                pincode,
-                country,
-                phone,
-                email,
+                org_name,
+                legal_name,
+                gst_number,
+                pan_number,
+                drug_license_number,
+                fssai_number,
+                registered_address,
+                correspondence_address,
+                contact_numbers,
+                email_addresses,
                 website,
-                gst_number as gst,
-                pan_number as pan,
-                logo,
+                business_settings,
                 created_at,
                 updated_at
             FROM organizations.organizations
@@ -47,10 +47,49 @@ def get_company_info(
         """
         
         result = db.execute(text(org_query), {"org_id": org_id})
-        company_data = result.first()
+        org_data = result.first()
         
-        if company_data:
-            return dict(company_data._mapping)
+        if org_data:
+            # Parse JSON fields
+            registered_addr = {}
+            contact_nums = {}
+            email_addrs = {}
+            
+            if org_data.registered_address:
+                try:
+                    registered_addr = json.loads(org_data.registered_address) if isinstance(org_data.registered_address, str) else org_data.registered_address
+                except:
+                    registered_addr = {}
+            
+            if org_data.contact_numbers:
+                try:
+                    contact_nums = json.loads(org_data.contact_numbers) if isinstance(org_data.contact_numbers, str) else org_data.contact_numbers
+                except:
+                    contact_nums = {}
+                    
+            if org_data.email_addresses:
+                try:
+                    email_addrs = json.loads(org_data.email_addresses) if isinstance(org_data.email_addresses, str) else org_data.email_addresses
+                except:
+                    email_addrs = {}
+            
+            # Return formatted data matching frontend expectations
+            return {
+                "name": org_data.org_name or "Your Company",
+                "address": registered_addr.get("line1", ""),
+                "city": registered_addr.get("city", ""),
+                "state": registered_addr.get("state", ""),
+                "pincode": registered_addr.get("pincode", ""),
+                "country": "India",
+                "phone": contact_nums.get("primary", ""),
+                "email": email_addrs.get("primary", ""),
+                "website": org_data.website or "",
+                "gst": org_data.gst_number or "",
+                "pan": org_data.pan_number or "",
+                "drug_license_no": org_data.drug_license_number or "",
+                "fssai_no": org_data.fssai_number or "",
+                "logo": None
+            }
         
         # If not found, try settings table
         settings_query = """
@@ -116,57 +155,59 @@ def update_company_info(
         
         exists = db.execute(text(check_query), {"org_id": org_id}).first()
         
+        # Prepare JSON fields
+        registered_address = json.dumps({
+            "line1": company_data.get("address", ""),
+            "city": company_data.get("city", ""),
+            "state": company_data.get("state", ""),
+            "pincode": company_data.get("pincode", "")
+        })
+        
+        contact_numbers = json.dumps({
+            "primary": company_data.get("phone", "")
+        })
+        
+        email_addresses = json.dumps({
+            "primary": company_data.get("email", "")
+        })
+        
         if exists:
             # Update existing organization
             update_query = """
                 UPDATE organizations.organizations
                 SET 
                     org_name = :name,
-                    address = :address,
-                    city = :city,
-                    state = :state,
-                    pincode = :pincode,
-                    country = :country,
-                    phone = :phone,
-                    email = :email,
+                    registered_address = :registered_address::jsonb,
+                    contact_numbers = :contact_numbers::jsonb,
+                    email_addresses = :email_addresses::jsonb,
                     website = :website,
                     gst_number = :gst,
                     pan_number = :pan,
-                    logo = :logo,
+                    drug_license_number = :drug_license_no,
+                    fssai_number = :fssai_no,
                     updated_at = CURRENT_TIMESTAMP
                 WHERE org_id = :org_id
-                RETURNING *
+                RETURNING org_id, org_name, gst_number, pan_number
             """
         else:
-            # Insert new organization
-            update_query = """
-                INSERT INTO organizations.organizations (
-                    org_id, org_name, address, city, state, pincode, 
-                    country, phone, email, website, gst_number, pan_number, 
-                    logo, created_at, updated_at
-                ) VALUES (
-                    :org_id, :name, :address, :city, :state, :pincode,
-                    :country, :phone, :email, :website, :gst, :pan,
-                    :logo, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
-                )
-                RETURNING *
-            """
+            # This shouldn't happen as organization is created during setup
+            # But handle it just in case
+            return {
+                "error": "Organization not found. Please complete initial setup."
+            }
         
-        # Execute the update/insert
+        # Execute the update
         result = db.execute(text(update_query), {
             "org_id": org_id,
             "name": company_data.get("name", ""),
-            "address": company_data.get("address", ""),
-            "city": company_data.get("city", ""),
-            "state": company_data.get("state", ""),
-            "pincode": company_data.get("pincode", ""),
-            "country": company_data.get("country", "India"),
-            "phone": company_data.get("phone", ""),
-            "email": company_data.get("email", ""),
+            "registered_address": registered_address,
+            "contact_numbers": contact_numbers,
+            "email_addresses": email_addresses,
             "website": company_data.get("website", ""),
             "gst": company_data.get("gst", ""),
             "pan": company_data.get("pan", ""),
-            "logo": company_data.get("logo")
+            "drug_license_no": company_data.get("drug_license_no", ""),
+            "fssai_no": company_data.get("fssai_no", "")
         })
         
         db.commit()
