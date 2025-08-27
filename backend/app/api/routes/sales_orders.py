@@ -117,12 +117,21 @@ async def create_sales_order(
         # Generate order number
         order_number = OrderService.generate_order_number(db, org_id)
         
+        # Get valid branch_id for the org
+        branch_result = db.execute(text("""
+            SELECT branch_id FROM master.org_branches 
+            WHERE org_id = :org_id 
+            LIMIT 1
+        """), {"org_id": org_id})
+        branch = branch_result.fetchone()
+        branch_id = branch.branch_id if branch else 1
+        
         # Create sales order (no inventory allocation)
         order_data = order.dict(exclude={"items"})
         order_data.update({
             "order_number": order_number,
             "order_status": "draft",  # Match schema values
-            "branch_id": 1,  # Default branch
+            "branch_id": branch_id,  # Use actual branch from DB
             "subtotal_amount": totals["subtotal"],
             "discount_amount": totals["discount"],
             "tax_amount": totals["tax"],

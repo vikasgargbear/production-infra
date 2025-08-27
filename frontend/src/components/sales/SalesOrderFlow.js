@@ -796,8 +796,8 @@ const SalesOrderFlow = ({ open = true, onClose }) => {
       
       debugLogger.debug('Sales order data to send:', salesOrderData);
       
-      // Use sales-orders endpoint  
-      const response = await api.post('/sales-orders/', salesOrderData);
+      // Use sales-orders endpoint with proper API client (like invoice does)
+      const response = await apiClient.post('/sales-orders/', salesOrderData);
       
       if (response?.data) {
         const createdOrderId = response.data.order_id || response.data.id;
