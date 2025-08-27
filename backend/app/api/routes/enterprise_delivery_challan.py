@@ -51,8 +51,7 @@ class ChallanCreationRequest(BaseModel):
     driver_phone: Optional[str] = None
     transport_company: Optional[str] = None
     lr_number: Optional[str] = None
-    freight_amount: Optional[Decimal] = Field(default=0, ge=0)
-    freight_charges: Optional[Decimal] = Field(default=0, ge=0)  # Alias for freight_amount
+    freight_charges: Optional[Decimal] = Field(default=0, ge=0)
     delivery_address: str
     delivery_city: str
     delivery_state: str
@@ -137,13 +136,9 @@ class EnterpriseChallanService:
             gst_amount = Decimal("0")
             total_amount = Decimal("0")
             
-            # Use freight_charges if provided, otherwise freight_amount (backward compatibility)
-            logger.info(f"=== FREIGHT DEBUG ===")
-            logger.info(f"request.freight_charges: {request.freight_charges}")
-            logger.info(f"request.freight_amount: {request.freight_amount}")
-            freight = Decimal(str(request.freight_charges)) if request.freight_charges else (Decimal(str(request.freight_amount)) if request.freight_amount else Decimal("0"))
-            logger.info(f"Calculated freight variable: {freight}")
-            logger.info(f"=== END FREIGHT DEBUG ===")
+            # Get freight charges
+            freight = Decimal(str(request.freight_charges)) if request.freight_charges else Decimal("0")
+            logger.info(f"Freight charges from request: {request.freight_charges} -> {freight}")
             
             # Get created_by user - same approach as invoices
             created_by_user = self._get_created_by_user()

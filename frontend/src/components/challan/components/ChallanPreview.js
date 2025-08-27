@@ -180,13 +180,13 @@ const ChallanPreview = ({
                   <p className="text-gray-900">{challan.driver_phone}</p>
                 </div>
               )}
-              {challan.freight_amount > 0 && (
+              {challan.freight_charges > 0 && (
                 <div className="text-xs mt-2 pt-2 border-t border-yellow-200">
                   <span className="font-medium text-gray-700">Freight Charges:</span>
-                  <p className="text-gray-900 font-bold">{formatCurrency(challan.freight_amount)}</p>
+                  <p className="text-gray-900 font-bold">{formatCurrency(challan.freight_charges)}</p>
                 </div>
               )}
-              {!challan.transport_company && !challan.vehicle_number && !challan.driver_phone && !challan.freight_amount && (
+              {!challan.transport_company && !challan.vehicle_number && !challan.driver_phone && !challan.freight_charges && (
                 <p className="text-xs text-gray-400 italic">No transport details provided</p>
               )}
             </div>
@@ -285,10 +285,10 @@ const ChallanPreview = ({
                   )}
                 </span>
               </div>
-              {challan.freight_amount > 0 && (
+              {challan.freight_charges > 0 && (
                 <div className="flex justify-between text-xs">
                   <span className="text-gray-600">Freight Charges:</span>
-                  <span className="font-medium">{formatCurrency(challan.freight_amount)}</span>
+                  <span className="font-medium">{formatCurrency(challan.freight_charges)}</span>
                 </div>
               )}
               <div className="flex justify-between pt-1 border-t border-gray-300">
@@ -301,7 +301,7 @@ const ChallanPreview = ({
                       const gstPercent = item.gst_percent || item.tax_percent || 0;
                       const gstAmount = (taxableAmount * gstPercent) / 100;
                       return sum + taxableAmount + gstAmount;
-                    }, 0) + (parseFloat(challan.freight_amount) || 0)
+                    }, 0) + (parseFloat(challan.freight_charges) || 0)
                   )}
                 </span>
               </div>

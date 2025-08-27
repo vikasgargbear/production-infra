@@ -48,8 +48,7 @@ export const challansApi = {
       transport_company: data.transport_company,
       vehicle_number: data.vehicle_number,
       lr_number: data.lr_number,
-      freight_charges: parseFloat(data.freight_amount || data.freight_charges || 0),
-      freight_amount: parseFloat(data.freight_amount || data.freight_charges || 0),
+      freight_charges: parseFloat(data.freight_charges || 0),
       notes: data.notes,
       items: data.items.map((item, index) => ({
         order_item_id: item.order_item_id || null, // Optional for independent challans
@@ -89,8 +88,7 @@ export const challansApi = {
       transport_company: data.transport_company,
       vehicle_number: data.vehicle_number,
       lr_number: data.lr_number,
-      freight_charges: parseFloat(data.freight_amount || data.freight_charges || 0),
-      freight_amount: parseFloat(data.freight_amount || data.freight_charges || 0),
+      freight_charges: parseFloat(data.freight_charges || 0),
       notes: data.notes,
       items: data.items.map((item, index) => ({
         order_item_id: item.order_item_id || index + 1,

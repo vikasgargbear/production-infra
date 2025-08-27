@@ -34,7 +34,7 @@ const ModularChallanCreatorV5 = ({ open = true, onClose }) => {
     vehicle_number: '',
     driver_name: '',
     driver_phone: '',
-    freight_amount: 0,
+    freight_charges: 0,
     // Status
     status: 'draft',
     // Totals
@@ -499,13 +499,13 @@ const ModularChallanCreatorV5 = ({ open = true, onClose }) => {
       // Calculate total amount
       const totalAmount = apiItems.reduce((sum, item) => 
         sum + (item.dispatched_quantity * item.unit_price), 0
-      ) + (parseFloat(challan.freight_amount) || 0);
+      ) + (parseFloat(challan.freight_charges) || 0);
 
       // Debug freight amount
       console.log('=== CHALLAN SAVE DEBUG ===');
       console.log('Current challan state:', challan);
-      console.log('challan.freight_amount from state:', challan.freight_amount);
-      console.log('parsed freight_amount:', parseFloat(challan.freight_amount) || 0);
+      console.log('challan.freight_charges from state:', challan.freight_charges);
+      console.log('parsed freight_amount:', parseFloat(challan.freight_charges) || 0);
       console.log('totalAmount (with freight):', totalAmount);
 
       // Prepare challan data with complete delivery address
@@ -524,7 +524,7 @@ const ModularChallanCreatorV5 = ({ open = true, onClose }) => {
         transport_company: challan.transport_company || '',
         vehicle_number: challan.vehicle_number || '',
         driver_phone: challan.driver_phone || '',
-        freight_amount: parseFloat(challan.freight_amount) || 0,
+        freight_amount: parseFloat(challan.freight_charges) || 0,
         lr_number: challan.lr_number || '',
         notes: challan.notes || '',
         total_amount: totalAmount
@@ -875,7 +875,7 @@ Expected Delivery: ${challan.expected_delivery_date}
           <DocumentFooter
             totalItems={challan.total_quantity}
             totalAmount={challan.total_amount}
-            additionalInfo={challan.freight_amount > 0 ? `Freight: ₹${challan.freight_amount.toFixed(2)}` : null}
+            additionalInfo={challan.freight_charges > 0 ? `Freight: ₹${challan.freight_charges.toFixed(2)}` : null}
             onCancel={onClose}
             onContinue={() => setCurrentStep(2)}
             cancelLabel="Cancel"
@@ -1015,7 +1015,7 @@ Expected Delivery: ${challan.expected_delivery_date}
                     <span className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-500 text-sm">₹</span>
                     <input
                       type="number"
-                      value={challan.freight_amount || ''}
+                      value={challan.freight_charges || ''}
                       onChange={(e) => {
                         const value = parseFloat(e.target.value) || 0;
                         console.log('Freight input changed to:', value);
