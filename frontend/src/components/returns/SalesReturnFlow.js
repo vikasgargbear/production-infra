@@ -4,14 +4,14 @@ import {
   RotateCcw, FileText, User, ChevronRight, Save, Printer, History, Truck, Plus, Trash2
 } from 'lucide-react';
 import { 
-  CustomerSearch, ProductSearchSimple, ItemsTable, ModuleHeader,
+  CustomerSearch, ProductSearchSimple, ModuleHeader,
   DatePicker, Select, NumberInput, NotesSection, useToast, ViewHistoryButton,
   ProceedToReviewComponent, StandardDatePicker
 } from '../global';
 import CustomerCreationB2B from '../global/ui/forms/CustomerCreationB2B';
 import { returnsApi, customersApi, settingsApi, metadataApi } from '../../services/api';
 import InvoiceApiService from '../../services/invoiceApiService';
-// ReturnItemsTable moved to archive - use ItemsTable from global instead
+import ReturnItemsTable from './components/ReturnItemsTable';
 import ReturnSummary from './components/ReturnSummary';
 import CreditNotePreview from './components/CreditNotePreview';
 import offlineStorage from '../../services/offlineStorage';
@@ -573,13 +573,22 @@ const SalesReturnFlow = ({ onClose }) => {
 
     returnData.items.forEach(item => {
       if (item.selected && item.return_quantity > 0) {
-        const itemTotal = item.return_quantity * item.rate;
+        const returnQty = parseFloat(item.return_quantity) || 0;
+        const rate = parseFloat(item.rate) || 0;
+        const discountPercent = parseFloat(item.discount_percent) || 0;
+        
+        const baseAmount = returnQty * rate;
+        const discountAmount = (baseAmount * discountPercent) / 100;
+        const afterDiscount = baseAmount - discountAmount;
+        
         // Always calculate tax for return amount (both GST and non-GST customers paid it)
         // Only exclude if GST customer explicitly chooses to exclude
-        const itemTax = (!selectedCustomer?.gst_number || returnData.include_gst) 
-          ? (itemTotal * item.tax_percent) / 100 
+        const taxPercent = (!selectedCustomer?.gst_number || returnData.include_gst) 
+          ? (parseFloat(item.tax_percent) || 0)
           : 0;
-        subtotal += itemTotal;
+        const itemTax = (afterDiscount * taxPercent) / 100;
+        
+        subtotal += afterDiscount;
         taxAmount += itemTax;
       }
     });
@@ -1161,14 +1170,12 @@ const SalesReturnFlow = ({ onClose }) => {
                   
                   {/* Show items table or empty state */}
                   {returnData.items.length > 0 ? (
-                    <ItemsTable
-                      module="returns"
+                    <ReturnItemsTable
                       items={returnData.items}
                       onUpdateItem={updateReturnItem}
                       onRemoveItem={showManualEntry ? removeManualItem : undefined}
-                      customer={selectedCustomer}
                       includeGst={returnData.include_gst}
-                      allowRemove={showManualEntry}
+                      showManualEntry={showManualEntry}
                     />
                   ) : (
                     <div className="text-center py-8 text-gray-500">

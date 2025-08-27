@@ -15,6 +15,12 @@ from ...core.auth_utils import get_org_id_from_header
 
 logger = logging.getLogger(__name__)
 
+def validate_ifsc(ifsc_code: str) -> bool:
+    """Validate IFSC code format"""
+    import re
+    pattern = r'^[A-Z]{4}0[A-Z0-9]{6}$'
+    return bool(re.match(pattern, ifsc_code))
+
 router = APIRouter(tags=["Bank Accounts"])
 
 @router.get("/")
@@ -277,9 +283,3 @@ def set_default_account(
         logger.error(f"Error setting default account: {str(e)}")
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Failed to set default account: {str(e)}")
-
-def validate_ifsc(ifsc_code: str) -> bool:
-    """Validate IFSC code format"""
-    import re
-    pattern = r'^[A-Z]{4}0[A-Z0-9]{6}$'
-    return bool(re.match(pattern, ifsc_code))

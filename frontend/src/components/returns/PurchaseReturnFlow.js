@@ -4,13 +4,13 @@ import {
   RotateCcw, FileText, Building2, ChevronRight, Save, Printer, History, Truck
 } from 'lucide-react';
 import { 
-  SupplierSearch, ProductSearchSimple, ItemsTable, ModuleHeader,
+  SupplierSearch, ProductSearchSimple, ModuleHeader,
   DatePicker, Select, NumberInput, NotesSection, useToast, PurchaseSearch, ViewHistoryButton,
   ProceedToReviewComponent
 } from '../global';
 import { returnsApi, purchasesApi, suppliersApi, settingsApi, metadataApi } from '../../services/api';
 import PurchaseInvoiceSelector from './components/PurchaseInvoiceSelector';
-// ReturnItemsTable moved to archive - use ItemsTable from global instead
+import ReturnItemsTable from './components/ReturnItemsTable';
 import ReturnSummary from './components/ReturnSummary';
 import DebitNotePreview from './components/DebitNotePreview';
 import offlineStorage from '../../services/offlineStorage';
@@ -239,12 +239,20 @@ const PurchaseReturnFlow = ({ onClose }) => {
   };
 
   // Update return item
-  const updateReturnItem = (itemId, field, value) => {
+  // Update return item - handle both index and id based updates
+  const updateReturnItem = (indexOrId, field, value) => {
+    // For returns, we want to update return_quantity when quantity is changed
+    const actualField = (field === 'quantity') ? 'return_quantity' : field;
+    
     setReturnData(prev => ({
       ...prev,
-      items: prev.items.map(item => 
-        item.id === itemId ? { ...item, [field]: value } : item
-      )
+      items: prev.items.map((item, index) => {
+        // Check if it's an index (number) or id match
+        if (index === indexOrId || item.id === indexOrId) {
+          return { ...item, [actualField]: value };
+        }
+        return item;
+      })
     }));
   };
 
@@ -255,9 +263,18 @@ const PurchaseReturnFlow = ({ onClose }) => {
 
     returnData.items.forEach(item => {
       if (item.selected && item.return_quantity > 0) {
-        const itemTotal = item.return_quantity * item.rate;
-        const itemTax = (itemTotal * item.tax_percent) / 100;
-        subtotal += itemTotal;
+        const returnQty = parseFloat(item.return_quantity) || 0;
+        const rate = parseFloat(item.rate) || 0;
+        const discountPercent = parseFloat(item.discount_percent) || 0;
+        
+        const baseAmount = returnQty * rate;
+        const discountAmount = (baseAmount * discountPercent) / 100;
+        const afterDiscount = baseAmount - discountAmount;
+        
+        const taxPercent = parseFloat(item.tax_percent) || 0;
+        const itemTax = (afterDiscount * taxPercent) / 100;
+        
+        subtotal += afterDiscount;
         taxAmount += itemTax;
       }
     });
@@ -597,11 +614,11 @@ const PurchaseReturnFlow = ({ onClose }) => {
                       </button>
                     </div>
                   </div>
-                  <ItemsTable
-                    module="returns"
+                  <ReturnItemsTable
                     items={returnData.items}
                     onUpdateItem={updateReturnItem}
-                    reasons={returnReasons}
+                    includeGst={true}
+                    showManualEntry={false}
                   />
                 </div>
               )}
