@@ -2,10 +2,11 @@ import React, { useState, useRef, useEffect } from 'react';
 import { 
   Building, Upload, Save, Mail, Phone, 
   MapPin, FileText, Calendar, Printer,
-  CreditCard, Globe, Image, Loader2,
+  Globe, Image, Loader2,
   AlertCircle, RefreshCw
 } from 'lucide-react';
-import { companyAPI } from '../../services/api';
+import { companyAPI, bankAccountsAPI } from '../../services/api';
+import BankAccountManager from './BankAccountManager';
 
 const CompanyProfile = ({ open, onClose }) => {
   const fileInputRef = useRef(null);
@@ -75,6 +76,16 @@ const CompanyProfile = ({ open, onClose }) => {
   useEffect(() => {
     if (open) {
       fetchOrganizationProfile();
+      
+      // Load logo from localStorage
+      const savedLogo = localStorage.getItem('companyLogo');
+      if (savedLogo) {
+        setLogoPreview(savedLogo);
+        setCompanyData(prev => ({
+          ...prev,
+          logo: savedLogo
+        }));
+      }
     }
   }, [open]);
 
@@ -176,24 +187,32 @@ const CompanyProfile = ({ open, onClose }) => {
   const handleLogoUpload = async (e) => {
     const file = e.target.files[0];
     if (file) {
-      // Show preview
+      // Check file size (max 2MB for localStorage)
+      if (file.size > 2 * 1024 * 1024) {
+        setError('Logo size should be less than 2MB');
+        setTimeout(() => setError(null), 5000);
+        return;
+      }
+
+      // Show preview and save to localStorage
       const reader = new FileReader();
       reader.onloadend = () => {
-        setLogoPreview(reader.result);
+        const base64Logo = reader.result;
+        setLogoPreview(base64Logo);
+        
+        // Save to localStorage for persistence
+        localStorage.setItem('companyLogo', base64Logo);
+        
+        // Update company data
+        setCompanyData(prev => ({
+          ...prev,
+          logo: base64Logo
+        }));
+        
+        setSuccessMessage('Logo uploaded successfully!');
+        setTimeout(() => setSuccessMessage(''), 3000);
       };
       reader.readAsDataURL(file);
-      
-      // Upload to backend
-      try {
-        const response = await organizationsApi.uploadLogo(file);
-        if (response.success) {
-          setSuccessMessage('Logo uploaded successfully!');
-          setTimeout(() => setSuccessMessage(''), 3000);
-        }
-      } catch (error) {
-        console.error('Error uploading logo:', error);
-        setError('Failed to upload logo. Please try again.');
-      }
     }
   };
 
@@ -605,92 +624,34 @@ const CompanyProfile = ({ open, onClose }) => {
             </div>
           </div>
 
-          {/* Bank Details */}
-          <div className="bg-white rounded-lg border border-gray-200 p-6">
-            <h2 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
-              <CreditCard className="w-5 h-5 mr-2" />
-              Bank Details
-            </h2>
-            
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Account Name
-                </label>
-                <input
-                  type="text"
-                  value={companyData.accountName}
-                  onChange={(e) => handleInputChange('accountName', e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                  placeholder="Account holder name"
-                />
-              </div>
-              
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Account Number
-                </label>
-                <input
-                  type="text"
-                  value={companyData.accountNumber}
-                  onChange={(e) => handleInputChange('accountNumber', e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                />
-              </div>
-              
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Bank Name
-                </label>
-                <input
-                  type="text"
-                  value={companyData.bankName}
-                  onChange={(e) => handleInputChange('bankName', e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                />
-              </div>
-              
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Account Type
-                </label>
-                <select
-                  value={companyData.accountType}
-                  onChange={(e) => handleInputChange('accountType', e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                >
-                  <option value="SAVINGS">Savings</option>
-                  <option value="CURRENT">Current</option>
-                  <option value="CASH_CREDIT">Cash Credit</option>
-                  <option value="OVERDRAFT">Overdraft</option>
-                </select>
-              </div>
-              
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  IFSC Code
-                </label>
-                <input
-                  type="text"
-                  value={companyData.ifscCode}
-                  onChange={(e) => handleInputChange('ifscCode', e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                />
-              </div>
-              
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Branch Name
-                </label>
-                <input
-                  type="text"
-                  value={companyData.branchName}
-                  onChange={(e) => handleInputChange('branchName', e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                />
-              </div>
-            </div>
-          </div>
+          {/* Bank Account Management - Now using dedicated component */}
+          <BankAccountManager 
+            companyData={{
+              businessName: companyData.businessName,
+              // Pass existing bank data if migrating from old single-account system
+              bankName: companyData.bankName,
+              accountNumber: companyData.accountNumber,
+              accountName: companyData.accountName,
+              accountType: companyData.accountType,
+              ifscCode: companyData.ifscCode,
+              branchName: companyData.branchName
+            }}
+            onUpdate={(accountData) => {
+              // When default account changes, update company data
+              // This maintains backward compatibility
+              if (accountData.is_default_account) {
+                setCompanyData(prev => ({
+                  ...prev,
+                  bankName: accountData.bank_name,
+                  accountNumber: accountData.account_number,
+                  accountName: accountData.account_name,
+                  accountType: accountData.account_type,
+                  ifscCode: accountData.ifsc_code,
+                  branchName: accountData.branch_name
+                }));
+              }
+            }}
+          />
 
           {/* Invoice Settings */}
           <div className="bg-white rounded-lg border border-gray-200 p-6">

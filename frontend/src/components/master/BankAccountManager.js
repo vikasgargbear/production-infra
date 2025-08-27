@@ -1,13 +1,16 @@
 import React, { useState, useEffect } from 'react';
 import {
   CreditCard, Plus, Trash2, Edit2, Check,
-  X, AlertCircle, Building2, Star
+  X, AlertCircle, Building2, Star, Loader2
 } from 'lucide-react';
+import { bankAccountsAPI } from '../../services/api';
 
 const BankAccountManager = ({ companyData, onUpdate }) => {
   const [accounts, setAccounts] = useState([]);
   const [isAddingNew, setIsAddingNew] = useState(false);
   const [editingId, setEditingId] = useState(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState(null);
   const [newAccount, setNewAccount] = useState({
     account_name: '',
     account_number: '',
@@ -18,21 +21,26 @@ const BankAccountManager = ({ companyData, onUpdate }) => {
     is_default_account: false
   });
 
+  // Fetch accounts on mount
   useEffect(() => {
-    // Initialize with existing account if available
-    if (companyData.bankName || companyData.accountNumber) {
-      setAccounts([{
-        id: 'existing',
-        account_name: companyData.accountName || companyData.businessName || '',
-        account_number: companyData.accountNumber || '',
-        bank_name: companyData.bankName || '',
-        account_type: companyData.accountType || 'CURRENT',
-        ifsc_code: companyData.ifscCode || '',
-        branch_name: companyData.branchName || '',
-        is_default_account: true
-      }]);
+    fetchAccounts();
+  }, []);
+
+  const fetchAccounts = async () => {
+    try {
+      setIsLoading(true);
+      setError(null);
+      const data = await bankAccountsAPI.getBankAccounts();
+      setAccounts(data || []);
+    } catch (error) {
+      console.error('Error fetching bank accounts:', error);
+      setError('Failed to load bank accounts');
+      // If no accounts exist, that's okay - show empty state
+      setAccounts([]);
+    } finally {
+      setIsLoading(false);
     }
-  }, [companyData]);
+  };
 
   const validateIFSC = (ifsc) => {
     // IFSC format: 4 letters + 0 + 6 alphanumeric
@@ -53,58 +61,74 @@ const BankAccountManager = ({ companyData, onUpdate }) => {
     });
   };
 
-  const handleSaveNewAccount = () => {
+  const handleSaveNewAccount = async () => {
     // Validate required fields
     if (!newAccount.account_number || !newAccount.ifsc_code || !newAccount.bank_name) {
-      alert('Please fill in Account Number, Bank Name, and IFSC Code');
+      setError('Please fill in Account Number, Bank Name, and IFSC Code');
       return;
     }
 
     if (!validateIFSC(newAccount.ifsc_code)) {
-      alert('Invalid IFSC Code format. Example: HDFC0001234');
+      setError('Invalid IFSC Code format. Example: HDFC0001234');
       return;
     }
 
-    const accountToAdd = {
-      ...newAccount,
-      id: Date.now().toString(),
-      ifsc_code: newAccount.ifsc_code.toUpperCase()
-    };
+    try {
+      const accountToAdd = {
+        ...newAccount,
+        ifsc_code: newAccount.ifsc_code.toUpperCase()
+      };
 
-    // If this is marked as default, unset other defaults
-    if (accountToAdd.is_default_account) {
-      setAccounts(prev => prev.map(acc => ({ ...acc, is_default_account: false })));
-    }
-
-    setAccounts(prev => [...prev, accountToAdd]);
-    setIsAddingNew(false);
-    
-    // Update parent component
-    if (onUpdate) {
-      onUpdate(accountToAdd);
+      // Save to backend
+      const response = await bankAccountsAPI.createBankAccount(accountToAdd);
+      
+      // Refresh the list
+      await fetchAccounts();
+      
+      setIsAddingNew(false);
+      setError(null);
+      
+      // Update parent component
+      if (onUpdate) {
+        onUpdate(accountToAdd);
+      }
+    } catch (error) {
+      console.error('Error saving bank account:', error);
+      setError('Failed to save bank account. Please try again.');
     }
   };
 
-  const handleDeleteAccount = (id) => {
+  const handleDeleteAccount = async (id) => {
     const accountToDelete = accounts.find(acc => acc.id === id);
     if (accountToDelete?.is_default_account && accounts.length > 1) {
-      alert('Cannot delete default account. Please set another account as default first.');
+      setError('Cannot delete default account. Please set another account as default first.');
       return;
     }
     
-    setAccounts(prev => prev.filter(acc => acc.id !== id));
+    try {
+      await bankAccountsAPI.deleteBankAccount(id);
+      await fetchAccounts();
+      setError(null);
+    } catch (error) {
+      console.error('Error deleting bank account:', error);
+      setError('Failed to delete bank account. Please try again.');
+    }
   };
 
-  const handleSetDefault = (id) => {
-    setAccounts(prev => prev.map(acc => ({
-      ...acc,
-      is_default_account: acc.id === id
-    })));
-    
-    // Update parent with the new default
-    const defaultAccount = accounts.find(acc => acc.id === id);
-    if (defaultAccount && onUpdate) {
-      onUpdate(defaultAccount);
+  const handleSetDefault = async (id) => {
+    try {
+      await bankAccountsAPI.setDefaultAccount(id);
+      await fetchAccounts();
+      
+      // Update parent with the new default
+      const defaultAccount = accounts.find(acc => acc.id === id);
+      if (defaultAccount && onUpdate) {
+        onUpdate(defaultAccount);
+      }
+      setError(null);
+    } catch (error) {
+      console.error('Error setting default account:', error);
+      setError('Failed to set default account. Please try again.');
     }
   };
 
@@ -124,16 +148,40 @@ const BankAccountManager = ({ companyData, onUpdate }) => {
         </h2>
         <button
           onClick={handleAddAccount}
-          className="px-3 py-1.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center space-x-1 text-sm"
+          disabled={isLoading}
+          className="px-3 py-1.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center space-x-1 text-sm disabled:opacity-50 disabled:cursor-not-allowed"
         >
           <Plus className="w-4 h-4" />
           <span>Add Account</span>
         </button>
       </div>
 
+      {/* Error Message */}
+      {error && (
+        <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg flex items-center">
+          <AlertCircle className="w-4 h-4 text-red-600 mr-2" />
+          <span className="text-sm text-red-800">{error}</span>
+          <button
+            onClick={() => setError(null)}
+            className="ml-auto text-red-600 hover:text-red-800"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
+
+      {/* Loading State */}
+      {isLoading && (
+        <div className="flex items-center justify-center py-8">
+          <Loader2 className="w-8 h-8 animate-spin text-gray-400" />
+          <span className="ml-2 text-gray-600">Loading bank accounts...</span>
+        </div>
+      )}
+
       {/* Existing Accounts */}
-      <div className="space-y-3">
-        {accounts.map((account) => (
+      {!isLoading && (
+        <div className="space-y-3">
+          {accounts.map((account) => (
           <div
             key={account.id}
             className={`border rounded-lg p-4 ${
@@ -322,7 +370,8 @@ const BankAccountManager = ({ companyData, onUpdate }) => {
             <p className="text-xs mt-1">Click "Add Account" to add your first bank account.</p>
           </div>
         )}
-      </div>
+        </div>
+      )}
 
       {/* Info Note */}
       <div className="mt-4 p-3 bg-amber-50 border border-amber-200 rounded-lg flex items-start space-x-2">

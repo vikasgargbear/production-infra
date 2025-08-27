@@ -14,8 +14,8 @@ class OrderItemBase(BaseModel):
     product_id: int = Field(..., gt=0)
     batch_id: Optional[int] = Field(None, gt=0)
     batch_number: Optional[str] = None  # Add batch_number!
-    quantity: int = Field(..., gt=0)
-    free_quantity: Optional[int] = Field(default=0, ge=0)  # Add free_quantity!
+    quantity: Decimal = Field(..., gt=0)  # Changed to Decimal to match DB!
+    free_quantity: Optional[Decimal] = Field(default=Decimal("0"), ge=0)  # Changed to Decimal!
     unit_price: Decimal = Field(..., ge=0)
     mrp: Optional[Decimal] = Field(None, ge=0)  # Add MRP!
     discount_percent: Decimal = Field(default=Decimal("0.00"), ge=0, le=100)
