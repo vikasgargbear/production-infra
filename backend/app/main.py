@@ -34,6 +34,8 @@ from .api.routes import enterprise_api_complete
 from .api.routes import invoice_calculation, enterprise_calculations
 # Import simple company API (no database dependencies)
 from .api.routes import company_simple
+# Import company API for company profile management
+from .api.routes import company
 # Import master data API
 from .api.routes import master_data
 # All temporary endpoints removed - using main endpoints only
@@ -118,6 +120,7 @@ api.include_router(inventory.router, prefix="/inventory", tags=["Inventory"])
 api.include_router(payments.router, prefix="/payments", tags=["Payments"])
 api.include_router(dashboard.router, prefix="/dashboard", tags=["Dashboard"])
 api.include_router(billing.router, prefix="/billing", tags=["Billing"])
+api.include_router(company.router, prefix="/company", tags=["Company"])
 # Register additional routes from __init__.py
 api.include_router(orders_router, tags=["Orders"])
 api.include_router(invoices_router, tags=["Invoices"])
