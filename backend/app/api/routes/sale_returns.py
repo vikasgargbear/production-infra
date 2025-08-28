@@ -308,21 +308,39 @@ async def create_sale_return(
         if customer.gst_number:
             credit_note_no = f"CN-{datetime.now().strftime('%Y%m%d-%H%M%S')}"
         
-        # Calculate totals
-        subtotal = Decimal("0")
+        # Calculate totals with proper discount handling
+        subtotal = Decimal("0")  # This will be the taxable amount after discounts
         tax_amount = Decimal("0")
+        cgst_amount = Decimal("0")
+        sgst_amount = Decimal("0")
+        igst_amount = Decimal("0")
         total_amount = Decimal("0")
         
         for item in return_dict["items"]:
             # Handle both return_quantity and quantity field names
-            qty = item.get("return_quantity") or item.get("quantity", 0)
-            item_total = Decimal(str(qty)) * Decimal(str(item["rate"]))
-            # Always calculate tax (all customers paid it)
-            item_tax = item_total * Decimal(str(item.get("tax_percent", 0))) / 100
+            qty = Decimal(str(item.get("return_quantity") or item.get("quantity", 0)))
+            rate = Decimal(str(item.get("rate", 0)))
+            discount_percent = Decimal(str(item.get("discount_percent", 0)))
+            tax_percent = Decimal(str(item.get("tax_percent", 0)))
             
-            subtotal += item_total
+            # Calculate with discount
+            base_amount = qty * rate
+            discount_amount = (base_amount * discount_percent) / 100
+            taxable_amount = base_amount - discount_amount
+            
+            # Calculate tax on discounted amount
+            item_tax = (taxable_amount * tax_percent) / 100
+            
+            # For intra-state, split tax into CGST and SGST
+            # TODO: Check if inter-state based on customer state vs org state
+            item_cgst = item_tax / 2
+            item_sgst = item_tax / 2
+            
+            subtotal += taxable_amount  # Subtotal is the taxable amount after discount
             tax_amount += item_tax
-            total_amount += item_total + item_tax
+            cgst_amount += item_cgst
+            sgst_amount += item_sgst
+            total_amount += taxable_amount + item_tax
             
         # Get branch_id from first available source
         branch_id = None
@@ -378,6 +396,7 @@ async def create_sale_return(
                     return_reason, return_category,
                     approval_required, approval_status,
                     return_amount, tax_amount, total_amount,
+                    cgst_amount, sgst_amount, igst_amount,
                     credit_note_number, credit_note_date, credit_note_status,
                     notes, created_by
                 ) VALUES (
@@ -386,6 +405,7 @@ async def create_sale_return(
                     :reason, :category,
                     false, 'approved',
                     :subtotal, :tax_amount, :total_amount,
+                    :cgst_amount, :sgst_amount, :igst_amount,
                     :credit_note_no, :credit_note_date, :credit_note_status,
                     :notes, :created_by
                 )
@@ -403,6 +423,9 @@ async def create_sale_return(
                 "subtotal": float(subtotal),
                 "tax_amount": float(tax_amount),
                 "total_amount": float(total_amount),
+                "cgst_amount": float(cgst_amount),
+                "sgst_amount": float(sgst_amount),
+                "igst_amount": float(igst_amount),
                 "credit_note_no": credit_note_no,
                 "credit_note_date": return_dict["return_date"] if credit_note_no else None,
                 "credit_note_status": "issued" if credit_note_no else None,
