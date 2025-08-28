@@ -165,15 +165,35 @@ const ProductMaster = ({
 
   const loadMetadata = async () => {
     try {
-      // Load categories
-      const catResponse = await metadataApi.getProductCategories();
+      // Load categories from products API
+      const catResponse = await productsApi.getCategories();
       setCategories(catResponse.data || []);
       
-      // Load units of measure
-      const uomResponse = await metadataApi.getUnitsOfMeasure();
-      setUomList(uomResponse.data || []);
+      // Load units of measure - fallback to defaults if API fails
+      try {
+        const uomResponse = await metadataApi.getUnitsOfMeasure();
+        setUomList(uomResponse.data || []);
+      } catch (e) {
+        // Default UOM list
+        setUomList([
+          { id: '1', name: 'Strip', code: 'STRIP' },
+          { id: '2', name: 'Box', code: 'BOX' },
+          { id: '3', name: 'Bottle', code: 'BTL' },
+          { id: '4', name: 'Vial', code: 'VIAL' },
+          { id: '5', name: 'Tablet', code: 'TAB' },
+          { id: '6', name: 'Capsule', code: 'CAP' }
+        ]);
+      }
     } catch (error) {
       console.error('Error loading metadata:', error);
+      // Set default categories if API fails
+      setCategories([
+        { category_id: '1', category_name: 'Tablets' },
+        { category_id: '2', category_name: 'Syrups' },
+        { category_id: '3', category_name: 'Injections' },
+        { category_id: '4', category_name: 'Ointments' },
+        { category_id: '5', category_name: 'Equipment' }
+      ]);
     }
   };
 
@@ -332,16 +352,11 @@ const ProductMaster = ({
   };
 
   const sections = [
-    { id: 'basic', label: 'Basic Information', icon: Package },
-    { id: 'classification', label: 'Classification', icon: Tag },
-    { id: 'pharma', label: 'Pharmaceutical', icon: Pill },
-    { id: 'packaging', label: 'Packaging', icon: Box },
-    { id: 'pricing', label: 'Pricing & Tax', icon: DollarSign },
-    { id: 'storage', label: 'Storage', icon: Thermometer },
-    { id: 'inventory', label: 'Inventory', icon: Database },
-    { id: 'status', label: 'Status & Availability', icon: CheckCircle },
-    { id: 'search', label: 'Search & Tags', icon: Search },
-    { id: 'media', label: 'Media & Documents', icon: Image }
+    { id: 'basic', label: 'Basic & Classification', icon: Package },
+    { id: 'product_details', label: 'Product Details', icon: Pill },
+    { id: 'pricing_inventory', label: 'Pricing & Inventory', icon: DollarSign },
+    { id: 'storage_compliance', label: 'Storage & Compliance', icon: Shield },
+    { id: 'additional', label: 'Additional Info', icon: FileText }
   ];
 
   if (!isOpen) return null;
@@ -399,12 +414,12 @@ const ProductMaster = ({
 
             {/* Content Area */}
             <div className="flex-1 overflow-y-auto p-6">
-              {/* Basic Information Section */}
+              {/* Basic Information & Classification Section */}
               {activeSection === 'basic' && (
                 <div className="space-y-6">
                   <h3 className="text-lg font-medium text-gray-900 mb-4 flex items-center">
                     <Package className="w-5 h-5 mr-2" />
-                    Basic Information
+                    Basic Information & Classification
                   </h3>
                   
                   <div className="grid grid-cols-2 gap-4">
@@ -504,21 +519,77 @@ const ProductMaster = ({
                     </div>
                   </div>
 
+                  {/* Classification Fields */}
+                  <div className="border-t pt-4">
+                    <h4 className="text-md font-medium text-gray-800 mb-3 flex items-center">
+                      <Tag className="w-4 h-4 mr-2" />
+                      Classification
+                    </h4>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Category</label>
+                        <select
+                          value={formData.category_id}
+                          onChange={(e) => handleInputChange('category_id', e.target.value)}
+                          disabled={mode === 'view'}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100"
+                        >
+                          <option value="">Select Category</option>
+                          {categories.map(cat => (
+                            <option key={cat.category_id} value={cat.category_id}>
+                              {cat.category_name}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Product Type</label>
+                        <select
+                          value={formData.product_type}
+                          onChange={(e) => handleInputChange('product_type', e.target.value)}
+                          disabled={mode === 'view'}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100"
+                        >
+                          <option value="">Select Type</option>
+                          {productTypes.map(type => (
+                            <option key={type} value={type}>{type}</option>
+                          ))}
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Product Class</label>
+                        <select
+                          value={formData.product_class}
+                          onChange={(e) => handleInputChange('product_class', e.target.value)}
+                          disabled={mode === 'view'}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100"
+                        >
+                          <option value="">Select Class</option>
+                          {productClasses.map(cls => (
+                            <option key={cls} value={cls}>{cls}</option>
+                          ))}
+                        </select>
+                      </div>
+                    </div>
+                  </div>
+
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
                     <textarea
                       value={formData.description}
                       onChange={(e) => handleInputChange('description', e.target.value)}
                       disabled={mode === 'view'}
-                      rows={4}
+                      rows={3}
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100"
                     />
                   </div>
                 </div>
               )}
 
-              {/* Classification Section */}
-              {activeSection === 'classification' && (
+              {/* Product Details Section (Pharmaceutical + Packaging) */}
+              {activeSection === 'product_details' && (
                 <div className="space-y-6">
                   <h3 className="text-lg font-medium text-gray-900 mb-4 flex items-center">
                     <Tag className="w-5 h-5 mr-2" />

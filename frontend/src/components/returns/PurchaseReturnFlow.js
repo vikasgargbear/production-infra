@@ -221,14 +221,29 @@ const PurchaseReturnFlow = ({ onClose }) => {
         setReturnData(prev => ({
           ...prev,
           items: response.data.items.map(item => {
-            // Separate paid and free quantities
+            // Use backend data directly
             const totalQty = parseFloat(item.quantity || 0);
             const freeQty = parseFloat(item.free_quantity || 0);
-            const paidQty = totalQty - freeQty;
             
-            // Only paid quantities can be returned (free items have no value)
+            // If backend has paid_quantity, use it directly
+            let paidQty;
+            if (item.paid_quantity !== undefined && item.paid_quantity !== null) {
+              paidQty = Math.max(0, parseFloat(item.paid_quantity));
+            } else {
+              // Calculate but ensure it's never negative
+              paidQty = Math.max(0, totalQty - freeQty);
+            }
+            
+            // Handle data inconsistency
+            if (freeQty > totalQty) {
+              console.warn(`Data inconsistency: free_quantity (${freeQty}) > total quantity (${totalQty})`);
+              paidQty = 0;
+            }
+            
+            // Calculate max returnable
             const returnedQty = parseFloat(item.returned_quantity || 0);
-            const maxReturnable = paidQty - returnedQty;
+            const maxReturnablePaid = Math.max(0, paidQty - returnedQty);
+            const maxReturnableTotal = Math.max(0, totalQty - returnedQty);
             
             return {
               ...item,
@@ -239,7 +254,8 @@ const PurchaseReturnFlow = ({ onClose }) => {
               free_quantity: freeQty,
               // Return settings
               return_quantity: 0,
-              max_returnable_qty: maxReturnable,
+              max_returnable_qty: maxReturnableTotal,
+              max_returnable_paid: maxReturnablePaid,
               return_reason: '',
               selected: false
             };

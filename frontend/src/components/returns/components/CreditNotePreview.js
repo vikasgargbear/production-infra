@@ -1,7 +1,9 @@
 import React from 'react';
 import { FileText, Calendar, User, Building2, Phone, Mail } from 'lucide-react';
+import useCompanyDetails from '../../../hooks/useCompanyDetails';
 
 const CreditNotePreview = ({ returnData, customer, invoice, includeGst = true, customerDues = 0 }) => {
+  const { companyDetails } = useCompanyDetails();
   const formatDate = (date) => {
     return new Date(date).toLocaleDateString('en-IN', {
       day: '2-digit',
@@ -28,7 +30,19 @@ const CreditNotePreview = ({ returnData, customer, invoice, includeGst = true, c
     if (customer.gst_number && !includeGst) return gstBreakup;
     
     returnItems.forEach(item => {
-      const returnAmount = item.return_quantity * item.rate;
+      // Only calculate for paid quantities
+      const totalQty = parseFloat(item.quantity || 0);
+      const freeQty = parseFloat(item.free_quantity || 0);
+      const paidQty = parseFloat(item.paid_quantity || totalQty - freeQty);
+      const returnQty = parseFloat(item.return_quantity || 0);
+      const paidReturnQty = Math.min(returnQty, paidQty);
+      
+      // Apply discount to base amount
+      const baseAmount = paidReturnQty * item.rate;
+      const discountPercent = parseFloat(item.discount_percent || 0);
+      const discountAmount = (baseAmount * discountPercent) / 100;
+      const returnAmount = baseAmount - discountAmount;
+      
       const taxAmount = (returnAmount * item.tax_percent) / 100;
       
       if (!gstBreakup[item.tax_percent]) {
@@ -86,13 +100,14 @@ const CreditNotePreview = ({ returnData, customer, invoice, includeGst = true, c
               {/* Company Logo and Details */}
               <div className="mb-6">
                 <h2 className="text-2xl font-bold text-gray-900 mb-2">
-                  {localStorage.getItem('company_name') || 'AASO Pharmaceuticals'}
+                  {companyDetails.company_name}
                 </h2>
                 <div className="text-sm text-gray-600 space-y-1">
-                  <p>{localStorage.getItem('company_address') || '123 Business Street, City'}</p>
-                  <p>GSTIN: {localStorage.getItem('company_gstin') || ''}</p>
-                  <p>DL No: {localStorage.getItem('company_drug_license') || '20B/21B-XXX'}</p>
-                  <p>Phone: {localStorage.getItem('company_phone') || '+91 99999 99999'}</p>
+                  {companyDetails.company_address && <p>{companyDetails.company_address}</p>}
+                  {companyDetails.company_gstin && <p>GSTIN: {companyDetails.company_gstin}</p>}
+                  {companyDetails.company_drug_license && <p>DL No: {companyDetails.company_drug_license}</p>}
+                  {companyDetails.company_phone && <p>Phone: {companyDetails.company_phone}</p>}
+                  {companyDetails.company_email && <p>Email: {companyDetails.company_email}</p>}
                 </div>
               </div>
             </div>
@@ -191,7 +206,20 @@ const CreditNotePreview = ({ returnData, customer, invoice, includeGst = true, c
               </thead>
               <tbody>
                 {returnItems.map((item, index) => {
-                  const returnAmount = item.return_quantity * item.rate;
+                  // Calculate amounts only for paid quantities
+                  const totalQty = parseFloat(item.quantity || 0);
+                  const freeQty = parseFloat(item.free_quantity || 0);
+                  const paidQty = parseFloat(item.paid_quantity || totalQty - freeQty);
+                  const returnQty = parseFloat(item.return_quantity || 0);
+                  const paidReturnQty = Math.min(returnQty, paidQty);
+                  const freeReturnQty = returnQty > paidQty ? returnQty - paidQty : 0;
+                  
+                  // Apply discount to base amount
+                  const baseAmount = paidReturnQty * item.rate;
+                  const discountPercent = parseFloat(item.discount_percent || 0);
+                  const discountAmount = (baseAmount * discountPercent) / 100;
+                  const returnAmount = baseAmount - discountAmount;
+                  
                   // Calculate tax for all customers (they all paid it)
                   const taxAmount = (!customer.gst_number || includeGst) ? (returnAmount * item.tax_percent) / 100 : 0;
                   const totalAmount = returnAmount + taxAmount;
@@ -205,7 +233,14 @@ const CreditNotePreview = ({ returnData, customer, invoice, includeGst = true, c
                       <td className="py-3 px-2 text-sm">
                         {item.expiry_date ? formatDate(item.expiry_date) : '-'}
                       </td>
-                      <td className="py-3 px-2 text-sm text-center">{item.return_quantity}</td>
+                      <td className="py-3 px-2 text-sm text-center">
+                        <div>
+                          {item.return_quantity}
+                          {freeReturnQty > 0 && (
+                            <div className="text-xs text-amber-600">({paidReturnQty} paid + {freeReturnQty} free)</div>
+                          )}
+                        </div>
+                      </td>
                       <td className="py-3 px-2 text-sm text-right">{formatCurrency(item.rate)}</td>
                       {customer.gst_number && (
                         <td className="py-3 px-2 text-sm text-center">{item.tax_percent}%</td>

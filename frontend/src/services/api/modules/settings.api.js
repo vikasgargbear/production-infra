@@ -1,6 +1,11 @@
 import apiClient from '../apiClient';
 
 export const settingsApi = {
+  // Get company settings (main method for company details)
+  getSettings: () => apiClient.get('company/settings'),
+  updateSettings: (data) => apiClient.put('company/settings', data),
+  getCompanyInfo: () => apiClient.get('company/info'),
+  
   // Tax Master APIs (tax_entries table)
   taxes: {
     getAll: () => apiClient.get('/tax-entries'),

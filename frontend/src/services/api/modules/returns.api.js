@@ -80,7 +80,7 @@ export const returnsApi = {
       throw new Error(validation.errors.join(', '));
     }
     
-    const response = await apiClient.post('/sale-returns', transformedData);
+    const response = await apiClient.post('sale-returns', transformedData);
     
     if (response.data) {
       response.data = returnsDataTransformer.transformBackendSaleReturn(response.data);
@@ -98,7 +98,7 @@ export const returnsApi = {
       throw new Error(validation.errors.join(', '));
     }
     
-    const response = await apiClient.post('/purchase-returns', transformedData);
+    const response = await apiClient.post('purchase-returns', transformedData);
     
     if (response.data) {
       response.data = returnsDataTransformer.transformBackendPurchaseReturn(response.data);
@@ -109,7 +109,7 @@ export const returnsApi = {
 
   // Get sale returns
   getSaleReturns: async (params = {}) => {
-    const response = await apiClient.get('/sale-returns', { params });
+    const response = await apiClient.get('sale-returns', { params });
     
     if (response.data && response.data.returns) {
       response.data.returns = response.data.returns.map(ret => 
@@ -122,7 +122,7 @@ export const returnsApi = {
 
   // Get purchase returns
   getPurchaseReturns: async (params = {}) => {
-    const response = await apiClient.get('/purchase-returns', { params });
+    const response = await apiClient.get('purchase-returns', { params });
     
     if (response.data && response.data.returns) {
       response.data.returns = response.data.returns.map(ret => 
@@ -135,16 +135,16 @@ export const returnsApi = {
 
   // Get returnable invoices
   getReturnableInvoices: async (params = {}) => {
-    return apiClient.get('/sale-returns/returnable-invoices', { params });
+    return apiClient.get('sale-returns/returnable-invoices', { params });
   },
 
   // Get returnable purchases
   getReturnablePurchases: async (params = {}) => {
-    return apiClient.get('/purchase-returns/returnable-purchases/', { params });
+    return apiClient.get('purchase-returns/returnable-purchases/', { params });
   },
 
   // Get purchase items for return
   getPurchaseItems: async (purchaseId) => {
-    return apiClient.get(`/purchase-returns/purchase/${purchaseId}/items`);
+    return apiClient.get(`purchase-returns/purchase/${purchaseId}/items`);
   }
 };

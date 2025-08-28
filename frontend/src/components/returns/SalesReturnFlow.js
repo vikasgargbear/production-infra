@@ -383,14 +383,25 @@ const SalesReturnFlow = ({ onClose }) => {
       return;
     }
     
-    setSelectedCustomer(customer);
+    // Ensure customer has all needed fields
+    const fullCustomer = {
+      ...customer,
+      customer_name: customer.customer_name || customer.name,
+      address: customer.address || customer.billing_address || customer.street_address || '',
+      phone: customer.phone || customer.mobile || customer.contact_phone || '',
+      email: customer.email || customer.contact_email || '',
+      gst_number: customer.gst_number || customer.gstin || customer.gst || '',
+      drug_license_number: customer.drug_license_number || customer.drug_license || ''
+    };
+    
+    setSelectedCustomer(fullCustomer);
     setSelectedInvoice(null); // Reset invoice selection
     setShowInvoiceSection(true); // Show invoice section for new customer
     setShowManualEntry(false); // Reset manual entry
     setReturnData(prev => ({
       ...prev,
       customer_id: customer.id || customer.customer_id || customer.party_id,
-      customer_details: customer,
+      customer_details: fullCustomer,
       invoice_id: '',
       items: []
     }));
@@ -511,14 +522,31 @@ const SalesReturnFlow = ({ onClose }) => {
       invoice_date: invoiceWithItems.invoice_date,
       original_invoice: invoiceWithItems,
       items: (invoiceWithItems.items || []).map((item, index) => {
-        // Separate paid and free quantities
+        // Use backend data directly - don't calculate
         const totalQty = parseFloat(item.quantity || 0);
         const freeQty = parseFloat(item.free_quantity || 0);
-        const paidQty = totalQty - freeQty;
         
-        // Only paid quantities can be returned (free items have no value)
+        // If backend has paid_quantity, use it directly
+        // Otherwise calculate but ensure it's never negative
+        let paidQty;
+        if (item.paid_quantity !== undefined && item.paid_quantity !== null) {
+          paidQty = parseFloat(item.paid_quantity);
+        } else {
+          // Calculate paid qty, but ensure it's not negative
+          paidQty = Math.max(0, totalQty - freeQty);
+        }
+        
+        // Handle data inconsistency - if free > total, adjust free
+        if (freeQty > totalQty) {
+          console.warn(`Data inconsistency: free_quantity (${freeQty}) > total quantity (${totalQty}) for ${item.product_name}`);
+          // In this case, assume all are free
+          paidQty = 0;
+        }
+        
+        // Calculate max returnable (considering already returned items)
         const returnedQty = parseFloat(item.returned_quantity || 0);
-        const maxReturnable = paidQty - returnedQty;
+        const maxReturnablePaid = Math.max(0, paidQty - returnedQty);
+        const maxReturnableTotal = Math.max(0, totalQty - returnedQty);
         
         return {
           ...item,
@@ -530,16 +558,17 @@ const SalesReturnFlow = ({ onClose }) => {
           rate: item.rate || item.sale_price || item.price || item.unit_price,
           tax_percent: item.tax_percent || item.gst_percent || 0,  // No default GST
           discount_percent: item.discount_percent || item.discount || 0,
-          // Quantities
+          // Quantities - use actual values
           quantity: totalQty,
           paid_quantity: paidQty,
           free_quantity: freeQty,
-          // Auto-populate with max returnable quantity (paid only)
-          return_quantity: maxReturnable,
-          max_returnable_qty: maxReturnable,
+          // Auto-populate with total returnable (user can return all)
+          return_quantity: maxReturnableTotal,
+          max_returnable_qty: maxReturnableTotal,
+          max_returnable_paid: maxReturnablePaid, // Track paid limit separately
           return_reason: '',
-          // Auto-select items that have returnable paid quantity
-          selected: maxReturnable > 0,
+          // Auto-select items that have something to return
+          selected: maxReturnableTotal > 0,
           hsn_code: item.hsn_code || ''
         };
       })
@@ -586,11 +615,22 @@ const SalesReturnFlow = ({ onClose }) => {
 
     returnData.items.forEach(item => {
       if (item.selected && item.return_quantity > 0) {
+        // Get quantities, ensuring no negative values
         const returnQty = parseFloat(item.return_quantity) || 0;
+        const paidQty = Math.max(0, parseFloat(item.paid_quantity || 0));
+        
+        // Only paid items being returned have value
+        const paidReturnQty = Math.min(returnQty, paidQty);
+        
+        // Skip calculation if no paid items being returned
+        if (paidReturnQty <= 0) {
+          return; // Continue to next item
+        }
+        
         const rate = parseFloat(item.rate) || 0;
         const discountPercent = parseFloat(item.discount_percent) || 0;
         
-        const baseAmount = returnQty * rate;
+        const baseAmount = paidReturnQty * rate;
         const discountAmount = (baseAmount * discountPercent) / 100;
         const afterDiscount = baseAmount - discountAmount;
         

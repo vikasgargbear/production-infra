@@ -7,13 +7,13 @@ import {
 import GlobalPDFGenerator from '../pdf/GlobalPDFGenerator';
 import { ordersAPI, purchasesAPI, paymentAPI, challansAPI, invoiceAPI, salesOrdersAPI, purchasesApi, returnsApi, stockApi } from '../../../services/api';
 
-const ViewHistoryButton = ({ 
+const ViewHistoryButton = React.forwardRef(({ 
   historyType = 'invoice', // 'invoice', 'challan', 'payment', 'purchase', 'order', 'sales-order'
   onViewItem,
   onEditItem,
   className = '',
   buttonText = ''
-}) => {
+}, ref) => {
   const [showHistory, setShowHistory] = useState(false);
   const [historyItems, setHistoryItems] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -24,6 +24,13 @@ const ViewHistoryButton = ({
   const [showMoreMenu, setShowMoreMenu] = useState(false);
   const [isHovered, setIsHovered] = useState(false);
   const [loadSuccess, setLoadSuccess] = useState(false);
+
+  // Expose click handler via ref
+  React.useImperativeHandle(ref, () => ({
+    click: () => {
+      handleOpenHistory();
+    }
+  }), []);
 
   const getHistoryTitle = () => {
     switch (historyType) {
@@ -909,6 +916,8 @@ const ViewHistoryButton = ({
       )}
     </>
   );
-};
+});
+
+ViewHistoryButton.displayName = 'ViewHistoryButton';
 
 export default ViewHistoryButton;

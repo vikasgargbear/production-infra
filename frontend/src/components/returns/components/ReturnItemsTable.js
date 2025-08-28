@@ -10,18 +10,31 @@ const ReturnItemsTable = ({
 }) => {
   // Calculate item amounts - ONLY for paid quantities, not free
   const calculateItemAmount = (item) => {
-    // Get paid quantity (excluding free quantity)
-    const paidQty = parseFloat(item.paid_quantity || item.quantity || 0) - parseFloat(item.free_quantity || 0);
+    // Get quantities ensuring no negative values
+    const totalQty = parseFloat(item.quantity || 0);
+    const freeQty = parseFloat(item.free_quantity || 0);
+    
+    // Use paid_quantity from backend if available, otherwise calculate
+    let paidQty;
+    if (item.paid_quantity !== undefined && item.paid_quantity !== null) {
+      paidQty = Math.max(0, parseFloat(item.paid_quantity));
+    } else {
+      // Ensure paid qty is never negative
+      paidQty = Math.max(0, totalQty - freeQty);
+    }
+    
     const returnQty = parseFloat(item.return_quantity) || 0;
     
-    // For returns, we can only return up to the paid quantity
-    const effectiveReturnQty = Math.min(returnQty, paidQty);
+    // User can return all items (paid + free), but only paid items have value
+    // Calculate how many paid items are being returned
+    const paidReturnQty = Math.min(returnQty, paidQty);
+    const freeReturnQty = Math.max(0, returnQty - paidQty);
     
     const rate = parseFloat(item.rate) || 0;
     const discountPercent = parseFloat(item.discount_percent) || 0;
     
-    // Calculate amount only for paid quantities
-    const baseAmount = effectiveReturnQty * rate;
+    // Calculate amount only for paid quantities being returned
+    const baseAmount = paidReturnQty * rate;
     const discountAmount = (baseAmount * discountPercent) / 100;
     const afterDiscount = baseAmount - discountAmount;
     
@@ -34,7 +47,11 @@ const ReturnItemsTable = ({
       taxAmount,
       totalAmount: afterDiscount + taxAmount,
       paidQty,
-      effectiveReturnQty
+      totalQty,
+      freeQty,
+      returnQty,
+      paidReturnQty,
+      freeReturnQty
     };
   };
 
@@ -83,9 +100,18 @@ const ReturnItemsTable = ({
           {items.map((item, index) => {
             const amounts = calculateItemAmount(item);
             const isManual = item.is_manual || showManualEntry;
-            const paidQty = parseFloat(item.paid_quantity || item.quantity || 0) - parseFloat(item.free_quantity || 0);
+            
+            // Use the same logic as calculateItemAmount for consistency
+            const totalQty = parseFloat(item.quantity || 0);
             const freeQty = parseFloat(item.free_quantity || 0);
-            const totalQty = paidQty + freeQty;
+            
+            // Use paid_quantity from backend if available, otherwise calculate
+            let paidQty;
+            if (item.paid_quantity !== undefined && item.paid_quantity !== null) {
+              paidQty = Math.max(0, parseFloat(item.paid_quantity));
+            } else {
+              paidQty = Math.max(0, totalQty - freeQty);
+            }
             
             return (
               <tr key={item.id || index} className={!item.selected ? 'opacity-50' : ''}>
@@ -133,12 +159,16 @@ const ReturnItemsTable = ({
                     onChange={(e) => onUpdateItem(index, 'return_quantity', e.target.value)}
                     className="w-20 px-2 py-1 text-center border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 font-medium"
                     min="0"
-                    max={isManual ? undefined : paidQty}
+                    max={isManual ? undefined : (paidQty + freeQty)}
                     disabled={!item.selected}
                   />
-                  {!isManual && item.return_quantity > paidQty && (
-                    <div className="text-xs text-red-600 mt-1">
-                      Max: {paidQty}
+                  {!isManual && (
+                    <div className="text-xs mt-1">
+                      {item.return_quantity > paidQty && (
+                        <span className="text-amber-600">
+                          Includes {Math.min(item.return_quantity - paidQty, freeQty)} free items
+                        </span>
+                      )}
                     </div>
                   )}
                 </td>
