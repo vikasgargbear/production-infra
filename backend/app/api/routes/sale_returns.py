@@ -2,8 +2,9 @@
 Sale Return API Router
 Handles returns of sold items with inventory and ledger adjustments
 """
-from typing import List, Optional
-from fastapi import APIRouter, Depends, HTTPException, Query
+from typing import List, Optional, Dict, Any
+from fastapi import APIRouter, Depends, HTTPException, Query, Body
+from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 from sqlalchemy import text
 import logging
@@ -14,6 +15,30 @@ import uuid
 from ...core.database import get_db
 from ...core.auth_utils import get_org_id_from_header
 from ..services.document_number_service import DocumentNumberService
+
+# Pydantic models for request validation
+class ReturnItem(BaseModel):
+    product_id: int
+    invoice_item_id: Optional[int] = None
+    batch_id: Optional[int] = None
+    batch_no: Optional[str] = None
+    return_quantity: float
+    quantity: Optional[float] = None  # Alias for return_quantity
+    rate: float
+    tax_percent: float = 0
+    discount_percent: float = 0
+    unit: str = "PCS"
+    return_reason: Optional[str] = None
+
+class SaleReturnCreate(BaseModel):
+    customer_id: int
+    invoice_id: Optional[int] = None
+    return_date: str
+    return_reason: str
+    return_method: str = "credit_note"
+    return_category: str = "QUALITY"
+    notes: Optional[str] = ""
+    items: List[ReturnItem]
 
 logger = logging.getLogger(__name__)
 
@@ -244,7 +269,7 @@ async def get_invoice_items_for_return(
 
 @router.post("/")
 async def create_sale_return(
-    return_data: dict,
+    return_data: SaleReturnCreate,
     db: Session = Depends(get_db),
     org_id: str = Depends(get_org_id_from_header)
 ):
@@ -252,29 +277,17 @@ async def create_sale_return(
     Create a new sale return and generate credit note if customer has GST
     """
     try:
-        # Validate required fields
-        required_fields = ["invoice_id", "customer_id", "return_date", "items"]
-        for field in required_fields:
-            if field not in return_data:
-                # Handle both old and new field names
-                if field == "invoice_id" and "original_sale_id" in return_data:
-                    return_data["invoice_id"] = return_data["original_sale_id"]
-                elif field == "customer_id" and "party_id" in return_data:
-                    return_data["customer_id"] = return_data["party_id"]
-                else:
-                    raise HTTPException(
-                        status_code=400, 
-                        detail=f"Missing required field: {field}"
-                    )
-                
-        if not return_data["items"]:
+        # Convert Pydantic model to dict for easier manipulation
+        return_dict = return_data.dict()
+        
+        if not return_dict["items"]:
             raise HTTPException(
                 status_code=400,
                 detail="At least one item must be returned"
             )
             
         # Generate return number using unified service
-        invoice_id = return_data.get("invoice_id", "")
+        invoice_id = return_dict.get("invoice_id", "")
         return_number = DocumentNumberService.generate_number(db, "sales_return", org_id)
         
         # Get customer details to check for GST
@@ -284,7 +297,7 @@ async def create_sale_return(
                 FROM parties.customers
                 WHERE customer_id = :customer_id
             """),
-            {"customer_id": return_data["customer_id"]}
+            {"customer_id": return_dict["customer_id"]}
         ).fetchone()
         
         if not customer:
@@ -300,7 +313,7 @@ async def create_sale_return(
         tax_amount = Decimal("0")
         total_amount = Decimal("0")
         
-        for item in return_data["items"]:
+        for item in return_dict["items"]:
             item_total = Decimal(str(item["quantity"])) * Decimal(str(item["rate"]))
             # Always calculate tax (all customers paid it)
             item_tax = item_total * Decimal(str(item.get("tax_percent", 0))) / 100
@@ -350,18 +363,18 @@ async def create_sale_return(
                 "org_id": org_id,
                 "branch_id": branch_id,
                 "return_number": return_number,
-                "return_date": return_data["return_date"],
-                "invoice_id": return_data.get("invoice_id") if return_data.get("invoice_id") else None,
-                "customer_id": return_data.get("customer_id", return_data.get("party_id")),
-                "reason": return_data.get("return_reason", return_data.get("reason", "Customer Return")),
-                "category": return_data.get("return_category", "QUALITY"),
+                "return_date": return_dict["return_date"],
+                "invoice_id": return_dict.get("invoice_id") if return_dict.get("invoice_id") else None,
+                "customer_id": return_dict["customer_id"],
+                "reason": return_dict.get("return_reason", "Customer Return"),
+                "category": return_dict.get("return_category", "QUALITY"),
                 "subtotal": float(subtotal),
                 "tax_amount": float(tax_amount),
                 "total_amount": float(total_amount),
                 "credit_note_no": credit_note_no,
-                "credit_note_date": return_data["return_date"] if credit_note_no else None,
+                "credit_note_date": return_dict["return_date"] if credit_note_no else None,
                 "credit_note_status": "issued" if credit_note_no else None,
-                "notes": return_data.get("notes", ""),
+                "notes": return_dict.get("notes", ""),
                 "created_by": created_by
             }
         ).fetchone()
@@ -369,10 +382,10 @@ async def create_sale_return(
         return_id = result.return_id
         
         # Create return items and update inventory
-        for item in return_data["items"]:
+        for item in return_dict["items"]:
             # Get invoice_item_id if returning from invoice
             invoice_item_id = None
-            if return_data.get("invoice_id") and item.get("invoice_item_id"):
+            if return_dict.get("invoice_id") and item.get("invoice_item_id"):
                 invoice_item_id = item["invoice_item_id"]
             
             # Calculate item values
@@ -421,7 +434,7 @@ async def create_sale_return(
                     "unit_price": float(unit_price),
                     "return_value": float(return_value),
                     "tax_amount": float(item_tax_amount),
-                    "item_return_reason": item.get("return_reason", return_data.get("return_reason", "Quality Issue")),
+                    "item_return_reason": item.get("return_reason", return_dict.get("return_reason", "Quality Issue")),
                     "disposition": "RESTOCK"  # Default disposition is to restock
                 }
             )
