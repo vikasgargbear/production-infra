@@ -45,7 +45,7 @@ def get_org_users(
                 is_active,
                 last_login_at,
                 created_at
-            FROM parties.org_users 
+            FROM master.org_users 
             WHERE 1=1
         """
         params = {}
@@ -94,7 +94,7 @@ def get_org_user(user_id: int, db: Session = Depends(get_db),
                     is_active,
                     last_login_at,
                     created_at
-                FROM parties.org_users 
+                FROM master.org_users 
                 WHERE user_id = :user_id
             """),
             {"user_id": user_id}
@@ -128,25 +128,33 @@ def create_org_user(user_data: dict, db: Session = Depends(get_db),
             
         # Prepare insert query
         query = text("""
-            INSERT INTO parties.org_users (
-                org_id, full_name, email, primary_phone as phone, employee_id,
-                password_hash, role, permissions, department,
+            INSERT INTO master.org_users (
+                org_id, first_name, last_name, email, mobile_number, employee_code,
+                username, password_hash, role, permissions, department,
                 can_view_reports, can_modify_prices, can_approve_discounts,
                 discount_limit_percent, is_active
             ) VALUES (
-                :org_id, :full_name, :email, :phone, :employee_id,
-                :password_hash, :role, :permissions, :department,
+                :org_id, :first_name, :last_name, :email, :mobile_number, :employee_code,
+                :username, :password_hash, :role, :permissions, :department,
                 :can_view_reports, :can_modify_prices, :can_approve_discounts,
                 :discount_limit_percent, :is_active
             ) RETURNING user_id
         """)
         
+        # Extract full name and split into first/last
+        full_name = user_data.get('full_name', user_data.get('fullName', ''))
+        name_parts = full_name.split(' ', 1) if full_name else ['', '']
+        first_name = name_parts[0] or user_data.get('first_name', '')
+        last_name = name_parts[1] if len(name_parts) > 1 else user_data.get('last_name', '')
+        
         params = {
             'org_id': org_id,
-            'full_name': user_data.get('full_name', user_data.get('fullName')),
+            'first_name': first_name or 'User',
+            'last_name': last_name,
             'email': user_data.get('email'),
-            'phone': user_data.get('phone'),
-            'employee_id': user_data.get('employee_id'),
+            'mobile_number': user_data.get('phone', user_data.get('mobile_number', '')),
+            'employee_code': user_data.get('employee_id', user_data.get('employee_code')),
+            'username': user_data.get('username', user_data.get('email', '')),  # Use email as username if not provided
             'password_hash': password_hash,
             'role': user_data.get('role', 'staff'),
             'permissions': user_data.get('permissions', '{}'),
@@ -184,11 +192,24 @@ def update_org_user(user_id: int, user_data: dict, db: Session = Depends(get_db)
         update_fields = []
         params = {"user_id": user_id}
         
+        # Handle full_name by splitting into first_name and last_name
+        if 'full_name' in user_data or 'fullName' in user_data:
+            full_name = user_data.get('full_name', user_data.get('fullName', ''))
+            if full_name:
+                name_parts = full_name.split(' ', 1)
+                user_data['first_name'] = name_parts[0]
+                if len(name_parts) > 1:
+                    user_data['last_name'] = name_parts[1]
+        
         field_mapping = {
-            'full_name': 'full_name',
-            'fullName': 'full_name',
+            'first_name': 'first_name',
+            'last_name': 'last_name',
             'email': 'email',
-            'phone': 'phone',
+            'phone': 'mobile_number',
+            'mobile_number': 'mobile_number',
+            'username': 'username',
+            'employee_code': 'employee_code',
+            'employee_id': 'employee_code',
             'role': 'role',
             'permissions': 'permissions',
             'department': 'department',
@@ -209,7 +230,7 @@ def update_org_user(user_id: int, user_data: dict, db: Session = Depends(get_db)
             raise HTTPException(status_code=400, detail="No valid fields to update")
         
         query = text(f"""
-            UPDATE parties.org_users 
+            UPDATE master.org_users 
             SET {', '.join(update_fields)}, updated_at = CURRENT_TIMESTAMP
             WHERE user_id = :user_id
             RETURNING user_id
@@ -236,7 +257,7 @@ def delete_org_user(user_id: int, db: Session = Depends(get_db),
     """Delete an org user"""
     try:
         result = db.execute(
-            text("DELETE FROM parties.org_users WHERE user_id = :user_id RETURNING user_id"),
+            text("DELETE FROM master.org_users WHERE user_id = :user_id RETURNING user_id"),
             {"user_id": user_id}
         )
         
@@ -265,7 +286,7 @@ def reset_password(user_id: int, db: Session = Depends(get_db),
         
         # For now, just verify user exists
         result = db.execute(
-            text("SELECT email FROM parties.org_users WHERE user_id = :user_id"),
+            text("SELECT email FROM master.org_users WHERE user_id = :user_id"),
             {"user_id": user_id}
         )
         user = result.first()
