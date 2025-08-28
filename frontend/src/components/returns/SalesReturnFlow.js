@@ -221,33 +221,25 @@ const SalesReturnFlow = ({ onClose }) => {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
       
-      // Use returns API to fetch returnable invoices with return status
-      const response = await returnsApi.getReturnableInvoices({
-        party_id: customerId,
+      // Use InvoiceApiService to fetch invoices for the customer
+      const response = await InvoiceApiService.getInvoices({
+        customer_id: customerId,
+        limit: 10,
+        offset: (invoicePage - 1) * 10,
         signal: controller.signal
       });
       
       clearTimeout(timeoutId);
       
-      if (response.data && response.data.invoices) {
+      if (response.success && response.data) {
         let allInvoices = response.data.invoices?.map(invoice => ({
           id: invoice.invoice_id,
           invoice_number: invoice.invoice_number,
           invoice_date: invoice.invoice_date,
-          total_amount: parseFloat(invoice.grand_total) || 0,
-          outstanding_amount: parseFloat(invoice.grand_total) - parseFloat(invoice.paid_amount || 0),
+          total_amount: parseFloat(invoice.final_amount || invoice.grand_total) || 0,
+          outstanding_amount: parseFloat(invoice.final_amount || invoice.grand_total) - parseFloat(invoice.paid_amount || 0),
           status: invoice.payment_status || 'pending',
-          items: invoice.items || [],
-          // Return status fields
-          has_returns: invoice.has_returns || false,
-          return_count: invoice.return_count || 0,
-          total_quantity_returned: invoice.total_quantity_returned || 0,
-          total_value_returned: invoice.total_value_returned || 0,
-          return_numbers: invoice.return_numbers,
-          credit_note_numbers: invoice.credit_note_numbers,
-          returnable_quantity: invoice.returnable_quantity || 0,
-          can_return: invoice.can_return !== false,
-          return_percentage: invoice.return_percentage || 0
+          items: invoice.items || []
         })) || [];
 
         // Apply frontend filters
@@ -1047,63 +1039,32 @@ const SalesReturnFlow = ({ onClose }) => {
                               <div
                                 key={invoice.id}
                                 onClick={() => handleInvoiceSelect(invoice)}
-                                className={`p-4 border rounded-lg transition-colors ${
-                                  invoice.can_return 
-                                    ? 'border-gray-200 hover:bg-gray-50 cursor-pointer' 
-                                    : 'border-gray-100 bg-gray-50 cursor-not-allowed opacity-75'
-                                }`}
+                                className="p-4 border border-gray-200 rounded-lg hover:bg-gray-50 cursor-pointer transition-colors"
                               >
                                 <div className="flex items-center justify-between">
-                                  <div className="flex-1">
-                                    <div className="flex items-center gap-2">
-                                      <h4 className="font-semibold text-gray-900">
-                                        Invoice #{invoice.invoice_number}
-                                      </h4>
-                                      {invoice.has_returns && (
-                                        <span className={`inline-flex items-center px-2 py-0.5 text-xs rounded-full ${
-                                          invoice.return_percentage >= 100 
-                                            ? 'bg-red-100 text-red-700' 
-                                            : 'bg-yellow-100 text-yellow-700'
-                                        }`}>
-                                          {invoice.return_percentage >= 100 ? 'Fully Returned' : `${Math.round(invoice.return_percentage)}% Returned`}
-                                        </span>
-                                      )}
-                                    </div>
+                                  <div>
+                                    <h4 className="font-semibold text-gray-900">
+                                      Invoice #{invoice.invoice_number}
+                                    </h4>
                                     <p className="text-sm text-gray-600">
                                       Date: {new Date(invoice.invoice_date).toLocaleDateString()}
                                     </p>
                                     <p className="text-sm text-gray-600">
-                                      Payment: <span className={`font-medium ${
+                                      Status: <span className={`font-medium ${
                                         invoice.status === 'paid' ? 'text-green-600' : 
                                         invoice.status === 'partial' ? 'text-yellow-600' : 'text-red-600'
                                       }`}>
                                         {invoice.status?.charAt(0).toUpperCase() + invoice.status?.slice(1) || ''}
                                       </span>
                                     </p>
-                                    {invoice.has_returns && invoice.credit_note_numbers && (
-                                      <p className="text-xs text-gray-500 mt-1">
-                                        Credit Notes: {invoice.credit_note_numbers}
-                                      </p>
-                                    )}
                                   </div>
                                   <div className="text-right">
                                     <p className="font-semibold text-gray-900">
                                       ₹{invoice.total_amount?.toFixed(2) || '0.00'}
                                     </p>
-                                    {invoice.has_returns && (
-                                      <p className="text-sm text-red-600">
-                                        Returned: ₹{invoice.total_value_returned?.toFixed(2) || '0.00'}
-                                      </p>
-                                    )}
-                                    {invoice.returnable_quantity > 0 ? (
-                                      <p className="text-xs text-green-600 mt-1">
-                                        {invoice.returnable_quantity} items returnable
-                                      </p>
-                                    ) : (
-                                      <p className="text-xs text-gray-400 mt-1">
-                                        No items returnable
-                                      </p>
-                                    )}
+                                    <p className="text-sm text-gray-600">
+                                      Outstanding: ₹{invoice.outstanding_amount?.toFixed(2) || '0.00'}
+                                    </p>
                                   </div>
                                 </div>
                               </div>
