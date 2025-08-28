@@ -314,7 +314,9 @@ async def create_sale_return(
         total_amount = Decimal("0")
         
         for item in return_dict["items"]:
-            item_total = Decimal(str(item["quantity"])) * Decimal(str(item["rate"]))
+            # Handle both return_quantity and quantity field names
+            qty = item.get("return_quantity") or item.get("quantity", 0)
+            item_total = Decimal(str(qty)) * Decimal(str(item["rate"]))
             # Always calculate tax (all customers paid it)
             item_tax = item_total * Decimal(str(item.get("tax_percent", 0))) / 100
             

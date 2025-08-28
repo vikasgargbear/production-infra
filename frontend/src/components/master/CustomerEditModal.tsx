@@ -853,35 +853,76 @@ const CustomerEditModal: React.FC<CustomerEditModalProps> = ({
           </div>
 
           {/* Footer */}
-          <div className="px-6 py-4 border-t border-gray-200 flex items-center justify-between bg-gray-50">
-            <div className="text-sm text-gray-500">
-              {customer ? `Customer ID: ${customer.customer_id}` : 'New Customer'}
-            </div>
-            <div className="flex items-center space-x-3">
-              <Button
-                type="button"
-                variant="secondary"
-                onClick={onClose}
-              >
-                Cancel
-              </Button>
-              <Button
-                type="submit"
-                variant="primary"
-                disabled={isSaving}
-              >
-                {isSaving ? (
-                  <>
-                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                    Saving...
-                  </>
-                ) : (
-                  <>
-                    <Save className="w-4 h-4 mr-2" />
-                    {customer ? 'Update' : 'Create'}
-                  </>
-                )}
-              </Button>
+          <div className="px-6 py-4 border-t border-gray-200 bg-gray-50">
+            <div className="flex items-center justify-between">
+              <div className="text-sm text-gray-500">
+                {customer ? `Customer ID: ${customer.customer_id}` : 'New Customer'}
+              </div>
+              
+              {/* Section Navigation */}
+              <div className="flex items-center space-x-2">
+                <Button
+                  type="button"
+                  variant="secondary"
+                  onClick={() => {
+                    const currentIndex = sections.findIndex(s => s.id === activeSection);
+                    if (currentIndex > 0) {
+                      setActiveSection(sections[currentIndex - 1].id);
+                    }
+                  }}
+                  disabled={sections.findIndex(s => s.id === activeSection) === 0}
+                  className="px-3 py-1.5 text-sm"
+                >
+                  ← Previous
+                </Button>
+                
+                <span className="text-sm text-gray-500 px-2">
+                  {sections.findIndex(s => s.id === activeSection) + 1} / {sections.length}
+                </span>
+                
+                <Button
+                  type="button"
+                  variant="secondary"
+                  onClick={() => {
+                    const currentIndex = sections.findIndex(s => s.id === activeSection);
+                    if (currentIndex < sections.length - 1) {
+                      setActiveSection(sections[currentIndex + 1].id);
+                    }
+                  }}
+                  disabled={sections.findIndex(s => s.id === activeSection) === sections.length - 1}
+                  className="px-3 py-1.5 text-sm"
+                >
+                  Next →
+                </Button>
+              </div>
+              
+              {/* Action Buttons */}
+              <div className="flex items-center space-x-3">
+                <Button
+                  type="button"
+                  variant="secondary"
+                  onClick={onClose}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="submit"
+                  variant="primary"
+                  disabled={isSaving}
+                >
+                  {isSaving ? (
+                    <>
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      Saving...
+                    </>
+                  ) : (
+                    <>
+                      <Save className="w-4 h-4 mr-2" />
+                      {customer ? 'Update' : 'Create'}
+                    </>
+                  )}
+                </Button>
+              </div>
             </div>
           </div>
         </form>
