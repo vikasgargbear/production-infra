@@ -156,13 +156,14 @@ async def get_returnable_invoices(
                 i.invoice_number,
                 i.invoice_date,
                 i.customer_id as party_id,
-                p.party_name,
+                c.customer_name as party_name,
                 i.final_amount as grand_total,
+                i.paid_amount,
                 COUNT(DISTINCT ii.invoice_item_id) as total_items,
                 SUM(ii.quantity) as total_quantity
             FROM sales.invoices i
-            LEFT JOIN parties p ON i.customer_id = p.party_id
-            LEFT JOIN invoice_items ii ON i.invoice_id = ii.invoice_id
+            LEFT JOIN parties.customers c ON i.customer_id = c.customer_id
+            LEFT JOIN sales.invoice_items ii ON i.invoice_id = ii.invoice_id
             WHERE i.invoice_status = 'generated'
         """
         params = {}

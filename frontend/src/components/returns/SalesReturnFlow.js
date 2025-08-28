@@ -241,6 +241,51 @@ const SalesReturnFlow = ({ onClose }) => {
           status: invoice.payment_status || 'pending',
           items: invoice.items || []
         })) || [];
+        
+        // Fetch return status for these invoices
+        try {
+          const returnStatusPromises = allInvoices.map(async (invoice) => {
+            try {
+              const returnResponse = await returnsApi.getSaleReturns({
+                invoice_id: invoice.id,
+                limit: 100
+              });
+              
+              if (returnResponse.data && returnResponse.data.returns) {
+                const returns = returnResponse.data.returns;
+                return {
+                  invoice_id: invoice.id,
+                  has_returns: returns.length > 0,
+                  return_count: returns.length,
+                  return_numbers: returns.map(r => r.return_number).join(', '),
+                  credit_note_numbers: returns.map(r => r.credit_note_no).filter(Boolean).join(', '),
+                  total_returned: returns.reduce((sum, r) => sum + (r.total_amount || 0), 0)
+                };
+              }
+              return { invoice_id: invoice.id, has_returns: false };
+            } catch (error) {
+              console.log('Could not fetch return status for invoice', invoice.id);
+              return { invoice_id: invoice.id, has_returns: false };
+            }
+          });
+          
+          const returnStatuses = await Promise.all(returnStatusPromises);
+          
+          // Merge return status with invoices
+          allInvoices = allInvoices.map(invoice => {
+            const returnStatus = returnStatuses.find(rs => rs.invoice_id === invoice.id) || {};
+            return {
+              ...invoice,
+              has_returns: returnStatus.has_returns || false,
+              return_count: returnStatus.return_count || 0,
+              return_numbers: returnStatus.return_numbers || '',
+              credit_note_numbers: returnStatus.credit_note_numbers || '',
+              total_returned: returnStatus.total_returned || 0
+            };
+          });
+        } catch (error) {
+          console.log('Could not fetch return statuses, continuing without them');
+        }
 
         // Apply frontend filters
         if (invoiceFilters.dateFrom) {
@@ -1042,10 +1087,17 @@ const SalesReturnFlow = ({ onClose }) => {
                                 className="p-4 border border-gray-200 rounded-lg hover:bg-gray-50 cursor-pointer transition-colors"
                               >
                                 <div className="flex items-center justify-between">
-                                  <div>
-                                    <h4 className="font-semibold text-gray-900">
-                                      Invoice #{invoice.invoice_number}
-                                    </h4>
+                                  <div className="flex-1">
+                                    <div className="flex items-center gap-2">
+                                      <h4 className="font-semibold text-gray-900">
+                                        Invoice #{invoice.invoice_number}
+                                      </h4>
+                                      {invoice.has_returns && (
+                                        <span className="inline-flex items-center px-2 py-0.5 text-xs rounded-full bg-yellow-100 text-yellow-700">
+                                          {invoice.return_count} Return{invoice.return_count > 1 ? 's' : ''}
+                                        </span>
+                                      )}
+                                    </div>
                                     <p className="text-sm text-gray-600">
                                       Date: {new Date(invoice.invoice_date).toLocaleDateString()}
                                     </p>
@@ -1057,6 +1109,11 @@ const SalesReturnFlow = ({ onClose }) => {
                                         {invoice.status?.charAt(0).toUpperCase() + invoice.status?.slice(1) || ''}
                                       </span>
                                     </p>
+                                    {invoice.has_returns && invoice.credit_note_numbers && (
+                                      <p className="text-xs text-gray-500 mt-1">
+                                        Credit Notes: {invoice.credit_note_numbers}
+                                      </p>
+                                    )}
                                   </div>
                                   <div className="text-right">
                                     <p className="font-semibold text-gray-900">
@@ -1065,6 +1122,11 @@ const SalesReturnFlow = ({ onClose }) => {
                                     <p className="text-sm text-gray-600">
                                       Outstanding: ₹{invoice.outstanding_amount?.toFixed(2) || '0.00'}
                                     </p>
+                                    {invoice.has_returns && (
+                                      <p className="text-xs text-orange-600 mt-1">
+                                        Returned: ₹{invoice.total_returned?.toFixed(2) || '0.00'}
+                                      </p>
+                                    )}
                                   </div>
                                 </div>
                               </div>
