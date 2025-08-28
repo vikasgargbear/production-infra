@@ -423,11 +423,9 @@ const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) =>
       {/* GST Calculator Modal */}
       {showGSTCalculator && (
         <GSTCalculator
-          isOpen={showGSTCalculator}
-          onClose={() => setShowGSTCalculator(false)}
-          onCalculate={() => {}}
-          companyGSTIN=""
-          customerGSTIN=""
+          orderData={null}
+          onCalculationComplete={() => setShowGSTCalculator(false)}
+          showDetails={true}
         />
       )}
 

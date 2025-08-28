@@ -10,7 +10,7 @@ interface Order {
   customer_id: number;
   order_date?: string;
   delivery_date?: string;
-  status?: 'pending' | 'processing' | 'shipped' | 'delivered' | 'cancelled';
+  status?: 'pending' | 'processing' | 'confirmed' | 'shipped' | 'delivered' | 'cancelled';
   payment_status?: 'pending' | 'partial' | 'completed' | 'refunded';
   payment_mode?: 'cash' | 'card' | 'upi' | 'netbanking' | 'cheque';
   total_amount?: number;

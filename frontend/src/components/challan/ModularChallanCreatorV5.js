@@ -56,6 +56,8 @@ const ModularChallanCreatorV5 = ({ open = true, onClose }) => {
   const [sameAsBilling, setSameAsBilling] = useState(true);
   const [newProductName, setNewProductName] = useState('');
   const [fetchingAddress, setFetchingAddress] = useState(false);
+  const [message, setMessage] = useState('');
+  const [messageType, setMessageType] = useState('');
 
   // Keyboard shortcuts
   useEffect(() => {

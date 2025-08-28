@@ -496,6 +496,28 @@ class InvoiceApiService {
     }
     return error?.message || 'An unexpected error occurred';
   }
+
+  /**
+   * Generate invoice from order
+   * @param {Number} orderId - Order ID
+   * @returns {Promise<Object>} Invoice details
+   */
+  static async generateFromOrder(orderId) {
+    try {
+      const response = await api.post(`/api/invoices/generate-from-order`, {
+        order_id: orderId
+      });
+      
+      if (response.data.success) {
+        return response.data.data;
+      }
+      
+      throw new Error(response.data.message || 'Failed to generate invoice from order');
+    } catch (error) {
+      console.error('Error generating invoice from order:', error);
+      throw error;
+    }
+  }
 }
 
 export default InvoiceApiService;

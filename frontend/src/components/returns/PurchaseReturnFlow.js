@@ -220,14 +220,30 @@ const PurchaseReturnFlow = ({ onClose }) => {
       if (response.data.items) {
         setReturnData(prev => ({
           ...prev,
-          items: response.data.items.map(item => ({
-            ...item,
-            id: item.purchase_item_id, // Normalize ID for ReturnItemsTable compatibility
-            return_quantity: 0,
-            max_returnable_qty: item.quantity - (item.returned_quantity || 0),
-            return_reason: '',
-            selected: false
-          }))
+          items: response.data.items.map(item => {
+            // Separate paid and free quantities
+            const totalQty = parseFloat(item.quantity || 0);
+            const freeQty = parseFloat(item.free_quantity || 0);
+            const paidQty = totalQty - freeQty;
+            
+            // Only paid quantities can be returned (free items have no value)
+            const returnedQty = parseFloat(item.returned_quantity || 0);
+            const maxReturnable = paidQty - returnedQty;
+            
+            return {
+              ...item,
+              id: item.purchase_item_id, // Normalize ID for ReturnItemsTable compatibility
+              // Quantities
+              quantity: totalQty,
+              paid_quantity: paidQty,
+              free_quantity: freeQty,
+              // Return settings
+              return_quantity: 0,
+              max_returnable_qty: maxReturnable,
+              return_reason: '',
+              selected: false
+            };
+          })
         }));
       }
     } catch (error) {

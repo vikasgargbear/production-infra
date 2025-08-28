@@ -6,13 +6,14 @@ import {
 import { productsApi } from '../../services/api';
 import { ProductEditModal } from '../global/modals';
 import { DataTable, Column } from '../global/ui/display/DataTable';
-import { GlobalLayout, ContentCard, StatsGrid } from '../global';
+import { GlobalLayout, ContentCard } from '../global';
 import Button from '../global/ui/Button';
 import Input from '../global/ui/forms/Input';
 import { useToast } from '../global/ui/feedback/Toast';
 
 interface Product {
-  id: string;
+  product_id: number;
+  id?: string; // For compatibility
   product_name: string;
   generic_name?: string;
   product_code?: string;
@@ -142,7 +143,7 @@ const ProductMaster: React.FC<ProductMasterProps> = () => {
     setEditingProduct(product);
   };
 
-  const handleDeleteProduct = async (productId: string): Promise<void> => {
+  const handleDeleteProduct = async (productId: string | number): Promise<void> => {
     if (!window.confirm('Are you sure you want to delete this product?')) {
       return;
     }
@@ -194,7 +195,7 @@ const ProductMaster: React.FC<ProductMasterProps> = () => {
     if (selectedProducts.length === filteredProducts.length) {
       setSelectedProducts([]);
     } else {
-      setSelectedProducts(filteredProducts.map(p => p.id));
+      setSelectedProducts(filteredProducts.map(p => String(p.product_id)));
     }
   };
 
@@ -275,9 +276,9 @@ const ProductMaster: React.FC<ProductMasterProps> = () => {
             <Edit2 className="w-4 h-4" />
           </button>
           <button
-            onClick={() => handleDeleteProduct(product?.id)}
+            onClick={() => handleDeleteProduct(String(product?.product_id))}
             className="text-danger-600 hover:text-danger-700 p-1 rounded transition-colors"
-            disabled={!product?.id}
+            disabled={!product?.product_id}
           >
             <Trash2 className="w-4 h-4" />
           </button>
@@ -314,37 +315,6 @@ const ProductMaster: React.FC<ProductMasterProps> = () => {
     </>
   );
 
-  // Statistics for StatsGrid
-  const statsData = [
-    {
-      label: 'Total Products',
-      value: products.length,
-      icon: Package,
-      iconBg: 'bg-blue-100',
-      iconColor: 'text-blue-600'
-    },
-    {
-      label: 'Active',
-      value: products.filter(p => p.is_active !== false).length,
-      icon: Check,
-      iconBg: 'bg-green-100',
-      iconColor: 'text-green-600'
-    },
-    {
-      label: 'Categories',
-      value: categories.length,
-      icon: Package,
-      iconBg: 'bg-purple-100',
-      iconColor: 'text-purple-600'
-    },
-    {
-      label: 'Low Stock',
-      value: 0, // TODO: Calculate from inventory
-      icon: AlertCircle,
-      iconBg: 'bg-red-100',
-      iconColor: 'text-red-600'
-    }
-  ];
 
   return (
     <GlobalLayout
@@ -353,9 +323,6 @@ const ProductMaster: React.FC<ProductMasterProps> = () => {
       icon={Package}
       headerActions={headerActions}
     >
-      {/* Statistics */}
-      <StatsGrid stats={statsData} />
-
       {/* Filters and Search */}
       <ContentCard title="Search & Filter" subtitle={null} actions={
         selectedProducts.length > 0 ? (
@@ -420,13 +387,13 @@ const ProductMaster: React.FC<ProductMasterProps> = () => {
         <DataTable
           data={filteredProducts}
           columns={columns}
-          keyField="id"
+          keyField="product_id"
           loading={isLoading}
           emptyMessage="No products found"
           emptyIcon={<Package className="w-12 h-12 text-app-400" />}
           selectable={true}
-          selectedRows={filteredProducts.filter(p => selectedProducts.includes(p.id))}
-          onSelectionChange={(selected) => setSelectedProducts(selected.map(p => p.id))}
+          selectedRows={filteredProducts.filter(p => selectedProducts.includes(String(p.product_id)))}
+          onSelectionChange={(selected) => setSelectedProducts(selected.map(p => String(p.product_id)))}
           hoverable={true}
           striped={true}
           paginated={true}

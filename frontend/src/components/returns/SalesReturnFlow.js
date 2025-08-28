@@ -511,21 +511,34 @@ const SalesReturnFlow = ({ onClose }) => {
       invoice_date: invoiceWithItems.invoice_date,
       original_invoice: invoiceWithItems,
       items: (invoiceWithItems.items || []).map((item, index) => {
-        const maxReturnable = item.quantity - (item.returned_quantity || 0);
+        // Separate paid and free quantities
+        const totalQty = parseFloat(item.quantity || 0);
+        const freeQty = parseFloat(item.free_quantity || 0);
+        const paidQty = totalQty - freeQty;
+        
+        // Only paid quantities can be returned (free items have no value)
+        const returnedQty = parseFloat(item.returned_quantity || 0);
+        const maxReturnable = paidQty - returnedQty;
+        
         return {
           ...item,
           id: item.item_id || item.id || `item-${index}`,
           product_id: item.product_id,
           product_name: item.product_name || item.product?.name,
           batch_id: item.batch_id,
+          batch_no: item.batch_no || item.batch?.batch_no,
           rate: item.rate || item.sale_price || item.price || item.unit_price,
           tax_percent: item.tax_percent || item.gst_percent || 0,  // No default GST
-          quantity: item.quantity,
-          // Auto-populate with max returnable quantity
+          discount_percent: item.discount_percent || item.discount || 0,
+          // Quantities
+          quantity: totalQty,
+          paid_quantity: paidQty,
+          free_quantity: freeQty,
+          // Auto-populate with max returnable quantity (paid only)
           return_quantity: maxReturnable,
           max_returnable_qty: maxReturnable,
           return_reason: '',
-          // Auto-select all items
+          // Auto-select items that have returnable paid quantity
           selected: maxReturnable > 0,
           hsn_code: item.hsn_code || ''
         };

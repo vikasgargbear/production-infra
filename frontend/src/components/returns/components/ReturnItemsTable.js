@@ -8,13 +8,20 @@ const ReturnItemsTable = ({
   includeGst = true,
   showManualEntry = false
 }) => {
-  // Calculate item amounts
+  // Calculate item amounts - ONLY for paid quantities, not free
   const calculateItemAmount = (item) => {
+    // Get paid quantity (excluding free quantity)
+    const paidQty = parseFloat(item.paid_quantity || item.quantity || 0) - parseFloat(item.free_quantity || 0);
     const returnQty = parseFloat(item.return_quantity) || 0;
+    
+    // For returns, we can only return up to the paid quantity
+    const effectiveReturnQty = Math.min(returnQty, paidQty);
+    
     const rate = parseFloat(item.rate) || 0;
     const discountPercent = parseFloat(item.discount_percent) || 0;
     
-    const baseAmount = returnQty * rate;
+    // Calculate amount only for paid quantities
+    const baseAmount = effectiveReturnQty * rate;
     const discountAmount = (baseAmount * discountPercent) / 100;
     const afterDiscount = baseAmount - discountAmount;
     
@@ -25,7 +32,9 @@ const ReturnItemsTable = ({
       baseAmount,
       discountAmount,
       taxAmount,
-      totalAmount: afterDiscount + taxAmount
+      totalAmount: afterDiscount + taxAmount,
+      paidQty,
+      effectiveReturnQty
     };
   };
 
@@ -41,7 +50,10 @@ const ReturnItemsTable = ({
               Product
             </th>
             <th className="px-3 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
-              Original Qty
+              Paid Qty
+            </th>
+            <th className="px-3 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
+              Free Qty
             </th>
             <th className="px-3 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
               Return Qty
@@ -71,6 +83,9 @@ const ReturnItemsTable = ({
           {items.map((item, index) => {
             const amounts = calculateItemAmount(item);
             const isManual = item.is_manual || showManualEntry;
+            const paidQty = parseFloat(item.paid_quantity || item.quantity || 0) - parseFloat(item.free_quantity || 0);
+            const freeQty = parseFloat(item.free_quantity || 0);
+            const totalQty = paidQty + freeQty;
             
             return (
               <tr key={item.id || index} className={!item.selected ? 'opacity-50' : ''}>
@@ -95,12 +110,20 @@ const ReturnItemsTable = ({
                 </td>
                 <td className="px-3 py-4 whitespace-nowrap text-center">
                   <div className="text-sm text-gray-900">
-                    {item.quantity || '-'}
+                    {paidQty || 0}
                   </div>
-                  {!isManual && item.max_returnable_qty < item.quantity && (
-                    <div className="text-xs text-orange-600">
-                      Max: {item.max_returnable_qty}
+                  {totalQty !== paidQty && (
+                    <div className="text-xs text-gray-500">
+                      Total: {totalQty}
                     </div>
+                  )}
+                </td>
+                <td className="px-3 py-4 whitespace-nowrap text-center">
+                  <div className="text-sm text-gray-900">
+                    {freeQty || 0}
+                  </div>
+                  {freeQty > 0 && (
+                    <div className="text-xs text-green-600">FREE</div>
                   )}
                 </td>
                 <td className="px-3 py-4 whitespace-nowrap">
@@ -110,9 +133,14 @@ const ReturnItemsTable = ({
                     onChange={(e) => onUpdateItem(index, 'return_quantity', e.target.value)}
                     className="w-20 px-2 py-1 text-center border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 font-medium"
                     min="0"
-                    max={isManual ? undefined : item.max_returnable_qty}
+                    max={isManual ? undefined : paidQty}
                     disabled={!item.selected}
                   />
+                  {!isManual && item.return_quantity > paidQty && (
+                    <div className="text-xs text-red-600 mt-1">
+                      Max: {paidQty}
+                    </div>
+                  )}
                 </td>
                 <td className="px-3 py-4 whitespace-nowrap">
                   <input
