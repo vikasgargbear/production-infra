@@ -455,6 +455,7 @@ async def create_sale_return(
                     return_amount, tax_amount, total_amount,
                     cgst_amount, sgst_amount, igst_amount,
                     credit_note_number, credit_note_date, credit_note_status,
+                    adjusted_amount, pending_amount,
                     notes, created_by
                 ) VALUES (
                     :org_id, :branch_id, :return_number, :return_date,
@@ -464,6 +465,7 @@ async def create_sale_return(
                     :subtotal, :tax_amount, :total_amount,
                     :cgst_amount, :sgst_amount, :igst_amount,
                     :credit_note_no, :credit_note_date, :credit_note_status,
+                    0, :total_amount,
                     :notes, :created_by
                 )
                 RETURNING return_id
