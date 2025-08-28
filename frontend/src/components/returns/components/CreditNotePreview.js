@@ -2,7 +2,7 @@ import React from 'react';
 import { FileText, Calendar, User, Building2, Phone, Mail } from 'lucide-react';
 import useCompanyDetails from '../../../hooks/useCompanyDetails';
 
-const CreditNotePreview = ({ returnData, customer, invoice, includeGst = true, customerDues = 0 }) => {
+const CreditNotePreview = ({ returnData, customer, invoice, includeGst = true, customerDues = 0, returnMethod = 'credit_note' }) => {
   const { companyDetails } = useCompanyDetails();
   const formatDate = (date) => {
     return new Date(date).toLocaleDateString('en-IN', {
@@ -125,12 +125,19 @@ const CreditNotePreview = ({ returnData, customer, invoice, includeGst = true, c
               )}
               <div className="space-y-1">
                 <p className="text-lg font-semibold text-gray-700">
-                  {customer.gst_number ? 'CN' : 'RN'} No: {returnData.credit_note_no || returnData.return_no}
+                  {returnMethod === 'credit_note' ? 'Credit Note' : returnMethod === 'replacement' ? 'Replacement Note' : 'Refund Note'} No: {returnData.credit_note_no || returnData.return_no}
                 </p>
                 <p className="text-gray-600">Date: {formatDate(returnData.return_date)}</p>
                 {invoice && <p className="text-gray-600">Original Invoice: {invoice.invoice_no || invoice.invoice_number}</p>}
                 {!invoice && <p className="text-gray-600">Manual Return - No Invoice Reference</p>}
-                <p className="text-gray-600">Invoice Date: {formatDate(invoice.invoice_date)}</p>
+                {invoice && <p className="text-gray-600">Invoice Date: {formatDate(invoice.invoice_date)}</p>}
+                <p className="text-gray-600">
+                  Return Method: <span className="font-semibold">
+                    {returnMethod === 'credit_note' ? 'Store Credit' : 
+                     returnMethod === 'replacement' ? 'Product Replacement' : 
+                     'Refund to Original Payment'}
+                  </span>
+                </p>
               </div>
             </div>
           </div>

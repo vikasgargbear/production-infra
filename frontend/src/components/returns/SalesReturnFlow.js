@@ -41,6 +41,7 @@ const SalesReturnFlow = ({ onClose }) => {
     items: [],
     return_reason: '',
     return_reason_notes: '',
+    return_method: 'credit_note', // Default to credit note
     subtotal_amount: 0,
     tax_amount: 0,
     total_amount: 0,
@@ -847,9 +848,9 @@ const SalesReturnFlow = ({ onClose }) => {
                     />
                   </div>
                   
-                  {/* Right side - Return Reason and Notes */}
+                  {/* Right side - Return Reason and Method */}
                   <div className="flex-1">
-                    <div className="grid grid-cols-2 gap-4">
+                    <div className="grid grid-cols-3 gap-4">
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-2">
                           Return Reason <span className="text-red-500">*</span>
@@ -865,13 +866,27 @@ const SalesReturnFlow = ({ onClose }) => {
                       </div>
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-2">
-                          Notes (Optional)
+                          Return Method <span className="text-red-500">*</span>
+                        </label>
+                        <select
+                          value={returnData.return_method || 'credit_note'}
+                          onChange={(e) => setReturnData(prev => ({ ...prev, return_method: e.target.value }))}
+                          className="w-full px-4 py-3 text-lg border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                        >
+                          <option value="credit_note">Credit Note (Recommended)</option>
+                          <option value="replacement">Replacement</option>
+                          <option value="refund">Refund (Requires Approval)</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          Additional Notes
                         </label>
                         <input
                           type="text"
                           value={returnData.return_reason_notes}
                           onChange={(e) => setReturnData(prev => ({ ...prev, return_reason_notes: e.target.value }))}
-                          placeholder="Additional details..."
+                          placeholder="Optional details..."
                           className="w-full px-4 py-3 text-lg border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                         />
                       </div>
@@ -1341,6 +1356,7 @@ const SalesReturnFlow = ({ onClose }) => {
               invoice={selectedInvoice}
               includeGst={returnData.include_gst}
               customerDues={customerDues}
+              returnMethod={returnData.return_method}
             />
             
             {/* Notes Section */}

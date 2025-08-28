@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { 
   Package, Search, Plus, Edit2, Trash2, 
-  Download, Upload, AlertCircle, Check, Loader2
+  Download, Upload, AlertCircle, Check, Loader2,
+  AlertTriangle
 } from 'lucide-react';
 import { productsApi } from '../../services/api';
 import { ProductEditModal } from '../global/modals';
@@ -144,17 +145,39 @@ const ProductMaster: React.FC<ProductMasterProps> = () => {
   };
 
   const handleDeleteProduct = async (productId: string | number): Promise<void> => {
-    if (!window.confirm('Are you sure you want to delete this product?')) {
+    // Find the product to check current status and if it has stock
+    const product = products.find(p => p.product_id === Number(productId));
+    const isCurrentlyActive = product?.is_active !== false;
+    
+    // Check if product has stock - warn more strongly
+    const hasStock = product?.current_stock && product.current_stock > 0;
+    
+    const action = isCurrentlyActive ? 'deactivate' : 'reactivate';
+    let confirmMessage = isCurrentlyActive 
+      ? 'Are you sure you want to deactivate this product? The product will be marked as inactive but all data, inventory records, and transaction history will be preserved.'
+      : 'Are you sure you want to reactivate this product?';
+    
+    if (hasStock && isCurrentlyActive) {
+      confirmMessage = `WARNING: This product has ${product.current_stock} units in stock!\n\n${confirmMessage}\n\nExisting stock will remain but the product won't be available for new transactions.`;
+    }
+    
+    if (!window.confirm(confirmMessage)) {
       return;
     }
 
     try {
-      await productsApi.delete(productId);
-      toast.deleted('Product');
+      // Toggle active status (soft delete/restore) 
+      // For products, we need to be extra careful
+      const updateData = {
+        ...product,
+        is_active: !isCurrentlyActive
+      };
+      await productsApi.update(productId, updateData);
+      toast.success(`Product ${action}d successfully`);
       loadProducts();
     } catch (err) {
-      console.error('Error deleting product:', err);
-      toast.error('Failed to delete product. It may be in use by other records.');
+      console.error(`Error ${action}ing product:`, err);
+      toast.error(`Failed to ${action} product. It may be in use by active transactions.`);
     }
   };
 
@@ -168,18 +191,34 @@ const ProductMaster: React.FC<ProductMasterProps> = () => {
   const handleBulkDelete = async (): Promise<void> => {
     if (selectedProducts.length === 0) return;
     
-    if (!window.confirm(`Are you sure you want to delete ${selectedProducts.length} products?`)) {
+    // Check if any selected products have stock
+    const productsWithStock = products.filter(p => 
+      selectedProducts.includes(String(p.product_id)) && 
+      p.current_stock && p.current_stock > 0
+    );
+    
+    let confirmMessage = `Are you sure you want to deactivate ${selectedProducts.length} products? They will be marked as inactive but all data, inventory records, and transaction history will be preserved.`;
+    
+    if (productsWithStock.length > 0) {
+      confirmMessage = `WARNING: ${productsWithStock.length} of these products have stock!\n\n${confirmMessage}`;
+    }
+    
+    if (!window.confirm(confirmMessage)) {
       return;
     }
 
     try {
-      await Promise.all(selectedProducts.map(id => productsApi.delete(id)));
-      toast.deleted('Products', selectedProducts.length);
+      // Bulk soft delete - mark all as inactive
+      await Promise.all(selectedProducts.map(id => {
+        const product = products.find(p => p.product_id === Number(id));
+        return productsApi.update(id, {...product, is_active: false});
+      }));
+      toast.success(`${selectedProducts.length} products deactivated successfully`);
       setSelectedProducts([]);
       loadProducts();
     } catch (err) {
-      console.error('Error bulk deleting products:', err);
-      toast.error('Failed to delete some products.');
+      console.error('Error bulk deactivating products:', err);
+      toast.error('Failed to deactivate some products.');
     }
   };
 
@@ -277,10 +316,23 @@ const ProductMaster: React.FC<ProductMasterProps> = () => {
           </button>
           <button
             onClick={() => handleDeleteProduct(String(product?.product_id))}
-            className="text-danger-600 hover:text-danger-700 p-1 rounded transition-colors"
+            className={`${
+              product?.is_active !== false 
+                ? 'text-warning-600 hover:text-warning-700' 
+                : 'text-success-600 hover:text-success-700'
+            } p-1 rounded transition-colors`}
             disabled={!product?.product_id}
+            title={product?.is_active !== false ? 'Deactivate Product' : 'Reactivate Product'}
           >
-            <Trash2 className="w-4 h-4" />
+            {product?.is_active !== false ? (
+              product?.current_stock > 0 ? (
+                <AlertTriangle className="w-4 h-4" />
+              ) : (
+                <Trash2 className="w-4 h-4" />
+              )
+            ) : (
+              <Check className="w-4 h-4" />
+            )}
           </button>
         </div>
       ),
@@ -332,7 +384,7 @@ const ProductMaster: React.FC<ProductMasterProps> = () => {
             onClick={handleBulkDelete}
           >
             <Trash2 className="w-4 h-4 mr-2" />
-            Delete ({selectedProducts.length})
+            Deactivate ({selectedProducts.length})
           </Button>
         ) : null
       } icon={Search}>

@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { 
   X, Save, Loader2, User, Phone, Building, CreditCard, Shield
 } from 'lucide-react';
-import { customersApi } from '../../services/api';
+import { customersApi, metadataApi } from '../../services/api';
 import { useToast } from '../global/ui/feedback/Toast';
 import Input from '../global/ui/forms/Input';
 import Button from '../global/ui/Button';
@@ -80,6 +80,16 @@ const CustomerEditModal: React.FC<CustomerEditModalProps> = ({
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [activeSection, setActiveSection] = useState('basic');
+  
+  // Metadata for dropdowns - loaded from backend
+  const [metadata, setMetadata] = useState({
+    customerTypes: [],
+    customerCategories: [],
+    creditRatings: [],
+    paymentTerms: [],
+    paymentModes: [],
+    states: []
+  });
 
   // Reset form when modal opens/closes or customer changes
   useEffect(() => {
@@ -87,8 +97,39 @@ const CustomerEditModal: React.FC<CustomerEditModalProps> = ({
       setFormData(getInitialFormData());
       setActiveSection('basic');
       setError(null);
+      loadMetadata();
     }
   }, [isOpen, customer]);
+  
+  // Load metadata for dropdowns
+  const loadMetadata = async () => {
+    try {
+      // Try to load from backend, fallback to sensible defaults if API fails
+      const [creditRatings, paymentTerms, paymentModes] = await Promise.all([
+        metadataApi.getCreditRatings().catch(() => ({ data: [] })),
+        metadataApi.getPaymentTerms().catch(() => ({ data: [] })),
+        metadataApi.getPaymentModes().catch(() => ({ data: [] }))
+      ]);
+      
+      setMetadata({
+        // If backend doesn't provide, use minimal defaults
+        customerTypes: [
+          { value: 'retail', label: 'Retail' },
+          { value: 'wholesale', label: 'Wholesale' },
+          { value: 'hospital', label: 'Hospital' },
+          { value: 'clinic', label: 'Clinic' },
+          { value: 'pharmacy', label: 'Pharmacy' }
+        ],
+        customerCategories: [], // Let user type their own
+        creditRatings: creditRatings.data?.length > 0 ? creditRatings.data : [],
+        paymentTerms: paymentTerms.data?.length > 0 ? paymentTerms.data : [],
+        paymentModes: paymentModes.data?.length > 0 ? paymentModes.data : [],
+        states: [] // Could load from backend or let user type
+      });
+    } catch (err) {
+      console.log('Using defaults for metadata');
+    }
+  };
 
   const handleInputChange = (field: string, value: any) => {
     setFormData(prev => ({
@@ -294,17 +335,19 @@ const CustomerEditModal: React.FC<CustomerEditModalProps> = ({
                       <label className="block text-sm font-medium text-gray-700 mb-1">
                         Category
                       </label>
-                      <select
+                      <Input
+                        type="text"
                         value={formData.customer_category}
                         onChange={(e) => handleInputChange('customer_category', e.target.value)}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                      >
-                        <option value="PREMIUM">Premium</option>
-                        <option value="GOLD">Gold</option>
-                        <option value="SILVER">Silver</option>
-                        <option value="REGULAR">Regular</option>
-                        <option value="NEW">New</option>
-                      </select>
+                        placeholder="e.g., Premium, Regular, VIP"
+                        list="customer-categories"
+                      />
+                      <datalist id="customer-categories">
+                        <option value="Premium" />
+                        <option value="Regular" />
+                        <option value="VIP" />
+                        <option value="New" />
+                      </datalist>
                     </div>
 
                     <div className="flex items-center space-x-4">
@@ -621,54 +664,81 @@ const CustomerEditModal: React.FC<CustomerEditModalProps> = ({
                       <label className="block text-sm font-medium text-gray-700 mb-1">
                         Credit Rating
                       </label>
-                      <select
-                        value={formData.credit_rating}
-                        onChange={(e) => handleInputChange('credit_rating', e.target.value)}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                      >
-                        <option value="AAA">AAA - Excellent</option>
-                        <option value="AA">AA - Very Good</option>
-                        <option value="A">A - Good</option>
-                        <option value="B">B - Average</option>
-                        <option value="C">C - Below Average</option>
-                        <option value="D">D - Poor</option>
-                      </select>
+                      {metadata.creditRatings.length > 0 ? (
+                        <select
+                          value={formData.credit_rating}
+                          onChange={(e) => handleInputChange('credit_rating', e.target.value)}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                        >
+                          <option value="">Select rating</option>
+                          {metadata.creditRatings.map((rating: any) => (
+                            <option key={rating.value || rating} value={rating.value || rating}>
+                              {rating.label || rating}
+                            </option>
+                          ))}
+                        </select>
+                      ) : (
+                        <Input
+                          type="text"
+                          value={formData.credit_rating}
+                          onChange={(e) => handleInputChange('credit_rating', e.target.value)}
+                          placeholder="e.g., A, B, C or custom rating"
+                        />
+                      )}
                     </div>
 
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">
                         Payment Terms
                       </label>
-                      <select
-                        value={formData.payment_terms}
-                        onChange={(e) => handleInputChange('payment_terms', e.target.value)}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                      >
-                        <option value="IMMEDIATE">Immediate</option>
-                        <option value="NET7">Net 7 Days</option>
-                        <option value="NET15">Net 15 Days</option>
-                        <option value="NET30">Net 30 Days</option>
-                        <option value="NET45">Net 45 Days</option>
-                        <option value="NET60">Net 60 Days</option>
-                      </select>
+                      {metadata.paymentTerms.length > 0 ? (
+                        <select
+                          value={formData.payment_terms}
+                          onChange={(e) => handleInputChange('payment_terms', e.target.value)}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                        >
+                          <option value="">Select terms</option>
+                          {metadata.paymentTerms.map((term: any) => (
+                            <option key={term.value || term} value={term.value || term}>
+                              {term.label || term}
+                            </option>
+                          ))}
+                        </select>
+                      ) : (
+                        <Input
+                          type="text"
+                          value={formData.payment_terms}
+                          onChange={(e) => handleInputChange('payment_terms', e.target.value)}
+                          placeholder="e.g., NET30, COD, Advance"
+                        />
+                      )}
                     </div>
 
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">
                         Preferred Payment Mode
                       </label>
-                      <select
-                        value={formData.preferred_payment_mode}
-                        onChange={(e) => handleInputChange('preferred_payment_mode', e.target.value)}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                      >
-                        <option value="cash">Cash</option>
-                        <option value="credit">Credit</option>
-                        <option value="cheque">Cheque</option>
-                        <option value="upi">UPI</option>
-                        <option value="card">Card</option>
-                        <option value="neft">NEFT/RTGS</option>
-                      </select>
+                      {metadata.paymentModes.length > 0 ? (
+                        <select
+                          value={formData.preferred_payment_mode}
+                          onChange={(e) => handleInputChange('preferred_payment_mode', e.target.value)}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                        >
+                          <option value="">Select mode</option>
+                          {metadata.paymentModes.map((mode: any) => (
+                            <option key={mode.value || mode} value={mode.value || mode}>
+                              {mode.label || mode}
+                            </option>
+                          ))}
+                        </select>
+                      ) : (
+                        <Input
+                          type="text"
+                          value={formData.preferred_payment_mode}
+                          onChange={(e) => handleInputChange('preferred_payment_mode', e.target.value)}
+                          placeholder="e.g., Cash, UPI, Credit"
+                        />
+                      )}
                     </div>
                   </div>
 
