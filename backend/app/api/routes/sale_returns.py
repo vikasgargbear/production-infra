@@ -457,6 +457,29 @@ async def create_sale_return(
             tax_percent = Decimal(str(item.get("tax_percent", 0)))
             item_tax_amount = return_value * tax_percent / 100
             
+            # Get batch_id from batch_number if not provided
+            batch_id = item.get("batch_id")
+            batch_number = item.get("batch_no") or item.get("batch_number")
+            
+            # If we have batch_number but no batch_id, try to look it up
+            if batch_number and not batch_id:
+                batch_result = db.execute(
+                    text("""
+                        SELECT batch_id 
+                        FROM inventory.batches 
+                        WHERE batch_number = :batch_number 
+                        AND product_id = :product_id
+                        LIMIT 1
+                    """),
+                    {
+                        "batch_number": batch_number,
+                        "product_id": item["product_id"]
+                    }
+                ).fetchone()
+                
+                if batch_result:
+                    batch_id = batch_result.batch_id
+            
             # Insert return item using correct schema
             db.execute(
                 text("""
@@ -480,8 +503,8 @@ async def create_sale_return(
                     "return_id": return_id,
                     "invoice_item_id": invoice_item_id,
                     "product_id": item["product_id"],
-                    "batch_id": item.get("batch_id"),
-                    "batch_number": item.get("batch_no", item.get("batch_number")),
+                    "batch_id": batch_id,
+                    "batch_number": batch_number,
                     "return_quantity": float(return_qty),
                     "uom": item.get("unit", item.get("uom", "PCS")),
                     "damaged_quantity": 0,  # Assume all items are saleable unless specified
@@ -495,17 +518,17 @@ async def create_sale_return(
             )
             
             # Update batch stock (increase stock for returns)
-            if item.get("batch_id"):
+            if batch_id:
                 db.execute(
                     text("""
                         UPDATE inventory.batches 
                         SET quantity_available = quantity_available + :quantity,
-                            quantity_returned = quantity_returned + :quantity
+                            quantity_returned = COALESCE(quantity_returned, 0) + :quantity
                         WHERE batch_id = :batch_id
                     """),
                     {
-                        "quantity": item["quantity"],
-                        "batch_id": item["batch_id"]
+                        "quantity": float(return_qty),
+                        "batch_id": batch_id
                     }
                 )
             # Note: If no batch_id, we skip stock update as we can't track non-batch items
