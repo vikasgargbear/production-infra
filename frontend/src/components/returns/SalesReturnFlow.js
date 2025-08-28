@@ -285,7 +285,7 @@ const SalesReturnFlow = ({ onClose }) => {
     } catch (error) {
       // Don't show error for aborted requests (component unmount or new request)
       if (error.name === 'AbortError') {
-        console.log('Invoice fetch aborted');
+        // Invoice fetch aborted
         setLoadingInvoices(false);
         return;
       }
@@ -365,7 +365,7 @@ const SalesReturnFlow = ({ onClose }) => {
 
   // Handle customer selection
   const handleCustomerSelect = async (customer) => {
-    console.log('Customer selected:', customer);
+    // Customer selected successfully
     
     // Handle customer clear/removal
     if (!customer) {
@@ -442,24 +442,32 @@ const SalesReturnFlow = ({ onClose }) => {
   const addManualItem = (product) => {
     if (!product) return;
     
+    // Get the selling price from product data
+    const sellingPrice = parseFloat(product.sale_price || product.selling_price || product.mrp || 0);
+    const gstPercent = parseFloat(product.gst_percent || product.tax_rate || 18);
+    
     const newItem = {
       id: `manual-${manualItemCounter}`,
       product_id: product.product_id,
       product_name: product.product_name || product.name,
-      batch_id: null,
-      rate: 0,
-      tax_percent: 18, // Default GST rate
-      quantity: 0, // Will be set manually
-      return_quantity: 0,
+      batch_id: product.batch_id || null,
+      batch_no: product.batch_no || '',
+      rate: sellingPrice, // Use actual selling price from backend
+      tax_percent: gstPercent, // Use actual GST from product
+      quantity: 1, // Default quantity for manual entry
+      paid_quantity: 1, // For manual items, assume all are paid
+      free_quantity: 0,
+      return_quantity: 1, // Default return 1 item
       max_returnable_qty: 999999, // No limit for manual items
       return_reason: '',
       selected: true,
-      hsn_code: product.hsn_code || '',
-      unit: product.unit || '',  // No default unit
+      hsn_code: product.hsn_code || product.hsn || '',
+      unit: product.unit || product.uom || 'PCS',
       manufacturer: product.manufacturer || '',
       // Additional fields for manual entry
       is_manual: true,
-      available_stock: 0 // Not relevant for returns
+      available_stock: product.current_stock || product.stock || 0,
+      discount_percent: 0 // Default no discount for manual items
     };
 
     setReturnData(prev => ({
@@ -517,8 +525,7 @@ const SalesReturnFlow = ({ onClose }) => {
     
     // Debug: log the invoice data to see what fields we have
     if (invoiceWithItems.items && invoiceWithItems.items.length > 0) {
-      console.log('Invoice item fields:', Object.keys(invoiceWithItems.items[0]));
-      console.log('First item data:', invoiceWithItems.items[0]);
+      // Successfully loaded invoice items
     }
     
     setReturnData(prev => ({
@@ -608,30 +615,24 @@ const SalesReturnFlow = ({ onClose }) => {
 
   // Update return item - handle both index and id based updates
   const updateReturnItem = (indexOrId, field, value) => {
-    console.log('updateReturnItem called:', { indexOrId, field, value });
+    // Updating return item
     
     // For returns module, we want to update return_quantity when quantity is changed
     const actualField = (field === 'quantity') ? 'return_quantity' : field;
     
     setReturnData(prev => {
-      console.log('Current items before update:', prev.items);
+      // Process item update
       const updatedItems = prev.items.map((item, index) => {
         // Check if it's an index (number) or id match
         if (index === indexOrId || item.id === indexOrId) {
-          console.log('Found item to update:', { 
-            id: item.id,
-            index: index,
-            currentValue: item[actualField], 
-            newValue: value,
-            field: actualField
-          });
+          // Found item to update
           const updatedItem = { ...item, [actualField]: value };
-          console.log('Updated item:', updatedItem);
+          // Item updated
           return updatedItem;
         }
         return item;
       });
-      console.log('All items after update:', updatedItems);
+      // Update complete
       return {
         ...prev,
         items: updatedItems
@@ -1116,7 +1117,8 @@ const SalesReturnFlow = ({ onClose }) => {
                         Search Products
                       </label>
                       <ProductSearchSimple
-                        onSelect={addManualItem}
+                        onAddItem={addManualItem}
+                        showBatchSelection={false}
                         placeholder="Search products by name, code..."
                         className="w-full"
                       />

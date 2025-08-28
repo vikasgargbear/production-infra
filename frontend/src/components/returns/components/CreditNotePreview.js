@@ -128,7 +128,8 @@ const CreditNotePreview = ({ returnData, customer, invoice, includeGst = true, c
                   {customer.gst_number ? 'CN' : 'RN'} No: {returnData.credit_note_no || returnData.return_no}
                 </p>
                 <p className="text-gray-600">Date: {formatDate(returnData.return_date)}</p>
-                <p className="text-gray-600">Original Invoice: {invoice.invoice_no}</p>
+                {invoice && <p className="text-gray-600">Original Invoice: {invoice.invoice_no || invoice.invoice_number}</p>}
+                {!invoice && <p className="text-gray-600">Manual Return - No Invoice Reference</p>}
                 <p className="text-gray-600">Invoice Date: {formatDate(invoice.invoice_date)}</p>
               </div>
             </div>

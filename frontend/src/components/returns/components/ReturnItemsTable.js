@@ -241,22 +241,6 @@ const ReturnItemsTable = ({
             </tr>
           )}
         </tbody>
-        <tfoot className="bg-gray-50">
-          <tr>
-            <td colSpan={includeGst ? 7 : 6} className="px-3 py-3 text-right font-medium text-gray-700">
-              Total:
-            </td>
-            <td className="px-3 py-3 text-right">
-              <div className="text-lg font-bold text-gray-900">
-                ₹{items.reduce((sum, item) => {
-                  if (!item.selected) return sum;
-                  return sum + calculateItemAmount(item).totalAmount;
-                }, 0).toFixed(2)}
-              </div>
-            </td>
-            {onRemoveItem && <td></td>}
-          </tr>
-        </tfoot>
       </table>
     </div>
   );

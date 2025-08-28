@@ -23,6 +23,7 @@ import { authApi } from './modules/auth.api';
 import { batchesApi } from './modules/batches.api';
 import { challansApi as challansApiModule } from './modules/challans.api';
 import { customersApi as customersApiModule } from './modules/customers.api';
+import { suppliersApi as suppliersApiModule } from './modules/suppliers.api';
 import { deliveryApi } from './modules/delivery.api';
 import { ledgerApi } from './modules/ledger.api';
 import { notesApi } from './modules/notes.api';
@@ -54,7 +55,7 @@ export {
   // Primary APIs with search methods (from TypeScript wrapper)
   customerAPI,
   productAPI,
-  supplierAPI,
+  // supplierAPI exported below as suppliersApi to avoid duplicate
   invoiceAPI,
   ordersAPI,
   purchasesAPI,
@@ -93,7 +94,8 @@ export {
   customerAPI as customersApiOld,
   customersApiModule as customersApi,
   productAPI as productsApi,
-  supplierAPI as suppliersApi,
+  suppliersApiModule as suppliersApi,
+  supplierAPI, // Export supplierAPI here only once
   invoiceAPI as invoicesApi,
   purchasesAPI as purchasesAPIAlias,  // Renamed to avoid conflict with modules/purchases.api
   purchasesAPI as purchaseApi,

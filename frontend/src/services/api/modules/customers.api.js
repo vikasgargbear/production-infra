@@ -7,11 +7,13 @@ const ENDPOINTS = API_CONFIG.ENDPOINTS.CUSTOMERS;
 export const customersApi = {
   // Get all customers
   getAll: (params = {}) => {
+    // Ensure trailing slash for backend compatibility
+    const url = ENDPOINTS.BASE.endsWith('/') ? ENDPOINTS.BASE : ENDPOINTS.BASE + '/';
     // Support search parameter for backward compatibility
     if (params && params.search) {
-      return apiHelpers.get(ENDPOINTS.BASE, { params });
+      return apiHelpers.get(url, { params });
     }
-    return apiHelpers.get(ENDPOINTS.BASE, { params });
+    return apiHelpers.get(url, { params });
   },
   
   // Get customer by ID

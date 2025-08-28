@@ -7,7 +7,9 @@ const ENDPOINTS = API_CONFIG.ENDPOINTS.SUPPLIERS;
 export const suppliersApi = {
   // Get all suppliers
   getAll: (params = {}) => {
-    return apiHelpers.get(ENDPOINTS.BASE, { params });
+    // Ensure trailing slash for backend compatibility
+    const url = ENDPOINTS.BASE.endsWith('/') ? ENDPOINTS.BASE : ENDPOINTS.BASE + '/';
+    return apiHelpers.get(url, { params });
   },
   
   // Get supplier by ID
