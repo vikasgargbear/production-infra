@@ -70,21 +70,40 @@ def create_user(user_data: dict, db: Session = Depends(get_db),
     org_id: str = Depends(get_org_id_from_header)):
     """Create a new user"""
     try:
-        # Insert into master.org_users
+        # Extract full name and split into first/last
+        full_name = user_data.get('full_name', user_data.get('fullName', ''))
+        name_parts = full_name.split(' ', 1) if full_name else ['', '']
+        first_name = name_parts[0] or user_data.get('username', 'User')
+        last_name = name_parts[1] if len(name_parts) > 1 else ''
+        
+        # Insert into master.org_users (full_name is GENERATED, so we use first_name and last_name)
         result = db.execute(
             text("""
-                INSERT INTO master.org_users (username, email, full_name, is_active, org_id, created_at, updated_at)
-                VALUES (:username, :email, :full_name, true, :org_id, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+                INSERT INTO master.org_users (
+                    username, email, first_name, last_name, mobile_number, 
+                    employee_code, role, is_active, org_id, 
+                    created_at, updated_at
+                )
+                VALUES (
+                    :username, :email, :first_name, :last_name, :mobile_number,
+                    :employee_code, :role, true, :org_id, 
+                    CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+                )
                 RETURNING user_id, username, email, full_name
             """),
             {
                 "username": user_data.get("username"),
                 "email": user_data.get("email"),
-                "full_name": user_data.get("full_name", user_data.get("username")),
-                "org_id": "550e8400-e29b-41d4-a716-446655440000"  # Default org_id
+                "first_name": first_name,
+                "last_name": last_name,
+                "mobile_number": user_data.get("phone", user_data.get("mobile_number", "")),
+                "employee_code": user_data.get("employee_id", user_data.get("employee_code")),
+                "role": user_data.get("role", "staff"),
+                "org_id": org_id  # Use org_id from header, not hardcoded
             }
         )
         new_user = result.first()
+        db.commit()
         
         # Return user data
         return dict(new_user._mapping)
@@ -111,18 +130,35 @@ def update_user(user_id: int, user_data: dict, db: Session = Depends(get_db),
         update_fields = []
         params = {"user_id": user_id}
         
+        # Handle full_name by splitting into first_name and last_name
+        if 'full_name' in user_data or 'fullName' in user_data:
+            full_name = user_data.get('full_name', user_data.get('fullName', ''))
+            if full_name:
+                name_parts = full_name.split(' ', 1)
+                update_fields.append("first_name = :first_name")
+                params["first_name"] = name_parts[0]
+                if len(name_parts) > 1:
+                    update_fields.append("last_name = :last_name")
+                    params["last_name"] = name_parts[1]
+                else:
+                    update_fields.append("last_name = :last_name")
+                    params["last_name"] = ''
+        
         if 'username' in user_data:
             update_fields.append("username = :username")
             params["username"] = user_data['username']
         if 'email' in user_data:
             update_fields.append("email = :email")
             params["email"] = user_data['email']
-        if 'full_name' in user_data:
-            update_fields.append("full_name = :full_name")
-            params["full_name"] = user_data['full_name']
+        if 'phone' in user_data or 'mobile_number' in user_data:
+            update_fields.append("mobile_number = :mobile_number")
+            params["mobile_number"] = user_data.get('phone', user_data.get('mobile_number'))
         if 'is_active' in user_data:
             update_fields.append("is_active = :is_active")
             params["is_active"] = user_data['is_active']
+        if 'role' in user_data:
+            update_fields.append("role = :role")
+            params["role"] = user_data['role']
             
         if not update_fields:
             raise HTTPException(status_code=400, detail="No fields to update")

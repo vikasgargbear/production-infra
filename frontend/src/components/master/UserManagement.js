@@ -216,9 +216,6 @@ const UserManagement = ({ open, onClose }) => {
     try {
       // Prepare data for both table structures
       const userData = {
-        // REQUIRED: org_id for org_users table
-        org_id: localStorage.getItem('pharma_org_id') || sessionStorage.getItem('pharma_org_id'), // Get org_id from storage
-        
         // Common fields
         email: formData.email,
         role: formData.role,
@@ -232,7 +229,7 @@ const UserManagement = ({ open, onClose }) => {
         // Basic user fields
         username: formData.username,
         employee_id: formData.username, // Use username as employee_id
-        phone: null,
+        phone: formData.phone || '',
         department: 'General',
         can_view_reports: formData.role === 'admin' || formData.role === 'manager',
         can_modify_prices: formData.role === 'admin' || formData.role === 'manager',
