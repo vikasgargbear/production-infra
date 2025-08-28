@@ -380,7 +380,7 @@ def get_company_settings(
             SELECT 
                 setting_key, 
                 setting_value
-            FROM settings.organization_settings
+            FROM system_config.system_settings
             WHERE org_id = :org_id
         """
         
@@ -440,7 +440,7 @@ def update_company_settings(
                 value = json.dumps(value)
             
             query = """
-                INSERT INTO settings.organization_settings (org_id, setting_key, setting_value)
+                INSERT INTO system_config.system_settings (org_id, setting_key, setting_value)
                 VALUES (:org_id, :key, :value)
                 ON CONFLICT (org_id, setting_key)
                 DO UPDATE SET setting_value = :value, updated_at = CURRENT_TIMESTAMP

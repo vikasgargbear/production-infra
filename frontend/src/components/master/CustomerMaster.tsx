@@ -115,18 +115,27 @@ const CustomerMaster: React.FC<CustomerMasterProps> = () => {
   };
 
   const handleDeleteCustomer = async (customerId: string | number): Promise<void> => {
-    if (!window.confirm('Are you sure you want to deactivate this customer? The customer will be marked as inactive but data will be preserved.')) {
+    // Find the customer to check current status
+    const customer = customers.find(c => c.customer_id === Number(customerId));
+    const isCurrentlyActive = customer?.is_active !== false;
+    
+    const action = isCurrentlyActive ? 'deactivate' : 'reactivate';
+    const confirmMessage = isCurrentlyActive 
+      ? 'Are you sure you want to deactivate this customer? The customer will be marked as inactive but all data will be preserved.'
+      : 'Are you sure you want to reactivate this customer?';
+    
+    if (!window.confirm(confirmMessage)) {
       return;
     }
 
     try {
-      // Instead of deleting, mark as inactive (soft delete)
-      await customersApi.update(customerId, { is_active: false });
-      toast.success('Customer deactivated successfully');
+      // Toggle active status (soft delete/restore)
+      await customersApi.update(customerId, { is_active: !isCurrentlyActive });
+      toast.success(`Customer ${action}d successfully`);
       loadCustomers();
     } catch (err) {
-      console.error('Error deactivating customer:', err);
-      toast.error('Failed to deactivate customer.');
+      console.error(`Error ${action}ing customer:`, err);
+      toast.error(`Failed to ${action} customer.`);
     }
   };
 
@@ -309,10 +318,19 @@ const CustomerMaster: React.FC<CustomerMasterProps> = () => {
           </button>
           <button
             onClick={() => handleDeleteCustomer(customer?.customer_id)}
-            className="text-danger-600 hover:text-danger-700 p-1 rounded transition-colors"
+            className={`${
+              customer?.is_active !== false 
+                ? 'text-warning-600 hover:text-warning-700' 
+                : 'text-success-600 hover:text-success-700'
+            } p-1 rounded transition-colors`}
             disabled={!customer?.customer_id}
+            title={customer?.is_active !== false ? 'Deactivate Customer' : 'Reactivate Customer'}
           >
-            <Trash2 className="w-4 h-4" />
+            {customer?.is_active !== false ? (
+              <Trash2 className="w-4 h-4" />
+            ) : (
+              <Check className="w-4 h-4" />
+            )}
           </button>
         </div>
       ),
@@ -366,7 +384,7 @@ const CustomerMaster: React.FC<CustomerMasterProps> = () => {
               onClick={handleBulkDelete}
             >
               <Trash2 className="w-4 h-4 mr-2" />
-              Delete ({selectedCustomers.length})
+              Deactivate ({selectedCustomers.length})
             </Button>
           ) : null
         } 
