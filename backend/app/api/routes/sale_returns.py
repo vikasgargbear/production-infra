@@ -158,7 +158,8 @@ async def get_returnable_invoices(
                 i.customer_id as party_id,
                 p.party_name,
                 i.final_amount as grand_total,
-                COUNT(ii.invoice_item_id) as total_items
+                COUNT(DISTINCT ii.invoice_item_id) as total_items,
+                SUM(ii.quantity) as total_quantity
             FROM sales.invoices i
             LEFT JOIN parties p ON i.customer_id = p.party_id
             LEFT JOIN invoice_items ii ON i.invoice_id = ii.invoice_id
@@ -185,21 +186,45 @@ async def get_returnable_invoices(
         
         result = []
         for inv in invoices:
-            # Check how much has already been returned
-            returned_query = """
-                SELECT COALESCE(SUM(sri.return_quantity), 0) as total_returned
+            # Get comprehensive return information
+            return_info_query = """
+                SELECT 
+                    COUNT(DISTINCT sr.return_id) as return_count,
+                    COALESCE(SUM(sri.return_quantity), 0) as total_quantity_returned,
+                    COALESCE(SUM(sri.return_value), 0) as total_value_returned,
+                    COALESCE(SUM(sri.saleable_quantity), 0) as saleable_qty_returned,
+                    COALESCE(SUM(sri.damaged_quantity), 0) as damaged_qty_returned,
+                    STRING_AGG(DISTINCT sr.return_number, ', ') as return_numbers,
+                    STRING_AGG(DISTINCT sr.credit_note_number, ', ') as credit_note_numbers
                 FROM sales.sales_returns sr
                 JOIN sales.sales_return_items sri ON sr.return_id = sri.return_id
-                WHERE sr.order_id = :invoice_id AND sr.return_type = 'SALES'
+                WHERE sr.invoice_id = :invoice_id
             """
-            total_returned = db.execute(
-                text(returned_query), 
+            return_info = db.execute(
+                text(return_info_query), 
                 {"invoice_id": inv.invoice_id}
-            ).scalar()
+            ).fetchone()
             
             invoice_dict = dict(inv._mapping)
-            invoice_dict["has_returns"] = total_returned > 0
-            invoice_dict["can_return"] = True  # Can be refined based on business rules
+            invoice_dict["has_returns"] = return_info.return_count > 0 if return_info else False
+            invoice_dict["return_count"] = return_info.return_count if return_info else 0
+            invoice_dict["total_quantity_returned"] = float(return_info.total_quantity_returned) if return_info else 0
+            invoice_dict["total_value_returned"] = float(return_info.total_value_returned) if return_info else 0
+            invoice_dict["return_numbers"] = return_info.return_numbers if return_info and return_info.return_numbers else None
+            invoice_dict["credit_note_numbers"] = return_info.credit_note_numbers if return_info and return_info.credit_note_numbers else None
+            
+            # Calculate if more returns are possible
+            total_qty = float(inv.total_quantity) if inv.total_quantity else 0
+            qty_returned = float(return_info.total_quantity_returned) if return_info else 0
+            invoice_dict["returnable_quantity"] = total_qty - qty_returned
+            invoice_dict["can_return"] = invoice_dict["returnable_quantity"] > 0
+            
+            # Add return percentage for UI display
+            if total_qty > 0:
+                invoice_dict["return_percentage"] = (qty_returned / total_qty) * 100
+            else:
+                invoice_dict["return_percentage"] = 0
+                
             result.append(invoice_dict)
             
         return {"invoices": result}
@@ -227,37 +252,69 @@ async def get_invoice_items_for_return(
         if not invoice:
             raise HTTPException(status_code=404, detail="Invoice not found")
             
-        # Get items with return info
+        # Get items with comprehensive return info
         items_query = """
             SELECT 
-                si.*,
+                ii.*,
                 p.product_name,
                 p.hsn_code,
-                COALESCE(SUM(sri.return_quantity), 0) as returned_quantity
+                COALESCE(ret.total_returned, 0) as returned_quantity,
+                COALESCE(ret.saleable_returned, 0) as saleable_returned,
+                COALESCE(ret.damaged_returned, 0) as damaged_returned,
+                ret.return_numbers,
+                ret.last_return_date
             FROM sales.invoice_items ii
             LEFT JOIN inventory.products p ON ii.product_id = p.product_id
             LEFT JOIN (
-                SELECT r.product_id, r.batch_id, SUM(r.return_quantity) as return_quantity
-                FROM sales.sales_return_items r
-                JOIN sales.sales_returns sr ON r.return_id = sr.return_id  
-                WHERE sr.order_id = :invoice_id AND sr.return_type = 'SALES'
-                GROUP BY r.product_id, r.batch_id
-            ) sri ON (sri.product_id = ii.product_id AND (sri.batch_id = ii.batch_id OR (sri.batch_id IS NULL AND ii.batch_id IS NULL)))
+                SELECT 
+                    sri.product_id,
+                    sri.batch_id,
+                    SUM(sri.return_quantity) as total_returned,
+                    SUM(sri.saleable_quantity) as saleable_returned,
+                    SUM(sri.damaged_quantity) as damaged_returned,
+                    STRING_AGG(DISTINCT sr.return_number, ', ') as return_numbers,
+                    MAX(sr.return_date) as last_return_date
+                FROM sales.sales_return_items sri
+                JOIN sales.sales_returns sr ON sri.return_id = sr.return_id
+                WHERE sr.invoice_id = :invoice_id
+                GROUP BY sri.product_id, sri.batch_id
+            ) ret ON (ret.product_id = ii.product_id 
+                     AND (ret.batch_id = ii.batch_id OR (ret.batch_id IS NULL AND ii.batch_id IS NULL)))
             WHERE ii.invoice_id = :invoice_id
-            GROUP BY ii.invoice_item_id, p.product_name, p.hsn_code
         """
         
-        items = db.execute(text(items_query), {"invoice_id": invoice_id, "invoice_pattern": f"%Invoice: {invoice_id}%"}).fetchall()
+        items = db.execute(text(items_query), {"invoice_id": invoice_id}).fetchall()
         
         result_items = []
         for item in items:
             item_dict = dict(item._mapping)
-            item_dict["returnable_quantity"] = item.quantity - item.returned_quantity
+            
+            # Calculate returnable quantity (original - returned)
+            original_qty = float(item.quantity) if item.quantity else 0
+            returned_qty = float(item.returned_quantity) if item.returned_quantity else 0
+            
+            item_dict["original_quantity"] = original_qty
+            item_dict["returned_quantity"] = returned_qty
+            item_dict["returnable_quantity"] = max(0, original_qty - returned_qty)
             item_dict["can_return"] = item_dict["returnable_quantity"] > 0
+            
+            # Add return status
+            if returned_qty > 0:
+                if returned_qty >= original_qty:
+                    item_dict["return_status"] = "FULLY_RETURNED"
+                else:
+                    item_dict["return_status"] = "PARTIALLY_RETURNED"
+            else:
+                item_dict["return_status"] = "NOT_RETURNED"
+            
+            # Include return history
+            item_dict["return_numbers"] = item.return_numbers
+            item_dict["last_return_date"] = item.last_return_date
+            
             result_items.append(item_dict)
             
         return {
-            "sale": dict(sale._mapping),
+            "invoice": dict(invoice._mapping),
             "items": result_items
         }
         
@@ -480,6 +537,29 @@ async def create_sale_return(
                 if batch_result:
                     batch_id = batch_result.batch_id
             
+            # Determine disposition and quantities based on return reason
+            item_return_reason = item.get("reason") or item.get("return_reason") or return_dict.get("return_reason", "Quality Issue")
+            
+            # Define reason categories that result in damaged/unsaleable items
+            damaged_reasons = [
+                "damaged", "broken", "expired", "expiry", "quality issue", "defective", 
+                "contaminated", "leaking", "melted", "manufacturing defect"
+            ]
+            
+            # Check if the reason indicates damaged/unsaleable items
+            is_damaged = any(reason in item_return_reason.lower() for reason in damaged_reasons)
+            
+            if is_damaged:
+                # Items are damaged and cannot be resold
+                damaged_qty = float(return_qty)
+                saleable_qty = 0
+                disposition = "DESTROY"  # or "QUARANTINE" based on business rules
+            else:
+                # Items are saleable and can be restocked
+                damaged_qty = 0
+                saleable_qty = float(return_qty)
+                disposition = "RESTOCK"
+            
             # Insert return item using correct schema
             db.execute(
                 text("""
@@ -507,27 +587,28 @@ async def create_sale_return(
                     "batch_number": batch_number,
                     "return_quantity": float(return_qty),
                     "uom": item.get("unit", item.get("uom", "PCS")),
-                    "damaged_quantity": 0,  # Assume all items are saleable unless specified
-                    "saleable_quantity": float(return_qty),  # All returned items are saleable by default
+                    "damaged_quantity": damaged_qty,
+                    "saleable_quantity": saleable_qty,
                     "unit_price": float(unit_price),
                     "return_value": float(return_value),
                     "tax_amount": float(item_tax_amount),
-                    "item_return_reason": item.get("return_reason", return_dict.get("return_reason", "Quality Issue")),
-                    "disposition": "RESTOCK"  # Default disposition is to restock
+                    "item_return_reason": item_return_reason,
+                    "disposition": disposition
                 }
             )
             
-            # Update batch stock (increase stock for returns)
-            if batch_id:
+            # Update batch stock (only increase for saleable items)
+            if batch_id and saleable_qty > 0:
                 db.execute(
                     text("""
                         UPDATE inventory.batches 
-                        SET quantity_available = quantity_available + :quantity,
-                            quantity_returned = COALESCE(quantity_returned, 0) + :quantity
+                        SET quantity_available = quantity_available + :saleable_qty,
+                            quantity_returned = COALESCE(quantity_returned, 0) + :total_qty
                         WHERE batch_id = :batch_id
                     """),
                     {
-                        "quantity": float(return_qty),
+                        "saleable_qty": saleable_qty,  # Only saleable items go back to available stock
+                        "total_qty": float(return_qty),  # Track total returned (damaged + saleable)
                         "batch_id": batch_id
                     }
                 )
