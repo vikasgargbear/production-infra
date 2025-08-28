@@ -539,8 +539,8 @@ class SalesOrdersAPI {
         unit_price: parseFloat(item.unit_price) || 0,
         discount_percent: parseFloat(item.discount_percent) || 0,
         gst_percent: parseFloat(item.gst_percent || item.tax_percent) || 0
-      })),
-      org_id: localStorage.getItem('orgId') || orderData.org_id
+      }))
+      // org_id now comes from auth header, not request body
     };
   }
 

@@ -42,7 +42,7 @@ class BatchBase(BaseModel):
 
 class BatchCreate(BatchBase):
     """Schema for creating a batch"""
-    org_id: UUID = Field(..., description="Organization ID")
+    org_id: Optional[UUID] = Field(None, description="Organization ID - optional, derived from token")
 
 
 class BatchUpdate(BaseModel):
@@ -93,7 +93,7 @@ class StockMovementBase(BaseModel):
 
 class StockMovementCreate(StockMovementBase):
     """Schema for recording stock movement"""
-    org_id: UUID = Field(..., description="Organization ID")
+    org_id: Optional[UUID] = Field(None, description="Organization ID - optional, derived from token")
 
 
 class StockMovementResponse(StockMovementBase):
