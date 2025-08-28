@@ -80,7 +80,7 @@ export const returnsApi = {
       throw new Error(validation.errors.join(', '));
     }
     
-    const response = await apiClient.post('sale-returns', transformedData);
+    const response = await apiClient.post('sale-returns/', transformedData);
     
     if (response.data) {
       response.data = returnsDataTransformer.transformBackendSaleReturn(response.data);
@@ -109,7 +109,7 @@ export const returnsApi = {
 
   // Get sale returns
   getSaleReturns: async (params = {}) => {
-    const response = await apiClient.get('sale-returns', { params });
+    const response = await apiClient.get('sale-returns/', { params });
     
     if (response.data && response.data.returns) {
       response.data.returns = response.data.returns.map(ret => 

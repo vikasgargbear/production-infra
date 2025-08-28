@@ -817,33 +817,78 @@ const ProductMaster = ({
           </div>
 
           {/* Footer */}
-          <div className="px-6 py-4 border-t border-gray-200 flex justify-end space-x-3">
-            <button
-              type="button"
-              onClick={onClose}
-              className="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200"
-            >
-              Cancel
-            </button>
-            {mode !== 'view' && (
-              <button
-                type="submit"
-                disabled={isSaving}
-                className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center space-x-2 disabled:opacity-50"
-              >
-                {isSaving ? (
-                  <>
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                    <span>Saving...</span>
-                  </>
-                ) : (
-                  <>
-                    <Save className="w-4 h-4" />
-                    <span>Save</span>
-                  </>
+          <div className="px-6 py-4 border-t border-gray-200">
+            <div className="flex items-center justify-between">
+              {/* Product Info */}
+              <div className="text-sm text-gray-500">
+                {product ? `Product ID: ${product.product_id}` : 'New Product'}
+              </div>
+              
+              {/* Section Navigation */}
+              <div className="flex items-center space-x-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    const currentIndex = sections.findIndex(s => s.id === activeSection);
+                    if (currentIndex > 0) {
+                      setActiveSection(sections[currentIndex - 1].id);
+                    }
+                  }}
+                  disabled={sections.findIndex(s => s.id === activeSection) === 0}
+                  className="px-3 py-1.5 text-sm bg-gray-100 text-gray-700 rounded hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  ← Previous
+                </button>
+                
+                <span className="text-sm text-gray-500 px-2">
+                  {sections.findIndex(s => s.id === activeSection) + 1} / {sections.length}
+                </span>
+                
+                <button
+                  type="button"
+                  onClick={() => {
+                    const currentIndex = sections.findIndex(s => s.id === activeSection);
+                    if (currentIndex < sections.length - 1) {
+                      setActiveSection(sections[currentIndex + 1].id);
+                    }
+                  }}
+                  disabled={sections.findIndex(s => s.id === activeSection) === sections.length - 1}
+                  className="px-3 py-1.5 text-sm bg-gray-100 text-gray-700 rounded hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Next →
+                </button>
+              </div>
+              
+              {/* Action Buttons */}
+              <div className="flex items-center space-x-3">
+                <button
+                  type="button"
+                  onClick={onClose}
+                  className="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200"
+                >
+                  Cancel
+                </button>
+                {mode !== 'view' && (
+                  <button
+                    type="submit"
+                    disabled={isSaving}
+                    className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center space-x-2 disabled:opacity-50"
+                  >
+                    {isSaving ? (
+                      <>
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        <span>Saving...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Save className="w-4 h-4" />
+                        <span>Save</span>
+                      </>
+                    )}
+                  </button>
                 )}
-              </button>
-            )}
+              </div>
+            </div>
           </div>
         </form>
       </div>
