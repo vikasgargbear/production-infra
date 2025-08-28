@@ -309,31 +309,60 @@ async def create_sale_return(
             tax_amount += item_tax
             total_amount += item_total + item_tax
             
-        # Create return record using sales.sales_returns table
-        # Note: order_id can be NULL for direct invoice returns
+        # Get branch_id from first available source
+        branch_id = 1  # Default branch
+        try:
+            branch_result = db.execute(
+                text("SELECT branch_id FROM master.org_branches WHERE org_id = :org_id LIMIT 1"),
+                {"org_id": org_id}
+            ).fetchone()
+            if branch_result:
+                branch_id = branch_result.branch_id
+        except:
+            pass
+            
+        # Get current user_id (created_by) - for now use default
+        created_by = 1  # Default user, should be from session
+        
+        # Create return record using sales.sales_returns table with correct columns
         result = db.execute(
             text("""
                 INSERT INTO sales.sales_returns (
-                    org_id, return_number, return_date,
-                    return_type, order_id, customer_id,
-                    return_reason, return_status,
-                    total_return_amount, credit_note_number
+                    org_id, branch_id, return_number, return_date,
+                    return_type, invoice_id, customer_id,
+                    return_reason, return_category,
+                    approval_required, approval_status,
+                    return_amount, tax_amount, total_amount,
+                    credit_note_number, credit_note_date, credit_note_status,
+                    notes, created_by
                 ) VALUES (
-                    :org_id, :return_number, :return_date,
-                    'SALES', NULL, :customer_id,
-                    :reason, 'approved',
-                    :total_amount, :credit_note_no
+                    :org_id, :branch_id, :return_number, :return_date,
+                    'SALES', :invoice_id, :customer_id,
+                    :reason, :category,
+                    false, 'approved',
+                    :subtotal, :tax_amount, :total_amount,
+                    :credit_note_no, :credit_note_date, :credit_note_status,
+                    :notes, :created_by
                 )
                 RETURNING return_id
             """),
             {
-                "org_id": org_id,  # Default org
+                "org_id": org_id,
+                "branch_id": branch_id,
                 "return_number": return_number,
                 "return_date": return_data["return_date"],
+                "invoice_id": return_data.get("invoice_id") if return_data.get("invoice_id") else None,
                 "customer_id": return_data.get("customer_id", return_data.get("party_id")),
-                "reason": return_data.get("return_reason", return_data.get("reason", "")),
-                "total_amount": total_amount,
-                "credit_note_no": credit_note_no
+                "reason": return_data.get("return_reason", return_data.get("reason", "Customer Return")),
+                "category": return_data.get("return_category", "QUALITY"),
+                "subtotal": float(subtotal),
+                "tax_amount": float(tax_amount),
+                "total_amount": float(total_amount),
+                "credit_note_no": credit_note_no,
+                "credit_note_date": return_data["return_date"] if credit_note_no else None,
+                "credit_note_status": "issued" if credit_note_no else None,
+                "notes": return_data.get("notes", ""),
+                "created_by": created_by
             }
         ).fetchone()
         
@@ -341,25 +370,59 @@ async def create_sale_return(
         
         # Create return items and update inventory
         for item in return_data["items"]:
-            # Insert return item using existing sales.sales_return_items table
+            # Get invoice_item_id if returning from invoice
+            invoice_item_id = None
+            if return_data.get("invoice_id") and item.get("invoice_item_id"):
+                invoice_item_id = item["invoice_item_id"]
+            
+            # Calculate item values
+            return_qty = Decimal(str(item.get("return_quantity", item.get("quantity", 0))))
+            unit_price = Decimal(str(item.get("rate", 0)))
+            discount_percent = Decimal(str(item.get("discount_percent", 0)))
+            
+            # Calculate return value after discount
+            base_value = return_qty * unit_price
+            discount_amount = base_value * discount_percent / 100
+            return_value = base_value - discount_amount
+            
+            # Calculate tax
+            tax_percent = Decimal(str(item.get("tax_percent", 0)))
+            item_tax_amount = return_value * tax_percent / 100
+            
+            # Insert return item using correct schema
             db.execute(
                 text("""
                     INSERT INTO sales.sales_return_items (
-                        return_id, product_id,
-                        batch_id, return_quantity, 
-                        original_price, return_price
+                        return_id, invoice_item_id, product_id,
+                        batch_id, batch_number,
+                        return_quantity, uom,
+                        damaged_quantity, saleable_quantity,
+                        unit_price, return_value, tax_amount,
+                        item_return_reason, disposition
                     ) VALUES (
-                        :return_id, :product_id,
-                        :batch_id, :quantity, 
-                        :rate, :rate
+                        :return_id, :invoice_item_id, :product_id,
+                        :batch_id, :batch_number,
+                        :return_quantity, :uom,
+                        :damaged_quantity, :saleable_quantity,
+                        :unit_price, :return_value, :tax_amount,
+                        :item_return_reason, :disposition
                     )
                 """),
                 {
                     "return_id": return_id,
+                    "invoice_item_id": invoice_item_id,
                     "product_id": item["product_id"],
                     "batch_id": item.get("batch_id"),
-                    "quantity": item["quantity"],
-                    "rate": Decimal(str(item["rate"]))
+                    "batch_number": item.get("batch_no", item.get("batch_number")),
+                    "return_quantity": float(return_qty),
+                    "uom": item.get("unit", item.get("uom", "PCS")),
+                    "damaged_quantity": 0,  # Assume all items are saleable unless specified
+                    "saleable_quantity": float(return_qty),  # All returned items are saleable by default
+                    "unit_price": float(unit_price),
+                    "return_value": float(return_value),
+                    "tax_amount": float(item_tax_amount),
+                    "item_return_reason": item.get("return_reason", return_data.get("return_reason", "Quality Issue")),
+                    "disposition": "RESTOCK"  # Default disposition is to restock
                 }
             )
             

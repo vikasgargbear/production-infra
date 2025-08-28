@@ -130,7 +130,14 @@ const CustomerMaster: React.FC<CustomerMasterProps> = () => {
 
     try {
       // Toggle active status (soft delete/restore)
-      await customersApi.update(customerId, { is_active: !isCurrentlyActive });
+      // Need to send all required fields, not just is_active
+      const updateData = {
+        ...customer,
+        is_active: !isCurrentlyActive,
+        // Ensure customer_type is lowercase
+        customer_type: customer?.customer_type?.toLowerCase() || 'retail'
+      };
+      await customersApi.update(customerId, updateData);
       toast.success(`Customer ${action}d successfully`);
       loadCustomers();
     } catch (err) {
