@@ -23,11 +23,6 @@ def validate_ifsc(ifsc_code: str) -> bool:
 
 router = APIRouter(tags=["Bank Accounts"])
 
-@router.get("/test")
-def test_endpoint():
-    """Test if router is working"""
-    return {"message": "Bank accounts router is working", "status": "ok"}
-
 @router.get("/")
 def get_bank_accounts(
     db: Session = Depends(get_db),

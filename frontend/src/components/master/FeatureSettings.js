@@ -174,9 +174,9 @@ const FeatureSettings = ({ open, onClose }) => {
   }
 
   return (
-    <div className="flex-1 flex flex-col bg-gray-50">
+    <div className="flex flex-col h-full bg-gray-50">
       {/* Header */}
-      <div className="bg-white border-b border-gray-200 px-6 py-4">
+      <div className="flex-shrink-0 bg-white border-b border-gray-200 px-6 py-4">
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-3">
             <Cog className="w-6 h-6 text-gray-700" />

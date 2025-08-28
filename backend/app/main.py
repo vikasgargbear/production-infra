@@ -25,15 +25,10 @@ from .api.routes import (
 )
 
 # Import bank accounts directly
-try:
-    from .api.routes.bank_accounts import router as bank_accounts_router
-    print("✅ Bank accounts router imported successfully")
-except Exception as e:
-    print(f"❌ Failed to import bank accounts router: {e}")
-    bank_accounts_router = None
+from .api.routes.bank_accounts import router as bank_accounts_router
 
 # Import additional routers not in __init__.py
-from .api.routes import stock_receive, enterprise_delivery_challan, inventory_batches, create_user, delivery_challan, stock_dashboard, sales_orders, grn, journal_entries, expense_claims
+from .api.routes import stock_receive, enterprise_delivery_challan, inventory_batches, create_user, delivery_challan, stock_dashboard, sales_orders, grn, journal_entries, expense_claims, settings
 # Import new APIs
 from .api.routes import master_settings, schemes_discounts, loyalty_points, compliance, metadata, master_data_crud
 # Import comprehensive enterprise API
@@ -61,7 +56,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="Pharma ERP API",
     description="Enterprise Pharma ERP System API",
-    version="2.1.0",  # Debug bank accounts router loading
+    version="2.2.0",  # Added settings API and fixed bank accounts
     lifespan=lifespan
 )
 
@@ -95,9 +90,9 @@ app.router.redirect_slashes = False
 async def root():
     return {
         "message": "Pharma ERP API",
-        "version": "2.1.0",
+        "version": "2.2.0",
         "status": "healthy",
-        "deployment": "bank-accounts-debug",
+        "deployment": "settings-api-added",
         "endpoints": {
             "health": "/health",
             "docs": "/docs",
@@ -116,13 +111,6 @@ async def health_check():
         "version": "2.0.0"
     }
 
-@app.get("/debug/routers")
-async def debug_routers():
-    """Debug endpoint to check which routers are loaded"""
-    return {
-        "bank_accounts_loaded": bank_accounts_router is not None,
-        "routes": [route.path for route in app.routes] if hasattr(app, 'routes') else []
-    }
 
 # Consolidated API prefix - no version numbers
 from fastapi import APIRouter
@@ -138,11 +126,8 @@ api.include_router(payments.router, prefix="/payments", tags=["Payments"])
 api.include_router(dashboard.router, prefix="/dashboard", tags=["Dashboard"])
 api.include_router(billing.router, prefix="/billing", tags=["Billing"])
 api.include_router(company.router, prefix="/company", tags=["Company"])
-if bank_accounts_router:
-    api.include_router(bank_accounts_router, prefix="/bank-accounts", tags=["Bank Accounts"])
-    print("✅ Bank accounts router registered")
-else:
-    print("❌ Bank accounts router not available")
+api.include_router(settings.router, prefix="/settings", tags=["Settings"])
+api.include_router(bank_accounts_router, prefix="/bank-accounts", tags=["Bank Accounts"])
 # Register additional routes from __init__.py
 api.include_router(orders_router, tags=["Orders"])
 api.include_router(invoices_router, tags=["Invoices"])

@@ -4,7 +4,7 @@ export const bankAccountsAPI = {
   // Get all bank accounts for the organization
   getBankAccounts: async () => {
     try {
-      const response = await apiClient.get('/bank-accounts');
+      const response = await apiClient.get('/bank-accounts/');
       return response.data;
     } catch (error) {
       console.error('Error fetching bank accounts:', error);
@@ -15,7 +15,7 @@ export const bankAccountsAPI = {
   // Create a new bank account
   createBankAccount: async (accountData) => {
     try {
-      const response = await apiClient.post('/bank-accounts', accountData);
+      const response = await apiClient.post('/bank-accounts/', accountData);
       return response.data;
     } catch (error) {
       console.error('Error creating bank account:', error);
