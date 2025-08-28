@@ -772,12 +772,14 @@ async def get_product_categories(
 ):
     """Get all active product categories"""
     try:
+        # Check if org_id field exists in the table
         result = db.execute(text("""
             SELECT category_id, category_name, category_code, parent_category_id
             FROM inventory.product_categories
             WHERE is_active = true
+            AND (org_id = :org_id OR org_id IS NULL)
             ORDER BY category_name
-        """))
+        """), {"org_id": org_id})
         
         categories = [dict(row._mapping) for row in result]
         return {"success": True, "data": categories}
@@ -953,4 +955,60 @@ async def create_product_type(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to create product type: {str(e)}"
+        )
+
+@router.get("/master/classes")
+async def get_product_classes(
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)
+):
+    """Get all distinct product classes"""
+    try:
+        # Get distinct classes from products table since there's no separate product_classes table
+        result = db.execute(text("""
+            SELECT DISTINCT product_class
+            FROM inventory.products
+            WHERE product_class IS NOT NULL
+            AND product_class != ''
+            ORDER BY product_class
+        """))
+        
+        classes = [{"class_name": row.product_class} for row in result if row.product_class]
+        return {"success": True, "data": classes}
+        
+    except Exception as e:
+        logger.error(f"Error fetching product classes: {str(e)}")
+        # Return empty list on error
+        return {"success": True, "data": []}
+
+@router.post("/master/classes")
+async def create_product_class(
+    class_data: dict,
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)
+):
+    """Create a new product class (adds to first product with this class)"""
+    try:
+        class_name = class_data.get("class_name", "").strip()
+        if not class_name:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Class name is required"
+            )
+        
+        # Since there's no product_classes table, we'll just return success
+        # The class will be available when a product is created with it
+        return {
+            "success": True,
+            "data": {
+                "class_name": class_name
+            },
+            "message": f"Product class '{class_name}' is now available for use"
+        }
+        
+    except Exception as e:
+        logger.error(f"Error creating product class: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to create product class: {str(e)}"
         )

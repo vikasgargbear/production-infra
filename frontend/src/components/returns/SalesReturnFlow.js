@@ -515,6 +515,12 @@ const SalesReturnFlow = ({ onClose }) => {
       }
     }
     
+    // Debug: log the invoice data to see what fields we have
+    if (invoiceWithItems.items && invoiceWithItems.items.length > 0) {
+      console.log('Invoice item fields:', Object.keys(invoiceWithItems.items[0]));
+      console.log('First item data:', invoiceWithItems.items[0]);
+    }
+    
     setReturnData(prev => ({
       ...prev,
       invoice_id: invoiceWithItems.invoice_id || invoiceWithItems.id,
@@ -522,14 +528,15 @@ const SalesReturnFlow = ({ onClose }) => {
       invoice_date: invoiceWithItems.invoice_date,
       original_invoice: invoiceWithItems,
       items: (invoiceWithItems.items || []).map((item, index) => {
-        // Use backend data directly - don't calculate
+        // Use backend data directly - base_quantity is the paid quantity
         const totalQty = parseFloat(item.quantity || 0);
         const freeQty = parseFloat(item.free_quantity || 0);
         
-        // If backend has paid_quantity, use it directly
-        // Otherwise calculate but ensure it's never negative
+        // Backend sends base_quantity as the actual paid quantity
         let paidQty;
-        if (item.paid_quantity !== undefined && item.paid_quantity !== null) {
+        if (item.base_quantity !== undefined && item.base_quantity !== null) {
+          paidQty = parseFloat(item.base_quantity);
+        } else if (item.paid_quantity !== undefined && item.paid_quantity !== null) {
           paidQty = parseFloat(item.paid_quantity);
         } else {
           // Calculate paid qty, but ensure it's not negative
@@ -554,10 +561,34 @@ const SalesReturnFlow = ({ onClose }) => {
           product_id: item.product_id,
           product_name: item.product_name || item.product?.name,
           batch_id: item.batch_id,
-          batch_no: item.batch_no || item.batch?.batch_no,
-          rate: item.rate || item.sale_price || item.price || item.unit_price,
-          tax_percent: item.tax_percent || item.gst_percent || 0,  // No default GST
-          discount_percent: item.discount_percent || item.discount || 0,
+          batch_no: item.batch_number || item.batch_no || item.batch?.batch_no,
+          batch_number: item.batch_number,
+          manufacturing_date: item.manufacturing_date,
+          expiry_date: item.expiry_date,
+          rate: parseFloat(item.unit_price || item.rate || item.sale_price || item.price || 0),
+          // GST calculation from actual backend data
+          // Backend sends cgst_rate and sgst_rate as strings like "6.00"
+          tax_percent: (() => {
+            // Try direct tax_percent first
+            if (item.tax_percent) return parseFloat(item.tax_percent);
+            if (item.gst_percent) return parseFloat(item.gst_percent);
+            
+            // Calculate from CGST + SGST (most common case)
+            const cgst = parseFloat(item.cgst_rate || item.cgst_percent || 0);
+            const sgst = parseFloat(item.sgst_rate || item.sgst_percent || 0);
+            const igst = parseFloat(item.igst_rate || item.igst_percent || 0);
+            
+            // Return whichever is available
+            if (cgst || sgst) return cgst + sgst;
+            if (igst) return igst;
+            
+            return 0; // Default to 0 if no tax info found
+          })(),
+          cgst_rate: parseFloat(item.cgst_rate || item.cgst_percent || 0),
+          sgst_rate: parseFloat(item.sgst_rate || item.sgst_percent || 0),
+          igst_rate: parseFloat(item.igst_rate || item.igst_percent || 0),
+          discount_percent: parseFloat(item.discount_percent || item.discount || 0),
+          discount_amount: parseFloat(item.discount_amount || 0),
           // Quantities - use actual values
           quantity: totalQty,
           paid_quantity: paidQty,
