@@ -850,7 +850,7 @@ const SalesReturnFlow = ({ onClose }) => {
                   
                   {/* Right side - Return Reason and Method */}
                   <div className="flex-1">
-                    <div className="grid grid-cols-3 gap-4">
+                    <div className="grid grid-cols-2 gap-4">
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-2">
                           Return Reason <span className="text-red-500">*</span>
@@ -877,18 +877,6 @@ const SalesReturnFlow = ({ onClose }) => {
                           <option value="replacement">Replacement</option>
                           <option value="refund">Refund (Requires Approval)</option>
                         </select>
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                          Additional Notes
-                        </label>
-                        <input
-                          type="text"
-                          value={returnData.return_reason_notes}
-                          onChange={(e) => setReturnData(prev => ({ ...prev, return_reason_notes: e.target.value }))}
-                          placeholder="Optional details..."
-                          className="w-full px-4 py-3 text-lg border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                        />
                       </div>
                     </div>
                   </div>

@@ -1,169 +1,345 @@
 import React, { useState, useEffect } from 'react';
 import { 
-  Truck, Search, Plus, Edit2, Filter, Download, Upload,
-  Phone, Mail, MapPin, AlertTriangle, CheckCircle, 
-  Star, Building2, Calendar, TrendingUp, CreditCard,
-  Shield, Clock, User, X, ChevronRight, FileText,
-  AlertCircle, MessageCircle, Banknote, Award, Building
+  Truck, Search, Plus, Edit2, Trash2, 
+  Download, Upload, AlertCircle, Check, Loader2,
+  Phone, Mail, Building, CreditCard, Shield,
+  AlertTriangle
 } from 'lucide-react';
-import { Card, Button, Badge, DataTable, BaseModal, GlobalLayout, ContentCard, StatsGrid } from '../global';
-import { theme, classes } from '../../config/theme.config';
 import { suppliersApi } from '../../services/api';
-import SupplierCreationModal from '../global/modals/SupplierCreationModal';
+import { DataTable, Column } from '../global/ui/display/DataTable';
+import { GlobalLayout, ContentCard } from '../global';
+import Button from '../global/ui/Button';
+import Input from '../global/ui/forms/Input';
+import { useToast } from '../global/ui/feedback/Toast';
+import SupplierEditModal from './SupplierEditModal';
 
 interface Supplier {
   supplier_id: number;
+  supplier_code?: string;
   supplier_name: string;
-  supplier_type: string;
+  supplier_type?: string;
   primary_phone: string;
   primary_email?: string;
   whatsapp_number?: string;
-  address?: string;
+  gst_number?: string;
+  gstin?: string;
+  pan_number?: string;
+  drug_license_number?: string;
+  drug_license_validity?: string;
+  payment_days?: number;
+  payment_terms?: string;
+  supplier_category?: string;
+  is_active?: boolean;
+  created_at?: string;
+  last_transaction_date?: string;
+  total_business_amount?: number;
+  address_line_1?: string;
   city?: string;
   state?: string;
   pincode?: string;
-  gst_number?: string;
-  drug_license_number?: string;
-  drug_license_validity?: string;
   bank_name?: string;
   account_number?: string;
   ifsc_code?: string;
-  account_holder_name?: string;
-  payment_days?: number;
-  supplier_category?: string;
-  quality_rating?: number;
-  delivery_rating?: number;
-  compliance_rating?: string;
-  is_active?: boolean;
-  last_transaction_date?: string;
-  total_business_amount?: number;
+  current_outstanding?: number;
 }
 
-const SupplierMaster: React.FC = () => {
-  const [suppliers, setSuppliers] = useState<Supplier[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [showCreateModal, setShowCreateModal] = useState(false);
-  const [selectedSupplier, setSelectedSupplier] = useState<Supplier | null>(null);
-  const [filterStatus, setFilterStatus] = useState<'all' | 'active' | 'inactive'>('all');
-  const [showDetails, setShowDetails] = useState(false);
+interface SupplierMasterProps {
+  // Make it a full page component
+}
 
+const SupplierMaster: React.FC<SupplierMasterProps> = () => {
+  const toast = useToast();
+  const [searchTerm, setSearchTerm] = useState<string>('');
+  const [filterType, setFilterType] = useState<string>('all');
+  const [showAddModal, setShowAddModal] = useState<boolean>(false);
+  const [editingSupplier, setEditingSupplier] = useState<Supplier | null>(null);
+  const [selectedSuppliers, setSelectedSuppliers] = useState<string[]>([]);
+  const [suppliers, setSuppliers] = useState<Supplier[]>([]);
+  const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [error, setError] = useState<string | null>(null);
+  
+  // Supplier types - should come from backend or metadata API
+  const [supplierTypes, setSupplierTypes] = useState([
+    { value: 'all', label: 'All Types' },
+    { value: 'manufacturer', label: 'Manufacturer' },
+    { value: 'distributor', label: 'Distributor' },
+    { value: 'wholesaler', label: 'Wholesaler' },
+    { value: 'stockist', label: 'Stockist' },
+    { value: 'cnf', label: 'C&F Agent' }
+  ]);
+
+  // Load suppliers on component mount
   useEffect(() => {
     loadSuppliers();
   }, []);
 
-  const loadSuppliers = async () => {
+  // Load suppliers from API
+  const loadSuppliers = async (): Promise<void> => {
     try {
-      setLoading(true);
+      setIsLoading(true);
+      setError(null);
+      // Ensure trailing slash for backend compatibility
       const response = await suppliersApi.getAll();
-      const supplierData = response.data?.data || response.data || [];
-      setSuppliers(supplierData);
-    } catch (error) {
-      console.error('Error loading suppliers:', error);
+      console.log('Suppliers API Response:', response);
+      
+      // Handle different response formats
+      const supplierData = response.data?.suppliers || response.data?.data || response.data || [];
+      setSuppliers(Array.isArray(supplierData) ? supplierData : []);
+    } catch (err) {
+      console.error('Error loading suppliers:', err);
+      setError('Failed to load suppliers. Please try again.');
+      // Set empty array on error to prevent crashes
+      setSuppliers([]);
     } finally {
-      setLoading(false);
+      setIsLoading(false);
     }
   };
 
-  const filteredSuppliers = suppliers.filter(supplier => {
-    const matchesSearch = 
+  // Filter suppliers based on search and type
+  const filteredSuppliers = suppliers.filter((supplier: Supplier) => {
+    if (!supplier) return false;
+    
+    const matchesSearch = searchTerm === '' || 
       supplier.supplier_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      supplier.supplier_code?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       supplier.primary_phone?.includes(searchTerm) ||
-      supplier.gst_number?.includes(searchTerm) ||
-      supplier.bank_name?.toLowerCase().includes(searchTerm.toLowerCase());
+      supplier.gst_number?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      supplier.gstin?.toLowerCase().includes(searchTerm.toLowerCase());
     
-    const matchesStatus = 
-      filterStatus === 'all' || 
-      (filterStatus === 'active' && supplier.is_active !== false) ||
-      (filterStatus === 'inactive' && supplier.is_active === false);
+    const matchesType = filterType === 'all' || 
+      supplier.supplier_type === filterType;
     
-    return matchesSearch && matchesStatus;
+    return matchesSearch && matchesType;
   });
 
+  const handleEditSupplier = (supplier: Supplier): void => {
+    setEditingSupplier(supplier);
+  };
+
+  const handleDeleteSupplier = async (supplierId: string | number): Promise<void> => {
+    // Find the supplier to check current status
+    const supplier = suppliers.find(s => s.supplier_id === Number(supplierId));
+    const isCurrentlyActive = supplier?.is_active !== false;
+    
+    const action = isCurrentlyActive ? 'deactivate' : 'reactivate';
+    const confirmMessage = isCurrentlyActive 
+      ? 'Are you sure you want to deactivate this supplier? The supplier will be marked as inactive but all data, purchase history, and payment records will be preserved.'
+      : 'Are you sure you want to reactivate this supplier?';
+    
+    if (!window.confirm(confirmMessage)) {
+      return;
+    }
+
+    try {
+      // Toggle active status (soft delete/restore)
+      // Need to send all required fields, not just is_active
+      const updateData = {
+        ...supplier,
+        is_active: !isCurrentlyActive,
+        // Ensure supplier_type is lowercase if needed
+        supplier_type: supplier?.supplier_type?.toLowerCase() || 'distributor'
+      };
+      await suppliersApi.update(supplierId, updateData);
+      toast.success(`Supplier ${action}d successfully`);
+      loadSuppliers();
+    } catch (err) {
+      console.error(`Error ${action}ing supplier:`, err);
+      toast.error(`Failed to ${action} supplier.`);
+    }
+  };
+
+  const handleSupplierSaved = (): void => {
+    setEditingSupplier(null);
+    setShowAddModal(false);
+    loadSuppliers();
+    toast.created('Supplier');
+  };
+
+  const handleBulkDelete = async (): Promise<void> => {
+    if (selectedSuppliers.length === 0) return;
+    
+    if (!window.confirm(`Are you sure you want to deactivate ${selectedSuppliers.length} suppliers? They will be marked as inactive but all data will be preserved.`)) {
+      return;
+    }
+
+    try {
+      // Bulk soft delete - mark all as inactive
+      await Promise.all(selectedSuppliers.map(id => 
+        suppliersApi.update(id, { is_active: false })
+      ));
+      toast.success(`${selectedSuppliers.length} suppliers deactivated successfully`);
+      setSelectedSuppliers([]);
+      loadSuppliers();
+    } catch (err) {
+      console.error('Error bulk deactivating suppliers:', err);
+      toast.error('Failed to deactivate some suppliers.');
+    }
+  };
+
+  // Get payment terms badge
+  const getPaymentTermsBadge = (supplier: Supplier) => {
+    const days = supplier.payment_days || 0;
+    
+    if (days === 0) {
+      return <span className="px-2 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-800">COD</span>;
+    } else if (days <= 7) {
+      return <span className="px-2 py-1 text-xs font-semibold rounded-full bg-blue-100 text-blue-800">Net {days}</span>;
+    } else if (days <= 30) {
+      return <span className="px-2 py-1 text-xs font-semibold rounded-full bg-yellow-100 text-yellow-800">Net {days}</span>;
+    } else {
+      return <span className="px-2 py-1 text-xs font-semibold rounded-full bg-orange-100 text-orange-800">Net {days}</span>;
+    }
+  };
+
+  // Get license status
   const getLicenseStatus = (expiryDate?: string) => {
-    if (!expiryDate) return { status: 'missing', color: 'gray', text: 'No License' };
+    if (!expiryDate) return null;
     
     const today = new Date();
     const expiry = new Date(expiryDate);
     const daysToExpiry = Math.floor((expiry.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
     
-    if (daysToExpiry < 0) return { status: 'expired', color: 'red', text: 'Expired' };
-    if (daysToExpiry <= 30) return { status: 'expiring', color: 'amber', text: `${daysToExpiry}d left` };
-    return { status: 'valid', color: 'green', text: 'Valid' };
-  };
-
-  const getRatingStars = (rating?: number) => {
-    if (!rating) return null;
-    const fullStars = Math.floor(rating);
-    const hasHalfStar = rating % 1 >= 0.5;
-    
-    return (
-      <div className="flex items-center">
-        {[...Array(5)].map((_, i) => (
-          <Star
-            key={i}
-            className={`w-3 h-3 ${
-              i < fullStars 
-                ? 'text-yellow-400 fill-yellow-400' 
-                : i === fullStars && hasHalfStar
-                ? 'text-yellow-400 fill-yellow-200'
-                : 'text-gray-300'
-            }`}
-          />
-        ))}
-        <span className="ml-1 text-xs text-gray-600">{rating.toFixed(1)}</span>
-      </div>
-    );
-  };
-
-  const getComplianceRatingBadge = (rating?: string) => {
-    const colors = {
-      'excellent': 'bg-green-100 text-green-800 border-green-200',
-      'good': 'bg-blue-100 text-blue-800 border-blue-200',
-      'average': 'bg-amber-100 text-amber-800 border-amber-200',
-      'poor': 'bg-red-100 text-red-800 border-red-200'
-    };
-    return colors[rating as keyof typeof colors] || 'bg-gray-100 text-gray-600 border-gray-200';
-  };
-
-  // Statistics Cards - Only essential metrics
-  const stats = {
-    total: suppliers.length,
-    active: suppliers.filter(s => s.is_active !== false).length,
-    withLicense: suppliers.filter(s => s.drug_license_number).length,
-    withBankDetails: suppliers.filter(s => s.bank_name && s.account_number).length
-  };
-
-  // Prepare stats data for StatsGrid
-  const statsData = [
-    {
-      label: 'Total Suppliers',
-      value: stats.total,
-      icon: Truck,
-      iconBg: 'bg-purple-100',
-      iconColor: 'text-purple-600'
-    },
-    {
-      label: 'Active',
-      value: stats.active,
-      icon: CheckCircle,
-      iconBg: 'bg-green-100', 
-      iconColor: 'text-green-600'
-    },
-    {
-      label: 'Licensed',
-      value: stats.withLicense,
-      icon: Shield,
-      iconBg: 'bg-blue-100',
-      iconColor: 'text-blue-600'
-    },
-    {
-      label: 'Bank Verified',
-      value: stats.withBankDetails,
-      icon: Banknote,
-      iconBg: 'bg-teal-100',
-      iconColor: 'text-teal-600'
+    if (daysToExpiry < 0) {
+      return <span className="text-xs text-red-600">Expired</span>;
+    } else if (daysToExpiry <= 30) {
+      return <span className="text-xs text-yellow-600">{daysToExpiry}d left</span>;
+    } else {
+      return <span className="text-xs text-green-600">Valid</span>;
     }
+  };
+
+  // Define columns for DataTable
+  const columns: Column<Supplier>[] = [
+    {
+      key: 'supplier_name',
+      header: 'Supplier',
+      render: (_, supplier) => {
+        if (!supplier) return <div>N/A</div>;
+        return (
+          <div>
+            <div className="font-medium text-app-800">{supplier.supplier_name || 'N/A'}</div>
+            <div className="text-sm text-app-500">{supplier.supplier_code || `ID: ${supplier.supplier_id}`}</div>
+          </div>
+        );
+      },
+    },
+    {
+      key: 'contact',
+      header: 'Contact',
+      render: (_, supplier) => {
+        if (!supplier) return <div>N/A</div>;
+        return (
+          <div>
+            <div className="flex items-center text-app-800">
+              <Phone className="w-3 h-3 mr-1" />
+              {supplier.primary_phone || 'N/A'}
+            </div>
+            {supplier.primary_email && (
+              <div className="text-sm text-app-500 truncate">{supplier.primary_email}</div>
+            )}
+          </div>
+        );
+      },
+    },
+    {
+      key: 'supplier_type',
+      header: 'Type',
+      render: (value) => (
+        <span className="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-primary-100 text-primary-800">
+          {value || 'N/A'}
+        </span>
+      ),
+    },
+    {
+      key: 'gst_number',
+      header: 'GST/License',
+      render: (_, supplier) => {
+        if (!supplier) return <div>N/A</div>;
+        // Check both gst_number and gstin fields as backend may use either
+        const gstNumber = supplier.gst_number || supplier.gstin;
+        return (
+          <div className="text-sm">
+            {gstNumber ? (
+              <div className="text-app-800">{gstNumber}</div>
+            ) : (
+              <div className="text-app-400">No GST</div>
+            )}
+            {supplier.drug_license_number && (
+              <div className="text-app-500">
+                DL: {supplier.drug_license_number} {getLicenseStatus(supplier.drug_license_validity)}
+              </div>
+            )}
+          </div>
+        );
+      },
+    },
+    {
+      key: 'payment',
+      header: 'Payment',
+      align: 'right' as const,
+      render: (_, supplier) => {
+        if (!supplier) return <div className="text-app-400">N/A</div>;
+        return (
+          <div>
+            {getPaymentTermsBadge(supplier)}
+            {supplier.current_outstanding && supplier.current_outstanding > 0 && (
+              <div className="text-sm text-app-500 mt-1">
+                Due: ₹{supplier.current_outstanding.toLocaleString()}
+              </div>
+            )}
+          </div>
+        );
+      },
+    },
+    {
+      key: 'is_active',
+      header: 'Status',
+      align: 'center' as const,
+      render: (value) => (
+        <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
+          value !== false ? 'bg-success-100 text-success-800' : 'bg-danger-100 text-danger-800'
+        }`}>
+          {value !== false ? 'Active' : 'Inactive'}
+        </span>
+      ),
+    },
+    {
+      key: 'actions',
+      header: 'Actions',
+      align: 'center' as const,
+      sortable: false,
+      render: (_, supplier) => (
+        <div className="flex items-center justify-center space-x-2">
+          <button
+            onClick={() => handleEditSupplier(supplier)}
+            className="text-primary-600 hover:text-primary-700 p-1 rounded transition-colors"
+            disabled={!supplier}
+          >
+            <Edit2 className="w-4 h-4" />
+          </button>
+          <button
+            onClick={() => handleDeleteSupplier(supplier?.supplier_id)}
+            className={`${
+              supplier?.is_active !== false 
+                ? 'text-warning-600 hover:text-warning-700' 
+                : 'text-success-600 hover:text-success-700'
+            } p-1 rounded transition-colors`}
+            disabled={!supplier?.supplier_id}
+            title={supplier?.is_active !== false ? 'Deactivate Supplier' : 'Reactivate Supplier'}
+          >
+            {supplier?.is_active !== false ? (
+              supplier?.current_outstanding && supplier.current_outstanding > 0 ? (
+                <AlertTriangle className="w-4 h-4" />
+              ) : (
+                <Trash2 className="w-4 h-4" />
+              )
+            ) : (
+              <Check className="w-4 h-4" />
+            )}
+          </button>
+        </div>
+      ),
+    },
   ];
 
   const headerActions = (
@@ -186,7 +362,7 @@ const SupplierMaster: React.FC = () => {
       </Button>
       <Button
         variant="primary"
-        onClick={() => setShowCreateModal(true)}
+        onClick={() => setShowAddModal(true)}
       >
         <Plus className="w-4 h-4 mr-2" />
         Add Supplier
@@ -201,353 +377,107 @@ const SupplierMaster: React.FC = () => {
       icon={Truck}
       headerActions={headerActions}
     >
-      {/* Statistics */}
-      <StatsGrid stats={statsData} />
-
       {/* Filters and Search */}
-      <ContentCard title="Search & Filter" subtitle={null} actions={null} icon={Search}>
-        <div className="flex flex-col md:flex-row gap-4">
-          {/* Search */}
-          <div className="flex-1">
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-app-400" />
-              <input
-                type="text"
-                placeholder="Search by name, phone, GST, bank..."
-                className="w-full pl-10 pr-4 py-2 border border-app-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-              />
-            </div>
+      <ContentCard 
+        title="Search & Filter" 
+        subtitle={null} 
+        actions={
+          selectedSuppliers.length > 0 ? (
+            <Button
+              variant="danger"
+              size="sm"
+              onClick={handleBulkDelete}
+            >
+              <Trash2 className="w-4 h-4 mr-2" />
+              Deactivate ({selectedSuppliers.length})
+            </Button>
+          ) : null
+        } 
+        icon={Search}
+      >
+        <div className="flex items-center space-x-6">
+          <div className="flex-1 relative">
+            <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 text-app-400 w-5 h-5" />
+            <Input
+              type="text"
+              placeholder="Search suppliers..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="pl-12"
+            />
           </div>
-          
-          {/* Status Filter */}
-          <div className="flex gap-2">
-            {['all', 'active', 'inactive'].map((status) => (
-              <button
-                key={status}
-                onClick={() => setFilterStatus(status as any)}
-                className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                  filterStatus === status
-                    ? 'bg-primary-600 text-white'
-                    : 'bg-app-100 text-app-700 hover:bg-app-200'
-                }`}
-              >
-                {status.charAt(0).toUpperCase() + status.slice(1)}
-              </button>
-            ))}
+          <div className="flex items-center space-x-4">
+            <select
+              value={filterType}
+              onChange={(e) => setFilterType(e.target.value)}
+              className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              {supplierTypes.map(type => (
+                <option key={type.value} value={type.value}>
+                  {type.label}
+                </option>
+              ))}
+            </select>
           </div>
         </div>
       </ContentCard>
 
-      {/* Supplier List */}
-      <ContentCard title="Supplier List" subtitle={null} actions={null} className="overflow-hidden" icon={Building}>
-          {loading ? (
-            <div className="p-8 text-center">
-              <div className="inline-flex items-center text-gray-600">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-600 mr-3"></div>
-                Loading suppliers...
-              </div>
-            </div>
-          ) : filteredSuppliers.length === 0 ? (
-            <div className="p-8 text-center">
-              <Truck className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-              <p className="text-gray-600">No suppliers found</p>
-              <Button
-                variant="primary"
-                size="sm"
-                className="mt-4"
-                onClick={() => setShowCreateModal(true)}
-              >
-                <Plus className="w-4 h-4 mr-2" />
-                Add First Supplier
-              </Button>
-            </div>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead className="bg-gray-50 border-b border-gray-200">
-                  <tr>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Supplier
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Contact
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      License Status
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Banking
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Ratings
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Status
-                    </th>
-                    <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Actions
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
-                  {filteredSuppliers.map((supplier) => {
-                    const licenseStatus = getLicenseStatus(supplier.drug_license_validity);
-                    
-                    return (
-                      <tr key={supplier.supplier_id} className="hover:bg-gray-50 transition-colors">
-                        <td className="px-6 py-4">
-                          <div>
-                            <p className="text-sm font-medium text-gray-900">
-                              {supplier.supplier_name}
-                            </p>
-                            <p className="text-xs text-gray-500 mt-1">
-                              {supplier.city || supplier.state || 'Location not specified'}
-                            </p>
-                            {supplier.gst_number && (
-                              <p className="text-xs text-gray-500">GST: {supplier.gst_number}</p>
-                            )}
-                          </div>
-                        </td>
-                        
-                        <td className="px-6 py-4">
-                          <div className="space-y-1">
-                            <div className="flex items-center text-sm text-gray-600">
-                              <Phone className="w-3 h-3 mr-1" />
-                              {supplier.primary_phone}
-                            </div>
-                            {supplier.whatsapp_number && (
-                              <div className="flex items-center text-sm text-green-600">
-                                <MessageCircle className="w-3 h-3 mr-1" />
-                                {supplier.whatsapp_number}
-                              </div>
-                            )}
-                            {supplier.primary_email && (
-                              <div className="flex items-center text-sm text-gray-600">
-                                <Mail className="w-3 h-3 mr-1" />
-                                {supplier.primary_email}
-                              </div>
-                            )}
-                          </div>
-                        </td>
-                        
-                        <td className="px-6 py-4">
-                          {supplier.drug_license_number ? (
-                            <div>
-                              <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium
-                                ${licenseStatus.status === 'expired' ? 'bg-red-100 text-red-800 border border-red-200' :
-                                  licenseStatus.status === 'expiring' ? 'bg-amber-100 text-amber-800 border border-amber-200' :
-                                  'bg-green-100 text-green-800 border border-green-200'}`}>
-                                {licenseStatus.status === 'expired' && <X className="w-3 h-3 mr-1" />}
-                                {licenseStatus.status === 'expiring' && <AlertTriangle className="w-3 h-3 mr-1" />}
-                                {licenseStatus.status === 'valid' && <CheckCircle className="w-3 h-3 mr-1" />}
-                                {licenseStatus.text}
-                              </span>
-                              <p className="text-xs text-gray-500 mt-1">
-                                {supplier.drug_license_number}
-                              </p>
-                            </div>
-                          ) : (
-                            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-600 border border-gray-200">
-                              <AlertCircle className="w-3 h-3 mr-1" />
-                              No License
-                            </span>
-                          )}
-                        </td>
-                        
-                        <td className="px-6 py-4">
-                          {supplier.bank_name && supplier.account_number ? (
-                            <div>
-                              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-teal-100 text-teal-800 border border-teal-200">
-                                <CheckCircle className="w-3 h-3 mr-1" />
-                                Verified
-                              </span>
-                              <p className="text-xs text-gray-500 mt-1">
-                                {supplier.bank_name}
-                              </p>
-                              <p className="text-xs text-gray-500">
-                                {supplier.payment_days ? `${supplier.payment_days} days` : 'COD'}
-                              </p>
-                            </div>
-                          ) : (
-                            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-800 border border-amber-200">
-                              <AlertTriangle className="w-3 h-3 mr-1" />
-                              Bank Details Missing
-                            </span>
-                          )}
-                        </td>
-                        
-                        <td className="px-6 py-4">
-                          <div className="space-y-1">
-                            {supplier.quality_rating && (
-                              <div className="flex items-center">
-                                <span className="text-xs text-gray-500 mr-2">Quality:</span>
-                                {getRatingStars(supplier.quality_rating)}
-                              </div>
-                            )}
-                            {supplier.delivery_rating && (
-                              <div className="flex items-center">
-                                <span className="text-xs text-gray-500 mr-2">Delivery:</span>
-                                {getRatingStars(supplier.delivery_rating)}
-                              </div>
-                            )}
-                            {supplier.compliance_rating && (
-                              <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${getComplianceRatingBadge(supplier.compliance_rating)}`}>
-                                {supplier.compliance_rating}
-                              </span>
-                            )}
-                          </div>
-                        </td>
-                        
-                        <td className="px-6 py-4">
-                          <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                            supplier.is_active !== false
-                              ? 'bg-green-100 text-green-800'
-                              : 'bg-gray-100 text-gray-600'
-                          }`}>
-                            {supplier.is_active !== false ? 'Active' : 'Inactive'}
-                          </span>
-                        </td>
-                        
-                        <td className="px-6 py-4 text-right">
-                          <div className="flex items-center justify-end gap-2">
-                            <button
-                              onClick={() => {
-                                setSelectedSupplier(supplier);
-                                setShowDetails(true);
-                              }}
-                              className="text-gray-400 hover:text-gray-600 transition-colors"
-                              title="View Details"
-                            >
-                              <ChevronRight className="w-5 h-5" />
-                            </button>
-                            <button
-                              onClick={() => {
-                                setSelectedSupplier(supplier);
-                                setShowCreateModal(true);
-                              }}
-                              className="text-gray-400 hover:text-purple-600 transition-colors"
-                              title="Edit"
-                            >
-                              <Edit2 className="w-4 h-4" />
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          )}
-      </ContentCard>
-
-      {/* Create/Edit Modal */}
-      {showCreateModal && (
-        <SupplierCreationModal
-          isOpen={showCreateModal}
-          onClose={() => {
-            setShowCreateModal(false);
-            setSelectedSupplier(null);
-          }}
-          onSupplierCreated={(supplier) => {
-            loadSuppliers();
-            setShowCreateModal(false);
-            setSelectedSupplier(null);
-          }}
-          initialData={selectedSupplier || {}}
-          title={selectedSupplier ? 'Edit Supplier' : 'Add New Supplier'}
-        />
+      {/* Error Message */}
+      {error && (
+        <ContentCard title="" subtitle={null} actions={null} className="border-l-4 border-l-red-500 bg-red-50" icon={AlertCircle}>
+          <div className="flex items-center space-x-3">
+            <AlertCircle className="w-5 h-5 text-red-600" />
+            <span className="text-red-800">{error}</span>
+          </div>
+        </ContentCard>
       )}
 
-      {/* Supplier Details Modal */}
-      {showDetails && selectedSupplier && (
-        <BaseModal
-          open={showDetails}
-          onClose={() => setShowDetails(false)}
-          title="Supplier Details"
-          subtitle={selectedSupplier.supplier_name}
-          icon={Truck}
-          footerActions={null}
-        >
-          <div className="p-6">
-            {/* Supplier details content */}
-            <div className="space-y-4">
-              <div className="flex items-center justify-between">
-                <h3 className="text-lg font-semibold">{selectedSupplier.supplier_name}</h3>
-                {selectedSupplier.compliance_rating && (
-                  <span className={`px-3 py-1 rounded-full text-xs font-medium ${getComplianceRatingBadge(selectedSupplier.compliance_rating)}`}>
-                    Compliance: {selectedSupplier.compliance_rating}
-                  </span>
-                )}
-              </div>
-              
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <p className="text-sm text-gray-500">Contact</p>
-                  <p className="text-sm font-medium">{selectedSupplier.primary_phone}</p>
-                  {selectedSupplier.whatsapp_number && (
-                    <p className="text-sm text-green-600">WhatsApp: {selectedSupplier.whatsapp_number}</p>
-                  )}
-                </div>
-                
-                <div>
-                  <p className="text-sm text-gray-500">Banking Details</p>
-                  <p className="text-sm font-medium">{selectedSupplier.bank_name || 'Not provided'}</p>
-                  {selectedSupplier.account_number && (
-                    <p className="text-xs text-gray-500">A/C: ****{selectedSupplier.account_number.slice(-4)}</p>
-                  )}
-                  {selectedSupplier.ifsc_code && (
-                    <p className="text-xs text-gray-500">IFSC: {selectedSupplier.ifsc_code}</p>
-                  )}
-                </div>
-                
-                <div>
-                  <p className="text-sm text-gray-500">Drug License</p>
-                  <p className="text-sm font-medium">{selectedSupplier.drug_license_number || 'Not provided'}</p>
-                  {selectedSupplier.drug_license_validity && (
-                    <p className="text-xs text-gray-500">Valid till: {new Date(selectedSupplier.drug_license_validity).toLocaleDateString()}</p>
-                  )}
-                </div>
-                
-                <div>
-                  <p className="text-sm text-gray-500">GST Number</p>
-                  <p className="text-sm font-medium">{selectedSupplier.gst_number || 'Not provided'}</p>
-                </div>
-                
-                <div>
-                  <p className="text-sm text-gray-500">Payment Terms</p>
-                  <p className="text-sm font-medium">{selectedSupplier.payment_days ? `${selectedSupplier.payment_days} days credit` : 'COD'}</p>
-                </div>
-                
-                <div>
-                  <p className="text-sm text-gray-500">Ratings</p>
-                  <div className="space-y-1">
-                    {selectedSupplier.quality_rating && (
-                      <div className="flex items-center">
-                        <span className="text-xs mr-1">Quality:</span>
-                        {getRatingStars(selectedSupplier.quality_rating)}
-                      </div>
-                    )}
-                    {selectedSupplier.delivery_rating && (
-                      <div className="flex items-center">
-                        <span className="text-xs mr-1">Delivery:</span>
-                        {getRatingStars(selectedSupplier.delivery_rating)}
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </div>
-              
-              <div className="pt-4 border-t">
-                <p className="text-sm text-gray-500">Address</p>
-                <p className="text-sm">{selectedSupplier.address}</p>
-                <p className="text-sm">{selectedSupplier.city}, {selectedSupplier.state} - {selectedSupplier.pincode}</p>
-              </div>
-            </div>
+      {/* Supplier List */}
+      <ContentCard title="Supplier List" subtitle={null} actions={null} className="overflow-hidden" icon={Truck}>
+        {suppliers.length === 0 && !isLoading ? (
+          <div className="text-center py-12">
+            <Truck className="w-12 h-12 text-app-400 mx-auto mb-4" />
+            <h3 className="text-lg font-medium text-gray-900 mb-2">No suppliers found</h3>
+            <p className="text-sm text-gray-500 mb-4">Get started by adding your first supplier</p>
+            <Button
+              variant="primary"
+              onClick={() => setShowAddModal(true)}
+            >
+              <Plus className="w-4 h-4 mr-2" />
+              Add Your First Supplier
+            </Button>
           </div>
-        </BaseModal>
+        ) : (
+          <DataTable
+            data={filteredSuppliers}
+            columns={columns}
+            keyField="supplier_id"
+            loading={isLoading}
+            emptyMessage="No suppliers found"
+            emptyIcon={<Truck className="w-12 h-12 text-app-400" />}
+            selectable={true}
+            selectedRows={filteredSuppliers.filter(s => selectedSuppliers.includes(String(s.supplier_id)))}
+            onSelectionChange={(selected) => setSelectedSuppliers(selected.map(s => String(s.supplier_id)))}
+            hoverable={true}
+            striped={true}
+            paginated={true}
+            pageSize={20}
+            searchable={false}
+          />
+        )}
+      </ContentCard>
+
+      {/* Supplier Edit/Add Modal */}
+      {(showAddModal || editingSupplier) && (
+        <SupplierEditModal
+          isOpen={true}
+          onClose={() => {
+            setShowAddModal(false);
+            setEditingSupplier(null);
+          }}
+          onSave={handleSupplierSaved}
+          supplier={editingSupplier}
+        />
       )}
     </GlobalLayout>
   );

@@ -6,6 +6,7 @@ import { customersApi, metadataApi } from '../../services/api';
 import { useToast } from '../global/ui/feedback/Toast';
 import Input from '../global/ui/forms/Input';
 import Button from '../global/ui/Button';
+import { FORM_STYLES } from '../../constants/formStyles';
 
 interface CustomerEditModalProps {
   isOpen: boolean;
@@ -309,7 +310,7 @@ const CustomerEditModal: React.FC<CustomerEditModalProps> = ({
                       <select
                         value={formData.customer_type}
                         onChange={(e) => handleInputChange('customer_type', e.target.value)}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                        className={FORM_STYLES.select}
                       >
                         <option value="retail">Retail</option>
                         <option value="wholesale">Wholesale</option>
