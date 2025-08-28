@@ -7,11 +7,12 @@ export const returnsDataTransformer = {
     if (!returnData) return null;
     
     return {
-      // Map fields to match backend expectations
-      customer_id: returnData.customer_id || returnData.party_id,
-      invoice_id: returnData.invoice_id || returnData.document_id || returnData.sale_id,
+      // Map fields to match backend expectations - ensure proper types
+      customer_id: parseInt(returnData.customer_id || returnData.party_id) || null,
+      invoice_id: returnData.invoice_id ? parseInt(returnData.invoice_id) : null,
       return_date: returnData.return_date || new Date().toISOString().split('T')[0],
       return_reason: returnData.return_reason || returnData.reason || '',
+      return_method: returnData.return_method || 'credit_note',
       custom_reason: returnData.custom_reason || '',
       notes: returnData.return_reason_notes || returnData.notes || '',
       
@@ -19,14 +20,16 @@ export const returnsDataTransformer = {
       items: (returnData.items || [])
         .filter(item => item.selected && item.return_quantity > 0)
         .map(item => ({
-          product_id: item.product_id,
-          batch_id: item.batch_id || item.batch_no,
-          batch_number: item.batch_number || item.batch_no,
+          product_id: parseInt(item.product_id) || null,
+          batch_id: item.batch_id ? parseInt(item.batch_id) : null, // Must be integer or null
+          batch_number: item.batch_number || item.batch_no || null,
+          invoice_item_id: item.invoice_item_id ? parseInt(item.invoice_item_id) : null,
           quantity: parseFloat(item.return_quantity || 0),
           return_quantity: parseFloat(item.return_quantity || 0), // Include both for compatibility
           rate: parseFloat(item.rate || item.unit_price || item.sale_price || 0),
           tax_percent: parseFloat(item.tax_percent || item.gst_percent || 0),
           discount_percent: parseFloat(item.discount_percent || 0),
+          unit: item.unit || item.uom || 'PCS',
           reason: item.reason || returnData.reason || returnData.return_reason || '',
           custom_reason: item.custom_reason || returnData.custom_reason || '',
           hsn_code: item.hsn_code || ''
