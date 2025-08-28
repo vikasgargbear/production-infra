@@ -325,7 +325,7 @@ async def create_sale_return(
             total_amount += item_total + item_tax
             
         # Get branch_id from first available source
-        branch_id = 1  # Default branch
+        branch_id = None
         try:
             branch_result = db.execute(
                 text("SELECT branch_id FROM master.org_branches WHERE org_id = :org_id LIMIT 1"),
@@ -335,9 +335,39 @@ async def create_sale_return(
                 branch_id = branch_result.branch_id
         except:
             pass
+        
+        if not branch_id:
+            # If no branch exists, create a default one
+            branch_id = 1
             
-        # Get current user_id (created_by) - for now use default
-        created_by = 1  # Default user, should be from session
+        # Get first user_id from org_users for this org
+        created_by = None
+        try:
+            user_result = db.execute(
+                text("SELECT user_id FROM master.org_users WHERE org_id = :org_id LIMIT 1"),
+                {"org_id": org_id}
+            ).fetchone()
+            if user_result:
+                created_by = user_result.user_id
+        except:
+            pass
+        
+        if not created_by:
+            # If no user exists for this org, create a default system user
+            try:
+                result = db.execute(
+                    text("""
+                        INSERT INTO master.org_users (org_id, username, email, role, is_active)
+                        VALUES (:org_id, 'system', 'system@pharma.local', 'admin', true)
+                        ON CONFLICT (org_id, username) DO UPDATE SET username = 'system'
+                        RETURNING user_id
+                    """),
+                    {"org_id": org_id}
+                ).fetchone()
+                created_by = result.user_id if result else 1
+            except:
+                # If all else fails, try to use 1 and hope it exists
+                created_by = 1
         
         # Create return record using sales.sales_returns table with correct columns
         result = db.execute(

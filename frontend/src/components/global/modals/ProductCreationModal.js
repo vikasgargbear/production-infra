@@ -369,11 +369,19 @@ const ProductCreationModal = ({
       
       if (error.response?.data?.detail) {
         if (Array.isArray(error.response.data.detail)) {
-          errorMessages = error.response.data.detail.map(err => 
-            `${err.loc?.join('.')} - ${err.msg}`
-          );
-        } else {
+          errorMessages = error.response.data.detail.map(err => {
+            if (typeof err === 'string') {
+              return err;
+            } else if (err.msg) {
+              return err.loc ? `${err.loc.join('.')} - ${err.msg}` : err.msg;
+            } else {
+              return JSON.stringify(err);
+            }
+          });
+        } else if (typeof error.response.data.detail === 'string') {
           errorMessages = [error.response.data.detail];
+        } else {
+          errorMessages = [JSON.stringify(error.response.data.detail)];
         }
       } else if (error.response?.data?.message) {
         errorMessages = [error.response.data.message];

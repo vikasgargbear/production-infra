@@ -186,8 +186,8 @@ const SupplierEditModal: React.FC<SupplierEditModalProps> = ({
         current_outstanding: parseFloat(String(formData.current_outstanding)) || 0,
         minimum_order_value: parseFloat(String(formData.minimum_order_value)) || 0,
         // Map GST field properly
-        gstin: formData.gst_number || formData.gstin,
-        gst_number: formData.gst_number || formData.gstin
+        gstin: formData.gst_number,
+        gst_number: formData.gst_number
       };
       
       if (supplier) {

@@ -51,7 +51,20 @@ const CompanySettings = () => {
       }
     } catch (error) {
       console.error('Error fetching company profile:', error);
-      const errorMessage = error.response?.data?.detail || error.message || 'Failed to load company profile';
+      let errorMessage = 'Failed to load company profile';
+      if (error.response?.data?.detail) {
+        if (typeof error.response.data.detail === 'string') {
+          errorMessage = error.response.data.detail;
+        } else if (Array.isArray(error.response.data.detail)) {
+          errorMessage = error.response.data.detail
+            .map(err => typeof err === 'string' ? err : (err.msg || JSON.stringify(err)))
+            .join(', ');
+        } else {
+          errorMessage = JSON.stringify(error.response.data.detail);
+        }
+      } else if (error.message) {
+        errorMessage = error.message;
+      }
       setError(errorMessage);
       
       // Use default values if fetch fails
@@ -131,7 +144,20 @@ const CompanySettings = () => {
       
     } catch (error) {
       console.error('Error saving company profile:', error);
-      const errorMessage = error.response?.data?.detail || error.message || 'Failed to save company profile';
+      let errorMessage = 'Failed to save company profile';
+      if (error.response?.data?.detail) {
+        if (typeof error.response.data.detail === 'string') {
+          errorMessage = error.response.data.detail;
+        } else if (Array.isArray(error.response.data.detail)) {
+          errorMessage = error.response.data.detail
+            .map(err => typeof err === 'string' ? err : (err.msg || JSON.stringify(err)))
+            .join(', ');
+        } else {
+          errorMessage = JSON.stringify(error.response.data.detail);
+        }
+      } else if (error.message) {
+        errorMessage = error.message;
+      }
       setError(errorMessage);
     } finally {
       setSaving(false);

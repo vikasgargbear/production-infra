@@ -784,7 +784,14 @@ const SalesReturnFlow = ({ onClose }) => {
         onClose();
       }, 2500);
     } catch (error) {
-      toast.error(error.message || 'Failed to create return');
+      // Handle error message properly - could be string or array
+      const errorMessage = Array.isArray(error.message) 
+        ? error.message[0]?.msg || error.message[0] || 'Failed to create return'
+        : typeof error.message === 'object'
+        ? JSON.stringify(error.message)
+        : error.message || 'Failed to create return';
+      
+      toast.error(errorMessage);
       console.error('Error creating return:', error);
     } finally {
       setSaving(false);

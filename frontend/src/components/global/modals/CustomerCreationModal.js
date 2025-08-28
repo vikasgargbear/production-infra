@@ -90,11 +90,19 @@ const CustomerCreationModal = ({ show, onClose, onCustomerCreated }) => {
       console.error('Error saving customer:', error);
       if (error.response?.data?.detail) {
         if (Array.isArray(error.response.data.detail)) {
-          setErrors(error.response.data.detail.map(err => 
-            `${err.loc?.join('.')} - ${err.msg}`
-          ));
-        } else {
+          setErrors(error.response.data.detail.map(err => {
+            if (typeof err === 'string') {
+              return err;
+            } else if (err.msg) {
+              return err.loc ? `${err.loc.join('.')} - ${err.msg}` : err.msg;
+            } else {
+              return JSON.stringify(err);
+            }
+          }));
+        } else if (typeof error.response.data.detail === 'string') {
           setErrors([error.response.data.detail]);
+        } else {
+          setErrors([JSON.stringify(error.response.data.detail)]);
         }
       } else {
         setErrors(['Failed to save customer']);
