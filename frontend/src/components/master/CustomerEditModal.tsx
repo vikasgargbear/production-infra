@@ -82,7 +82,7 @@ const CustomerEditModal: React.FC<CustomerEditModalProps> = ({
   const [activeSection, setActiveSection] = useState('basic');
   
   // Metadata for dropdowns - loaded from backend
-  const [metadata, setMetadata] = useState({
+  const [metadata, setMetadata] = useState<any>({
     customerTypes: [],
     customerCategories: [],
     creditRatings: [],
@@ -178,8 +178,8 @@ const CustomerEditModal: React.FC<CustomerEditModalProps> = ({
         current_outstanding: parseFloat(String(formData.current_outstanding)) || 0,
         security_deposit: parseFloat(String(formData.security_deposit)) || 0,
         // Map GST field properly
-        gstin: formData.gst_number || formData.gstin,
-        gst_number: formData.gst_number || formData.gstin
+        gstin: formData.gst_number,
+        gst_number: formData.gst_number
       };
       
       if (customer) {

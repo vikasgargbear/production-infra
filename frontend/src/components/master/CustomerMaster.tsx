@@ -255,7 +255,7 @@ const CustomerMaster: React.FC<CustomerMasterProps> = () => {
       render: (_, customer) => {
         if (!customer) return <div>N/A</div>;
         // Check both gst_number and gstin fields as backend may use either
-        const gstNumber = customer.gst_number || customer.gstin;
+        const gstNumber = customer.gst_number || (customer as any).gstin;
         return (
           <div className="text-sm">
             {gstNumber ? (
@@ -277,8 +277,8 @@ const CustomerMaster: React.FC<CustomerMasterProps> = () => {
       render: (_, customer) => {
         if (!customer) return <div className="text-app-400">No Credit</div>;
         // Check multiple possible field names for credit limit
-        const creditLimit = customer.credit_limit || customer.creditLimit || 0;
-        const creditDays = customer.credit_days || customer.creditDays || 0;
+        const creditLimit = customer.credit_limit || (customer as any).creditLimit || 0;
+        const creditDays = customer.credit_days || (customer as any).creditDays || 0;
         
         if (!creditLimit) return <div className="text-app-400">No Credit</div>;
         
