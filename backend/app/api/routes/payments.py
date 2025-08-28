@@ -186,6 +186,11 @@ async def create_payment(
     - Creates proper payment records in payments table
     """
     try:
+        # Convert org_id to UUID for database operations
+        from uuid import UUID
+        if isinstance(org_id, str):
+            org_id = UUID(org_id)
+        
         # Generate payment number if not provided
         if not payment.payment_number:
             payment.payment_number = f"PAY-{payment.payment_date.strftime('%Y%m%d')}-{payment.customer_id or payment.supplier_id or 'ADV'}-{int(datetime.now().timestamp())}"
@@ -215,7 +220,7 @@ async def create_payment(
                     ORDER BY user_id
                     LIMIT 1
                 """),
-                {"org_id": payment.org_id}
+                {"org_id": org_id}
             ).first()
             
             if user_result:
@@ -233,7 +238,7 @@ async def create_payment(
                                 'System', 'API', ARRAY['api_user'], true
                             ) RETURNING user_id
                         """),
-                        {"org_id": payment.org_id}
+                        {"org_id": org_id}
                     ).first()
                     payment.created_by = create_user.user_id if create_user else None
                 except:
@@ -249,7 +254,7 @@ async def create_payment(
                     WHERE org_id = :org_id AND method_type = :method_type
                     LIMIT 1
                 """),
-                {"org_id": payment.org_id, "method_type": payment.payment_mode}
+                {"org_id": org_id, "method_type": payment.payment_mode}
             ).first()
             
             if method_result:
@@ -263,7 +268,7 @@ async def create_payment(
                         RETURNING payment_method_id
                     """),
                     {
-                        "org_id": payment.org_id,
+                        "org_id": org_id,
                         "code": payment.payment_mode.upper(),
                         "name": payment.payment_mode.title(),
                         "type": payment.payment_mode
@@ -280,7 +285,7 @@ async def create_payment(
         
         # Prepare payment data for database using CORRECT column names from schema
         payment_data = {
-            'org_id': payment.org_id,
+            'org_id': org_id,
             'branch_id': payment.branch_id or 1,
             'payment_number': payment.payment_number,
             'payment_date': payment.payment_date,
@@ -426,6 +431,11 @@ async def create_customer_receipt(
     Simple endpoint for recording customer payments
     """
     try:
+        # Convert org_id to UUID for database operations
+        from uuid import UUID
+        if isinstance(org_id, str):
+            org_id = UUID(org_id)
+        
         # Generate receipt number
         receipt_number = f"RCP-{date.today().strftime('%Y%m%d')}-{int(datetime.now().timestamp())}"
         

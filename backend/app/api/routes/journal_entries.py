@@ -195,9 +195,48 @@ async def create_journal_entry(
     - Updates account balances
     """
     try:
+        # Convert org_id to UUID for database operations
+        from uuid import UUID
+        if isinstance(org_id, str):
+            org_id = UUID(org_id)
+        
         # Generate journal number if not provided
-        journal_number_response = await generate_journal_number(db)
-        journal_number = journal_number_response["journal_number"]
+        # Can't call Depends functions directly, generate number here
+        current_date = date.today()
+        year = current_date.year
+        
+        # Get next sequence number atomically
+        seq_query = """
+            SELECT COALESCE(MAX(
+                CASE 
+                    WHEN journal_number ~ :pattern THEN 
+                        CAST(SUBSTRING(journal_number FROM :extract_pattern) AS INTEGER)
+                    ELSE 0 
+                END
+            ), 0) + 1 as next_number
+            FROM financial.journal_entries 
+            WHERE org_id = :org_id
+                AND EXTRACT(YEAR FROM journal_date) = :year
+                AND journal_number LIKE :like_pattern
+        """
+        
+        pattern = f"^JV-{year}-[0-9]+$"
+        extract_pattern = f"JV-{year}-([0-9]+)$"
+        like_pattern = f"JV-{year}-%"
+        
+        result = db.execute(
+            text(seq_query),
+            {
+                "org_id": org_id,
+                "year": year,
+                "pattern": pattern,
+                "extract_pattern": extract_pattern,
+                "like_pattern": like_pattern
+            }
+        ).first()
+        
+        next_number = result.next_number if result else 1
+        journal_number = f"JV-{year}-{str(next_number).zfill(4)}"
         
         # Get or create system user for API operations
         if not journal_entry.created_by:
@@ -208,7 +247,7 @@ async def create_journal_entry(
                     ORDER BY user_id
                     LIMIT 1
                 """),
-                {"org_id": journal_entry.org_id}
+                {"org_id": org_id}
             ).first()
             
             if user_result:
@@ -237,7 +276,7 @@ async def create_journal_entry(
         """
         
         journal_result = db.execute(text(journal_query), {
-            "org_id": journal_entry.org_id,
+            "org_id": org_id,
             "journal_number": journal_number,
             "journal_date": journal_entry.journal_date,
             "reference_number": journal_entry.reference_number,
@@ -254,7 +293,7 @@ async def create_journal_entry(
             # Validate account exists
             account_check = db.execute(
                 text("SELECT account_id FROM financial.chart_of_accounts WHERE account_code = :code AND org_id = :org_id"),
-                {"code": line.account_code, "org_id": journal_entry.org_id}
+                {"code": line.account_code, "org_id": org_id}
             ).first()
             
             if not account_check:
@@ -268,7 +307,7 @@ async def create_journal_entry(
                         ) RETURNING account_id
                     """),
                     {
-                        "org_id": journal_entry.org_id,
+                        "org_id": org_id,
                         "account_code": line.account_code,
                         "account_name": line.account_name
                     }

@@ -160,6 +160,11 @@ def create_stock_receive(
     Create a stock receive entry (increase inventory)
     """
     try:
+        # Convert org_id to UUID for database operations
+        from uuid import UUID
+        if isinstance(org_id, str):
+            org_id = UUID(org_id)
+        
         # Validate required fields
         required_fields = ["product_id", "quantity", "movement_date", "reason"]
         for field in required_fields:
@@ -270,6 +275,11 @@ def create_stock_issue(
     Create a stock issue entry (decrease inventory)
     """
     try:
+        # Convert org_id to UUID for database operations
+        from uuid import UUID
+        if isinstance(org_id, str):
+            org_id = UUID(org_id)
+        
         # Validate required fields
         required_fields = ["product_id", "quantity", "movement_date", "reason"]
         for field in required_fields:
@@ -362,6 +372,11 @@ def create_stock_transfer(
     Transfer stock between locations/warehouses
     """
     try:
+        # Convert org_id to UUID for database operations
+        from uuid import UUID
+        if isinstance(org_id, str):
+            org_id = UUID(org_id)
+        
         # Validate required fields
         required_fields = ["product_id", "quantity", "movement_date", 
                           "source_location", "destination_location"]

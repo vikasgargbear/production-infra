@@ -269,6 +269,11 @@ async def create_product(
     Create a new product
     """
     try:
+        # Convert org_id to UUID for database operations
+        from uuid import UUID
+        if isinstance(org_id, str):
+            org_id = UUID(org_id)
+        
         logger.info(f"Creating product with data: {product}")
         # Map frontend fields to database fields (matching actual table columns)
         # Handle composition - could be dict or string
@@ -823,6 +828,11 @@ async def create_product_category(
 ):
     """Create a new product category"""
     try:
+        # Convert org_id to UUID for database operations
+        from uuid import UUID
+        if isinstance(org_id, str):
+            org_id = UUID(org_id)
+        
         category_name = category_data.get("category_name", "").strip()
         if not category_name:
             raise HTTPException(
@@ -893,6 +903,11 @@ async def create_product_type(
 ):
     """Create a new product type"""
     try:
+        # Convert org_id to UUID for database operations
+        from uuid import UUID
+        if isinstance(org_id, str):
+            org_id = UUID(org_id)
+        
         type_name = type_data.get("type_name", "").strip()
         if not type_name:
             raise HTTPException(

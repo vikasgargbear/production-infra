@@ -139,6 +139,11 @@ def create_supplier(supplier_data: SupplierCreate, db: Session = Depends(get_db)
     org_id: str = Depends(get_org_id_from_header)):
     """Create a new supplier"""
     try:
+        # Convert org_id to UUID for database operations
+        from uuid import UUID
+        if isinstance(org_id, str):
+            org_id = UUID(org_id)
+        
         # Generate supplier code if not provided
         supplier_code = supplier_data.code
         if not supplier_code:

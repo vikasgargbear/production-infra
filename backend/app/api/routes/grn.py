@@ -46,6 +46,11 @@ async def create_grn(
 ):
     """Create a new Goods Receipt Note"""
     try:
+        # Convert org_id to UUID for database operations
+        from uuid import UUID
+        if isinstance(org_id, str):
+            org_id = UUID(org_id)
+        
         # Extract main GRN data
         main_data = {
             "org_id": org_id,
