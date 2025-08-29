@@ -146,5 +146,10 @@ export const returnsApi = {
   // Get purchase items for return
   getPurchaseItems: async (purchaseId) => {
     return apiClient.get(`purchase-returns/purchase/${purchaseId}/items`);
+  },
+
+  // Get returns for a specific invoice
+  getReturnsForInvoice: async (invoiceId) => {
+    return apiClient.get(`sale-returns/invoice/${invoiceId}/returns`);
   }
 };

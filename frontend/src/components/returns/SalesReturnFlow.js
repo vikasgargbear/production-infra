@@ -246,25 +246,21 @@ const SalesReturnFlow = ({ onClose }) => {
         try {
           const returnStatusPromises = allInvoices.map(async (invoice) => {
             try {
-              const returnResponse = await returnsApi.getSaleReturns({
-                invoice_id: invoice.id,
-                limit: 100
-              });
+              const returnResponse = await returnsApi.getReturnsForInvoice(invoice.id);
               
-              if (returnResponse.data && returnResponse.data.returns) {
-                const returns = returnResponse.data.returns;
+              if (returnResponse.data) {
                 return {
                   invoice_id: invoice.id,
-                  has_returns: returns.length > 0,
-                  return_count: returns.length,
-                  return_numbers: returns.map(r => r.return_number).join(', '),
-                  credit_note_numbers: returns.map(r => r.credit_note_no).filter(Boolean).join(', '),
-                  total_returned: returns.reduce((sum, r) => sum + (r.total_amount || 0), 0)
+                  has_returns: returnResponse.data.has_returns || false,
+                  return_count: returnResponse.data.return_count || 0,
+                  return_numbers: returnResponse.data.returns?.map(r => r.return_number).join(', ') || '',
+                  credit_note_numbers: returnResponse.data.returns?.map(r => r.credit_note_number).filter(Boolean).join(', ') || '',
+                  total_returned: returnResponse.data.returns?.reduce((sum, r) => sum + (parseFloat(r.total_amount) || 0), 0) || 0
                 };
               }
               return { invoice_id: invoice.id, has_returns: false };
             } catch (error) {
-              console.log('Could not fetch return status for invoice', invoice.id);
+              // Silently handle error - invoice might not have returns
               return { invoice_id: invoice.id, has_returns: false };
             }
           });
@@ -613,9 +609,10 @@ const SalesReturnFlow = ({ onClose }) => {
           id: item.item_id || item.id || `item-${index}`,
           product_id: item.product_id,
           product_name: item.product_name || item.product?.name,
-          batch_id: item.batch_id,
+          // Invoice items have batch_number but not batch_id
+          batch_id: item.batch_id || null,
           batch_no: item.batch_number || item.batch_no || item.batch?.batch_no,
-          batch_number: item.batch_number,
+          batch_number: item.batch_number || item.batch_no,
           manufacturing_date: item.manufacturing_date,
           expiry_date: item.expiry_date,
           rate: parseFloat(item.unit_price || item.rate || item.sale_price || item.price || 0),

@@ -234,6 +234,50 @@ async def get_returnable_invoices(
         logger.error(f"Error fetching returnable invoices: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+@router.get("/invoice/{invoice_id}/returns")
+async def get_returns_for_invoice(
+    invoice_id: int,
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)
+):
+    """
+    Get all returns for a specific invoice
+    """
+    try:
+        # Get all returns for this invoice
+        returns_query = """
+            SELECT 
+                sr.return_id,
+                sr.return_number,
+                sr.return_date,
+                sr.return_reason,
+                sr.total_amount,
+                sr.credit_note_number,
+                sr.credit_note_status,
+                COUNT(sri.return_item_id) as item_count,
+                SUM(sri.return_quantity) as total_quantity_returned
+            FROM sales.sales_returns sr
+            LEFT JOIN sales.sales_return_items sri ON sr.return_id = sri.return_id
+            WHERE sr.invoice_id = :invoice_id
+            GROUP BY sr.return_id, sr.return_number, sr.return_date, 
+                     sr.return_reason, sr.total_amount, sr.credit_note_number, 
+                     sr.credit_note_status
+            ORDER BY sr.return_date DESC
+        """
+        
+        returns = db.execute(text(returns_query), {"invoice_id": invoice_id}).fetchall()
+        
+        return {
+            "invoice_id": invoice_id,
+            "has_returns": len(returns) > 0,
+            "return_count": len(returns),
+            "returns": [dict(r._mapping) for r in returns] if returns else []
+        }
+        
+    except Exception as e:
+        logger.error(f"Error fetching returns for invoice: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 @router.get("/invoice/{invoice_id}/items")
 async def get_invoice_items_for_return(
     invoice_id: str,
