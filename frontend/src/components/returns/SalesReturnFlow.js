@@ -509,7 +509,10 @@ const SalesReturnFlow = ({ onClose }) => {
       // Additional fields for manual entry
       is_manual: true,
       available_stock: product.current_stock || product.stock || 0,
-      discount_percent: 0 // Default no discount for manual items
+      discount_percent: 0, // Default no discount for manual items
+      // Enterprise fields for manual returns
+      requires_approval: true,
+      verification_status: 'pending'
     };
 
     setReturnData(prev => ({
@@ -1120,9 +1123,16 @@ const SalesReturnFlow = ({ onClose }) => {
                                       Outstanding: ₹{invoice.outstanding_amount?.toFixed(2) || '0.00'}
                                     </p>
                                     {invoice.has_returns && (
-                                      <p className="text-xs text-orange-600 mt-1">
-                                        Returned: ₹{invoice.total_returned?.toFixed(2) || '0.00'}
-                                      </p>
+                                      <>
+                                        <p className="text-xs text-orange-600 mt-1">
+                                          Returned: ₹{invoice.total_returned?.toFixed(2) || '0.00'}
+                                        </p>
+                                        {invoice.return_numbers && (
+                                          <p className="text-xs text-gray-500">
+                                            Returns: {invoice.return_numbers}
+                                          </p>
+                                        )}
+                                      </>
                                     )}
                                   </div>
                                 </div>
@@ -1168,6 +1178,21 @@ const SalesReturnFlow = ({ onClose }) => {
               {/* Manual Item Entry - Show when invoice is skipped */}
               {selectedCustomer && showManualEntry && !selectedInvoice && (
                 <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+                  {/* Manual Return Notice */}
+                  <div className="mb-4 p-3 bg-amber-50 border border-amber-200 rounded-lg">
+                    <div className="flex items-start">
+                      <AlertCircle className="h-5 w-5 text-amber-600 mt-0.5 mr-2" />
+                      <div className="text-sm">
+                        <p className="font-medium text-amber-800">Manual Return Without Invoice</p>
+                        <p className="text-amber-700 mt-1">
+                          • Returns above ₹1,000 may require manager approval
+                          • Product condition will be verified at warehouse
+                          • Credit note validity: 90 days from issue date
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                  
                   <div className="flex items-center justify-between mb-4">
                     <div>
                       <h3 className="text-lg font-semibold text-gray-900 flex items-center">

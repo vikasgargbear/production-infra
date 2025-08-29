@@ -160,9 +160,8 @@ export const returnsDataTransformer = {
       if (!returnData.customer_id && !returnData.party_id) {
         errors.push('Customer is required');
       }
-      if (!returnData.invoice_id && !returnData.original_sale_id) {
-        errors.push('Original sale/invoice is required');
-      }
+      // Invoice is optional for manual returns
+      // Manual returns are allowed without invoice reference
     } else {
       if (!returnData.supplier_id) {
         errors.push('Supplier is required');
