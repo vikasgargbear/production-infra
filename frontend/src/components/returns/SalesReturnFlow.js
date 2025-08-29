@@ -105,18 +105,6 @@ const SalesReturnFlow = ({ onClose }) => {
     loadReturnReasons();
   }, []);
 
-  // Load customer invoices when filters change
-  useEffect(() => {
-    if (selectedCustomer) {
-      const customerId = selectedCustomer.id || selectedCustomer.customer_id || selectedCustomer.party_id;
-      // Add a small debounce to avoid multiple rapid calls
-      const timeoutId = setTimeout(() => {
-        fetchCustomerInvoices(customerId);
-      }, 300);
-      
-      return () => clearTimeout(timeoutId);
-    }
-  }, [selectedCustomer, invoicePage, invoiceFilters]);
 
   // Generate return number with consistent format
   const generateReturnNumber = () => {
@@ -713,73 +701,18 @@ const SalesReturnFlow = ({ onClose }) => {
                       </div>
                     )}
                     
-                    {/* Invoice List */}
+                    {/* Invoice Selector Component */}
                     {!selectedInvoice && (
-                      <div>
-                        {/* Filters */}
-                        <div className="bg-gray-50 rounded-lg p-4 mb-4">
-                          <div className="flex items-center justify-between mb-3">
-                            <div className="flex items-center gap-2">
-                              <Search className="w-4 h-4 text-gray-600" />
-                              <span className="text-sm font-medium text-gray-700">Filter Invoices</span>
-                            </div>
-                            <button
-                              onClick={() => setInvoiceFilters({
-                                dateFrom: '',
-                                dateTo: '',
-                                status: 'all',
-                                minAmount: '',
-                                maxAmount: ''
-                              })}
-                              className="px-3 py-1 text-sm text-gray-600 border border-gray-300 rounded hover:bg-white transition-colors"
-                            >
-                              Clear Filters
-                            </button>
-                          </div>
-                          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                            <div>
-                              <StandardDatePicker
-                                label="From Date"
-                                value={invoiceFilters.dateFrom}
-                                onChange={(value) => setInvoiceFilters(prev => ({ ...prev, dateFrom: value }))}
-                                size="sm"
-                              />
-                            </div>
-                            <div>
-                              <StandardDatePicker
-                                label="To Date"
-                                value={invoiceFilters.dateTo}
-                                onChange={(value) => setInvoiceFilters(prev => ({ ...prev, dateTo: value }))}
-                                size="sm"
-                              />
-                            </div>
-                            <div>
-                              <label className="block text-xs font-medium text-gray-700 mb-1">Status</label>
-                              <select
-                                value={invoiceFilters.status}
-                                onChange={(e) => setInvoiceFilters(prev => ({ ...prev, status: e.target.value }))}
-                                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                              >
-                                <option value="all">All Status</option>
-                                <option value="paid">Paid</option>
-                                <option value="partial">Partial</option>
-                                <option value="pending">Pending</option>
-                              </select>
-                            </div>
-                          </div>
-                        </div>
-                        
-                        {/* Invoice Selector Component */}
-                        <InvoiceSelector
-                          customerId={selectedCustomer?.customer_id || selectedCustomer?.id}
-                          onSelect={handleInvoiceSelect}
-                          mode="single"
-                          showReturnStatus={true}
-                          showPaymentStatus={true}
-                          showItems={false}
-                          title=""
-                          pageSize={10}
-                        />
+                      <InvoiceSelector
+                        customerId={selectedCustomer?.customer_id || selectedCustomer?.id}
+                        onSelect={handleInvoiceSelect}
+                        mode="single"
+                        showReturnStatus={true}
+                        showPaymentStatus={true}
+                        showItems={false}
+                        title=""
+                        pageSize={10}
+                      />
                     )}
                   </div>
                 )}

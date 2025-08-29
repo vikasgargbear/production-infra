@@ -138,13 +138,26 @@ function App(): JSX.Element {
 
   const checkSetupStatus = async () => {
     try {
+      // First check if we have an org_id stored locally
+      const existingOrgId = localStorage.getItem('pharma_org_id') || 
+                           sessionStorage.getItem('pharma_org_id');
+      
+      if (existingOrgId) {
+        // If we have an org_id, setup is complete
+        setSetupComplete(true);
+        setIsCheckingSetup(false);
+        return;
+      }
+      
+      // Otherwise, check with backend
       const response = await apiClient.get('/setup/check');
       setSetupComplete(response.data.setup_complete);
     } catch (error) {
       console.error('Error checking setup status:', error);
-      // If backend is down or endpoint doesn't exist, show setup page
-      // This allows users to set up even if backend is having issues
-      setSetupComplete(false);
+      // If backend is unreachable but we have an org_id, assume setup is complete
+      const existingOrgId = localStorage.getItem('pharma_org_id') || 
+                           sessionStorage.getItem('pharma_org_id');
+      setSetupComplete(!!existingOrgId);
     } finally {
       setIsCheckingSetup(false);
     }

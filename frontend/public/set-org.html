@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Restore Organization</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
+            max-width: 600px;
+            margin: 50px auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        h2 {
+            color: #333;
+            margin-bottom: 20px;
+        }
+        button {
+            background: #4CAF50;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            font-size: 16px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 10px 0;
+        }
+        button:hover {
+            background: #45a049;
+        }
+        #status {
+            margin-top: 20px;
+            padding: 15px;
+            border-radius: 4px;
+            display: none;
+        }
+        .success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+            display: block;
+        }
+        .info {
+            background: #d1ecf1;
+            color: #0c5460;
+            border: 1px solid #bee5eb;
+            margin-bottom: 20px;
+        }
+        code {
+            background: #f4f4f4;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-family: monospace;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h2>🔧 Restore Organization Settings</h2>
+        
+        <div class="info">
+            <strong>Organization ID found:</strong><br>
+            <code>ad808530-1ddb-4377-ab20-67bef145d80d</code><br><br>
+            This is your actual organization ID from the database.
+        </div>
+        
+        <button onclick="setOrg()">Restore Organization Settings</button>
+        
+        <div id="status"></div>
+        
+        <script>
+        function setOrg() {
+            // Set the actual org_id from database
+            const orgId = 'ad808530-1ddb-4377-ab20-67bef145d80d';
+            
+            // Set all org-related items in localStorage
+            localStorage.setItem('pharma_org_id', orgId);
+            localStorage.setItem('X-Org-Id', orgId);
+            localStorage.setItem('organization_id', orgId);
+            localStorage.setItem('org_id', orgId);
+            
+            // Also set in sessionStorage
+            sessionStorage.setItem('pharma_org_id', orgId);
+            sessionStorage.setItem('X-Org-Id', orgId);
+            sessionStorage.setItem('organization_id', orgId);
+            sessionStorage.setItem('org_id', orgId);
+            
+            // Show success message
+            const status = document.getElementById('status');
+            status.className = 'success';
+            status.innerHTML = `
+                ✅ <strong>Organization restored successfully!</strong><br><br>
+                Organization ID: <code>${orgId}</code><br><br>
+                <a href="/" style="color: #28a745; font-weight: bold;">→ Go to Login Page</a>
+            `;
+            status.style.display = 'block';
+        }
+        
+        // Auto-run if coming from app redirect
+        const urlParams = new URLSearchParams(window.location.search);
+        if (urlParams.get('auto') === 'true') {
+            setOrg();
+        }
+        </script>
+    </div>
+</body>
+</html>
