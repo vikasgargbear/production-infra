@@ -160,24 +160,10 @@ async def get_returnable_invoices(
                 i.final_amount as grand_total,
                 i.paid_amount,
                 COUNT(DISTINCT ii.invoice_item_id) as total_items,
-                SUM(ii.quantity) as total_quantity,
-                -- Subquery for return info to avoid multiple queries
-                COALESCE(ret.return_count, 0) as return_count,
-                COALESCE(ret.total_returned, 0) as total_value_returned,
-                ret.return_numbers,
-                ret.credit_note_numbers
+                SUM(ii.quantity) as total_quantity
             FROM sales.invoices i
             LEFT JOIN parties.customers c ON i.customer_id = c.customer_id
             LEFT JOIN sales.invoice_items ii ON i.invoice_id = ii.invoice_id
-            LEFT JOIN LATERAL (
-                SELECT 
-                    COUNT(DISTINCT sr.return_id) as return_count,
-                    SUM(sr.total_amount) as total_returned,
-                    STRING_AGG(DISTINCT sr.return_number, ', ') as return_numbers,
-                    STRING_AGG(DISTINCT sr.credit_note_number, ', ') as credit_note_numbers
-                FROM sales.sales_returns sr
-                WHERE sr.invoice_id = i.invoice_id
-            ) ret ON true
             WHERE i.invoice_status = 'generated'
         """
         params = {}
@@ -192,9 +178,7 @@ async def get_returnable_invoices(
             
         query += """ 
             GROUP BY i.invoice_id, i.invoice_number, i.invoice_date, 
-                     i.customer_id, c.customer_name, i.final_amount, i.paid_amount,
-                     ret.return_count, ret.total_returned, ret.return_numbers, 
-                     ret.credit_note_numbers
+                     i.customer_id, c.customer_name, i.final_amount, i.paid_amount
             ORDER BY i.invoice_date DESC
             LIMIT 50
         """
@@ -204,16 +188,9 @@ async def get_returnable_invoices(
         result = []
         for inv in invoices:
             invoice_dict = dict(inv._mapping)
-            
-            # Return info is already in the query result
-            invoice_dict["has_returns"] = inv.return_count > 0
-            invoice_dict["total_value_returned"] = float(inv.total_value_returned) if inv.total_value_returned else 0
-            
-            # Calculate returnable quantity
-            total_qty = float(inv.total_quantity) if inv.total_quantity else 0
-            invoice_dict["returnable_quantity"] = total_qty  # Simplified - actual calculation would check returned items
-            invoice_dict["can_return"] = total_qty > 0
-            
+            invoice_dict["has_returns"] = False  # Will be checked separately if needed
+            invoice_dict["returnable_quantity"] = float(inv.total_quantity) if inv.total_quantity else 0
+            invoice_dict["can_return"] = True  # Allow all invoices to be returned
             result.append(invoice_dict)
             
         return {"invoices": result}
