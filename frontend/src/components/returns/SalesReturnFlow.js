@@ -221,29 +221,25 @@ const SalesReturnFlow = ({ onClose }) => {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
       
-      // Use returns API to get invoices with return status included
-      const response = await returnsApi.getReturnableInvoices({
-        party_id: customerId,
+      // Use InvoiceApiService to fetch invoices for the customer (this was working)
+      const response = await InvoiceApiService.getInvoices({
+        customer_id: customerId,
+        limit: 10,
+        offset: (invoicePage - 1) * 10,
         signal: controller.signal
       });
       
       clearTimeout(timeoutId);
       
-      if (response.data && response.data.invoices) {
+      if (response.success && response.data) {
         let allInvoices = response.data.invoices?.map(invoice => ({
           id: invoice.invoice_id,
           invoice_number: invoice.invoice_number,
           invoice_date: invoice.invoice_date,
-          total_amount: parseFloat(invoice.grand_total) || 0,
-          outstanding_amount: parseFloat(invoice.grand_total) - parseFloat(invoice.paid_amount || 0),
+          total_amount: parseFloat(invoice.final_amount || invoice.grand_total) || 0,
+          outstanding_amount: parseFloat(invoice.final_amount || invoice.grand_total) - parseFloat(invoice.paid_amount || 0),
           status: invoice.payment_status || 'pending',
-          items: invoice.items || [],
-          // Return status is now included in the response
-          has_returns: invoice.has_returns || false,
-          return_count: invoice.return_count || 0,
-          return_numbers: invoice.return_numbers || '',
-          credit_note_numbers: invoice.credit_note_numbers || '',
-          total_returned: invoice.total_value_returned || 0
+          items: invoice.items || []
         })) || [];
 
         // Apply frontend filters

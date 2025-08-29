@@ -183,6 +183,7 @@ def update_user(user_id: int, user_data: dict, db: Session = Depends(get_db),
         )
         
         updated_user = result.first()
+        db.commit()  # Add commit to persist changes
         return dict(updated_user._mapping)
     except HTTPException:
         raise

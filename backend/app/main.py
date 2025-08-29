@@ -60,30 +60,25 @@ app = FastAPI(
     lifespan=lifespan
 )
 
-# Configure CORS
+# Configure CORS - MUST be first middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:3000",  # React development server
-        "http://localhost:3001",  # React development server (alternate port)
-        "http://localhost:5173",  # Vite development server
-        "http://127.0.0.1:3000",
-        "http://127.0.0.1:3001",
-        "http://127.0.0.1:5173",
-        "https://pharma-frontend.railway.app",  # Production frontend
-        "https://pharma-erp.vercel.app",  # Vercel deployment
-        "https://*.vercel.app",  # Any Vercel preview
-        "https://*.railway.app",  # Any Railway preview
-        "*"  # Allow all origins temporarily for debugging
-    ],
+    allow_origins=["*"],  # Allow all origins for now to avoid CORS issues
     allow_credentials=True,
-    allow_methods=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],  # Explicitly list methods
     allow_headers=["*"],
+    expose_headers=["*"],
+    max_age=3600,
 )
 
 # Disable automatic trailing slash redirects to avoid CORS preflight issues
 # This allows both /api/customers and /api/customers/ to work without redirects
 app.router.redirect_slashes = False
+
+# Handle OPTIONS requests for CORS preflight
+@app.options("/{full_path:path}")
+async def options_handler(full_path: str):
+    return {"message": "OK"}
 
 # Health check endpoint
 @app.get("/")
