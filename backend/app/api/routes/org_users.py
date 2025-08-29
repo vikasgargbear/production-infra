@@ -114,17 +114,17 @@ def create_org_user(user_data: dict, db: Session = Depends(get_db),
     org_id: str = Depends(get_org_id_from_header)):
     """Create a new org user"""
     try:
+        # IMPORTANT: Convert org_id to UUID as per migration guide
+        from uuid import UUID
+        if isinstance(org_id, str):
+            org_id = UUID(org_id)
+        
         # Hash password if provided
         password = user_data.pop('password', None)
         if password:
             password_hash = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
         else:
             password_hash = 'temp_password_hash'  # Should be set properly
-        
-        # Extract fields
-        org_id = user_data.get('org_id')
-        if not org_id:
-            raise HTTPException(status_code=400, detail="org_id is required")
             
         # Prepare insert query
         query = text("""

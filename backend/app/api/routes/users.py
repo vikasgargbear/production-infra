@@ -70,24 +70,30 @@ def create_user(user_data: dict, db: Session = Depends(get_db),
     org_id: str = Depends(get_org_id_from_header)):
     """Create a new user"""
     try:
+        # IMPORTANT: Convert org_id to UUID as per migration guide
+        from uuid import UUID
+        if isinstance(org_id, str):
+            org_id = UUID(org_id)
+        
         # Extract full name and split into first/last
         full_name = user_data.get('full_name', user_data.get('fullName', ''))
         name_parts = full_name.split(' ', 1) if full_name else ['', '']
         first_name = name_parts[0] or user_data.get('username', 'User')
         last_name = name_parts[1] if len(name_parts) > 1 else ''
         
+        # Log for debugging
+        logger.info(f"Creating user with org_id type: {type(org_id)}, value: {org_id}")
+        
         # Insert into master.org_users (full_name is GENERATED, so we use first_name and last_name)
         result = db.execute(
             text("""
                 INSERT INTO master.org_users (
                     username, email, first_name, last_name, mobile_number, 
-                    employee_code, role, is_active, org_id, 
-                    created_at, updated_at
+                    employee_code, role, is_active, org_id
                 )
                 VALUES (
                     :username, :email, :first_name, :last_name, :mobile_number,
-                    :employee_code, :role, true, :org_id, 
-                    CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+                    :employee_code, :role, true, :org_id
                 )
                 RETURNING user_id, username, email, full_name
             """),
@@ -99,7 +105,7 @@ def create_user(user_data: dict, db: Session = Depends(get_db),
                 "mobile_number": user_data.get("phone", user_data.get("mobile_number", "")),
                 "employee_code": user_data.get("employee_id", user_data.get("employee_code")),
                 "role": user_data.get("role", "staff"),
-                "org_id": org_id  # Use org_id from header, not hardcoded
+                "org_id": org_id  # Now this is UUID type
             }
         )
         new_user = result.first()
@@ -110,6 +116,7 @@ def create_user(user_data: dict, db: Session = Depends(get_db),
     except Exception as e:
         db.rollback()
         logger.error(f"Error creating user: {str(e)}")
+        logger.error(f"Error details - columns might be: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to create user: {str(e)}")
 
 @router.put("/{user_id}")
