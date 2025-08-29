@@ -88,17 +88,13 @@ const SalesReturnFlow = ({ onClose }) => {
         // Get return reasons from metadata API
         const response = await metadataApi.getReturnReasons();
         
-        const returnReasons = response.data?.sales_return_reasons || [];
+        const fetchedReasons = response.data?.sales_return_reasons || [];
         
-        if (Array.isArray(returnReasons) && returnReasons.length > 0) {
+        if (Array.isArray(fetchedReasons) && fetchedReasons.length > 0) {
           // Use return reasons directly from metadata API
-          const reasons = returnReasons;
-          
-          if (reasons.length > 0) {
-            setReturnReasons(reasons);
-            // Cache for offline use
-            await offlineStorage.storeOffline('sales_return_reasons', reasons, { persistent: true });
-          }
+          setReturnReasons(fetchedReasons);
+          // Cache for offline use
+          await offlineStorage.storeOffline('sales_return_reasons', fetchedReasons, { persistent: true });
         }
       } catch (error) {
         // Silently fail and keep using default reasons
@@ -234,21 +230,6 @@ const SalesReturnFlow = ({ onClose }) => {
         }))
       }));
     }
-        );
-      }
-
-      setReturnableInvoices(filteredInvoices);
-      setInvoicePagination({
-        page: 1,
-        limit: 10,
-        total_count: filteredInvoices.length,
-        total_pages: 1,
-        has_next: false,
-        has_prev: false
-      });
-    } finally {
-      setLoadingInvoices(false);
-    }
   };
 
   // Handle customer selection
@@ -306,9 +287,6 @@ const SalesReturnFlow = ({ onClose }) => {
       console.error('Error fetching customer dues:', error);
       setCustomerDues(0);
     }
-
-    // Fetch customer invoices
-    await fetchCustomerInvoices(customerId);
   };
 
   // Handle skipping invoice selection for general return
@@ -377,133 +355,6 @@ const SalesReturnFlow = ({ onClose }) => {
     }));
   };
 
-  // Handle invoice selection
-  const handleInvoiceSelect = async (invoice) => {
-    setSelectedInvoice(invoice);
-    
-    // Fetch invoice details if items not included
-    let invoiceWithItems = invoice;
-    if (!invoice.items || invoice.items.length === 0) {
-      try {
-        setLoading(true);
-        
-        // Add timeout to prevent hanging
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 8000); // 8 second timeout
-        
-        const response = await InvoiceApiService.getInvoiceById(invoice.invoice_id || invoice.id, {
-          signal: controller.signal
-        });
-        
-        clearTimeout(timeoutId);
-        
-        if (response.success) {
-          invoiceWithItems = response.data;
-        }
-      } catch (error) {
-        if (error.name === 'AbortError') {
-          toast.error('Request timed out. Please try again.');
-        } else {
-          toast.error('Failed to fetch invoice details');
-        }
-        console.error('Error fetching invoice details:', error);
-        setLoading(false);
-        return;
-      } finally {
-        setLoading(false);
-      }
-    }
-    
-    // Debug: log the invoice data to see what fields we have
-    if (invoiceWithItems.items && invoiceWithItems.items.length > 0) {
-      // Successfully loaded invoice items
-    }
-    
-    setReturnData(prev => ({
-      ...prev,
-      invoice_id: invoiceWithItems.invoice_id || invoiceWithItems.id,
-      invoice_no: invoiceWithItems.invoice_number || invoiceWithItems.invoice_no,
-      invoice_date: invoiceWithItems.invoice_date,
-      original_invoice: invoiceWithItems,
-      items: (invoiceWithItems.items || []).map((item, index) => {
-        // Use backend data directly - base_quantity is the paid quantity
-        const totalQty = parseFloat(item.quantity || 0);
-        const freeQty = parseFloat(item.free_quantity || 0);
-        
-        // Backend sends base_quantity as the actual paid quantity
-        let paidQty;
-        if (item.base_quantity !== undefined && item.base_quantity !== null) {
-          paidQty = parseFloat(item.base_quantity);
-        } else if (item.paid_quantity !== undefined && item.paid_quantity !== null) {
-          paidQty = parseFloat(item.paid_quantity);
-        } else {
-          // Calculate paid qty, but ensure it's not negative
-          paidQty = Math.max(0, totalQty - freeQty);
-        }
-        
-        // Handle data inconsistency - if free > total, adjust free
-        if (freeQty > totalQty) {
-          console.warn(`Data inconsistency: free_quantity (${freeQty}) > total quantity (${totalQty}) for ${item.product_name}`);
-          // In this case, assume all are free
-          paidQty = 0;
-        }
-        
-        // Calculate max returnable (considering already returned items)
-        const returnedQty = parseFloat(item.returned_quantity || 0);
-        const maxReturnablePaid = Math.max(0, paidQty - returnedQty);
-        const maxReturnableTotal = Math.max(0, totalQty - returnedQty);
-        
-        return {
-          ...item,
-          id: item.item_id || item.id || `item-${index}`,
-          product_id: item.product_id,
-          product_name: item.product_name || item.product?.name,
-          // Invoice items have batch_number but not batch_id
-          batch_id: item.batch_id || null,
-          batch_no: item.batch_number || item.batch_no || item.batch?.batch_no,
-          batch_number: item.batch_number || item.batch_no,
-          manufacturing_date: item.manufacturing_date,
-          expiry_date: item.expiry_date,
-          rate: parseFloat(item.unit_price || item.rate || item.sale_price || item.price || 0),
-          // GST calculation from actual backend data
-          // Backend sends cgst_rate and sgst_rate as strings like "6.00"
-          tax_percent: (() => {
-            // Try direct tax_percent first
-            if (item.tax_percent) return parseFloat(item.tax_percent);
-            if (item.gst_percent) return parseFloat(item.gst_percent);
-            
-            // Calculate from CGST + SGST (most common case)
-            const cgst = parseFloat(item.cgst_rate || item.cgst_percent || 0);
-            const sgst = parseFloat(item.sgst_rate || item.sgst_percent || 0);
-            const igst = parseFloat(item.igst_rate || item.igst_percent || 0);
-            
-            // Return whichever is available
-            if (cgst || sgst) return cgst + sgst;
-            if (igst) return igst;
-            
-            return 0; // Default to 0 if no tax info found
-          })(),
-          cgst_rate: parseFloat(item.cgst_rate || item.cgst_percent || 0),
-          sgst_rate: parseFloat(item.sgst_rate || item.sgst_percent || 0),
-          igst_rate: parseFloat(item.igst_rate || item.igst_percent || 0),
-          discount_percent: parseFloat(item.discount_percent || item.discount || 0),
-          discount_amount: parseFloat(item.discount_amount || 0),
-          // Quantities - use actual values
-          quantity: totalQty,
-          paid_quantity: paidQty,
-          free_quantity: freeQty,
-          // Auto-populate with total returnable (user can return all)
-          return_quantity: maxReturnableTotal,
-          max_returnable_qty: maxReturnableTotal,
-          max_returnable_paid: maxReturnablePaid, // Track paid limit separately
-          return_reason: '',
-          // Auto-select items that have something to return
-          selected: maxReturnableTotal > 0,
-          hsn_code: item.hsn_code || ''
-        };
-      })
-    }));
-  };
 
   // Update return item - handle both index and id based updates
   const updateReturnItem = (indexOrId, field, value) => {
@@ -928,55 +779,7 @@ const SalesReturnFlow = ({ onClose }) => {
                           showItems={false}
                           title=""
                           pageSize={10}
-                                    </p>
-                                    {invoice.has_returns && (
-                                      <>
-                                        <p className="text-xs text-orange-600 mt-1">
-                                          Returned: ₹{invoice.total_returned?.toFixed(2) || '0.00'}
-                                        </p>
-                                        {invoice.return_numbers && (
-                                          <p className="text-xs text-gray-500">
-                                            Returns: {invoice.return_numbers}
-                                          </p>
-                                        )}
-                                      </>
-                                    )}
-                                  </div>
-                                </div>
-                              </div>
-                            ))}
-                            
-                            {/* Pagination */}
-                            {invoicePagination && invoicePagination.total_pages > 1 && (
-                              <div className="flex items-center justify-center space-x-2 mt-4">
-                                <button
-                                  onClick={() => setInvoicePage(prev => Math.max(1, prev - 1))}
-                                  disabled={!invoicePagination.has_prev}
-                                  className="px-3 py-1 text-sm border border-gray-300 rounded disabled:opacity-50"
-                                >
-                                  Previous
-                                </button>
-                                <span className="text-sm text-gray-600">
-                                  Page {invoicePagination.page} of {invoicePagination.total_pages}
-                                </span>
-                                <button
-                                  onClick={() => setInvoicePage(prev => prev + 1)}
-                                  disabled={!invoicePagination.has_next}
-                                  className="px-3 py-1 text-sm border border-gray-300 rounded disabled:opacity-50"
-                                >
-                                  Next
-                                </button>
-                              </div>
-                            )}
-                          </div>
-                        ) : (
-                          <div className="text-center py-8 text-gray-500">
-                            <FileText className="w-12 h-12 mx-auto mb-3 text-gray-300" />
-                            <p className="text-lg font-medium">No invoices found</p>
-                            <p className="text-sm">This customer has no returnable invoices</p>
-                          </div>
-                        )}
-                      </div>
+                        />
                     )}
                   </div>
                 )}

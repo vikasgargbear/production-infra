@@ -5,10 +5,10 @@ import {
   Package, RotateCcw, X
 } from 'lucide-react';
 import InvoiceApiService from '../../services/InvoiceApiService';
-import { formatCurrency, formatDate } from './utils/formatters';
-import StandardDatePicker from './ui/StandardDatePicker';
-import Select from './ui/Select';
-import LoadingSpinner from './ui/LoadingSpinner';
+import { formatCurrency, formatDate } from '../../utils/formatters';
+import StandardDatePicker from './ui/forms/StandardDatePicker';
+import { Select } from './ui';
+import LoadingSpinner from '../LoadingSpinner';
 
 /**
  * Global Invoice Selector Component
