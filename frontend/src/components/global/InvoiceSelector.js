@@ -4,7 +4,7 @@ import {
   FileText, AlertCircle, CheckCircle, Clock, DollarSign,
   Package, RotateCcw, X
 } from 'lucide-react';
-import InvoiceApiService from '../../services/InvoiceApiService';
+import InvoiceApiService from '../../services/invoiceApiService';
 import { formatCurrency, formatDate } from '../../utils/formatters';
 import StandardDatePicker from './ui/forms/StandardDatePicker';
 import { Select } from './ui';

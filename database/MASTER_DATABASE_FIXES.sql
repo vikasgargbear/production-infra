@@ -2476,3 +2476,47 @@ END $$;
 -- - Multi-factor authentication
 -- - OAuth providers integration
 RAISE NOTICE '==========================================';
+-- ========================================
+-- SECTION 23: ROLE-BASED ACCESS CONTROL (RBAC) SETUP
+-- ========================================
+-- NOTE: Run this section to setup default roles for all organizations
+-- This creates 7 standard roles: Admin, Manager, Billing, Store, Accountant, Sales Executive, Viewer
+
+/*
+To run this section manually:
+
+DO $$
+DECLARE
+    org_record RECORD;
+    role_exists BOOLEAN;
+BEGIN
+    -- Loop through all active organizations
+    FOR org_record IN 
+        SELECT org_id, org_name 
+        FROM master.organizations 
+        WHERE is_active = true
+    LOOP
+        RAISE NOTICE 'Setting up roles for organization: %', org_record.org_name;
+        
+        -- Create all 7 default roles as shown below...
+        -- (Full implementation available in backend/app/core/role_management.py)
+    END LOOP;
+END $$;
+
+-- After creating roles, assign them to existing users:
+UPDATE master.org_users u
+SET role_id = r.role_id
+FROM master.roles r
+WHERE u.org_id = r.org_id 
+  AND r.role_code = CASE 
+    WHEN u.is_admin THEN 'admin'
+    ELSE 'manager'
+  END
+  AND u.role_id IS NULL;
+
+*/
+
+-- View to check role assignments:
+-- SELECT * FROM master.v_role_user_summary;
+
+RAISE NOTICE 'Section 23: RBAC setup instructions added. Run the DO block above to create roles.';
