@@ -133,7 +133,8 @@ export const returnsApi = {
     return response;
   },
 
-  // Get returnable invoices
+  // Get returnable invoices - DEPRECATED, use InvoiceApiService.getInvoices instead
+  // Keeping for backward compatibility but should be removed
   getReturnableInvoices: async (params = {}) => {
     return apiClient.get('sale-returns/returnable-invoices', { params });
   },

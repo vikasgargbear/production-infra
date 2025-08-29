@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from sqlalchemy import text
 import logging
+import json
 
 from ...core.database import get_db
 from ...core.auth_utils import get_org_id_from_header
@@ -84,18 +85,41 @@ def create_user(user_data: dict, db: Session = Depends(get_db),
         # Log for debugging
         logger.info(f"Creating user with org_id type: {type(org_id)}, value: {org_id}")
         
-        # Insert into master.org_users (full_name is GENERATED, so we use first_name and last_name)
+        # Map role names to simple role_ids (you can customize these)
+        # For now, using simple integer mapping
+        role_mapping = {
+            "admin": 1,      # Full access
+            "manager": 2,    # Department manager
+            "staff": 3,      # Regular staff
+            "viewer": 4      # Read-only access
+        }
+        
+        role_name = user_data.get("role", "staff").lower()
+        role_id = role_mapping.get(role_name, 3)  # Default to staff
+        
+        # Set is_admin flag based on role
+        is_admin = role_name == "admin"
+        
+        # Set basic permissions based on role
+        permissions = {
+            "admin": {"all": True},
+            "manager": {"view": True, "create": True, "edit": True, "delete": False, "reports": True},
+            "staff": {"view": True, "create": True, "edit": True, "delete": False},
+            "viewer": {"view": True, "create": False, "edit": False, "delete": False}
+        }.get(role_name, {"view": True})
+        
+        # Insert into master.org_users with role and security settings
         result = db.execute(
             text("""
                 INSERT INTO master.org_users (
                     username, email, first_name, last_name, mobile_number, 
-                    employee_code, role, is_active, org_id
+                    employee_code, role_id, is_admin, permissions, is_active, org_id
                 )
                 VALUES (
                     :username, :email, :first_name, :last_name, :mobile_number,
-                    :employee_code, :role, true, :org_id
+                    :employee_code, :role_id, :is_admin, :permissions, true, :org_id
                 )
-                RETURNING user_id, username, email, full_name
+                RETURNING user_id, username, email, full_name, role_id, is_admin
             """),
             {
                 "username": user_data.get("username"),
@@ -104,7 +128,9 @@ def create_user(user_data: dict, db: Session = Depends(get_db),
                 "last_name": last_name,
                 "mobile_number": user_data.get("phone", user_data.get("mobile_number", "")),
                 "employee_code": user_data.get("employee_id", user_data.get("employee_code")),
-                "role": user_data.get("role", "staff"),
+                "role_id": role_id,
+                "is_admin": is_admin,
+                "permissions": json.dumps(permissions),
                 "org_id": org_id  # Now this is UUID type
             }
         )
@@ -163,9 +189,34 @@ def update_user(user_id: int, user_data: dict, db: Session = Depends(get_db),
         if 'is_active' in user_data:
             update_fields.append("is_active = :is_active")
             params["is_active"] = user_data['is_active']
+        
+        # Handle role updates
         if 'role' in user_data:
-            update_fields.append("role = :role")
-            params["role"] = user_data['role']
+            role_mapping = {
+                "admin": 1,
+                "manager": 2,
+                "staff": 3,
+                "viewer": 4
+            }
+            role_name = user_data['role'].lower()
+            role_id = role_mapping.get(role_name, 3)
+            is_admin = role_name == "admin"
+            
+            update_fields.append("role_id = :role_id")
+            update_fields.append("is_admin = :is_admin")
+            params["role_id"] = role_id
+            params["is_admin"] = is_admin
+            
+            # Update permissions based on role
+            permissions = {
+                "admin": {"all": True},
+                "manager": {"view": True, "create": True, "edit": True, "delete": False, "reports": True},
+                "staff": {"view": True, "create": True, "edit": True, "delete": False},
+                "viewer": {"view": True, "create": False, "edit": False, "delete": False}
+            }.get(role_name, {"view": True})
+            
+            update_fields.append("permissions = :permissions")
+            params["permissions"] = json.dumps(permissions)
             
         if not update_fields:
             raise HTTPException(status_code=400, detail="No fields to update")
