@@ -343,12 +343,13 @@ async def create_order(
 
 **Apply this pattern in:**
 - ✅ Sales Orders (completed)
-- ⏳ Purchase Orders
-- ⏳ Delivery Challans  
-- ⏳ GRN (Goods Receipt Note)
-- ⏳ Returns (Sales & Purchase)
-- ⏳ Stock Management
-- ⏳ Any other component with org_id foreign keys
+- ✅ Purchase Orders (completed)
+- ✅ Delivery Challans (completed)
+- ✅ GRN (Goods Receipt Note) (completed)
+- ✅ Returns (Sales & Purchase) (completed)
+- ✅ Stock Management (completed)
+- ✅ Financial Hub (payments, journal entries) (completed)
+- ✅ Master Components (products, suppliers) (completed)
 
 **Why this happens:**
 1. FastAPI Depends returns string from headers/tokens
