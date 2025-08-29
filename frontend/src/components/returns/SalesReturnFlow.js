@@ -6,7 +6,7 @@ import {
 import { 
   CustomerSearch, ProductSearchSimple, ModuleHeader,
   DatePicker, Select, NumberInput, NotesSection, useToast, ViewHistoryButton,
-  ProceedToReviewComponent, StandardDatePicker
+  ProceedToReviewComponent, StandardDatePicker, InvoiceSelector
 } from '../global';
 import CustomerCreationB2B from '../global/ui/forms/CustomerCreationB2B';
 import { returnsApi, customersApi, settingsApi, metadataApi } from '../../services/api';
@@ -53,20 +53,9 @@ const SalesReturnFlow = ({ onClose }) => {
 
   const [selectedCustomer, setSelectedCustomer] = useState(null);
   const [selectedInvoice, setSelectedInvoice] = useState(null);
-  const [returnableInvoices, setReturnableInvoices] = useState([]);
-  const [loadingInvoices, setLoadingInvoices] = useState(false);
   const [customerDues, setCustomerDues] = useState(0);
   const [returnReasons, setReturnReasons] = useState([]);
   const [showCustomerModal, setShowCustomerModal] = useState(false);
-  const [invoiceFilters, setInvoiceFilters] = useState({
-    dateFrom: '',
-    dateTo: '',
-    status: 'all',
-    minAmount: '',
-    maxAmount: ''
-  });
-  const [invoicePage, setInvoicePage] = useState(1);
-  const [invoicePagination, setInvoicePagination] = useState(null);
   const [showManualEntry, setShowManualEntry] = useState(false);
   const [showInvoiceSection, setShowInvoiceSection] = useState(true);
   const [manualItemCounter, setManualItemCounter] = useState(1);
@@ -202,151 +191,49 @@ const SalesReturnFlow = ({ onClose }) => {
     }
   }, []);
 
-  // Load customer invoices when customer is selected
-  const fetchCustomerInvoices = async (customerId) => {
-    if (!customerId) {
-      setReturnableInvoices([]);
-      setInvoicePagination(null);
-      return;
+  // Handle invoice selection from InvoiceSelector
+  const handleInvoiceSelect = async (invoice) => {
+    if (!invoice) return;
+    
+    setSelectedInvoice(invoice);
+    setReturnData(prev => ({
+      ...prev,
+      invoice_id: invoice.id || invoice.invoice_id,
+      invoice_no: invoice.invoice_number,
+      invoice_date: invoice.invoice_date,
+      original_invoice: invoice
+    }));
+    
+    // Load invoice items if not already loaded
+    if (!invoice.items || invoice.items.length === 0) {
+      try {
+        const fullInvoice = await InvoiceApiService.getInvoiceById(invoice.id || invoice.invoice_id);
+        if (fullInvoice.success && fullInvoice.data) {
+          const items = fullInvoice.data.items || [];
+          setReturnData(prev => ({
+            ...prev,
+            items: items.map(item => ({
+              ...item,
+              return_quantity: 0,
+              selected: false
+            }))
+          }));
+        }
+      } catch (error) {
+        console.error('Error loading invoice items:', error);
+        toast.error('Failed to load invoice items');
+      }
+    } else {
+      // Use existing items
+      setReturnData(prev => ({
+        ...prev,
+        items: invoice.items.map(item => ({
+          ...item,
+          return_quantity: 0,
+          selected: false
+        }))
+      }));
     }
-
-    // Prevent multiple simultaneous calls
-    if (loadingInvoices) {
-      return;
-    }
-
-    setLoadingInvoices(true);
-    try {
-      // Add timeout to prevent hanging
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
-      
-      // Use InvoiceApiService to fetch invoices for the customer (this was working)
-      const response = await InvoiceApiService.getInvoices({
-        customer_id: customerId,
-        limit: 10,
-        offset: (invoicePage - 1) * 10,
-        signal: controller.signal
-      });
-      
-      clearTimeout(timeoutId);
-      
-      if (response.success && response.data) {
-        let allInvoices = response.data.invoices?.map(invoice => ({
-          id: invoice.invoice_id,
-          invoice_number: invoice.invoice_number,
-          invoice_date: invoice.invoice_date,
-          total_amount: parseFloat(invoice.final_amount || invoice.grand_total) || 0,
-          outstanding_amount: parseFloat(invoice.final_amount || invoice.grand_total) - parseFloat(invoice.paid_amount || 0),
-          status: invoice.payment_status || 'pending',
-          items: invoice.items || []
-        })) || [];
-
-        // Apply frontend filters
-        if (invoiceFilters.dateFrom) {
-          allInvoices = allInvoices.filter(invoice => 
-            new Date(invoice.invoice_date) >= new Date(invoiceFilters.dateFrom)
-          );
-        }
-        
-        if (invoiceFilters.dateTo) {
-          allInvoices = allInvoices.filter(invoice => 
-            new Date(invoice.invoice_date) <= new Date(invoiceFilters.dateTo)
-          );
-        }
-        
-        if (invoiceFilters.status !== 'all') {
-          allInvoices = allInvoices.filter(invoice => 
-            invoice.status.toLowerCase() === invoiceFilters.status.toLowerCase()
-          );
-        }
-        
-        if (invoiceFilters.minAmount) {
-          allInvoices = allInvoices.filter(invoice => 
-            invoice.total_amount >= parseFloat(invoiceFilters.minAmount)
-          );
-        }
-        
-        if (invoiceFilters.maxAmount) {
-          allInvoices = allInvoices.filter(invoice => 
-            invoice.total_amount <= parseFloat(invoiceFilters.maxAmount)
-          );
-        }
-
-        setReturnableInvoices(allInvoices);
-        setInvoicePagination({
-          page: invoicePage,
-          limit: 10,
-          total_count: response.data.total || allInvoices.length,
-          total_pages: Math.ceil((response.data.total || allInvoices.length) / 10),
-          has_next: invoicePage < Math.ceil((response.data.total || allInvoices.length) / 10),
-          has_prev: invoicePage > 1
-        });
-      }
-    } catch (error) {
-      // Don't show error for aborted requests (component unmount or new request)
-      if (error.name === 'AbortError') {
-        // Invoice fetch aborted
-        setLoadingInvoices(false);
-        return;
-      }
-      
-      console.error('Error fetching customer invoices:', error);
-      
-      // Mock data for UI/UX demonstration
-      const mockInvoices = [
-        {
-          id: 'INV-001',
-          invoice_number: 'INV-2024-001',
-          invoice_date: '2024-01-15',
-          total_amount: 15000,
-          outstanding_amount: 15000,
-          status: 'paid',
-          items: [
-            { id: 1, product_name: 'Paracetamol 500mg', quantity: 100, rate: 50, hsn_code: '30049099' },
-            { id: 2, product_name: 'Aspirin 75mg', quantity: 50, rate: 100, hsn_code: '30049099' }
-          ]
-        },
-        {
-          id: 'INV-002',
-          invoice_number: 'INV-2024-002',
-          invoice_date: '2024-01-10',
-          total_amount: 25000,
-          outstanding_amount: 5000,
-          status: 'partial',
-          items: [
-            { id: 3, product_name: 'Vitamin D3 Tablets', quantity: 200, rate: 75, hsn_code: '30049099' }
-          ]
-        },
-        {
-          id: 'INV-003',
-          invoice_number: 'INV-2024-003',
-          invoice_date: '2024-01-05',
-          total_amount: 18000,
-          outstanding_amount: 18000,
-          status: 'paid',
-          items: []
-        }
-      ];
-
-      // Apply frontend filters to mock data
-      let filteredInvoices = [...mockInvoices];
-      
-      if (invoiceFilters.dateFrom) {
-        filteredInvoices = filteredInvoices.filter(invoice => 
-          new Date(invoice.invoice_date) >= new Date(invoiceFilters.dateFrom)
-        );
-      }
-      
-      if (invoiceFilters.dateTo) {
-        filteredInvoices = filteredInvoices.filter(invoice => 
-          new Date(invoice.invoice_date) <= new Date(invoiceFilters.dateTo)
-        );
-      }
-      
-      if (invoiceFilters.status !== 'all') {
-        filteredInvoices = filteredInvoices.filter(invoice => 
-          invoice.status.toLowerCase() === invoiceFilters.status.toLowerCase()
         );
       }
 
@@ -1031,55 +918,16 @@ const SalesReturnFlow = ({ onClose }) => {
                           </div>
                         </div>
                         
-                        {/* Invoice List */}
-                        {loadingInvoices ? (
-                          <div className="text-center py-8">
-                            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
-                            <p className="text-gray-600 mt-2">Loading invoices...</p>
-                          </div>
-                        ) : returnableInvoices.length > 0 ? (
-                          <div className="space-y-2">
-                            {returnableInvoices.map((invoice) => (
-                              <div
-                                key={invoice.id}
-                                onClick={() => handleInvoiceSelect(invoice)}
-                                className="p-4 border border-gray-200 rounded-lg hover:bg-gray-50 cursor-pointer transition-colors"
-                              >
-                                <div className="flex items-center justify-between">
-                                  <div className="flex-1">
-                                    <div className="flex items-center gap-2">
-                                      <h4 className="font-semibold text-gray-900">
-                                        Invoice #{invoice.invoice_number}
-                                      </h4>
-                                      {invoice.has_returns && (
-                                        <span className="inline-flex items-center px-2 py-0.5 text-xs rounded-full bg-yellow-100 text-yellow-700">
-                                          {invoice.return_count} Return{invoice.return_count > 1 ? 's' : ''}
-                                        </span>
-                                      )}
-                                    </div>
-                                    <p className="text-sm text-gray-600">
-                                      Date: {new Date(invoice.invoice_date).toLocaleDateString()}
-                                    </p>
-                                    <p className="text-sm text-gray-600">
-                                      Status: <span className={`font-medium ${
-                                        invoice.status === 'paid' ? 'text-green-600' : 
-                                        invoice.status === 'partial' ? 'text-yellow-600' : 'text-red-600'
-                                      }`}>
-                                        {invoice.status?.charAt(0).toUpperCase() + invoice.status?.slice(1) || ''}
-                                      </span>
-                                    </p>
-                                    {invoice.has_returns && invoice.credit_note_numbers && (
-                                      <p className="text-xs text-gray-500 mt-1">
-                                        Credit Notes: {invoice.credit_note_numbers}
-                                      </p>
-                                    )}
-                                  </div>
-                                  <div className="text-right">
-                                    <p className="font-semibold text-gray-900">
-                                      ₹{invoice.total_amount?.toFixed(2) || '0.00'}
-                                    </p>
-                                    <p className="text-sm text-gray-600">
-                                      Outstanding: ₹{invoice.outstanding_amount?.toFixed(2) || '0.00'}
+                        {/* Invoice Selector Component */}
+                        <InvoiceSelector
+                          customerId={selectedCustomer?.customer_id || selectedCustomer?.id}
+                          onSelect={handleInvoiceSelect}
+                          mode="single"
+                          showReturnStatus={true}
+                          showPaymentStatus={true}
+                          showItems={false}
+                          title=""
+                          pageSize={10}
                                     </p>
                                     {invoice.has_returns && (
                                       <>

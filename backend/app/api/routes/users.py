@@ -2,15 +2,21 @@
 Users API Router
 Manages system users and authentication
 """
-from typing import List, Optional
-from fastapi import APIRouter, Depends, HTTPException, Query
+from typing import List, Optional, Dict, Any
+from fastapi import APIRouter, Depends, HTTPException, Query, Header
 from sqlalchemy.orm import Session
 from sqlalchemy import text
 import logging
 import json
 
 from ...core.database import get_db
-from ...core.auth_utils import get_org_id_from_header
+from ...core.auth_utils import get_org_id_from_header, get_user_context_from_token
+from ...core.permissions import (
+    PermissionChecker, 
+    require_master_permission,
+    check_permission,
+    PERMISSIONS
+)
 
 logger = logging.getLogger(__name__)
 
@@ -24,12 +30,16 @@ def get_users(
     limit: int = 100,
     search: Optional[str] = Query(None, description="Search by username or email"),
     db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    current_user: Dict[str, Any] = Depends(PermissionChecker("master", "view")),
+    authorization: str = Header(None)
 ):
     """Get users with optional search"""
     try:
-        query = "SELECT user_id, username, email, full_name, is_active FROM master.org_users WHERE 1=1"
-        params = {}
+        # Use org_id from current user context
+        org_id = current_user.get('org_id')
+        
+        query = "SELECT user_id, username, email, full_name, role_id, is_active FROM master.org_users WHERE org_id = :org_id"
+        params = {"org_id": org_id}
         
         if search:
             query += " AND (LOWER(username) LIKE LOWER(:search) OR LOWER(email) LIKE LOWER(:search))"
@@ -48,13 +58,20 @@ def get_users(
         raise HTTPException(status_code=500, detail=f"Failed to get users: {str(e)}")
 
 @router.get("/{user_id}")
-def get_user(user_id: int, db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)):
+def get_user(
+    user_id: int, 
+    db: Session = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(PermissionChecker("master", "view"))
+):
     """Get a single user by ID (excluding password)"""
     try:
+        org_id = current_user.get('org_id')
+        
         result = db.execute(
-            text("SELECT user_id, username, email, full_name, is_active FROM master.org_users WHERE user_id = :user_id"),
-            {"user_id": user_id}
+            text("""SELECT user_id, username, email, full_name, role_id, is_active 
+                    FROM master.org_users 
+                    WHERE user_id = :user_id AND org_id = :org_id"""),
+            {"user_id": user_id, "org_id": org_id}
         )
         user = result.first()
         if not user:
@@ -67,12 +84,16 @@ def get_user(user_id: int, db: Session = Depends(get_db),
         raise HTTPException(status_code=500, detail=f"Failed to get user: {str(e)}")
 
 @router.post("/")
-def create_user(user_data: dict, db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)):
+def create_user(
+    user_data: dict, 
+    db: Session = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(PermissionChecker("master", "create"))
+):
     """Create a new user"""
     try:
-        # IMPORTANT: Convert org_id to UUID as per migration guide
+        # Get org_id from current user context
         from uuid import UUID
+        org_id = current_user.get('org_id')
         if isinstance(org_id, str):
             org_id = UUID(org_id)
         
@@ -146,14 +167,20 @@ def create_user(user_data: dict, db: Session = Depends(get_db),
         raise HTTPException(status_code=500, detail=f"Failed to create user: {str(e)}")
 
 @router.put("/{user_id}")
-def update_user(user_id: int, user_data: dict, db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)):
+def update_user(
+    user_id: int, 
+    user_data: dict, 
+    db: Session = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(PermissionChecker("master", "edit"))
+):
     """Update a user"""
     try:
-        # Check if user exists
+        org_id = current_user.get('org_id')
+        
+        # Check if user exists in same org
         existing = db.execute(
-            text("SELECT user_id FROM master.org_users WHERE user_id = :user_id"),
-            {"user_id": user_id}
+            text("SELECT user_id FROM master.org_users WHERE user_id = :user_id AND org_id = :org_id"),
+            {"user_id": user_id, "org_id": org_id}
         ).first()
         
         if not existing:
@@ -244,14 +271,19 @@ def update_user(user_id: int, user_data: dict, db: Session = Depends(get_db),
         raise HTTPException(status_code=500, detail=f"Failed to update user: {str(e)}")
 
 @router.delete("/{user_id}")
-def delete_user(user_id: int, db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)):
+def delete_user(
+    user_id: int, 
+    db: Session = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(PermissionChecker("master", "delete"))
+):
     """Delete a user"""
     try:
-        # Check if user exists
+        org_id = current_user.get('org_id')
+        
+        # Check if user exists in same org
         existing = db.execute(
-            text("SELECT user_id FROM master.org_users WHERE user_id = :user_id"),
-            {"user_id": user_id}
+            text("SELECT user_id FROM master.org_users WHERE user_id = :user_id AND org_id = :org_id"),
+            {"user_id": user_id, "org_id": org_id}
         ).first()
         
         if not existing:

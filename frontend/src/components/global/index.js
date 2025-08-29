@@ -14,6 +14,9 @@ export { default as InvoiceSearch } from './search/InvoiceSearch';
 export { default as PurchaseSearch } from './search/PurchaseSearch';
 export { default as HistoricalDataSearch } from './search/HistoricalDataSearch';
 
+// Selector Components
+export { default as InvoiceSelector } from './InvoiceSelector';
+
 // Table Components
 export { default as PharmaItemsTable } from './PharmaItemsTable';
 

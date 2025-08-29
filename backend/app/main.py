@@ -29,6 +29,8 @@ from .api.routes.bank_accounts import router as bank_accounts_router
 
 # Import additional routers not in __init__.py
 from .api.routes import stock_receive, enterprise_delivery_challan, inventory_batches, create_user, delivery_challan, stock_dashboard, sales_orders, grn, journal_entries, expense_claims, settings
+# Import org users APIs
+from .api.routes import org_users, org_users_secure
 # Import new APIs
 from .api.routes import master_settings, schemes_discounts, loyalty_points, compliance, metadata, master_data_crud
 # Import comprehensive enterprise API
@@ -178,6 +180,10 @@ api.include_router(company_simple.router, tags=["Company"])
 
 # Register master data API
 api.include_router(master_data.router, prefix="/master", tags=["Master Data"])
+
+# Register org users APIs
+api.include_router(org_users.router, tags=["Organization Users"])
+api.include_router(org_users_secure.router, tags=["Secure Organization Users"])
 
 # All endpoints consolidated - no temporary workarounds
 
