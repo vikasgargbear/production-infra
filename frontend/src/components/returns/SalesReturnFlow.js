@@ -221,67 +221,30 @@ const SalesReturnFlow = ({ onClose }) => {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
       
-      // Use InvoiceApiService to fetch invoices for the customer
-      const response = await InvoiceApiService.getInvoices({
-        customer_id: customerId,
-        limit: 10,
-        offset: (invoicePage - 1) * 10,
+      // Use returns API to get invoices with return status included
+      const response = await returnsApi.getReturnableInvoices({
+        party_id: customerId,
         signal: controller.signal
       });
       
       clearTimeout(timeoutId);
       
-      if (response.success && response.data) {
+      if (response.data && response.data.invoices) {
         let allInvoices = response.data.invoices?.map(invoice => ({
           id: invoice.invoice_id,
           invoice_number: invoice.invoice_number,
           invoice_date: invoice.invoice_date,
-          total_amount: parseFloat(invoice.final_amount || invoice.grand_total) || 0,
-          outstanding_amount: parseFloat(invoice.final_amount || invoice.grand_total) - parseFloat(invoice.paid_amount || 0),
+          total_amount: parseFloat(invoice.grand_total) || 0,
+          outstanding_amount: parseFloat(invoice.grand_total) - parseFloat(invoice.paid_amount || 0),
           status: invoice.payment_status || 'pending',
-          items: invoice.items || []
+          items: invoice.items || [],
+          // Return status is now included in the response
+          has_returns: invoice.has_returns || false,
+          return_count: invoice.return_count || 0,
+          return_numbers: invoice.return_numbers || '',
+          credit_note_numbers: invoice.credit_note_numbers || '',
+          total_returned: invoice.total_value_returned || 0
         })) || [];
-        
-        // Fetch return status for these invoices
-        try {
-          const returnStatusPromises = allInvoices.map(async (invoice) => {
-            try {
-              const returnResponse = await returnsApi.getReturnsForInvoice(invoice.id);
-              
-              if (returnResponse.data) {
-                return {
-                  invoice_id: invoice.id,
-                  has_returns: returnResponse.data.has_returns || false,
-                  return_count: returnResponse.data.return_count || 0,
-                  return_numbers: returnResponse.data.returns?.map(r => r.return_number).join(', ') || '',
-                  credit_note_numbers: returnResponse.data.returns?.map(r => r.credit_note_number).filter(Boolean).join(', ') || '',
-                  total_returned: returnResponse.data.returns?.reduce((sum, r) => sum + (parseFloat(r.total_amount) || 0), 0) || 0
-                };
-              }
-              return { invoice_id: invoice.id, has_returns: false };
-            } catch (error) {
-              // Silently handle error - invoice might not have returns
-              return { invoice_id: invoice.id, has_returns: false };
-            }
-          });
-          
-          const returnStatuses = await Promise.all(returnStatusPromises);
-          
-          // Merge return status with invoices
-          allInvoices = allInvoices.map(invoice => {
-            const returnStatus = returnStatuses.find(rs => rs.invoice_id === invoice.id) || {};
-            return {
-              ...invoice,
-              has_returns: returnStatus.has_returns || false,
-              return_count: returnStatus.return_count || 0,
-              return_numbers: returnStatus.return_numbers || '',
-              credit_note_numbers: returnStatus.credit_note_numbers || '',
-              total_returned: returnStatus.total_returned || 0
-            };
-          });
-        } catch (error) {
-          console.log('Could not fetch return statuses, continuing without them');
-        }
 
         // Apply frontend filters
         if (invoiceFilters.dateFrom) {
