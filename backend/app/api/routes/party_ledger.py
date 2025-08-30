@@ -20,7 +20,7 @@ router = APIRouter(prefix="/party-ledger", tags=["party-ledger"])
 @router.get("/balance/{party_id}")
 async def get_party_balance(
     party_id: str,
-    party_type: str = Query(..., regex="^(customer|supplier)$"),
+    party_type: str = Query(..., pattern="^(customer|supplier)$"),
     as_of_date: Optional[str] = None,
     db: Session = Depends(get_db),
     org_id: str = Depends(get_org_id_from_header)
@@ -48,10 +48,10 @@ async def get_party_balance(
                     SELECT 
                         payment_date as transaction_date,
                         0 as debit_amount,
-                        amount as credit_amount
+                        payment_amount as credit_amount
                     FROM financial.payments
                     WHERE party_id = :party_id AND party_type = 'customer'
-                    AND status = 'completed'
+                    AND payment_status != 'cancelled'
                     
                     UNION ALL
                     
@@ -59,10 +59,10 @@ async def get_party_balance(
                     SELECT 
                         return_date as transaction_date,
                         0 as debit_amount,
-                        total_refund_amount as credit_amount
+                        total_amount as credit_amount
                     FROM sales.sales_returns
                     WHERE customer_id = :party_id
-                    AND status = 'approved'
+                    AND approval_status = 'approved'
                 )
                 SELECT 
                     COALESCE(SUM(debit_amount - credit_amount), 0) as balance,
@@ -87,11 +87,11 @@ async def get_party_balance(
                     -- Supplier Payments (Debit)
                     SELECT 
                         payment_date as transaction_date,
-                        amount as debit_amount,
+                        payment_amount as debit_amount,
                         0 as credit_amount
                     FROM financial.payments
                     WHERE party_id = :party_id AND party_type = 'supplier'
-                    AND status = 'completed'
+                    AND payment_status != 'cancelled'
                 )
                 SELECT 
                     COALESCE(SUM(credit_amount - debit_amount), 0) as balance,
@@ -133,7 +133,7 @@ async def get_party_balance(
 @router.get("/statement/{party_id}")
 async def get_party_statement(
     party_id: str,
-    party_type: str = Query(..., regex="^(customer|supplier)$"),
+    party_type: str = Query(..., pattern="^(customer|supplier)$"),
     from_date: Optional[str] = None,
     to_date: Optional[str] = None,
     skip: int = Query(0, ge=0),
@@ -195,14 +195,14 @@ async def get_party_statement(
                             payment_date as date,
                             'Payment' as transaction_type,
                             'PAY' as reference_type,
-                            reference_number as reference,
+                            payment_number as reference,
                             COALESCE(narration, 'Payment Received') as description,
                             0 as debit,
-                            amount as credit,
-                            status
+                            payment_amount as credit,
+                            payment_status as status
                         FROM financial.payments
                         WHERE party_id = :party_id AND party_type = 'customer'
-                        AND status = 'completed'
+                        AND payment_status != 'cancelled'
                     )
                     SELECT * FROM ledger_entries
                 """
@@ -385,7 +385,7 @@ async def get_party_statement(
 @router.get("/outstanding-bills/{party_id}")
 async def get_outstanding_bills(
     party_id: str,
-    party_type: str = Query(..., regex="^(customer|supplier)$"),
+    party_type: str = Query(..., pattern="^(customer|supplier)$"),
     as_of_date: Optional[str] = None,
     db: Session = Depends(get_db),
     org_id: str = Depends(get_org_id_from_header)

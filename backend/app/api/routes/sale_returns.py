@@ -517,6 +517,32 @@ async def create_sale_return(
             unit_price = Decimal(str(item.get("rate", 0)))
             discount_percent = Decimal(str(item.get("discount_percent", 0)))
             
+            # Validate return quantity doesn't exceed invoice quantity
+            if invoice_item_id:
+                # Check how much has already been returned for this item
+                already_returned = db.execute(
+                    text("""
+                        SELECT 
+                            ii.quantity as invoice_qty,
+                            COALESCE(SUM(sri.return_quantity), 0) as already_returned
+                        FROM sales.invoice_items ii
+                        LEFT JOIN sales.sales_return_items sri 
+                            ON ii.invoice_item_id = sri.invoice_item_id
+                        WHERE ii.invoice_item_id = :invoice_item_id
+                        GROUP BY ii.quantity
+                    """),
+                    {"invoice_item_id": invoice_item_id}
+                ).fetchone()
+                
+                if already_returned:
+                    max_returnable = Decimal(str(already_returned.invoice_qty)) - Decimal(str(already_returned.already_returned))
+                    if return_qty > max_returnable:
+                        product_name = item.get("product_name", "Product")
+                        raise HTTPException(
+                            status_code=400,
+                            detail=f"Cannot return {return_qty} units of {product_name}. Maximum returnable: {max_returnable}"
+                        )
+            
             # Calculate return value after discount
             base_value = return_qty * unit_price
             discount_amount = base_value * discount_percent / 100
