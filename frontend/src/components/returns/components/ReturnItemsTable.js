@@ -326,8 +326,8 @@ const ReturnItemsTable = ({
                         disabled={!item.selected}
                       />
                     )}
-                    {!item.batch_id && !item.batch_no && item.selected && (
-                      <div className="text-xs text-amber-600 mt-1">Required for tracking</div>
+                    {!item.batch_id && !item.batch_no && item.selected && item.restock !== false && (
+                      <div className="text-xs text-amber-600 mt-1">Will go to quarantine</div>
                     )}
                   </td>
                 )}

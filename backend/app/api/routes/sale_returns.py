@@ -613,8 +613,9 @@ async def create_sale_return(
                 }
             )
             
-            # Update batch stock
+            # Update batch stock based on batch tracking
             if batch_id:
+                # Have batch ID - can directly update the specific batch
                 if saleable_qty > 0:
                     # Update both quantity_available and quantity_returned for restockable items
                     db.execute(
@@ -643,7 +644,24 @@ async def create_sale_return(
                             "batch_id": batch_id
                         }
                     )
-            # Note: If no batch_id, we skip stock update as we can't track non-batch items
+            elif saleable_qty > 0:
+                # No batch ID but item is restockable - put in quarantine for batch assignment
+                # Update quantity_quarantine in the oldest batch or create tracking record
+                db.execute(
+                    text("""
+                        UPDATE inventory.batches 
+                        SET quantity_quarantine = COALESCE(quantity_quarantine, 0) + :qty
+                        WHERE product_id = :product_id
+                        AND quantity_available > 0
+                        ORDER BY expiry_date ASC NULLS LAST
+                        LIMIT 1
+                    """),
+                    {
+                        "qty": saleable_qty,
+                        "product_id": item["product_id"]
+                    }
+                )
+                # Note: Items in quarantine need manual batch assignment later
                 
         # TODO: Update party ledger when table is available
         # For now, we'll skip ledger updates to avoid errors
