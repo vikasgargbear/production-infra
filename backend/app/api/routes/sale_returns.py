@@ -717,7 +717,7 @@ async def create_sale_return(
                         "return_id": return_id,
                         "return_number": return_number,
                         "reason": item_return_reason,
-                        "notes": f"Return from invoice {invoice_result.invoice_number}" if invoice_result else "Manual return",
+                        "notes": f"Return from invoice {invoice_no}" if invoice_no else "Manual return",
                         "created_by": created_by
                     }
                 )
