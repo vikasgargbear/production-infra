@@ -5,6 +5,7 @@
 
 // Use dynamic import to avoid initialization order issues
 import axios from 'axios';
+import orgIdManager from '../OrgIdManager';
 
 // Create our own apiClient instance to avoid circular dependency
 // Use HTTPS for Railway production deployment
@@ -20,17 +21,25 @@ const apiClient = axios.create({
 
 // Add request interceptor for auth token and org_id
 apiClient.interceptors.request.use((config) => {
-  const token = localStorage.getItem('auth_token');
-  if (token) {
-    config.headers.Authorization = `Bearer ${token}`;
+  // ALWAYS get org_id from OrgIdManager (guaranteed to return a value)
+  const orgId = orgIdManager.getOrgId();
+  
+  // Add org_id header
+  config.headers['X-Org-Id'] = orgId;
+  
+  // Log only if there's an issue
+  const isPublicEndpoint = config.url?.includes('/setup/check') || 
+                          config.url?.includes('/auth/') ||
+                          config.url?.includes('/login');
+  
+  if (!orgIdManager.isValidOrgId(orgId) && !isPublicEndpoint) {
+    console.warn('[apiClientExports] Using fallback org_id for:', config.url);
   }
   
-  // Add org_id header for multi-tenant support
-  const orgId = sessionStorage.getItem('pharma_org_id') || localStorage.getItem('pharma_org_id');
-  if (orgId) {
-    config.headers['X-Org-Id'] = orgId;
-  } else {
-    console.warn('No org_id found in storage - API requests may fail');
+  // Then add auth token if it exists
+  const token = localStorage.getItem('authToken') || localStorage.getItem('auth_token');
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`;
   }
   
   return config;
@@ -41,12 +50,16 @@ apiClient.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.response?.status === 401) {
+      localStorage.removeItem('authToken');
       localStorage.removeItem('auth_token');
       window.location.href = '/login';
     }
     return Promise.reject(error);
   }
 );
+
+// Export the configured apiClient for use by other modules
+export { apiClient };
 
 // Define the customerAPI directly in JavaScript to avoid TypeScript export issues
 export const customerAPI = {

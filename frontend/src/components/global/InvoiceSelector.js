@@ -36,7 +36,7 @@ const InvoiceSelector = ({
   showItems = false,
   title = 'Select Invoice',
   filterPredicate = null,
-  pageSize = 10,
+  pageSize = 5,
   className = '',
   onClose = null
 }) => {
@@ -228,34 +228,33 @@ const InvoiceSelector = ({
           )}
         </div>
 
-        {/* Search and Filters */}
-        <div className="space-y-3">
-          {/* Search Bar */}
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
-            <input
-              type="text"
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              placeholder="Search by invoice number or customer..."
-              className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-            />
-          </div>
-
-          {/* Filter Controls */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        {/* Compact Search and Filters */}
+        <div className="space-y-2">
+          {/* Row 1: Search + Date Range + Status */}
+          <div className="flex gap-2">
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+              <input
+                type="text"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                placeholder="Search invoice..."
+                className="w-full pl-9 pr-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              />
+            </div>
+            
             <StandardDatePicker
               value={localFilters.dateFrom}
               onChange={(date) => setLocalFilters({...localFilters, dateFrom: date})}
-              placeholder="From Date"
-              className="w-full"
+              placeholder="From"
+              className="w-28 text-sm"
             />
             
             <StandardDatePicker
               value={localFilters.dateTo}
               onChange={(date) => setLocalFilters({...localFilters, dateTo: date})}
-              placeholder="To Date"
-              className="w-full"
+              placeholder="To"
+              className="w-28 text-sm"
             />
             
             <Select
@@ -267,7 +266,7 @@ const InvoiceSelector = ({
                 { value: 'partial', label: 'Partial' },
                 { value: 'pending', label: 'Pending' }
               ]}
-              className="w-full"
+              className="w-32 text-sm"
             />
 
             {showReturnStatus && (
@@ -275,35 +274,17 @@ const InvoiceSelector = ({
                 value={localFilters.hasReturns}
                 onChange={(value) => setLocalFilters({...localFilters, hasReturns: value})}
                 options={[
-                  { value: 'all', label: 'All Invoices' },
+                  { value: 'all', label: 'All' },
                   { value: 'yes', label: 'Has Returns' },
                   { value: 'no', label: 'No Returns' }
                 ]}
-                className="w-full"
+                className="w-32 text-sm"
               />
             )}
-          </div>
-
-          {/* Amount Range Filters */}
-          <div className="flex gap-3 items-center">
-            <input
-              type="number"
-              value={localFilters.minAmount}
-              onChange={(e) => setLocalFilters({...localFilters, minAmount: e.target.value})}
-              placeholder="Min Amount"
-              className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-            />
-            <span className="text-gray-500">to</span>
-            <input
-              type="number"
-              value={localFilters.maxAmount}
-              onChange={(e) => setLocalFilters({...localFilters, maxAmount: e.target.value})}
-              placeholder="Max Amount"
-              className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-            />
+            
             <button
               onClick={resetFilters}
-              className="px-4 py-2 text-sm text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg"
+              className="px-3 py-1.5 text-sm text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg"
             >
               Reset
             </button>

@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Fix Org ID</title>
+</head>
+<body>
+    <h1>Fixing Org ID...</h1>
+    <script>
+        // Set org_id in all storage locations
+        const orgId = 'e78d6777-35f6-4b19-994f-caaede2f021a';
+        localStorage.setItem('pharma_org_id', orgId);
+        sessionStorage.setItem('pharma_org_id', orgId);
+        localStorage.setItem('org_id', orgId);
+        localStorage.setItem('orgId', orgId);
+        
+        // Also ensure token exists
+        if (!localStorage.getItem('authToken')) {
+            localStorage.setItem('authToken', 'demo_token_' + Date.now());
+        }
+        
+        console.log('Fixed org_id:', orgId);
+        alert('Org ID fixed! Redirecting to app...');
+        
+        // Redirect to main app
+        window.location.href = '/';
+    </script>
+</body>
+</html>

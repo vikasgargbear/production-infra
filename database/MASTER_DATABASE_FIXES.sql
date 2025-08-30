@@ -2520,3 +2520,36 @@ WHERE u.org_id = r.org_id
 -- SELECT * FROM master.v_role_user_summary;
 
 RAISE NOTICE 'Section 23: RBAC setup instructions added. Run the DO block above to create roles.';
+
+-- =============================================
+-- SECTION 24: ADD QUANTITY_RETURNED FOR RETURN TRACKING
+-- =============================================
+-- Date: 2024-12-30
+-- Issue: Backend expects quantity_returned column for returns
+
+DO $$
+BEGIN
+    -- Add quantity_returned column for tracking returns
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_schema = 'inventory' 
+        AND table_name = 'batches' 
+        AND column_name = 'quantity_returned'
+    ) THEN
+        ALTER TABLE inventory.batches 
+        ADD COLUMN quantity_returned DECIMAL(18,3) DEFAULT 0;
+        
+        RAISE NOTICE '✅ Added quantity_returned column to inventory.batches';
+    ELSE
+        RAISE NOTICE '⏭️ Column quantity_returned already exists in inventory.batches';
+    END IF;
+END $$;
+
+-- Add comment separately (correct PostgreSQL syntax)
+
+-- =============================================
+-- END OF MASTER DATABASE FIXES
+-- =============================================
+-- Total Sections: 24
+-- Last Updated: 2024-12-30
+-- =============================================

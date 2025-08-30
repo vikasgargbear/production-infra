@@ -1,5 +1,6 @@
 // Authentication service for JWT-based authentication
 import axios from 'axios';
+import orgIdManager from './OrgIdManager';
 
 const API_BASE_URL = process.env.REACT_APP_API_BASE_URL ? `${process.env.REACT_APP_API_BASE_URL}/api` : (process.env.REACT_APP_API_URL || 'http://localhost:8000/api');
 
@@ -40,12 +41,10 @@ class AuthService {
       localStorage.setItem('token', demoToken); // Also store as 'token' for compatibility
       localStorage.setItem('user', JSON.stringify(demoUserData));
       
-      // For demo users, check if org_id already exists from initial setup
-      // If not, this means setup hasn't been done yet
-      const existingOrgId = localStorage.getItem('pharma_org_id');
-      if (!existingOrgId) {
-        console.warn('No organization setup found. Please complete initial setup.');
-      }
+      // For demo users, ensure org_id is set using OrgIdManager
+      // OrgIdManager will handle setting default if needed
+      const orgId = orgIdManager.getOrgId();
+      console.log('Demo user org_id:', orgId);
 
       // Set default authorization header
       this.setAuthHeader(demoToken);
@@ -72,10 +71,9 @@ class AuthService {
       localStorage.setItem('refreshToken', refresh_token);
       localStorage.setItem('user', JSON.stringify(user));
       
-      // Store org_id from login response
+      // Store org_id from login response using OrgIdManager
       if (organization?.org_id) {
-        localStorage.setItem('pharma_org_id', organization.org_id);
-        sessionStorage.setItem('pharma_org_id', organization.org_id);
+        orgIdManager.setOrgId(organization.org_id);
       }
 
       // Set default authorization header

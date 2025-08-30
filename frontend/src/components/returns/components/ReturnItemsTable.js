@@ -6,7 +6,9 @@ const ReturnItemsTable = ({
   onUpdateItem,
   onRemoveItem,
   includeGst = true,
-  showManualEntry = false
+  showManualEntry = false,
+  availableBatches = {},
+  returnReason = ''
 }) => {
   // Calculate item amounts - ONLY for paid quantities, not free
   const calculateItemAmount = (item) => {
@@ -67,10 +69,8 @@ const ReturnItemsTable = ({
               Product
             </th>
             <th className="px-3 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
-              Paid Qty
-            </th>
-            <th className="px-3 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
-              Free Qty
+              Invoice Qty<br/>
+              <span className="text-xs font-normal">(Paid + Free)</span>
             </th>
             <th className="px-3 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
               Return Qty
@@ -88,6 +88,17 @@ const ReturnItemsTable = ({
             )}
             <th className="px-3 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
               Amount
+            </th>
+            <th className="px-3 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
+              Restock
+            </th>
+            {showManualEntry && (
+              <th className="px-3 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
+                Batch
+              </th>
+            )}
+            <th className="px-3 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
+              Disposition
             </th>
             {onRemoveItem && (
               <th className="px-3 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -113,13 +124,23 @@ const ReturnItemsTable = ({
               paidQty = Math.max(0, totalQty - freeQty);
             }
             
+            // Auto-set disposition based on return reason
+            const shouldRestock = returnReason !== 'EXPIRED' && returnReason !== 'DAMAGED';
+            if (item.restock === undefined && item.selected) {
+              // Set default restock value based on reason
+              setTimeout(() => {
+                onUpdateItem(item.id || index, 'restock', shouldRestock);
+                onUpdateItem(item.id || index, 'disposition', shouldRestock ? 'RESTOCK' : 'DESTROY');
+              }, 0);
+            }
+            
             return (
               <tr key={item.id || index} className={!item.selected ? 'opacity-50' : ''}>
                 <td className="px-3 py-4 whitespace-nowrap">
                   <input
                     type="checkbox"
                     checked={item.selected || false}
-                    onChange={(e) => onUpdateItem(index, 'selected', e.target.checked)}
+                    onChange={(e) => onUpdateItem(item.id || index, 'selected', e.target.checked)}
                     className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
                   />
                 </td>
@@ -135,88 +156,198 @@ const ReturnItemsTable = ({
                   )}
                 </td>
                 <td className="px-3 py-4 whitespace-nowrap text-center">
-                  <div className="text-sm text-gray-900">
-                    {paidQty || 0}
-                  </div>
-                  {totalQty !== paidQty && (
-                    <div className="text-xs text-gray-500">
-                      Total: {totalQty}
+                  <div className="flex flex-col items-center">
+                    <div className="text-sm font-medium text-gray-900">
+                      {totalQty || 0}
                     </div>
-                  )}
-                </td>
-                <td className="px-3 py-4 whitespace-nowrap text-center">
-                  <div className="text-sm text-gray-900">
-                    {freeQty || 0}
+                    <div className="text-xs text-gray-500 mt-0.5">
+                      {paidQty > 0 && (
+                        <span className="text-blue-600">Paid: {paidQty}</span>
+                      )}
+                      {paidQty > 0 && freeQty > 0 && <span className="mx-1">|</span>}
+                      {freeQty > 0 && (
+                        <span className="text-green-600">Free: {freeQty}</span>
+                      )}
+                    </div>
                   </div>
-                  {freeQty > 0 && (
-                    <div className="text-xs text-green-600">FREE</div>
-                  )}
                 </td>
                 <td className="px-3 py-4 whitespace-nowrap">
-                  <input
-                    type="number"
-                    value={item.return_quantity || ''}
-                    onChange={(e) => onUpdateItem(index, 'return_quantity', e.target.value)}
-                    className="w-20 px-2 py-1 text-center border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 font-medium"
-                    min="0"
-                    max={isManual ? undefined : (paidQty + freeQty)}
-                    disabled={!item.selected}
-                  />
-                  {!isManual && (
-                    <div className="text-xs mt-1">
-                      {item.return_quantity > paidQty && (
-                        <span className="text-amber-600">
-                          Includes {Math.min(item.return_quantity - paidQty, freeQty)} free items
-                        </span>
+                  <div className="flex flex-col items-center">
+                    <input
+                      type="number"
+                      value={item.return_quantity || ''}
+                      onChange={(e) => {
+                        const value = parseFloat(e.target.value) || 0;
+                        const maxQty = paidQty + freeQty;
+                        if (value <= maxQty || isManual) {
+                          onUpdateItem(item.id || index, 'return_quantity', e.target.value);
+                        }
+                      }}
+                      className="w-20 px-2 py-1 text-center border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 font-medium"
+                      min="0"
+                      max={isManual ? undefined : (paidQty + freeQty)}
+                      disabled={!item.selected}
+                    />
+                    {!isManual && item.return_quantity > 0 && (
+                      <div className="text-xs mt-1 text-center">
+                        {item.return_quantity <= paidQty ? (
+                          <span className="text-blue-600">
+                            Paid: {item.return_quantity}
+                          </span>
+                        ) : (
+                          <span className="text-amber-600">
+                            P: {paidQty} + F: {Math.min(item.return_quantity - paidQty, freeQty)}
+                          </span>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </td>
+                <td className="px-3 py-4 whitespace-nowrap">
+                  <div className="text-center">
+                    <div className="text-sm font-medium text-gray-900">
+                      ₹{item.rate || 0}
+                    </div>
+                    {isManual && (
+                      <input
+                        type="number"
+                        value={item.rate || ''}
+                        onChange={(e) => onUpdateItem(item.id || index, 'rate', e.target.value)}
+                        className="w-20 px-2 py-1 mt-1 text-center text-xs border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        min="0"
+                        step="0.01"
+                        disabled={!item.selected}
+                      />
+                    )}
+                  </div>
+                </td>
+                <td className="px-3 py-4 whitespace-nowrap">
+                  <div className="text-center">
+                    <div className="text-sm font-medium text-gray-900">
+                      {item.discount_percent || 0}%
+                    </div>
+                    {isManual && (
+                      <input
+                        type="number"
+                        value={item.discount_percent || ''}
+                        onChange={(e) => onUpdateItem(item.id || index, 'discount_percent', e.target.value)}
+                        className="w-16 px-2 py-1 mt-1 text-center text-xs border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        min="0"
+                        max="100"
+                        disabled={!item.selected}
+                      />
+                    )}
+                  </div>
+                </td>
+                {includeGst && (
+                  <td className="px-3 py-4 whitespace-nowrap">
+                    <div className="text-center">
+                      <div className="text-sm font-medium text-gray-900">
+                        {item.tax_percent || 0}%
+                      </div>
+                      {isManual && (
+                        <input
+                          type="number"
+                          value={item.tax_percent || ''}
+                          onChange={(e) => onUpdateItem(item.id || index, 'tax_percent', e.target.value)}
+                          className="w-16 px-2 py-1 mt-1 text-center text-xs border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          min="0"
+                          max="28"
+                          disabled={!item.selected}
+                        />
+                      )}
+                    </div>
+                  </td>
+                )}
+                <td className="px-3 py-4 whitespace-nowrap text-right">
+                  <div className="text-sm font-semibold text-gray-900">
+                    ₹{amounts.totalAmount.toFixed(2)}
+                  </div>
+                  {amounts.totalAmount > 0 && item.selected && (
+                    <div className="text-xs text-gray-500 space-y-0.5 mt-1">
+                      <div>Base: ₹{amounts.baseAmount.toFixed(2)}</div>
+                      {amounts.discountAmount > 0 && (
+                        <div className="text-red-600">-Disc: ₹{amounts.discountAmount.toFixed(2)}</div>
+                      )}
+                      {amounts.taxAmount > 0 && (
+                        <div className="text-blue-600">+Tax: ₹{amounts.taxAmount.toFixed(2)}</div>
                       )}
                     </div>
                   )}
                 </td>
-                <td className="px-3 py-4 whitespace-nowrap">
+                <td className="px-3 py-4 whitespace-nowrap text-center">
                   <input
-                    type="number"
-                    value={item.rate || ''}
-                    onChange={(e) => onUpdateItem(index, 'rate', e.target.value)}
-                    className="w-24 px-2 py-1 text-center border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 font-medium"
-                    min="0"
-                    step="0.01"
-                    disabled={!isManual || !item.selected}
-                    readOnly={!isManual}
+                    type="checkbox"
+                    checked={item.restock !== false}
+                    onChange={(e) => {
+                      onUpdateItem(item.id || index, 'restock', e.target.checked);
+                      // Update disposition based on restock
+                      onUpdateItem(item.id || index, 'disposition', e.target.checked ? 'RESTOCK' : 'QUARANTINE');
+                    }}
+                    disabled={!item.selected || returnReason === 'EXPIRED' || returnReason === 'DAMAGED'}
+                    className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                    title={returnReason === 'EXPIRED' || returnReason === 'DAMAGED' ? 'Cannot restock expired/damaged items' : 'Check to restock this item'}
                   />
+                  {(returnReason === 'EXPIRED' || returnReason === 'DAMAGED') && (
+                    <div className="text-xs text-red-600 mt-1">No Restock</div>
+                  )}
                 </td>
-                <td className="px-3 py-4 whitespace-nowrap">
-                  <input
-                    type="number"
-                    value={item.discount_percent || ''}
-                    onChange={(e) => onUpdateItem(index, 'discount_percent', e.target.value)}
-                    className="w-20 px-2 py-1 text-center border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 font-medium"
-                    min="0"
-                    max="100"
-                    disabled={!item.selected}
-                  />
-                </td>
-                {includeGst && (
-                  <td className="px-3 py-4 whitespace-nowrap">
-                    <input
-                      type="number"
-                      value={item.tax_percent || ''}
-                      onChange={(e) => onUpdateItem(index, 'tax_percent', e.target.value)}
-                      className="w-20 px-2 py-1 text-center border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 font-medium"
-                      min="0"
-                      max="28"
-                      disabled={!isManual || !item.selected}
-                      readOnly={!isManual}
-                    />
+                {showManualEntry && (
+                  <td className="px-3 py-4 whitespace-nowrap text-center">
+                    {availableBatches[item.product_id]?.length > 0 ? (
+                      <select
+                        value={item.batch_id || ''}
+                        onChange={(e) => {
+                          const batchId = e.target.value;
+                          onUpdateItem(item.id || index, 'batch_id', batchId);
+                          // Update batch_no when batch is selected
+                          const selectedBatch = availableBatches[item.product_id].find(b => b.id === batchId);
+                          if (selectedBatch) {
+                            onUpdateItem(item.id || index, 'batch_no', selectedBatch.batch_no);
+                          }
+                        }}
+                        className="text-xs border border-gray-300 rounded px-2 py-1 focus:ring-2 focus:ring-blue-500"
+                        disabled={!item.selected}
+                      >
+                        <option value="">Select Batch</option>
+                        {availableBatches[item.product_id].map(batch => (
+                          <option key={batch.id} value={batch.id}>
+                            {batch.batch_no} (Qty: {batch.quantity_available})
+                          </option>
+                        ))}
+                      </select>
+                    ) : (
+                      <input
+                        type="text"
+                        value={item.batch_no || ''}
+                        onChange={(e) => onUpdateItem(item.id || index, 'batch_no', e.target.value)}
+                        placeholder="Enter batch"
+                        className="w-24 text-xs border border-gray-300 rounded px-2 py-1 focus:ring-2 focus:ring-blue-500"
+                        disabled={!item.selected}
+                      />
+                    )}
+                    {!item.batch_id && !item.batch_no && item.selected && (
+                      <div className="text-xs text-amber-600 mt-1">Required for tracking</div>
+                    )}
                   </td>
                 )}
-                <td className="px-3 py-4 whitespace-nowrap text-right">
-                  <div className="text-sm font-medium text-gray-900">
-                    ₹{amounts.totalAmount.toFixed(2)}
-                  </div>
-                  {amounts.discountAmount > 0 && (
-                    <div className="text-xs text-gray-500">
-                      Disc: ₹{amounts.discountAmount.toFixed(2)}
-                    </div>
+                <td className="px-3 py-4 whitespace-nowrap text-center">
+                  <select
+                    value={item.disposition || 'RESTOCK'}
+                    onChange={(e) => onUpdateItem(item.id || index, 'disposition', e.target.value)}
+                    className="text-xs border border-gray-300 rounded px-2 py-1 focus:ring-2 focus:ring-blue-500"
+                    disabled={!item.selected}
+                  >
+                    <option value="RESTOCK">Restock</option>
+                    <option value="QUARANTINE">Quarantine</option>
+                    <option value="DESTROY">Destroy</option>
+                    <option value="RETURN_TO_VENDOR">Return to Vendor</option>
+                  </select>
+                  {item.disposition === 'QUARANTINE' && (
+                    <div className="text-xs text-amber-600 mt-1">Requires Inspection</div>
+                  )}
+                  {item.disposition === 'DESTROY' && (
+                    <div className="text-xs text-red-600 mt-1">Will be Destroyed</div>
                   )}
                 </td>
                 {onRemoveItem && (
@@ -235,7 +366,7 @@ const ReturnItemsTable = ({
           })}
           {items.length === 0 && (
             <tr>
-              <td colSpan={includeGst ? 9 : 8} className="px-3 py-8 text-center text-gray-500">
+              <td colSpan={includeGst ? (showManualEntry ? 11 : 10) : (showManualEntry ? 10 : 9)} className="px-3 py-8 text-center text-gray-500">
                 No items to display
               </td>
             </tr>

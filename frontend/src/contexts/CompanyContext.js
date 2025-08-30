@@ -19,7 +19,11 @@ export const CompanyProvider = ({ children }) => {
 
   // Load company data on mount
   useEffect(() => {
-    loadCompanyData();
+    // Wait a bit to ensure org_id is set in localStorage/sessionStorage
+    const timer = setTimeout(() => {
+      loadCompanyData();
+    }, 100);
+    return () => clearTimeout(timer);
   }, []);
 
   const loadCompanyData = async () => {
@@ -43,12 +47,14 @@ export const CompanyProvider = ({ children }) => {
       setCompanyInfo(cachedCompanyInfo);
       setOrgId(cachedOrgId);
       
-      // Try to fetch latest data from API
-      try {
-        const [companyResponse, orgResponse] = await Promise.all([
-          companyAPI.getCompanyInfo(),
-          companyAPI.getOrganizationId()
-        ]);
+      // Try to fetch latest data from API (but only if org_id exists)
+      const currentOrgId = sessionStorage.getItem('pharma_org_id') || localStorage.getItem('pharma_org_id');
+      if (currentOrgId) {
+        try {
+          const [companyResponse, orgResponse] = await Promise.all([
+            companyAPI.getCompanyInfo(),
+            companyAPI.getOrganizationId()
+          ]);
         
         if (companyResponse.success) {
           const apiCompanyInfo = {
@@ -80,9 +86,10 @@ export const CompanyProvider = ({ children }) => {
           localStorage.setItem('orgId', orgResponse.data.org_id);
         }
         
-      } catch (apiError) {
-        console.warn('Failed to fetch latest company data from API, using cached data:', apiError);
-        // Continue with cached data - don't throw error
+        } catch (apiError) {
+          console.warn('Failed to fetch latest company data from API, using cached data:', apiError);
+          // Continue with cached data - don't throw error
+        }
       }
       
     } catch (error) {

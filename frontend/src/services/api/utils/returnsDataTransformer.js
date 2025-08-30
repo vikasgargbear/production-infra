@@ -32,7 +32,8 @@ export const returnsDataTransformer = {
           unit: item.unit || item.uom || 'PCS',
           reason: item.reason || returnData.reason || returnData.return_reason || '',
           custom_reason: item.custom_reason || returnData.custom_reason || '',
-          hsn_code: item.hsn_code || ''
+          hsn_code: item.hsn_code || '',
+          disposition: item.disposition || 'RESTOCK'
         })),
       
       // Credit note details

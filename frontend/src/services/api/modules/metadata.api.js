@@ -1,4 +1,5 @@
-import apiClient from '../apiClient';
+// Use the JavaScript apiClient that has proper interceptors
+import { apiClient } from '../apiClientExports';
 
 /**
  * Metadata API Service

@@ -4,6 +4,8 @@
  */
 
 import axios, { AxiosInstance, AxiosError } from 'axios';
+// @ts-ignore - JavaScript module
+import orgIdManager from '../OrgIdManager';
 
 // Get API URL from environment or use default
 // Always use HTTPS for production Railway deployments
@@ -21,7 +23,7 @@ const apiClient: AxiosInstance = axios.create({
 // Request interceptor for auth token
 apiClient.interceptors.request.use(
   (config) => {
-    // Check if this is an endpoint that doesn't need token
+    // Check if this is an endpoint that doesn't need auth
     const isPublicEndpoint = config.url?.includes('/auth/') || 
                             config.url?.includes('/login') || 
                             config.url?.includes('/register') ||
@@ -30,7 +32,18 @@ apiClient.interceptors.request.use(
                             config.url?.includes('/setup/check') ||  // Allow setup check without auth
                             config.url?.includes('/health');  // Allow health checks
     
-    // Get auth token - use consistent key
+    // FIRST: Always get org_id from OrgIdManager (guaranteed to return a value)
+    const orgId = orgIdManager.getOrgId();
+    
+    // Add org_id header
+    config.headers['X-Org-Id'] = orgId;
+    
+    // Log only if there's an issue
+    if (!orgIdManager.isValidOrgId(orgId) && !isPublicEndpoint) {
+      console.warn('[TS apiClient] Using fallback org_id for:', config.url);
+    }
+    
+    // THEN: Get auth token - use consistent key
     const token = localStorage.getItem('authToken');
     
     if (token) {
@@ -46,14 +59,14 @@ apiClient.interceptors.request.use(
         if (now < expiry) {
           // Token is still valid
           config.headers.Authorization = `Bearer ${token}`;
-          // Also add org_id from token to header (temporary)
-          if (payload.org_id) {
-            config.headers['X-Org-Id'] = payload.org_id;
+          // If token has org_id, update the manager
+          const orgIdFromToken = payload.org_id || payload.organization_id;
+          if (orgIdFromToken && orgIdFromToken !== orgId) {
+            // Token has a different org_id, update the manager
+            orgIdManager.setOrgId(orgIdFromToken);
+            config.headers['X-Org-Id'] = orgIdFromToken;
           }
           
-          // Log token status for debugging
-          const hoursRemaining = ((expiry - now) / (1000 * 60 * 60)).toFixed(1);
-          console.log(`Token valid for ${hoursRemaining} more hours`);
           
         } else if (!isPublicEndpoint) {
           // Token expired - only redirect if not an auth endpoint
@@ -85,12 +98,9 @@ apiClient.interceptors.request.use(
       }
     }
     
-    // Add X-Org-Id from storage as fallback (temporary)
-    if (!config.headers['X-Org-Id']) {
-      const orgId = sessionStorage.getItem('pharma_org_id') || localStorage.getItem('pharma_org_id');
-      if (orgId) {
-        config.headers['X-Org-Id'] = orgId;
-      }
+    // Final check - warn if no org_id for non-public endpoints
+    if (!config.headers['X-Org-Id'] && !isPublicEndpoint) {
+      console.warn('No org_id found for request:', config.url);
     }
     
     // For auth endpoints or valid token, continue

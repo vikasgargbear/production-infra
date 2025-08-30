@@ -549,8 +549,11 @@ async def create_sale_return(
                 if batch_result:
                     batch_id = batch_result.batch_id
             
-            # Determine disposition and quantities based on return reason
+            # Determine disposition and quantities based on return reason and restock flag
             item_return_reason = item.get("reason") or item.get("return_reason") or return_dict.get("return_reason", "Quality Issue")
+            
+            # Check for explicit restock flag from frontend
+            should_restock = item.get("restock", None)
             
             # Define reason categories that result in damaged/unsaleable items
             damaged_reasons = [
@@ -561,16 +564,17 @@ async def create_sale_return(
             # Check if the reason indicates damaged/unsaleable items
             is_damaged = any(reason in item_return_reason.lower() for reason in damaged_reasons)
             
-            if is_damaged:
-                # Items are damaged and cannot be resold
+            # Use explicit restock flag if provided, otherwise determine from reason
+            if should_restock is False or is_damaged:
+                # Items are damaged/not restockable
                 damaged_qty = float(return_qty)
                 saleable_qty = 0
-                disposition = "DESTROY"  # or "QUARANTINE" based on business rules
+                disposition = item.get("disposition", "DESTROY" if is_damaged else "QUARANTINE")
             else:
                 # Items are saleable and can be restocked
                 damaged_qty = 0
                 saleable_qty = float(return_qty)
-                disposition = "RESTOCK"
+                disposition = item.get("disposition", "RESTOCK")
             
             # Insert return item using correct schema
             db.execute(
@@ -609,21 +613,36 @@ async def create_sale_return(
                 }
             )
             
-            # Update batch stock (only increase for saleable items)
-            if batch_id and saleable_qty > 0:
-                db.execute(
-                    text("""
-                        UPDATE inventory.batches 
-                        SET quantity_available = quantity_available + :saleable_qty,
-                            quantity_returned = COALESCE(quantity_returned, 0) + :total_qty
-                        WHERE batch_id = :batch_id
-                    """),
-                    {
-                        "saleable_qty": saleable_qty,  # Only saleable items go back to available stock
-                        "total_qty": float(return_qty),  # Track total returned (damaged + saleable)
-                        "batch_id": batch_id
-                    }
-                )
+            # Update batch stock
+            if batch_id:
+                if saleable_qty > 0:
+                    # Update both quantity_available and quantity_returned for restockable items
+                    db.execute(
+                        text("""
+                            UPDATE inventory.batches 
+                            SET quantity_available = quantity_available + :saleable_qty,
+                                quantity_returned = COALESCE(quantity_returned, 0) + :total_qty
+                            WHERE batch_id = :batch_id
+                        """),
+                        {
+                            "saleable_qty": saleable_qty,  # Only saleable items go back to available stock
+                            "total_qty": float(return_qty),  # Track total returned (damaged + saleable)
+                            "batch_id": batch_id
+                        }
+                    )
+                else:
+                    # Only update quantity_returned for non-restockable items (damaged/expired)
+                    db.execute(
+                        text("""
+                            UPDATE inventory.batches 
+                            SET quantity_returned = COALESCE(quantity_returned, 0) + :total_qty
+                            WHERE batch_id = :batch_id
+                        """),
+                        {
+                            "total_qty": float(return_qty),  # Track total returned
+                            "batch_id": batch_id
+                        }
+                    )
             # Note: If no batch_id, we skip stock update as we can't track non-batch items
                 
         # TODO: Update party ledger when table is available

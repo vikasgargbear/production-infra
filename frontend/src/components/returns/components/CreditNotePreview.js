@@ -1,6 +1,19 @@
 import React from 'react';
-import { FileText, Calendar, User, Building2, Phone, Mail } from 'lucide-react';
+import { FileText, Calendar, User, Building2, Phone, Mail, MapPin, CreditCard } from 'lucide-react';
 import useCompanyDetails from '../../../hooks/useCompanyDetails';
+
+// Return reasons for display
+const RETURN_REASONS = [
+  { value: 'DAMAGED', label: 'Damaged Product' },
+  { value: 'EXPIRED', label: 'Expired Product' },
+  { value: 'WRONG_ITEM', label: 'Wrong Item Delivered' },
+  { value: 'QUALITY_ISSUE', label: 'Quality Issue' },
+  { value: 'NOT_REQUIRED', label: 'Not Required' },
+  { value: 'DAMAGED_IN_TRANSIT', label: 'Damaged in Transit' },
+  { value: 'SHORT_EXPIRY', label: 'Short Expiry' },
+  { value: 'BATCH_RECALL', label: 'Batch Recall' },
+  { value: 'OTHER', label: 'Other' }
+];
 
 const CreditNotePreview = ({ returnData, customer, invoice, includeGst = true, customerDues = 0, returnMethod = 'credit_note' }) => {
   const { companyDetails } = useCompanyDetails();
@@ -37,10 +50,12 @@ const CreditNotePreview = ({ returnData, customer, invoice, includeGst = true, c
       const returnQty = parseFloat(item.return_quantity || 0);
       const paidReturnQty = Math.min(returnQty, paidQty);
       
-      // Apply discount to base amount
+      // Apply discount to base amount - handle both percent and amount
       const baseAmount = paidReturnQty * item.rate;
-      const discountPercent = parseFloat(item.discount_percent || 0);
-      const discountAmount = (baseAmount * discountPercent) / 100;
+      const discountPercent = parseFloat(item.discount_percent || item.discount || 0);
+      const discountAmt = parseFloat(item.discount_amount || 0);
+      // Use discount amount if available, otherwise calculate from percent
+      const discountAmount = discountAmt > 0 ? (discountAmt * paidReturnQty) : (baseAmount * discountPercent) / 100;
       const returnAmount = baseAmount - discountAmount;
       
       const taxAmount = (returnAmount * item.tax_percent) / 100;
@@ -153,12 +168,29 @@ const CreditNotePreview = ({ returnData, customer, invoice, includeGst = true, c
               </h3>
               <div>
                 <p className="font-semibold text-gray-900">{customer.customer_name || customer.name}</p>
-                <p className="text-sm text-gray-600">{customer.address}</p>
+                {customer.address && (
+                  <div className="text-sm text-gray-600 mt-1">
+                    <p>{customer.address}</p>
+                    {(customer.city || customer.state || customer.pincode) && (
+                      <p>
+                        {customer.city && `${customer.city}, `}
+                        {customer.state && `${customer.state} `}
+                        {customer.pincode}
+                      </p>
+                    )}
+                  </div>
+                )}
                 {customer.gst_number && (
-                  <p className="text-sm text-gray-600 mt-1">GSTIN: {customer.gst_number}</p>
+                  <p className="text-sm text-gray-600 mt-1">
+                    <CreditCard className="w-3 h-3 inline mr-1" />
+                    GSTIN: {customer.gst_number}
+                  </p>
                 )}
                 {customer.drug_license_number && (
-                  <p className="text-sm text-gray-600">DL No: {customer.drug_license_number}</p>
+                  <p className="text-sm text-gray-600">
+                    <FileText className="w-3 h-3 inline mr-1" />
+                    DL No: {customer.drug_license_number}
+                  </p>
                 )}
               </div>
             </div>
@@ -168,8 +200,14 @@ const CreditNotePreview = ({ returnData, customer, invoice, includeGst = true, c
                 {customer.phone && (
                   <p><Phone className="w-3 h-3 inline mr-1" /> {customer.phone}</p>
                 )}
+                {customer.mobile && customer.mobile !== customer.phone && (
+                  <p><Phone className="w-3 h-3 inline mr-1" /> {customer.mobile} (Mobile)</p>
+                )}
                 {customer.email && (
                   <p><Mail className="w-3 h-3 inline mr-1" /> {customer.email}</p>
+                )}
+                {customer.contact_person && (
+                  <p><User className="w-3 h-3 inline mr-1" /> {customer.contact_person}</p>
                 )}
               </div>
             </div>
@@ -206,6 +244,7 @@ const CreditNotePreview = ({ returnData, customer, invoice, includeGst = true, c
                   <th className="text-left py-3 px-2 text-sm font-semibold text-gray-700">Expiry</th>
                   <th className="text-center py-3 px-2 text-sm font-semibold text-gray-700">Qty</th>
                   <th className="text-right py-3 px-2 text-sm font-semibold text-gray-700">Rate</th>
+                  <th className="text-right py-3 px-2 text-sm font-semibold text-gray-700">Disc</th>
                   {customer.gst_number && (
                     <th className="text-center py-3 px-2 text-sm font-semibold text-gray-700">GST%</th>
                   )}
@@ -222,10 +261,12 @@ const CreditNotePreview = ({ returnData, customer, invoice, includeGst = true, c
                   const paidReturnQty = Math.min(returnQty, paidQty);
                   const freeReturnQty = returnQty > paidQty ? returnQty - paidQty : 0;
                   
-                  // Apply discount to base amount
+                  // Apply discount to base amount - handle both percent and amount
                   const baseAmount = paidReturnQty * item.rate;
-                  const discountPercent = parseFloat(item.discount_percent || 0);
-                  const discountAmount = (baseAmount * discountPercent) / 100;
+                  const discountPercent = parseFloat(item.discount_percent || item.discount || 0);
+                  const discountAmt = parseFloat(item.discount_amount || 0);
+                  // Use discount amount if available, otherwise calculate from percent
+                  const discountAmount = discountAmt > 0 ? (discountAmt * paidReturnQty) : (baseAmount * discountPercent) / 100;
                   const returnAmount = baseAmount - discountAmount;
                   
                   // Calculate tax for all customers (they all paid it)
@@ -233,7 +274,7 @@ const CreditNotePreview = ({ returnData, customer, invoice, includeGst = true, c
                   const totalAmount = returnAmount + taxAmount;
 
                   return (
-                    <tr key={item.id} className="border-b border-gray-200">
+                    <tr key={item.id || item.product_id || index} className="border-b border-gray-200">
                       <td className="py-3 px-2 text-sm">{index + 1}</td>
                       <td className="py-3 px-2 text-sm font-medium">{item.product_name}</td>
                       <td className="py-3 px-2 text-sm">{item.hsn_code || '-'}</td>
@@ -250,6 +291,15 @@ const CreditNotePreview = ({ returnData, customer, invoice, includeGst = true, c
                         </div>
                       </td>
                       <td className="py-3 px-2 text-sm text-right">{formatCurrency(item.rate)}</td>
+                      <td className="py-3 px-2 text-sm text-right">
+                        {discountAmount > 0 && (
+                          <span className="text-green-600">
+                            -{formatCurrency(discountAmount)}
+                            {discountPercent > 0 && ` (${discountPercent}%)`}
+                          </span>
+                        )}
+                        {discountAmount === 0 && '-'}
+                      </td>
                       {customer.gst_number && (
                         <td className="py-3 px-2 text-sm text-center">{item.tax_percent}%</td>
                       )}
@@ -368,17 +418,5 @@ const CreditNotePreview = ({ returnData, customer, invoice, includeGst = true, c
     </>
   );
 };
-
-// Return reasons should be imported from parent
-const RETURN_REASONS = [
-  { value: 'EXPIRED', label: 'Expired Product' },
-  { value: 'DAMAGED', label: 'Damaged Product' },
-  { value: 'WRONG_PRODUCT', label: 'Wrong Product Delivered' },
-  { value: 'QUALITY_ISSUE', label: 'Quality Issue' },
-  { value: 'NOT_REQUIRED', label: 'Not Required' },
-  { value: 'EXCESS_STOCK', label: 'Excess Stock' },
-  { value: 'RATE_DIFFERENCE', label: 'Rate Difference' },
-  { value: 'OTHER', label: 'Other' }
-];
 
 export default CreditNotePreview;

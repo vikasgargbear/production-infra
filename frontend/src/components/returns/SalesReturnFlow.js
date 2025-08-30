@@ -9,7 +9,7 @@ import {
   ProceedToReviewComponent, StandardDatePicker, InvoiceSelector
 } from '../global';
 import CustomerCreationB2B from '../global/ui/forms/CustomerCreationB2B';
-import { returnsApi, customersApi, settingsApi, metadataApi } from '../../services/api';
+import { returnsApi, customersApi, customerAPI, settingsApi, metadataApi } from '../../services/api';
 import InvoiceApiService from '../../services/invoiceApiService';
 import ReturnItemsTable from './components/ReturnItemsTable';
 import ReturnSummary from './components/ReturnSummary';
@@ -59,6 +59,7 @@ const SalesReturnFlow = ({ onClose }) => {
   const [showManualEntry, setShowManualEntry] = useState(false);
   const [showInvoiceSection, setShowInvoiceSection] = useState(true);
   const [manualItemCounter, setManualItemCounter] = useState(1);
+  const [availableBatches, setAvailableBatches] = useState({});
 
   // Load return reasons from system settings
   useEffect(() => {
@@ -196,11 +197,38 @@ const SalesReturnFlow = ({ onClose }) => {
           const items = fullInvoice.data.items || [];
           setReturnData(prev => ({
             ...prev,
-            items: items.map(item => ({
-              ...item,
-              return_quantity: 0,
-              selected: false
-            }))
+            items: items.map(item => {
+              // Calculate paid quantity (total - free)
+              const totalQty = parseFloat(item.quantity || 0);
+              const freeQty = parseFloat(item.free_quantity || 0);
+              const paidQty = totalQty - freeQty;
+              
+              // Calculate GST percentage from CGST + SGST or IGST
+              const gstPercent = (item.cgst_rate || 0) + (item.sgst_rate || 0) + (item.igst_rate || 0);
+              
+              return {
+                ...item,
+                return_quantity: totalQty, // Default to returning all
+                selected: true,
+                paid_quantity: paidQty,
+                free_quantity: freeQty,
+                quantity: totalQty,
+                rate: item.unit_price || item.rate || 0,
+                discount_percent: item.discount_percent || 0,
+                tax_percent: gstPercent,
+                max_returnable_qty: totalQty,
+                // Preserve batch data
+                batch_id: item.batch_id,
+                batch_number: item.batch_number,
+                batch_no: item.batch_number || item.batch_no,
+                manufacturing_date: item.manufacturing_date,
+                expiry_date: item.expiry_date,
+                // Preserve invoice item ID for linking
+                invoice_item_id: item.invoice_item_id,
+                // Default disposition for invoice returns
+                disposition: 'RESTOCK'
+              };
+            })
           }));
         }
       } catch (error) {
@@ -208,14 +236,41 @@ const SalesReturnFlow = ({ onClose }) => {
         toast.error('Failed to load invoice items');
       }
     } else {
-      // Use existing items
+      // Use existing items - pre-select all with full quantities
       setReturnData(prev => ({
         ...prev,
-        items: invoice.items.map(item => ({
-          ...item,
-          return_quantity: 0,
-          selected: false
-        }))
+        items: invoice.items.map(item => {
+          // Calculate paid quantity (total - free)
+          const totalQty = parseFloat(item.quantity || 0);
+          const freeQty = parseFloat(item.free_quantity || 0);
+          const paidQty = totalQty - freeQty;
+          
+          // Calculate GST percentage from CGST + SGST or IGST
+          const gstPercent = (item.cgst_rate || 0) + (item.sgst_rate || 0) + (item.igst_rate || 0) || item.tax_percent || 0;
+          
+          return {
+            ...item,
+            return_quantity: totalQty, // Default to returning all
+            selected: true,
+            paid_quantity: paidQty,
+            free_quantity: freeQty,
+            quantity: totalQty,
+            rate: item.unit_price || item.rate || 0,
+            discount_percent: item.discount_percent || 0,
+            tax_percent: gstPercent,
+            max_returnable_qty: totalQty,
+            // Preserve batch data
+            batch_id: item.batch_id,
+            batch_number: item.batch_number,
+            batch_no: item.batch_number || item.batch_no,
+            manufacturing_date: item.manufacturing_date,
+            expiry_date: item.expiry_date,
+            // Preserve invoice item ID for linking
+            invoice_item_id: item.invoice_item_id,
+            // Default disposition for invoice returns
+            disposition: 'RESTOCK'
+          };
+        })
       }));
     }
   };
@@ -240,15 +295,22 @@ const SalesReturnFlow = ({ onClose }) => {
       return;
     }
     
-    // Ensure customer has all needed fields
+    // Ensure customer has all needed fields - comprehensive mapping
     const fullCustomer = {
       ...customer,
       customer_name: customer.customer_name || customer.name,
       address: customer.address || customer.billing_address || customer.street_address || '',
+      city: customer.city || customer.billing_city || '',
+      state: customer.state || customer.billing_state || '',
+      pincode: customer.pincode || customer.postal_code || customer.zip || '',
       phone: customer.phone || customer.mobile || customer.contact_phone || '',
+      mobile: customer.mobile || customer.phone || '',
       email: customer.email || customer.contact_email || '',
+      contact_person: customer.contact_person || customer.contact_name || '',
       gst_number: customer.gst_number || customer.gstin || customer.gst || '',
-      drug_license_number: customer.drug_license_number || customer.drug_license || ''
+      drug_license_number: customer.drug_license_number || customer.drug_license || '',
+      credit_limit: customer.credit_limit || 0,
+      credit_days: customer.credit_days || 0
     };
     
     setSelectedCustomer(fullCustomer);
@@ -265,14 +327,25 @@ const SalesReturnFlow = ({ onClose }) => {
 
     const customerId = customer.id || customer.customer_id || customer.party_id;
     
-    // Fetch customer outstanding balance
+    // Fetch complete customer details including outstanding balance
     try {
-      const response = await customersApi.getOutstandingBalance(customerId);
-      if (response.success) {
-        setCustomerDues(response.data.outstanding_amount || 0);
+      // Try to get full customer details
+      const detailResponse = await customerAPI.getDetails(customerId);
+      if (detailResponse?.data) {
+        const detailedCustomer = {
+          ...fullCustomer,
+          ...detailResponse.data,
+          outstanding_amount: detailResponse.data.outstanding_amount || 0
+        };
+        setSelectedCustomer(detailedCustomer);
+        setCustomerDues(detailedCustomer.outstanding_amount || 0);
+      } else {
+        // Fallback to basic customer data
+        setCustomerDues(0);
       }
     } catch (error) {
-      console.error('Error fetching customer dues:', error);
+      console.warn('Could not fetch full customer details:', error);
+      // Use basic customer data we already have
       setCustomerDues(0);
     }
   };
@@ -292,20 +365,52 @@ const SalesReturnFlow = ({ onClose }) => {
     }));
   };
 
+  // Fetch batches for a product
+  const fetchBatchesForProduct = async (productId) => {
+    try {
+      const response = await fetch(
+        `https://pharma-backend-production-0c09.up.railway.app/api/inventory/batches/product/${productId}`,
+        {
+          headers: {
+            'X-Org-Id': localStorage.getItem('pharma_org_id') || sessionStorage.getItem('pharma_org_id')
+          }
+        }
+      );
+      if (response.ok) {
+        const batches = await response.json();
+        setAvailableBatches(prev => ({
+          ...prev,
+          [productId]: batches.filter(b => b.quantity_available > 0)
+        }));
+      }
+    } catch (error) {
+      console.error('Error fetching batches:', error);
+    }
+  };
+
   // Add manual item to return
-  const addManualItem = (product) => {
+  const addManualItem = async (product) => {
     if (!product) return;
     
+    // Fetch batches for this product if manual entry
+    if (showManualEntry) {
+      await fetchBatchesForProduct(product.product_id);
+    }
+    
     // Get the selling price from product data
-    const sellingPrice = parseFloat(product.sale_price || product.selling_price || product.mrp || 0);
+    const sellingPrice = parseFloat(product.sale_price || product.selling_price || product.unit_price || product.mrp || 0);
     const gstPercent = parseFloat(product.gst_percent || product.tax_rate || 18);
     
     const newItem = {
       id: `manual-${manualItemCounter}`,
       product_id: product.product_id,
       product_name: product.product_name || product.name,
-      batch_id: product.batch_id || null,
-      batch_no: product.batch_no || '',
+      // Batch data - properly handle from product search
+      batch_id: product.batch_id || product.selectedBatch?.batch_id || null,
+      batch_no: product.batch_no || product.batch_number || product.selectedBatch?.batch_number || '',
+      batch_number: product.batch_number || product.batch_no || product.selectedBatch?.batch_number || '',
+      manufacturing_date: product.manufacturing_date || product.selectedBatch?.manufacturing_date || null,
+      expiry_date: product.expiry_date || product.selectedBatch?.expiry_date || null,
       rate: sellingPrice, // Use actual selling price from backend
       tax_percent: gstPercent, // Use actual GST from product
       quantity: 1, // Default quantity for manual entry
@@ -324,7 +429,9 @@ const SalesReturnFlow = ({ onClose }) => {
       discount_percent: 0, // Default no discount for manual items
       // Enterprise fields for manual returns
       requires_approval: true,
-      verification_status: 'pending'
+      verification_status: 'pending',
+      // Default disposition for manual returns - quarantine for inspection
+      disposition: 'QUARANTINE'
     };
 
     setReturnData(prev => ({
@@ -444,6 +551,18 @@ const SalesReturnFlow = ({ onClose }) => {
     if (!hasSelectedItems) {
       toast.error('Please add items to return');
       return false;
+    }
+    
+    // Enterprise validation: Batch tracking for manual returns
+    if (showManualEntry) {
+      const itemsWithoutBatch = returnData.items.filter(item => 
+        item.selected && item.return_quantity > 0 && !item.batch_id && !item.batch_no
+      );
+      
+      if (itemsWithoutBatch.length > 0) {
+        toast.error(`Batch information is mandatory for pharmaceutical returns. Missing batch for: ${itemsWithoutBatch[0].product_name}`);
+        return false;
+      }
     }
 
     if (!returnData.return_reason) {
@@ -711,7 +830,7 @@ const SalesReturnFlow = ({ onClose }) => {
                         showPaymentStatus={true}
                         showItems={false}
                         title=""
-                        pageSize={10}
+                        pageSize={5}
                       />
                     )}
                   </div>
@@ -726,10 +845,12 @@ const SalesReturnFlow = ({ onClose }) => {
                     <div className="flex items-start">
                       <AlertCircle className="h-5 w-5 text-amber-600 mt-0.5 mr-2" />
                       <div className="text-sm">
-                        <p className="font-medium text-amber-800">Manual Return Without Invoice</p>
+                        <p className="font-medium text-amber-800">Manual Return Without Invoice - Enterprise Requirements</p>
                         <p className="text-amber-700 mt-1">
-                          • Returns above ₹1,000 may require manager approval
-                          • Product condition will be verified at warehouse
+                          • <strong>Batch selection is MANDATORY</strong> for pharmaceutical products
+                          • Returns will go through inspection before restocking
+                          • Select disposition for each item (Restock/Quarantine/Destroy)
+                          • Returns above ₹1,000 require manager approval
                           • Credit note validity: 90 days from issue date
                         </p>
                       </div>
@@ -755,7 +876,7 @@ const SalesReturnFlow = ({ onClose }) => {
                       </label>
                       <ProductSearchSimple
                         onAddItem={addManualItem}
-                        showBatchSelection={false}
+                        showBatchSelection={true}
                         placeholder="Search products by name, code..."
                         className="w-full"
                       />
@@ -899,6 +1020,8 @@ const SalesReturnFlow = ({ onClose }) => {
                       onRemoveItem={showManualEntry ? removeManualItem : undefined}
                       includeGst={returnData.include_gst}
                       showManualEntry={showManualEntry}
+                      availableBatches={availableBatches}
+                      returnReason={returnData.return_reason}
                     />
                   ) : (
                     <div className="text-center py-8 text-gray-500">

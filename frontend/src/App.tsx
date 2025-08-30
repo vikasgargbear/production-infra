@@ -166,6 +166,13 @@ function App(): JSX.Element {
   // Test backend connection on app load
   useEffect(() => {
     testBackendConnection();
+    
+    // OrgIdManager handles org_id initialization automatically
+    // Just log the current state for debugging
+    import('./services/OrgIdManager').then(module => {
+      const manager = module.default;
+      console.log('[App] OrgIdManager initialized with org_id:', manager.getOrgId());
+    });
   }, []);
 
   // Component renderer - removed useCallback to reduce input lag
