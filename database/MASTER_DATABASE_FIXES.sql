@@ -3031,3 +3031,151 @@ GRANT EXECUTE ON FUNCTION financial.auto_allocate_payment TO application_role;
 GRANT EXECUTE ON FUNCTION financial.get_party_balance TO application_role;
 
 RAISE NOTICE '✅ Section 24: Payment Allocation System - Complete';
+-- =============================================
+-- Return Tracking Enhancement
+-- =============================================
+
+-- 1. Add tracking columns to invoice_items if not exists
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns 
+        WHERE table_schema = 'sales' 
+        AND table_name = 'invoice_items'
+        AND column_name = 'quantity_returned'
+    ) THEN
+        ALTER TABLE sales.invoice_items 
+        ADD COLUMN quantity_returned DECIMAL(18,3) DEFAULT 0;
+        
+        COMMENT ON COLUMN sales.invoice_items.quantity_returned IS 'Total quantity returned for this line item';
+    END IF;
+END $$;
+
+-- 2. Create view for invoice return status
+CREATE OR REPLACE VIEW sales.invoice_return_status AS
+SELECT 
+    i.invoice_id,
+    i.invoice_number,
+    i.invoice_date,
+    i.customer_id,
+    i.final_amount as invoice_amount,
+    -- Return summary
+    COUNT(DISTINCT sr.return_id) as return_count,
+    COALESCE(SUM(sr.total_amount), 0) as total_returned_amount,
+    COALESCE(SUM(sr.total_amount), 0) / NULLIF(i.final_amount, 0) * 100 as return_percentage,
+    -- Status flags
+    CASE 
+        WHEN COUNT(sr.return_id) = 0 THEN 'NO_RETURNS'
+        WHEN SUM(sr.total_amount) >= i.final_amount THEN 'FULLY_RETURNED'
+        ELSE 'PARTIALLY_RETURNED'
+    END as return_status,
+    -- Can we still return more?
+    CASE 
+        WHEN COALESCE(SUM(sr.total_amount), 0) >= i.final_amount THEN false
+        ELSE true
+    END as can_return_more,
+    -- Remaining returnable amount
+    GREATEST(0, i.final_amount - COALESCE(SUM(sr.total_amount), 0)) as remaining_returnable_amount,
+    -- List of returns
+    STRING_AGG(sr.return_number, ', ' ORDER BY sr.return_date) as return_numbers,
+    MAX(sr.return_date) as last_return_date
+FROM sales.invoices i
+LEFT JOIN sales.sales_returns sr ON i.invoice_id = sr.invoice_id
+GROUP BY i.invoice_id, i.invoice_number, i.invoice_date, i.customer_id, i.final_amount;
+
+-- 3. Create function to validate returns don't exceed invoice
+CREATE OR REPLACE FUNCTION sales.validate_return_quantity()
+RETURNS TRIGGER AS $$
+DECLARE
+    v_invoice_item RECORD;
+    v_total_returned DECIMAL(18,3);
+BEGIN
+    -- Only validate if we have an invoice_item_id
+    IF NEW.invoice_item_id IS NOT NULL THEN
+        -- Get invoice item details
+        SELECT quantity, COALESCE(quantity_returned, 0) as quantity_returned
+        INTO v_invoice_item
+        FROM sales.invoice_items
+        WHERE invoice_item_id = NEW.invoice_item_id;
+        
+        -- Calculate total that would be returned including this return
+        v_total_returned := v_invoice_item.quantity_returned + NEW.return_quantity;
+        
+        -- Check if return exceeds original quantity
+        IF v_total_returned > v_invoice_item.quantity THEN
+            RAISE EXCEPTION 'Return quantity (%) exceeds original invoice quantity (%)', 
+                v_total_returned, v_invoice_item.quantity;
+        END IF;
+    END IF;
+    
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+-- 4. Create trigger for return validation
+DROP TRIGGER IF EXISTS validate_return_quantity_trigger ON sales.sales_return_items;
+CREATE TRIGGER validate_return_quantity_trigger
+BEFORE INSERT ON sales.sales_return_items
+FOR EACH ROW
+EXECUTE FUNCTION sales.validate_return_quantity();
+
+-- 5. Create function to update invoice_items.quantity_returned
+CREATE OR REPLACE FUNCTION sales.update_invoice_item_returned()
+RETURNS TRIGGER AS $$
+BEGIN
+    IF TG_OP = 'INSERT' OR TG_OP = 'UPDATE' THEN
+        -- Update quantity_returned in invoice_items
+        IF NEW.invoice_item_id IS NOT NULL THEN
+            UPDATE sales.invoice_items
+            SET quantity_returned = (
+                SELECT COALESCE(SUM(return_quantity), 0)
+                FROM sales.sales_return_items
+                WHERE invoice_item_id = NEW.invoice_item_id
+            )
+            WHERE invoice_item_id = NEW.invoice_item_id;
+        END IF;
+    ELSIF TG_OP = 'DELETE' THEN
+        -- Update quantity_returned in invoice_items
+        IF OLD.invoice_item_id IS NOT NULL THEN
+            UPDATE sales.invoice_items
+            SET quantity_returned = (
+                SELECT COALESCE(SUM(return_quantity), 0)
+                FROM sales.sales_return_items
+                WHERE invoice_item_id = OLD.invoice_item_id
+            )
+            WHERE invoice_item_id = OLD.invoice_item_id;
+        END IF;
+    END IF;
+    
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+-- 6. Create trigger to update invoice_items
+DROP TRIGGER IF EXISTS update_invoice_returned_trigger ON sales.sales_return_items;
+CREATE TRIGGER update_invoice_returned_trigger
+AFTER INSERT OR UPDATE OR DELETE ON sales.sales_return_items
+FOR EACH ROW
+EXECUTE FUNCTION sales.update_invoice_item_returned();
+
+-- 7. Initialize current quantity_returned values
+UPDATE sales.invoice_items ii
+SET quantity_returned = (
+    SELECT COALESCE(SUM(sri.return_quantity), 0)
+    FROM sales.sales_return_items sri
+    WHERE sri.invoice_item_id = ii.invoice_item_id
+);
+
+-- 8. Show current status
+SELECT 
+    invoice_number,
+    invoice_amount,
+    return_count,
+    total_returned_amount,
+    return_status,
+    can_return_more,
+    remaining_returnable_amount
+FROM sales.invoice_return_status
+WHERE return_count > 0
+ORDER BY invoice_id DESC
+LIMIT 10;
