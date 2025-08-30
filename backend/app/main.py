@@ -190,6 +190,11 @@ api.include_router(role_management.router, tags=["Role Management"])
 from .api.routes import party_ledger_debug
 api.include_router(party_ledger_debug.router, tags=["Debug"])
 
+# Payment allocation and improved ledger
+from .api.routes import payment_allocation, party_ledger_v2
+api.include_router(payment_allocation.router, tags=["Payment Allocation"])
+api.include_router(party_ledger_v2.router, tags=["Party Ledger V2"])
+
 # All endpoints consolidated - no temporary workarounds
 
 # Include the PostgreSQL function wrappers
