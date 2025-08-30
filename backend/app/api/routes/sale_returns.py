@@ -646,21 +646,32 @@ async def create_sale_return(
                     )
             elif saleable_qty > 0:
                 # No batch ID but item is restockable - put in quarantine for batch assignment
-                # Update quantity_quarantine in the oldest batch or create tracking record
-                db.execute(
+                # Find the oldest batch with available quantity
+                oldest_batch = db.execute(
                     text("""
-                        UPDATE inventory.batches 
-                        SET quantity_quarantine = COALESCE(quantity_quarantine, 0) + :qty
+                        SELECT batch_id 
+                        FROM inventory.batches 
                         WHERE product_id = :product_id
                         AND quantity_available > 0
                         ORDER BY expiry_date ASC NULLS LAST
                         LIMIT 1
                     """),
-                    {
-                        "qty": saleable_qty,
-                        "product_id": item["product_id"]
-                    }
-                )
+                    {"product_id": item["product_id"]}
+                ).first()
+                
+                if oldest_batch:
+                    # Update quantity_quarantine in the oldest batch
+                    db.execute(
+                        text("""
+                            UPDATE inventory.batches 
+                            SET quantity_quarantine = COALESCE(quantity_quarantine, 0) + :qty
+                            WHERE batch_id = :batch_id
+                        """),
+                        {
+                            "qty": saleable_qty,
+                            "batch_id": oldest_batch.batch_id
+                        }
+                    )
                 # Note: Items in quarantine need manual batch assignment later
                 
         # TODO: Update party ledger when table is available

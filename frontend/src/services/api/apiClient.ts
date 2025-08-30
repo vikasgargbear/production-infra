@@ -48,35 +48,43 @@ apiClient.interceptors.request.use(
     
     if (token) {
       try {
-        // Decode token to check expiry (without verification)
-        const payload = JSON.parse(atob(token.split('.')[1]));
-        const expiry = payload.exp * 1000; // Convert to milliseconds
-        
-        // Add 5 minute buffer for clock skew
-        const now = Date.now();
-        const expiryWithBuffer = expiry - (5 * 60 * 1000); // 5 minutes before actual expiry
-        
-        if (now < expiry) {
-          // Token is still valid
+        // Validate token format first
+        const tokenParts = token.split('.');
+        if (tokenParts.length !== 3) {
+          // Not a valid JWT format
+          console.warn('Invalid token format, using as-is');
           config.headers.Authorization = `Bearer ${token}`;
-          // If token has org_id, update the manager
-          const orgIdFromToken = payload.org_id || payload.organization_id;
-          if (orgIdFromToken && orgIdFromToken !== orgId) {
-            // Token has a different org_id, update the manager
-            orgIdManager.setOrgId(orgIdFromToken);
-            config.headers['X-Org-Id'] = orgIdFromToken;
-          }
+        } else {
+          // Decode token to check expiry (without verification)
+          const payload = JSON.parse(atob(tokenParts[1]));
+          const expiry = payload.exp * 1000; // Convert to milliseconds
           
+          // Add 5 minute buffer for clock skew
+          const now = Date.now();
+          const expiryWithBuffer = expiry - (5 * 60 * 1000); // 5 minutes before actual expiry
           
-        } else if (!isPublicEndpoint) {
-          // Token expired - only redirect if not an auth endpoint
-          console.error('Token expired:', new Date(expiry), 'Current time:', new Date(now));
-          localStorage.removeItem('authToken');
-          // Prevent redirect loop
-          if (!window.location.pathname.includes('/login')) {
-            window.location.href = '/login?reason=token_expired';
+          if (now < expiry) {
+            // Token is still valid
+            config.headers.Authorization = `Bearer ${token}`;
+            // If token has org_id, update the manager
+            const orgIdFromToken = payload.org_id || payload.organization_id;
+            if (orgIdFromToken && orgIdFromToken !== orgId) {
+              // Token has a different org_id, update the manager
+              orgIdManager.setOrgId(orgIdFromToken);
+              config.headers['X-Org-Id'] = orgIdFromToken;
+            }
+            
+            
+          } else if (!isPublicEndpoint) {
+            // Token expired - only redirect if not an auth endpoint
+            console.error('Token expired:', new Date(expiry), 'Current time:', new Date(now));
+            localStorage.removeItem('authToken');
+            // Prevent redirect loop
+            if (!window.location.pathname.includes('/login')) {
+              window.location.href = '/login?reason=token_expired';
+            }
+            return Promise.reject(new Error('Token expired'));
           }
-          return Promise.reject(new Error('Token expired'));
         }
       } catch (e) {
         // Don't remove token on decode error - let backend validate
