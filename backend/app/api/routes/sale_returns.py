@@ -690,9 +690,14 @@ async def create_sale_return(
                 # Note: Items in quarantine need manual batch assignment later
             
             # Track inventory movement for return
-            if batch_id or product_id:
+            if batch_id or item["product_id"]:
                 movement_quantity = float(return_qty)
                 movement_type = 'RETURN' if saleable_qty > 0 else 'RETURN_DAMAGED'
+                
+                # Create movement note based on whether we have invoice
+                movement_note = f"Return #{return_number}"
+                if invoice_id:
+                    movement_note = f"Return #{return_number} from Invoice ID: {invoice_id}"
                 
                 db.execute(
                     text("""
@@ -717,7 +722,7 @@ async def create_sale_return(
                         "return_id": return_id,
                         "return_number": return_number,
                         "reason": item_return_reason,
-                        "notes": f"Return from invoice {invoice_no}" if invoice_no else "Manual return",
+                        "notes": movement_note,
                         "created_by": created_by
                     }
                 )
