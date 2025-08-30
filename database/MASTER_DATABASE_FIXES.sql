@@ -2619,3 +2619,12 @@ END $$;
 -- Total Sections: 25
 -- Last Updated: 2024-12-30
 -- =============================================
+
+-- ========================================
+-- SECTION 24: PAYMENT ALLOCATION SYSTEM
+-- ========================================
+-- Run the migration script to add payment allocation tables:
+-- database/migrations/add_payment_allocations.sql
+-- This adds proper invoice-payment linking for enterprise ledger
+
+RAISE NOTICE 'Section 24: Payment Allocation System - Run migration script';
