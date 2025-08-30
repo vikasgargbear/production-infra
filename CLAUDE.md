@@ -5,6 +5,20 @@
 - never assume variable name, check schema docs or ask user
 - don't ask permission for curl command or sleep commands
 
+## Database Query Execution
+
+To run SQL queries on Railway database:
+```bash
+# Run single query
+psql "$(railway variables --json | python3 -c "import json, sys; data = json.load(sys.stdin); print(data.get('DATABASE_URL', ''))")" -c "YOUR_SQL_QUERY"
+
+# Run SQL file
+psql "$(railway variables --json | python3 -c "import json, sys; data = json.load(sys.stdin); print(data.get('DATABASE_URL', ''))")" -f /path/to/file.sql
+
+# Example: Check table structure
+psql "$(railway variables --json | python3 -c "import json, sys; data = json.load(sys.stdin); print(data.get('DATABASE_URL', ''))")" -c "\d financial.payments"
+```
+
 ## COMPLETED MODULES - DO NOT MODIFY WITHOUT DOUBLE CHECKING
 
 ### Invoice System (FULLY WORKING)

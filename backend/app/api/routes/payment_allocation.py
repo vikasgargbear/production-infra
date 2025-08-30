@@ -30,7 +30,7 @@ class BulkAllocationRequest(BaseModel):
     
 class AutoAllocationRequest(BaseModel):
     payment_id: int
-    method: str = Field(default="fifo", regex="^(fifo|lifo|proportional)$")
+    method: str = Field(default="fifo", pattern="^(fifo|lifo|proportional)$")
 
 @router.post("/allocate")
 async def allocate_payment(
