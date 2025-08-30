@@ -166,6 +166,11 @@ const ReturnItemsTable = ({
                         <span className="text-green-600">Free: {freeQty}</span>
                       )}
                     </div>
+                    {item.already_returned > 0 && (
+                      <div className="text-xs text-orange-600 mt-1">
+                        Already returned: {item.already_returned}
+                      </div>
+                    )}
                   </div>
                 </td>
                 <td className="px-3 py-4 whitespace-nowrap">
@@ -175,9 +180,17 @@ const ReturnItemsTable = ({
                       value={item.return_quantity || ''}
                       onChange={(e) => {
                         const value = parseFloat(e.target.value) || 0;
-                        const maxQty = paidQty + freeQty;
+                        // Use max_returnable_qty if provided (from backend), otherwise calculate
+                        const maxQty = item.max_returnable_qty !== undefined 
+                          ? item.max_returnable_qty 
+                          : (paidQty + freeQty);
+                        
                         if (value <= maxQty || isManual) {
                           onUpdateItem(item.id || index, 'return_quantity', e.target.value);
+                        } else {
+                          // Show error or reset to max
+                          alert(`Maximum returnable quantity is ${maxQty}`);
+                          onUpdateItem(item.id || index, 'return_quantity', maxQty);
                         }
                       }}
                       className="w-20 px-2 py-1 text-center border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 font-medium"

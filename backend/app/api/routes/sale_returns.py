@@ -243,6 +243,73 @@ async def get_returns_for_invoice(
         logger.error(f"Error fetching returns for invoice: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+@router.get("/invoice/{invoice_id}/returnable-items")
+async def get_returnable_items(
+    invoice_id: int,
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)
+):
+    """
+    Get invoice items with accurate returnable quantities
+    """
+    try:
+        # Get invoice items with already returned quantities
+        items = db.execute(
+            text("""
+                SELECT 
+                    ii.invoice_item_id,
+                    ii.product_id,
+                    p.product_name,
+                    ii.batch_id,
+                    ii.batch_number,
+                    ii.quantity as invoice_quantity,
+                    ii.free_quantity,
+                    ii.quantity - COALESCE(ii.free_quantity, 0) as paid_quantity,
+                    COALESCE(SUM(sri.return_quantity), 0) as already_returned,
+                    ii.quantity - COALESCE(SUM(sri.return_quantity), 0) as returnable_quantity,
+                    ii.unit_price,
+                    ii.discount_percent,
+                    ii.gst_percent as tax_percent,
+                    ii.total_amount,
+                    p.hsn_code,
+                    ii.unit
+                FROM sales.invoice_items ii
+                JOIN inventory.products p ON ii.product_id = p.product_id
+                LEFT JOIN sales.sales_return_items sri ON ii.invoice_item_id = sri.invoice_item_id
+                WHERE ii.invoice_id = :invoice_id
+                GROUP BY ii.invoice_item_id, p.product_name, p.hsn_code
+                HAVING ii.quantity - COALESCE(SUM(sri.return_quantity), 0) > 0
+                ORDER BY ii.invoice_item_id
+            """),
+            {"invoice_id": invoice_id}
+        ).fetchall()
+        
+        result = []
+        for item in items:
+            result.append({
+                "invoice_item_id": item.invoice_item_id,
+                "product_id": item.product_id,
+                "product_name": item.product_name,
+                "batch_id": item.batch_id,
+                "batch_number": item.batch_number,
+                "invoice_quantity": float(item.invoice_quantity),
+                "already_returned": float(item.already_returned),
+                "returnable_quantity": float(item.returnable_quantity),
+                "max_returnable_qty": float(item.returnable_quantity),
+                "unit_price": float(item.unit_price),
+                "discount_percent": float(item.discount_percent) if item.discount_percent else 0,
+                "tax_percent": float(item.tax_percent) if item.tax_percent else 0,
+                "hsn_code": item.hsn_code,
+                "unit": item.unit,
+                "can_return": float(item.returnable_quantity) > 0
+            })
+        
+        return {"items": result}
+        
+    except Exception as e:
+        logger.error(f"Error fetching returnable items: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 @router.get("/invoice/{invoice_id}/items")
 async def get_invoice_items_for_return(
     invoice_id: str,
