@@ -530,7 +530,22 @@ async def create_sale_return(
             batch_id = item.get("batch_id")
             batch_number = item.get("batch_no") or item.get("batch_number")
             
-            # If we have batch_number but no batch_id, try to look it up
+            # If this is from invoice and we don't have batch info, get from invoice_item
+            if invoice_item_id and not batch_number and not batch_id:
+                invoice_batch = db.execute(
+                    text("""
+                        SELECT batch_number, batch_id
+                        FROM sales.invoice_items
+                        WHERE invoice_item_id = :invoice_item_id
+                    """),
+                    {"invoice_item_id": invoice_item_id}
+                ).fetchone()
+                
+                if invoice_batch:
+                    batch_number = invoice_batch.batch_number or invoice_batch[0]
+                    batch_id = invoice_batch.batch_id or invoice_batch[1]
+            
+            # If we have batch_number but no batch_id, look it up
             if batch_number and not batch_id:
                 batch_result = db.execute(
                     text("""
@@ -673,6 +688,39 @@ async def create_sale_return(
                         }
                     )
                 # Note: Items in quarantine need manual batch assignment later
+            
+            # Track inventory movement for return
+            if batch_id or product_id:
+                movement_quantity = float(return_qty)
+                movement_type = 'RETURN' if saleable_qty > 0 else 'RETURN_DAMAGED'
+                
+                db.execute(
+                    text("""
+                        INSERT INTO inventory.inventory_movements (
+                            org_id, movement_type, movement_date, movement_direction,
+                            product_id, batch_id, quantity, base_quantity,
+                            location_id, reference_type, reference_id, reference_number,
+                            reason, notes, created_by
+                        ) VALUES (
+                            :org_id, :movement_type, CURRENT_TIMESTAMP, 'IN',
+                            :product_id, :batch_id, :quantity, :quantity,
+                            1, 'SALES_RETURN', :return_id, :return_number,
+                            :reason, :notes, :created_by
+                        )
+                    """),
+                    {
+                        "org_id": org_id,
+                        "movement_type": movement_type,
+                        "product_id": item["product_id"],
+                        "batch_id": batch_id,
+                        "quantity": movement_quantity,
+                        "return_id": return_id,
+                        "return_number": return_number,
+                        "reason": item_return_reason,
+                        "notes": f"Return from invoice {invoice_result.invoice_number}" if invoice_result else "Manual return",
+                        "created_by": created_by
+                    }
+                )
                 
         # TODO: Update party ledger when table is available
         # For now, we'll skip ledger updates to avoid errors
