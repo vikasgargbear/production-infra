@@ -97,9 +97,6 @@ const ReturnItemsTable = ({
                 Batch
               </th>
             )}
-            <th className="px-3 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
-              Disposition
-            </th>
             {onRemoveItem && (
               <th className="px-3 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
                 Action
@@ -331,25 +328,6 @@ const ReturnItemsTable = ({
                     )}
                   </td>
                 )}
-                <td className="px-3 py-4 whitespace-nowrap text-center">
-                  <select
-                    value={item.disposition || 'RESTOCK'}
-                    onChange={(e) => onUpdateItem(item.id || index, 'disposition', e.target.value)}
-                    className="text-xs border border-gray-300 rounded px-2 py-1 focus:ring-2 focus:ring-blue-500"
-                    disabled={!item.selected}
-                  >
-                    <option value="RESTOCK">Restock</option>
-                    <option value="QUARANTINE">Quarantine</option>
-                    <option value="DESTROY">Destroy</option>
-                    <option value="RETURN_TO_VENDOR">Return to Vendor</option>
-                  </select>
-                  {item.disposition === 'QUARANTINE' && (
-                    <div className="text-xs text-amber-600 mt-1">Requires Inspection</div>
-                  )}
-                  {item.disposition === 'DESTROY' && (
-                    <div className="text-xs text-red-600 mt-1">Will be Destroyed</div>
-                  )}
-                </td>
                 {onRemoveItem && (
                   <td className="px-3 py-4 whitespace-nowrap text-center">
                     <button
@@ -366,7 +344,7 @@ const ReturnItemsTable = ({
           })}
           {items.length === 0 && (
             <tr>
-              <td colSpan={includeGst ? (showManualEntry ? 11 : 10) : (showManualEntry ? 10 : 9)} className="px-3 py-8 text-center text-gray-500">
+              <td colSpan={includeGst ? (showManualEntry ? 10 : 9) : (showManualEntry ? 9 : 8)} className="px-3 py-8 text-center text-gray-500">
                 No items to display
               </td>
             </tr>
