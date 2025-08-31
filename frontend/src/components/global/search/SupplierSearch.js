@@ -235,7 +235,7 @@ const SupplierSearch = forwardRef(({
 
         {/* Dropdown Results */}
         {showDropdown && searchQuery && (
-          <div className="absolute z-20 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-64 overflow-y-auto">
+          <div className="absolute z-20 w-full max-w-lg mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-64 overflow-y-auto">
             {loading ? (
               <div className="p-4 text-center text-gray-500">
                 <Loader2 className="w-6 h-6 animate-spin mx-auto mb-2" />
