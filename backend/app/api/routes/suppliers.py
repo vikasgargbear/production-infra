@@ -37,8 +37,8 @@ def search_suppliers(
     """
     try:
         query = """
-            SELECT s.supplier_id, s.supplier_name, s.supplier_code, s.gstin, 
-                   s.phone, s.email, s.supplier_type, s.is_active,
+            SELECT s.supplier_id, s.supplier_name, s.supplier_code, s.gst_number, 
+                   s.primary_phone, s.primary_email, s.supplier_type, s.is_active,
                    a.city, a.state_name as state, a.address_line1 as address, a.pincode
             FROM parties.suppliers s
             LEFT JOIN master.addresses a ON (
@@ -57,13 +57,13 @@ def search_suppliers(
                 AND (
                     LOWER(s.supplier_name) LIKE LOWER(:search) OR
                     LOWER(s.supplier_code) LIKE LOWER(:search) OR
-                    LOWER(s.gstin) LIKE LOWER(:exact) OR
-                    s.phone LIKE :phone OR
-                    LOWER(s.email) LIKE LOWER(:search)
+                    LOWER(s.gst_number) LIKE LOWER(:exact) OR
+                    s.primary_phone LIKE :phone OR
+                    LOWER(s.primary_email) LIKE LOWER(:search)
                 )
             """
             params["search"] = f"%{clean_term}%"
-            params["exact"] = clean_term  # For GSTIN exact match
+            params["exact"] = clean_term  # For GST exact match
             params["phone"] = f"%{clean_term.replace(' ', '').replace('-', '')}%"
         
         query += " ORDER BY s.supplier_name LIMIT :limit OFFSET :offset"
@@ -78,10 +78,13 @@ def search_suppliers(
                 "supplier_id": row.supplier_id,
                 "supplier_name": row.supplier_name,
                 "supplier_code": row.supplier_code,
-                "gstin": row.gstin,
-                "phone": row.phone,
-                "mobile": row.phone,  # Add mobile field for compatibility
-                "email": row.email,
+                "gstin": row.gst_number,  # Map gst_number to gstin for frontend compatibility
+                "gst_number": row.gst_number,
+                "phone": row.primary_phone,
+                "mobile": row.primary_phone,  # Add mobile field for compatibility
+                "primary_phone": row.primary_phone,
+                "email": row.primary_email,
+                "primary_email": row.primary_email,
                 "supplier_type": row.supplier_type,
                 "is_active": row.is_active,
                 "city": row.city,

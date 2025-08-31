@@ -414,21 +414,20 @@ const SupplierVerificationModal = ({
             )}
           </div>
 
-          <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3">
-            <div className="flex items-start space-x-2">
-              <AlertCircle className="w-4 h-4 text-yellow-600 mt-0.5" />
-              <div className="text-sm text-yellow-800">
-                <p className="font-medium">New supplier will be created</p>
-                <p className="mt-1">Extracted information has been pre-filled. Please review and complete:</p>
-              </div>
+          <div className="bg-yellow-50 border border-yellow-200 rounded-lg px-3 py-2">
+            <div className="flex items-center space-x-2">
+              <Info className="w-4 h-4 text-yellow-600 flex-shrink-0" />
+              <p className="text-xs text-yellow-800">
+                <span className="font-medium">New supplier will be created.</span> Extracted data has been pre-filled.
+              </p>
             </div>
           </div>
 
-          {/* Tabbed sections for better organization */}
-          <div className="border rounded-lg p-4 space-y-4">
-            {/* Basic Information */}
-            <div>
-              <h4 className="text-sm font-semibold text-gray-700 mb-3 flex items-center">
+          {/* Compact form with collapsible sections */}
+          <div className="space-y-3">
+            {/* Basic Information - Always visible */}
+            <div className="border rounded-lg p-3">
+              <h4 className="text-sm font-semibold text-gray-700 mb-2 flex items-center">
                 <Building2 className="w-4 h-4 mr-2" />
                 Basic Information
               </h4>
@@ -513,12 +512,24 @@ const SupplierVerificationModal = ({
               </div>
             </div>
 
-            {/* Tax & Compliance */}
-            <div className="border-t pt-4">
-              <h4 className="text-sm font-semibold text-gray-700 mb-3 flex items-center">
-                <FileText className="w-4 h-4 mr-2" />
-                Tax & Compliance
-              </h4>
+            {/* Tax & Compliance - Collapsible */}
+            <div className="border rounded-lg">
+              <button
+                type="button"
+                onClick={() => setExpandedSections(prev => ({ ...prev, compliance: !prev.compliance }))}
+                className="w-full p-3 flex items-center justify-between hover:bg-gray-50"
+              >
+                <div className="flex items-center">
+                  <FileText className="w-4 h-4 mr-2 text-gray-600" />
+                  <span className="text-sm font-semibold text-gray-700">Tax & Compliance</span>
+                  {supplierForm.gstin && (
+                    <span className="text-xs text-green-600 ml-2">✓ GSTIN provided</span>
+                  )}
+                </div>
+                {expandedSections.compliance ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+              </button>
+              {expandedSections.compliance && (
+                <div className="p-3 pt-0 border-t">
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-medium text-gray-700 mb-1">
@@ -583,27 +594,56 @@ const SupplierVerificationModal = ({
                   />
                 </div>
               </div>
+                </div>
+              )}
             </div>
 
-            {/* Address Information */}
-            <div className="border-t pt-4">
-              <h4 className="text-sm font-semibold text-gray-700 mb-3 flex items-center">
-                <MapPin className="w-4 h-4 mr-2" />
-                Address Information
-              </h4>
+            {/* Address Information - Collapsible, expanded by default */}
+            <div className="border rounded-lg">
+              <button
+                type="button"
+                onClick={() => setExpandedSections(prev => ({ ...prev, address: !prev.address }))}
+                className="w-full p-3 flex items-center justify-between hover:bg-gray-50"
+              >
+                <div className="flex items-center">
+                  <MapPin className="w-4 h-4 mr-2 text-gray-600" />
+                  <span className="text-sm font-semibold text-gray-700">Address Information</span>
+                </div>
+                {expandedSections.address ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+              </button>
+              {expandedSections.address && (
+                <div className="p-3 pt-0 border-t">
               <div className="grid grid-cols-2 gap-3">
-                <div className="col-span-2">
+                <div>
                   <label className="block text-xs font-medium text-gray-700 mb-1">
-                    Address
+                    Address Line 1
                   </label>
-                  <textarea
-                    value={supplierForm.address}
+                  <input
+                    type="text"
+                    value={supplierForm.address_line1 || supplierForm.address}
                     onChange={(e) => setSupplierForm(prev => ({ 
                       ...prev, 
-                      address: e.target.value 
+                      address_line1: e.target.value,
+                      address: e.target.value // Keep both in sync for compatibility
                     }))}
                     className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 text-sm"
-                    rows="2"
+                    placeholder="Street, building, floor"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 mb-1">
+                    Address Line 2 <span className="text-gray-400">(Optional)</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={supplierForm.address_line2}
+                    onChange={(e) => setSupplierForm(prev => ({ 
+                      ...prev, 
+                      address_line2: e.target.value
+                    }))}
+                    className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 text-sm"
+                    placeholder="Landmark, area"
                   />
                 </div>
 
@@ -668,6 +708,89 @@ const SupplierVerificationModal = ({
                   />
                 </div>
               </div>
+                </div>
+              )}
+            </div>
+
+            {/* Banking Details - Collapsible */}
+            <div className="border rounded-lg">
+              <button
+                type="button"
+                onClick={() => setExpandedSections(prev => ({ ...prev, banking: !prev.banking }))}
+                className="w-full p-3 flex items-center justify-between hover:bg-gray-50"
+              >
+                <div className="flex items-center">
+                  <Landmark className="w-4 h-4 mr-2 text-gray-600" />
+                  <span className="text-sm font-semibold text-gray-700">Banking Details</span>
+                  <span className="text-xs text-gray-500 ml-2">(Optional)</span>
+                </div>
+                {expandedSections.banking ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+              </button>
+              {expandedSections.banking && (
+                <div className="p-3 pt-0 border-t">
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs font-medium text-gray-700 mb-1">
+                        Bank Name
+                      </label>
+                      <input
+                        type="text"
+                        value={supplierForm.bank_name}
+                        onChange={(e) => setSupplierForm(prev => ({ 
+                          ...prev, 
+                          bank_name: e.target.value 
+                        }))}
+                        className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 text-sm"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-medium text-gray-700 mb-1">
+                        Account Number
+                      </label>
+                      <input
+                        type="text"
+                        value={supplierForm.bank_account_no}
+                        onChange={(e) => setSupplierForm(prev => ({ 
+                          ...prev, 
+                          bank_account_no: e.target.value 
+                        }))}
+                        className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 text-sm"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-medium text-gray-700 mb-1">
+                        IFSC Code
+                      </label>
+                      <input
+                        type="text"
+                        value={supplierForm.bank_ifsc_code}
+                        onChange={(e) => setSupplierForm(prev => ({ 
+                          ...prev, 
+                          bank_ifsc_code: e.target.value.toUpperCase() 
+                        }))}
+                        className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 text-sm"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-medium text-gray-700 mb-1">
+                        Account Holder Name
+                      </label>
+                      <input
+                        type="text"
+                        value={supplierForm.account_holder_name}
+                        onChange={(e) => setSupplierForm(prev => ({ 
+                          ...prev, 
+                          account_holder_name: e.target.value 
+                        }))}
+                        className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 text-sm"
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
 
