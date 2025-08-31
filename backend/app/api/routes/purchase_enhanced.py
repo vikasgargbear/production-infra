@@ -355,6 +355,302 @@ async def create_direct_purchase_entry(purchase_data: dict, db: Session = Depend
         logger.error(f"Error in simple purchase: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
+@router.post("/entry")
+async def create_purchase_entry(purchase_data: dict, db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user_and_org)):
+    """
+    Create a purchase entry (supplier invoice) with line items
+    This is for recording completed purchases/bills from suppliers
+    """
+    # Ensure clean transaction state
+    try:
+        db.rollback()  # Clear any aborted transaction
+    except:
+        pass
+    
+    try:
+        # Generate invoice number if not provided
+        invoice_number = purchase_data.get("invoice_number")
+        if not invoice_number:
+            invoice_number = f"PINV-{datetime.now().strftime('%Y%m%d-%H%M%S')}"
+        
+        invoice_date = purchase_data.get("invoice_date", purchase_data.get("purchase_date", datetime.now().date()))
+        
+        # Get supplier name first
+        supplier_name = None
+        if purchase_data.get("supplier_id"):
+            supplier_result = db.execute(
+                text("SELECT supplier_name FROM parties.suppliers WHERE supplier_id = :id"),
+                {"id": purchase_data.get("supplier_id")}
+            ).first()
+            if supplier_result:
+                supplier_name = supplier_result.supplier_name
+        
+        # Get created_by from JWT token user_id or use default
+        created_by = purchase_data.get("created_by") or current_user.get('user_id')
+        if not created_by:
+            # For header-based auth, use a default user ID or get from org
+            if current_user.get('org_id'):
+                # Try to get any user from this org
+                user_result = db.execute(text("""
+                    SELECT user_id FROM master.org_users 
+                    WHERE org_id = :org_id AND is_active = true
+                    ORDER BY user_id LIMIT 1
+                """), {"org_id": current_user['org_id']}).fetchone()
+                created_by = user_result.user_id if user_result else 1
+            else:
+                created_by = 1  # Ultimate fallback
+        
+        # Get branch_id from JWT token (authentication context)
+        branch_id = current_user.get('branch_id')
+        if branch_id is None:
+            # Fallback for backward compatibility with old tokens
+            result = db.execute(text("""
+                SELECT branch_id FROM master.org_branches 
+                WHERE org_id = :org_id AND is_active = true
+                ORDER BY branch_id LIMIT 1
+            """), {"org_id": current_user['org_id']}).fetchone()
+            branch_id = result.branch_id if result else 1
+        logger.info(f"Using branch_id {branch_id} for user {current_user.get('user_id')}")
+        
+        # Create supplier invoice directly (not purchase order)
+        invoice_result = db.execute(
+            text("""
+                INSERT INTO procurement.supplier_invoices (
+                    org_id, branch_id, supplier_invoice_number, invoice_date,
+                    supplier_id, 
+                    subtotal_amount, discount_amount, taxable_amount,
+                    cgst_amount, sgst_amount, igst_amount, tax_amount,
+                    freight_charges, insurance_charges, other_charges,
+                    round_off_amount, invoice_total,
+                    payment_terms, due_date, payment_status,
+                    invoice_status, created_by
+                ) VALUES (
+                    :org_id, :branch_id, :invoice_number, :invoice_date,
+                    :supplier_id,
+                    :subtotal, :discount, :taxable,
+                    :cgst, :sgst, :igst, :tax,
+                    :freight, :insurance, :other,
+                    :round_off, :total,
+                    :payment_terms, :due_date, :payment_status,
+                    :invoice_status, :created_by
+                ) RETURNING supplier_invoice_id
+            """),
+            {
+                "org_id": current_user['org_id'],
+                "branch_id": branch_id,
+                "invoice_number": invoice_number,
+                "invoice_date": invoice_date,
+                "supplier_id": purchase_data.get("supplier_id"),
+                "subtotal": Decimal(str(purchase_data.get("subtotal_amount", 0))),
+                "discount": Decimal(str(purchase_data.get("discount_amount", 0))),
+                "taxable": Decimal(str(purchase_data.get("taxable_amount", purchase_data.get("subtotal_amount", 0) - purchase_data.get("discount_amount", 0)))),
+                "cgst": Decimal(str(purchase_data.get("cgst_amount", purchase_data.get("tax_amount", 0) / 2))),
+                "sgst": Decimal(str(purchase_data.get("sgst_amount", purchase_data.get("tax_amount", 0) / 2))),
+                "igst": Decimal(str(purchase_data.get("igst_amount", 0))),
+                "tax": Decimal(str(purchase_data.get("tax_amount", 0))),
+                "freight": Decimal(str(purchase_data.get("freight_charges", 0))),
+                "insurance": Decimal(str(purchase_data.get("insurance_charges", 0))),
+                "other": Decimal(str(purchase_data.get("other_charges", 0))),
+                "round_off": Decimal(str(purchase_data.get("round_off_amount", 0))),
+                "total": Decimal(str(purchase_data.get("final_amount", 0))),
+                "payment_terms": purchase_data.get("payment_terms", "immediate"),
+                "due_date": purchase_data.get("due_date", invoice_date),
+                "payment_status": purchase_data.get("payment_status", "pending"),
+                "invoice_status": "posted",  # Purchase entry is already posted
+                "created_by": created_by
+            }
+        )
+        
+        supplier_invoice_id = invoice_result.scalar()
+        
+        # Create supplier invoice items
+        items = purchase_data.get("items", [])
+        items_created = 0
+        
+        for item in items:
+            # Get or create product_id if not provided
+            product_id = item.get("product_id")
+            product_name = item.get("product_name")
+            
+            if not product_id and product_name:
+                # First try exact match (case-insensitive, trimmed)
+                existing_product = db.execute(text("""
+                    SELECT product_id FROM inventory.products 
+                    WHERE LOWER(TRIM(product_name)) = LOWER(TRIM(:product_name))
+                    AND org_id = :org_id
+                    LIMIT 1
+                """), {"product_name": product_name, "org_id": current_user['org_id']}).fetchone()
+                
+                if existing_product:
+                    product_id = existing_product.product_id
+                    logger.info(f"Found existing product: {product_name} (ID: {product_id})")
+                else:
+                    # Get or create a default category first
+                    category_result = db.execute(text("""
+                        SELECT category_id FROM inventory.product_categories 
+                        WHERE org_id = :org_id
+                        ORDER BY category_id
+                        LIMIT 1
+                    """), {"org_id": current_user['org_id']}).fetchone()
+                    
+                    if category_result:
+                        category_id = category_result.category_id
+                    else:
+                        # Create a default category
+                        new_category = db.execute(text("""
+                            INSERT INTO inventory.product_categories (
+                                org_id, category_name, category_code, is_active
+                            ) VALUES (
+                                :org_id, 'General', 'GEN', true
+                            ) RETURNING category_id
+                        """), {"org_id": current_user['org_id']}).fetchone()
+                        category_id = new_category.category_id if new_category else None
+                    
+                    # Create new product with minimal required fields
+                    product_code = f"PROD-{product_name[:10].upper().replace(' ', '')}-{datetime.now().strftime('%Y%m%d%H%M%S')}"
+                    hsn_code = item.get("hsn_code", "30049099")  # Default pharma HSN
+                    
+                    new_product = db.execute(text("""
+                        INSERT INTO inventory.products (
+                            org_id, product_name, product_code,
+                            category_id, hsn_code, is_active, created_at
+                        ) VALUES (
+                            :org_id, :product_name, :product_code,
+                            :category_id, :hsn_code, true, CURRENT_TIMESTAMP
+                        ) RETURNING product_id
+                    """), {
+                        "org_id": current_user['org_id'],
+                        "product_name": product_name,
+                        "product_code": product_code,
+                        "category_id": category_id,
+                        "hsn_code": hsn_code
+                    }).fetchone()
+                    product_id = new_product.product_id if new_product else None
+                    logger.info(f"Created new product: {product_name} (ID: {product_id}, Code: {product_code})")
+            
+            # Calculate item totals
+            quantity = Decimal(str(item.get("ordered_quantity", item.get("quantity", 0))))
+            cost_price = Decimal(str(item.get("cost_price", item.get("unit_price", 0))))
+            discount_percent = Decimal(str(item.get("discount_percent", 0)))
+            tax_percent = Decimal(str(item.get("tax_percent", 0)))
+            
+            # Calculate amounts
+            subtotal = quantity * cost_price
+            discount_amount = subtotal * discount_percent / 100
+            taxable_amount = subtotal - discount_amount
+            tax_amount = taxable_amount * tax_percent / 100
+            total_price = taxable_amount + tax_amount
+            
+            # Determine GST split (CGST/SGST or IGST based on same state)
+            cgst_percent = tax_percent / 2
+            sgst_percent = tax_percent / 2
+            igst_percent = 0
+            
+            cgst_amount = taxable_amount * cgst_percent / 100
+            sgst_amount = taxable_amount * sgst_percent / 100
+            igst_amount = 0
+            
+            # Generate batch number if not provided
+            batch_number = item.get("batch_number")
+            if not batch_number or batch_number.strip() == "":
+                batch_number = f"BATCH{datetime.now().strftime('%y%m')}{str(db.execute(text('SELECT floor(random() * 10000)::int')).scalar()).zfill(4)}"
+            
+            # Create batch if expiry date is provided
+            batch_id = None
+            if item.get("expiry_date"):
+                batch_result = db.execute(text("""
+                    INSERT INTO inventory.batches (
+                        org_id, product_id, supplier_id,
+                        batch_number, expiry_date,
+                        quantity_received, quantity_available,
+                        cost_per_unit, selling_price, mrp,
+                        batch_status, expiry_status,
+                        created_at
+                    ) VALUES (
+                        :org_id, :product_id, :supplier_id,
+                        :batch_number, :expiry_date,
+                        :quantity, :quantity,
+                        :cost_price, :selling_price, :mrp,
+                        'active', 'fresh',
+                        CURRENT_TIMESTAMP
+                    ) RETURNING batch_id
+                """), {
+                    "org_id": current_user['org_id'],
+                    "product_id": product_id,
+                    "supplier_id": purchase_data.get("supplier_id"),
+                    "batch_number": batch_number,
+                    "expiry_date": item.get("expiry_date"),
+                    "quantity": quantity,
+                    "cost_price": cost_price,
+                    "selling_price": item.get("selling_price", item.get("mrp", 0)),
+                    "mrp": item.get("mrp", 0)
+                })
+                
+                batch = batch_result.fetchone()
+                batch_id = batch.batch_id if batch else None
+                logger.info(f"Batch {batch_id} created for product {product_id}")
+            
+            # Create supplier invoice item
+            db.execute(
+                text("""
+                    INSERT INTO procurement.supplier_invoice_items (
+                        supplier_invoice_id, product_id, batch_id,
+                        batch_number, quantity, free_quantity,
+                        unit_price, discount_percent, discount_amount,
+                        taxable_amount, cgst_percent, sgst_percent, igst_percent,
+                        cgst_amount, sgst_amount, igst_amount, total_amount,
+                        hsn_code, unit, pack_type, pack_size
+                    ) VALUES (
+                        :invoice_id, :product_id, :batch_id,
+                        :batch_number, :quantity, :free_quantity,
+                        :unit_price, :disc_percent, :disc_amount,
+                        :taxable_amount, :cgst_percent, :sgst_percent, :igst_percent,
+                        :cgst_amount, :sgst_amount, :igst_amount, :total_amount,
+                        :hsn_code, :unit, :pack_type, :pack_size
+                    )
+                """),
+                {
+                    "invoice_id": supplier_invoice_id,
+                    "product_id": product_id,
+                    "batch_id": batch_id,
+                    "batch_number": batch_number,
+                    "quantity": quantity,
+                    "free_quantity": item.get("free_quantity", 0),
+                    "unit_price": cost_price,
+                    "disc_percent": discount_percent,
+                    "disc_amount": discount_amount,
+                    "taxable_amount": taxable_amount,
+                    "cgst_percent": cgst_percent,
+                    "sgst_percent": sgst_percent,
+                    "igst_percent": igst_percent,
+                    "cgst_amount": cgst_amount,
+                    "sgst_amount": sgst_amount,
+                    "igst_amount": igst_amount,
+                    "total_amount": total_price,
+                    "hsn_code": item.get("hsn_code", "30049099"),
+                    "unit": item.get("uom", "NOS"),
+                    "pack_type": item.get("pack_type", "STRIP"),
+                    "pack_size": item.get("pack_size", 1)
+                }
+            )
+            
+            items_created += 1
+        
+        db.commit()
+        
+        return {
+            "invoice_id": supplier_invoice_id,
+            "invoice_number": invoice_number,
+            "items_created": items_created,
+            "message": "Purchase entry (supplier invoice) created successfully"
+        }
+        
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Error creating purchase entry: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to create purchase entry: {str(e)}")
+
 @router.post("/with-items")
 async def create_purchase_with_items(purchase_data: dict, db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user_and_org)):

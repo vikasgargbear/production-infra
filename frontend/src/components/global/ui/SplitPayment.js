@@ -13,10 +13,13 @@ const SplitPayment = ({
   onPaymentStatusChange,
   allowPartial = true,
   className = '',
-  readOnly = false 
+  readOnly = false,
+  defaultToCredit = true  // New prop to control default behavior
 }) => {
+  // Initialize with full amount if defaultToCredit is false, otherwise 0 for credit
+  const defaultAmount = defaultToCredit ? 0 : totalAmount;
   const [paymentMethods, setPaymentMethods] = useState(payments.length > 0 ? payments : [
-    { id: 1, method: 'cash', amount: 0, reference: '' }
+    { id: 1, method: 'cash', amount: defaultAmount, reference: '' }
   ]);
   const [paymentStatus, setPaymentStatus] = useState('Pending');
 
