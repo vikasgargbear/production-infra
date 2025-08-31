@@ -339,6 +339,14 @@ def create_purchase_with_items(purchase_data: dict, db: Session = Depends(get_db
                 detail="Unable to determine user for this operation. Please provide created_by field."
             )
         
+        # Get default branch for organization
+        from app.utils.branch_utils import get_default_branch_id
+        branch_id = get_default_branch_id(db, org_id)
+        if not branch_id:
+            # If no branch exists, don't fail - let it be NULL if allowed
+            logger.warning(f"No branch found for org {org_id}, proceeding without branch_id")
+            branch_id = None
+        
         # Create purchase header
         result = db.execute(
             text("""
@@ -353,7 +361,7 @@ def create_purchase_with_items(purchase_data: dict, db: Session = Depends(get_db
                     :purchase_number, :po_date,
                     :supplier_id, :supplier_name,
                     :subtotal, :discount, :tax, :other_charges, :total,
-                    :status, :payment_mode, :notes, :created_by, 1
+                    :status, :payment_mode, :notes, :created_by, :branch_id
                 ) RETURNING purchase_order_id
             """),
             {
@@ -370,7 +378,8 @@ def create_purchase_with_items(purchase_data: dict, db: Session = Depends(get_db
                 "status": purchase_data.get("purchase_status", "draft"),
                 "payment_mode": purchase_data.get("payment_mode", "cash"),
                 "notes": purchase_data.get("notes"),
-                "created_by": created_by
+                "created_by": created_by,
+                "branch_id": branch_id  # Use the dynamically fetched branch_id
             }
         )
         

@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test Party Ledger</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            padding: 20px;
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        .section {
+            margin: 20px 0;
+            padding: 15px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+        }
+        h2 {
+            color: #333;
+            margin-bottom: 10px;
+        }
+        pre {
+            background: #f4f4f4;
+            padding: 10px;
+            border-radius: 3px;
+            overflow-x: auto;
+        }
+        .success {
+            color: green;
+            font-weight: bold;
+        }
+        .error {
+            color: red;
+            font-weight: bold;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 10px;
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 8px;
+            text-align: left;
+        }
+        th {
+            background-color: #f2f2f2;
+        }
+        .debit {
+            color: red;
+        }
+        .credit {
+            color: green;
+        }
+    </style>
+</head>
+<body>
+    <h1>Party Ledger API Test</h1>
+    
+    <div class="section">
+        <h2>Testing Customer: Garg Medical Store (ID: 108)</h2>
+        <button onclick="testAPI()">Test Party Ledger API</button>
+        <div id="result"></div>
+    </div>
+    
+    <div class="section">
+        <h2>Ledger Entries</h2>
+        <div id="ledger"></div>
+    </div>
+    
+    <script>
+        const API_BASE = 'https://pharma-backend-production-0c09.up.railway.app';
+        const AUTH_TOKEN = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ1c2VyLWlkIiwiZXhwIjoxNzM1NjA0NDQ0LCJvcmdfaWQiOiJlNzhkNjc3Ny0zNWY2LTRiMTktOTk0Zi1jYWFlZGUyZjAyMWEifQ.RhSa-Cf9jqGqhJx3bBOAGWBIMl3xOt7V0Qy-4vjD5uo';
+        const ORG_ID = 'e78d6777-35f6-4b19-994f-caaede2f021a';
+        
+        async function testAPI() {
+            const resultDiv = document.getElementById('result');
+            const ledgerDiv = document.getElementById('ledger');
+            
+            resultDiv.innerHTML = '<p>Testing API...</p>';
+            
+            try {
+                // Test balance endpoint
+                const balanceResponse = await fetch(`${API_BASE}/api/party-ledger/balance/108?party_type=customer`, {
+                    headers: {
+                        'Authorization': `Bearer ${AUTH_TOKEN}`,
+                        'X-Org-Id': ORG_ID
+                    }
+                });
+                
+                const balanceData = await balanceResponse.json();
+                
+                // Test statement endpoint
+                const statementResponse = await fetch(`${API_BASE}/api/party-ledger/statement/108?party_type=customer`, {
+                    headers: {
+                        'Authorization': `Bearer ${AUTH_TOKEN}`,
+                        'X-Org-Id': ORG_ID
+                    }
+                });
+                
+                const statementData = await statementResponse.json();
+                
+                // Display results
+                resultDiv.innerHTML = `
+                    <p class="success">✓ API Connected Successfully!</p>
+                    <h3>Balance Information:</h3>
+                    <pre>${JSON.stringify(balanceData, null, 2)}</pre>
+                    <h3>Party Information:</h3>
+                    <pre>${JSON.stringify(statementData.party, null, 2)}</pre>
+                `;
+                
+                // Display ledger entries in table
+                if (statementData.statement && statementData.statement.length > 0) {
+                    let tableHTML = `
+                        <h3>Transaction History (${statementData.statement.length} entries)</h3>
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>Date</th>
+                                    <th>Type</th>
+                                    <th>Reference</th>
+                                    <th>Description</th>
+                                    <th class="debit">Debit</th>
+                                    <th class="credit">Credit</th>
+                                    <th>Balance</th>
+                                    <th>Status</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                    `;
+                    
+                    statementData.statement.forEach(entry => {
+                        tableHTML += `
+                            <tr>
+                                <td>${entry.date}</td>
+                                <td>${entry.transaction_type}</td>
+                                <td>${entry.reference}</td>
+                                <td>${entry.description}</td>
+                                <td class="debit">${entry.debit > 0 ? '₹' + entry.debit.toFixed(2) : '-'}</td>
+                                <td class="credit">${entry.credit > 0 ? '₹' + entry.credit.toFixed(2) : '-'}</td>
+                                <td>₹${entry.running_balance.toFixed(2)}</td>
+                                <td>${entry.status || '-'}</td>
+                            </tr>
+                        `;
+                    });
+                    
+                    tableHTML += '</tbody></table>';
+                    
+                    // Calculate summary
+                    const totalDebit = statementData.statement.reduce((sum, e) => sum + e.debit, 0);
+                    const totalCredit = statementData.statement.reduce((sum, e) => sum + e.credit, 0);
+                    const balance = totalDebit - totalCredit;
+                    
+                    tableHTML += `
+                        <h3>Summary</h3>
+                        <table>
+                            <tr>
+                                <td><strong>Total Debit:</strong></td>
+                                <td class="debit">₹${totalDebit.toFixed(2)}</td>
+                            </tr>
+                            <tr>
+                                <td><strong>Total Credit:</strong></td>
+                                <td class="credit">₹${totalCredit.toFixed(2)}</td>
+                            </tr>
+                            <tr>
+                                <td><strong>Outstanding Balance:</strong></td>
+                                <td style="color: ${balance > 0 ? 'red' : 'green'}">₹${Math.abs(balance).toFixed(2)} ${balance > 0 ? '(Receivable)' : '(Payable)'}</td>
+                            </tr>
+                        </table>
+                    `;
+                    
+                    ledgerDiv.innerHTML = tableHTML;
+                } else {
+                    ledgerDiv.innerHTML = '<p>No ledger entries found</p>';
+                }
+                
+            } catch (error) {
+                resultDiv.innerHTML = `<p class="error">✗ Error: ${error.message}</p>`;
+                console.error('API Test Error:', error);
+            }
+        }
+        
+        // Auto-test on load
+        window.onload = () => testAPI();
+    </script>
+</body>
+</html>

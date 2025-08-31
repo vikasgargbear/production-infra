@@ -489,8 +489,12 @@ async def create_sale_return(
             pass
         
         if not branch_id:
-            # If no branch exists, create a default one
-            branch_id = 1
+            # Get default branch using utility function
+            from app.utils.branch_utils import get_default_branch_id
+            branch_id = get_default_branch_id(db, org_id)
+            if not branch_id:
+                logger.warning(f"No branch found for org {org_id}, using NULL")
+                branch_id = None
             
         # Get first user_id from org_users for this org
         created_by = None
