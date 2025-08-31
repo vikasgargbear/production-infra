@@ -45,6 +45,25 @@ export const purchasesApi = {
     return apiHelpers.delete(`${ENDPOINTS.BASE}/${id}`);
   },
   
+  // Create purchase entry (not order)
+  createEntry: async (data) => {
+    // Use the /entry endpoint for purchase entries
+    const response = await apiHelpers.post(ENDPOINTS.ENHANCED + '/entry', data);
+    return response;
+  },
+  
+  // Search products for purchase entry
+  searchProducts: async (params) => {
+    const response = await apiHelpers.post(ENDPOINTS.ENHANCED + '/search-products', params);
+    return response;
+  },
+  
+  // Validate purchase items before saving
+  validateItems: async (data) => {
+    const response = await apiHelpers.post(ENDPOINTS.ENHANCED + '/validate-purchase-items', data);
+    return response;
+  },
+  
   // Parse invoice PDF
   parseInvoice: async (formData) => {
     const response = await apiClient.post(ENDPOINTS.PDF_PARSE, formData, {

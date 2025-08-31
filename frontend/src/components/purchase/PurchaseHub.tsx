@@ -3,7 +3,8 @@ import {
   ShoppingBag, FileText, Package, ShoppingCart, List
 } from 'lucide-react';
 import { ModuleHub } from '../global';
-import EnhancedPurchaseEntry from './EnhancedPurchaseEntry';
+import StreamlinedPurchaseEntry from './StreamlinedPurchaseEntry';
+// import EnhancedPurchaseEntry from './EnhancedPurchaseEntry';
 import EnhancedPurchaseOrderFlow from './EnhancedPurchaseOrderFlow';
 import EnhancedGRNFlow from './EnhancedGRNFlow';
 import PurchaseListHistory from './PurchaseListHistory';
@@ -33,7 +34,7 @@ const PurchaseHub: React.FC<PurchaseHubProps> = ({ open = true, onClose }) => {
       description: 'Record purchases',
       icon: ShoppingBag,
       color: 'indigo',
-      component: EnhancedPurchaseEntry
+      component: StreamlinedPurchaseEntry
     },
     {
       id: 'purchase-order',
