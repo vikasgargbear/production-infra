@@ -214,7 +214,8 @@ async def create_direct_purchase_entry(purchase_data: dict, db: Session = Depend
             product_name = item.get("product_name")
             
             if not product_id and product_name:
-                # Try to find existing product by name (with better matching)
+                # In pharma, products must match very closely (95%+)
+                # Different dosages/strengths are different products
                 # First try exact match (case-insensitive, trimmed)
                 existing_product = db.execute(text("""
                     SELECT product_id FROM inventory.products 
@@ -223,16 +224,9 @@ async def create_direct_purchase_entry(purchase_data: dict, db: Session = Depend
                     LIMIT 1
                 """), {"product_name": product_name, "org_id": current_user['org_id']}).fetchone()
                 
-                # If not found, try with partial match for common variations
-                if not existing_product and len(product_name) > 5:
-                    # Try to match the first part of the name (often the brand/generic name)
-                    existing_product = db.execute(text("""
-                        SELECT product_id FROM inventory.products 
-                        WHERE LOWER(product_name) LIKE LOWER(:pattern)
-                        AND org_id = :org_id
-                        ORDER BY LENGTH(product_name)  -- Prefer shorter/exact matches
-                        LIMIT 1
-                    """), {"pattern": f"{product_name.split()[0]}%", "org_id": current_user['org_id']}).fetchone()
+                # For pharma, we DON'T do partial matching
+                # PARACETAMOL 500MG and PARACETAMOL 650MG are different products
+                # Only exact name matches are acceptable
                 
                 if existing_product:
                     product_id = existing_product.product_id
@@ -455,7 +449,8 @@ async def create_purchase_with_items(purchase_data: dict, db: Session = Depends(
             product_name = item.get("product_name")
             
             if not product_id and product_name:
-                # Try to find existing product by name (with better matching)
+                # In pharma, products must match very closely (95%+)
+                # Different dosages/strengths are different products
                 # First try exact match (case-insensitive, trimmed)
                 existing_product = db.execute(text("""
                     SELECT product_id FROM inventory.products 
@@ -464,16 +459,9 @@ async def create_purchase_with_items(purchase_data: dict, db: Session = Depends(
                     LIMIT 1
                 """), {"product_name": product_name, "org_id": current_user['org_id']}).fetchone()
                 
-                # If not found, try with partial match for common variations
-                if not existing_product and len(product_name) > 5:
-                    # Try to match the first part of the name (often the brand/generic name)
-                    existing_product = db.execute(text("""
-                        SELECT product_id FROM inventory.products 
-                        WHERE LOWER(product_name) LIKE LOWER(:pattern)
-                        AND org_id = :org_id
-                        ORDER BY LENGTH(product_name)  -- Prefer shorter/exact matches
-                        LIMIT 1
-                    """), {"pattern": f"{product_name.split()[0]}%", "org_id": current_user['org_id']}).fetchone()
+                # For pharma, we DON'T do partial matching
+                # PARACETAMOL 500MG and PARACETAMOL 650MG are different products
+                # Only exact name matches are acceptable
                 
                 if existing_product:
                     product_id = existing_product.product_id
