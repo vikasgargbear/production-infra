@@ -8,6 +8,7 @@ import { customersApi, salesApi, paymentsApi } from '../../services/api';
 import { paymentDataTransformer } from '../../services/api/utils/paymentDataTransformer';
 import InvoiceSelector from './components/InvoiceSelector';
 import PaymentDetails from './components/PaymentDetails';
+import PaymentDetailsEnhanced from './components/PaymentDetailsEnhanced';
 import PaymentSummary from './components/PaymentSummary';
 
 // Import global components
@@ -203,19 +204,58 @@ const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) =>
   const handleCustomerSelect = async (customer: any): Promise<void> => {
     setCustomer(customer);
     
-    // Fetch outstanding invoices - temporarily disabled due to API issues
+    // Fetch outstanding invoices using invoicesApi
     try {
-      // TODO: Fix API endpoint parameters for getOutstanding
-      // const response = await paymentsApi.getOutstanding({ 
-      //   customer_id: customer.customer_id || customer.id 
-      // });
+      // Import invoicesApi at the top of the file if not already imported
+      const { invoicesApi } = await import('../../services/api');
       
-      // For now, just set empty array to not break payment flow
-      setOutstandingInvoices([]);
+      // Get customer's invoices with outstanding amounts
+      const response = await invoicesApi.getByCustomer(
+        customer.customer_id || customer.id,
+        {
+          payment_status: 'pending,partial', // Get unpaid and partially paid invoices
+          sort: 'invoice_date',
+          order: 'asc',
+          limit: 50
+        }
+      );
+      
+      // Transform invoices to outstanding format
+      const invoices = response.data || [];
+      const outstandingInvoices = invoices
+        .filter((inv: any) => {
+          // Only include invoices with outstanding amounts
+          const outstanding = (inv.final_amount || inv.total_amount || 0) - (inv.paid_amount || 0);
+          return outstanding > 0;
+        })
+        .map((inv: any) => ({
+          invoice_no: inv.invoice_number || inv.invoice_id,
+          invoice_date: inv.invoice_date || inv.created_at,
+          total_amount: inv.final_amount || inv.total_amount || 0,
+          paid_amount: inv.paid_amount || 0,
+          amount_due: (inv.final_amount || inv.total_amount || 0) - (inv.paid_amount || 0),
+          status: inv.payment_status || 'pending',
+          invoice_id: inv.invoice_id || inv.id
+        }));
+      
+      setOutstandingInvoices(outstandingInvoices);
+      console.log(`Found ${outstandingInvoices.length} outstanding invoices for customer`);
       
     } catch (error) {
       console.error('Error fetching outstanding invoices:', error);
-      setOutstandingInvoices([]);
+      // Try alternative API if available
+      try {
+        // Try using the customer API's getOutstanding method
+        const response = await customersApi.getOutstanding(customer.customer_id || customer.id);
+        if (response.data) {
+          setOutstandingInvoices(response.data);
+        } else {
+          setOutstandingInvoices([]);
+        }
+      } catch (fallbackError) {
+        console.error('Fallback API also failed:', fallbackError);
+        setOutstandingInvoices([]);
+      }
     }
   };
 
@@ -344,9 +384,9 @@ const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) =>
 
             {currentStep === 1 ? (
               <>
-                {/* Payment Details - Moved to Top */}
+                {/* Payment Details - Enhanced Version with Better UI */}
                 <div className="mb-8">
-                  <PaymentDetails />
+                  <PaymentDetailsEnhanced />
                 </div>
 
                 {/* Customer Section */}

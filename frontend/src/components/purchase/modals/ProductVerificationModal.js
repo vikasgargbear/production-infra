@@ -44,40 +44,90 @@ const ProductVerificationModal = ({
   const [validationErrors, setValidationErrors] = useState([]);
   const [validationWarnings, setValidationWarnings] = useState([]);
 
-  // Search for product on mount
+  // Update product data when product prop changes (switching between products)
   useEffect(() => {
-    if (product?.product_name) {
-      searchProduct(product.product_name);
-    }
-  }, [product]);
-
-  // Search products
-  const searchProduct = React.useCallback(
-    debounce(async (term) => {
-      if (!term || term.length < 2) return;
-
-      setSearching(true);
-      try {
-        const response = await purchasesApi.searchProducts({ 
-          product_name: term 
-        });
-        if (response && response.data) {
-          setSearchResults(response.data.products || []);
-          
-          // Auto-select if exact match found
-          const exactMatch = response.data.products?.find(p => p.is_exact_match);
-          if (exactMatch) {
-            selectProduct(exactMatch);
-          }
-        }
-      } catch (error) {
-        console.error('Search error:', error);
-      } finally {
-        setSearching(false);
+    // If product has been verified already, keep the verified data
+    // Otherwise, use the extracted data
+    if (product?.verified) {
+      // Product was already verified, use the saved values
+      setProductData({
+        product_id: product.product_id,
+        product_name: product.product_name,
+        batch_number: product.batch_number,
+        expiry_date: product.expiry_date,
+        quantity: product.quantity,
+        cost_price: product.cost_price,
+        mrp: product.mrp,
+        selling_price: product.selling_price,
+        tax_percent: product.tax_percent,
+        hsn_code: product.hsn_code,
+        free_quantity: product.free_quantity,
+        discount_percent: product.discount_percent
+      });
+      
+      // Also set the mode based on whether it's a new product
+      if (product.isNewProduct) {
+        setMode('new');
+      } else if (product.product_id) {
+        setMode('selected');
+        // You might want to set selectedProduct here too if needed
       }
-    }, 300),
-    []
-  );
+    } else {
+      // Product not verified yet, use extracted/original data
+      setProductData({
+        product_id: product?.product_id || null,
+        product_name: product?.product_name || '',
+        batch_number: product?.batch_number || '',
+        expiry_date: product?.expiry_date || '',
+        quantity: product?.quantity || '',
+        cost_price: product?.cost_price || product?.rate || '',
+        mrp: product?.mrp || '',
+        selling_price: product?.selling_price || '',
+        tax_percent: product?.tax_percent || 12,
+        hsn_code: product?.hsn_code || '',
+        free_quantity: product?.free_quantity || 0,
+        discount_percent: product?.discount_percent || 0
+      });
+      
+      setMode('search');
+      
+      // Search for the new product only if not verified
+      if (product?.product_name) {
+        searchProduct(product.product_name);
+      }
+    }
+    
+    // Reset common state
+    setSearchTerm(product?.product_name || '');
+    setSelectedProduct(null);
+    setValidationErrors([]);
+    setValidationWarnings([]);
+  }, [product, productIndex]); // Add productIndex to ensure updates when switching
+
+  // Search products - removed useCallback to avoid stale closure
+  const searchProduct = debounce(async (term) => {
+    if (!term || term.length < 2) return;
+
+    setSearching(true);
+    try {
+      const response = await purchasesApi.searchProducts({ 
+        product_name: term 
+      });
+      if (response && response.data) {
+        setSearchResults(response.data.products || []);
+        
+        // Auto-select if exact match found
+        const exactMatch = response.data.products?.find(p => p.is_exact_match);
+        if (exactMatch) {
+          selectProduct(exactMatch);
+        }
+      }
+    } catch (error) {
+      console.error('Search error:', error);
+    } finally {
+      setSearching(false);
+    }
+  }, 300);
 
   // Select existing product
   const selectProduct = (existingProduct) => {
@@ -133,6 +183,15 @@ const ProductVerificationModal = ({
     }
   }, [productData.mrp]);
 
+  // Generate batch number if not provided
+  const generateBatchNumber = () => {
+    const date = new Date();
+    const year = date.getFullYear().toString().slice(-2);
+    const month = (date.getMonth() + 1).toString().padStart(2, '0');
+    const random = Math.floor(Math.random() * 10000).toString().padStart(4, '0');
+    return `B${year}${month}${random}`;
+  };
+
   // Validate product data
   const validateProduct = () => {
     const errors = [];
@@ -142,7 +201,7 @@ const ProductVerificationModal = ({
     if (!productData.product_name) errors.push('Product name is required');
     if (!productData.quantity || productData.quantity <= 0) errors.push('Quantity must be greater than 0');
     if (!productData.cost_price || productData.cost_price <= 0) errors.push('Cost price must be greater than 0');
-    if (!productData.batch_number) errors.push('Batch number is required');
+    // Batch number is NOT required - will be auto-generated if missing
     if (!productData.expiry_date) errors.push('Expiry date is required');
 
     // Price logic
@@ -184,8 +243,14 @@ const ProductVerificationModal = ({
       return;
     }
 
-    onVerified({
+    // Auto-generate batch number if not provided
+    const finalProductData = {
       ...productData,
+      batch_number: productData.batch_number || generateBatchNumber()
+    };
+
+    onVerified({
+      ...finalProductData,
       isNewProduct: mode === 'new',
       verified: true
     });
@@ -195,9 +260,17 @@ const ProductVerificationModal = ({
     <div className="space-y-6">
       {/* Progress indicator */}
       <div className="flex items-center justify-between mb-4">
-        <h3 className="text-lg font-medium">
-          Product {productIndex + 1} of {totalProducts}
-        </h3>
+        <div className="flex items-center space-x-3">
+          <h3 className="text-lg font-medium">
+            Product {productIndex + 1} of {totalProducts}
+          </h3>
+          {product?.verified && (
+            <span className="px-2 py-1 bg-green-100 text-green-700 text-xs rounded-full flex items-center">
+              <CheckCircle className="w-3 h-3 mr-1" />
+              Verified
+            </span>
+          )}
+        </div>
         <div className="flex items-center space-x-2">
           {Array.from({ length: totalProducts }, (_, i) => (
             <div

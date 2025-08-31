@@ -132,15 +132,21 @@ const PDFVerificationFlow = ({
       return;
     }
 
-    // Compile final data
+    // Compile final data with all supplier info
     const finalData = {
       ...extractedData,
       supplier_id: verifiedSupplier.supplier_id,
       supplier_name: verifiedSupplier.supplier_name,
+      supplier_gst: verifiedSupplier.gst_number || verifiedSupplier.gstin,
+      supplier_gstin: verifiedSupplier.gstin || verifiedSupplier.gst_number,
+      supplier_phone: verifiedSupplier.primary_phone || verifiedSupplier.phone,
+      supplier_email: verifiedSupplier.primary_email || verifiedSupplier.email,
+      supplier_address: verifiedSupplier.address_line1 || verifiedSupplier.address,
+      fromPDFExtract: !extractedData.isBulkUpload, // Mark as PDF extract if not bulk upload
       items: productsToSave.map(product => ({
         product_id: product.product_id || null,
         product_name: product.product_name,
-        batch_number: product.batch_number,
+        batch_number: product.batch_number || product.batch_no,
         expiry_date: product.expiry_date,
         quantity: product.quantity,
         cost_price: product.cost_price,
@@ -149,7 +155,8 @@ const PDFVerificationFlow = ({
         tax_percent: product.tax_percent || 12,
         hsn_code: product.hsn_code,
         free_quantity: product.free_quantity || 0,
-        discount_percent: product.discount_percent || 0
+        discount_percent: product.discount_percent || 0,
+        isNewProduct: product.isNewProduct || false
       }))
     };
 
@@ -239,104 +246,157 @@ const PDFVerificationFlow = ({
           )}
 
           {currentStep === 'review' && (
-            <div className="space-y-6">
-              <div>
-                <h3 className="text-lg font-semibold mb-4">Review & Confirm</h3>
-                
-                {/* Supplier Summary */}
-                <div className="bg-gray-50 rounded-lg p-4 mb-4">
-                  <div className="flex items-center justify-between mb-2">
-                    <div className="flex items-center space-x-2">
-                      <Building2 className="w-5 h-5 text-gray-600" />
-                      <span className="font-medium">Supplier</span>
-                    </div>
-                    <CheckCircle className="w-5 h-5 text-green-500" />
+            <div className="space-y-4">
+              <h3 className="text-lg font-semibold">Review Complete Purchase Entry</h3>
+              
+              {/* Invoice Header Info */}
+              <div className="bg-blue-50 rounded-lg p-3">
+                <div className="grid grid-cols-3 gap-4 text-sm">
+                  <div>
+                    <span className="text-gray-600">Invoice #:</span>
+                    <span className="ml-2 font-semibold">{extractedData.invoice_number}</span>
                   </div>
-                  <div className="text-sm text-gray-600">
-                    <p className="font-medium text-gray-900">{verifiedSupplier?.supplier_name}</p>
-                    {verifiedSupplier?.gstin && <p>GSTIN: {verifiedSupplier.gstin}</p>}
+                  <div>
+                    <span className="text-gray-600">Date:</span>
+                    <span className="ml-2 font-semibold">{extractedData.invoice_date}</span>
                   </div>
-                </div>
-
-                {/* Products Summary */}
-                <div className="bg-gray-50 rounded-lg p-4">
-                  <div className="flex items-center justify-between mb-3">
-                    <div className="flex items-center space-x-2">
-                      <Package className="w-5 h-5 text-gray-600" />
-                      <span className="font-medium">Products</span>
-                    </div>
-                    <span className="text-sm text-gray-500">
-                      {verifiedProducts.filter(p => !p.skipped).length} of {verifiedProducts.length} items
-                    </span>
-                  </div>
-                  
-                  <div className="space-y-2 max-h-60 overflow-y-auto">
-                    {verifiedProducts.map((product, index) => (
-                      <div 
-                        key={index}
-                        className={`flex items-center justify-between p-2 rounded ${
-                          product.skipped ? 'bg-gray-100 opacity-50' : 'bg-white'
-                        }`}
-                      >
-                        <div className="flex-1">
-                          <p className="text-sm font-medium">
-                            {product.product_name}
-                            {product.skipped && <span className="ml-2 text-xs text-gray-500">(Skipped)</span>}
-                          </p>
-                          <p className="text-xs text-gray-500">
-                            Qty: {product.quantity} | ₹{product.cost_price} | Batch: {product.batch_number}
-                          </p>
-                        </div>
-                        <div className="flex items-center space-x-2">
-                          {product.verified && !product.skipped && (
-                            <CheckCircle className="w-4 h-4 text-green-500" />
-                          )}
-                          {product.isNewProduct && (
-                            <span className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded">New</span>
-                          )}
-                        </div>
-                      </div>
-                    ))}
+                  <div>
+                    <span className="text-gray-600">Total Amount:</span>
+                    <span className="ml-2 font-semibold">₹{extractedData.final_amount || extractedData.total_amount || 0}</span>
                   </div>
                 </div>
-
-                {/* Totals */}
-                <div className="mt-4 p-4 bg-indigo-50 rounded-lg">
-                  <div className="flex justify-between items-center">
-                    <span className="text-gray-700">Invoice Total</span>
-                    <span className="text-xl font-semibold text-indigo-600">
-                      ₹{extractedData.final_amount || extractedData.total_amount || 0}
-                    </span>
+              </div>
+              
+              {/* Supplier Details */}
+              <div className="bg-gray-50 rounded-lg p-4">
+                <div className="flex items-center justify-between mb-3">
+                  <div className="flex items-center space-x-2">
+                    <Building2 className="w-5 h-5 text-gray-600" />
+                    <span className="font-medium">Supplier Details</span>
+                  </div>
+                  <CheckCircle className="w-5 h-5 text-green-500" />
+                </div>
+                <div className="grid grid-cols-2 gap-4 text-sm">
+                  <div>
+                    <p><span className="text-gray-600">Name:</span> <span className="font-medium">{verifiedSupplier?.supplier_name || verifiedSupplier?.name}</span></p>
+                    {(verifiedSupplier?.gst_number || verifiedSupplier?.gstin) && <p><span className="text-gray-600">GSTIN:</span> {verifiedSupplier.gst_number || verifiedSupplier.gstin}</p>}
+                    {(verifiedSupplier?.primary_phone || verifiedSupplier?.phone) && <p><span className="text-gray-600">Phone:</span> {verifiedSupplier.primary_phone || verifiedSupplier.phone}</p>}
+                  </div>
+                  <div>
+                    {(verifiedSupplier?.primary_email || verifiedSupplier?.email) && <p><span className="text-gray-600">Email:</span> {verifiedSupplier.primary_email || verifiedSupplier.email}</p>}
+                    {verifiedSupplier?.address_line1 && <p><span className="text-gray-600">Address:</span> {verifiedSupplier.address_line1}</p>}
+                    {verifiedSupplier?.city && <p><span className="text-gray-600">City:</span> {verifiedSupplier.city}, {verifiedSupplier.state}</p>}
                   </div>
                 </div>
               </div>
 
-              {/* Action Buttons */}
-              <div className="flex justify-between">
+              {/* Products Table */}
+              <div className="bg-white border rounded-lg">
+                <div className="flex items-center justify-between p-3 border-b bg-gray-50">
+                  <div className="flex items-center space-x-2">
+                    <Package className="w-5 h-5 text-gray-600" />
+                    <span className="font-medium">Products ({verifiedProducts.filter(p => !p.skipped).length} items)</span>
+                  </div>
+                </div>
+                
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead className="bg-gray-50 border-b">
+                      <tr>
+                        <th className="text-left px-3 py-2">Product</th>
+                        <th className="text-left px-3 py-2">Batch</th>
+                        <th className="text-left px-3 py-2">Expiry</th>
+                        <th className="text-right px-3 py-2">Qty</th>
+                        <th className="text-right px-3 py-2">Free</th>
+                        <th className="text-right px-3 py-2">Cost</th>
+                        <th className="text-right px-3 py-2">MRP</th>
+                        <th className="text-right px-3 py-2">PTR</th>
+                        <th className="text-right px-3 py-2">Tax%</th>
+                        <th className="text-right px-3 py-2">Amount</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {verifiedProducts.filter(p => !p.skipped).map((product, index) => {
+                        const amount = (parseFloat(product.quantity || 0) * parseFloat(product.cost_price || 0)).toFixed(2);
+                        return (
+                          <tr key={index} className="border-b hover:bg-gray-50">
+                            <td className="px-3 py-2">
+                              <div>
+                                <p className="font-medium">{product.product_name}</p>
+                                {product.hsn_code && <p className="text-xs text-gray-500">HSN: {product.hsn_code}</p>}
+                                {product.isNewProduct && (
+                                  <span className="text-xs bg-blue-100 text-blue-700 px-1 rounded">New Product</span>
+                                )}
+                              </div>
+                            </td>
+                            <td className="px-3 py-2">{product.batch_number || 'Auto'}</td>
+                            <td className="px-3 py-2 text-xs">{product.expiry_date}</td>
+                            <td className="px-3 py-2 text-right">{product.quantity}</td>
+                            <td className="px-3 py-2 text-right">{product.free_quantity || 0}</td>
+                            <td className="px-3 py-2 text-right">₹{product.cost_price}</td>
+                            <td className="px-3 py-2 text-right">₹{product.mrp}</td>
+                            <td className="px-3 py-2 text-right">₹{product.selling_price}</td>
+                            <td className="px-3 py-2 text-right">{product.tax_percent}%</td>
+                            <td className="px-3 py-2 text-right font-medium">₹{amount}</td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                    <tfoot className="bg-gray-50">
+                      <tr>
+                        <td colSpan="9" className="px-3 py-2 text-right font-medium">Subtotal:</td>
+                        <td className="px-3 py-2 text-right font-medium">
+                          ₹{verifiedProducts.filter(p => !p.skipped).reduce((sum, p) => 
+                            sum + (parseFloat(p.quantity || 0) * parseFloat(p.cost_price || 0)), 0
+                          ).toFixed(2)}
+                        </td>
+                      </tr>
+                      <tr>
+                        <td colSpan="9" className="px-3 py-2 text-right font-medium">Tax Amount:</td>
+                        <td className="px-3 py-2 text-right font-medium">
+                          ₹{verifiedProducts.filter(p => !p.skipped).reduce((sum, p) => {
+                            const base = parseFloat(p.quantity || 0) * parseFloat(p.cost_price || 0);
+                            return sum + (base * parseFloat(p.tax_percent || 0) / 100);
+                          }, 0).toFixed(2)}
+                        </td>
+                      </tr>
+                      <tr className="text-lg">
+                        <td colSpan="9" className="px-3 py-3 text-right font-semibold">Total Amount:</td>
+                        <td className="px-3 py-3 text-right font-semibold text-indigo-600">
+                          ₹{extractedData.final_amount || extractedData.total_amount || 0}
+                        </td>
+                      </tr>
+                    </tfoot>
+                  </table>
+                </div>
+              </div>
+
+              {/* Action Buttons - Better Layout */}
+              <div className="flex justify-between items-center pt-4 border-t">
                 <button
                   onClick={() => {
                     setCurrentStep('products');
                     setCurrentProductIndex(verifiedProducts.length - 1);
                   }}
-                  className="px-4 py-2 text-gray-600 hover:text-gray-800"
+                  className="px-4 py-2 text-gray-600 hover:text-gray-800 flex items-center"
                 >
-                  <ChevronLeft className="w-4 h-4 inline mr-1" />
+                  <ChevronLeft className="w-4 h-4 mr-1" />
                   Back to Products
                 </button>
                 
-                <div className="space-x-3">
+                <div className="flex space-x-3">
                   <button
                     onClick={onCancel}
-                    className="px-6 py-2 border border-gray-300 rounded-lg hover:bg-gray-50"
+                    className="px-6 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50"
                   >
                     Cancel
                   </button>
                   <button
                     onClick={handleFinalSave}
-                    className="px-6 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 flex items-center space-x-2"
+                    className="px-8 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 flex items-center space-x-2"
                   >
-                    <Save className="w-4 h-4" />
-                    <span>Save Purchase</span>
+                    <Save className="w-5 h-5" />
+                    <span>Confirm & Save Purchase</span>
                   </button>
                 </div>
               </div>

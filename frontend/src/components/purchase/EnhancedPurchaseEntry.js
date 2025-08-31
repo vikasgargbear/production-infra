@@ -482,33 +482,108 @@ const EnhancedPurchaseEntry = ({ onClose, prefilledData = null }) => {
 
   // Handle verified data from verification flow
   const handleVerificationComplete = (verifiedData) => {
-    // Update purchase with verified data
+    // Map the verified items to the format expected by the purchase form
+    const mappedItems = verifiedData.items.map((item, index) => ({
+      id: Date.now() + index + Math.random(),
+      product_id: item.product_id,
+      product_name: item.product_name,
+      product_code: item.product_code,
+      hsn_code: item.hsn_code,
+      // Batch information
+      batch_no: item.batch_number,
+      batch_number: item.batch_number,
+      batch: item.batch_number,
+      // Dates
+      expiry_date: item.expiry_date,
+      manufacturing_date: item.manufacturing_date,
+      // Quantities
+      quantity: parseFloat(item.quantity) || 0,
+      free_quantity: parseFloat(item.free_quantity) || 0,
+      // Pricing - ensure all price fields are synced
+      mrp: parseFloat(item.mrp) || 0,
+      purchase_price: parseFloat(item.cost_price) || 0,
+      rate: parseFloat(item.cost_price) || 0,
+      cost_price: parseFloat(item.cost_price) || 0,
+      selling_price: parseFloat(item.selling_price) || parseFloat(item.mrp) || 0,
+      sale_price: parseFloat(item.selling_price) || parseFloat(item.mrp) || 0,
+      // Discounts and taxes
+      discount_percent: parseFloat(item.discount_percent) || 0,
+      tax_percent: parseFloat(item.tax_percent) || 12,
+      tax: parseFloat(item.tax_percent) || 12,
+      tax_amount: 0, // Will be calculated
+      // Pack information
+      pack_type: item.pack_type || 'STRIP',
+      pack_size: item.pack_size || 10,
+      strips_per_box: item.strips_per_box || 10,
+      // Additional info
+      category: item.category || '',
+      brand_name: item.brand_name || '',
+      unit: item.unit || 'Strip',
+      isNewProduct: item.isNewProduct || false
+    }));
+
+    // Calculate totals
+    let grossAmount = 0;
+    let taxAmount = 0;
+    
+    mappedItems.forEach(item => {
+      const itemAmount = (item.quantity * item.purchase_price);
+      const itemTax = itemAmount * (item.tax_percent / 100);
+      grossAmount += itemAmount;
+      taxAmount += itemTax;
+    });
+
+    const netAmount = grossAmount + taxAmount;
+
+    // Update purchase with ALL verified data
     setPurchase(prev => ({
       ...prev,
       supplier_invoice_number: verifiedData.invoice_number || prev.supplier_invoice_number,
       invoice_date: verifiedData.invoice_date || prev.invoice_date,
       supplier_id: verifiedData.supplier_id,
       supplier_name: verifiedData.supplier_name,
-      items: verifiedData.items || [],
-      gross_amount: verifiedData.gross_amount || 0,
-      tax_amount: verifiedData.tax_amount || 0,
-      net_amount: verifiedData.net_amount || 0,
-      final_amount: verifiedData.final_amount || 0
+      supplier_details: {
+        supplier_id: verifiedData.supplier_id,
+        supplier_name: verifiedData.supplier_name,
+        gst_number: verifiedData.supplier_gst || verifiedData.supplier_gstin,
+        primary_phone: verifiedData.supplier_phone,
+        primary_email: verifiedData.supplier_email,
+        address: verifiedData.supplier_address
+      },
+      items: mappedItems,
+      gross_amount: grossAmount,
+      tax_amount: taxAmount,
+      net_amount: netAmount,
+      final_amount: verifiedData.final_amount || netAmount,
+      payment_type: verifiedData.payment_type || 'credit',
+      payment_terms: verifiedData.payment_terms || 30,
+      notes: verifiedData.notes || ''
     }));
     
-    // Update supplier
+    // Update supplier state
     if (verifiedData.supplier_id) {
       setSelectedSupplier({
         supplier_id: verifiedData.supplier_id,
         supplier_name: verifiedData.supplier_name,
-        gstin: verifiedData.supplier_gstin,
+        gst_number: verifiedData.supplier_gst || verifiedData.supplier_gstin,
+        gstin: verifiedData.supplier_gstin || verifiedData.supplier_gst,
+        primary_phone: verifiedData.supplier_phone,
         address: verifiedData.supplier_address
       });
     }
     
+    // Close verification flow
     setShowVerificationFlow(false);
     setExtractedPDFData(null);
-    toast.success('Data verified and loaded successfully!');
+    
+    // For bulk/extract method, go directly to review tab
+    if (verifiedData.isBulkUpload || verifiedData.fromPDFExtract) {
+      setActiveTab('review');
+      toast.success('Data verified! Please review and save the purchase entry.');
+    } else {
+      setActiveTab('items'); // Go to items tab to show the loaded items
+      toast.success('Data verified and loaded successfully!');
+    }
   };
 
   // Create content for step 1
