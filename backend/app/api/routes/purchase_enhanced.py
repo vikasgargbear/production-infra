@@ -214,18 +214,34 @@ async def create_direct_purchase_entry(purchase_data: dict, db: Session = Depend
             product_name = item.get("product_name")
             
             if not product_id and product_name:
-                # Try to find existing product by name
+                # Try to find existing product by name (with better matching)
+                # First try exact match (case-insensitive, trimmed)
                 existing_product = db.execute(text("""
                     SELECT product_id FROM inventory.products 
-                    WHERE LOWER(product_name) = LOWER(:product_name)
+                    WHERE LOWER(TRIM(product_name)) = LOWER(TRIM(:product_name))
                     AND org_id = :org_id
                     LIMIT 1
                 """), {"product_name": product_name, "org_id": current_user['org_id']}).fetchone()
                 
+                # If not found, try with partial match for common variations
+                if not existing_product and len(product_name) > 5:
+                    # Try to match the first part of the name (often the brand/generic name)
+                    existing_product = db.execute(text("""
+                        SELECT product_id FROM inventory.products 
+                        WHERE LOWER(product_name) LIKE LOWER(:pattern)
+                        AND org_id = :org_id
+                        ORDER BY LENGTH(product_name)  -- Prefer shorter/exact matches
+                        LIMIT 1
+                    """), {"pattern": f"{product_name.split()[0]}%", "org_id": current_user['org_id']}).fetchone()
+                
                 if existing_product:
                     product_id = existing_product.product_id
+                    logger.info(f"Found existing product: {product_name} (ID: {product_id})")
                 else:
                     # Create new product with minimal required fields
+                    # Generate a meaningful product code
+                    product_code = f"PROD-{product_name[:10].upper().replace(' ', '')}-{datetime.now().strftime('%Y%m%d%H%M%S')}"
+                    
                     new_product = db.execute(text("""
                         INSERT INTO inventory.products (
                             org_id, product_name, product_code,
@@ -237,9 +253,10 @@ async def create_direct_purchase_entry(purchase_data: dict, db: Session = Depend
                     """), {
                         "org_id": current_user['org_id'],
                         "product_name": product_name,
-                        "product_code": f"PROD-{datetime.now().strftime('%Y%m%d%H%M%S')}"
+                        "product_code": product_code
                     }).fetchone()
                     product_id = new_product.product_id if new_product else None
+                    logger.info(f"Created new product: {product_name} (ID: {product_id}, Code: {product_code})")
             
             # Create PO item (no final_amount column - use line_total for total)
             item_result = db.execute(text("""
@@ -416,18 +433,34 @@ async def create_purchase_with_items(purchase_data: dict, db: Session = Depends(
             product_name = item.get("product_name")
             
             if not product_id and product_name:
-                # Try to find existing product by name
+                # Try to find existing product by name (with better matching)
+                # First try exact match (case-insensitive, trimmed)
                 existing_product = db.execute(text("""
                     SELECT product_id FROM inventory.products 
-                    WHERE LOWER(product_name) = LOWER(:product_name)
+                    WHERE LOWER(TRIM(product_name)) = LOWER(TRIM(:product_name))
                     AND org_id = :org_id
                     LIMIT 1
                 """), {"product_name": product_name, "org_id": current_user['org_id']}).fetchone()
                 
+                # If not found, try with partial match for common variations
+                if not existing_product and len(product_name) > 5:
+                    # Try to match the first part of the name (often the brand/generic name)
+                    existing_product = db.execute(text("""
+                        SELECT product_id FROM inventory.products 
+                        WHERE LOWER(product_name) LIKE LOWER(:pattern)
+                        AND org_id = :org_id
+                        ORDER BY LENGTH(product_name)  -- Prefer shorter/exact matches
+                        LIMIT 1
+                    """), {"pattern": f"{product_name.split()[0]}%", "org_id": current_user['org_id']}).fetchone()
+                
                 if existing_product:
                     product_id = existing_product.product_id
+                    logger.info(f"Found existing product: {product_name} (ID: {product_id})")
                 else:
                     # Create new product with minimal required fields
+                    # Generate a meaningful product code
+                    product_code = f"PROD-{product_name[:10].upper().replace(' ', '')}-{datetime.now().strftime('%Y%m%d%H%M%S')}"
+                    
                     new_product = db.execute(text("""
                         INSERT INTO inventory.products (
                             org_id, product_name, product_code,
@@ -439,9 +472,10 @@ async def create_purchase_with_items(purchase_data: dict, db: Session = Depends(
                     """), {
                         "org_id": current_user['org_id'],
                         "product_name": product_name,
-                        "product_code": f"PROD-{datetime.now().strftime('%Y%m%d%H%M%S')}"
+                        "product_code": product_code
                     }).fetchone()
                     product_id = new_product.product_id if new_product else None
+                    logger.info(f"Created new product: {product_name} (ID: {product_id}, Code: {product_code})")
             
             # Calculate item totals if not provided
             quantity = Decimal(str(item.get("ordered_quantity", 0)))
