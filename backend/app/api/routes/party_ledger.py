@@ -167,11 +167,11 @@ async def get_party_statement(
                 SELECT * FROM ledger_entries
             """
             
-            # Try to add payments if table exists
-            try:
-                payment_check = db.execute(text("SELECT 1 FROM financial.payments LIMIT 1"))
-                query = """
-                    WITH ledger_entries AS (
+            # Build comprehensive query with all transaction types
+            query_parts = []
+            
+            # Always include invoices
+            query_parts.append("""
                         -- Invoices
                         SELECT 
                             invoice_id as ledger_id,
@@ -186,7 +186,48 @@ async def get_party_statement(
                         FROM sales.invoices
                         WHERE customer_id = :party_id
                         AND invoice_status != 'cancelled'
+            """)
+            
+            # Try to add payments with allocation info
+            try:
+                payment_check = db.execute(text("SELECT 1 FROM financial.payments LIMIT 1"))
+                
+                # Check if payment_allocations exists for detailed tracking
+                try:
+                    alloc_check = db.execute(text("SELECT 1 FROM financial.payment_allocations LIMIT 1"))
+                    query_parts.append("""
+                        UNION ALL
                         
+                        -- Payments with allocation details
+                        SELECT DISTINCT
+                            p.payment_id as ledger_id,
+                            p.payment_date as date,
+                            CASE 
+                                WHEN pa.allocation_id IS NOT NULL 
+                                THEN CONCAT('Payment (Allocated to ', pa.reference_number, ')')
+                                ELSE 'Payment (Unallocated)'
+                            END as transaction_type,
+                            'PAY' as reference_type,
+                            p.payment_number as reference,
+                            CASE 
+                                WHEN pa.allocation_id IS NOT NULL
+                                THEN CONCAT('Payment ', p.payment_number, ' - ₹', pa.allocated_amount, ' allocated to Invoice ', pa.reference_number)
+                                ELSE COALESCE(p.narration, CONCAT('Payment ', p.payment_number, ' - Total: ₹', p.payment_amount))
+                            END as description,
+                            0 as debit,
+                            COALESCE(pa.allocated_amount, p.payment_amount) as credit,
+                            p.payment_status as status
+                        FROM financial.payments p
+                        LEFT JOIN financial.payment_allocations pa 
+                            ON p.payment_id = pa.payment_id 
+                            AND pa.reference_type = 'invoice'
+                        WHERE p.party_id = :party_id 
+                        AND p.party_type = 'customer'
+                        AND p.payment_status != 'cancelled'
+                    """)
+                except:
+                    # No allocations table, use simple payments
+                    query_parts.append("""
                         UNION ALL
                         
                         -- Payments
@@ -196,18 +237,46 @@ async def get_party_statement(
                             'Payment' as transaction_type,
                             'PAY' as reference_type,
                             payment_number as reference,
-                            COALESCE(narration, 'Payment Received') as description,
+                            COALESCE(narration, CONCAT('Payment Received - ₹', payment_amount)) as description,
                             0 as debit,
                             payment_amount as credit,
                             payment_status as status
                         FROM financial.payments
                         WHERE party_id = :party_id AND party_type = 'customer'
                         AND payment_status != 'cancelled'
-                    )
-                    SELECT * FROM ledger_entries
-                """
-            except:
-                logger.info("financial.payments table not found, using invoices only")
+                    """)
+            except Exception as e:
+                logger.info(f"financial.payments table not found: {e}")
+            
+            # Try to add sales returns (credit notes)
+            try:
+                returns_check = db.execute(text("SELECT 1 FROM sales.sales_returns LIMIT 1"))
+                query_parts.append("""
+                    UNION ALL
+                    
+                    -- Sales Returns (Credit Notes)
+                    SELECT 
+                        return_id as ledger_id,
+                        return_date as date,
+                        'Credit Note' as transaction_type,
+                        'CRN' as reference_type,
+                        return_number as reference,
+                        CONCAT('Sales Return ', return_number, 
+                               CASE WHEN return_reason IS NOT NULL 
+                                    THEN CONCAT(' - ', return_reason) 
+                                    ELSE '' END) as description,
+                        0 as debit,
+                        return_amount as credit,
+                        return_status as status
+                    FROM sales.sales_returns
+                    WHERE customer_id = :party_id
+                    AND return_status != 'cancelled'
+                """)
+            except Exception as e:
+                logger.info(f"sales.sales_returns table not found: {e}")
+            
+            # Build final query
+            query = "WITH ledger_entries AS (" + "\n".join(query_parts) + ") SELECT * FROM ledger_entries"
             
             # Get party details
             party_query = "SELECT customer_name as name, phone_primary as phone, email FROM parties.customers WHERE customer_id = :party_id"
@@ -261,14 +330,14 @@ async def get_party_statement(
                             payment_date as date,
                             'Payment' as transaction_type,
                             'PAY' as reference_type,
-                            reference_number as reference,
+                            payment_number as reference,
                             COALESCE(narration, 'Payment Made') as description,
-                            amount as debit,
+                            payment_amount as debit,
                             0 as credit,
-                            status
+                            payment_status as status
                         FROM financial.payments
                         WHERE party_id = :party_id AND party_type = 'supplier'
-                        AND status = 'completed'
+                        AND payment_status != 'cancelled'
                     )
                     SELECT * FROM ledger_entries
                 """

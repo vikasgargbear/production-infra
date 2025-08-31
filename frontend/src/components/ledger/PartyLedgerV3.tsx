@@ -191,9 +191,6 @@ const PartyLedgerV3: React.FC<PartyLedgerV3Props> = ({
     // Filter out any undefined/null entries first
     let filtered = ledgerData.entries.filter((entry: any) => entry != null);
     
-    console.log('[PartyLedgerV3] Filtered entries:', filtered);
-    console.log('[PartyLedgerV3] First entry:', filtered[0]);
-    
     if (filters.searchQuery) {
       const query = filters.searchQuery.toLowerCase();
       filtered = filtered.filter((entry: LedgerEntry) =>
@@ -273,173 +270,94 @@ const PartyLedgerV3: React.FC<PartyLedgerV3Props> = ({
     }
   };
 
+  // Simplify columns to debug - return plain strings/elements
   const columns = [
-    {
-      key: 'select',
-      header: '',
-      render: (entry: LedgerEntry) => {
-        if (!entry) return null;
-        const entryId = entry.id || (entry as any).ledger_id;
-        return (
-          <input
-            type="checkbox"
-            checked={selectedTransactions.includes(entryId)}
-            onChange={(e) => {
-              if (e.target.checked) {
-                setSelectedTransactions([...selectedTransactions, entryId]);
-              } else {
-                setSelectedTransactions(selectedTransactions.filter(id => id !== entryId));
-              }
-            }}
-          />
-        );
-      },
-      width: '50px'
-    },
     {
       key: 'date',
       header: 'Date',
-      render: (entry: LedgerEntry) => {
-        console.log('[Column Date] Entry:', entry);
-        if (!entry || !entry.date) {
-          console.log('[Column Date] No entry or date');
-          return <div>-</div>;
+      render: (value: any, entry: any) => {
+        console.log('[Column Render] Date:', { value, entry });
+        if (!entry || !entry.date) return '-';
+        try {
+          return format(parseISO(entry.date), 'dd/MM/yyyy');
+        } catch (e) {
+          return entry.date || '-';
         }
-        return (
-          <div>
-            <div className="font-medium">{format(parseISO(entry.date), 'dd/MM/yyyy')}</div>
-            {entry.due_date && (
-              <div className="text-xs text-gray-500">
-                Due: {format(parseISO(entry.due_date), 'dd/MM/yyyy')}
-              </div>
-            )}
-          </div>
-        );
-      }
+      },
+      width: '120px'
     },
     {
-      key: 'type',
+      key: 'transaction_type',
       header: 'Type',
-      render: (entry: LedgerEntry) => {
-        if (!entry) return null;
-        const typeConfig = {
-          invoice: { color: 'blue', icon: FileText },
-          Invoice: { color: 'blue', icon: FileText },
-          payment: { color: 'green', icon: CreditCard },
-          Payment: { color: 'green', icon: CreditCard },
-          credit_note: { color: 'yellow', icon: TrendingDown },
-          debit_note: { color: 'red', icon: TrendingUp },
-          opening_balance: { color: 'gray', icon: DollarSign },
-          adjustment: { color: 'purple', icon: Edit }
-        };
-        
-        const transactionType = entry.transaction_type;
-        const config = typeConfig[transactionType] || typeConfig['invoice'];
-        const Icon = config.icon;
-        
-        return (
-          <div className="flex items-center gap-2">
-            <Icon className={`h-4 w-4 text-${config.color}-600`} />
-            <StatusBadge
-              status={entry.transaction_type === 'payment' ? 'success' : entry.transaction_type === 'invoice' ? 'info' : entry.transaction_type === 'credit_note' ? 'warning' : 'error'}
-              label={entry.transaction_type.replace('_', ' ').toUpperCase()}
-            />
-          </div>
-        );
-      }
+      render: (value: any, entry: any) => {
+        console.log('[Column Render] Type:', { value, entry });
+        return entry?.transaction_type || '-';
+      },
+      width: '100px'
     },
     {
       key: 'reference',
       header: 'Reference',
-      render: (entry: LedgerEntry) => {
-        if (!entry) return null;
-        return (
-          <button
-            onClick={() => onTransactionClick?.(entry)}
-            className="text-blue-600 hover:text-blue-800 font-mono text-sm underline"
-          >
-            {entry.reference_number || entry.reference || '-'}
-          </button>
-        );
-      }
+      render: (value: any, entry: any) => {
+        console.log('[Column Render] Reference:', { value, entry });
+        return entry?.reference || entry?.reference_number || '-';
+      },
+      width: '150px'
     },
     {
       key: 'description',
       header: 'Description',
-      render: (entry: LedgerEntry) => {
-        if (!entry) return null;
-        return (
-          <div>
-            <div>{entry.description || '-'}</div>
-          {entry.notes && (
-            <div className="text-xs text-gray-500 mt-1">{entry.notes}</div>
-          )}
-          {entry.tags && entry.tags.length > 0 && (
-            <div className="flex gap-1 mt-1">
-              {entry.tags.map(tag => (
-                <span key={tag} className="text-xs px-2 py-0.5 bg-gray-100 rounded">
-                  {tag}
-                </span>
-              ))}
-            </div>
-          )}
-        </div>
-        );
+      render: (value: any, entry: any) => {
+        console.log('[Column Render] Description:', { value, entry });
+        return entry?.description || '-';
       }
     },
     {
       key: 'debit',
       header: 'Debit',
       align: 'right' as const,
-      render: (entry: LedgerEntry) => {
-        if (!entry) return null;
-        return entry.debit ? formatCurrency(entry.debit) : '-';
-      }
+      render: (value: any, entry: any) => {
+        console.log('[Column Render] Debit:', { value, entry });
+        if (!entry || !entry.debit) return '-';
+        const amount = parseFloat(String(entry.debit));
+        return amount > 0 ? `₹${amount.toFixed(2)}` : '-';
+      },
+      width: '120px'
     },
     {
       key: 'credit',
       header: 'Credit',
       align: 'right' as const,
-      render: (entry: LedgerEntry) => {
-        if (!entry) return null;
-        return entry.credit ? formatCurrency(entry.credit) : '-';
-      }
+      render: (value: any, entry: any) => {
+        console.log('[Column Render] Credit:', { value, entry });
+        if (!entry || !entry.credit) return '-';
+        const amount = parseFloat(String(entry.credit));
+        return amount > 0 ? `₹${amount.toFixed(2)}` : '-';
+      },
+      width: '120px'
     },
     {
-      key: 'balance',
+      key: 'running_balance',
       header: 'Balance',
       align: 'right' as const,
-      render: (entry: LedgerEntry) => {
-        if (!entry) return null;
-        const balance = entry.balance ?? entry.running_balance ?? 0;
-        return (
-          <div className={`font-semibold ${balance < 0 ? 'text-red-600' : 'text-green-600'}`}>
-            {formatCurrency(Math.abs(balance))}
-            <span className="text-xs ml-1">
-              {balance < 0 ? 'Dr' : 'Cr'}
-            </span>
-          </div>
-        );
-      }
+      render: (value: any, entry: any) => {
+        console.log('[Column Render] Balance:', { value, entry });
+        if (!entry) return '-';
+        const balance = entry.running_balance ?? entry.balance ?? 0;
+        const balanceNum = parseFloat(String(balance));
+        const isReceivable = balanceNum > 0;
+        return `₹${Math.abs(balanceNum).toFixed(2)} ${isReceivable ? '(Dr)' : '(Cr)'}`;
+      },
+      width: '150px'
     },
     {
       key: 'status',
       header: 'Status',
-      render: (entry: LedgerEntry) => {
-        if (!entry) return null;
-        return (
-          <div className="flex items-center gap-1">
-            {entry.is_reconciled ? (
-            <CheckCircle className="h-4 w-4 text-green-600" />
-          ) : (
-            <XCircle className="h-4 w-4 text-gray-400" />
-          )}
-          {entry.due_date && differenceInDays(new Date(), parseISO(entry.due_date)) > 0 && !entry.is_reconciled && (
-            <AlertCircle className="h-4 w-4 text-red-600" />
-          )}
-        </div>
-        );
-      }
+      render: (value: any, entry: any) => {
+        console.log('[Column Render] Status:', { value, entry });
+        return entry?.status || '-';
+      },
+      width: '100px'
     }
   ];
 
@@ -566,6 +484,18 @@ const PartyLedgerV3: React.FC<PartyLedgerV3Props> = ({
                 </div>
               </div>
             )}
+            
+            {(() => {
+              console.log('[PartyLedgerV3] Rendering DataTable with:', {
+                filteredEntries: filteredEntries,
+                entriesCount: filteredEntries?.length,
+                firstEntry: filteredEntries?.[0],
+                columnsCount: columns.length,
+                loading: loadingLedger,
+                ledgerData: ledgerData
+              });
+              return null;
+            })()}
             
             <DataTable
               columns={columns}
