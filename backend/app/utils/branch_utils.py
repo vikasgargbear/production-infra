@@ -19,7 +19,7 @@ def get_default_branch_id(db: Session, org_id: str) -> Optional[int]:
         result = db.execute(
             text("""
                 SELECT branch_id 
-                FROM public.org_branches 
+                FROM master.org_branches 
                 WHERE org_id = :org_id 
                 AND is_active = true
                 ORDER BY 
@@ -45,14 +45,14 @@ def get_default_branch_id(db: Session, org_id: str) -> Optional[int]:
         # Check if we need to create a branch
         # First check the max branch_id to ensure we don't conflict
         max_id_result = db.execute(
-            text("SELECT COALESCE(MAX(branch_id), 0) + 1 as next_id FROM public.org_branches")
+            text("SELECT COALESCE(MAX(branch_id), 0) + 1 as next_id FROM master.org_branches")
         ).fetchone()
         
         next_branch_id = max_id_result[0] if max_id_result else 1
         
         create_result = db.execute(
             text("""
-                INSERT INTO public.org_branches (
+                INSERT INTO master.org_branches (
                     branch_id,
                     org_id,
                     branch_name,
@@ -84,7 +84,7 @@ def get_default_branch_id(db: Session, org_id: str) -> Optional[int]:
         final_result = db.execute(
             text("""
                 SELECT branch_id 
-                FROM public.org_branches 
+                FROM master.org_branches 
                 WHERE org_id = :org_id 
                 LIMIT 1
             """),
@@ -105,7 +105,7 @@ def get_default_branch_id(db: Session, org_id: str) -> Optional[int]:
             
             db.execute(
                 text("""
-                    INSERT INTO public.org_branches (
+                    INSERT INTO master.org_branches (
                         branch_id, org_id, branch_name, branch_code, is_active
                     ) VALUES (
                         :branch_id, :org_id, 'Main Branch', 'MAIN', true
@@ -137,7 +137,7 @@ def get_user_branch_id(db: Session, org_id: str, user_id: int) -> Optional[int]:
         result = db.execute(
             text("""
                 SELECT branch_id 
-                FROM public.user_branches 
+                FROM master.user_branches 
                 WHERE org_id = :org_id 
                 AND user_id = :user_id
                 AND is_active = true

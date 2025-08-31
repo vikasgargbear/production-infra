@@ -2,10 +2,10 @@
 -- This ensures the branch_id=1 exists for the org
 
 -- First, check if branch exists
-SELECT * FROM public.org_branches WHERE org_id = 'e78d6777-35f6-4b19-994f-caaede2f021a';
+SELECT * FROM master.org_branches WHERE org_id = 'e78d6777-35f6-4b19-994f-caaede2f021a';
 
 -- Insert default branch if it doesn't exist
-INSERT INTO public.org_branches (
+INSERT INTO master.org_branches (
     branch_id,
     org_id,
     branch_name,
@@ -45,4 +45,4 @@ INSERT INTO public.org_branches (
     updated_at = NOW();
 
 -- Verify the branch was created
-SELECT * FROM public.org_branches WHERE branch_id = 1;
+SELECT * FROM master.org_branches WHERE branch_id = 1;
