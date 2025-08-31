@@ -191,6 +191,9 @@ const PartyLedgerV3: React.FC<PartyLedgerV3Props> = ({
     // Filter out any undefined/null entries first
     let filtered = ledgerData.entries.filter((entry: any) => entry != null);
     
+    console.log('[PartyLedgerV3] Filtered entries:', filtered);
+    console.log('[PartyLedgerV3] First entry:', filtered[0]);
+    
     if (filters.searchQuery) {
       const query = filters.searchQuery.toLowerCase();
       filtered = filtered.filter((entry: LedgerEntry) =>
@@ -297,7 +300,11 @@ const PartyLedgerV3: React.FC<PartyLedgerV3Props> = ({
       key: 'date',
       header: 'Date',
       render: (entry: LedgerEntry) => {
-        if (!entry || !entry.date) return null;
+        console.log('[Column Date] Entry:', entry);
+        if (!entry || !entry.date) {
+          console.log('[Column Date] No entry or date');
+          return <div>-</div>;
+        }
         return (
           <div>
             <div className="font-medium">{format(parseISO(entry.date), 'dd/MM/yyyy')}</div>

@@ -118,6 +118,10 @@ export const partyLedgerApi = {
     
     // Map the response to match frontend expectations
     const data = response.data;
+    console.log('[PartyLedgerAPI] Raw response from statement API:', data);
+    console.log('[PartyLedgerAPI] Statement entries count:', data.statement?.length);
+    console.log('[PartyLedgerAPI] First entry:', data.statement?.[0]);
+    
     return {
       entries: data.statement || [], // Frontend expects 'entries', API returns 'statement'
       summary: data.summary || {

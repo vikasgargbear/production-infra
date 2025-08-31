@@ -6,7 +6,7 @@ from datetime import datetime, timedelta
 from typing import Optional
 from jose import JWTError, jwt
 from passlib.context import CryptContext
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, status, Header
 from fastapi.security import OAuth2PasswordBearer
 
 # Configuration
@@ -17,8 +17,8 @@ ACCESS_TOKEN_EXPIRE_MINUTES = 720  # 12 hours as requested
 # Password hashing
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
-# OAuth2 scheme
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/token")
+# OAuth2 scheme - auto_error=False makes it optional for backward compatibility
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login", auto_error=False)
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
     """Verify a password against a hash"""
@@ -39,13 +39,41 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
     encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
     return encoded_jwt
 
-async def get_current_user_and_org(token: str = Depends(oauth2_scheme)):
-    """Get current user and organization from token"""
+async def get_current_user_and_org(
+    token: Optional[str] = Depends(oauth2_scheme),
+    x_org_id: Optional[str] = Header(None, alias="X-Org-Id")
+):
+    """Get current user and organization from token or header (for backward compatibility)"""
+    
+    # If no token provided, check for X-Org-Id header (backward compatibility)
+    if not token:
+        if x_org_id:
+            # Return minimal user context for header-based auth
+            return {
+                "user_id": None,
+                "email": None,
+                "username": None,
+                "org_id": x_org_id,
+                "branch_id": None,  # Will need to be looked up
+                "role": None,
+                "full_name": None,
+                "org_name": None
+            }
+        else:
+            # No authentication provided
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Not authenticated",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+    
+    # Token provided - decode it
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Could not validate credentials",
         headers={"WWW-Authenticate": "Bearer"},
     )
+    
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
         
@@ -59,6 +87,10 @@ async def get_current_user_and_org(token: str = Depends(oauth2_scheme)):
         
         role = payload.get("role")
         
+        if not org_id:
+            # Try to get from header as fallback
+            org_id = x_org_id
+            
         if not user_id and not email:
             raise credentials_exception
             
