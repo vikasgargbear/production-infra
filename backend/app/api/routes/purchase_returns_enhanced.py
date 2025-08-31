@@ -154,8 +154,11 @@ async def create_purchase_return(
         # Generate return number
         return_number = DocumentNumberService.generate_number(db, "purchase_return", org_id)
         
-        # Get branch_id (default to 1 for now)
-        branch_id = 1
+        # Get default branch for organization instead of hardcoding
+        from app.utils.branch_utils import get_default_branch_id
+        branch_id = get_default_branch_id(db, org_id)
+        if not branch_id:
+            raise HTTPException(status_code=400, detail="No branch found for organization")
         
         # Generate debit note number if supplier has GST
         debit_note_no = None

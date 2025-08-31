@@ -5,6 +5,33 @@
 - never assume variable name, check schema docs or ask user
 - don't ask permission for curl command or sleep commands
 
+## CRITICAL: NO HARDCODING RULE
+
+### NEVER HARDCODE ANY VALUES
+- **Branch IDs**: NEVER use `branch_id = 1`. Always use `get_default_branch_id()` from `app.utils.branch_utils`
+- **User IDs**: Get from authentication context, never hardcode
+- **Organization IDs**: Get from request headers/context via `get_org_id_from_header()`
+- **Default values**: Use database lookups or configuration, not hardcoded values
+- **Status values**: Use constants or enums, not hardcoded strings
+
+### Proper Default Value Sources (in order of preference):
+1. Database lookup (e.g., default branch for organization)
+2. Configuration files
+3. Environment variables  
+4. Request context/headers
+5. NEVER hardcode in the code itself
+
+### Example of CORRECT branch handling:
+```python
+from app.utils.branch_utils import get_default_branch_id
+branch_id = get_default_branch_id(db, org_id)
+```
+
+### Example of WRONG branch handling:
+```python
+branch_id = 1  # NEVER DO THIS
+```
+
 ## Database Query Execution
 
 To run SQL queries on Railway database:

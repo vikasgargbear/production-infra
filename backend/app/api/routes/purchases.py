@@ -152,7 +152,10 @@ def create_purchase(purchase_data: dict, db: Session = Depends(get_db),
         if 'org_id' not in purchase_data:
             purchase_data['org_id'] = org_id  # Use org_id from header/auth
         if 'branch_id' not in purchase_data:
-            purchase_data['branch_id'] = 1
+            # Get default branch for organization instead of hardcoding
+            from app.utils.branch_utils import get_default_branch_id
+            branch_id = get_default_branch_id(db, org_id)
+            purchase_data['branch_id'] = branch_id if branch_id else None
         
         # Add defaults for fields that DO exist in the actual table
         if 'discount_amount' not in purchase_data:
