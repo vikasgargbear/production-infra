@@ -3178,4 +3178,178 @@ SELECT
 FROM sales.invoice_return_status
 WHERE return_count > 0
 ORDER BY invoice_id DESC
+LIMIT 10;-- =============================================
+-- Purchase Return Enhancement
+-- Makes purchase returns as robust as sales returns
+-- =============================================
+
+-- 1. Add quantity_returned to GRN items for tracking
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns 
+        WHERE table_schema = 'procurement' 
+        AND table_name = 'grn_items'
+        AND column_name = 'quantity_returned'
+    ) THEN
+        ALTER TABLE procurement.grn_items 
+        ADD COLUMN quantity_returned DECIMAL(18,3) DEFAULT 0;
+        
+        COMMENT ON COLUMN procurement.grn_items.quantity_returned IS 'Total quantity returned to supplier';
+        RAISE NOTICE '✅ Added quantity_returned to grn_items';
+    END IF;
+END $$;
+
+-- 2. Add tracking columns to purchase_return_items
+DO $$
+BEGIN
+    -- Add disposition column
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns 
+        WHERE table_schema = 'procurement' 
+        AND table_name = 'purchase_return_items'
+        AND column_name = 'disposition'
+    ) THEN
+        ALTER TABLE procurement.purchase_return_items 
+        ADD COLUMN disposition TEXT DEFAULT 'RETURN_TO_SUPPLIER';
+        
+        COMMENT ON COLUMN procurement.purchase_return_items.disposition IS 'RETURN_TO_SUPPLIER, DESTROY, QUARANTINE';
+    END IF;
+
+    -- Add damaged/saleable tracking
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns 
+        WHERE table_schema = 'procurement' 
+        AND table_name = 'purchase_return_items'
+        AND column_name = 'damaged_quantity'
+    ) THEN
+        ALTER TABLE procurement.purchase_return_items 
+        ADD COLUMN damaged_quantity DECIMAL(15,3) DEFAULT 0,
+        ADD COLUMN saleable_quantity DECIMAL(15,3) DEFAULT 0;
+        
+        COMMENT ON COLUMN procurement.purchase_return_items.damaged_quantity IS 'Quantity that is damaged/unsaleable';
+        COMMENT ON COLUMN procurement.purchase_return_items.saleable_quantity IS 'Quantity that can be resold if kept';
+    END IF;
+END $$;
+
+-- 3. Create view for GRN return status (similar to invoice_return_status)
+CREATE OR REPLACE VIEW procurement.grn_return_status AS
+SELECT 
+    g.grn_id,
+    g.grn_number,
+    g.grn_date,
+    g.supplier_id,
+    s.supplier_name,
+    g.total_amount as grn_amount,
+    COUNT(DISTINCT pr.return_id) as return_count,
+    COALESCE(SUM(pr.total_amount), 0) as total_returned_amount,
+    CASE 
+        WHEN COUNT(pr.return_id) = 0 THEN 'NO_RETURNS'
+        WHEN SUM(pr.total_amount) >= g.total_amount THEN 'FULLY_RETURNED'
+        ELSE 'PARTIALLY_RETURNED'
+    END as return_status,
+    GREATEST(0, g.total_amount - COALESCE(SUM(pr.total_amount), 0)) as remaining_returnable_amount
+FROM procurement.goods_receipt_notes g
+LEFT JOIN parties.suppliers s ON g.supplier_id = s.supplier_id
+LEFT JOIN procurement.purchase_returns pr ON g.grn_id = pr.grn_id
+GROUP BY g.grn_id, g.grn_number, g.grn_date, g.supplier_id, s.supplier_name, g.total_amount;
+
+-- 4. Function to validate purchase return quantities
+CREATE OR REPLACE FUNCTION procurement.validate_purchase_return_quantity()
+RETURNS TRIGGER AS $$
+DECLARE
+    v_grn_item RECORD;
+    v_total_returned DECIMAL(18,3);
+BEGIN
+    -- Only validate if we have a grn_item_id
+    IF NEW.grn_item_id IS NOT NULL THEN
+        -- Get GRN item details
+        SELECT received_quantity, COALESCE(quantity_returned, 0) as quantity_returned
+        INTO v_grn_item
+        FROM procurement.grn_items
+        WHERE grn_item_id = NEW.grn_item_id;
+        
+        -- Calculate total that would be returned including this return
+        v_total_returned := v_grn_item.quantity_returned + NEW.return_quantity;
+        
+        -- Check if return exceeds received quantity
+        IF v_total_returned > v_grn_item.received_quantity THEN
+            RAISE EXCEPTION 'Return quantity (%) exceeds received quantity (%)', 
+                v_total_returned, v_grn_item.received_quantity;
+        END IF;
+    END IF;
+    
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+-- 5. Create trigger for return validation
+DROP TRIGGER IF EXISTS validate_purchase_return_quantity_trigger ON procurement.purchase_return_items;
+CREATE TRIGGER validate_purchase_return_quantity_trigger
+BEFORE INSERT ON procurement.purchase_return_items
+FOR EACH ROW
+EXECUTE FUNCTION procurement.validate_purchase_return_quantity();
+
+-- 6. Function to update grn_items.quantity_returned
+CREATE OR REPLACE FUNCTION procurement.update_grn_item_returned()
+RETURNS TRIGGER AS $$
+BEGIN
+    IF TG_OP = 'INSERT' OR TG_OP = 'UPDATE' THEN
+        -- Update quantity_returned in grn_items
+        IF NEW.grn_item_id IS NOT NULL THEN
+            UPDATE procurement.grn_items
+            SET quantity_returned = (
+                SELECT COALESCE(SUM(return_quantity), 0)
+                FROM procurement.purchase_return_items
+                WHERE grn_item_id = NEW.grn_item_id
+            )
+            WHERE grn_item_id = NEW.grn_item_id;
+        END IF;
+    ELSIF TG_OP = 'DELETE' THEN
+        -- Update quantity_returned in grn_items
+        IF OLD.grn_item_id IS NOT NULL THEN
+            UPDATE procurement.grn_items
+            SET quantity_returned = (
+                SELECT COALESCE(SUM(return_quantity), 0)
+                FROM procurement.purchase_return_items
+                WHERE grn_item_id = OLD.grn_item_id
+            )
+            WHERE grn_item_id = OLD.grn_item_id;
+        END IF;
+    END IF;
+    
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+-- 7. Create trigger to update grn_items
+DROP TRIGGER IF EXISTS update_grn_returned_trigger ON procurement.purchase_return_items;
+CREATE TRIGGER update_grn_returned_trigger
+AFTER INSERT OR UPDATE OR DELETE ON procurement.purchase_return_items
+FOR EACH ROW
+EXECUTE FUNCTION procurement.update_grn_item_returned();
+
+-- 8. Initialize current quantity_returned values
+UPDATE procurement.grn_items gi
+SET quantity_returned = (
+    SELECT COALESCE(SUM(pri.return_quantity), 0)
+    FROM procurement.purchase_return_items pri
+    WHERE pri.grn_item_id = gi.grn_item_id
+)
+WHERE EXISTS (
+    SELECT 1 FROM procurement.purchase_return_items pri
+    WHERE pri.grn_item_id = gi.grn_item_id
+);
+
+-- 9. Show current status
+SELECT 
+    grn_number,
+    supplier_name,
+    grn_amount,
+    return_count,
+    total_returned_amount,
+    return_status
+FROM procurement.grn_return_status
+WHERE return_count > 0
+ORDER BY grn_id DESC
 LIMIT 10;
