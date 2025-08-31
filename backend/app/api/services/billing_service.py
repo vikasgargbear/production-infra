@@ -134,7 +134,7 @@ class BillingService:
             
             # Determine GST type based on state
             org_state = db.execute(text("""
-                SELECT state FROM parties.organizations
+                SELECT state FROM master.organizations
                 WHERE org_id = :org_id
             """), {"org_id": org_id}).scalar()
             

@@ -44,7 +44,7 @@ async def login(
                u.org_id, u.role, u.is_active,
                o.org_name, o.is_active as org_active
         FROM master.org_users u
-        JOIN organizations o ON u.org_id = o.org_id
+        JOIN master.organizations o ON u.org_id = o.org_id
         WHERE u.email = :email
     """), {"email": form_data.username}).fetchone()
     
@@ -143,7 +143,7 @@ async def get_user_organizations(
         SELECT DISTINCT o.org_id, o.org_name, o.business_type,
                u.role as user_role
         FROM master.org_users u
-        JOIN organizations o ON u.org_id = o.org_id
+        JOIN master.organizations o ON u.org_id = o.org_id
         WHERE u.email = :email
         AND u.is_active = true
         AND o.is_active = true
@@ -187,8 +187,8 @@ async def switch_organization(
     # Get organization details
     org = db.execute(text("""
         SELECT o.org_id, o.org_name, u.role
-        FROM parties.organizations o
-        JOIN org_users u ON u.org_id = o.org_id
+        FROM master.organizations o
+        JOIN master.org_users u ON u.org_id = o.org_id
         WHERE o.org_id = :org_id
         AND u.user_id = :user_id
         AND o.is_active = true
@@ -249,7 +249,7 @@ async def register_user(
             
             # Create organization
             db.execute(text("""
-                INSERT INTO parties.organizations (
+                INSERT INTO master.organizations (
                     org_id, org_name, business_type,
                     primary_contact_name, primary_email, primary_phone,
                     business_address

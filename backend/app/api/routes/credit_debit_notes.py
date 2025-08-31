@@ -466,7 +466,7 @@ async def get_note_print_data(
     try:
         # Get organization details
         org_query = """
-            SELECT * FROM parties.organizations 
+            SELECT * FROM master.organizations 
             WHERE org_id: str = Depends(get_org_id_from_header)
         """
         organization = db.execute(text(org_query)).first()

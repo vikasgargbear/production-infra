@@ -163,7 +163,7 @@ class ChallanToInvoiceService:
             org_result = self.db.execute(
                 text("""
                     SELECT business_settings->>'state' as state
-                    FROM parties.organizations
+                    FROM master.organizations
                     WHERE org_id = :org_id
                 """),
                 {"org_id": self.org_id}
