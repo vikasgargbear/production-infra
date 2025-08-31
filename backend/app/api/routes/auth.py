@@ -43,7 +43,7 @@ async def login(
         SELECT u.user_id, u.full_name, u.email, u.password_hash, 
                u.org_id, u.role, u.is_active,
                o.org_name, o.is_active as org_active
-        FROM parties.org_users u
+        FROM master.org_users u
         JOIN organizations o ON u.org_id = o.org_id
         WHERE u.email = :email
     """), {"email": form_data.username}).fetchone()
@@ -69,7 +69,7 @@ async def login(
     
     # Update last login
     db.execute(text("""
-        UPDATE parties.org_users 
+        UPDATE master.org_users 
         SET last_login_at = CURRENT_TIMESTAMP
         WHERE user_id = :user_id
     """), {"user_id": user.user_id})
@@ -142,7 +142,7 @@ async def get_user_organizations(
     organizations = db.execute(text("""
         SELECT DISTINCT o.org_id, o.org_name, o.business_type,
                u.role as user_role
-        FROM parties.org_users u
+        FROM master.org_users u
         JOIN organizations o ON u.org_id = o.org_id
         WHERE u.email = :email
         AND u.is_active = true
@@ -234,7 +234,7 @@ async def register_user(
     try:
         # Check if email already exists
         existing_user = db.execute(text("""
-            SELECT user_id FROM parties.org_users WHERE email = :email
+            SELECT user_id FROM master.org_users WHERE email = :email
         """), {"email": user_data["email"]}).scalar()
         
         if existing_user:
@@ -275,7 +275,7 @@ async def register_user(
         password_hash = get_password_hash(user_data["password"])
         
         result = db.execute(text("""
-            INSERT INTO parties.org_users (
+            INSERT INTO master.org_users (
                 org_id, full_name, email, primary_phone as phone,
                 password_hash, role, is_active
             ) VALUES (
@@ -332,7 +332,7 @@ async def change_password(
     # Verify current password
     user = db.execute(text("""
         SELECT password_hash
-        FROM parties.org_users
+        FROM master.org_users
         WHERE user_id = :user_id
     """), {"user_id": current_user["user_id"]}).fetchone()
     
@@ -346,7 +346,7 @@ async def change_password(
     new_password_hash = get_password_hash(password_data["new_password"])
     
     db.execute(text("""
-        UPDATE parties.org_users
+        UPDATE master.org_users
         SET password_hash = :password_hash,
             updated_at = CURRENT_TIMESTAMP
         WHERE user_id = :user_id

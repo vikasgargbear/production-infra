@@ -313,7 +313,7 @@ async def create_purchase_with_items(purchase_data: dict, db: Session = Depends(
             if current_user.get('org_id'):
                 # Try to get any user from this org
                 user_result = db.execute(text("""
-                    SELECT user_id FROM parties.org_users 
+                    SELECT user_id FROM master.org_users 
                     WHERE org_id = :org_id AND is_active = true
                     ORDER BY user_id LIMIT 1
                 """), {"org_id": current_user['org_id']}).fetchone()

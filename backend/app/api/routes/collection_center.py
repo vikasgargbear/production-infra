@@ -529,10 +529,10 @@ async def get_hub_statistics(
         
         today_result = db.execute(today_payments_query, {"org_id": org_id}).fetchone()
         
-        # Get field agents count (FROM parties.org_users table)
+        # Get field agents count (FROM master.org_users table)
         agents_query = text("""
             SELECT COUNT(*) as agent_count
-            FROM parties.org_users 
+            FROM master.org_users 
             WHERE org_id = :org_id AND is_active = true
                 AND role ILIKE '%agent%' OR role ILIKE '%collection%'
         """)
