@@ -810,6 +810,16 @@ async def create_invoice(
                                 # This is critical - invoice-time payments must ALWAYS be linked
                                 # The trigger has been fixed to use reference_id correctly
                                 try:
+                                    logger.info(f"Creating allocation: payment_id={payment_id}, invoice_id={invoice_id}, amount={payment_amount}")
+                                    
+                                    # Verify invoice exists before allocation
+                                    inv_check = db.execute(text("""
+                                        SELECT invoice_id FROM sales.invoices WHERE invoice_id = :invoice_id
+                                    """), {"invoice_id": invoice_id})
+                                    if not inv_check.fetchone():
+                                        logger.error(f"Invoice {invoice_id} not found! Cannot create allocation.")
+                                        raise Exception(f"Invoice {invoice_id} not found")
+                                    
                                     db.execute(text("""
                                         INSERT INTO financial.payment_allocations (
                                             payment_id, reference_type, reference_id, 
@@ -828,10 +838,10 @@ async def create_invoice(
                                         "created_by": created_by
                                     })
                                     db.commit()
-                                    logger.info(f"Payment {payment_id} linked to invoice {invoice_id} via allocation")
+                                    logger.info(f"✅ Payment {payment_id} successfully linked to invoice {invoice_id} via allocation")
                                     # The trigger will automatically update invoice paid_amount and status
                                 except Exception as alloc_error:
-                                    logger.error(f"Could not create payment allocation: {alloc_error}")
+                                    logger.error(f"❌ Allocation failed for payment {payment_id} to invoice {invoice_id}: {alloc_error}")
                                     db.rollback()
                                     # Payment exists but allocation failed - not critical for invoice
                                 
