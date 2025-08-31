@@ -700,6 +700,25 @@ async def create_invoice(
         # Commit transaction
         db.commit()
         
+        # Verify invoice was created successfully
+        invoice_verify = db.execute(text("""
+            SELECT invoice_id, invoice_number, final_amount 
+            FROM sales.invoices 
+            WHERE invoice_id = :invoice_id
+        """), {"invoice_id": invoice_id})
+        inv_check = invoice_verify.fetchone()
+        
+        if not inv_check:
+            logger.error(f"CRITICAL: Invoice {invoice_id} not found after commit!")
+            raise Exception(f"Invoice {invoice_id} was not created properly")
+        
+        # Use the verified invoice_id to ensure it's correct
+        verified_invoice_id = inv_check[0]
+        verified_invoice_number = inv_check[1]
+        verified_final_amount = float(inv_check[2])
+        
+        logger.info(f"Invoice {verified_invoice_id} ({verified_invoice_number}) created successfully with amount ₹{verified_final_amount}")
+        
         # Step 10: Create payment records AFTER successful invoice creation
         # IMPORTANT: Invoice-time payments MUST be linked to THIS specific invoice
         # This ensures accurate payment tracking and reconciliation
@@ -810,15 +829,7 @@ async def create_invoice(
                                 # This is critical - invoice-time payments must ALWAYS be linked
                                 # The trigger has been fixed to use reference_id correctly
                                 try:
-                                    logger.info(f"Creating allocation: payment_id={payment_id}, invoice_id={invoice_id}, amount={payment_amount}")
-                                    
-                                    # Verify invoice exists before allocation
-                                    inv_check = db.execute(text("""
-                                        SELECT invoice_id FROM sales.invoices WHERE invoice_id = :invoice_id
-                                    """), {"invoice_id": invoice_id})
-                                    if not inv_check.fetchone():
-                                        logger.error(f"Invoice {invoice_id} not found! Cannot create allocation.")
-                                        raise Exception(f"Invoice {invoice_id} not found")
+                                    logger.info(f"Creating allocation: payment_id={payment_id}, invoice_id={verified_invoice_id}, amount={payment_amount}")
                                     
                                     db.execute(text("""
                                         INSERT INTO financial.payment_allocations (
@@ -832,16 +843,16 @@ async def create_invoice(
                                         )
                                     """), {
                                         "payment_id": payment_id,
-                                        "invoice_id": invoice_id,
-                                        "invoice_number": invoice_number,
+                                        "invoice_id": verified_invoice_id,  # Use verified ID
+                                        "invoice_number": verified_invoice_number,  # Use verified number
                                         "allocated_amount": payment_amount,
                                         "created_by": created_by
                                     })
                                     db.commit()
-                                    logger.info(f"✅ Payment {payment_id} successfully linked to invoice {invoice_id} via allocation")
+                                    logger.info(f"✅ Payment {payment_id} successfully linked to invoice {verified_invoice_id} via allocation")
                                     # The trigger will automatically update invoice paid_amount and status
                                 except Exception as alloc_error:
-                                    logger.error(f"❌ Allocation failed for payment {payment_id} to invoice {invoice_id}: {alloc_error}")
+                                    logger.error(f"❌ Allocation failed for payment {payment_id} to invoice {verified_invoice_id}: {alloc_error}")
                                     db.rollback()
                                     # Payment exists but allocation failed - not critical for invoice
                                 
