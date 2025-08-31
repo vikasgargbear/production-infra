@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter(tags=["Purchase Enhanced"])
 
 @router.get("/")
-def get_purchases(
+async def get_purchases(
     skip: int = Query(0, description="Skip records"),
     limit: int = Query(25, description="Limit records"),
     offset: int = Query(0, description="Offset records"),
@@ -27,7 +27,7 @@ def get_purchases(
     supplier_id: Optional[int] = Query(None, description="Filter by supplier"),
     dateFilter: Optional[str] = Query(None, description="Date filter"),
     db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    current_user: dict = Depends(get_current_user_and_org)
 ):
     """Get list of purchase orders with pagination and filtering"""
     try:
@@ -193,7 +193,7 @@ async def create_direct_purchase_entry(purchase_data: dict, db: Session = Depend
             ) RETURNING purchase_order_id
         """), {
             "org_id": current_user['org_id'],
-            "branch_id": current_user.get('branch_id'),
+            "branch_id": current_user.get('branch_id') or 1,  # Fallback to 1 for backward compatibility
             "po_number": po_number,
             "po_date": purchase_data.get("purchase_date", datetime.now().date()),
             "supplier_id": purchase_data.get("supplier_id"),
@@ -316,7 +316,15 @@ async def create_purchase_with_items(purchase_data: dict, db: Session = Depends(
         
         # Get branch_id from JWT token (authentication context)
         branch_id = current_user.get('branch_id')
-        logger.info(f"Using branch_id {branch_id} from JWT token for user {current_user.get('user_id')}")
+        if branch_id is None:
+            # Fallback for backward compatibility with old tokens
+            result = db.execute(text("""
+                SELECT branch_id FROM master.org_branches 
+                WHERE org_id = :org_id AND is_active = true
+                ORDER BY branch_id LIMIT 1
+            """), {"org_id": current_user['org_id']}).fetchone()
+            branch_id = result.branch_id if result else 1
+        logger.info(f"Using branch_id {branch_id} for user {current_user.get('user_id')}")
         
         # Create purchase header
         result = db.execute(
@@ -426,8 +434,8 @@ async def create_purchase_with_items(purchase_data: dict, db: Session = Depends(
         raise HTTPException(status_code=500, detail=f"Failed to create purchase: {str(e)}")
 
 @router.get("/{purchase_id}/items")
-def get_purchase_items(purchase_id: int, db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)):
+async def get_purchase_items(purchase_id: int, db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user_and_org)):
     """Get all items for a purchase order"""
     try:
         items = db.execute(
@@ -766,10 +774,10 @@ async def receive_purchase_items_fixed(
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/pending-receipts")
-def get_pending_receipts(
+async def get_pending_receipts(
     supplier_id: Optional[int] = Query(None),
     db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    current_user: dict = Depends(get_current_user_and_org)
 ):
     """Get purchases pending receipt"""
     try:

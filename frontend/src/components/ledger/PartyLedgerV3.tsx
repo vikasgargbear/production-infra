@@ -43,23 +43,28 @@ interface PartyLedgerV3Props {
 }
 
 interface LedgerEntry {
-  id: string;
+  id?: string; // Optional for backward compatibility
+  ledger_id?: number | string; // API returns ledger_id
   date: string;
-  transaction_type: 'invoice' | 'payment' | 'credit_note' | 'debit_note' | 'opening_balance' | 'adjustment';
-  reference_number: string;
+  transaction_type: 'invoice' | 'payment' | 'credit_note' | 'debit_note' | 'opening_balance' | 'adjustment' | 'Invoice' | 'Payment'; // Include API values
+  reference_number?: string; // API returns 'reference'
+  reference?: string; // API field name
+  reference_type?: string; // API returns this
   description: string;
   debit: number;
   credit: number;
-  balance: number;
+  balance?: number;
+  running_balance?: number; // API returns running_balance
+  status?: string; // Payment status
   due_date?: string;
-  is_reconciled: boolean;
+  is_reconciled?: boolean;
   reconciliation_date?: string;
   tags?: string[];
   attachments?: { id: string; name: string; url: string }[];
   notes?: string;
-  created_by: string;
-  created_at: string;
-  updated_at: string;
+  created_by?: string;
+  created_at?: string;
+  updated_at?: string;
 }
 
 interface PartyInfo {
@@ -183,14 +188,15 @@ const PartyLedgerV3: React.FC<PartyLedgerV3Props> = ({
   const filteredEntries = useMemo(() => {
     if (!ledgerData?.entries) return [];
     
-    let filtered = ledgerData.entries;
+    // Filter out any undefined/null entries first
+    let filtered = ledgerData.entries.filter((entry: any) => entry != null);
     
     if (filters.searchQuery) {
       const query = filters.searchQuery.toLowerCase();
       filtered = filtered.filter((entry: LedgerEntry) =>
-        entry.reference_number.toLowerCase().includes(query) ||
-        entry.description.toLowerCase().includes(query) ||
-        entry.notes?.toLowerCase().includes(query)
+        (entry.reference_number || entry.reference || '').toLowerCase().includes(query) ||
+        (entry.description || '').toLowerCase().includes(query) ||
+        (entry.notes || '').toLowerCase().includes(query)
       );
     }
     
@@ -268,49 +274,60 @@ const PartyLedgerV3: React.FC<PartyLedgerV3Props> = ({
     {
       key: 'select',
       header: '',
-      render: (entry: LedgerEntry) => (
-        <input
-          type="checkbox"
-          checked={selectedTransactions.includes(entry.id)}
-          onChange={(e) => {
-            if (e.target.checked) {
-              setSelectedTransactions([...selectedTransactions, entry.id]);
-            } else {
-              setSelectedTransactions(selectedTransactions.filter(id => id !== entry.id));
-            }
-          }}
-        />
-      ),
+      render: (entry: LedgerEntry) => {
+        if (!entry) return null;
+        const entryId = entry.id || (entry as any).ledger_id;
+        return (
+          <input
+            type="checkbox"
+            checked={selectedTransactions.includes(entryId)}
+            onChange={(e) => {
+              if (e.target.checked) {
+                setSelectedTransactions([...selectedTransactions, entryId]);
+              } else {
+                setSelectedTransactions(selectedTransactions.filter(id => id !== entryId));
+              }
+            }}
+          />
+        );
+      },
       width: '50px'
     },
     {
       key: 'date',
       header: 'Date',
-      render: (entry: LedgerEntry) => (
-        <div>
-          <div className="font-medium">{format(parseISO(entry.date), 'dd/MM/yyyy')}</div>
-          {entry.due_date && (
-            <div className="text-xs text-gray-500">
-              Due: {format(parseISO(entry.due_date), 'dd/MM/yyyy')}
-            </div>
-          )}
-        </div>
-      )
+      render: (entry: LedgerEntry) => {
+        if (!entry || !entry.date) return null;
+        return (
+          <div>
+            <div className="font-medium">{format(parseISO(entry.date), 'dd/MM/yyyy')}</div>
+            {entry.due_date && (
+              <div className="text-xs text-gray-500">
+                Due: {format(parseISO(entry.due_date), 'dd/MM/yyyy')}
+              </div>
+            )}
+          </div>
+        );
+      }
     },
     {
       key: 'type',
       header: 'Type',
       render: (entry: LedgerEntry) => {
+        if (!entry) return null;
         const typeConfig = {
           invoice: { color: 'blue', icon: FileText },
+          Invoice: { color: 'blue', icon: FileText },
           payment: { color: 'green', icon: CreditCard },
+          Payment: { color: 'green', icon: CreditCard },
           credit_note: { color: 'yellow', icon: TrendingDown },
           debit_note: { color: 'red', icon: TrendingUp },
           opening_balance: { color: 'gray', icon: DollarSign },
           adjustment: { color: 'purple', icon: Edit }
         };
         
-        const config = typeConfig[entry.transaction_type];
+        const transactionType = entry.transaction_type;
+        const config = typeConfig[transactionType] || typeConfig['invoice'];
         const Icon = config.icon;
         
         return (
@@ -327,21 +344,26 @@ const PartyLedgerV3: React.FC<PartyLedgerV3Props> = ({
     {
       key: 'reference',
       header: 'Reference',
-      render: (entry: LedgerEntry) => (
-        <button
-          onClick={() => onTransactionClick?.(entry)}
-          className="text-blue-600 hover:text-blue-800 font-mono text-sm underline"
-        >
-          {entry.reference_number}
-        </button>
-      )
+      render: (entry: LedgerEntry) => {
+        if (!entry) return null;
+        return (
+          <button
+            onClick={() => onTransactionClick?.(entry)}
+            className="text-blue-600 hover:text-blue-800 font-mono text-sm underline"
+          >
+            {entry.reference_number || entry.reference || '-'}
+          </button>
+        );
+      }
     },
     {
       key: 'description',
       header: 'Description',
-      render: (entry: LedgerEntry) => (
-        <div>
-          <div>{entry.description}</div>
+      render: (entry: LedgerEntry) => {
+        if (!entry) return null;
+        return (
+          <div>
+            <div>{entry.description || '-'}</div>
           {entry.notes && (
             <div className="text-xs text-gray-500 mt-1">{entry.notes}</div>
           )}
@@ -355,39 +377,52 @@ const PartyLedgerV3: React.FC<PartyLedgerV3Props> = ({
             </div>
           )}
         </div>
-      )
+        );
+      }
     },
     {
       key: 'debit',
       header: 'Debit',
       align: 'right' as const,
-      render: (entry: LedgerEntry) => entry.debit ? formatCurrency(entry.debit) : '-'
+      render: (entry: LedgerEntry) => {
+        if (!entry) return null;
+        return entry.debit ? formatCurrency(entry.debit) : '-';
+      }
     },
     {
       key: 'credit',
       header: 'Credit',
       align: 'right' as const,
-      render: (entry: LedgerEntry) => entry.credit ? formatCurrency(entry.credit) : '-'
+      render: (entry: LedgerEntry) => {
+        if (!entry) return null;
+        return entry.credit ? formatCurrency(entry.credit) : '-';
+      }
     },
     {
       key: 'balance',
       header: 'Balance',
       align: 'right' as const,
-      render: (entry: LedgerEntry) => (
-        <div className={`font-semibold ${entry.balance < 0 ? 'text-red-600' : 'text-green-600'}`}>
-          {formatCurrency(Math.abs(entry.balance))}
-          <span className="text-xs ml-1">
-            {entry.balance < 0 ? 'Dr' : 'Cr'}
-          </span>
-        </div>
-      )
+      render: (entry: LedgerEntry) => {
+        if (!entry) return null;
+        const balance = entry.balance ?? entry.running_balance ?? 0;
+        return (
+          <div className={`font-semibold ${balance < 0 ? 'text-red-600' : 'text-green-600'}`}>
+            {formatCurrency(Math.abs(balance))}
+            <span className="text-xs ml-1">
+              {balance < 0 ? 'Dr' : 'Cr'}
+            </span>
+          </div>
+        );
+      }
     },
     {
       key: 'status',
       header: 'Status',
-      render: (entry: LedgerEntry) => (
-        <div className="flex items-center gap-1">
-          {entry.is_reconciled ? (
+      render: (entry: LedgerEntry) => {
+        if (!entry) return null;
+        return (
+          <div className="flex items-center gap-1">
+            {entry.is_reconciled ? (
             <CheckCircle className="h-4 w-4 text-green-600" />
           ) : (
             <XCircle className="h-4 w-4 text-gray-400" />
@@ -396,7 +431,8 @@ const PartyLedgerV3: React.FC<PartyLedgerV3Props> = ({
             <AlertCircle className="h-4 w-4 text-red-600" />
           )}
         </div>
-      )
+        );
+      }
     }
   ];
 
@@ -527,7 +563,7 @@ const PartyLedgerV3: React.FC<PartyLedgerV3Props> = ({
             <DataTable
               columns={columns}
               data={filteredEntries}
-              keyField="id"
+              keyField="ledger_id"
               loading={loadingLedger}
               emptyMessage="No transactions found"
             />

@@ -62,13 +62,20 @@ export const partyLedgerApi = {
   getEnhancedLedger: async (params) => {
     const { party_id, party_type = 'customer', ...otherParams } = params;
     
+    // If no party_id provided, return empty result
+    if (!party_id) {
+      console.log('[PartyLedgerAPI] getEnhancedLedger - No party_id provided, returning empty result');
+      return { entries: [], summary: {} };
+    }
+    
     // Extract ID from various possible formats
     let actualId = party_id;
     
     // If party_id is an object, try to extract the ID
     if (party_id && typeof party_id === 'object') {
       console.log('[PartyLedgerAPI] getEnhancedLedger - Received customer object:', party_id);
-      console.log('[PartyLedgerAPI] getEnhancedLedger - customer_id field:', party_id.customer_id);
+      console.log('[PartyLedgerAPI] getEnhancedLedger - customer_id field:', party_id?.customer_id);
+      console.log('[PartyLedgerAPI] getEnhancedLedger - All keys:', party_id ? Object.keys(party_id) : 'null/undefined');
       
       // Try different possible field names
       actualId = party_id.customer_id || 

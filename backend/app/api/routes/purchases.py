@@ -24,8 +24,8 @@ router = APIRouter(tags=["purchases"])
 purchase_crud = create_crud(Purchase)
 
 @router.get("/generate-number")
-def generate_purchase_number(db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)):
+async def generate_purchase_number(db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user_and_org)):
     """Generate next purchase number using unified service"""
     try:
         # Use unified document number service
@@ -42,7 +42,7 @@ def generate_purchase_number(db: Session = Depends(get_db),
         return {"po_number": fallback_number}
 
 @router.get("/")
-def get_purchases(
+async def get_purchases(
     skip: int = 0,
     limit: int = 100,
     supplier_id: Optional[int] = Query(None, description="Filter by supplier"),
@@ -50,7 +50,7 @@ def get_purchases(
     start_date: Optional[date] = Query(None, description="Filter from date"),
     end_date: Optional[date] = Query(None, description="Filter to date"),
     db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    current_user: dict = Depends(get_current_user_and_org)
 ):
     """Get purchases with optional filtering"""
     try:
@@ -97,8 +97,8 @@ def get_purchases(
         raise HTTPException(status_code=500, detail=f"Failed to get purchases: {str(e)}")
 
 @router.get("/{purchase_id}")
-def get_purchase(purchase_id: int, db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)):
+async def get_purchase(purchase_id: int, db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user_and_org)):
     """Get a single purchase by ID with related data"""
     try:
         result = db.execute(
@@ -154,7 +154,16 @@ async def create_purchase(purchase_data: dict, db: Session = Depends(get_db),
             purchase_data['org_id'] = current_user['org_id']  # Use org_id from JWT token
         if 'branch_id' not in purchase_data:
             # Get branch_id from JWT token (auth context)
-            purchase_data['branch_id'] = current_user.get('branch_id')
+            branch_id = current_user.get('branch_id')
+            if branch_id is None:
+                # Fallback: Get default branch for backward compatibility with old tokens
+                result = db.execute(text("""
+                    SELECT branch_id FROM master.org_branches 
+                    WHERE org_id = :org_id AND is_active = true
+                    ORDER BY branch_id LIMIT 1
+                """), {"org_id": current_user['org_id']}).fetchone()
+                branch_id = result.branch_id if result else None
+            purchase_data['branch_id'] = branch_id
         
         # Add defaults for fields that DO exist in the actual table
         if 'discount_amount' not in purchase_data:

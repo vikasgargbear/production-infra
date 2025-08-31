@@ -48,11 +48,16 @@ async def get_current_user_and_org(token: str = Depends(oauth2_scheme)):
     )
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        user_id: str = payload.get("user_id")
-        email: str = payload.get("email")
-        org_id: str = payload.get("org_id")
-        branch_id: int = payload.get("branch_id")
-        role: str = payload.get("role")
+        
+        # Handle both old and new token formats
+        user_id = payload.get("user_id") or payload.get("sub")
+        email = payload.get("email") or payload.get("sub")
+        org_id = payload.get("org_id")
+        
+        # branch_id might not exist in old tokens - default to None
+        branch_id = payload.get("branch_id")
+        
+        role = payload.get("role")
         
         if not user_id and not email:
             raise credentials_exception
@@ -62,12 +67,14 @@ async def get_current_user_and_org(token: str = Depends(oauth2_scheme)):
             "email": email,
             "username": email,  # Keep for backward compatibility
             "org_id": org_id,
-            "branch_id": branch_id,
+            "branch_id": branch_id,  # Will be None for old tokens
             "role": role,
             "full_name": payload.get("full_name"),
             "org_name": payload.get("org_name")
         }
-    except JWTError:
+    except JWTError as e:
+        import logging
+        logging.error(f"JWT decode error: {str(e)}")
         raise credentials_exception
 
 def verify_user_org_access(user_id: str, org_id: str, db) -> bool:
