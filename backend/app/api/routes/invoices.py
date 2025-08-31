@@ -536,15 +536,27 @@ async def create_invoice(
             quantity = float(item.get("quantity", 1))
             unit_price = float(item.get("unit_price", 0))
             
-            # Get product name if not provided
+            # Get product details if not provided
             product_name = item.get("product_name")
-            if not product_name:
+            uom = item.get("uom")
+            pack_type = item.get("pack_type")
+            
+            # Fetch product details if any are missing
+            if not product_name or not uom or not pack_type:
                 prod_result = db.execute(text("""
-                    SELECT product_name FROM inventory.products
+                    SELECT product_name, uom, pack_type 
+                    FROM inventory.products
                     WHERE product_id = :product_id
                 """), {"product_id": product_id})
                 prod = prod_result.fetchone()
-                product_name = prod[0] if prod else item.get("product_name", f"Product {product_id}")
+                if prod:
+                    product_name = product_name or prod[0]
+                    uom = uom or prod[1] or "PCS"  # Default to PCS if still None
+                    pack_type = pack_type or prod[2] or "UNIT"  # Default to UNIT if still None
+                else:
+                    product_name = product_name or f"Product {product_id}"
+                    uom = uom or "PCS"
+                    pack_type = pack_type or "UNIT"
             
             # Basic calculations (triggers will recalculate if needed)
             discount_percent = float(item.get("discount_percent", 0))
@@ -656,8 +668,8 @@ async def create_invoice(
                 "manufacturing_date": manufacturing_date or item.get("manufacturing_date"),
                 "expiry_date": expiry_date or item.get("expiry_date"),
                 "quantity": float(quantity),  # Ensure proper type
-                "uom": item.get("uom"),  # No default UOM
-                "pack_type": item.get("pack_type", "UNIT"),
+                "uom": uom,  # Now guaranteed to have a value
+                "pack_type": pack_type,  # Now guaranteed to have a value
                 "pack_size": int(item.get("pack_size")) if item.get("pack_size") and str(item.get("pack_size")).isdigit() else 1,
                 "base_quantity": float(base_quantity),  # Use the corrected variable
                 "mrp": float(mrp),
