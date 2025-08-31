@@ -563,6 +563,11 @@ async def create_purchase_entry(purchase_data: dict, db: Session = Depends(get_d
             if not batch_number or batch_number.strip() == "":
                 batch_number = f"BATCH{datetime.now().strftime('%y%m')}{str(db.execute(text('SELECT floor(random() * 10000)::int')).scalar()).zfill(4)}"
             
+            # Calculate MRP value first
+            mrp_value = Decimal(str(item.get("mrp", 0)))
+            if mrp_value == 0:
+                mrp_value = cost_price * Decimal('1.5')  # Default MRP is 1.5x cost
+            
             # Always create batch for inventory tracking
             batch_id = None
             # Use expiry_date if provided, otherwise set to 2 years from now (default for pharma)
@@ -599,7 +604,7 @@ async def create_purchase_entry(purchase_data: dict, db: Session = Depends(get_d
                 "expiry_date": expiry_date,
                 "quantity": quantity,
                 "cost_price": cost_price,
-                "mrp": item.get("mrp", cost_price * Decimal('1.5')),  # Default MRP is 1.5x cost
+                "mrp": mrp_value,  # Use the calculated MRP value
                 "pack_type": item.get("pack_type", "STRIP"),
                 "pack_size": item.get("pack_size", 1),
                 "pack_uom": item.get("pack_type", "STRIP"),
@@ -612,7 +617,6 @@ async def create_purchase_entry(purchase_data: dict, db: Session = Depends(get_d
             logger.info(f"Batch {batch_id} created for product {product_id}")
             
             # Update product pricing in inventory.products table
-            mrp_value = item.get("mrp", cost_price * Decimal('1.5'))
             db.execute(text("""
                 UPDATE inventory.products 
                 SET mrp = :mrp,
