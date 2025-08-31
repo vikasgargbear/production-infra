@@ -1,6 +1,6 @@
 import apiClient from './apiClient';
 
-const BASE_URL = '/api/party-ledger';
+const BASE_URL = '/party-ledger';
 
 export const partyLedgerApi = {
   // Get party info (maps to getBalance for now)

@@ -12,6 +12,7 @@ def get_default_branch_id(db: Session, org_id: str) -> Optional[int]:
     """
     Get the default branch_id for an organization.
     Returns the main branch or first active branch.
+    Always returns a valid branch_id, never None.
     """
     try:
         # First try to get the main/default branch
