@@ -5,8 +5,11 @@ const BASE_URL = '/api/party-ledger';
 export const partyLedgerApi = {
   // Get party info (maps to getBalance for now)
   getPartyInfo: async (partyId) => {
-    // For now, return basic party info from balance endpoint
-    const response = await apiClient.get(`${BASE_URL}/balance/${partyId}`, {
+    // Handle both id and customer_id fields
+    const actualId = partyId?.customer_id || partyId?.id || partyId;
+    console.log('[PartyLedgerAPI] getPartyInfo called with:', partyId, 'using ID:', actualId);
+    
+    const response = await apiClient.get(`${BASE_URL}/balance/${actualId}`, {
       params: { party_type: 'customer' }
     });
     return response.data;
@@ -15,10 +18,27 @@ export const partyLedgerApi = {
   // Get enhanced ledger (maps to getStatement with additional params)
   getEnhancedLedger: async (params) => {
     const { party_id, party_type = 'customer', ...otherParams } = params;
-    const response = await apiClient.get(`${BASE_URL}/statement/${party_id}`, {
+    // Handle both id and customer_id fields
+    const actualId = party_id?.customer_id || party_id?.id || party_id;
+    console.log('[PartyLedgerAPI] getEnhancedLedger called with party_id:', party_id, 'using ID:', actualId);
+    
+    const response = await apiClient.get(`${BASE_URL}/statement/${actualId}`, {
       params: { party_type, ...otherParams }
     });
-    return response.data;
+    
+    // Map the response to match frontend expectations
+    const data = response.data;
+    return {
+      entries: data.statement || [], // Frontend expects 'entries', API returns 'statement'
+      summary: data.summary || {
+        total_debit: 0,
+        total_credit: 0,
+        outstanding_amount: 0,
+        transaction_count: 0
+      },
+      party: data.party,
+      filters: data.filters
+    };
   },
 
   // Reconcile transactions
