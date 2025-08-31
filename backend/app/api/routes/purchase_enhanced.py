@@ -257,19 +257,23 @@ async def create_direct_purchase_entry(purchase_data: dict, db: Session = Depend
                     # Generate a meaningful product code
                     product_code = f"PROD-{product_name[:10].upper().replace(' ', '')}-{datetime.now().strftime('%Y%m%d%H%M%S')}"
                     
+                    # Extract HSN from item data or use default
+                    hsn_code = item.get("hsn_code", "30049099")  # Default pharma HSN
+                    
                     new_product = db.execute(text("""
                         INSERT INTO inventory.products (
                             org_id, product_name, product_code,
-                            category_id, is_active, created_at
+                            category_id, hsn_code, is_active, created_at
                         ) VALUES (
                             :org_id, :product_name, :product_code,
-                            :category_id, true, CURRENT_TIMESTAMP
+                            :category_id, :hsn_code, true, CURRENT_TIMESTAMP
                         ) RETURNING product_id
                     """), {
                         "org_id": current_user['org_id'],
                         "product_name": product_name,
                         "product_code": product_code,
-                        "category_id": category_id
+                        "category_id": category_id,
+                        "hsn_code": hsn_code
                     }).fetchone()
                     product_id = new_product.product_id if new_product else None
                     logger.info(f"Created new product: {product_name} (ID: {product_id}, Code: {product_code})")
@@ -492,19 +496,23 @@ async def create_purchase_with_items(purchase_data: dict, db: Session = Depends(
                     # Generate a meaningful product code
                     product_code = f"PROD-{product_name[:10].upper().replace(' ', '')}-{datetime.now().strftime('%Y%m%d%H%M%S')}"
                     
+                    # Extract HSN from item data or use default
+                    hsn_code = item.get("hsn_code", "30049099")  # Default pharma HSN
+                    
                     new_product = db.execute(text("""
                         INSERT INTO inventory.products (
                             org_id, product_name, product_code,
-                            category_id, is_active, created_at
+                            category_id, hsn_code, is_active, created_at
                         ) VALUES (
                             :org_id, :product_name, :product_code,
-                            :category_id, true, CURRENT_TIMESTAMP
+                            :category_id, :hsn_code, true, CURRENT_TIMESTAMP
                         ) RETURNING product_id
                     """), {
                         "org_id": current_user['org_id'],
                         "product_name": product_name,
                         "product_code": product_code,
-                        "category_id": category_id
+                        "category_id": category_id,
+                        "hsn_code": hsn_code
                     }).fetchone()
                     product_id = new_product.product_id if new_product else None
                     logger.info(f"Created new product: {product_name} (ID: {product_id}, Code: {product_code})")
