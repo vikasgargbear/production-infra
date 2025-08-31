@@ -60,36 +60,42 @@ const PDFUploadModal = ({ isOpen, onClose, onDataExtracted }) => {
         console.log('Setting extracted data:', response.data.extracted_data);
         console.log('Items in extracted data:', response.data.extracted_data.items);
         
-        // Set the extracted data to show the review UI
+        // Get the extracted data
         const extractedInfo = response.data.extracted_data;
-        console.log('📋 About to set state with:', extractedInfo);
+        console.log('📋 Extracted data:', extractedInfo);
         
-        // Force state update with new object references
-        setExtractedData(prevData => {
-          console.log('Previous extractedData:', prevData);
-          console.log('New extractedData:', extractedInfo);
-          return extractedInfo;
-        });
-        
-        setEditedData(prevData => {
-          console.log('Previous editedData:', prevData);
-          const newData = {...extractedInfo};
-          console.log('New editedData:', newData);
-          return newData;
-        });
-        
-        // Log state after setting
-        setTimeout(() => {
-          console.log('State after setting - extractedData:', extractedData);
-          console.log('State after setting - editedData:', editedData);
-        }, 100);
-        
-        // Show message about the extraction status
+        // Directly proceed to verification flow without showing the review UI
         if (response.data.success) {
-          console.log('✅ Extraction successful with', response.data.extracted_data.items?.length || 0, 'items');
-        } else if (response.data.message) {
-          // Show as info, not error - user can still fill in manually
-          console.log('ℹ️ Parse message:', response.data.message);
+          console.log('✅ Extraction successful with', extractedInfo.items?.length || 0, 'items');
+          
+          // Immediately call onDataExtracted to proceed to verification flow
+          onDataExtracted(extractedInfo);
+          onClose();
+          
+          // Reset state
+          setFile(null);
+          setExtractedData(null);
+          setEditedData(null);
+        } else {
+          // If extraction wasn't fully successful, show the review UI
+          console.log('⚠️ Partial extraction, showing review UI');
+          
+          setExtractedData(prevData => {
+            console.log('Previous extractedData:', prevData);
+            console.log('New extractedData:', extractedInfo);
+            return extractedInfo;
+          });
+          
+          setEditedData(prevData => {
+            console.log('Previous editedData:', prevData);
+            const newData = {...extractedInfo};
+            console.log('New editedData:', newData);
+            return newData;
+          });
+          
+          if (response.data.message) {
+            console.log('ℹ️ Parse message:', response.data.message);
+          }
         }
       } else {
         console.error('❌ No extracted_data in response:', response);

@@ -1112,68 +1112,41 @@ const EnhancedPurchaseEntry = ({ onClose, prefilledData = null }) => {
           onDataExtracted={(data) => {
             console.log('📥 Received extracted data:', data);
             
-            // Handle PDF data extraction
-            if (data.invoice_number) {
-              setPurchase(prev => ({ ...prev, supplier_invoice_number: data.invoice_number }));
-            }
-            
-            if (data.invoice_date) {
-              setPurchase(prev => ({ ...prev, invoice_date: data.invoice_date }));
-            }
-            
-            // Handle supplier information
-            if (data.supplier_name) {
-              setPurchase(prev => ({ ...prev, supplier_name: data.supplier_name }));
-              // If supplier exists in the system, set it
-              if (data.supplier_exists && data.supplier_id) {
-                setSelectedSupplier({
-                  supplier_id: data.supplier_id,
-                  supplier_name: data.supplier_name,
-                  gstin: data.supplier_gstin
-                });
-              } else {
-                // New supplier - just set the name for now
-                setSelectedSupplier(null);
-                setPurchase(prev => ({ 
-                  ...prev, 
-                  supplier_name: data.supplier_name,
-                  supplier_gstin: data.supplier_gstin 
-                }));
-              }
-            }
-            
-            // Handle items
-            if (data.items && data.items.length > 0) {
-              // Map extracted items to the format expected by the component
-              const mappedItems = data.items.map(item => ({
-                product_id: item.product_id || '',
-                product_name: item.product_name || '',
+            // Store extracted data and show verification flow
+            const extractedPDFData = {
+              supplier_name: data.supplier_name || data.vendor_name || '',
+              supplier_gstin: data.supplier_gstin || data.vendor_gstin || '',
+              supplier_address: data.supplier_address || data.vendor_address || '',
+              supplier_id: data.supplier_id || null,
+              invoice_number: data.invoice_number || '',
+              invoice_date: data.invoice_date || '',
+              items: (data.items || []).map(item => ({
+                product_id: item.product_id || null,
+                product_name: item.product_name || item.name || '',
                 hsn_code: item.hsn_code || '',
-                batch_number: item.batch_number || '',
+                batch_number: item.batch_number || item.batch_no || '',
                 expiry_date: item.expiry_date || '',
-                quantity: item.quantity || 0,
-                purchase_price: item.cost_price || item.rate || 0,
-                selling_price: item.mrp || 0,
-                mrp: item.mrp || 0,
-                discount_percent: item.discount_percent || 0,
-                tax_percent: item.tax_percent || 12,
-                amount: item.amount || 0
-              }));
-              setPurchase(prev => ({ ...prev, items: mappedItems }));
-            }
+                manufacturing_date: item.manufacturing_date || '',
+                quantity: parseFloat(item.quantity) || 0,
+                free_quantity: parseFloat(item.free_quantity) || 0,
+                cost_price: parseFloat(item.cost_price || item.rate || item.purchase_price) || 0,
+                mrp: parseFloat(item.mrp) || 0,
+                selling_price: parseFloat(item.selling_price || item.sale_price) || parseFloat(item.mrp) || 0,
+                discount_percent: parseFloat(item.discount_percent) || 0,
+                tax_percent: parseFloat(item.tax_percent || item.gst_percent) || 12,
+                pack_type: item.pack_type || 'STRIP',
+                pack_size: item.pack_size || 10
+              })),
+              gross_amount: data.subtotal || data.gross_amount || 0,
+              tax_amount: data.tax_amount || 0,
+              final_amount: data.grand_total || data.total_amount || 0
+            };
             
-            // Update totals if provided
-            if (data.grand_total) {
-              setPurchase(prev => ({ ...prev, final_amount: data.grand_total }));
-            }
-            if (data.subtotal) {
-              setPurchase(prev => ({ ...prev, gross_amount: data.subtotal }));
-            }
-            if (data.tax_amount) {
-              setPurchase(prev => ({ ...prev, tax_amount: data.tax_amount }));
-            }
+            setExtractedPDFData(extractedPDFData);
+            setShowPDFUpload(false); // Close PDF upload modal
+            setShowVerificationFlow(true); // Show verification flow
             
-            toast.success('PDF data extracted successfully! Review the details below.');
+            toast.success('PDF parsed! Please verify the extracted information.');
           }}
         />
       )}

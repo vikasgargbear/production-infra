@@ -174,8 +174,8 @@ const PDFVerificationFlow = ({
   };
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-white rounded-xl shadow-2xl w-full max-w-6xl max-h-[90vh] overflow-hidden">
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-xl shadow-2xl w-full max-w-7xl h-[95vh] overflow-hidden flex flex-col">
         {/* Header */}
         <div className="bg-gradient-to-r from-indigo-600 to-blue-600 px-6 py-4">
           <div className="flex items-center justify-between">
@@ -210,8 +210,8 @@ const PDFVerificationFlow = ({
           </div>
         </div>
 
-        {/* Content */}
-        <div className="p-6">
+        {/* Content - flex-1 to take remaining space */}
+        <div className="flex-1 p-6 overflow-y-auto">
           {currentStep === 'supplier' && (
             <SupplierVerificationModal
               extractedSupplier={{

@@ -37,8 +37,8 @@ export const suppliersApi = {
   
   // Search suppliers
   search: (query, params = {}) => {
-    return apiHelpers.get(ENDPOINTS.BASE, { 
-      params: { search: query, ...params } 
+    return apiHelpers.get(ENDPOINTS.SEARCH, { 
+      params: { search_term: query, ...params } 
     });
   },
   

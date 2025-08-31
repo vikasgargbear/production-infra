@@ -864,6 +864,103 @@ async def create_invoice(
                 logger.error(f"Error processing payments: {payments_error}")
                 # Continue - invoice is already created successfully
         
+        # Step 11: Create customer_outstanding record for tracking receivables
+        # This is critical for party ledger, aging reports, and collection management
+        try:
+            # Get the latest invoice data including payment status
+            invoice_data_result = db.execute(text("""
+                SELECT 
+                    final_amount,
+                    paid_amount,
+                    credit_amount,
+                    payment_status,
+                    due_date
+                FROM sales.invoices
+                WHERE invoice_id = :invoice_id
+            """), {"invoice_id": verified_invoice_id})
+            inv_data = invoice_data_result.fetchone()
+            
+            if inv_data and inv_data[3] != 'paid':  # Only create outstanding if not fully paid
+                final_amt = float(inv_data[0])
+                paid_amt = float(inv_data[1]) if inv_data[1] else 0
+                credit_amt = float(inv_data[2]) if inv_data[2] else final_amt - paid_amt
+                payment_stat = inv_data[3]
+                due_dt = inv_data[4] or (invoice_date + timedelta(days=7))  # Default 7 days credit
+                
+                # Check if outstanding record already exists (in case of retry)
+                existing_check = db.execute(text("""
+                    SELECT outstanding_id FROM financial.customer_outstanding
+                    WHERE org_id = :org_id 
+                    AND document_type = 'INVOICE' 
+                    AND document_id = :document_id
+                """), {
+                    "org_id": org_id,
+                    "document_id": verified_invoice_id
+                })
+                
+                if not existing_check.fetchone():
+                    # Create customer outstanding record
+                    db.execute(text("""
+                        INSERT INTO financial.customer_outstanding (
+                            org_id, customer_id, 
+                            document_type, document_id, document_number,
+                            document_date, original_amount, outstanding_amount,
+                            paid_amount, due_date, status, 
+                            days_overdue, aging_bucket
+                        ) VALUES (
+                            :org_id, :customer_id,
+                            'INVOICE', :invoice_id, :invoice_number,
+                            :invoice_date, :original_amount, :outstanding_amount,
+                            :paid_amount, :due_date, :status,
+                            GREATEST(0, CURRENT_DATE - :due_date::date),
+                            CASE 
+                                WHEN CURRENT_DATE <= :due_date::date THEN 'current'
+                                WHEN CURRENT_DATE - :due_date::date BETWEEN 1 AND 30 THEN '0-30'
+                                WHEN CURRENT_DATE - :due_date::date BETWEEN 31 AND 60 THEN '31-60'
+                                WHEN CURRENT_DATE - :due_date::date BETWEEN 61 AND 90 THEN '61-90'
+                                ELSE '90+'
+                            END
+                        )
+                    """), {
+                        "org_id": org_id,
+                        "customer_id": customer_id,
+                        "invoice_id": verified_invoice_id,
+                        "invoice_number": verified_invoice_number,
+                        "invoice_date": invoice_date,
+                        "original_amount": final_amt,
+                        "outstanding_amount": credit_amt,
+                        "paid_amount": paid_amt,
+                        "due_date": due_dt,
+                        "status": 'partial' if payment_stat == 'partial' else 'open'
+                    })
+                    db.commit()
+                    logger.info(f"✅ Customer outstanding record created for invoice {verified_invoice_id}")
+                else:
+                    # Update existing record
+                    db.execute(text("""
+                        UPDATE financial.customer_outstanding
+                        SET outstanding_amount = :outstanding_amount,
+                            paid_amount = :paid_amount,
+                            status = :status,
+                            updated_at = CURRENT_TIMESTAMP
+                        WHERE org_id = :org_id 
+                        AND document_type = 'INVOICE' 
+                        AND document_id = :document_id
+                    """), {
+                        "org_id": org_id,
+                        "document_id": verified_invoice_id,
+                        "outstanding_amount": credit_amt,
+                        "paid_amount": paid_amt,
+                        "status": 'partial' if payment_stat == 'partial' else 'open'
+                    })
+                    db.commit()
+                    logger.info(f"✅ Customer outstanding record updated for invoice {verified_invoice_id}")
+                    
+        except Exception as outstanding_error:
+            logger.error(f"Failed to create customer outstanding: {outstanding_error}")
+            db.rollback()
+            # Not critical - invoice is already created
+        
         # Get updated totals after triggers have run
         updated_result = db.execute(text("""
             SELECT 
