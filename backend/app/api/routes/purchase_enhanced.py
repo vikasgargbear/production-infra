@@ -209,16 +209,18 @@ async def create_direct_purchase_entry(purchase_data: dict, db: Session = Depend
         # Process items and create batches
         items = purchase_data.get("items", [])
         for item in items:
-            # Create PO item
+            # Create PO item (no final_amount column - use line_total for total)
             item_result = db.execute(text("""
                 INSERT INTO procurement.purchase_order_items (
                     purchase_order_id, product_id, product_name,
-                    ordered_quantity, unit_price, line_total,
-                    tax_percentage, tax_amount, final_amount
+                    ordered_quantity, unit_price, 
+                    discount_percent, discount_amount,
+                    tax_percent, tax_amount, line_total
                 ) VALUES (
                     :purchase_order_id, :product_id, :product_name,
-                    :quantity, :unit_price, :line_total,
-                    :tax_percent, :tax_amount, :final_amount
+                    :quantity, :unit_price,
+                    :disc_percent, :disc_amount,
+                    :tax_percent, :tax_amount, :line_total
                 ) RETURNING po_item_id
             """), {
                 "purchase_order_id": po_id,
@@ -226,10 +228,11 @@ async def create_direct_purchase_entry(purchase_data: dict, db: Session = Depend
                 "product_name": item.get("product_name"),
                 "quantity": item.get("quantity", 0),
                 "unit_price": item.get("unit_price", 0),
-                "line_total": item.get("quantity", 0) * item.get("unit_price", 0),
+                "disc_percent": item.get("discount_percent", 0),
+                "disc_amount": item.get("discount_amount", 0),
                 "tax_percent": item.get("tax_percent", 12),
                 "tax_amount": item.get("tax_amount", 0),
-                "final_amount": item.get("total_amount", 0)
+                "line_total": item.get("total_amount", 0)  # This is the final total with tax
             })
             
             # Create batch automatically
@@ -401,12 +404,12 @@ async def create_purchase_with_items(purchase_data: dict, db: Session = Depends(
                         purchase_order_id, product_id, product_name,
                         ordered_quantity, unit_price, free_quantity,
                         discount_percent, discount_amount,
-                        line_total, tax_percent, tax_amount, final_amount
+                        tax_percent, tax_amount, line_total
                     ) VALUES (
                         :purchase_order_id, :product_id, :product_name,
                         :ordered_qty, :unit_price, :free_qty,
                         :disc_percent, :disc_amount,
-                        :line_total, :tax_percent, :tax_amount, :final_amount
+                        :tax_percent, :tax_amount, :line_total
                     )
                 """),
                 {
@@ -418,10 +421,9 @@ async def create_purchase_with_items(purchase_data: dict, db: Session = Depends(
                     "free_qty": item.get("free_quantity", 0),
                     "disc_percent": discount_percent,
                     "disc_amount": discount_amount,
-                    "line_total": taxable_amount,
                     "tax_percent": tax_percent,
                     "tax_amount": tax_amount,
-                    "final_amount": total_price
+                    "line_total": total_price  # This is the final amount with tax
                 }
             )
             items_created += 1
