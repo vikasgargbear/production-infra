@@ -10,6 +10,7 @@ import {
 } from '../global';
 import { returnsApi, purchasesApi, suppliersApi, settingsApi, metadataApi } from '../../services/api';
 import PurchaseInvoiceSelector from './components/PurchaseInvoiceSelector';
+import SupplierInvoiceSelector from './components/SupplierInvoiceSelector';
 import ReturnItemsTable from './components/ReturnItemsTable';
 import ReturnSummary from './components/ReturnSummary';
 import DebitNotePreview from './components/DebitNotePreview';
@@ -33,7 +34,8 @@ const PurchaseReturnFlow = ({ onClose }) => {
     return_date: new Date().toISOString().split('T')[0],
     supplier_id: '',
     supplier_details: null,
-    purchase_id: '',
+    supplier_invoice_id: '',
+    purchase_id: '', // Keep for backward compatibility
     purchase_invoice_no: '',
     purchase_date: '',
     original_purchase: null,
@@ -55,7 +57,9 @@ const PurchaseReturnFlow = ({ onClose }) => {
 
   const [selectedSupplier, setSelectedSupplier] = useState(null);
   const [selectedPurchase, setSelectedPurchase] = useState(null);
+  const [selectedInvoice, setSelectedInvoice] = useState(null);
   const [returnablePurchases, setReturnablePurchases] = useState([]);
+  const [returnableInvoices, setReturnableInvoices] = useState([]);
   const [returnReasons, setReturnReasons] = useState([]);
 
   // Load return reasons from metadata API
@@ -186,22 +190,61 @@ const PurchaseReturnFlow = ({ onClose }) => {
       supplier_details: supplier
     }));
 
-    // Fetch returnable purchases for this supplier
+    // Fetch returnable supplier invoices for this supplier
     try {
       setLoading(true);
-      const response = await returnsApi.getReturnablePurchases({ 
+      const response = await purchasesApi.getReturnableInvoices({ 
         supplier_id: supplierId
       });
-      setReturnablePurchases(response.data?.purchases || []);
+      setReturnableInvoices(response.data?.invoices || []);
     } catch (error) {
-      toast.error('Failed to fetch purchases: ' + (error.response?.data?.detail || error.message));
-      console.error('Error fetching purchases:', error);
+      toast.error('Failed to fetch supplier invoices: ' + (error.response?.data?.detail || error.message));
+      console.error('Error fetching supplier invoices:', error);
     } finally {
       setLoading(false);
     }
   };
 
-  // Handle purchase selection
+  // Handle supplier invoice selection
+  const handleInvoiceSelect = async (invoice) => {
+    setSelectedInvoice(invoice);
+    const invoiceId = invoice.supplier_invoice_id;
+    
+    setReturnData(prev => ({
+      ...prev,
+      supplier_invoice_id: invoiceId,
+      purchase_invoice_no: invoice.supplier_invoice_number || invoice.invoice_number,
+      purchase_date: invoice.invoice_date,
+      original_purchase: invoice
+    }));
+
+    // Fetch returnable items from supplier invoice
+    try {
+      setLoading(true);
+      const response = await returnsApi.getSupplierInvoiceReturnableItems(invoiceId);
+      
+      if (response.data.items) {
+        setReturnData(prev => ({
+          ...prev,
+          items: response.data.items.map(item => ({
+            ...item,
+            id: item.invoice_item_id,
+            return_quantity: 0,
+            return_reason: '',
+            selected: false,
+            restock: true // Default to restock
+          }))
+        }));
+      }
+    } catch (error) {
+      toast.error('Failed to fetch invoice items: ' + (error.response?.data?.detail || error.message));
+      console.error('Error fetching invoice items:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Handle purchase selection (keep for backward compatibility)
   const handlePurchaseSelect = async (purchase) => {
     setSelectedPurchase(purchase);
     setReturnData(prev => ({
@@ -379,15 +422,22 @@ const PurchaseReturnFlow = ({ onClose }) => {
     try {
       const returnPayload = {
         ...returnData,
+        supplier_invoice_id: returnData.supplier_invoice_id,
         items: returnData.items
           .filter(item => item.selected && item.return_quantity > 0)
           .map(item => ({
+            invoice_item_id: item.invoice_item_id || item.id,
             product_id: item.product_id,
             batch_id: item.batch_id,
+            batch_number: item.batch_number,
             quantity: item.return_quantity,
-            rate: item.rate,
+            return_quantity: item.return_quantity,
+            unit_price: item.unit_price || item.rate,
+            discount_percent: item.discount_percent || 0,
             tax_percent: item.tax_percent,
-            return_reason: item.return_reason || returnData.return_reason
+            return_reason: item.return_reason || returnData.return_reason,
+            selected: true,
+            restock: item.restock !== false
           }))
       };
 
@@ -492,38 +542,39 @@ const PurchaseReturnFlow = ({ onClose }) => {
                   )}
                 </div>
 
-                {/* Purchase Invoice Selection */}
+                {/* Supplier Invoice Selection */}
                 {selectedSupplier && (
                   <div>
                     <h3 className="text-sm font-medium text-blue-700 mb-2 flex items-center">
                       <FileText className="w-4 h-4 mr-2" />
-                      Select Purchase Invoice
+                      Select Supplier Invoice
                     </h3>
-                    {!selectedPurchase ? (
-                      <PurchaseInvoiceSelector
+                    {!selectedInvoice ? (
+                      <SupplierInvoiceSelector
                         ref={purchaseSearchRef}
-                        purchases={returnablePurchases}
-                        onPurchaseSelect={handlePurchaseSelect}
+                        invoices={returnableInvoices}
+                        onInvoiceSelect={handleInvoiceSelect}
                         loading={loading}
                       />
                     ) : (
                       <div className="bg-blue-50 rounded-lg p-4 flex justify-between items-center">
                         <div>
                           <h4 className="font-semibold text-gray-900">
-                            Invoice #{selectedPurchase.invoice_number}
+                            Invoice #{selectedInvoice.supplier_invoice_number || selectedInvoice.invoice_number}
                           </h4>
                           <p className="text-sm text-gray-600">
-                            Date: {new Date(selectedPurchase.invoice_date).toLocaleDateString()}
+                            Date: {new Date(selectedInvoice.invoice_date).toLocaleDateString()}
                           </p>
                           <p className="text-sm text-gray-600">
-                            Amount: ₹{selectedPurchase.total_amount}
+                            Amount: ₹{selectedInvoice.total_amount || selectedInvoice.invoice_amount}
                           </p>
                         </div>
                         <button
                           onClick={() => {
-                            setSelectedPurchase(null);
+                            setSelectedInvoice(null);
                             setReturnData(prev => ({
                               ...prev,
+                              supplier_invoice_id: '',
                               purchase_id: '',
                               items: []
                             }));
@@ -539,7 +590,7 @@ const PurchaseReturnFlow = ({ onClose }) => {
               </div>
 
               {/* Return Reason - Moved Above Items */}
-              {selectedPurchase && (
+              {selectedInvoice && (
                 <div className="bg-white rounded-lg shadow-sm border border-blue-200 p-6">
                   <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
                     <AlertCircle className="w-5 h-5 mr-2 text-red-600" />
@@ -607,7 +658,7 @@ const PurchaseReturnFlow = ({ onClose }) => {
               )}
 
               {/* Return Items */}
-              {selectedPurchase && returnData.items.length > 0 && (
+              {selectedInvoice && returnData.items.length > 0 && (
                 <div className="bg-white rounded-lg shadow-sm border border-blue-200 p-6">
                   <div className="flex justify-between items-center mb-4">
                     <div>
@@ -660,16 +711,18 @@ const PurchaseReturnFlow = ({ onClose }) => {
           {/* Footer - Using Global Component */}
           <ProceedToReviewComponent
             currentStep={1}
-            canProceed={selectedSupplier && selectedPurchase && returnData.items.some(item => item.selected && item.return_quantity > 0)}
+            canProceed={selectedSupplier && selectedInvoice && returnData.items.some(item => item.selected && item.return_quantity > 0)}
             onBack={null}
             onProceed={handleProceedToReview}
             onReset={() => {
               setSelectedSupplier(null);
               setSelectedPurchase(null);
+              setSelectedInvoice(null);
               setReturnData(prev => ({
                 ...prev,
                 supplier_id: '',
                 supplier_details: null,
+                supplier_invoice_id: '',
                 purchase_id: '',
                 items: [],
                 return_reason: '',

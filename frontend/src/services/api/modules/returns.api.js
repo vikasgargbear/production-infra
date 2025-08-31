@@ -149,6 +149,16 @@ export const returnsApi = {
     return apiClient.get(`purchase-returns/purchase/${purchaseId}/items`);
   },
 
+  // Get supplier invoice items for return
+  getSupplierInvoiceReturnableItems: async (invoiceId) => {
+    return apiClient.get(`purchase-returns/supplier-invoice/${invoiceId}/returnable-items`);
+  },
+
+  // Get returnable supplier invoices
+  getReturnableSupplierInvoices: async (params = {}) => {
+    return apiClient.get('supplier-invoices/returnable/', { params });
+  },
+
   // Get returns for a specific invoice
   getReturnsForInvoice: async (invoiceId) => {
     return apiClient.get(`sale-returns/invoice/${invoiceId}/returns`);

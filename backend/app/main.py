@@ -29,6 +29,8 @@ from .api.routes.bank_accounts import router as bank_accounts_router
 
 # Import additional routers not in __init__.py
 from .api.routes import stock_receive, enterprise_delivery_challan, inventory_batches, create_user, delivery_challan, stock_dashboard, sales_orders, grn, journal_entries, expense_claims, settings
+# Import enhanced purchase returns and supplier invoices
+from .api.routes import purchase_returns_enhanced, supplier_invoices
 # Import org users APIs
 from .api.routes import org_users, org_users_secure, role_management
 # Import new APIs
@@ -141,6 +143,8 @@ api.include_router(purchase_upload_router, prefix="/purchase-upload", tags=["Pur
 api.include_router(purchase_enhanced_router, prefix="/purchase-enhanced", tags=["Purchase Enhanced"])
 api.include_router(sale_returns_api_router, prefix="/sale-returns", tags=["Sale Returns"])
 api.include_router(purchase_returns_router, prefix="/purchase-returns", tags=["Purchase Returns"])
+api.include_router(purchase_returns_enhanced.router, prefix="/purchase-returns-enhanced", tags=["Purchase Returns Enhanced"])
+api.include_router(supplier_invoices.router, prefix="/supplier-invoices", tags=["Supplier Invoices"])
 api.include_router(stock_movements_router, prefix="/stock-movements", tags=["Stock Movements"])
 api.include_router(party_ledger_router, prefix="/party-ledger", tags=["Party Ledger"])
 api.include_router(credit_debit_notes_router, prefix="/credit-debit-notes", tags=["Credit/Debit Notes"])

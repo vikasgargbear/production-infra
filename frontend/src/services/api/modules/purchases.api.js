@@ -58,6 +58,21 @@ export const purchasesApi = {
     
     return response;
   },
+
+  // Get returnable supplier invoices
+  getReturnableInvoices: async (params = {}) => {
+    return apiClient.get('supplier-invoices/returnable/', { params });
+  },
+
+  // Get supplier invoice by ID
+  getSupplierInvoice: async (invoiceId) => {
+    return apiClient.get(`supplier-invoices/${invoiceId}`);
+  },
+
+  // Get supplier invoice items
+  getSupplierInvoiceItems: async (invoiceId) => {
+    return apiClient.get(`supplier-invoices/${invoiceId}/items`);
+  },
   
   // Enhanced purchase operations
   enhanced: {
