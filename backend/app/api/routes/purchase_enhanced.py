@@ -447,6 +447,62 @@ async def create_purchase_with_items(purchase_data: dict, db: Session = Depends(
         
         purchase_id = result.scalar()
         
+        # Create supplier invoice
+        invoice_number = purchase_data.get("invoice_number", purchase_number)
+        invoice_date = purchase_data.get("invoice_date", purchase_data.get("purchase_date", datetime.now().date()))
+        
+        # Create supplier invoice
+        invoice_result = db.execute(
+            text("""
+                INSERT INTO procurement.supplier_invoices (
+                    org_id, branch_id, supplier_invoice_number, invoice_date,
+                    supplier_id, purchase_order_ids,
+                    subtotal_amount, discount_amount, taxable_amount,
+                    cgst_amount, sgst_amount, igst_amount, tax_amount,
+                    freight_charges, insurance_charges, other_charges,
+                    round_off_amount, invoice_total,
+                    payment_terms, due_date, payment_status,
+                    invoice_status, created_by
+                ) VALUES (
+                    :org_id, :branch_id, :invoice_number, :invoice_date,
+                    :supplier_id, ARRAY[:purchase_id]::integer[],
+                    :subtotal, :discount, :taxable,
+                    :cgst, :sgst, :igst, :tax,
+                    :freight, :insurance, :other,
+                    :round_off, :total,
+                    :payment_terms, :due_date, :payment_status,
+                    :invoice_status, :created_by
+                ) RETURNING supplier_invoice_id
+            """),
+            {
+                "org_id": current_user['org_id'],
+                "branch_id": branch_id,
+                "invoice_number": invoice_number,
+                "invoice_date": invoice_date,
+                "supplier_id": purchase_data.get("supplier_id"),
+                "purchase_id": purchase_id,
+                "subtotal": Decimal(str(purchase_data.get("subtotal_amount", 0))),
+                "discount": Decimal(str(purchase_data.get("discount_amount", 0))),
+                "taxable": Decimal(str(purchase_data.get("taxable_amount", purchase_data.get("subtotal_amount", 0) - purchase_data.get("discount_amount", 0)))),
+                "cgst": Decimal(str(purchase_data.get("cgst_amount", purchase_data.get("tax_amount", 0) / 2))),
+                "sgst": Decimal(str(purchase_data.get("sgst_amount", purchase_data.get("tax_amount", 0) / 2))),
+                "igst": Decimal(str(purchase_data.get("igst_amount", 0))),
+                "tax": Decimal(str(purchase_data.get("tax_amount", 0))),
+                "freight": Decimal(str(purchase_data.get("freight_charges", 0))),
+                "insurance": Decimal(str(purchase_data.get("insurance_charges", 0))),
+                "other": Decimal(str(purchase_data.get("other_charges", 0))),
+                "round_off": Decimal(str(purchase_data.get("round_off_amount", 0))),
+                "total": Decimal(str(purchase_data.get("final_amount", 0))),
+                "payment_terms": purchase_data.get("payment_terms", "immediate"),
+                "due_date": purchase_data.get("due_date", invoice_date),
+                "payment_status": purchase_data.get("payment_status", "pending"),
+                "invoice_status": purchase_data.get("invoice_status", "draft"),
+                "created_by": created_by
+            }
+        )
+        
+        supplier_invoice_id = invoice_result.scalar()
+        
         # Create purchase items if provided
         items = purchase_data.get("items", [])
         items_created = 0
@@ -572,6 +628,60 @@ async def create_purchase_with_items(purchase_data: dict, db: Session = Depends(
                     "line_total": total_price  # This is the final amount with tax
                 }
             )
+            
+            # Also create supplier invoice item
+            # Determine GST split (CGST/SGST or IGST based on same state)
+            # For now, assuming same state (CGST/SGST)
+            cgst_percent = tax_percent / 2
+            sgst_percent = tax_percent / 2
+            igst_percent = 0
+            
+            cgst_amount = taxable_amount * cgst_percent / 100
+            sgst_amount = taxable_amount * sgst_percent / 100
+            igst_amount = 0
+            
+            db.execute(
+                text("""
+                    INSERT INTO procurement.supplier_invoice_items (
+                        supplier_invoice_id, product_id, 
+                        batch_number, quantity, free_quantity,
+                        unit_price, discount_percent, discount_amount,
+                        taxable_amount, cgst_percent, sgst_percent, igst_percent,
+                        cgst_amount, sgst_amount, igst_amount, total_amount,
+                        hsn_code, unit, pack_type, pack_size
+                    ) VALUES (
+                        :invoice_id, :product_id,
+                        :batch_number, :quantity, :free_quantity,
+                        :unit_price, :disc_percent, :disc_amount,
+                        :taxable_amount, :cgst_percent, :sgst_percent, :igst_percent,
+                        :cgst_amount, :sgst_amount, :igst_amount, :total_amount,
+                        :hsn_code, :unit, :pack_type, :pack_size
+                    )
+                """),
+                {
+                    "invoice_id": supplier_invoice_id,
+                    "product_id": product_id,
+                    "batch_number": batch_number,
+                    "quantity": quantity,
+                    "free_quantity": item.get("free_quantity", 0),
+                    "unit_price": cost_price,
+                    "disc_percent": discount_percent,
+                    "disc_amount": discount_amount,
+                    "taxable_amount": taxable_amount,
+                    "cgst_percent": cgst_percent,
+                    "sgst_percent": sgst_percent,
+                    "igst_percent": igst_percent,
+                    "cgst_amount": cgst_amount,
+                    "sgst_amount": sgst_amount,
+                    "igst_amount": igst_amount,
+                    "total_amount": total_price,
+                    "hsn_code": item.get("hsn_code", "30049099"),
+                    "unit": item.get("uom", "NOS"),
+                    "pack_type": item.get("pack_type", "STRIP"),
+                    "pack_size": item.get("pack_size", 1)
+                }
+            )
+            
             items_created += 1
         
         db.commit()
