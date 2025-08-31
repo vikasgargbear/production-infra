@@ -278,16 +278,18 @@ async def create_direct_purchase_entry(purchase_data: dict, db: Session = Depend
                     product_id = new_product.product_id if new_product else None
                     logger.info(f"Created new product: {product_name} (ID: {product_id}, Code: {product_code})")
             
-            # Create PO item (no final_amount column - use line_total for total)
+            # Create PO item (with required UOM and pack_type fields)
             item_result = db.execute(text("""
                 INSERT INTO procurement.purchase_order_items (
                     purchase_order_id, product_id, product_name,
                     ordered_quantity, unit_price, 
+                    uom, pack_type,
                     discount_percent, discount_amount,
                     tax_percent, tax_amount, line_total
                 ) VALUES (
                     :purchase_order_id, :product_id, :product_name,
                     :quantity, :unit_price,
+                    :uom, :pack_type,
                     :disc_percent, :disc_amount,
                     :tax_percent, :tax_amount, :line_total
                 ) RETURNING po_item_id
@@ -297,6 +299,8 @@ async def create_direct_purchase_entry(purchase_data: dict, db: Session = Depend
                 "product_name": product_name,
                 "quantity": item.get("quantity", 0),
                 "unit_price": item.get("unit_price", 0),
+                "uom": item.get("uom", "NOS"),  # Default to NOS (numbers/pieces)
+                "pack_type": item.get("pack_type", "STRIP"),  # Default to STRIP for pharma
                 "disc_percent": item.get("discount_percent", 0),
                 "disc_amount": item.get("discount_amount", 0),
                 "tax_percent": item.get("tax_percent", 12),
@@ -541,11 +545,13 @@ async def create_purchase_with_items(purchase_data: dict, db: Session = Depends(
                     INSERT INTO procurement.purchase_order_items (
                         purchase_order_id, product_id, product_name,
                         ordered_quantity, unit_price, free_quantity,
+                        uom, pack_type,
                         discount_percent, discount_amount,
                         tax_percent, tax_amount, line_total
                     ) VALUES (
                         :purchase_order_id, :product_id, :product_name,
                         :ordered_qty, :unit_price, :free_qty,
+                        :uom, :pack_type,
                         :disc_percent, :disc_amount,
                         :tax_percent, :tax_amount, :line_total
                     )
@@ -557,6 +563,8 @@ async def create_purchase_with_items(purchase_data: dict, db: Session = Depends(
                     "ordered_qty": quantity,
                     "unit_price": cost_price,
                     "free_qty": item.get("free_quantity", 0),
+                    "uom": item.get("uom", "NOS"),  # Default to NOS
+                    "pack_type": item.get("pack_type", "STRIP"),  # Default to STRIP
                     "disc_percent": discount_percent,
                     "disc_amount": discount_amount,
                     "tax_percent": tax_percent,
