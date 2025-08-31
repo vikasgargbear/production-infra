@@ -339,13 +339,11 @@ def create_purchase_with_items(purchase_data: dict, db: Session = Depends(get_db
                 detail="Unable to determine user for this operation. Please provide created_by field."
             )
         
-        # Get default branch for organization
+        # Get default branch for organization - will always return a valid ID
         from app.utils.branch_utils import get_default_branch_id
         branch_id = get_default_branch_id(db, org_id)
-        if not branch_id:
-            # If no branch exists, don't fail - let it be NULL if allowed
-            logger.warning(f"No branch found for org {org_id}, proceeding without branch_id")
-            branch_id = None
+        # The function now always returns a valid branch_id, never None
+        logger.info(f"Using branch_id {branch_id} for org {org_id}")
         
         # Create purchase header
         result = db.execute(

@@ -16,6 +16,9 @@ export const partyLedgerApi = {
     
     // If partyId is an object, try to extract the ID
     if (partyId && typeof partyId === 'object') {
+      console.log('[PartyLedgerAPI] Received customer object:', partyId);
+      console.log('[PartyLedgerAPI] customer_id field:', partyId.customer_id);
+      
       actualId = partyId.customer_id || 
                  partyId.id || 
                  partyId.ID ||
@@ -63,6 +66,9 @@ export const partyLedgerApi = {
     
     // If party_id is an object, try to extract the ID
     if (party_id && typeof party_id === 'object') {
+      console.log('[PartyLedgerAPI] getEnhancedLedger - Received customer object:', party_id);
+      console.log('[PartyLedgerAPI] getEnhancedLedger - customer_id field:', party_id.customer_id);
+      
       // Try different possible field names
       actualId = party_id.customer_id || 
                  party_id.id || 
