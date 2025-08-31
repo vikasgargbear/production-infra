@@ -5,7 +5,7 @@
 
 import React, { useState } from 'react';
 import { Settings, ToggleLeft, ToggleRight } from 'lucide-react';
-import PartyLedgerV2 from './PartyLedgerV2';
+import PartyLedgerV2 from './archive/PartyLedgerV2';
 import PartyLedgerV3 from './PartyLedgerV3';
 
 interface PartyLedgerProps {

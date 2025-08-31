@@ -12,7 +12,7 @@ import AgingAnalysis from './AgingAnalysis';
 import CollectionCenter from './CollectionCenter';
 import LedgerReports from './LedgerReports';
 import PartyLedger from './PartyLedger';
-import PartyLedgerV2 from './PartyLedgerV2';
+import PartyLedgerV2 from './archive/PartyLedgerV2';
 import PartyLedgerV3 from './PartyLedgerV3';
 
 // Main Hub Component
@@ -28,7 +28,7 @@ export { default as LedgerReports } from './LedgerReports';
 
 // Legacy Components (for backward compatibility)
 export { default as PartyLedger } from './PartyLedger';
-export { default as PartyLedgerV2 } from './PartyLedgerV2';
+export { default as PartyLedgerV2 } from './archive/PartyLedgerV2';
 export { default as PartyLedgerV3 } from './PartyLedgerV3';
 
 // Ledger Constants

@@ -22,9 +22,9 @@ import {
   Loader2
 } from 'lucide-react';
 import { format, parseISO, startOfMonth, endOfMonth } from 'date-fns';
-import { partyLedgerAPI } from '../../services/api';
-import { CustomerSearch, SupplierSearch, DatePicker, Select, DataTable } from '../global';
-import { formatCurrency } from '../../utils/formatters';
+import { partyLedgerAPI } from '../../../services/api';
+import { CustomerSearch, SupplierSearch, DatePicker, Select, DataTable } from '../../global';
+import { formatCurrency } from '../../../utils/formatters';
 
 interface PartyLedgerV2Props {
   partyType?: 'customer' | 'supplier';

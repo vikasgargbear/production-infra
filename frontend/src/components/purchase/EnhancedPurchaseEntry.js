@@ -290,6 +290,14 @@ const EnhancedPurchaseEntry = ({ onClose, prefilledData = null }) => {
             updatedItem.tax_percent = value;
           } else if (field === 'tax_percent') {
             updatedItem.tax = value;
+          } else if (field === 'batch_no') {
+            // Sync batch fields
+            updatedItem.batch_number = value;
+            updatedItem.batch = value;
+          } else if (field === 'batch_number' || field === 'batch') {
+            updatedItem.batch_no = value;
+            updatedItem.batch_number = value;
+            updatedItem.batch = value;
           }
           return updatedItem;
         }
@@ -932,7 +940,7 @@ const EnhancedPurchaseEntry = ({ onClose, prefilledData = null }) => {
                         )}
                       </div>
                     </td>
-                    <td className="text-center py-3 px-2 text-sm text-gray-600">{item.batch_no || '-'}</td>
+                    <td className="text-center py-3 px-2 text-sm text-gray-600">{item.batch_no || item.batch_number || item.batch || '-'}</td>
                     <td className="text-center py-3 px-2 text-sm text-gray-600">{expiryDisplay}</td>
                     <td className="text-center py-3 px-2 text-sm font-medium">{quantity}</td>
                     <td className="text-center py-3 px-2 text-sm text-gray-600">{freeQty > 0 ? freeQty : '-'}</td>
