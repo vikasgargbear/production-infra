@@ -533,6 +533,7 @@ async def create_purchase_entry(purchase_data: dict, db: Session = Depends(get_d
     """
     Create a purchase entry (supplier invoice) with line items
     This is for recording completed purchases/bills from suppliers
+    Enhanced to handle all required fields including selling prices
     """
     # Ensure clean transaction state
     try:
@@ -640,7 +641,11 @@ async def create_purchase_entry(purchase_data: dict, db: Session = Depends(get_d
         items = purchase_data.get("items", [])
         items_created = 0
         
-        for item in items:
+        # Log the received data for debugging
+        logger.info(f"Processing {len(items)} items for purchase entry")
+        
+        for idx, item in enumerate(items):
+            logger.info(f"Item {idx + 1}: {item}")
             # Get or create product_id if not provided
             product_id = item.get("product_id")
             product_name = item.get("product_name")
@@ -728,10 +733,16 @@ async def create_purchase_entry(purchase_data: dict, db: Session = Depends(get_d
             if not batch_number or batch_number.strip() == "":
                 batch_number = f"BATCH{datetime.now().strftime('%y%m')}{str(db.execute(text('SELECT floor(random() * 10000)::int')).scalar()).zfill(4)}"
             
-            # Calculate MRP value first
+            # Calculate pricing values
             mrp_value = Decimal(str(item.get("mrp", 0)))
             if mrp_value == 0:
                 mrp_value = cost_price * Decimal('1.5')  # Default MRP is 1.5x cost
+            
+            # Selling price (PTR/PTS in pharma)
+            selling_price = Decimal(str(item.get("selling_price", 0)))
+            if selling_price == 0:
+                # Default selling price is 90% of MRP
+                selling_price = mrp_value * Decimal('0.9')
             
             # Always create batch for inventory tracking
             batch_id = None
@@ -747,7 +758,7 @@ async def create_purchase_entry(purchase_data: dict, db: Session = Depends(get_d
                     org_id, product_id,
                     batch_number, expiry_date,
                     initial_quantity, quantity_available,
-                    cost_per_unit, mrp_per_unit,
+                    cost_per_unit, mrp_per_unit, sale_price_per_unit,
                     source_type, 
                     pack_type, pack_size, pack_uom, base_uom, units_per_pack,
                     batch_status, expiry_status,
@@ -756,7 +767,7 @@ async def create_purchase_entry(purchase_data: dict, db: Session = Depends(get_d
                     :org_id, :product_id,
                     :batch_number, :expiry_date,
                     :quantity, :quantity,
-                    :cost_price, :mrp,
+                    :cost_price, :mrp, :selling_price,
                     'purchase',
                     :pack_type, :pack_size, :pack_uom, :base_uom, :units_per_pack,
                     'active', 'normal',
@@ -769,7 +780,8 @@ async def create_purchase_entry(purchase_data: dict, db: Session = Depends(get_d
                 "expiry_date": expiry_date,
                 "quantity": quantity,
                 "cost_price": cost_price,
-                "mrp": mrp_value,  # Use the calculated MRP value
+                "mrp": mrp_value,
+                "selling_price": selling_price,
                 "pack_type": item.get("pack_type", "STRIP"),
                 "pack_size": item.get("pack_size", 1),
                 "pack_uom": item.get("pack_type", "STRIP"),
