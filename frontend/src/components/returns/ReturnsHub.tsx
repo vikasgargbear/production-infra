@@ -2,7 +2,7 @@ import React from 'react';
 import { RotateCcw, ShoppingCart, Package, List } from 'lucide-react';
 import { ModuleHub } from '../global';
 import SalesReturnFlow from './SalesReturnFlow';
-import PurchaseReturnFlow from './PurchaseReturnFlow';
+import PurchaseReturnFlow from './PurchaseReturnFlowV2'; // Use the new UI-matching version
 import ReturnsListHistory from './ReturnsListHistory';
 
 interface ReturnsHubProps {
