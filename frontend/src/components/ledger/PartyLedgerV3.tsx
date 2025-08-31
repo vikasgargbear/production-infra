@@ -291,9 +291,21 @@ const PartyLedgerV3: React.FC<PartyLedgerV3Props> = ({
       header: 'Type',
       render: (value: any, entry: any) => {
         console.log('[Column Render] Type:', { value, entry });
-        return entry?.transaction_type || '-';
+        const type = entry?.transaction_type || '-';
+        // Add color coding for different transaction types
+        let textColor = '';
+        if (type.includes('Invoice')) textColor = 'blue';
+        else if (type.includes('Payment')) textColor = 'green';
+        else if (type.includes('Credit')) textColor = 'orange';
+        else if (type.includes('Debit')) textColor = 'red';
+        
+        return (
+          <span style={{ color: textColor, fontWeight: 'bold' }}>
+            {type}
+          </span>
+        );
       },
-      width: '100px'
+      width: '150px'
     },
     {
       key: 'reference',

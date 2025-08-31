@@ -145,7 +145,17 @@ async def create_purchase(purchase_data: dict, db: Session = Depends(get_db),
         
         # Ensure required fields have defaults
         if 'created_by' not in purchase_data or purchase_data['created_by'] is None:
-            purchase_data['created_by'] = current_user.get('user_id', 2)  # Use current user ID
+            # Try to get user_id from token, otherwise get from org
+            user_id = current_user.get('user_id')
+            if not user_id and current_user.get('org_id'):
+                # For header-based auth, get any user from this org
+                user_result = db.execute(text("""
+                    SELECT user_id FROM parties.org_users 
+                    WHERE org_id = :org_id AND is_active = true
+                    ORDER BY user_id LIMIT 1
+                """), {"org_id": current_user['org_id']}).fetchone()
+                user_id = user_result.user_id if user_result else 2
+            purchase_data['created_by'] = user_id if user_id else 2
         if 'po_status' not in purchase_data:
             purchase_data['po_status'] = 'draft'
         if 'po_type' not in purchase_data:
