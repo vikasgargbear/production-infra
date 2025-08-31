@@ -209,6 +209,38 @@ async def create_direct_purchase_entry(purchase_data: dict, db: Session = Depend
         # Process items and create batches
         items = purchase_data.get("items", [])
         for item in items:
+            # Get or create product_id if not provided
+            product_id = item.get("product_id")
+            product_name = item.get("product_name")
+            
+            if not product_id and product_name:
+                # Try to find existing product by name
+                existing_product = db.execute(text("""
+                    SELECT product_id FROM inventory.products 
+                    WHERE LOWER(product_name) = LOWER(:product_name)
+                    AND org_id = :org_id
+                    LIMIT 1
+                """), {"product_name": product_name, "org_id": current_user['org_id']}).fetchone()
+                
+                if existing_product:
+                    product_id = existing_product.product_id
+                else:
+                    # Create new product with minimal required fields
+                    new_product = db.execute(text("""
+                        INSERT INTO inventory.products (
+                            org_id, product_name, product_code,
+                            category_id, is_active, created_at
+                        ) VALUES (
+                            :org_id, :product_name, :product_code,
+                            1, true, CURRENT_TIMESTAMP
+                        ) RETURNING product_id
+                    """), {
+                        "org_id": current_user['org_id'],
+                        "product_name": product_name,
+                        "product_code": f"PROD-{datetime.now().strftime('%Y%m%d%H%M%S')}"
+                    }).fetchone()
+                    product_id = new_product.product_id if new_product else None
+            
             # Create PO item (no final_amount column - use line_total for total)
             item_result = db.execute(text("""
                 INSERT INTO procurement.purchase_order_items (
@@ -224,8 +256,8 @@ async def create_direct_purchase_entry(purchase_data: dict, db: Session = Depend
                 ) RETURNING po_item_id
             """), {
                 "purchase_order_id": po_id,
-                "product_id": item.get("product_id"),
-                "product_name": item.get("product_name"),
+                "product_id": product_id,  # Use the resolved product_id
+                "product_name": product_name,
                 "quantity": item.get("quantity", 0),
                 "unit_price": item.get("unit_price", 0),
                 "disc_percent": item.get("discount_percent", 0),
@@ -379,6 +411,38 @@ async def create_purchase_with_items(purchase_data: dict, db: Session = Depends(
         items_created = 0
         
         for item in items:
+            # Get or create product_id if not provided
+            product_id = item.get("product_id")
+            product_name = item.get("product_name")
+            
+            if not product_id and product_name:
+                # Try to find existing product by name
+                existing_product = db.execute(text("""
+                    SELECT product_id FROM inventory.products 
+                    WHERE LOWER(product_name) = LOWER(:product_name)
+                    AND org_id = :org_id
+                    LIMIT 1
+                """), {"product_name": product_name, "org_id": current_user['org_id']}).fetchone()
+                
+                if existing_product:
+                    product_id = existing_product.product_id
+                else:
+                    # Create new product with minimal required fields
+                    new_product = db.execute(text("""
+                        INSERT INTO inventory.products (
+                            org_id, product_name, product_code,
+                            category_id, is_active, created_at
+                        ) VALUES (
+                            :org_id, :product_name, :product_code,
+                            1, true, CURRENT_TIMESTAMP
+                        ) RETURNING product_id
+                    """), {
+                        "org_id": current_user['org_id'],
+                        "product_name": product_name,
+                        "product_code": f"PROD-{datetime.now().strftime('%Y%m%d%H%M%S')}"
+                    }).fetchone()
+                    product_id = new_product.product_id if new_product else None
+            
             # Calculate item totals if not provided
             quantity = Decimal(str(item.get("ordered_quantity", 0)))
             cost_price = Decimal(str(item.get("cost_price", 0)))
@@ -414,8 +478,8 @@ async def create_purchase_with_items(purchase_data: dict, db: Session = Depends(
                 """),
                 {
                     "purchase_order_id": purchase_id,
-                    "product_id": item.get("product_id"),
-                    "product_name": item.get("product_name"),
+                    "product_id": product_id,  # Use the resolved product_id
+                    "product_name": product_name,
                     "ordered_qty": quantity,
                     "unit_price": cost_price,
                     "free_qty": item.get("free_quantity", 0),
