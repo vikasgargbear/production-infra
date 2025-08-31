@@ -118,20 +118,20 @@ const PartyLedgerV3: React.FC<PartyLedgerV3Props> = ({
   const [showAgingAnalysis, setShowAgingAnalysis] = useState(false);
   const [viewMode, setViewMode] = useState<'table' | 'summary' | 'analytics'>('table');
 
-  // Fetch party info
+  // Fetch party info - pass the entire customer object for ID extraction
   const { data: partyInfo, isLoading: loadingParty, error: partyError } = useQuery(
-    ['party-info', selectedParty?.id || initialPartyId],
-    () => partyLedgerAPI.getPartyInfo(selectedParty?.id || initialPartyId),
+    ['party-info', selectedParty || initialPartyId],
+    () => partyLedgerAPI.getPartyInfo(selectedParty || initialPartyId),
     {
-      enabled: !!(selectedParty?.id || initialPartyId)
+      enabled: !!(selectedParty || initialPartyId)
     }
   );
 
-  // Fetch ledger entries with summary
+  // Fetch ledger entries with summary - pass the entire customer object
   const { data: ledgerData, isLoading: loadingLedger, refetch, error: ledgerError } = useQuery(
-    ['party-ledger-v3', selectedParty?.id || initialPartyId, dateRange, filters],
+    ['party-ledger-v3', selectedParty || initialPartyId, dateRange, filters],
     () => partyLedgerAPI.getEnhancedLedger({
-      party_id: selectedParty?.id || initialPartyId,
+      party_id: selectedParty || initialPartyId,  // Pass entire object, not just .id
       party_type: partyType,
       date_from: format(dateRange.from, 'yyyy-MM-dd'),
       date_to: format(dateRange.to, 'yyyy-MM-dd'),
@@ -141,7 +141,7 @@ const PartyLedgerV3: React.FC<PartyLedgerV3Props> = ({
       include_aging: true
     }),
     {
-      enabled: !!(selectedParty?.id || initialPartyId)
+      enabled: !!(selectedParty || initialPartyId)
     }
   );
 

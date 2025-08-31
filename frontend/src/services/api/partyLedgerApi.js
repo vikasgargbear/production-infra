@@ -5,6 +5,12 @@ const BASE_URL = '/api/party-ledger';
 export const partyLedgerApi = {
   // Get party info (maps to getBalance for now)
   getPartyInfo: async (partyId) => {
+    // If partyId is undefined or null, check if we have a selected customer
+    if (!partyId) {
+      console.log('[PartyLedgerAPI] getPartyInfo called with null/undefined');
+      return { balance: 0, transaction_count: 0 };
+    }
+    
     // Extract ID from various possible formats
     let actualId = partyId;
     
