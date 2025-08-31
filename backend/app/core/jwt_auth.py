@@ -48,11 +48,25 @@ async def get_current_user_and_org(token: str = Depends(oauth2_scheme)):
     )
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        username: str = payload.get("sub")
+        user_id: str = payload.get("user_id")
+        email: str = payload.get("email")
         org_id: str = payload.get("org_id")
-        if username is None:
+        branch_id: int = payload.get("branch_id")
+        role: str = payload.get("role")
+        
+        if not user_id and not email:
             raise credentials_exception
-        return {"username": username, "org_id": org_id}
+            
+        return {
+            "user_id": user_id,
+            "email": email,
+            "username": email,  # Keep for backward compatibility
+            "org_id": org_id,
+            "branch_id": branch_id,
+            "role": role,
+            "full_name": payload.get("full_name"),
+            "org_name": payload.get("org_name")
+        }
     except JWTError:
         raise credentials_exception
 

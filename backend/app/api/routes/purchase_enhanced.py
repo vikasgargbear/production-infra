@@ -11,6 +11,7 @@ from decimal import Decimal
 
 from ...core.database import get_db
 from ...core.auth_utils import get_org_id_from_header
+from ...core.jwt_auth import get_current_user_and_org
 
 logger = logging.getLogger(__name__)
 
@@ -161,8 +162,8 @@ def get_purchases(
         raise HTTPException(status_code=500, detail=f"Failed to fetch purchases: {str(e)}")
 
 @router.post("/direct-purchase-entry")
-def create_direct_purchase_entry(purchase_data: dict, db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)):
+async def create_direct_purchase_entry(purchase_data: dict, db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user_and_org)):
     """
     Direct Purchase Entry (Bill Entry) - When goods are received with supplier invoice
     This creates supplier invoice and adds stock to inventory via batches
@@ -184,14 +185,15 @@ def create_direct_purchase_entry(purchase_data: dict, db: Session = Depends(get_
                 po_status, receipt_status,
                 created_at
             ) VALUES (
-                :org_id, 1, :po_number, :po_date, 'regular',
+                :org_id, :branch_id, :po_number, :po_date, 'regular',
                 :supplier_id, :supplier_name,
                 :subtotal, :tax, :total,
                 'completed', 'received',
                 CURRENT_TIMESTAMP
             ) RETURNING purchase_order_id
         """), {
-            "org_id": org_id,
+            "org_id": current_user['org_id'],
+            "branch_id": current_user.get('branch_id'),
             "po_number": po_number,
             "po_date": purchase_data.get("purchase_date", datetime.now().date()),
             "supplier_id": purchase_data.get("supplier_id"),
@@ -249,7 +251,7 @@ def create_direct_purchase_entry(purchase_data: dict, db: Session = Depends(get_
                         CURRENT_TIMESTAMP
                     ) RETURNING batch_id
                 """), {
-                    "org_id": org_id,
+                    "org_id": current_user['org_id'],
                     "product_id": item.get("product_id"),
                     "supplier_id": purchase_data.get("supplier_id"),
                     "batch_number": item.get("batch_number"),
@@ -278,8 +280,8 @@ def create_direct_purchase_entry(purchase_data: dict, db: Session = Depends(get_
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/with-items")
-def create_purchase_with_items(purchase_data: dict, db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)):
+async def create_purchase_with_items(purchase_data: dict, db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user_and_org)):
     """
     Create a purchase order with line items
     Supports both manual entry and parsed invoice data
@@ -304,58 +306,17 @@ def create_purchase_with_items(purchase_data: dict, db: Session = Depends(get_db
             if supplier_result:
                 supplier_name = supplier_result.supplier_name
         
-        # Get or create system user if created_by not provided
-        created_by = purchase_data.get("created_by")
-        if not created_by:
-            # Try to get system user
-            user_result = db.execute(
-                text("""
-                    SELECT user_id FROM master.org_users 
-                    WHERE org_id = :org_id AND is_active = true
-                    ORDER BY user_id
-                    LIMIT 1
-                """),
-                {"org_id": org_id}
-            ).first()
-            
-            if user_result:
-                created_by = user_result.user_id
-            else:
-                # Create system user
-                try:
-                    create_user = db.execute(
-                        text("""
-                            INSERT INTO master.org_users (
-                                org_id, employee_code, username, email, password_hash,
-                                first_name, last_name, roles, is_active
-                            ) VALUES (
-                                :org_id, 'SYSTEM', 'system', 'system@api.local', 'no-login',
-                                'System', 'API', ARRAY['api_user'], true
-                            ) RETURNING user_id
-                        """),
-                        {"org_id": org_id}
-                    ).first()
-                    created_by = create_user.user_id if create_user else None
-                except:
-                    pass
-        
+        # Get created_by from JWT token user_id
+        created_by = purchase_data.get("created_by") or current_user.get('user_id')
         if not created_by:
             raise HTTPException(
                 status_code=400,
-                detail="Unable to determine user for this operation. Please provide created_by field."
+                detail="Unable to determine user for this operation."
             )
         
-        # Get default branch for organization - will always return a valid ID
-        from app.utils.branch_utils import get_default_branch_id
-        try:
-            branch_id = get_default_branch_id(db, org_id)
-            logger.info(f"Using branch_id {branch_id} for org {org_id}")
-        except Exception as e:
-            logger.error(f"Error getting branch_id: {str(e)}")
-            # Use a fallback branch_id based on org
-            import hashlib
-            branch_id = int(hashlib.md5(org_id.encode()).hexdigest()[:6], 16) % 10000 + 1
-            logger.info(f"Using fallback branch_id {branch_id} for org {org_id}")
+        # Get branch_id from JWT token (authentication context)
+        branch_id = current_user.get('branch_id')
+        logger.info(f"Using branch_id {branch_id} from JWT token for user {current_user.get('user_id')}")
         
         # Create purchase header
         result = db.execute(
@@ -375,7 +336,7 @@ def create_purchase_with_items(purchase_data: dict, db: Session = Depends(get_db
                 ) RETURNING purchase_order_id
             """),
             {
-                "org_id": org_id,
+                "org_id": current_user['org_id'],
                 "purchase_number": purchase_number,
                 "po_date": purchase_data.get("purchase_date", datetime.now().date()),
                 "supplier_id": purchase_data.get("supplier_id"),
@@ -552,11 +513,11 @@ def update_purchase_item(
         raise HTTPException(status_code=500, detail=f"Failed to update purchase item: {str(e)}")
 
 @router.post("/{purchase_id}/receive")
-def receive_purchase_items(
+async def receive_purchase_items(
     purchase_id: int,
     receive_data: dict,
     db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    current_user: dict = Depends(get_current_user_and_org)
 ):
     """
     Receive items from a purchase order
@@ -708,11 +669,11 @@ def receive_purchase_items(
         raise HTTPException(status_code=500, detail=f"Failed to receive items: {str(e)}")
 
 @router.post("/{purchase_id}/receive-fixed")
-def receive_purchase_items_fixed(
+async def receive_purchase_items_fixed(
     purchase_id: int,
     receive_data: dict,
     db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    current_user: dict = Depends(get_current_user_and_org)
 ):
     """
     Receive items - Fixed version that works with auto batch trigger

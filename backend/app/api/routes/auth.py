@@ -75,14 +75,27 @@ async def login(
     """), {"user_id": user.user_id})
     db.commit()
     
-    # Create access token
+    # Get user's branch_id - NEVER hardcode, get from user assignment or org default
+    branch_result = db.execute(text("""
+        SELECT b.branch_id 
+        FROM master.org_branches b
+        WHERE b.org_id = :org_id 
+        AND b.is_active = true
+        ORDER BY b.is_default_location DESC, b.branch_id
+        LIMIT 1
+    """), {"org_id": str(user.org_id)}).fetchone()
+    
+    branch_id = branch_result.branch_id if branch_result else None
+    
+    # Create access token with branch_id included
     access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     access_token = create_access_token(
         data={
             "user_id": user.user_id,
             "email": user.email,
             "org_id": str(user.org_id),
-            "role": user.role
+            "role": user.role,
+            "branch_id": branch_id  # Include branch_id in JWT token
         },
         expires_delta=access_token_expires
     )
