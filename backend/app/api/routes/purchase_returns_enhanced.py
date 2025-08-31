@@ -22,7 +22,8 @@ router = APIRouter(tags=["purchase-returns"])
 
 class PurchaseReturnCreate(BaseModel):
     """Purchase return request model"""
-    grn_id: Optional[int] = None
+    supplier_invoice_id: Optional[int] = None
+    grn_id: Optional[int] = None  # Optional, for backward compatibility
     supplier_id: int
     return_date: str
     return_reason: str
@@ -31,58 +32,90 @@ class PurchaseReturnCreate(BaseModel):
     transport_details: Optional[Dict[str, Any]] = {}
     notes: Optional[str] = ""
 
-@router.get("/grn/{grn_id}/returnable-items")
+@router.get("/supplier-invoice/{invoice_id}/returnable-items")
 async def get_returnable_items(
-    grn_id: int,
+    invoice_id: int,
     db: Session = Depends(get_db),
     org_id: str = Depends(get_org_id_from_header)
 ):
     """
-    Get GRN items with accurate returnable quantities
-    Similar to sales return endpoint
+    Get supplier invoice items with accurate returnable quantities
+    Works with both direct invoices and GRN-based invoices
     """
     try:
-        # Get GRN items with already returned quantities
+        # First try supplier_invoice_items table
         items = db.execute(
             text("""
                 SELECT 
-                    gi.grn_item_id,
-                    gi.product_id,
+                    sii.invoice_item_id,
+                    sii.product_id,
                     p.product_name,
-                    gi.batch_id,
-                    gi.batch_number,
-                    gi.received_quantity as grn_quantity,
-                    COALESCE(SUM(pri.return_quantity), 0) as already_returned,
-                    gi.received_quantity - COALESCE(SUM(pri.return_quantity), 0) as returnable_quantity,
-                    gi.unit_price,
-                    gi.discount_percent,
-                    gi.tax_percent,
-                    gi.total_amount,
+                    sii.batch_id,
+                    sii.batch_number,
+                    sii.quantity as invoice_quantity,
+                    COALESCE(sii.quantity_returned, 0) as already_returned,
+                    sii.quantity - COALESCE(sii.quantity_returned, 0) as returnable_quantity,
+                    sii.unit_price,
+                    sii.discount_percent,
+                    COALESCE(sii.cgst_percent, 0) + COALESCE(sii.sgst_percent, 0) + COALESCE(sii.igst_percent, 0) as tax_percent,
+                    sii.total_amount,
                     p.hsn_code,
-                    gi.uom as unit,
+                    sii.unit,
                     b.expiry_date,
                     b.manufacturing_date
-                FROM procurement.grn_items gi
-                JOIN inventory.products p ON gi.product_id = p.product_id
-                LEFT JOIN procurement.purchase_return_items pri ON gi.grn_item_id = pri.grn_item_id
-                LEFT JOIN inventory.batches b ON gi.batch_id = b.batch_id
-                WHERE gi.grn_id = :grn_id
-                GROUP BY gi.grn_item_id, p.product_name, p.hsn_code, b.expiry_date, b.manufacturing_date
-                HAVING gi.received_quantity - COALESCE(SUM(pri.return_quantity), 0) > 0
-                ORDER BY gi.grn_item_id
+                FROM procurement.supplier_invoice_items sii
+                JOIN inventory.products p ON sii.product_id = p.product_id
+                LEFT JOIN inventory.batches b ON sii.batch_id = b.batch_id
+                WHERE sii.supplier_invoice_id = :invoice_id
+                AND sii.quantity - COALESCE(sii.quantity_returned, 0) > 0
+                ORDER BY sii.invoice_item_id
             """),
-            {"grn_id": grn_id}
+            {"invoice_id": invoice_id}
         ).fetchall()
+        
+        # If no items in supplier_invoice_items, check if invoice has GRN
+        if not items:
+            # Get GRN items linked to this supplier invoice
+            items = db.execute(
+                text("""
+                    SELECT 
+                        gi.grn_item_id as invoice_item_id,
+                        gi.product_id,
+                        p.product_name,
+                        gi.batch_id,
+                        gi.batch_number,
+                        gi.received_quantity as invoice_quantity,
+                        COALESCE(gi.quantity_returned, 0) as already_returned,
+                        gi.received_quantity - COALESCE(gi.quantity_returned, 0) as returnable_quantity,
+                        gi.unit_price,
+                        gi.discount_percent,
+                        gi.tax_percent,
+                        gi.total_amount,
+                        p.hsn_code,
+                        gi.uom as unit,
+                        b.expiry_date,
+                        b.manufacturing_date
+                    FROM procurement.supplier_invoices si
+                    JOIN procurement.goods_receipt_notes grn ON si.grn_ids @> ARRAY[grn.grn_id]
+                    JOIN procurement.grn_items gi ON grn.grn_id = gi.grn_id
+                    JOIN inventory.products p ON gi.product_id = p.product_id
+                    LEFT JOIN inventory.batches b ON gi.batch_id = b.batch_id
+                    WHERE si.supplier_invoice_id = :invoice_id
+                    AND gi.received_quantity - COALESCE(gi.quantity_returned, 0) > 0
+                    ORDER BY gi.grn_item_id
+                """),
+                {"invoice_id": invoice_id}
+            ).fetchall()
         
         result = []
         for item in items:
             result.append({
-                "grn_item_id": item.grn_item_id,
+                "invoice_item_id": item.invoice_item_id,
                 "product_id": item.product_id,
                 "product_name": item.product_name,
                 "batch_id": item.batch_id,
                 "batch_number": item.batch_number,
-                "grn_quantity": float(item.grn_quantity),
+                "invoice_quantity": float(item.invoice_quantity),
                 "already_returned": float(item.already_returned),
                 "returnable_quantity": float(item.returnable_quantity),
                 "max_returnable_qty": float(item.returnable_quantity),
@@ -177,14 +210,14 @@ async def create_purchase_return(
             text("""
                 INSERT INTO procurement.purchase_returns (
                     org_id, branch_id, return_number, return_date, return_type,
-                    grn_id, supplier_id, return_reason, detailed_reason,
+                    supplier_invoice_id, grn_id, supplier_id, return_reason, detailed_reason,
                     return_amount, tax_amount, total_amount,
                     cgst_amount, sgst_amount, igst_amount,
                     debit_note_number, debit_note_date, debit_note_status,
                     notes, created_by
                 ) VALUES (
                     :org_id, :branch_id, :return_number, :return_date, 'PURCHASE',
-                    :grn_id, :supplier_id, :return_reason, :detailed_reason,
+                    :supplier_invoice_id, :grn_id, :supplier_id, :return_reason, :detailed_reason,
                     :return_amount, :tax_amount, :total_amount,
                     :cgst_amount, :sgst_amount, :igst_amount,
                     :debit_note_number, CURRENT_DATE, :debit_note_status,
@@ -196,6 +229,7 @@ async def create_purchase_return(
                 "branch_id": branch_id,
                 "return_number": return_number,
                 "return_date": return_dict["return_date"],
+                "supplier_invoice_id": return_dict.get("supplier_invoice_id"),
                 "grn_id": return_dict.get("grn_id"),
                 "supplier_id": return_dict["supplier_id"],
                 "return_reason": return_dict.get("return_reason"),
@@ -214,35 +248,47 @@ async def create_purchase_return(
         ).fetchone()
         
         return_id = return_result[0]
-        grn_id = return_dict.get("grn_id")
+        supplier_invoice_id = return_dict.get("supplier_invoice_id")
         
         # Process return items
         for item in return_dict["items"]:
             if not item.get("selected") or not item.get("return_quantity", 0):
                 continue
                 
-            grn_item_id = item.get("grn_item_id")
+            invoice_item_id = item.get("invoice_item_id")
+            grn_item_id = item.get("grn_item_id")  # For backward compatibility
             return_qty = Decimal(str(item.get("return_quantity", 0)))
             unit_price = Decimal(str(item.get("unit_price", 0)))
             
-            # Validate return quantity doesn't exceed GRN quantity
-            if grn_item_id:
+            # Validate return quantity doesn't exceed invoice quantity
+            if invoice_item_id:
+                # Check supplier_invoice_items first
                 already_returned = db.execute(
                     text("""
                         SELECT 
-                            gi.received_quantity as grn_qty,
-                            COALESCE(SUM(pri.return_quantity), 0) as already_returned
-                        FROM procurement.grn_items gi
-                        LEFT JOIN procurement.purchase_return_items pri 
-                            ON gi.grn_item_id = pri.grn_item_id
-                        WHERE gi.grn_item_id = :grn_item_id
-                        GROUP BY gi.received_quantity
+                            sii.quantity as invoice_qty,
+                            COALESCE(sii.quantity_returned, 0) as already_returned
+                        FROM procurement.supplier_invoice_items sii
+                        WHERE sii.invoice_item_id = :invoice_item_id
                     """),
-                    {"grn_item_id": grn_item_id}
+                    {"invoice_item_id": invoice_item_id}
                 ).fetchone()
                 
+                if not already_returned and grn_item_id:
+                    # Fallback to GRN items
+                    already_returned = db.execute(
+                        text("""
+                            SELECT 
+                                gi.received_quantity as invoice_qty,
+                                COALESCE(gi.quantity_returned, 0) as already_returned
+                            FROM procurement.grn_items gi
+                            WHERE gi.grn_item_id = :grn_item_id
+                        """),
+                        {"grn_item_id": grn_item_id}
+                    ).fetchone()
+                
                 if already_returned:
-                    max_returnable = Decimal(str(already_returned.grn_qty)) - Decimal(str(already_returned.already_returned))
+                    max_returnable = Decimal(str(already_returned.invoice_qty)) - Decimal(str(already_returned.already_returned))
                     if return_qty > max_returnable:
                         product_name = item.get("product_name", "Product")
                         raise HTTPException(

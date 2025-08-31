@@ -3352,4 +3352,241 @@ SELECT
 FROM procurement.grn_return_status
 WHERE return_count > 0
 ORDER BY grn_id DESC
-LIMIT 10;
+LIMIT 10;-- =============================================
+-- Add Supplier Invoice Items Table
+-- Required for proper purchase return tracking
+-- =============================================
+
+-- Create supplier_invoice_items table (similar to sales.invoice_items)
+CREATE TABLE IF NOT EXISTS procurement.supplier_invoice_items (
+    invoice_item_id SERIAL PRIMARY KEY,
+    supplier_invoice_id INTEGER NOT NULL REFERENCES procurement.supplier_invoices(supplier_invoice_id) ON DELETE CASCADE,
+    product_id INTEGER NOT NULL REFERENCES inventory.products(product_id),
+    batch_id INTEGER REFERENCES inventory.batches(batch_id),
+    batch_number TEXT,
+    quantity DECIMAL(18,3) NOT NULL,
+    free_quantity DECIMAL(18,3) DEFAULT 0,
+    unit_price DECIMAL(15,4) NOT NULL,
+    discount_percent DECIMAL(5,2) DEFAULT 0,
+    discount_amount DECIMAL(15,2) DEFAULT 0,
+    taxable_amount DECIMAL(15,2) NOT NULL,
+    cgst_percent DECIMAL(5,2) DEFAULT 0,
+    sgst_percent DECIMAL(5,2) DEFAULT 0,
+    igst_percent DECIMAL(5,2) DEFAULT 0,
+    cgst_amount DECIMAL(15,2) DEFAULT 0,
+    sgst_amount DECIMAL(15,2) DEFAULT 0,
+    igst_amount DECIMAL(15,2) DEFAULT 0,
+    total_amount DECIMAL(15,2) NOT NULL,
+    hsn_code TEXT,
+    unit TEXT DEFAULT 'PCS',
+    pack_type TEXT,
+    pack_size INTEGER DEFAULT 1,
+    quantity_returned DECIMAL(18,3) DEFAULT 0, -- Track returns
+    grn_item_id INTEGER REFERENCES procurement.grn_items(grn_item_id), -- Link to GRN if exists
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Create indexes
+CREATE INDEX IF NOT EXISTS idx_supplier_invoice_items_invoice 
+ON procurement.supplier_invoice_items(supplier_invoice_id);
+
+CREATE INDEX IF NOT EXISTS idx_supplier_invoice_items_product 
+ON procurement.supplier_invoice_items(product_id);
+
+CREATE INDEX IF NOT EXISTS idx_supplier_invoice_items_batch 
+ON procurement.supplier_invoice_items(batch_id);
+
+-- Add reference to supplier_invoice_id in purchase_returns
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns 
+        WHERE table_schema = 'procurement' 
+        AND table_name = 'purchase_returns'
+        AND column_name = 'supplier_invoice_item_id'
+    ) THEN
+        -- First, rename the existing supplier_invoice_id if it exists
+        IF EXISTS (
+            SELECT 1 FROM information_schema.columns 
+            WHERE table_schema = 'procurement' 
+            AND table_name = 'purchase_return_items'
+            AND column_name = 'supplier_invoice_id'
+        ) THEN
+            ALTER TABLE procurement.purchase_return_items 
+            RENAME COLUMN supplier_invoice_id TO supplier_invoice_item_id;
+        ELSE
+            ALTER TABLE procurement.purchase_return_items 
+            ADD COLUMN supplier_invoice_item_id INTEGER 
+            REFERENCES procurement.supplier_invoice_items(invoice_item_id);
+        END IF;
+        
+        COMMENT ON COLUMN procurement.purchase_return_items.supplier_invoice_item_id IS 
+        'Reference to supplier invoice line item';
+    END IF;
+END $$;
+
+-- Create view for supplier invoice return status
+CREATE OR REPLACE VIEW procurement.supplier_invoice_return_status AS
+SELECT 
+    si.supplier_invoice_id,
+    si.supplier_invoice_number,
+    si.invoice_date,
+    si.supplier_id,
+    s.supplier_name,
+    si.invoice_total as invoice_amount,
+    COUNT(DISTINCT pr.return_id) as return_count,
+    COALESCE(SUM(pr.total_amount), 0) as total_returned_amount,
+    CASE 
+        WHEN COUNT(pr.return_id) = 0 THEN 'NO_RETURNS'
+        WHEN SUM(pr.total_amount) >= si.invoice_total THEN 'FULLY_RETURNED'
+        ELSE 'PARTIALLY_RETURNED'
+    END as return_status,
+    GREATEST(0, si.invoice_total - COALESCE(SUM(pr.total_amount), 0)) as remaining_returnable_amount
+FROM procurement.supplier_invoices si
+LEFT JOIN parties.suppliers s ON si.supplier_id = s.supplier_id
+LEFT JOIN procurement.purchase_returns pr ON si.supplier_invoice_id = pr.supplier_invoice_id
+GROUP BY si.supplier_invoice_id, si.supplier_invoice_number, si.invoice_date, 
+         si.supplier_id, s.supplier_name, si.invoice_total;
+
+-- Function to update supplier_invoice_items.quantity_returned
+CREATE OR REPLACE FUNCTION procurement.update_supplier_invoice_item_returned()
+RETURNS TRIGGER AS $$
+BEGIN
+    IF TG_OP = 'INSERT' OR TG_OP = 'UPDATE' THEN
+        -- Update quantity_returned in supplier_invoice_items
+        IF NEW.supplier_invoice_item_id IS NOT NULL THEN
+            UPDATE procurement.supplier_invoice_items
+            SET quantity_returned = (
+                SELECT COALESCE(SUM(return_quantity), 0)
+                FROM procurement.purchase_return_items
+                WHERE supplier_invoice_item_id = NEW.supplier_invoice_item_id
+            )
+            WHERE invoice_item_id = NEW.supplier_invoice_item_id;
+        END IF;
+    ELSIF TG_OP = 'DELETE' THEN
+        -- Update quantity_returned in supplier_invoice_items
+        IF OLD.supplier_invoice_item_id IS NOT NULL THEN
+            UPDATE procurement.supplier_invoice_items
+            SET quantity_returned = (
+                SELECT COALESCE(SUM(return_quantity), 0)
+                FROM procurement.purchase_return_items
+                WHERE supplier_invoice_item_id = OLD.supplier_invoice_item_id
+            )
+            WHERE invoice_item_id = OLD.supplier_invoice_item_id;
+        END IF;
+    END IF;
+    
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Create trigger to update supplier_invoice_items
+DROP TRIGGER IF EXISTS update_supplier_invoice_returned_trigger ON procurement.purchase_return_items;
+CREATE TRIGGER update_supplier_invoice_returned_trigger
+AFTER INSERT OR UPDATE OR DELETE ON procurement.purchase_return_items
+FOR EACH ROW
+EXECUTE FUNCTION procurement.update_supplier_invoice_item_returned();
+
+-- Migration: If you have existing data, you might want to populate supplier_invoice_items
+-- from GRN items where supplier_invoice_id exists
+-- This is a sample migration query (adjust as needed):
+/*
+INSERT INTO procurement.supplier_invoice_items (
+    supplier_invoice_id, product_id, batch_id, batch_number,
+    quantity, unit_price, discount_percent, taxable_amount,
+    cgst_percent, sgst_percent, igst_percent,
+    cgst_amount, sgst_amount, igst_amount,
+    total_amount, hsn_code, unit, grn_item_id
+)
+SELECT 
+    si.supplier_invoice_id,
+    gi.product_id,
+    gi.batch_id,
+    gi.batch_number,
+    gi.received_quantity,
+    gi.unit_price,
+    gi.discount_percent,
+    gi.taxable_amount,
+    gi.cgst_percent,
+    gi.sgst_percent,
+    gi.igst_percent,
+    gi.cgst_amount,
+    gi.sgst_amount,
+    gi.igst_amount,
+    gi.total_amount,
+    p.hsn_code,
+    gi.uom,
+    gi.grn_item_id
+FROM procurement.supplier_invoices si
+JOIN procurement.goods_receipt_notes grn ON si.grn_ids @> ARRAY[grn.grn_id]
+JOIN procurement.grn_items gi ON grn.grn_id = gi.grn_id
+JOIN inventory.products p ON gi.product_id = p.product_id
+WHERE NOT EXISTS (
+    SELECT 1 FROM procurement.supplier_invoice_items sii
+    WHERE sii.supplier_invoice_id = si.supplier_invoice_id
+    AND sii.product_id = gi.product_id
+);
+*/
+
+SELECT 'Supplier invoice items table created successfully' as status;
+-- Section 28: Purchase Returns Enhancement for Supplier Invoices
+-- Add supplier_invoice_id to purchase_returns table
+ALTER TABLE procurement.purchase_returns
+ADD COLUMN IF NOT EXISTS supplier_invoice_id INTEGER REFERENCES procurement.supplier_invoices(supplier_invoice_id);
+
+-- Add invoice_item_id to purchase_return_items table
+ALTER TABLE procurement.purchase_return_items
+ADD COLUMN IF NOT EXISTS invoice_item_id INTEGER REFERENCES procurement.supplier_invoice_items(invoice_item_id);
+
+-- Create index for performance
+CREATE INDEX IF NOT EXISTS idx_purchase_returns_supplier_invoice ON procurement.purchase_returns(supplier_invoice_id);
+CREATE INDEX IF NOT EXISTS idx_purchase_return_items_invoice_item ON procurement.purchase_return_items(invoice_item_id);
+
+-- Update trigger to handle supplier_invoice_items quantity_returned
+CREATE OR REPLACE FUNCTION procurement.update_return_quantities()
+RETURNS TRIGGER AS $$
+BEGIN
+    IF TG_OP = 'INSERT' OR TG_OP = 'UPDATE' THEN
+        -- Update supplier_invoice_items if invoice_item_id is present
+        IF NEW.invoice_item_id IS NOT NULL THEN
+            UPDATE procurement.supplier_invoice_items
+            SET quantity_returned = COALESCE(quantity_returned, 0) + NEW.return_quantity
+            WHERE invoice_item_id = NEW.invoice_item_id;
+        END IF;
+        
+        -- Update grn_items if grn_item_id is present  
+        IF NEW.grn_item_id IS NOT NULL THEN
+            UPDATE procurement.grn_items
+            SET quantity_returned = COALESCE(quantity_returned, 0) + NEW.return_quantity
+            WHERE grn_item_id = NEW.grn_item_id;
+        END IF;
+        
+        RETURN NEW;
+    ELSIF TG_OP = 'DELETE' THEN
+        -- Reverse the quantity on deletion
+        IF OLD.invoice_item_id IS NOT NULL THEN
+            UPDATE procurement.supplier_invoice_items
+            SET quantity_returned = GREATEST(0, COALESCE(quantity_returned, 0) - OLD.return_quantity)
+            WHERE invoice_item_id = OLD.invoice_item_id;
+        END IF;
+        
+        IF OLD.grn_item_id IS NOT NULL THEN
+            UPDATE procurement.grn_items
+            SET quantity_returned = GREATEST(0, COALESCE(quantity_returned, 0) - OLD.return_quantity)
+            WHERE grn_item_id = OLD.grn_item_id;
+        END IF;
+        
+        RETURN OLD;
+    END IF;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Create trigger
+DROP TRIGGER IF EXISTS update_return_quantities_trigger ON procurement.purchase_return_items;
+CREATE TRIGGER update_return_quantities_trigger
+AFTER INSERT OR UPDATE OR DELETE ON procurement.purchase_return_items
+FOR EACH ROW
+EXECUTE FUNCTION procurement.update_return_quantities();
+
+SELECT 'Purchase returns enhanced for supplier invoices' as status;

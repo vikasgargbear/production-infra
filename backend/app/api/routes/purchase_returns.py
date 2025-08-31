@@ -260,6 +260,99 @@ async def get_purchase_items_for_return(
         logger.error(f"Error fetching purchase items: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+@router.get("/supplier-invoice/{invoice_id}/returnable-items")
+async def get_invoice_returnable_items(
+    invoice_id: int,
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)
+):
+    """
+    Get supplier invoice items with returnable quantities
+    Works whether items came from GRN or direct purchase entry
+    """
+    try:
+        # Check if supplier_invoice_items table has data
+        items = db.execute(
+            text("""
+                SELECT 
+                    sii.invoice_item_id,
+                    sii.product_id,
+                    p.product_name,
+                    sii.batch_id,
+                    sii.batch_number,
+                    sii.quantity as invoice_quantity,
+                    COALESCE(sii.quantity_returned, 0) as already_returned,
+                    sii.quantity - COALESCE(sii.quantity_returned, 0) as returnable_quantity,
+                    sii.unit_price,
+                    sii.discount_percent,
+                    COALESCE(sii.cgst_percent + sii.sgst_percent + sii.igst_percent, 0) as tax_percent,
+                    sii.total_amount,
+                    p.hsn_code,
+                    sii.unit
+                FROM procurement.supplier_invoice_items sii
+                JOIN inventory.products p ON sii.product_id = p.product_id
+                WHERE sii.supplier_invoice_id = :invoice_id
+                AND sii.quantity - COALESCE(sii.quantity_returned, 0) > 0
+                ORDER BY sii.invoice_item_id
+            """),
+            {"invoice_id": invoice_id}
+        ).fetchall()
+        
+        # If no items in supplier_invoice_items, try to get from GRN
+        if not items:
+            items = db.execute(
+                text("""
+                    SELECT 
+                        gi.grn_item_id as invoice_item_id,
+                        gi.product_id,
+                        p.product_name,
+                        gi.batch_id,
+                        gi.batch_number,
+                        gi.received_quantity as invoice_quantity,
+                        COALESCE(gi.quantity_returned, 0) as already_returned,
+                        gi.received_quantity - COALESCE(gi.quantity_returned, 0) as returnable_quantity,
+                        gi.unit_price,
+                        gi.discount_percent,
+                        gi.tax_percent,
+                        gi.total_amount,
+                        p.hsn_code,
+                        gi.uom as unit
+                    FROM procurement.supplier_invoices si
+                    JOIN procurement.goods_receipt_notes grn ON si.grn_ids @> ARRAY[grn.grn_id]
+                    JOIN procurement.grn_items gi ON grn.grn_id = gi.grn_id
+                    JOIN inventory.products p ON gi.product_id = p.product_id
+                    WHERE si.supplier_invoice_id = :invoice_id
+                    AND gi.received_quantity - COALESCE(gi.quantity_returned, 0) > 0
+                """),
+                {"invoice_id": invoice_id}
+            ).fetchall()
+        
+        result = []
+        for item in items:
+            result.append({
+                "invoice_item_id": item.invoice_item_id,
+                "product_id": item.product_id,
+                "product_name": item.product_name,
+                "batch_id": item.batch_id,
+                "batch_number": item.batch_number,
+                "invoice_quantity": float(item.invoice_quantity),
+                "already_returned": float(item.already_returned),
+                "returnable_quantity": float(item.returnable_quantity),
+                "max_returnable_qty": float(item.returnable_quantity),
+                "unit_price": float(item.unit_price) if item.unit_price else 0,
+                "discount_percent": float(item.discount_percent) if item.discount_percent else 0,
+                "tax_percent": float(item.tax_percent) if item.tax_percent else 0,
+                "hsn_code": item.hsn_code,
+                "unit": item.unit,
+                "can_return": float(item.returnable_quantity) > 0
+            })
+        
+        return {"items": result}
+        
+    except Exception as e:
+        logger.error(f"Error fetching returnable items: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 @router.post("/")
 async def create_purchase_return(
     return_data: dict,

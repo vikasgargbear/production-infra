@@ -15,7 +15,7 @@ from ...core.auth_utils import get_org_id_from_header
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/party-ledger", tags=["party-ledger"])
+router = APIRouter(tags=["party-ledger"])
 
 @router.get("/balance/{party_id}")
 async def get_party_balance(
