@@ -26,6 +26,7 @@ import { PURCHASE_CONFIG } from '../../config/purchase.config';
 import PDFUploadModal from '../PDFUploadModal';
 import PDFUploadCard from '../global/ui/PDFUploadCard';
 import BulkUploadInline from './BulkUploadInline';
+import PDFVerificationFlow from './PDFVerificationFlow';
 
 /**
  * EnhancedPurchaseEntry - Purchase Entry using the full global document system
@@ -44,6 +45,8 @@ const EnhancedPurchaseEntry = ({ onClose, prefilledData = null }) => {
   const [showProductModal, setShowProductModal] = useState(false);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [showPDFUpload, setShowPDFUpload] = useState(false);
+  const [showVerificationFlow, setShowVerificationFlow] = useState(false);
+  const [extractedPDFData, setExtractedPDFData] = useState(null);
   const [createdPurchaseData, setCreatedPurchaseData] = useState(null);
   const [saving, setSaving] = useState(false);
   const [errors, setErrors] = useState({});
@@ -232,47 +235,52 @@ const EnhancedPurchaseEntry = ({ onClose, prefilledData = null }) => {
   };
 
   const handleBulkUpload = (products) => {
-    // Process multiple products from bulk upload/PDF parse
-    const newItems = products.map((product, index) => ({
-      id: Date.now() + index + Math.random(), // Unique ID for tracking
-      product_id: product.product_id || product.id || null, // Might not have ID from PDF parse
-      product_name: product.product_name || product.name || '',
-      product_code: product.product_code,
-      hsn_code: product.hsn_code || '',
-      // Batch information - capture from all possible sources
-      batch_no: product.batch_no || product.batch_number || product.batch || '',
-      batch_number: product.batch_no || product.batch_number || product.batch || '',
-      // Dates
-      expiry_date: product.expiry_date || product.expiry || '',
-      manufacturing_date: product.manufacturing_date || product.mfg_date || '',
-      // Quantities  
-      quantity: parseFloat(product.quantity) || 1,
-      free_quantity: parseFloat(product.free_quantity || product.free) || 0,
-      // Pricing - check multiple field names from parser
-      mrp: parseFloat(product.mrp) || 0,
-      purchase_price: parseFloat(product.purchase_price || product.cost_price || product.rate) || (parseFloat(product.mrp) || 0) * 0.7,
-      selling_price: parseFloat(product.selling_price || product.sale_price) || parseFloat(product.mrp) || 0,
-      sale_price: parseFloat(product.sale_price || product.selling_price) || parseFloat(product.mrp) || 0,
-      // Discounts and taxes
-      discount_percent: parseFloat(product.discount_percent || product.discount) || 0,
-      tax_percent: parseFloat(product.tax_percent || product.gst_percent || product.tax_rate) || 12,
-      tax_amount: parseFloat(product.tax_amount) || 0,
-      // Pack information
-      pack_type: product.pack_type || product.packaging_type || 'STRIP',
-      pack_size: product.pack_size || product.units_per_pack || 10,
-      strips_per_box: product.strips_per_box || product.packages_per_box || 10,
-      // Additional info
-      category: product.category || '',
-      brand_name: product.brand_name || product.brand || '',
-      unit: product.unit || product.uom || 'Strip'
-    }));
+    // For bulk upload, skip supplier verification and go directly to product verification
+    // Check if supplier is already selected
+    if (!purchase.supplier_id) {
+      toast.error('Please select a supplier first');
+      return;
+    }
+
+    const bulkData = {
+      supplier_id: purchase.supplier_id,
+      supplier_name: purchase.supplier_name,
+      invoice_number: purchase.supplier_invoice_number,
+      invoice_date: purchase.invoice_date,
+      items: products.map((product, index) => ({
+        // Core product info
+        product_id: product.product_id || product.id || null,
+        product_name: product.product_name || product.name || '',
+        product_code: product.product_code,
+        hsn_code: product.hsn_code || '',
+        // Batch information
+        batch_number: product.batch_no || product.batch_number || product.batch || '',
+        expiry_date: product.expiry_date || product.expiry || '',
+        manufacturing_date: product.manufacturing_date || product.mfg_date || '',
+        // Quantities  
+        quantity: parseFloat(product.quantity) || 1,
+        free_quantity: parseFloat(product.free_quantity || product.free) || 0,
+        // Pricing
+        mrp: parseFloat(product.mrp) || 0,
+        cost_price: parseFloat(product.purchase_price || product.cost_price || product.rate) || (parseFloat(product.mrp) || 0) * 0.7,
+        selling_price: parseFloat(product.selling_price || product.sale_price) || parseFloat(product.mrp) || 0,
+        // Discounts and taxes
+        discount_percent: parseFloat(product.discount_percent || product.discount) || 0,
+        tax_percent: parseFloat(product.tax_percent || product.gst_percent || product.tax_rate) || 12,
+        // Pack information
+        pack_type: product.pack_type || product.packaging_type || 'STRIP',
+        pack_size: product.pack_size || product.units_per_pack || 10,
+        // Additional info
+        category: product.category || '',
+        brand_name: product.brand_name || product.brand || '',
+        unit: product.unit || product.uom || 'Strip'
+      })),
+      isBulkUpload: true // Flag to skip supplier verification in the flow
+    };
     
-    setPurchase(prev => ({
-      ...prev,
-      items: [...(prev.items || []), ...newItems]
-    }));
-    
-    toast.success(`Added ${products.length} products from bulk upload`);
+    setExtractedPDFData(bulkData);
+    setShowVerificationFlow(true);
+    toast.info(`Verify ${products.length} products from bulk upload`);
   };
 
   const handleUpdateItem = (index, field, value) => {
@@ -447,34 +455,60 @@ const EnhancedPurchaseEntry = ({ onClose, prefilledData = null }) => {
       if (response && response.data) {
         const extractedData = response.data;
         
-        // Update purchase with extracted data
-        setPurchase(prev => ({
-          ...prev,
-          supplier_invoice_number: extractedData.invoice_number || prev.supplier_invoice_number,
-          invoice_date: extractedData.invoice_date || prev.invoice_date,
-          items: extractedData.items || prev.items,
-          gross_amount: extractedData.gross_amount || prev.gross_amount,
-          tax_amount: extractedData.tax_amount || prev.tax_amount,
-          net_amount: extractedData.net_amount || prev.net_amount,
-          final_amount: extractedData.final_amount || prev.final_amount
-        }));
+        // Store extracted data and show verification flow
+        setExtractedPDFData({
+          ...extractedData,
+          supplier_name: extractedData.supplier_name,
+          supplier_gstin: extractedData.supplier_gstin,
+          supplier_address: extractedData.supplier_address,
+          invoice_number: extractedData.invoice_number,
+          invoice_date: extractedData.invoice_date,
+          items: extractedData.items || [],
+          gross_amount: extractedData.gross_amount || 0,
+          tax_amount: extractedData.tax_amount || 0,
+          final_amount: extractedData.final_amount || extractedData.total_amount || 0
+        });
         
-        // Update supplier if extracted
-        if (extractedData.supplier_id) {
-          setSelectedSupplier(extractedData.supplier_details);
-          setPurchase(prev => ({
-            ...prev,
-            supplier_id: extractedData.supplier_id,
-            supplier_name: extractedData.supplier_name
-          }));
-        }
+        setShowPDFUpload(false); // Close PDF upload modal
+        setShowVerificationFlow(true); // Show verification flow
         
-        toast.success('PDF data extracted successfully!');
+        toast.success('PDF parsed! Please verify the extracted information.');
       }
     } catch (error) {
       console.error('Error uploading PDF:', error);
       toast.error('Failed to parse PDF. Please try again.');
     }
+  };
+
+  // Handle verified data from verification flow
+  const handleVerificationComplete = (verifiedData) => {
+    // Update purchase with verified data
+    setPurchase(prev => ({
+      ...prev,
+      supplier_invoice_number: verifiedData.invoice_number || prev.supplier_invoice_number,
+      invoice_date: verifiedData.invoice_date || prev.invoice_date,
+      supplier_id: verifiedData.supplier_id,
+      supplier_name: verifiedData.supplier_name,
+      items: verifiedData.items || [],
+      gross_amount: verifiedData.gross_amount || 0,
+      tax_amount: verifiedData.tax_amount || 0,
+      net_amount: verifiedData.net_amount || 0,
+      final_amount: verifiedData.final_amount || 0
+    }));
+    
+    // Update supplier
+    if (verifiedData.supplier_id) {
+      setSelectedSupplier({
+        supplier_id: verifiedData.supplier_id,
+        supplier_name: verifiedData.supplier_name,
+        gstin: verifiedData.supplier_gstin,
+        address: verifiedData.supplier_address
+      });
+    }
+    
+    setShowVerificationFlow(false);
+    setExtractedPDFData(null);
+    toast.success('Data verified and loaded successfully!');
   };
 
   // Create content for step 1
@@ -1140,6 +1174,18 @@ const EnhancedPurchaseEntry = ({ onClose, prefilledData = null }) => {
             }
             
             toast.success('PDF data extracted successfully! Review the details below.');
+          }}
+        />
+      )}
+
+      {/* PDF Verification Flow Modal */}
+      {showVerificationFlow && extractedPDFData && (
+        <PDFVerificationFlow
+          extractedData={extractedPDFData}
+          onComplete={handleVerificationComplete}
+          onCancel={() => {
+            setShowVerificationFlow(false);
+            setExtractedPDFData(null);
           }}
         />
       )}

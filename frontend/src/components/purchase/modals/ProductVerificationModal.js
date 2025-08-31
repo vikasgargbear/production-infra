@@ -1,0 +1,587 @@
+import React, { useState, useEffect } from 'react';
+import { 
+  Package, Search, CheckCircle, AlertCircle, ChevronLeft, 
+  ChevronRight, Calendar, Hash, DollarSign, Percent, Info,
+  SkipForward, Save, AlertTriangle
+} from 'lucide-react';
+import { purchasesApi } from '../../../services/api/modules/purchases.api';
+import { debounce } from 'lodash';
+
+/**
+ * ProductVerificationModal - Verify single product with search and validation
+ */
+const ProductVerificationModal = ({ 
+  product, 
+  productIndex,
+  totalProducts,
+  onVerified, 
+  onSkip,
+  onPrevious,
+  onNext
+}) => {
+  const [searchTerm, setSearchTerm] = useState(product?.product_name || '');
+  const [searchResults, setSearchResults] = useState([]);
+  const [selectedProduct, setSelectedProduct] = useState(null);
+  const [searching, setSearching] = useState(false);
+  const [mode, setMode] = useState('search'); // 'search', 'selected', 'new'
+  
+  // Editable product data
+  const [productData, setProductData] = useState({
+    product_id: product?.product_id || null,
+    product_name: product?.product_name || '',
+    batch_number: product?.batch_number || '',
+    expiry_date: product?.expiry_date || '',
+    quantity: product?.quantity || '',
+    cost_price: product?.cost_price || product?.rate || '',
+    mrp: product?.mrp || '',
+    selling_price: product?.selling_price || '',
+    tax_percent: product?.tax_percent || 12,
+    hsn_code: product?.hsn_code || '',
+    free_quantity: product?.free_quantity || 0,
+    discount_percent: product?.discount_percent || 0
+  });
+
+  const [validationErrors, setValidationErrors] = useState([]);
+  const [validationWarnings, setValidationWarnings] = useState([]);
+
+  // Search for product on mount
+  useEffect(() => {
+    if (product?.product_name) {
+      searchProduct(product.product_name);
+    }
+  }, [product]);
+
+  // Search products
+  const searchProduct = React.useCallback(
+    debounce(async (term) => {
+      if (!term || term.length < 2) return;
+
+      setSearching(true);
+      try {
+        const response = await purchasesApi.searchProducts({ 
+          product_name: term 
+        });
+        if (response && response.data) {
+          setSearchResults(response.data.products || []);
+          
+          // Auto-select if exact match found
+          const exactMatch = response.data.products?.find(p => p.is_exact_match);
+          if (exactMatch) {
+            selectProduct(exactMatch);
+          }
+        }
+      } catch (error) {
+        console.error('Search error:', error);
+      } finally {
+        setSearching(false);
+      }
+    }, 300),
+    []
+  );
+
+  // Select existing product
+  const selectProduct = (existingProduct) => {
+    setSelectedProduct(existingProduct);
+    setMode('selected');
+    
+    // Update product data with existing product info
+    setProductData(prev => ({
+      ...prev,
+      product_id: existingProduct.product_id,
+      product_name: existingProduct.product_name,
+      hsn_code: existingProduct.hsn_code || prev.hsn_code,
+      // Suggest last pricing but keep extracted values if available
+      cost_price: prev.cost_price || existingProduct.last_cost || '',
+      mrp: prev.mrp || existingProduct.last_mrp || ''
+    }));
+
+    // Auto-calculate selling price if not set
+    if (!productData.selling_price && productData.mrp) {
+      setProductData(prev => ({
+        ...prev,
+        selling_price: (parseFloat(prev.mrp) * 0.9).toFixed(2)
+      }));
+    }
+  };
+
+  // Create new product
+  const createNewProduct = () => {
+    setMode('new');
+    setSelectedProduct(null);
+    setProductData(prev => ({
+      ...prev,
+      product_id: null
+    }));
+  };
+
+  // Auto-calculate prices
+  useEffect(() => {
+    if (productData.cost_price && !productData.mrp) {
+      setProductData(prev => ({
+        ...prev,
+        mrp: (parseFloat(prev.cost_price) * 1.5).toFixed(2)
+      }));
+    }
+  }, [productData.cost_price]);
+
+  useEffect(() => {
+    if (productData.mrp && !productData.selling_price) {
+      setProductData(prev => ({
+        ...prev,
+        selling_price: (parseFloat(prev.mrp) * 0.9).toFixed(2)
+      }));
+    }
+  }, [productData.mrp]);
+
+  // Validate product data
+  const validateProduct = () => {
+    const errors = [];
+    const warnings = [];
+
+    // Required fields
+    if (!productData.product_name) errors.push('Product name is required');
+    if (!productData.quantity || productData.quantity <= 0) errors.push('Quantity must be greater than 0');
+    if (!productData.cost_price || productData.cost_price <= 0) errors.push('Cost price must be greater than 0');
+    if (!productData.batch_number) errors.push('Batch number is required');
+    if (!productData.expiry_date) errors.push('Expiry date is required');
+
+    // Price logic
+    if (productData.mrp && productData.cost_price) {
+      if (parseFloat(productData.mrp) < parseFloat(productData.cost_price)) {
+        errors.push('MRP cannot be less than cost price');
+      }
+    }
+    
+    if (productData.selling_price && productData.mrp) {
+      if (parseFloat(productData.selling_price) > parseFloat(productData.mrp)) {
+        errors.push('Selling price cannot be greater than MRP');
+      }
+    }
+
+    // Expiry warning
+    if (productData.expiry_date) {
+      const expiry = new Date(productData.expiry_date);
+      const today = new Date();
+      const monthsUntilExpiry = (expiry - today) / (1000 * 60 * 60 * 24 * 30);
+      
+      if (monthsUntilExpiry < 3) {
+        warnings.push('Product expires in less than 3 months');
+      }
+      if (monthsUntilExpiry < 0) {
+        errors.push('Product is already expired');
+      }
+    }
+
+    setValidationErrors(errors);
+    setValidationWarnings(warnings);
+
+    return errors.length === 0;
+  };
+
+  // Handle save
+  const handleSave = () => {
+    if (!validateProduct()) {
+      return;
+    }
+
+    onVerified({
+      ...productData,
+      isNewProduct: mode === 'new',
+      verified: true
+    });
+  };
+
+  return (
+    <div className="space-y-6">
+      {/* Progress indicator */}
+      <div className="flex items-center justify-between mb-4">
+        <h3 className="text-lg font-medium">
+          Product {productIndex + 1} of {totalProducts}
+        </h3>
+        <div className="flex items-center space-x-2">
+          {Array.from({ length: totalProducts }, (_, i) => (
+            <div
+              key={i}
+              className={`w-2 h-2 rounded-full ${
+                i === productIndex ? 'bg-indigo-600' : 
+                i < productIndex ? 'bg-green-500' : 'bg-gray-300'
+              }`}
+            />
+          ))}
+        </div>
+      </div>
+
+      {/* Search Section */}
+      <div className="bg-gray-50 rounded-lg p-4">
+        <div className="flex items-center space-x-3 mb-3">
+          <Search className="w-5 h-5 text-gray-600" />
+          <input
+            type="text"
+            value={searchTerm}
+            onChange={(e) => {
+              setSearchTerm(e.target.value);
+              searchProduct(e.target.value);
+            }}
+            placeholder="Search for product..."
+            className="flex-1 px-3 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500"
+          />
+          {searching && (
+            <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-indigo-600"></div>
+          )}
+        </div>
+
+        {/* Search Results */}
+        {searchResults.length > 0 && mode === 'search' && (
+          <div className="space-y-2 max-h-40 overflow-y-auto">
+            {searchResults.map((result) => (
+              <div
+                key={result.product_id}
+                onClick={() => selectProduct(result)}
+                className="p-2 bg-white rounded border hover:bg-indigo-50 hover:border-indigo-300 cursor-pointer"
+              >
+                <div className="flex items-center justify-between">
+                  <div className="flex-1">
+                    <p className="text-sm font-medium">{result.product_name}</p>
+                    <p className="text-xs text-gray-500">
+                      {result.last_batch && `Last: Batch ${result.last_batch}`}
+                      {result.last_mrp && ` • MRP ₹${result.last_mrp}`}
+                    </p>
+                  </div>
+                  {result.is_exact_match && (
+                    <span className="text-xs bg-green-100 text-green-700 px-2 py-1 rounded">
+                      Exact Match
+                    </span>
+                  )}
+                </div>
+              </div>
+            ))}
+            <button
+              onClick={createNewProduct}
+              className="w-full p-2 text-center text-sm text-indigo-600 hover:bg-indigo-50 rounded"
+            >
+              + Create as new product
+            </button>
+          </div>
+        )}
+
+        {/* Selected/New Product Indicator */}
+        {mode === 'selected' && selectedProduct && (
+          <div className="mt-3 p-2 bg-green-50 rounded-lg flex items-center justify-between">
+            <div className="flex items-center space-x-2">
+              <CheckCircle className="w-4 h-4 text-green-600" />
+              <span className="text-sm text-green-700">
+                Using existing product (ID: {selectedProduct.product_id})
+              </span>
+            </div>
+            <button
+              onClick={() => setMode('search')}
+              className="text-xs text-green-600 hover:text-green-700"
+            >
+              Change
+            </button>
+          </div>
+        )}
+
+        {mode === 'new' && (
+          <div className="mt-3 p-2 bg-blue-50 rounded-lg flex items-center justify-between">
+            <div className="flex items-center space-x-2">
+              <Info className="w-4 h-4 text-blue-600" />
+              <span className="text-sm text-blue-700">
+                New product will be created
+              </span>
+            </div>
+            <button
+              onClick={() => setMode('search')}
+              className="text-xs text-blue-600 hover:text-blue-700"
+            >
+              Search Again
+            </button>
+          </div>
+        )}
+      </div>
+
+      {/* Product Details Form */}
+      <div className="space-y-4">
+        <div className="grid grid-cols-2 gap-4">
+          {/* Product Name */}
+          <div className="col-span-2">
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Product Name <span className="text-red-500">*</span>
+            </label>
+            <input
+              type="text"
+              value={productData.product_name}
+              onChange={(e) => setProductData(prev => ({ 
+                ...prev, 
+                product_name: e.target.value 
+              }))}
+              className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500"
+              disabled={mode === 'selected'}
+            />
+          </div>
+
+          {/* Batch Number */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Batch Number <span className="text-red-500">*</span>
+            </label>
+            <div className="relative">
+              <Hash className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
+              <input
+                type="text"
+                value={productData.batch_number}
+                onChange={(e) => setProductData(prev => ({ 
+                  ...prev, 
+                  batch_number: e.target.value 
+                }))}
+                className="w-full pl-10 pr-3 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500"
+              />
+            </div>
+          </div>
+
+          {/* Expiry Date */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Expiry Date <span className="text-red-500">*</span>
+            </label>
+            <div className="relative">
+              <Calendar className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
+              <input
+                type="date"
+                value={productData.expiry_date}
+                onChange={(e) => setProductData(prev => ({ 
+                  ...prev, 
+                  expiry_date: e.target.value 
+                }))}
+                min={new Date().toISOString().split('T')[0]}
+                className="w-full pl-10 pr-3 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500"
+              />
+            </div>
+          </div>
+
+          {/* Quantity */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Quantity <span className="text-red-500">*</span>
+            </label>
+            <input
+              type="number"
+              value={productData.quantity}
+              onChange={(e) => setProductData(prev => ({ 
+                ...prev, 
+                quantity: e.target.value 
+              }))}
+              min="0"
+              className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500"
+            />
+          </div>
+
+          {/* Free Quantity */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Free Quantity
+            </label>
+            <input
+              type="number"
+              value={productData.free_quantity}
+              onChange={(e) => setProductData(prev => ({ 
+                ...prev, 
+                free_quantity: e.target.value 
+              }))}
+              min="0"
+              className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500"
+            />
+          </div>
+
+          {/* Cost Price */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Cost Price <span className="text-red-500">*</span>
+            </label>
+            <div className="relative">
+              <DollarSign className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
+              <input
+                type="number"
+                value={productData.cost_price}
+                onChange={(e) => setProductData(prev => ({ 
+                  ...prev, 
+                  cost_price: e.target.value 
+                }))}
+                min="0"
+                step="0.01"
+                className="w-full pl-10 pr-3 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500"
+              />
+            </div>
+          </div>
+
+          {/* MRP */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              MRP
+            </label>
+            <div className="relative">
+              <DollarSign className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
+              <input
+                type="number"
+                value={productData.mrp}
+                onChange={(e) => setProductData(prev => ({ 
+                  ...prev, 
+                  mrp: e.target.value 
+                }))}
+                min="0"
+                step="0.01"
+                className="w-full pl-10 pr-3 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500"
+              />
+            </div>
+          </div>
+
+          {/* Selling Price */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Selling Price (PTR)
+            </label>
+            <div className="relative">
+              <DollarSign className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
+              <input
+                type="number"
+                value={productData.selling_price}
+                onChange={(e) => setProductData(prev => ({ 
+                  ...prev, 
+                  selling_price: e.target.value 
+                }))}
+                min="0"
+                step="0.01"
+                className="w-full pl-10 pr-3 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500"
+              />
+            </div>
+          </div>
+
+          {/* Tax Percent */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Tax %
+            </label>
+            <div className="relative">
+              <Percent className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
+              <select
+                value={productData.tax_percent}
+                onChange={(e) => setProductData(prev => ({ 
+                  ...prev, 
+                  tax_percent: e.target.value 
+                }))}
+                className="w-full pl-10 pr-3 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500"
+              >
+                <option value="0">0%</option>
+                <option value="5">5%</option>
+                <option value="12">12%</option>
+                <option value="18">18%</option>
+                <option value="28">28%</option>
+              </select>
+            </div>
+          </div>
+
+          {/* HSN Code */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              HSN Code
+            </label>
+            <input
+              type="text"
+              value={productData.hsn_code}
+              onChange={(e) => setProductData(prev => ({ 
+                ...prev, 
+                hsn_code: e.target.value 
+              }))}
+              className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500"
+            />
+          </div>
+
+          {/* Discount */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Discount %
+            </label>
+            <input
+              type="number"
+              value={productData.discount_percent}
+              onChange={(e) => setProductData(prev => ({ 
+                ...prev, 
+                discount_percent: e.target.value 
+              }))}
+              min="0"
+              max="100"
+              className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500"
+            />
+          </div>
+        </div>
+
+        {/* Validation Messages */}
+        {validationErrors.length > 0 && (
+          <div className="p-3 bg-red-50 rounded-lg">
+            <div className="flex items-start space-x-2">
+              <AlertCircle className="w-4 h-4 text-red-600 mt-0.5" />
+              <div className="text-sm text-red-700">
+                <p className="font-medium mb-1">Please fix the following errors:</p>
+                <ul className="list-disc list-inside space-y-1">
+                  {validationErrors.map((error, i) => (
+                    <li key={i}>{error}</li>
+                  ))}
+                </ul>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {validationWarnings.length > 0 && (
+          <div className="p-3 bg-yellow-50 rounded-lg">
+            <div className="flex items-start space-x-2">
+              <AlertTriangle className="w-4 h-4 text-yellow-600 mt-0.5" />
+              <div className="text-sm text-yellow-700">
+                <p className="font-medium mb-1">Warnings:</p>
+                <ul className="list-disc list-inside space-y-1">
+                  {validationWarnings.map((warning, i) => (
+                    <li key={i}>{warning}</li>
+                  ))}
+                </ul>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Action Buttons */}
+      <div className="flex justify-between pt-4 border-t">
+        <button
+          onClick={onPrevious}
+          disabled={productIndex === 0}
+          className="px-4 py-2 text-gray-600 hover:text-gray-800 disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          <ChevronLeft className="w-4 h-4 inline mr-1" />
+          Previous
+        </button>
+
+        <div className="flex space-x-3">
+          <button
+            onClick={onSkip}
+            className="px-4 py-2 text-gray-600 hover:text-gray-800"
+          >
+            <SkipForward className="w-4 h-4 inline mr-1" />
+            Skip
+          </button>
+          
+          <button
+            onClick={handleSave}
+            className="px-6 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 flex items-center space-x-2"
+          >
+            <Save className="w-4 h-4" />
+            <span>
+              {productIndex < totalProducts - 1 ? 'Save & Next' : 'Save & Review'}
+            </span>
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export default ProductVerificationModal;
