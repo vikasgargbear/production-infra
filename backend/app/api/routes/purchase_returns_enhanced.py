@@ -161,14 +161,14 @@ async def create_purchase_return(
         debit_note_no = None
         supplier = db.execute(
             text("""
-                SELECT supplier_id, supplier_name, gstin
+                SELECT supplier_id, supplier_name, gst_number
                 FROM parties.suppliers
                 WHERE supplier_id = :supplier_id
             """),
             {"supplier_id": return_dict["supplier_id"]}
         ).fetchone()
         
-        if supplier and supplier.gstin:
+        if supplier and supplier.gst_number:
             debit_note_no = f"DN-{datetime.now().strftime('%Y%m%d-%H%M%S')}"
         
         # Calculate totals

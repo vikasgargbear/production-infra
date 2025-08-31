@@ -38,7 +38,7 @@ async def get_returnable_invoices(
                 si.invoice_date,
                 si.supplier_id,
                 s.supplier_name,
-                s.gstin as supplier_gst,
+                s.gst_number as supplier_gst,
                 si.total_amount as invoice_amount,
                 si.grn_ids,
                 -- Count items from supplier_invoice_items or GRN items
@@ -112,7 +112,7 @@ async def get_invoice_details(
                 SELECT 
                     si.*,
                     s.supplier_name,
-                    s.gstin as supplier_gst,
+                    s.gst_number as supplier_gst,
                     s.phone as supplier_phone,
                     s.address as supplier_address
                 FROM procurement.supplier_invoices si

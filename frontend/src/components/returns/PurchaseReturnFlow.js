@@ -62,6 +62,52 @@ const PurchaseReturnFlow = ({ onClose }) => {
   const [returnableInvoices, setReturnableInvoices] = useState([]);
   const [returnReasons, setReturnReasons] = useState([]);
 
+  // Keyboard shortcuts - Enterprise patterns
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      // Ctrl/Cmd + Key combinations
+      if (e.ctrlKey || e.metaKey) {
+        switch(e.key) {
+          case 'r':
+            e.preventDefault();
+            if (supplierSearchRef.current) {
+              supplierSearchRef.current.focus();
+            }
+            break;
+          case 'i':
+            e.preventDefault();
+            if (purchaseSearchRef.current) {
+              purchaseSearchRef.current.focus();
+            }
+            break;
+          case 's':
+            e.preventDefault();
+            if (currentStep === 1) {
+              handleProceedToReview();
+            } else if (currentStep === 2) {
+              handleSaveReturn();
+            }
+            break;
+          case 'p':
+            e.preventDefault();
+            if (currentStep === 2) {
+              handlePrint();
+            }
+            break;
+        }
+      }
+      
+      // Escape to close or go back
+      if (e.key === 'Escape') {
+        if (currentStep === 2) setCurrentStep(1);
+        else onClose();
+      }
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [currentStep]);
+
   // Load return reasons from metadata API
   useEffect(() => {
     const loadReturnReasons = async () => {
@@ -179,15 +225,49 @@ const PurchaseReturnFlow = ({ onClose }) => {
     }
   }, []);
 
-  // Handle supplier selection
+  // Handle supplier selection - comprehensive like sales return
   const handleSupplierSelect = async (supplier) => {
-    setSelectedSupplier(supplier);
-    const supplierId = supplier.supplier_id || supplier.id;
+    // Handle supplier clear/removal
+    if (!supplier) {
+      setSelectedSupplier(null);
+      setSelectedInvoice(null);
+      setReturnData(prev => ({
+        ...prev,
+        supplier_id: '',
+        supplier_details: null,
+        supplier_invoice_id: '',
+        items: []
+      }));
+      return;
+    }
+    
+    // Ensure supplier has all needed fields - comprehensive mapping
+    const fullSupplier = {
+      ...supplier,
+      supplier_name: supplier.supplier_name || supplier.name,
+      address: supplier.address || supplier.billing_address || supplier.street_address || '',
+      city: supplier.city || supplier.billing_city || '',
+      state: supplier.state || supplier.billing_state || '',
+      pincode: supplier.pincode || supplier.postal_code || supplier.zip || '',
+      phone: supplier.phone || supplier.mobile || supplier.contact_phone || '',
+      mobile: supplier.mobile || supplier.phone || '',
+      email: supplier.email || supplier.contact_email || '',
+      contact_person: supplier.contact_person || supplier.contact_name || '',
+      gst_number: supplier.gst_number || supplier.gstin || supplier.gst || '',
+      drug_license_number: supplier.drug_license_number || supplier.drug_license || '',
+      payment_terms: supplier.payment_terms || supplier.credit_days || 0
+    };
+    
+    setSelectedSupplier(fullSupplier);
+    setSelectedInvoice(null); // Reset invoice selection
+    const supplierId = supplier.supplier_id || supplier.id || supplier.party_id;
     
     setReturnData(prev => ({
       ...prev,
       supplier_id: supplierId,
-      supplier_details: supplier
+      supplier_details: fullSupplier,
+      supplier_invoice_id: '',
+      items: []
     }));
 
     // Fetch returnable supplier invoices for this supplier
@@ -205,10 +285,12 @@ const PurchaseReturnFlow = ({ onClose }) => {
     }
   };
 
-  // Handle supplier invoice selection
+  // Handle supplier invoice selection - smooth like sales return
   const handleInvoiceSelect = async (invoice) => {
+    if (!invoice) return;
+    
     setSelectedInvoice(invoice);
-    const invoiceId = invoice.supplier_invoice_id;
+    const invoiceId = invoice.supplier_invoice_id || invoice.invoice_id;
     
     setReturnData(prev => ({
       ...prev,
@@ -224,16 +306,49 @@ const PurchaseReturnFlow = ({ onClose }) => {
       const response = await returnsApi.getSupplierInvoiceReturnableItems(invoiceId);
       
       if (response.data.items) {
+        const processedItems = response.data.items.map(item => ({
+          ...item,
+          id: item.invoice_item_id || item.id,
+          invoice_item_id: item.invoice_item_id,
+          return_quantity: parseFloat(item.returnable_quantity || 0), // Default to full returnable qty
+          return_reason: '',
+          selected: true, // Pre-select all items like sales return
+          restock: true, // Default to restock
+          rate: item.unit_price || item.rate || 0,
+          tax_percent: item.tax_percent || 18,
+          discount_percent: item.discount_percent || 0,
+          max_returnable_qty: parseFloat(item.returnable_quantity || item.max_returnable_qty || 0),
+          quantity: parseFloat(item.invoice_quantity || item.quantity || 0),
+          batch_id: item.batch_id,
+          batch_number: item.batch_number,
+          product_name: item.product_name,
+          product_id: item.product_id,
+          hsn_code: item.hsn_code,
+          unit: item.unit || 'PCS'
+        }));
+        
         setReturnData(prev => ({
           ...prev,
-          items: response.data.items.map(item => ({
-            ...item,
-            id: item.invoice_item_id,
-            return_quantity: 0,
-            return_reason: '',
-            selected: false,
-            restock: true // Default to restock
-          }))
+          items: processedItems
+        }));
+        
+        // Calculate totals immediately
+        let subtotal = 0;
+        let taxAmount = 0;
+        processedItems.forEach(item => {
+          if (item.selected && item.return_quantity > 0) {
+            const itemTotal = item.return_quantity * item.rate;
+            const itemTax = itemTotal * (item.tax_percent / 100);
+            subtotal += itemTotal;
+            taxAmount += itemTax;
+          }
+        });
+        
+        setReturnData(prev => ({
+          ...prev,
+          subtotal_amount: subtotal,
+          tax_amount: taxAmount,
+          total_amount: subtotal + taxAmount
         }));
       }
     } catch (error) {
