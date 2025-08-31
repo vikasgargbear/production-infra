@@ -808,14 +808,8 @@ async def create_invoice(
                                 
                                 # Create allocation to link this payment to THIS specific invoice
                                 # This is critical - invoice-time payments must ALWAYS be linked
+                                # The trigger has been fixed to use reference_id correctly
                                 try:
-                                    # Disable the broken trigger temporarily
-                                    try:
-                                        db.execute(text("ALTER TABLE financial.payment_allocations DISABLE TRIGGER trg_validate_payment_allocation"))
-                                    except:
-                                        pass  # May not have permissions
-                                    
-                                    # Create the allocation - this links payment to invoice
                                     db.execute(text("""
                                         INSERT INTO financial.payment_allocations (
                                             payment_id, reference_type, reference_id, 
@@ -833,41 +827,13 @@ async def create_invoice(
                                         "allocated_amount": payment_amount,
                                         "created_by": created_by
                                     })
-                                    
-                                    # Re-enable trigger
-                                    try:
-                                        db.execute(text("ALTER TABLE financial.payment_allocations ENABLE TRIGGER trg_validate_payment_allocation"))
-                                    except:
-                                        pass
-                                    
                                     db.commit()
                                     logger.info(f"Payment {payment_id} linked to invoice {invoice_id} via allocation")
+                                    # The trigger will automatically update invoice paid_amount and status
                                 except Exception as alloc_error:
-                                    logger.warning(f"Could not create allocation (trigger issue): {alloc_error}")
+                                    logger.error(f"Could not create payment allocation: {alloc_error}")
                                     db.rollback()
-                                    
-                                    # Fallback: Update invoice paid_amount directly
-                                    try:
-                                        db.execute(text("""
-                                            UPDATE sales.invoices
-                                            SET paid_amount = COALESCE(paid_amount, 0) + :payment_amount,
-                                                credit_amount = GREATEST(0, final_amount - (COALESCE(paid_amount, 0) + :payment_amount)),
-                                                payment_status = CASE 
-                                                    WHEN (COALESCE(paid_amount, 0) + :payment_amount) >= final_amount THEN 'paid'
-                                                    WHEN (COALESCE(paid_amount, 0) + :payment_amount) > 0 THEN 'partial'
-                                                    ELSE 'pending'
-                                                END,
-                                                updated_at = CURRENT_TIMESTAMP
-                                            WHERE invoice_id = :invoice_id
-                                        """), {
-                                            "payment_amount": payment_amount,
-                                            "invoice_id": invoice_id
-                                        })
-                                        db.commit()
-                                        logger.info(f"Updated invoice {invoice_id} paid amount directly")
-                                    except Exception as update_error:
-                                        logger.error(f"Could not update invoice paid amount: {update_error}")
-                                        db.rollback()
+                                    # Payment exists but allocation failed - not critical for invoice
                                 
                             except Exception as payment_error:
                                 logger.error(f"Failed to create payment: {payment_error}")
