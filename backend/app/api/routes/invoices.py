@@ -111,7 +111,16 @@ async def create_invoice(
     try:
         # Start fresh - clear any failed transaction state
         db.rollback()  # Clear any failed transaction state
-        logger.info(f"Creating invoice for customer {invoice_data.get('customer_id')}")
+        
+        # Extract customer_id early for use throughout the function
+        customer_id = invoice_data.get("customer_id")
+        if not customer_id:
+            return JSONResponse(
+                status_code=400,
+                content={"detail": "Customer ID is required"}
+            )
+        
+        logger.info(f"Creating invoice for customer {customer_id}")
         
         # Step 1: Get valid branch_id and created_by
         branch_result = db.execute(text("""
@@ -201,7 +210,7 @@ async def create_invoice(
             "branch_id": branch_id,
             "order_number": order_number,
             "order_date": date.today(),
-            "customer_id": invoice_data["customer_id"],
+            "customer_id": customer_id,
             "subtotal": subtotal,
             "discount": total_discount,  # Sum of item-level discounts
             "taxable": taxable_amount,
@@ -216,13 +225,13 @@ async def create_invoice(
         # Step 5: Generate invoice number using unified service
         invoice_number = DocumentNumberService.generate_number(db, "invoice", org_id)
         
-        # Step 6: Get customer name for invoice
+        # Step 6: Get customer details for invoice
         cust_result = db.execute(text("""
             SELECT customer_name FROM parties.customers
             WHERE customer_id = :customer_id
-        """), {"customer_id": invoice_data["customer_id"]})
+        """), {"customer_id": customer_id})
         cust = cust_result.fetchone()
-        customer_name = cust[0] if cust else f"Customer {invoice_data['customer_id']}"
+        customer_name = cust[0] if cust else f"Customer {customer_id}"
         
         # Get customer addresses from master.addresses table
         # Addresses are linked via entity_type='customer' and entity_id=customer_id
@@ -235,7 +244,7 @@ async def create_invoice(
             AND is_active = true
             ORDER BY is_default DESC, created_at DESC
             LIMIT 1
-        """), {"customer_id": invoice_data["customer_id"]})
+        """), {"customer_id": customer_id})
         billing_addr = billing_addr_result.fetchone()
         billing_address_id = billing_addr[0] if billing_addr else None
         
@@ -248,7 +257,7 @@ async def create_invoice(
             AND is_active = true
             ORDER BY is_default DESC, created_at DESC
             LIMIT 1
-        """), {"customer_id": invoice_data["customer_id"]})
+        """), {"customer_id": customer_id})
         shipping_addr = shipping_addr_result.fetchone()
         shipping_address_id = shipping_addr[0] if shipping_addr else None
         
@@ -296,7 +305,7 @@ async def create_invoice(
             "invoice_number": invoice_number,
             "invoice_date": date.today(),
             "order_id": order_id,
-            "customer_id": invoice_data["customer_id"],
+            "customer_id": customer_id,
             "customer_name": customer_name,
             "subtotal": subtotal,
             "discount": total_discount,  # Sum of item-level discounts
@@ -541,22 +550,20 @@ async def create_invoice(
             uom = item.get("uom")
             pack_type = item.get("pack_type")
             
-            # Fetch product details if any are missing
-            if not product_name or not uom or not pack_type:
+            # Fetch product name if missing (products table doesn't have uom/pack_type)
+            if not product_name:
                 prod_result = db.execute(text("""
-                    SELECT product_name, uom, pack_type 
+                    SELECT product_name 
                     FROM inventory.products
                     WHERE product_id = :product_id
                 """), {"product_id": product_id})
                 prod = prod_result.fetchone()
-                if prod:
-                    product_name = product_name or prod[0]
-                    uom = uom or prod[1] or "PCS"  # Default to PCS if still None
-                    pack_type = pack_type or prod[2] or "UNIT"  # Default to UNIT if still None
-                else:
-                    product_name = product_name or f"Product {product_id}"
-                    uom = uom or "PCS"
-                    pack_type = pack_type or "UNIT"
+                product_name = prod[0] if prod else f"Product {product_id}"
+            
+            # Set default values for uom and pack_type if not provided
+            # These are typically stored at batch level or as part of product configuration
+            uom = uom or "PCS"  # Default to pieces
+            pack_type = pack_type or "UNIT"  # Default to unit
             
             # Basic calculations (triggers will recalculate if needed)
             discount_percent = float(item.get("discount_percent", 0))

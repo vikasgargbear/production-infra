@@ -316,6 +316,8 @@ async def create_direct_purchase_entry(purchase_data: dict, db: Session = Depend
                         batch_number, expiry_date,
                         initial_quantity, quantity_available,
                         cost_per_unit, mrp_per_unit,
+                        source_type,
+                        pack_type, pack_size, pack_uom, base_uom, units_per_pack,
                         batch_status, expiry_status,
                         created_at
                     ) VALUES (
@@ -323,6 +325,8 @@ async def create_direct_purchase_entry(purchase_data: dict, db: Session = Depend
                         :batch_number, :expiry_date,
                         :quantity, :quantity,
                         :cost_price, :mrp,
+                        'purchase',
+                        :pack_type, :pack_size, :pack_uom, :base_uom, :units_per_pack,
                         'active', 'normal',
                         CURRENT_TIMESTAMP
                     ) RETURNING batch_id
@@ -333,7 +337,12 @@ async def create_direct_purchase_entry(purchase_data: dict, db: Session = Depend
                     "expiry_date": item.get("expiry_date"),
                     "quantity": item.get("quantity", 0),
                     "cost_price": item.get("unit_price", 0),
-                    "mrp": item.get("mrp", 0)
+                    "mrp": item.get("mrp", 0),
+                    "pack_type": item.get("pack_type", "STRIP"),
+                    "pack_size": item.get("pack_size", 1),
+                    "pack_uom": item.get("pack_type", "STRIP"),
+                    "base_uom": item.get("uom", "NOS"),
+                    "units_per_pack": item.get("pack_size", 1)
                 })
                 
                 batch = batch_result.fetchone()
@@ -563,6 +572,8 @@ async def create_purchase_entry(purchase_data: dict, db: Session = Depends(get_d
                         batch_number, expiry_date,
                         initial_quantity, quantity_available,
                         cost_per_unit, mrp_per_unit,
+                        source_type, 
+                        pack_type, pack_size, pack_uom, base_uom, units_per_pack,
                         batch_status, expiry_status,
                         created_at
                     ) VALUES (
@@ -570,6 +581,8 @@ async def create_purchase_entry(purchase_data: dict, db: Session = Depends(get_d
                         :batch_number, :expiry_date,
                         :quantity, :quantity,
                         :cost_price, :mrp,
+                        'purchase',
+                        :pack_type, :pack_size, :pack_uom, :base_uom, :units_per_pack,
                         'active', 'normal',
                         CURRENT_TIMESTAMP
                     ) RETURNING batch_id
@@ -580,7 +593,12 @@ async def create_purchase_entry(purchase_data: dict, db: Session = Depends(get_d
                     "expiry_date": item.get("expiry_date"),
                     "quantity": quantity,
                     "cost_price": cost_price,
-                    "mrp": item.get("mrp", 0)
+                    "mrp": item.get("mrp", 0),
+                    "pack_type": item.get("pack_type", "STRIP"),
+                    "pack_size": item.get("pack_size", 1),
+                    "pack_uom": item.get("pack_type", "STRIP"),
+                    "base_uom": item.get("uom", "NOS"),
+                    "units_per_pack": item.get("pack_size", 1)
                 })
                 
                 batch = batch_result.fetchone()
@@ -1132,6 +1150,8 @@ async def receive_purchase_items(
                         manufacturing_date, expiry_date,
                         initial_quantity, quantity_available,
                         cost_per_unit, mrp_per_unit,
+                        source_type,
+                        pack_type, pack_size, pack_uom, base_uom, units_per_pack,
                         batch_status
                     ) VALUES (
                         :org_id,
@@ -1139,6 +1159,8 @@ async def receive_purchase_items(
                         :mfg_date, :exp_date,
                         :qty_received, :qty_available,
                         :cost, :mrp,
+                        'purchase',
+                        'STRIP', 1, 'STRIP', 'NOS', 1,
                         'active'
                     ) RETURNING batch_id
                 """),
