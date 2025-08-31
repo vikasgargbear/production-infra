@@ -299,8 +299,9 @@ const SupplierSearch = forwardRef(({
 
   // Inline display mode (default)
   return (
-    <div className={`bg-white rounded-lg border border-gray-200 p-4 ${className}`} ref={dropdownRef} onKeyDown={handleKeyDown}>
-      <div className="space-y-3">
+    <div className={`relative ${className}`} ref={dropdownRef} onKeyDown={handleKeyDown}>
+      <div className="bg-white rounded-lg border border-gray-200 p-4">
+        <div className="space-y-3">
         <div className="flex items-center justify-between">
           <h4 className="text-sm font-medium text-gray-700 flex items-center">
             <Building2 className="w-4 h-4 mr-2" />
@@ -393,9 +394,12 @@ const SupplierSearch = forwardRef(({
           </div>
         )}
 
-        {/* Search Results Dropdown */}
-        {showDropdown && searchQuery && !selectedSupplier && (
-          <div className="absolute z-20 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-64 overflow-y-auto">
+        </div>
+      </div>
+
+      {/* Search Results Dropdown - Outside the white box */}
+      {showDropdown && searchQuery && !selectedSupplier && (
+        <div className="absolute z-20 w-full max-w-lg mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-64 overflow-y-auto">
             {loading ? (
               <div className="p-4 text-center text-gray-500">
                 <Loader2 className="w-6 h-6 animate-spin mx-auto mb-2" />
@@ -460,7 +464,6 @@ const SupplierSearch = forwardRef(({
             ) : null}
           </div>
         )}
-      </div>
     </div>
   );
 });
