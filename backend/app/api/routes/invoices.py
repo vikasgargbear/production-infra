@@ -753,7 +753,7 @@ async def create_invoice(
                             # Generate payment number
                             payment_number = f"PAY-{invoice_number}-{payment_method[:3].upper()}"
                             
-                            # Insert payment record (without allocation for now due to trigger issues)
+                            # Insert payment record with proper allocation
                             try:
                                 payment_insert = db.execute(text("""
                                     INSERT INTO financial.payments (
@@ -766,7 +766,7 @@ async def create_invoice(
                                         :org_id, :branch_id, :payment_number, :payment_date,
                                         'RECEIPT', 'CUSTOMER', :customer_id, :customer_name,
                                         :payment_amount, :payment_method_id, 'CLEARED',
-                                        'PENDING', 0, :payment_amount,
+                                        'ALLOCATED', :payment_amount, 0,
                                         :invoice_number, :narration, :created_by
                                     ) RETURNING payment_id
                                 """), {
@@ -786,8 +786,54 @@ async def create_invoice(
                                 db.commit()
                                 logger.info(f"Payment created: {payment_method} - ₹{payment_amount} (ID: {payment_id})")
                                 
-                                # Skip payment allocation due to trigger issues
-                                # The allocation can be done manually later or trigger can be fixed
+                                # Try to create allocation, but if trigger fails, update invoice directly
+                                try:
+                                    # Attempt allocation (might fail due to trigger)
+                                    db.execute(text("""
+                                        INSERT INTO financial.payment_allocations (
+                                            payment_id, reference_type, reference_id, 
+                                            reference_number, allocated_amount, 
+                                            allocation_status, created_by
+                                        ) VALUES (
+                                            :payment_id, 'INVOICE', :invoice_id,
+                                            :invoice_number, :allocated_amount,
+                                            'ACTIVE', :created_by
+                                        )
+                                    """), {
+                                        "payment_id": payment_id,
+                                        "invoice_id": invoice_id,
+                                        "invoice_number": invoice_number,
+                                        "allocated_amount": payment_amount,
+                                        "created_by": created_by
+                                    })
+                                    db.commit()
+                                    logger.info(f"Payment allocation created for invoice {invoice_id}")
+                                except Exception as alloc_error:
+                                    logger.warning(f"Could not create allocation (trigger issue): {alloc_error}")
+                                    db.rollback()
+                                    
+                                    # Fallback: Update invoice paid_amount directly
+                                    try:
+                                        db.execute(text("""
+                                            UPDATE sales.invoices
+                                            SET paid_amount = COALESCE(paid_amount, 0) + :payment_amount,
+                                                credit_amount = GREATEST(0, final_amount - (COALESCE(paid_amount, 0) + :payment_amount)),
+                                                payment_status = CASE 
+                                                    WHEN (COALESCE(paid_amount, 0) + :payment_amount) >= final_amount THEN 'paid'
+                                                    WHEN (COALESCE(paid_amount, 0) + :payment_amount) > 0 THEN 'partial'
+                                                    ELSE 'pending'
+                                                END,
+                                                updated_at = CURRENT_TIMESTAMP
+                                            WHERE invoice_id = :invoice_id
+                                        """), {
+                                            "payment_amount": payment_amount,
+                                            "invoice_id": invoice_id
+                                        })
+                                        db.commit()
+                                        logger.info(f"Updated invoice {invoice_id} paid amount directly")
+                                    except Exception as update_error:
+                                        logger.error(f"Could not update invoice paid amount: {update_error}")
+                                        db.rollback()
                                 
                             except Exception as payment_error:
                                 logger.error(f"Failed to create payment: {payment_error}")
