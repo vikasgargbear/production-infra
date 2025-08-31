@@ -266,11 +266,11 @@ async def get_party_statement(
                                     THEN CONCAT(' - ', return_reason) 
                                     ELSE '' END) as description,
                         0 as debit,
-                        return_amount as credit,
-                        return_status as status
+                        COALESCE(return_amount, total_amount, 0) as credit,
+                        COALESCE(approval_status, 'approved') as status
                     FROM sales.sales_returns
                     WHERE customer_id = :party_id
-                    AND return_status != 'cancelled'
+                    AND (approval_status != 'rejected' OR approval_status IS NULL)
                 """)
             except Exception as e:
                 logger.info(f"sales.sales_returns table not found: {e}")
