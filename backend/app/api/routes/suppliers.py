@@ -5,7 +5,7 @@ Manages pharmaceutical suppliers and vendors
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
-from sqlalchemy import text
+from sqlalchemy import text, or_
 import logging
 
 from ...core.database import get_db
@@ -22,6 +22,80 @@ router = APIRouter(tags=["suppliers"])
 
 # Create CRUD instance
 supplier_crud = create_crud(Supplier)
+
+@router.get("/search")
+def search_suppliers(
+    search_term: Optional[str] = Query(None, description="Search name, code, GST, phone"),
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)
+):
+    """
+    Search suppliers by name, code, GSTIN, phone, or email
+    This endpoint must be defined BEFORE /{supplier_id} to avoid route conflicts
+    """
+    try:
+        query = """
+            SELECT s.supplier_id, s.supplier_name, s.supplier_code, s.gstin, 
+                   s.phone, s.email, s.supplier_type, s.is_active,
+                   a.city, a.state_name as state, a.address_line1 as address, a.pincode
+            FROM parties.suppliers s
+            LEFT JOIN master.addresses a ON (
+                a.entity_type = 'supplier' 
+                AND a.entity_id = s.supplier_id 
+                AND a.is_default = true
+            )
+            WHERE s.is_active = true
+        """
+        params = {}
+        
+        if search_term:
+            # Clean the search term
+            clean_term = search_term.strip()
+            query += """ 
+                AND (
+                    LOWER(s.supplier_name) LIKE LOWER(:search) OR
+                    LOWER(s.supplier_code) LIKE LOWER(:search) OR
+                    LOWER(s.gstin) LIKE LOWER(:exact) OR
+                    s.phone LIKE :phone OR
+                    LOWER(s.email) LIKE LOWER(:search)
+                )
+            """
+            params["search"] = f"%{clean_term}%"
+            params["exact"] = clean_term  # For GSTIN exact match
+            params["phone"] = f"%{clean_term.replace(' ', '').replace('-', '')}%"
+        
+        query += " ORDER BY s.supplier_name LIMIT :limit OFFSET :offset"
+        params["limit"] = limit
+        params["offset"] = offset
+        
+        result = db.execute(text(query), params)
+        suppliers = []
+        
+        for row in result:
+            supplier_dict = {
+                "supplier_id": row.supplier_id,
+                "supplier_name": row.supplier_name,
+                "supplier_code": row.supplier_code,
+                "gstin": row.gstin,
+                "phone": row.phone,
+                "mobile": row.phone,  # Add mobile field for compatibility
+                "email": row.email,
+                "supplier_type": row.supplier_type,
+                "is_active": row.is_active,
+                "city": row.city,
+                "state": row.state,
+                "address": row.address,
+                "pincode": row.pincode
+            }
+            suppliers.append(supplier_dict)
+        
+        return suppliers
+        
+    except Exception as e:
+        logger.error(f"Error searching suppliers: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/")
 def get_suppliers(

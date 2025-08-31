@@ -248,7 +248,7 @@ const PDFUploadModal = ({ isOpen, onClose, onDataExtracted }) => {
               {loading ? (
                 <>
                   <Loader className="animate-spin" size={20} />
-                  Processing Invoice...
+                  Extracting & Verifying...
                 </>
               ) : (
                 <>

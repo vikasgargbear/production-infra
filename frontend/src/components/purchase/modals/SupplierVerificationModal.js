@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { 
   Building2, Search, CheckCircle, AlertCircle, 
-  Plus, MapPin, Phone, FileText, Calendar
+  Plus, MapPin, Phone, FileText, Calendar,
+  ChevronDown, ChevronUp, Landmark, Info
 } from 'lucide-react';
 import { suppliersApi } from '../../../services/api';
 import { debounce } from 'lodash';
@@ -60,6 +61,11 @@ const SupplierVerificationModal = ({
   });
   const [loading, setLoading] = useState(false);
   const [autoSelected, setAutoSelected] = useState(null);
+  const [expandedSections, setExpandedSections] = useState({
+    compliance: false,
+    banking: false,
+    address: true // Keep address expanded by default
+  });
 
   // Search for existing supplier
   useEffect(() => {
