@@ -347,72 +347,7 @@ async def create_invoice(
             payment_mode = invoice_data.get("payment_mode", "").lower()
             if payment_mode == "cash":
                 total_paid = final_amount  # Cash means fully paid
-                
-                # Create payment record for cash payment
-                try:
-                    # Get cash payment method ID
-                    method_result = db.execute(text("""
-                        SELECT payment_method_id FROM financial.payment_methods 
-                        WHERE org_id = :org_id AND LOWER(method_code) = 'cash'
-                        LIMIT 1
-                    """), {"org_id": org_id})
-                    method_row = method_result.fetchone()
-                    
-                    if method_row:
-                        payment_method_id = method_row[0]
-                        payment_number = f"PAY-{invoice_number}-CSH"
-                        
-                        payment_insert = db.execute(text("""
-                            INSERT INTO financial.payments (
-                                org_id, branch_id, payment_number, payment_date,
-                                payment_type, party_type, party_id, party_name,
-                                payment_amount, payment_method_id, payment_status,
-                                allocation_status, allocated_amount, unallocated_amount,
-                                reference_number, narration, created_by
-                            ) VALUES (
-                                :org_id, :branch_id, :payment_number, :payment_date,
-                                'RECEIPT', 'CUSTOMER', :customer_id, :customer_name,
-                                :payment_amount, :payment_method_id, 'CLEARED',
-                                'ALLOCATED', :payment_amount, 0,
-                                :invoice_number, :narration, :created_by
-                            ) RETURNING payment_id
-                        """), {
-                            "org_id": org_id,
-                            "branch_id": branch_id,
-                            "payment_number": payment_number,
-                            "payment_date": invoice_date,
-                            "customer_id": customer_id,
-                            "customer_name": customer_name,
-                            "payment_amount": total_paid,
-                            "payment_method_id": payment_method_id,
-                            "invoice_number": invoice_number,
-                            "narration": f"Cash payment for Invoice {invoice_number}",
-                            "created_by": created_by
-                        })
-                        payment_id = payment_insert.scalar()
-                        
-                        # Create payment allocation
-                        db.execute(text("""
-                            INSERT INTO financial.payment_allocations (
-                                payment_id, reference_type, reference_id,
-                                reference_number, allocated_amount,
-                                allocation_status, created_by
-                            ) VALUES (
-                                :payment_id, 'INVOICE', :invoice_id,
-                                :invoice_number, :allocated_amount,
-                                'ACTIVE', :created_by
-                            )
-                        """), {
-                            "payment_id": payment_id,
-                            "invoice_id": invoice_id,
-                            "invoice_number": invoice_number,
-                            "allocated_amount": total_paid,
-                            "created_by": created_by
-                        })
-                        
-                        logger.info(f"Cash payment created: ₹{total_paid} (ID: {payment_id})")
-                except Exception as payment_error:
-                    logger.error(f"Failed to create cash payment record: {payment_error}")
+                # Payment will be created after successful invoice creation
             # Credit means no payment yet
             
         logger.info(f"Total paid amount: ₹{total_paid} of ₹{final_amount}")
@@ -767,6 +702,11 @@ async def create_invoice(
         
         # Step 10: Create payment records AFTER successful invoice creation
         # This is done separately to avoid transaction issues
+        
+        # Handle legacy payment_mode if no payments array
+        if not payments and invoice_data.get("payment_mode") == "cash":
+            payments = [{"method": "cash", "amount": final_amount}]
+        
         if payments and total_paid > 0:
             try:
                 for payment in payments:
