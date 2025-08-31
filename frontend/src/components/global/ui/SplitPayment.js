@@ -14,14 +14,33 @@ const SplitPayment = ({
   allowPartial = true,
   className = '',
   readOnly = false,
-  defaultToCredit = true  // New prop to control default behavior
+  defaultPaymentMethod = null // Can be set from master settings: 'cash', 'credit', 'upi', etc.
 }) => {
-  // Initialize with full amount if defaultToCredit is false, otherwise 0 for credit
-  const defaultAmount = defaultToCredit ? 0 : totalAmount;
   const [paymentMethods, setPaymentMethods] = useState(payments.length > 0 ? payments : [
-    { id: 1, method: 'cash', amount: defaultAmount, reference: '' }
+    { id: 1, method: 'cash', amount: 0, reference: '' }
   ]);
+  const [showPaymentOptions, setShowPaymentOptions] = useState(false);
   const [paymentStatus, setPaymentStatus] = useState('Pending');
+
+  // Handle Enter key for default payment method
+  useEffect(() => {
+    const handleKeyPress = (e) => {
+      if (e.key === 'Enter' && defaultPaymentMethod && !showPaymentOptions && totalAmount > 0) {
+        e.preventDefault();
+        if (defaultPaymentMethod === 'credit') {
+          setPaymentMethods([{ id: 1, method: 'cash', amount: 0, reference: '' }]);
+        } else {
+          setPaymentMethods([{ id: 1, method: defaultPaymentMethod, amount: totalAmount, reference: '' }]);
+        }
+        setShowPaymentOptions(true);
+      }
+    };
+
+    if (!readOnly && paymentMethods.length === 1 && paymentMethods[0].amount === 0) {
+      window.addEventListener('keypress', handleKeyPress);
+      return () => window.removeEventListener('keypress', handleKeyPress);
+    }
+  }, [defaultPaymentMethod, showPaymentOptions, totalAmount, readOnly, paymentMethods]);
 
   // Payment method options with icons - aligned with backend method_code
   const paymentOptions = [
@@ -127,8 +146,92 @@ const SplitPayment = ({
 
   return (
     <div className={`${className}`}>
+      {/* Payment selection prompt */}
+      {totalAmount > 0 && !showPaymentOptions && paymentMethods.length === 1 && paymentMethods[0].amount === 0 && (
+        <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 space-y-3">
+          <div className="flex items-center gap-2">
+            <AlertCircle className="w-4 h-4 text-blue-600" />
+            <span className="text-sm font-medium text-blue-900">Select Payment Method</span>
+          </div>
+          <div className="text-sm text-blue-800">
+            Invoice Total: <span className="font-bold">₹{totalAmount.toFixed(2)}</span>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <button
+              onClick={() => {
+                setPaymentMethods([{ id: 1, method: 'cash', amount: totalAmount, reference: '' }]);
+                setShowPaymentOptions(true);
+              }}
+              className={`px-3 py-1.5 text-white text-sm rounded transition-colors ${
+                defaultPaymentMethod === 'cash' 
+                  ? 'bg-green-700 hover:bg-green-800 ring-2 ring-green-400 font-semibold' 
+                  : 'bg-green-600 hover:bg-green-700'
+              }`}
+            >
+              Full Cash {defaultPaymentMethod === 'cash' && '(Default)'}
+            </button>
+            <button
+              onClick={() => {
+                setPaymentMethods([{ id: 1, method: 'upi', amount: totalAmount, reference: '' }]);
+                setShowPaymentOptions(true);
+              }}
+              className={`px-3 py-1.5 text-white text-sm rounded transition-colors ${
+                defaultPaymentMethod === 'upi' 
+                  ? 'bg-purple-700 hover:bg-purple-800 ring-2 ring-purple-400 font-semibold' 
+                  : 'bg-purple-600 hover:bg-purple-700'
+              }`}
+            >
+              Full UPI {defaultPaymentMethod === 'upi' && '(Default)'}
+            </button>
+            <button
+              onClick={() => {
+                setPaymentMethods([{ id: 1, method: 'card', amount: totalAmount, reference: '' }]);
+                setShowPaymentOptions(true);
+              }}
+              className={`px-3 py-1.5 text-white text-sm rounded transition-colors ${
+                defaultPaymentMethod === 'card' 
+                  ? 'bg-blue-700 hover:bg-blue-800 ring-2 ring-blue-400 font-semibold' 
+                  : 'bg-blue-600 hover:bg-blue-700'
+              }`}
+            >
+              Full Card {defaultPaymentMethod === 'card' && '(Default)'}
+            </button>
+            <button
+              onClick={() => {
+                setPaymentMethods([
+                  { id: 1, method: 'cash', amount: 0, reference: '' },
+                  { id: 2, method: 'upi', amount: 0, reference: '' }
+                ]);
+                setShowPaymentOptions(true);
+              }}
+              className="px-3 py-1.5 bg-indigo-600 text-white text-sm rounded hover:bg-indigo-700 transition-colors"
+            >
+              Split Payment
+            </button>
+            <button
+              onClick={() => {
+                setPaymentMethods([{ id: 1, method: 'cash', amount: 0, reference: '' }]);
+                setShowPaymentOptions(true);
+              }}
+              className={`px-3 py-1.5 text-white text-sm rounded transition-colors ${
+                defaultPaymentMethod === 'credit' 
+                  ? 'bg-orange-700 hover:bg-orange-800 ring-2 ring-orange-400 font-semibold' 
+                  : 'bg-orange-600 hover:bg-orange-700'
+              }`}
+            >
+              Full Credit {defaultPaymentMethod === 'credit' && '(Default)'}
+            </button>
+          </div>
+          {defaultPaymentMethod && (
+            <div className="text-xs text-gray-600 mt-1">
+              💡 Tip: Press Enter to use default: {defaultPaymentMethod === 'credit' ? 'Full Credit' : `Full ${defaultPaymentMethod.toUpperCase()}`}
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Single payment method - default view */}
-      {paymentMethods.length === 1 && (
+      {(showPaymentOptions || paymentMethods[0].amount > 0 || payments.length > 0) && paymentMethods.length === 1 && (
         <div className="space-y-2">
           {/* Helper text for credit */}
           {totalAmount > 0 && (
