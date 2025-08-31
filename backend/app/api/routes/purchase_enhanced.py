@@ -312,29 +312,27 @@ async def create_direct_purchase_entry(purchase_data: dict, db: Session = Depend
             if item.get("batch_number") and item.get("expiry_date"):
                 batch_result = db.execute(text("""
                     INSERT INTO inventory.batches (
-                        org_id, product_id, supplier_id,
+                        org_id, product_id,
                         batch_number, expiry_date,
-                        quantity_received, quantity_available,
-                        cost_per_unit, selling_price, mrp,
+                        initial_quantity, quantity_available,
+                        cost_per_unit, mrp_per_unit,
                         batch_status, expiry_status,
                         created_at
                     ) VALUES (
-                        :org_id, :product_id, :supplier_id,
+                        :org_id, :product_id,
                         :batch_number, :expiry_date,
                         :quantity, :quantity,
-                        :cost_price, :selling_price, :mrp,
-                        'active', 'fresh',
+                        :cost_price, :mrp,
+                        'active', 'normal',
                         CURRENT_TIMESTAMP
                     ) RETURNING batch_id
                 """), {
                     "org_id": current_user['org_id'],
                     "product_id": item.get("product_id"),
-                    "supplier_id": purchase_data.get("supplier_id"),
                     "batch_number": item.get("batch_number"),
                     "expiry_date": item.get("expiry_date"),
                     "quantity": item.get("quantity", 0),
                     "cost_price": item.get("unit_price", 0),
-                    "selling_price": item.get("selling_price", item.get("mrp", 0)),
                     "mrp": item.get("mrp", 0)
                 })
                 
@@ -561,29 +559,27 @@ async def create_purchase_entry(purchase_data: dict, db: Session = Depends(get_d
             if item.get("expiry_date"):
                 batch_result = db.execute(text("""
                     INSERT INTO inventory.batches (
-                        org_id, product_id, supplier_id,
+                        org_id, product_id,
                         batch_number, expiry_date,
-                        quantity_received, quantity_available,
-                        cost_per_unit, selling_price, mrp,
+                        initial_quantity, quantity_available,
+                        cost_per_unit, mrp_per_unit,
                         batch_status, expiry_status,
                         created_at
                     ) VALUES (
-                        :org_id, :product_id, :supplier_id,
+                        :org_id, :product_id,
                         :batch_number, :expiry_date,
                         :quantity, :quantity,
-                        :cost_price, :selling_price, :mrp,
-                        'active', 'fresh',
+                        :cost_price, :mrp,
+                        'active', 'normal',
                         CURRENT_TIMESTAMP
                     ) RETURNING batch_id
                 """), {
                     "org_id": current_user['org_id'],
                     "product_id": product_id,
-                    "supplier_id": purchase_data.get("supplier_id"),
                     "batch_number": batch_number,
                     "expiry_date": item.get("expiry_date"),
                     "quantity": quantity,
                     "cost_price": cost_price,
-                    "selling_price": item.get("selling_price", item.get("mrp", 0)),
                     "mrp": item.get("mrp", 0)
                 })
                 
@@ -1134,23 +1130,20 @@ async def receive_purchase_items(
                     INSERT INTO inventory.batches (
                         org_id, product_id, batch_number,
                         manufacturing_date, expiry_date,
-                        quantity_received, quantity_available,
-                        cost_price, selling_price, mrp,
-                        supplier_id, purchase_id,
-                        purchase_invoice_number,
+                        initial_quantity, quantity_available,
+                        cost_per_unit, mrp_per_unit,
                         batch_status
                     ) VALUES (
-                        org_id,
+                        :org_id,
                         :product_id, :batch_number,
                         :mfg_date, :exp_date,
                         :qty_received, :qty_available,
-                        :cost, :selling, :mrp,
-                        :supplier_id, :purchase_id,
-                        :invoice_num,
+                        :cost, :mrp,
                         'active'
                     ) RETURNING batch_id
                 """),
                 {
+                    "org_id": current_user['org_id'],
                     "product_id": pi.product_id,
                     "batch_number": item.get("batch_number", pi.batch_number),
                     "mfg_date": item.get("manufacturing_date", pi.manufacturing_date),
@@ -1158,11 +1151,7 @@ async def receive_purchase_items(
                     "qty_received": received_qty,
                     "qty_available": received_qty,
                     "cost": pi.cost_price,
-                    "selling": pi.cost_price * Decimal("1.2"),  # Default 20% markup
-                    "mrp": pi.mrp,
-                    "supplier_id": purchase.supplier_id,
-                    "purchase_id": purchase_id,
-                    "invoice_num": purchase.supplier_invoice_number
+                    "mrp": pi.mrp
                 }
             ).scalar()
             
