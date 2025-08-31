@@ -563,49 +563,71 @@ async def create_purchase_entry(purchase_data: dict, db: Session = Depends(get_d
             if not batch_number or batch_number.strip() == "":
                 batch_number = f"BATCH{datetime.now().strftime('%y%m')}{str(db.execute(text('SELECT floor(random() * 10000)::int')).scalar()).zfill(4)}"
             
-            # Create batch if expiry date is provided
+            # Always create batch for inventory tracking
             batch_id = None
-            if item.get("expiry_date"):
-                batch_result = db.execute(text("""
-                    INSERT INTO inventory.batches (
-                        org_id, product_id,
-                        batch_number, expiry_date,
-                        initial_quantity, quantity_available,
-                        cost_per_unit, mrp_per_unit,
-                        source_type, 
-                        pack_type, pack_size, pack_uom, base_uom, units_per_pack,
-                        batch_status, expiry_status,
-                        created_at
-                    ) VALUES (
-                        :org_id, :product_id,
-                        :batch_number, :expiry_date,
-                        :quantity, :quantity,
-                        :cost_price, :mrp,
-                        'purchase',
-                        :pack_type, :pack_size, :pack_uom, :base_uom, :units_per_pack,
-                        'active', 'normal',
-                        CURRENT_TIMESTAMP
-                    ) RETURNING batch_id
-                """), {
-                    "org_id": current_user['org_id'],
-                    "product_id": product_id,
-                    "batch_number": batch_number,
-                    "expiry_date": item.get("expiry_date"),
-                    "quantity": quantity,
-                    "cost_price": cost_price,
-                    "mrp": item.get("mrp", 0),
-                    "pack_type": item.get("pack_type", "STRIP"),
-                    "pack_size": item.get("pack_size", 1),
-                    "pack_uom": item.get("pack_type", "STRIP"),
-                    "base_uom": item.get("uom", "NOS"),
-                    "units_per_pack": item.get("pack_size", 1)
-                })
-                
-                batch = batch_result.fetchone()
-                batch_id = batch.batch_id if batch else None
-                logger.info(f"Batch {batch_id} created for product {product_id}")
+            # Use expiry_date if provided, otherwise set to 2 years from now (default for pharma)
+            expiry_date = item.get("expiry_date")
+            if not expiry_date:
+                from datetime import timedelta
+                expiry_date = (datetime.now() + timedelta(days=730)).date()  # 2 years default
             
-            # Create supplier invoice item
+            # Always create batch for proper inventory tracking
+            batch_result = db.execute(text("""
+                INSERT INTO inventory.batches (
+                    org_id, product_id,
+                    batch_number, expiry_date,
+                    initial_quantity, quantity_available,
+                    cost_per_unit, mrp_per_unit,
+                    source_type, 
+                    pack_type, pack_size, pack_uom, base_uom, units_per_pack,
+                    batch_status, expiry_status,
+                    created_at
+                ) VALUES (
+                    :org_id, :product_id,
+                    :batch_number, :expiry_date,
+                    :quantity, :quantity,
+                    :cost_price, :mrp,
+                    'purchase',
+                    :pack_type, :pack_size, :pack_uom, :base_uom, :units_per_pack,
+                    'active', 'normal',
+                    CURRENT_TIMESTAMP
+                ) RETURNING batch_id
+            """), {
+                "org_id": current_user['org_id'],
+                "product_id": product_id,
+                "batch_number": batch_number,
+                "expiry_date": expiry_date,
+                "quantity": quantity,
+                "cost_price": cost_price,
+                "mrp": item.get("mrp", cost_price * Decimal('1.5')),  # Default MRP is 1.5x cost
+                "pack_type": item.get("pack_type", "STRIP"),
+                "pack_size": item.get("pack_size", 1),
+                "pack_uom": item.get("pack_type", "STRIP"),
+                "base_uom": item.get("uom", "NOS"),
+                "units_per_pack": item.get("pack_size", 1)
+            })
+            
+            batch = batch_result.fetchone()
+            batch_id = batch.batch_id if batch else None
+            logger.info(f"Batch {batch_id} created for product {product_id}")
+            
+            # Update product pricing in inventory.products table
+            mrp_value = item.get("mrp", cost_price * Decimal('1.5'))
+            db.execute(text("""
+                UPDATE inventory.products 
+                SET mrp = :mrp,
+                    cost_price = :cost_price,
+                    selling_price = :selling_price,
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE product_id = :product_id
+            """), {
+                "product_id": product_id,
+                "mrp": mrp_value,
+                "cost_price": cost_price,
+                "selling_price": mrp_value * Decimal('0.9')  # Default selling price is 90% of MRP
+            })
+            
+            # Create supplier invoice item with MRP
             db.execute(
                 text("""
                     INSERT INTO procurement.supplier_invoice_items (
