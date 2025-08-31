@@ -616,22 +616,10 @@ async def create_purchase_entry(purchase_data: dict, db: Session = Depends(get_d
             batch_id = batch.batch_id if batch else None
             logger.info(f"Batch {batch_id} created for product {product_id}")
             
-            # Update product pricing in inventory.products table
-            db.execute(text("""
-                UPDATE inventory.products 
-                SET mrp = :mrp,
-                    cost_price = :cost_price,
-                    selling_price = :selling_price,
-                    updated_at = CURRENT_TIMESTAMP
-                WHERE product_id = :product_id
-            """), {
-                "product_id": product_id,
-                "mrp": mrp_value,
-                "cost_price": cost_price,
-                "selling_price": mrp_value * Decimal('0.9')  # Default selling price is 90% of MRP
-            })
+            # Note: Pricing is stored at batch level, not product level
+            # Each batch can have different MRP and cost prices
             
-            # Create supplier invoice item with MRP
+            # Create supplier invoice item with batch reference
             db.execute(
                 text("""
                     INSERT INTO procurement.supplier_invoice_items (
