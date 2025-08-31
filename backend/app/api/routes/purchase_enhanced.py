@@ -238,6 +238,27 @@ async def create_direct_purchase_entry(purchase_data: dict, db: Session = Depend
                     product_id = existing_product.product_id
                     logger.info(f"Found existing product: {product_name} (ID: {product_id})")
                 else:
+                    # Get or create a default category first
+                    category_result = db.execute(text("""
+                        SELECT category_id FROM inventory.product_categories 
+                        WHERE org_id = :org_id
+                        ORDER BY category_id
+                        LIMIT 1
+                    """), {"org_id": current_user['org_id']}).fetchone()
+                    
+                    if category_result:
+                        category_id = category_result.category_id
+                    else:
+                        # Create a default category
+                        new_category = db.execute(text("""
+                            INSERT INTO inventory.product_categories (
+                                org_id, category_name, category_code, is_active
+                            ) VALUES (
+                                :org_id, 'General', 'GEN', true
+                            ) RETURNING category_id
+                        """), {"org_id": current_user['org_id']}).fetchone()
+                        category_id = new_category.category_id if new_category else None
+                    
                     # Create new product with minimal required fields
                     # Generate a meaningful product code
                     product_code = f"PROD-{product_name[:10].upper().replace(' ', '')}-{datetime.now().strftime('%Y%m%d%H%M%S')}"
@@ -248,12 +269,13 @@ async def create_direct_purchase_entry(purchase_data: dict, db: Session = Depend
                             category_id, is_active, created_at
                         ) VALUES (
                             :org_id, :product_name, :product_code,
-                            1, true, CURRENT_TIMESTAMP
+                            :category_id, true, CURRENT_TIMESTAMP
                         ) RETURNING product_id
                     """), {
                         "org_id": current_user['org_id'],
                         "product_name": product_name,
-                        "product_code": product_code
+                        "product_code": product_code,
+                        "category_id": category_id
                     }).fetchone()
                     product_id = new_product.product_id if new_product else None
                     logger.info(f"Created new product: {product_name} (ID: {product_id}, Code: {product_code})")
@@ -457,6 +479,27 @@ async def create_purchase_with_items(purchase_data: dict, db: Session = Depends(
                     product_id = existing_product.product_id
                     logger.info(f"Found existing product: {product_name} (ID: {product_id})")
                 else:
+                    # Get or create a default category first
+                    category_result = db.execute(text("""
+                        SELECT category_id FROM inventory.product_categories 
+                        WHERE org_id = :org_id
+                        ORDER BY category_id
+                        LIMIT 1
+                    """), {"org_id": current_user['org_id']}).fetchone()
+                    
+                    if category_result:
+                        category_id = category_result.category_id
+                    else:
+                        # Create a default category
+                        new_category = db.execute(text("""
+                            INSERT INTO inventory.product_categories (
+                                org_id, category_name, category_code, is_active
+                            ) VALUES (
+                                :org_id, 'General', 'GEN', true
+                            ) RETURNING category_id
+                        """), {"org_id": current_user['org_id']}).fetchone()
+                        category_id = new_category.category_id if new_category else None
+                    
                     # Create new product with minimal required fields
                     # Generate a meaningful product code
                     product_code = f"PROD-{product_name[:10].upper().replace(' ', '')}-{datetime.now().strftime('%Y%m%d%H%M%S')}"
@@ -467,12 +510,13 @@ async def create_purchase_with_items(purchase_data: dict, db: Session = Depends(
                             category_id, is_active, created_at
                         ) VALUES (
                             :org_id, :product_name, :product_code,
-                            1, true, CURRENT_TIMESTAMP
+                            :category_id, true, CURRENT_TIMESTAMP
                         ) RETURNING product_id
                     """), {
                         "org_id": current_user['org_id'],
                         "product_name": product_name,
-                        "product_code": product_code
+                        "product_code": product_code,
+                        "category_id": category_id
                     }).fetchone()
                     product_id = new_product.product_id if new_product else None
                     logger.info(f"Created new product: {product_name} (ID: {product_id}, Code: {product_code})")
