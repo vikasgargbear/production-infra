@@ -154,7 +154,8 @@ export const purchaseDataTransformer = {
     
     // Validate items
     purchaseData.items?.forEach((item, index) => {
-      if (!item.product_id) {
+      // Allow items without product_id if they have product_name (for PDF parsed items)
+      if (!item.product_id && !item.product_name) {
         errors.push(`Item ${index + 1}: Product is required`);
       }
       if (!item.ordered_quantity || item.ordered_quantity <= 0) {

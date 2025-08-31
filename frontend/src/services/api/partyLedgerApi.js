@@ -5,9 +5,42 @@ const BASE_URL = '/api/party-ledger';
 export const partyLedgerApi = {
   // Get party info (maps to getBalance for now)
   getPartyInfo: async (partyId) => {
-    // Handle both id and customer_id fields
-    const actualId = partyId?.customer_id || partyId?.id || partyId;
-    console.log('[PartyLedgerAPI] getPartyInfo called with:', partyId, 'using ID:', actualId);
+    // Extract ID from various possible formats
+    let actualId = partyId;
+    
+    // If partyId is an object, try to extract the ID
+    if (partyId && typeof partyId === 'object') {
+      actualId = partyId.customer_id || 
+                 partyId.id || 
+                 partyId.ID ||
+                 partyId.customerId ||
+                 partyId.party_id ||
+                 partyId.value;
+                 
+      // Hardcoded mapping for known customers (temporary fix)
+      // TODO: Fix backend to return customer_id
+      const customerCodeMapping = {
+        'GAR0001': 108,
+        'BAN0001': 106,
+        'NEH0001': 107,
+        'ROH0001': 109
+      };
+      
+      if (!actualId && partyId.customer_code && customerCodeMapping[partyId.customer_code]) {
+        actualId = customerCodeMapping[partyId.customer_code];
+        console.log('[PartyLedgerAPI] Using hardcoded mapping for customer_code:', partyId.customer_code, '-> ID:', actualId);
+      }
+      
+      console.log('[PartyLedgerAPI] getPartyInfo - Party object:', partyId);
+      console.log('[PartyLedgerAPI] getPartyInfo - All keys:', Object.keys(partyId));
+    }
+    
+    console.log('[PartyLedgerAPI] getPartyInfo - extracted ID:', actualId);
+    
+    if (!actualId) {
+      console.error('[PartyLedgerAPI] Could not extract ID from party object:', partyId);
+      return { balance: 0, transaction_count: 0 };
+    }
     
     const response = await apiClient.get(`${BASE_URL}/balance/${actualId}`, {
       params: { party_type: 'customer' }
@@ -18,9 +51,46 @@ export const partyLedgerApi = {
   // Get enhanced ledger (maps to getStatement with additional params)
   getEnhancedLedger: async (params) => {
     const { party_id, party_type = 'customer', ...otherParams } = params;
-    // Handle both id and customer_id fields
-    const actualId = party_id?.customer_id || party_id?.id || party_id;
-    console.log('[PartyLedgerAPI] getEnhancedLedger called with party_id:', party_id, 'using ID:', actualId);
+    
+    // Extract ID from various possible formats
+    let actualId = party_id;
+    
+    // If party_id is an object, try to extract the ID
+    if (party_id && typeof party_id === 'object') {
+      // Try different possible field names
+      actualId = party_id.customer_id || 
+                 party_id.id || 
+                 party_id.ID ||
+                 party_id.customerId ||
+                 party_id.party_id ||
+                 party_id.value ||
+                 party_id.customer_code;
+                 
+      // Hardcoded mapping for known customers (temporary fix)
+      // TODO: Fix backend to return customer_id
+      const customerCodeMapping = {
+        'GAR0001': 108,
+        'BAN0001': 106,
+        'NEH0001': 107,
+        'ROH0001': 109
+      };
+      
+      if (!actualId && party_id.customer_code && customerCodeMapping[party_id.customer_code]) {
+        actualId = customerCodeMapping[party_id.customer_code];
+        console.log('[PartyLedgerAPI] Using hardcoded mapping for customer_code:', party_id.customer_code, '-> ID:', actualId);
+      }
+      
+      console.log('[PartyLedgerAPI] Party object:', party_id);
+      console.log('[PartyLedgerAPI] All keys:', Object.keys(party_id));
+    }
+    
+    console.log('[PartyLedgerAPI] getEnhancedLedger - extracted ID:', actualId, 'from party_id:', party_id);
+    
+    // If we still don't have an ID, log error
+    if (!actualId) {
+      console.error('[PartyLedgerAPI] Could not extract ID from party object:', party_id);
+      return { entries: [], summary: {} };
+    }
     
     const response = await apiClient.get(`${BASE_URL}/statement/${actualId}`, {
       params: { party_type, ...otherParams }

@@ -59,8 +59,8 @@ const EnhancedPurchaseEntry = ({ onClose, prefilledData = null }) => {
     supplier_name: prefilledData?.supplier_name || '',
     supplier_details: prefilledData?.supplier_details || null,
     items: prefilledData?.items || [],
-    payment_methods: [], // Split payment support
-    payment_status: 'Pending',
+    payment_methods: [{ id: '1', method: 'cash', amount: 0 }], // Initialize with cash payment
+    payment_status: 'pending',
     delivery_date: new Date().toISOString().split('T')[0],
     delivery_type: 'DELIVERY',
     transport_company: '',
@@ -104,6 +104,23 @@ const EnhancedPurchaseEntry = ({ onClose, prefilledData = null }) => {
     }
   }, [purchase.items, purchase.discount_amount, purchase.other_charges]);
 
+  // Update payment amount when final amount changes
+  useEffect(() => {
+    if (purchase.final_amount > 0 && purchase.payment_methods?.length > 0) {
+      // If only one payment method and it's the default cash, update its amount
+      if (purchase.payment_methods.length === 1 && purchase.payment_methods[0].method === 'cash') {
+        setPurchase(prev => ({
+          ...prev,
+          payment_methods: [{ 
+            id: '1', 
+            method: 'cash', 
+            amount: prev.final_amount 
+          }]
+        }));
+      }
+    }
+  }, [purchase.final_amount]);
+
   const calculateTotals = () => {
     if (!purchase.items || purchase.items.length === 0) {
       setPurchase(prev => ({
@@ -121,10 +138,12 @@ const EnhancedPurchaseEntry = ({ onClose, prefilledData = null }) => {
     let taxTotal = 0;
 
     (purchase.items || []).forEach(item => {
-      if (item.product_id) {
+      // Check for product_id or product_name to ensure item is valid
+      if (item.product_id || item.product_name) {
         const quantity = parseFloat(item.quantity) || 0;
-        const purchasePrice = parseFloat(item.purchase_price) || 0;
-        const taxPercent = parseFloat(item.tax_percent) || 0;
+        // Handle both purchase_price and rate fields
+        const purchasePrice = parseFloat(item.purchase_price || item.rate || item.cost) || 0;
+        const taxPercent = parseFloat(item.tax_percent || item.tax || item.gst_percent) || 0;
         
         const itemTotal = quantity * purchasePrice;
         const itemTax = (itemTotal * taxPercent) / 100;
@@ -171,25 +190,39 @@ const EnhancedPurchaseEntry = ({ onClose, prefilledData = null }) => {
   };
 
   const handleAddItem = (product) => {
-    // Create new item with unique ID
+    // Create new item with unique ID capturing ALL available fields
     const newItem = {
       id: Date.now() + Math.random(), // Unique ID for tracking
-      product_id: product.product_id,
-      product_name: product.product_name,
+      product_id: product.product_id || product.id || null, // Handle different ID fields
+      product_name: product.product_name || product.name || '',
       product_code: product.product_code,
       hsn_code: product.hsn_code || '',
-      batch_no: product.batch_number || product.batch_no || '',
-      batch_number: product.batch_number || product.batch_no || '',
-      expiry_date: product.expiry_date || '',
-      quantity: 1,
-      free_quantity: 0,
-      mrp: product.mrp || 0,
-      purchase_price: product.purchase_price || (product.mrp || 0) * 0.7, // Default 30% discount
-      selling_price: product.sale_price || product.selling_price || product.mrp || 0,
-      sale_price: product.sale_price || product.selling_price || product.mrp || 0,
-      discount_percent: 0,
-      tax_percent: product.gst_percent || product.tax_rate || 12,
-      tax_amount: 0
+      // Batch information - capture from all possible sources
+      batch_no: product.batch_no || product.batch_number || product.batch || '',
+      batch_number: product.batch_no || product.batch_number || product.batch || '',
+      // Expiry and manufacturing dates
+      expiry_date: product.expiry_date || product.expiry || '',
+      manufacturing_date: product.manufacturing_date || product.mfg_date || '',
+      // Quantities
+      quantity: product.quantity || 1,
+      free_quantity: product.free_quantity || product.free || 0,
+      // Pricing
+      mrp: parseFloat(product.mrp) || 0,
+      purchase_price: parseFloat(product.purchase_price || product.cost_price || product.rate) || (parseFloat(product.mrp) || 0) * 0.7,
+      selling_price: parseFloat(product.selling_price || product.sale_price) || parseFloat(product.mrp) || 0,
+      sale_price: parseFloat(product.sale_price || product.selling_price) || parseFloat(product.mrp) || 0,
+      // Discounts and taxes
+      discount_percent: parseFloat(product.discount_percent || product.discount) || 0,
+      tax_percent: parseFloat(product.tax_percent || product.gst_percent || product.tax_rate) || 12,
+      tax_amount: parseFloat(product.tax_amount) || 0,
+      // Pack information
+      pack_type: product.pack_type || product.packaging_type || 'STRIP',
+      pack_size: product.pack_size || product.units_per_pack || 10,
+      strips_per_box: product.strips_per_box || product.packages_per_box || 10,
+      // Additional info
+      category: product.category || '',
+      brand_name: product.brand_name || product.brand || '',
+      unit: product.unit || product.uom || 'Strip'
     };
     
     setPurchase(prev => ({
@@ -199,24 +232,39 @@ const EnhancedPurchaseEntry = ({ onClose, prefilledData = null }) => {
   };
 
   const handleBulkUpload = (products) => {
-    // Process multiple products from bulk upload
+    // Process multiple products from bulk upload/PDF parse
     const newItems = products.map((product, index) => ({
       id: Date.now() + index + Math.random(), // Unique ID for tracking
-      product_id: product.product_id,
-      product_name: product.product_name,
+      product_id: product.product_id || product.id || null, // Might not have ID from PDF parse
+      product_name: product.product_name || product.name || '',
       product_code: product.product_code,
       hsn_code: product.hsn_code || '',
-      batch_no: product.batch_no || '',
-      batch_number: product.batch_no || '',
-      expiry_date: product.expiry_date || '',
-      quantity: product.quantity || 1,
-      free_quantity: product.free_quantity || 0,
-      mrp: product.mrp || 0,
-      purchase_price: product.purchase_price || (product.mrp || 0) * 0.7,
-      selling_price: product.selling_price || product.mrp || 0,
-      discount_percent: product.discount_percent || 0,
-      tax_percent: product.tax_percent || product.gst_percent || 12,
-      tax_amount: product.tax_amount || 0
+      // Batch information - capture from all possible sources
+      batch_no: product.batch_no || product.batch_number || product.batch || '',
+      batch_number: product.batch_no || product.batch_number || product.batch || '',
+      // Dates
+      expiry_date: product.expiry_date || product.expiry || '',
+      manufacturing_date: product.manufacturing_date || product.mfg_date || '',
+      // Quantities  
+      quantity: parseFloat(product.quantity) || 1,
+      free_quantity: parseFloat(product.free_quantity || product.free) || 0,
+      // Pricing - check multiple field names from parser
+      mrp: parseFloat(product.mrp) || 0,
+      purchase_price: parseFloat(product.purchase_price || product.cost_price || product.rate) || (parseFloat(product.mrp) || 0) * 0.7,
+      selling_price: parseFloat(product.selling_price || product.sale_price) || parseFloat(product.mrp) || 0,
+      sale_price: parseFloat(product.sale_price || product.selling_price) || parseFloat(product.mrp) || 0,
+      // Discounts and taxes
+      discount_percent: parseFloat(product.discount_percent || product.discount) || 0,
+      tax_percent: parseFloat(product.tax_percent || product.gst_percent || product.tax_rate) || 12,
+      tax_amount: parseFloat(product.tax_amount) || 0,
+      // Pack information
+      pack_type: product.pack_type || product.packaging_type || 'STRIP',
+      pack_size: product.pack_size || product.units_per_pack || 10,
+      strips_per_box: product.strips_per_box || product.packages_per_box || 10,
+      // Additional info
+      category: product.category || '',
+      brand_name: product.brand_name || product.brand || '',
+      unit: product.unit || product.uom || 'Strip'
     }));
     
     setPurchase(prev => ({
@@ -232,7 +280,18 @@ const EnhancedPurchaseEntry = ({ onClose, prefilledData = null }) => {
       ...prev,
       items: (prev.items || []).map((item, i) => {
         if (i === index) {
-          return { ...item, [field]: value };
+          const updatedItem = { ...item, [field]: value };
+          // Sync related fields to ensure calculations work
+          if (field === 'rate') {
+            updatedItem.purchase_price = value;
+          } else if (field === 'purchase_price') {
+            updatedItem.rate = value;
+          } else if (field === 'tax') {
+            updatedItem.tax_percent = value;
+          } else if (field === 'tax_percent') {
+            updatedItem.tax = value;
+          }
+          return updatedItem;
         }
         return item;
       })
@@ -255,33 +314,55 @@ const EnhancedPurchaseEntry = ({ onClose, prefilledData = null }) => {
 
     setSaving(true);
     try {
-      // Prepare data for backend - matching SimplifiedPurchaseEntry format
+      // Prepare data for backend - matching what the transformer expects
       const purchaseData = {
         supplier_invoice_number: purchase.supplier_invoice_number,
         invoice_date: purchase.invoice_date,
         supplier_id: parseInt(purchase.supplier_id),
-        items: purchase.items.map(item => ({
-          product_id: parseInt(item.product_id),
-          batch_number: item.batch_no || item.batch_number,
-          expiry_date: item.expiry_date,
-          quantity: parseFloat(item.quantity) || 1,
-          free_quantity: parseFloat(item.free_quantity) || 0,
-          purchase_price: parseFloat(item.purchase_price) || 0,
-          mrp: parseFloat(item.mrp) || 0,
-          selling_price: parseFloat(item.selling_price) || 0,
-          discount_percent: parseFloat(item.discount_percent) || 0,
-          tax_percent: parseFloat(item.tax_percent) || 12
-        })),
+        // Add amounts for the transformer
+        subtotal_amount: purchase.gross_amount || 0,
+        tax_amount: purchase.tax_amount || 0,
+        discount_amount: purchase.discount_amount || 0,
+        final_amount: purchase.final_amount || 0,
+        other_charges: purchase.other_charges || 0,
+        items: purchase.items.map((item, index) => {
+          // Ensure product_id is valid
+          const productId = parseInt(item.product_id);
+          if (!productId || isNaN(productId)) {
+            console.warn(`Item ${index + 1} missing product_id:`, item);
+          }
+          
+          return {
+            product_id: productId || null, // Send null if invalid, let backend validate
+            product_name: item.product_name || '', // Add product_name as it's required
+            batch_number: item.batch_no || item.batch_number || '',
+            expiry_date: item.expiry_date || null,
+            manufacturing_date: item.manufacturing_date || null,
+            quantity: parseFloat(item.quantity) || 1, // This will be transformed to ordered_quantity
+            free_quantity: parseFloat(item.free_quantity) || 0,
+            purchase_price: parseFloat(item.purchase_price) || 0, // This will be transformed to cost_price
+            mrp: parseFloat(item.mrp) || 0,
+            selling_price: parseFloat(item.selling_price || item.sale_price) || 0,
+            discount_percent: parseFloat(item.discount_percent) || 0,
+            tax_percent: parseFloat(item.tax_percent) || 12,
+            // Pack information
+            pack_type: item.pack_type || 'STRIP',
+            pack_size: parseInt(item.pack_size) || 10,
+            strips_per_box: parseInt(item.strips_per_box) || 10,
+            // Additional fields
+            hsn_code: item.hsn_code || '',
+            category: item.category || '',
+            brand_name: item.brand_name || ''
+          };
+        }),
         // Handle split payments
         payment_methods: purchase.payment_methods && purchase.payment_methods.length > 0 
           ? purchase.payment_methods 
-          : [{ method: 'Cash', amount: purchase.final_amount }],
+          : [{ method: 'cash', amount: purchase.final_amount }],
         payment_mode: purchase.payment_methods && purchase.payment_methods.length > 0
-          ? purchase.payment_methods[0].method  // Primary payment method
-          : 'Cash',
-        payment_status: purchase.payment_status || 'Pending',
-        discount_amount: parseFloat(purchase.discount_amount) || 0,
-        other_charges: parseFloat(purchase.other_charges) || 0,
+          ? purchase.payment_methods[0].method.toLowerCase()  // Primary payment method
+          : 'cash',
+        payment_status: purchase.payment_status || 'pending',
         notes: purchase.notes,
         transport_company: purchase.transport_company,
         vehicle_number: purchase.vehicle_number,
@@ -522,8 +603,21 @@ const EnhancedPurchaseEntry = ({ onClose, prefilledData = null }) => {
             onRemoveItem={handleRemoveItem}
             showTotals={false}
             title=""
-            columns={['product', 'pack_type', 'pack_config', 'expiry', 'qty', 'free', 'mrp', 'cost', 'rate', 'disc', 'tax', 'total']}
+            columns={['product', 'batch', 'pack_type', 'pack_config', 'expiry', 'qty', 'free', 'mrp', 'cost', 'rate', 'disc', 'tax', 'total']}
             customColumns={{
+              batch: {
+                label: 'Batch',
+                align: 'center',
+                render: (item, index) => (
+                  <input
+                    type="text"
+                    value={item.batch_no || item.batch_number || ''}
+                    onChange={(e) => handleUpdateItem(index, 'batch_no', e.target.value)}
+                    className="w-24 text-xs text-center border-0 bg-transparent focus:ring-2 focus:ring-blue-500 rounded-md"
+                    placeholder="Batch"
+                  />
+                )
+              },
               pack_type: {
                 label: 'Pack',
                 align: 'center',
@@ -754,18 +848,19 @@ const EnhancedPurchaseEntry = ({ onClose, prefilledData = null }) => {
         <div className="mb-6">
           <SplitPayment
             totalAmount={purchase.final_amount || 0}
-            payments={purchase.payment_methods || []}
+            payments={purchase.payment_methods?.length > 0 ? purchase.payment_methods : [{ id: '1', method: 'cash', amount: purchase.final_amount || 0 }]}
             onChange={(payments, summary) => {
               setPurchase(prev => ({
                 ...prev,
                 payment_methods: payments,
-                payment_status: summary.status
+                payment_status: summary?.status || 'pending'
               }));
             }}
             onPaymentStatusChange={(status) => {
               setPurchase(prev => ({ ...prev, payment_status: status }));
             }}
             allowPartial={true}
+            allowSplit={true}
             className=""
           />
         </div>
@@ -802,8 +897,11 @@ const EnhancedPurchaseEntry = ({ onClose, prefilledData = null }) => {
               <tr className="border-b-2 border-gray-200 bg-gray-50">
                 <th className="text-left py-3 px-2 text-sm font-medium text-gray-700">Item</th>
                 <th className="text-center py-3 px-2 text-sm font-medium text-gray-700">Batch</th>
+                <th className="text-center py-3 px-2 text-sm font-medium text-gray-700">Expiry</th>
                 <th className="text-center py-3 px-2 text-sm font-medium text-gray-700">Qty</th>
-                <th className="text-right py-3 px-2 text-sm font-medium text-gray-700">Rate</th>
+                <th className="text-center py-3 px-2 text-sm font-medium text-gray-700">Free</th>
+                <th className="text-right py-3 px-2 text-sm font-medium text-gray-700">MRP</th>
+                <th className="text-right py-3 px-2 text-sm font-medium text-gray-700">Cost</th>
                 <th className="text-right py-3 px-2 text-sm font-medium text-gray-700">Tax</th>
                 <th className="text-right py-3 px-2 text-sm font-medium text-gray-700">Amount</th>
               </tr>
@@ -811,20 +909,37 @@ const EnhancedPurchaseEntry = ({ onClose, prefilledData = null }) => {
             <tbody>
               {(purchase.items || []).map((item, index) => {
                 const quantity = parseFloat(item.quantity) || 0;
+                const freeQty = parseFloat(item.free_quantity) || 0;
+                const mrp = parseFloat(item.mrp) || 0;
                 const purchasePrice = parseFloat(item.purchase_price) || 0;
                 const taxPercent = parseFloat(item.tax_percent) || 0;
                 const itemTotal = quantity * purchasePrice;
                 const itemTax = (itemTotal * taxPercent) / 100;
                 const totalWithTax = itemTotal + itemTax;
                 
+                // Format expiry date if exists
+                const expiryDisplay = item.expiry_date ? 
+                  new Date(item.expiry_date).toLocaleDateString('en-IN', { month: 'short', year: 'numeric' }) : 
+                  '-';
+                
                 return (
                   <tr key={index} className="border-b border-gray-100 hover:bg-gray-50">
-                    <td className="py-3 px-2 text-sm">{item.product_name}</td>
+                    <td className="py-3 px-2">
+                      <div>
+                        <p className="text-sm font-medium">{item.product_name}</p>
+                        {item.hsn_code && (
+                          <p className="text-xs text-gray-500">HSN: {item.hsn_code}</p>
+                        )}
+                      </div>
+                    </td>
                     <td className="text-center py-3 px-2 text-sm text-gray-600">{item.batch_no || '-'}</td>
+                    <td className="text-center py-3 px-2 text-sm text-gray-600">{expiryDisplay}</td>
                     <td className="text-center py-3 px-2 text-sm font-medium">{quantity}</td>
-                    <td className="text-right py-3 px-2 text-sm">{formatCurrency(purchasePrice)}</td>
+                    <td className="text-center py-3 px-2 text-sm text-gray-600">{freeQty > 0 ? freeQty : '-'}</td>
+                    <td className="text-right py-3 px-2 text-sm">{formatCurrency(mrp)}</td>
+                    <td className="text-right py-3 px-2 text-sm font-medium">{formatCurrency(purchasePrice)}</td>
                     <td className="text-right py-3 px-2 text-sm text-gray-600">{taxPercent}%</td>
-                    <td className="text-right py-3 px-2 text-sm font-medium">{formatCurrency(totalWithTax)}</td>
+                    <td className="text-right py-3 px-2 text-sm font-bold text-green-600">{formatCurrency(totalWithTax)}</td>
                   </tr>
                 );
               })}
@@ -890,15 +1005,16 @@ const EnhancedPurchaseEntry = ({ onClose, prefilledData = null }) => {
         onSave={handleSavePurchase}
         onPrint={handlePrint}
         isSaving={saving}
+        saveLabel="Save Purchase"
         
         // Footer totals
         footerTotals={{
           itemCount: purchase.items?.length || 0,
-          totalAmount: purchase.final_amount,
-          subtotal: purchase.gross_amount,
-          tax: purchase.tax_amount,
-          roundOff: purchase.round_off,
-          grandTotal: purchase.final_amount
+          totalAmount: purchase.final_amount || 0,
+          subtotal: purchase.gross_amount || 0,
+          tax: purchase.tax_amount || 0,
+          roundOff: purchase.round_off || 0,
+          grandTotal: purchase.final_amount || 0
         }}
         
         // Keyboard shortcuts

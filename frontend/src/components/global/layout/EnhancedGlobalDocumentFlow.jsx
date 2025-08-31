@@ -46,6 +46,7 @@ const EnhancedGlobalDocumentFlow = ({
   onSave,
   onPrint,
   isSaving = false,
+  saveLabel, // Custom save button label
   
   // Footer Configuration
   footerTotals = {},
@@ -331,6 +332,7 @@ const EnhancedGlobalDocumentFlow = ({
             onPrint={onPrint}
             onSave={onSave}
             isSaving={isSaving}
+            saveLabel={config.saveLabel || saveLabel || 'Save'}
           />
         )}
 
