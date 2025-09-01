@@ -4292,3 +4292,14 @@ DO $$
         ADD COLUMN free_quantity INTEGER DEFAULT 0;
     END IF;
 END $$;
+
+
+-- Verify purchase triggers were created
+SELECT 
+    'Purchase Triggers Created' as status,
+    COUNT(*) as count
+FROM pg_trigger 
+WHERE tgname LIKE '%purchase%';
+
+RAISE NOTICE '✅ SECTION 26: PURCHASE ENTRY TRIGGERS COMPLETE';
+
