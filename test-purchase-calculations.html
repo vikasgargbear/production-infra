@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test Purchase Calculations</title>
+    <style>
+        body {
+            font-family: -apple-system, system-ui, sans-serif;
+            padding: 20px;
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        .test-section {
+            margin: 30px 0;
+            padding: 20px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+        }
+        .item-row {
+            display: grid;
+            grid-template-columns: repeat(7, 1fr);
+            gap: 10px;
+            margin: 10px 0;
+            padding: 10px;
+            background: #f5f5f5;
+            border-radius: 4px;
+        }
+        .result {
+            margin-top: 20px;
+            padding: 15px;
+            background: #e8f5e9;
+            border-radius: 4px;
+        }
+        .error {
+            background: #ffebee;
+            color: #c62828;
+        }
+        .success {
+            background: #e8f5e9;
+            color: #2e7d32;
+        }
+        h2 {
+            color: #1976d2;
+        }
+        .calculation-details {
+            font-family: monospace;
+            background: #fff;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            margin: 10px 0;
+        }
+    </style>
+</head>
+<body>
+    <h1>Purchase Calculation Test</h1>
+    
+    <div class="test-section">
+        <h2>Test Items from Your Screenshot</h2>
+        
+        <div class="item-row">
+            <strong>Product</strong>
+            <strong>Quantity</strong>
+            <strong>Purchase Price</strong>
+            <strong>Discount %</strong>
+            <strong>Tax %</strong>
+            <strong>Expected Total</strong>
+            <strong>Calculated Total</strong>
+        </div>
+        
+        <div id="test-items"></div>
+        
+        <div class="result" id="calculation-result"></div>
+    </div>
+
+    <script>
+        // Test data based on your screenshot
+        const testItems = [
+            {
+                product_name: "AASOPRO-DHA POWDER",
+                quantity: 491,
+                purchase_price: 80,
+                discount_percent: 0,
+                tax_percent: 18,
+                mrp: 330
+            },
+            {
+                product_name: "iPod",
+                quantity: 120,
+                purchase_price: 202.50,
+                discount_percent: 0,
+                tax_percent: 12,
+                mrp: 225
+            }
+        ];
+
+        // Calculate function matching PurchaseContext logic
+        function calculateLineTotal(item) {
+            const quantity = parseFloat(item.quantity) || 0;
+            const purchasePrice = parseFloat(item.purchase_price) || 0;
+            const taxPercent = parseFloat(item.tax_percent) || 0;
+            const discountPercent = parseFloat(item.discount_percent) || 0;
+            
+            const subtotal = quantity * purchasePrice;
+            const discountAmount = (subtotal * discountPercent) / 100;
+            const taxableAmount = subtotal - discountAmount;
+            const taxAmount = (taxableAmount * taxPercent) / 100;
+            const lineTotal = taxableAmount + taxAmount;
+            
+            return {
+                subtotal,
+                discountAmount,
+                taxableAmount,
+                taxAmount,
+                lineTotal
+            };
+        }
+
+        // Display test results
+        function runTests() {
+            const container = document.getElementById('test-items');
+            const resultDiv = document.getElementById('calculation-result');
+            let totalCalculated = 0;
+            let detailsHtml = '<h3>Calculation Details:</h3>';
+            
+            testItems.forEach((item, index) => {
+                const calc = calculateLineTotal(item);
+                totalCalculated += calc.lineTotal;
+                
+                const itemDiv = document.createElement('div');
+                itemDiv.className = 'item-row';
+                itemDiv.innerHTML = `
+                    <div>${item.product_name}</div>
+                    <div>${item.quantity}</div>
+                    <div>₹${item.purchase_price.toFixed(2)}</div>
+                    <div>${item.discount_percent}%</div>
+                    <div>${item.tax_percent}%</div>
+                    <div>-</div>
+                    <div>₹${calc.lineTotal.toFixed(2)}</div>
+                `;
+                container.appendChild(itemDiv);
+                
+                detailsHtml += `
+                    <div class="calculation-details">
+                        <strong>${item.product_name}:</strong><br>
+                        Quantity: ${item.quantity} × Purchase Price: ₹${item.purchase_price}<br>
+                        Subtotal: ₹${calc.subtotal.toFixed(2)}<br>
+                        Discount (${item.discount_percent}%): -₹${calc.discountAmount.toFixed(2)}<br>
+                        Taxable Amount: ₹${calc.taxableAmount.toFixed(2)}<br>
+                        Tax (${item.tax_percent}%): +₹${calc.taxAmount.toFixed(2)}<br>
+                        <strong>Line Total: ₹${calc.lineTotal.toFixed(2)}</strong>
+                    </div>
+                `;
+            });
+            
+            detailsHtml += `
+                <div class="calculation-details">
+                    <strong>Grand Total: ₹${totalCalculated.toFixed(2)}</strong>
+                </div>
+            `;
+            
+            resultDiv.innerHTML = detailsHtml;
+            
+            // Test specific scenarios
+            const item1Calc = calculateLineTotal(testItems[0]);
+            const item2Calc = calculateLineTotal(testItems[1]);
+            
+            console.log('Item 1 (AASOPRO-DHA):', {
+                expected_subtotal: 491 * 80,
+                actual_subtotal: item1Calc.subtotal,
+                expected_tax: (491 * 80) * 0.18,
+                actual_tax: item1Calc.taxAmount,
+                expected_total: (491 * 80) * 1.18,
+                actual_total: item1Calc.lineTotal
+            });
+            
+            console.log('Item 2 (iPod):', {
+                expected_subtotal: 120 * 202.50,
+                actual_subtotal: item2Calc.subtotal,
+                expected_tax: (120 * 202.50) * 0.12,
+                actual_tax: item2Calc.taxAmount,
+                expected_total: (120 * 202.50) * 1.12,
+                actual_total: item2Calc.lineTotal
+            });
+        }
+
+        // Run tests on load
+        runTests();
+    </script>
+</body>
+</html>

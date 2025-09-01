@@ -119,14 +119,17 @@ const purchaseReducer = (state, action) => {
         if (item.id === action.payload.itemId) {
           const updatedItem = { ...item, [action.payload.field]: action.payload.value };
           
-          // Calculate line total
+          // Calculate line total with discount and tax
           const quantity = parseFloat(updatedItem.quantity) || 0;
           const purchasePrice = parseFloat(updatedItem.purchase_price) || 0;
           const taxPercent = parseFloat(updatedItem.tax_percent) || 0;
+          const discountPercent = parseFloat(updatedItem.discount_percent) || 0;
           
           const subtotal = quantity * purchasePrice;
-          const taxAmount = (subtotal * taxPercent) / 100;
-          updatedItem.line_total = subtotal + taxAmount;
+          const discountAmount = (subtotal * discountPercent) / 100;
+          const taxableAmount = subtotal - discountAmount;
+          const taxAmount = (taxableAmount * taxPercent) / 100;
+          updatedItem.line_total = taxableAmount + taxAmount;
           
           return updatedItem;
         }
@@ -151,22 +154,48 @@ const purchaseReducer = (state, action) => {
       };
       
     case ActionTypes.CALCULATE_TOTALS:
-      const subtotal = state.purchase.items.reduce((sum, item) => {
+      // Calculate totals with tax for each item
+      let subtotal = 0;
+      let totalTax = 0;
+      let totalWithTax = 0;
+      
+      const calculatedItems = state.purchase.items.map(item => {
         const quantity = parseFloat(item.quantity) || 0;
         const purchasePrice = parseFloat(item.purchase_price) || 0;
-        return sum + (quantity * purchasePrice);
-      }, 0);
-      
-      // Tax calculation moved to backend API
-      const taxAmount = 0;
+        const taxPercent = parseFloat(item.tax_percent) || 0;
+        const discountPercent = parseFloat(item.discount_percent) || 0;
+        
+        // Calculate line item amounts
+        const lineSubtotal = quantity * purchasePrice;
+        const discountAmount = (lineSubtotal * discountPercent) / 100;
+        const taxableAmount = lineSubtotal - discountAmount;
+        const taxAmount = (taxableAmount * taxPercent) / 100;
+        const lineTotal = taxableAmount + taxAmount;
+        
+        // Accumulate totals
+        subtotal += lineSubtotal;
+        totalTax += taxAmount;
+        totalWithTax += lineTotal;
+        
+        // Return item with calculated values
+        return {
+          ...item,
+          line_subtotal: lineSubtotal,
+          line_discount: discountAmount,
+          line_taxable: taxableAmount,
+          line_tax: taxAmount,
+          line_total: lineTotal
+        };
+      });
       
       return {
         ...state,
         purchase: {
           ...state.purchase,
+          items: calculatedItems,
           subtotal_amount: subtotal,
-          tax_amount: taxAmount,
-          final_amount: subtotal + taxAmount - (state.purchase.discount_amount || 0) + (state.purchase.delivery_charges || 0)
+          tax_amount: totalTax,
+          final_amount: totalWithTax - (state.purchase.discount_amount || 0) + (state.purchase.delivery_charges || 0)
         }
       };
       

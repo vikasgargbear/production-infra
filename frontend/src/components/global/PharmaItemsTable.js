@@ -26,6 +26,12 @@ const PharmaItemsTable = ({
   };
 
   const calculateItemTotal = (item) => {
+    // Use pre-calculated line_total if available (from context calculations)
+    if (item.line_total !== undefined && item.line_total !== null) {
+      return item.line_total;
+    }
+    
+    // Fallback to manual calculation
     const quantity = parseFloat(item.quantity) || 0;
     // Use purchase_price if available (for purchase orders), otherwise use rate
     const rate = parseFloat(item.purchase_price || item.rate) || 0;
