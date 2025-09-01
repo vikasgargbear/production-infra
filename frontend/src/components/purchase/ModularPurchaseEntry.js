@@ -8,9 +8,9 @@ import PurchaseHeader from './components/PurchaseHeader';
 import PurchaseSummary from './components/PurchaseSummary';
 import PharmaItemsTable from '../global/PharmaItemsTable';
 import GSTCalculator from '../global/calculators/GSTCalculator';
+import PurchaseItemsTableWrapper from './components/PurchaseItemsTableWrapper';
 import { 
   ViewHistoryButton, 
-  ItemsTable, 
   SupplierSearch, 
   SupplierCreationModal,
   Button,
@@ -583,7 +583,7 @@ const PurchaseEntryContent = ({ onClose, initialShowPDFUpload = false }) => {
             <PurchaseHeader />
             
             {/* Items Table */}
-            <ItemsTable module="purchase" />
+            <PurchaseItemsTableWrapper />
           </div>
         </div>
         
