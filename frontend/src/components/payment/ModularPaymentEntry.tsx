@@ -10,6 +10,7 @@ import InvoiceSelector from './components/InvoiceSelector';
 import PaymentDetails from './components/PaymentDetails';
 import PaymentDetailsEnhanced from './components/PaymentDetailsEnhanced';
 import PaymentDetailsCompact from './components/PaymentDetailsCompact';
+import PaymentDetailsOptimized from './components/PaymentDetailsOptimized';
 import PaymentSummary from './components/PaymentSummary';
 import PaymentSummaryCompact from './components/PaymentSummaryCompact';
 
@@ -386,13 +387,9 @@ const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) =>
 
             {currentStep === 1 ? (
               <>
-                {/* Payment Details - Compact single-line version */}
+                {/* Payment Details - Optimized for fast entry */}
                 <div className="mb-6">
-                  <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wider mb-3 flex items-center">
-                    <CreditCard className="w-4 h-4 mr-2" />
-                    PAYMENT DETAILS
-                  </h3>
-                  <PaymentDetailsCompact />
+                  <PaymentDetailsOptimized />
                 </div>
 
                 {/* Customer Section */}
