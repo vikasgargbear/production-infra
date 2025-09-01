@@ -199,6 +199,10 @@ from .api.routes import payment_allocation, party_ledger_v2
 api.include_router(payment_allocation.router, tags=["Payment Allocation"])
 api.include_router(party_ledger_v2.router, tags=["Party Ledger V2"])
 
+# Customer Outstanding API
+from .api.v2 import customer_outstanding
+api.include_router(customer_outstanding.router, tags=["Customer Outstanding"])
+
 # All endpoints consolidated - no temporary workarounds
 
 # Include the PostgreSQL function wrappers

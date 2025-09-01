@@ -1,0 +1,5 @@
+{
+  "projectId": "pharma-backend-production",
+  "environmentId": "production",
+  "service": "pharma-backend"
+}
