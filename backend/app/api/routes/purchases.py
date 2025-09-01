@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from sqlalchemy import text
 import logging
-from datetime import date
+from datetime import date, datetime, timedelta
 
 from ...core.database import get_db
 from ...core.auth_utils import get_org_id_from_header
@@ -245,17 +245,37 @@ async def create_purchase(purchase_data: dict, db: Session = Depends(get_db),
                     price = item.get('unit_price', 0)
                     item['line_total'] = qty * price - item.get('discount_amount', 0) + item.get('tax_amount', 0)
                 
+                # Map additional fields for batch and pricing
+                if 'batch_no' in item:
+                    item['batch_number'] = item['batch_no']
+                elif 'batch_number' not in item:
+                    item['batch_number'] = f"PO-{po['po_id']}-{item.get('product_id')}-{datetime.now().strftime('%Y%m%d')}"
+                
+                if 'expiry_date' not in item or not item['expiry_date']:
+                    item['expiry_date'] = (datetime.now() + timedelta(days=730)).strftime('%Y-%m-%d')  # 2 years default
+                
+                # Map pricing fields
+                if 'purchase_price' in item:
+                    item['unit_price'] = item.get('unit_price', item['purchase_price'])
+                
+                # Ensure all required fields have values
+                item['selling_price'] = item.get('selling_price', item.get('unit_price', 0) * 1.2)  # 20% markup default
+                item['mrp'] = item.get('mrp', item.get('unit_price', 0) * 1.5)  # 50% markup for MRP default
+                item['free_quantity'] = item.get('free_quantity', 0)
+                
                 item_query = text("""
                     INSERT INTO procurement.purchase_order_items (
                         purchase_order_id, product_id, product_name,
                         ordered_quantity, uom, pack_type, unit_price, 
                         discount_percent, discount_amount, 
-                        tax_percent, tax_amount, line_total
+                        tax_percent, tax_amount, line_total,
+                        batch_number, expiry_date, selling_price, mrp, free_quantity
                     ) VALUES (
                         :purchase_order_id, :product_id, :product_name,
                         :ordered_quantity, :uom, :pack_type, :unit_price,
                         :discount_percent, :discount_amount,
-                        :tax_percent, :tax_amount, :line_total
+                        :tax_percent, :tax_amount, :line_total,
+                        :batch_number, :expiry_date, :selling_price, :mrp, :free_quantity
                     )
                 """)
                 db.execute(item_query, item)
