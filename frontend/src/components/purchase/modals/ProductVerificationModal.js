@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { 
   Package, Search, CheckCircle, AlertCircle, ChevronLeft, 
   ChevronRight, Calendar, Hash, DollarSign, Percent, Info,
-  SkipForward, Save, AlertTriangle
+  SkipForward, Save, AlertTriangle, Plus, Trash2
 } from 'lucide-react';
 import { purchasesApi } from '../../../services/api/modules/purchases.api';
 import { debounce } from 'lodash';
@@ -257,7 +257,7 @@ const ProductVerificationModal = ({
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       {/* Progress indicator */}
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center space-x-3">
@@ -284,20 +284,25 @@ const ProductVerificationModal = ({
         </div>
       </div>
 
-      {/* Search Section */}
-      <div className="bg-gray-50 rounded-lg p-4">
-        <div className="flex items-center space-x-3 mb-3">
-          <Search className="w-5 h-5 text-gray-600" />
-          <input
-            type="text"
-            value={searchTerm}
-            onChange={(e) => {
-              setSearchTerm(e.target.value);
-              searchProduct(e.target.value);
-            }}
-            placeholder="Search for product..."
-            className="flex-1 px-3 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500"
-          />
+      {/* Search Section - Improved visualization */}
+      <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+        <label className="block text-xs font-medium text-blue-700 mb-2 uppercase tracking-wider">
+          Product Search
+        </label>
+        <div className="flex items-center space-x-3">
+          <div className="relative flex-1">
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-blue-500" />
+            <input
+              type="text"
+              value={searchTerm}
+              onChange={(e) => {
+                setSearchTerm(e.target.value);
+                searchProduct(e.target.value);
+              }}
+              placeholder="Type to search existing products or create new..."
+              className="w-full pl-10 pr-3 py-2 border-2 border-blue-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white"
+            />
+          </div>
           {searching && (
             <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-indigo-600"></div>
           )}
@@ -373,13 +378,53 @@ const ProductVerificationModal = ({
         )}
       </div>
 
-      {/* Product Details Form */}
-      <div className="space-y-4">
-        <div className="grid grid-cols-2 gap-4">
-          {/* Product Name */}
+      {/* Product Details Form - Reduced whitespace */}
+      <div className="bg-white border rounded-lg p-4">
+        <div className="flex items-center justify-between mb-3">
+          <h4 className="font-medium text-gray-700">Product Details</h4>
+          <div className="flex gap-2">
+            <button
+              onClick={() => {
+                // Clear all fields for new product
+                setProductData({
+                  product_id: null,
+                  product_name: '',
+                  batch_number: '',
+                  expiry_date: '',
+                  quantity: '',
+                  cost_price: '',
+                  mrp: '',
+                  selling_price: '',
+                  tax_percent: 12,
+                  hsn_code: '',
+                  free_quantity: 0,
+                  discount_percent: 0
+                });
+                setMode('new');
+                setSearchTerm('');
+                setSelectedProduct(null);
+              }}
+              className="px-3 py-1 bg-green-600 text-white text-sm rounded hover:bg-green-700 flex items-center gap-1"
+              title="Add new product"
+            >
+              <Plus className="w-4 h-4" />
+              <span>New</span>
+            </button>
+            <button
+              onClick={onSkip}
+              className="px-3 py-1 bg-red-600 text-white text-sm rounded hover:bg-red-700 flex items-center gap-1"
+              title="Skip this product"
+            >
+              <Trash2 className="w-4 h-4" />
+              <span>Skip</span>
+            </button>
+          </div>
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          {/* Product Name - Clearly labeled */}
           <div className="col-span-2">
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Product Name <span className="text-red-500">*</span>
+            <label className="block text-xs font-medium text-gray-600 mb-1 uppercase tracking-wider">
+              Product Name (Editable) <span className="text-red-500">*</span>
             </label>
             <input
               type="text"
@@ -388,14 +433,15 @@ const ProductVerificationModal = ({
                 ...prev, 
                 product_name: e.target.value 
               }))}
-              className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500"
+              className="w-full px-3 py-2 border-2 rounded-lg focus:ring-2 focus:ring-indigo-500 bg-gray-50"
               disabled={mode === 'selected'}
+              placeholder="Enter product name"
             />
           </div>
 
           {/* Batch Number */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label className="block text-xs font-medium text-gray-600 mb-1">
               Batch Number <span className="text-red-500">*</span>
             </label>
             <div className="relative">
@@ -407,14 +453,14 @@ const ProductVerificationModal = ({
                   ...prev, 
                   batch_number: e.target.value 
                 }))}
-                className="w-full pl-10 pr-3 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500"
+                className="w-full pl-10 pr-3 py-1.5 border rounded-lg focus:ring-2 focus:ring-indigo-500 text-sm"
               />
             </div>
           </div>
 
           {/* Expiry Date */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label className="block text-xs font-medium text-gray-600 mb-1">
               Expiry Date <span className="text-red-500">*</span>
             </label>
             <div className="relative">
@@ -427,14 +473,14 @@ const ProductVerificationModal = ({
                   expiry_date: e.target.value 
                 }))}
                 min={new Date().toISOString().split('T')[0]}
-                className="w-full pl-10 pr-3 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500"
+                className="w-full pl-10 pr-3 py-1.5 border rounded-lg focus:ring-2 focus:ring-indigo-500 text-sm"
               />
             </div>
           </div>
 
           {/* Quantity */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label className="block text-xs font-medium text-gray-600 mb-1">
               Quantity <span className="text-red-500">*</span>
             </label>
             <input
@@ -445,13 +491,13 @@ const ProductVerificationModal = ({
                 quantity: e.target.value 
               }))}
               min="0"
-              className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500"
+              className="w-full px-3 py-1.5 border rounded-lg focus:ring-2 focus:ring-indigo-500 text-sm"
             />
           </div>
 
           {/* Free Quantity */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label className="block text-xs font-medium text-gray-600 mb-1">
               Free Quantity
             </label>
             <input
@@ -462,13 +508,13 @@ const ProductVerificationModal = ({
                 free_quantity: e.target.value 
               }))}
               min="0"
-              className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500"
+              className="w-full px-3 py-1.5 border rounded-lg focus:ring-2 focus:ring-indigo-500 text-sm"
             />
           </div>
 
           {/* Cost Price */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label className="block text-xs font-medium text-gray-600 mb-1">
               Cost Price <span className="text-red-500">*</span>
             </label>
             <div className="relative">
@@ -482,14 +528,14 @@ const ProductVerificationModal = ({
                 }))}
                 min="0"
                 step="0.01"
-                className="w-full pl-10 pr-3 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500"
+                className="w-full pl-10 pr-3 py-1.5 border rounded-lg focus:ring-2 focus:ring-indigo-500 text-sm"
               />
             </div>
           </div>
 
           {/* MRP */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label className="block text-xs font-medium text-gray-600 mb-1">
               MRP
             </label>
             <div className="relative">
@@ -503,14 +549,14 @@ const ProductVerificationModal = ({
                 }))}
                 min="0"
                 step="0.01"
-                className="w-full pl-10 pr-3 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500"
+                className="w-full pl-10 pr-3 py-1.5 border rounded-lg focus:ring-2 focus:ring-indigo-500 text-sm"
               />
             </div>
           </div>
 
           {/* Selling Price */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label className="block text-xs font-medium text-gray-600 mb-1">
               Selling Price (PTR)
             </label>
             <div className="relative">
@@ -524,14 +570,14 @@ const ProductVerificationModal = ({
                 }))}
                 min="0"
                 step="0.01"
-                className="w-full pl-10 pr-3 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500"
+                className="w-full pl-10 pr-3 py-1.5 border rounded-lg focus:ring-2 focus:ring-indigo-500 text-sm"
               />
             </div>
           </div>
 
           {/* Tax Percent */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label className="block text-xs font-medium text-gray-600 mb-1">
               Tax %
             </label>
             <div className="relative">
@@ -542,7 +588,7 @@ const ProductVerificationModal = ({
                   ...prev, 
                   tax_percent: e.target.value 
                 }))}
-                className="w-full pl-10 pr-3 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500"
+                className="w-full pl-10 pr-3 py-1.5 border rounded-lg focus:ring-2 focus:ring-indigo-500 text-sm"
               >
                 <option value="0">0%</option>
                 <option value="5">5%</option>
@@ -555,7 +601,7 @@ const ProductVerificationModal = ({
 
           {/* HSN Code */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label className="block text-xs font-medium text-gray-600 mb-1">
               HSN Code
             </label>
             <input
@@ -565,13 +611,13 @@ const ProductVerificationModal = ({
                 ...prev, 
                 hsn_code: e.target.value 
               }))}
-              className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500"
+              className="w-full px-3 py-1.5 border rounded-lg focus:ring-2 focus:ring-indigo-500 text-sm"
             />
           </div>
 
           {/* Discount */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label className="block text-xs font-medium text-gray-600 mb-1">
               Discount %
             </label>
             <input
@@ -583,7 +629,7 @@ const ProductVerificationModal = ({
               }))}
               min="0"
               max="100"
-              className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500"
+              className="w-full px-3 py-1.5 border rounded-lg focus:ring-2 focus:ring-indigo-500 text-sm"
             />
           </div>
         </div>
