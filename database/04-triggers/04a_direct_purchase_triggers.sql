@@ -91,8 +91,8 @@ BEGIN
             ) RETURNING batch_id INTO v_batch_id;
         END IF;
         
-        -- Update or create stock level
-        INSERT INTO inventory.stock_levels (
+        -- Update or create location-wise stock
+        INSERT INTO inventory.location_wise_stock (
             org_id,
             branch_id,
             product_id,
@@ -122,14 +122,15 @@ BEGIN
             updated_at = CURRENT_TIMESTAMP;
         
         -- Create stock movement record
-        INSERT INTO inventory.stock_movements (
+        INSERT INTO inventory.inventory_movements (
             org_id,
-            branch_id,
             product_id,
             batch_id,
             movement_type,
+            movement_direction,
             movement_date,
             quantity,
+            location_id,
             reference_type,
             reference_id,
             unit_cost,
@@ -139,18 +140,19 @@ BEGIN
             created_at
         ) VALUES (
             v_org_id,
-            v_branch_id,
             NEW.product_id,
             v_batch_id,
             'purchase',
-            CURRENT_DATE,
+            'IN',
+            CURRENT_TIMESTAMP,
             NEW.ordered_quantity,
+            COALESCE(v_branch_id, 1),
             'purchase_order',
             NEW.purchase_order_id,
             NEW.unit_price,
             NEW.ordered_quantity * NEW.unit_price,
             'Direct purchase entry - PO Item #' || NEW.po_item_id,
-            'system',
+            1,  -- Default created_by as system user
             CURRENT_TIMESTAMP
         );
         
@@ -262,7 +264,7 @@ BEGIN
         v_branch_id := NEW.branch_id;
         
         -- Reverse all inventory updates for this PO
-        UPDATE inventory.stock_levels sl
+        UPDATE inventory.location_wise_stock sl
         SET 
             quantity_in_stock = quantity_in_stock - poi.ordered_quantity,
             quantity_available = quantity_available - poi.ordered_quantity,
@@ -281,15 +283,15 @@ BEGIN
         WHERE purchase_order_id = NEW.purchase_order_id;
         
         -- Create reversal stock movements
-        INSERT INTO inventory.stock_movements (
-            org_id, branch_id, product_id, movement_type, movement_date,
-            quantity, reference_type, reference_id, notes, created_at
+        INSERT INTO inventory.inventory_movements (
+            org_id, product_id, movement_type, movement_direction, movement_date,
+            quantity, location_id, reference_type, reference_id, notes, created_by, created_at
         )
         SELECT 
-            v_org_id, v_branch_id, product_id, 'purchase_return', CURRENT_DATE,
-            -ordered_quantity, 'purchase_order', purchase_order_id,
+            v_org_id, product_id, 'purchase_return', 'OUT', CURRENT_TIMESTAMP,
+            ordered_quantity, COALESCE(v_branch_id, 1), 'purchase_order', purchase_order_id,
             'Purchase order cancelled - PO #' || NEW.po_number,
-            CURRENT_TIMESTAMP
+            1, CURRENT_TIMESTAMP
         FROM procurement.purchase_order_items
         WHERE purchase_order_id = NEW.purchase_order_id;
     END IF;

@@ -126,7 +126,7 @@ const InvoiceSelectorV2: React.FC = () => {
           <div className="flex items-center space-x-2">
             <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-red-100 text-red-800">
               <span className="w-2 h-2 mr-2 bg-red-400 rounded-full"></span>
-              Total Outstanding: ₹{totalOutstanding.toFixed(2)}
+              Total Outstanding: ₹{(totalOutstanding || 0).toFixed(2)}
             </span>
             {payment.amount && (
               <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
@@ -144,12 +144,12 @@ const InvoiceSelectorV2: React.FC = () => {
             {remainingPayment > 0 ? (
               <span className="text-amber-600">
                 <AlertCircle className="w-4 h-4 inline mr-1" />
-                ₹{remainingPayment.toFixed(2)} unallocated
+                ₹{(remainingPayment || 0).toFixed(2)} unallocated
               </span>
             ) : remainingPayment < 0 ? (
               <span className="text-red-600">
                 <AlertCircle className="w-4 h-4 inline mr-1" />
-                Over-allocated by ₹{Math.abs(remainingPayment).toFixed(2)}
+                Over-allocated by ₹{Math.abs(remainingPayment || 0).toFixed(2)}
               </span>
             ) : (
               <span className="text-green-600">
@@ -205,16 +205,16 @@ const InvoiceSelectorV2: React.FC = () => {
                     </p>
                   </td>
                   <td className="py-4 px-4 text-right">
-                    <p className="text-sm text-gray-900">₹{invoice.total_amount.toFixed(2)}</p>
+                    <p className="text-sm text-gray-900">₹{(invoice.total_amount || 0).toFixed(2)}</p>
                   </td>
                   <td className="py-4 px-4 text-right">
                     <p className="text-sm text-gray-600">
-                      ₹{(invoice.total_amount - invoice.amount_due).toFixed(2)}
+                      ₹{((invoice.total_amount || 0) - (invoice.amount_due || 0)).toFixed(2)}
                     </p>
                   </td>
                   <td className="py-4 px-4 text-right">
                     <p className="text-sm font-medium text-red-600">
-                      ₹{invoice.amount_due.toFixed(2)}
+                      ₹{(invoice.amount_due || 0).toFixed(2)}
                     </p>
                   </td>
                   <td className="py-4 px-4 text-center">
@@ -234,7 +234,7 @@ const InvoiceSelectorV2: React.FC = () => {
                       placeholder="0.00"
                       className="w-24 px-2 py-1 text-sm text-right border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
                       min="0"
-                      max={invoice.amount_due}
+                      max={invoice.amount_due || 0}
                       step="0.01"
                     />
                   </td>
@@ -250,7 +250,7 @@ const InvoiceSelectorV2: React.FC = () => {
                 </td>
                 <td className="py-3 px-4 text-right">
                   <p className="text-sm font-bold text-gray-900">
-                    ₹{totalAllocated.toFixed(2)}
+                    ₹{(totalAllocated || 0).toFixed(2)}
                   </p>
                 </td>
               </tr>
