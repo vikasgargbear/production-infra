@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { 
   FileText, CheckCircle, AlertCircle, ChevronRight, 
   ChevronLeft, Save, X, Building2, Package, Search,
-  Calendar, Hash, DollarSign, Info
+  Calendar, Hash, DollarSign, Info, Plus, Trash2
 } from 'lucide-react';
 import { suppliersApi } from '../../services/api';
 import { purchasesApi } from '../../services/api/modules/purchases.api';
@@ -120,6 +120,57 @@ const PDFVerificationFlow = ({
     };
     setVerifiedProducts(updatedProducts);
     goToNextProduct();
+  };
+
+  // Add new product
+  const addNewProduct = () => {
+    const newProduct = {
+      product_id: null,
+      product_name: '',
+      batch_number: '',
+      expiry_date: '',
+      quantity: 1,
+      cost_price: 0,
+      mrp: 0,
+      selling_price: 0,
+      tax_percent: 12,
+      hsn_code: '',
+      free_quantity: 0,
+      discount_percent: 0,
+      verified: false,
+      hasIssues: false,
+      isNewProduct: true
+    };
+    
+    const updatedProducts = [...verifiedProducts, newProduct];
+    setVerifiedProducts(updatedProducts);
+    
+    // Expand verification status array
+    const updatedStatus = [...verificationStatus.products, false];
+    setVerificationStatus(prev => ({ ...prev, products: updatedStatus }));
+    
+    // Go to the new product for verification
+    setCurrentProductIndex(updatedProducts.length - 1);
+    setCurrentStep('products');
+  };
+
+  // Remove product
+  const removeProduct = (index) => {
+    const updatedProducts = verifiedProducts.filter((_, i) => i !== index);
+    setVerifiedProducts(updatedProducts);
+    
+    // Update verification status
+    const updatedStatus = verificationStatus.products.filter((_, i) => i !== index);
+    setVerificationStatus(prev => ({ ...prev, products: updatedStatus }));
+    
+    // Adjust current index if needed
+    if (currentProductIndex >= updatedProducts.length) {
+      if (updatedProducts.length === 0) {
+        setCurrentStep('review');
+      } else {
+        setCurrentProductIndex(updatedProducts.length - 1);
+      }
+    }
   };
 
   // Final save
@@ -297,6 +348,16 @@ const PDFVerificationFlow = ({
                     <Package className="w-5 h-5 text-gray-600" />
                     <span className="font-medium">Products ({verifiedProducts.filter(p => !p.skipped).length} items)</span>
                   </div>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={addNewProduct}
+                      className="px-3 py-1.5 bg-green-600 text-white text-sm rounded-md hover:bg-green-700 flex items-center gap-1.5 font-medium"
+                      title="Add missing product"
+                    >
+                      <Plus className="w-4 h-4" />
+                      ADD PRODUCT
+                    </button>
+                  </div>
                 </div>
                 
                 <div className="overflow-x-auto">
@@ -313,6 +374,7 @@ const PDFVerificationFlow = ({
                         <th className="text-right px-3 py-2">PTR</th>
                         <th className="text-right px-3 py-2">Tax%</th>
                         <th className="text-right px-3 py-2">Amount</th>
+                        <th className="text-center px-3 py-2 w-20">Action</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -338,13 +400,26 @@ const PDFVerificationFlow = ({
                             <td className="px-3 py-2 text-right">₹{product.selling_price}</td>
                             <td className="px-3 py-2 text-right">{product.tax_percent}%</td>
                             <td className="px-3 py-2 text-right font-medium">₹{amount}</td>
+                            <td className="px-3 py-2 text-center">
+                              <button
+                                onClick={() => {
+                                  // Find the actual index in the full array (including skipped items)
+                                  const actualIndex = verifiedProducts.findIndex(p => p === product);
+                                  removeProduct(actualIndex);
+                                }}
+                                className="p-1.5 text-red-600 hover:bg-red-50 rounded transition-colors"
+                                title="Delete this product"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            </td>
                           </tr>
                         );
                       })}
                     </tbody>
                     <tfoot className="bg-gray-50">
                       <tr>
-                        <td colSpan="9" className="px-3 py-2 text-right font-medium">Subtotal:</td>
+                        <td colSpan="10" className="px-3 py-2 text-right font-medium">Subtotal:</td>
                         <td className="px-3 py-2 text-right font-medium">
                           ₹{verifiedProducts.filter(p => !p.skipped).reduce((sum, p) => 
                             sum + (parseFloat(p.quantity || 0) * parseFloat(p.cost_price || 0)), 0
@@ -352,7 +427,7 @@ const PDFVerificationFlow = ({
                         </td>
                       </tr>
                       <tr>
-                        <td colSpan="9" className="px-3 py-2 text-right font-medium">Tax Amount:</td>
+                        <td colSpan="10" className="px-3 py-2 text-right font-medium">Tax Amount:</td>
                         <td className="px-3 py-2 text-right font-medium">
                           ₹{verifiedProducts.filter(p => !p.skipped).reduce((sum, p) => {
                             const base = parseFloat(p.quantity || 0) * parseFloat(p.cost_price || 0);
@@ -361,7 +436,7 @@ const PDFVerificationFlow = ({
                         </td>
                       </tr>
                       <tr className="text-lg">
-                        <td colSpan="9" className="px-3 py-3 text-right font-semibold">Total Amount:</td>
+                        <td colSpan="10" className="px-3 py-3 text-right font-semibold">Total Amount:</td>
                         <td className="px-3 py-3 text-right font-semibold text-indigo-600">
                           ₹{extractedData.final_amount || extractedData.total_amount || 0}
                         </td>
