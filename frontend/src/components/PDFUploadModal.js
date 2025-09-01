@@ -368,7 +368,33 @@ const PDFUploadModal = ({ isOpen, onClose, onDataExtracted }) => {
 
             {/* Items */}
             <div className="bg-gray-50 p-4 rounded-lg">
-              <h5 className="font-medium mb-3">Items ({editedData.items?.length || 0})</h5>
+              <div className="flex justify-between items-center mb-3">
+                <h5 className="font-medium">Items ({editedData.items?.length || 0})</h5>
+                <button
+                  onClick={() => {
+                    const newItem = {
+                      product_name: '',
+                      hsn_code: '',
+                      batch_number: '',
+                      expiry_date: '',
+                      quantity: 1,
+                      free_quantity: 0,
+                      mrp: 0,
+                      purchase_price: 0,
+                      selling_price: 0,
+                      discount_percent: 0,
+                      tax_percent: 12
+                    };
+                    setEditedData({
+                      ...editedData,
+                      items: [...(editedData.items || []), newItem]
+                    });
+                  }}
+                  className="px-3 py-1 bg-blue-600 text-white text-sm rounded hover:bg-blue-700 flex items-center gap-1"
+                >
+                  <span className="text-lg">+</span> Add Item
+                </button>
+              </div>
               <div className="space-y-2">
                 {editedData.items && editedData.items.map((item, index) => {
                   // Ensure item exists and has all required properties
@@ -377,6 +403,8 @@ const PDFUploadModal = ({ isOpen, onClose, onDataExtracted }) => {
                     hsn_code: '',
                     batch_number: '',
                     expiry_date: '',
+                    purchase_price: 0,
+                    selling_price: 0,
                     quantity: 0,
                     free_quantity: 0,
                     pack_size: 1,
@@ -398,10 +426,10 @@ const PDFUploadModal = ({ isOpen, onClose, onDataExtracted }) => {
                         <span className="text-sm text-green-600 font-medium">₹{safeItem.amount || 0}</span>
                         <button
                           onClick={() => handleItemDelete(index)}
-                          className="text-red-500 hover:text-red-700 p-1 hover:bg-red-50 rounded"
+                          className="text-red-600 hover:text-white hover:bg-red-600 p-1.5 border border-red-600 rounded transition-all"
                           title="Delete item"
                         >
-                          <Trash2 className="w-3 h-3" />
+                          <Trash2 className="w-4 h-4" />
                         </button>
                       </div>
                     </div>
@@ -417,8 +445,8 @@ const PDFUploadModal = ({ isOpen, onClose, onDataExtracted }) => {
                       />
                     </div>
                     
-                    {/* Compact 3-column layout */}
-                    <div className="grid grid-cols-6 gap-2 text-xs">
+                    {/* Compact multi-column layout */}
+                    <div className="grid grid-cols-7 gap-2 text-xs">
                       {/* Row 1 */}
                       <div>
                         <label className="text-gray-500 text-xs">HSN</label>
@@ -504,21 +532,32 @@ const PDFUploadModal = ({ isOpen, onClose, onDataExtracted }) => {
                         />
                       </div>
                       <div>
-                        <label className="text-gray-500 text-xs">MRP</label>
+                        <label className="text-gray-500 text-xs">Cost</label>
                         <input
                           type="number"
-                          value={safeItem.mrp || ''}
-                          onChange={(e) => handleItemEdit(index, 'mrp', e.target.value)}
+                          value={safeItem.purchase_price || safeItem.cost_price || safeItem.rate || 0}
+                          onChange={(e) => handleItemEdit(index, 'purchase_price', e.target.value)}
                           className="w-full p-1 border rounded text-xs"
                           step="0.01"
                         />
                       </div>
                       <div>
-                        <label className="text-gray-500 text-xs">Cost</label>
+                        <label className="text-gray-500 text-xs">Selling</label>
                         <input
                           type="number"
-                          value={safeItem.cost_price || safeItem.rate || 0}
-                          onChange={(e) => handleItemEdit(index, 'cost_price', e.target.value)}
+                          value={safeItem.selling_price || ''}
+                          onChange={(e) => handleItemEdit(index, 'selling_price', e.target.value)}
+                          className="w-full p-1 border rounded text-xs"
+                          step="0.01"
+                          placeholder="SP"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-gray-500 text-xs">MRP</label>
+                        <input
+                          type="number"
+                          value={safeItem.mrp || ''}
+                          onChange={(e) => handleItemEdit(index, 'mrp', e.target.value)}
                           className="w-full p-1 border rounded text-xs"
                           step="0.01"
                         />
@@ -530,16 +569,6 @@ const PDFUploadModal = ({ isOpen, onClose, onDataExtracted }) => {
                           value={safeItem.tax_percent || 12}
                           onChange={(e) => handleItemEdit(index, 'tax_percent', e.target.value)}
                           className="w-full p-1 border rounded text-xs"
-                          step="0.01"
-                        />
-                      </div>
-                      <div>
-                        <label className="text-gray-500 text-xs">Amount</label>
-                        <input
-                          type="number"
-                          value={safeItem.amount || 0}
-                          onChange={(e) => handleItemEdit(index, 'amount', e.target.value)}
-                          className="w-full p-1 border rounded text-xs bg-gray-50"
                           step="0.01"
                         />
                       </div>
