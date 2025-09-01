@@ -69,6 +69,8 @@ const PharmaItemsTable = ({
               <th className="border border-gray-200 px-3 py-2 text-center text-xs font-medium text-gray-500 uppercase">Free</th>
             )}
             <th className="border border-gray-200 px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase">{isPurchaseOrder ? 'Cost' : 'Rate'}</th>
+            <th className="border border-gray-200 px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase">Selling</th>
+            <th className="border border-gray-200 px-3 py-2 text-center text-xs font-medium text-gray-500 uppercase">Margin%</th>
             <th className="border border-gray-200 px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase">MRP</th>
             <th className="border border-gray-200 px-3 py-2 text-center text-xs font-medium text-gray-500 uppercase">Disc%</th>
             {showScheme && (
@@ -162,6 +164,30 @@ const PharmaItemsTable = ({
                       step="0.01"
                     />
                   )}
+                </td>
+                <td className="border border-gray-200 px-3 py-2 text-right">
+                  {readOnly ? (
+                    <span>{formatCurrency(item.selling_price || item.sale_price || 0)}</span>
+                  ) : (
+                    <input
+                      type="number"
+                      value={item.selling_price || item.sale_price || ''}
+                      onChange={(e) => onUpdateItem(item.id, 'selling_price', parseFloat(e.target.value) || 0)}
+                      className="w-20 text-right px-2 py-1 text-sm border border-gray-300 rounded focus:ring-1 focus:ring-blue-500"
+                      min="0.01"
+                      step="0.01"
+                      placeholder="Selling"
+                    />
+                  )}
+                </td>
+                <td className="border border-gray-200 px-3 py-2 text-center">
+                  {(() => {
+                    const cost = parseFloat(item.purchase_price) || 0;
+                    const selling = parseFloat(item.selling_price) || 0;
+                    const margin = cost > 0 ? ((selling - cost) / cost * 100).toFixed(1) : 0;
+                    const marginColor = margin > 20 ? 'text-green-600' : margin > 10 ? 'text-blue-600' : 'text-gray-600';
+                    return <span className={`font-medium ${marginColor}`}>{margin}%</span>;
+                  })()}
                 </td>
                 <td className="border border-gray-200 px-3 py-2 text-right">
                   {readOnly ? (

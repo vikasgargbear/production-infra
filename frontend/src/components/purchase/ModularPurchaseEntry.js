@@ -332,8 +332,9 @@ const PurchaseEntryContent = ({ onClose, initialShowPDFUpload = false }) => {
                       <th className="text-left px-3 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">Expiry</th>
                       <th className="text-center px-3 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">Qty</th>
                       <th className="text-center px-3 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">Free</th>
-                      <th className="text-right px-3 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">MRP</th>
                       <th className="text-right px-3 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">Cost</th>
+                      <th className="text-right px-3 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">Selling</th>
+                      <th className="text-right px-3 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">MRP</th>
                       <th className="text-center px-3 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">Disc%</th>
                       <th className="text-center px-3 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">GST%</th>
                       <th className="text-right px-3 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">Amount</th>
@@ -363,8 +364,9 @@ const PurchaseEntryContent = ({ onClose, initialShowPDFUpload = false }) => {
                           </td>
                           <td className="px-3 py-3 text-center text-sm text-gray-900 font-medium">{quantity}</td>
                           <td className="px-3 py-3 text-center text-sm text-gray-600">{item.free_quantity || 0}</td>
-                          <td className="px-3 py-3 text-right text-sm text-gray-600">₹{(parseFloat(item.mrp) || 0).toFixed(2)}</td>
                           <td className="px-3 py-3 text-right text-sm text-gray-900 font-medium">₹{rate.toFixed(2)}</td>
+                          <td className="px-3 py-3 text-right text-sm text-gray-600">₹{(parseFloat(item.selling_price) || 0).toFixed(2)}</td>
+                          <td className="px-3 py-3 text-right text-sm text-gray-600">₹{(parseFloat(item.mrp) || 0).toFixed(2)}</td>
                           <td className="px-3 py-3 text-center text-sm text-gray-600">{discountPercent}%</td>
                           <td className="px-3 py-3 text-center text-sm text-gray-600">{item.tax_percent || 0}%</td>
                           <td className="px-3 py-3 text-right text-sm font-medium text-gray-900">₹{lineTotal.toFixed(2)}</td>
