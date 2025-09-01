@@ -348,16 +348,13 @@ const PDFVerificationFlow = ({
                     <Package className="w-5 h-5 text-gray-600" />
                     <span className="font-medium">Products ({verifiedProducts.filter(p => !p.skipped).length} items)</span>
                   </div>
-                  <div className="flex gap-2">
-                    <button
-                      onClick={addNewProduct}
-                      className="px-3 py-1.5 bg-green-600 text-white text-sm rounded-md hover:bg-green-700 flex items-center gap-1.5 font-medium"
-                      title="Add missing product"
-                    >
-                      <Plus className="w-4 h-4" />
-                      ADD PRODUCT
-                    </button>
-                  </div>
+                  <button
+                    onClick={addNewProduct}
+                    className="p-1.5 text-green-600 hover:bg-green-50 rounded transition-colors"
+                    title="Add new product"
+                  >
+                    <Plus className="w-4 h-4" />
+                  </button>
                 </div>
                 
                 <div className="overflow-x-auto">
@@ -395,9 +392,9 @@ const PDFVerificationFlow = ({
                             <td className="px-3 py-2 text-xs">{product.expiry_date}</td>
                             <td className="px-3 py-2 text-right">{product.quantity}</td>
                             <td className="px-3 py-2 text-right">{product.free_quantity || 0}</td>
-                            <td className="px-3 py-2 text-right">₹{product.cost_price}</td>
-                            <td className="px-3 py-2 text-right">₹{product.mrp}</td>
-                            <td className="px-3 py-2 text-right">₹{product.selling_price}</td>
+                            <td className="px-3 py-2 text-right">₹{product.cost_price || 0}</td>
+                            <td className="px-3 py-2 text-right">₹{product.mrp || 0}</td>
+                            <td className="px-3 py-2 text-right">₹{product.selling_price || product.mrp * 0.9 || 0}</td>
                             <td className="px-3 py-2 text-right">{product.tax_percent}%</td>
                             <td className="px-3 py-2 text-right font-medium">₹{amount}</td>
                             <td className="px-3 py-2 text-center">

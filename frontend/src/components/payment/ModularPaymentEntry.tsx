@@ -74,6 +74,16 @@ const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) =>
   }, [payment.receipt_no, setPaymentField]);
 
 
+  // Handle customer modal event from PaymentFlowOptimized
+  React.useEffect(() => {
+    const handleOpenCustomerModal = () => {
+      setShowCustomerModal(true);
+    };
+    
+    window.addEventListener('openCustomerModal', handleOpenCustomerModal);
+    return () => window.removeEventListener('openCustomerModal', handleOpenCustomerModal);
+  }, []);
+
   // Keyboard shortcuts
   const shortcuts: KeyboardShortcut[] = currentStep === 1 ? [
     { key: 'Ctrl+N', label: 'Add Customer' },
@@ -395,16 +405,6 @@ const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) =>
                   <PaymentFlowOptimized />
                 </div>
 
-                {/* Customer Creation Button - Floating */}
-                <div className="fixed bottom-20 right-6">
-                  <button
-                    onClick={() => setShowCustomerModal(true)}
-                    className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-full shadow-lg transition-colors text-sm font-medium flex items-center gap-2"
-                  >
-                    <Plus className="w-4 h-4" />
-                    New Customer
-                  </button>
-                </div>
                 
                 {/* Outstanding Invoices - Only show if customer selected */}
                 {selectedCustomer && (
@@ -412,16 +412,42 @@ const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) =>
                     <div className="flex items-center justify-between mb-3">
                       <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wider flex items-center">
                         <FileText className="w-4 h-4 mr-2" />
-                        OUTSTANDING INVOICES
+                        INVOICE ALLOCATION
                       </h3>
-                      <button
-                        onClick={() => setPaymentField('skip_invoice_allocation', !payment.skip_invoice_allocation)}
-                        className="text-sm text-blue-600 hover:text-blue-700"
+                      <select
+                        value={payment.allocation_method || 'manual'}
+                        onChange={(e) => setPaymentField('allocation_method', e.target.value)}
+                        className="px-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                       >
-                        {payment.skip_invoice_allocation ? 'Show Invoices' : 'Skip Invoice Selection'}
-                      </button>
+                        <option value="manual">Manual Selection</option>
+                        <option value="fifo">Auto - FIFO (Oldest First)</option>
+                        <option value="lifo">Auto - LIFO (Newest First)</option>
+                        <option value="highest">Auto - Highest Amount First</option>
+                        <option value="advance">Keep as Advance</option>
+                      </select>
                     </div>
-                    {!payment.skip_invoice_allocation && <InvoiceSelector />}
+                    
+                    {payment.allocation_method === 'manual' && <InvoiceSelector />}
+                    
+                    {payment.allocation_method !== 'manual' && payment.allocation_method !== 'advance' && (
+                      <Card className="p-3 bg-blue-50 border border-blue-200">
+                        <p className="text-sm text-blue-800">
+                          <span className="font-medium">Automatic Allocation:</span> Payment will be allocated to invoices using {' '}
+                          {payment.allocation_method === 'fifo' && 'First-In-First-Out (oldest invoices first)'}
+                          {payment.allocation_method === 'lifo' && 'Last-In-First-Out (newest invoices first)'}
+                          {payment.allocation_method === 'highest' && 'Highest Amount First'}
+                          {' '} method when saved.
+                        </p>
+                      </Card>
+                    )}
+                    
+                    {payment.allocation_method === 'advance' && (
+                      <Card className="p-3 bg-green-50 border border-green-200">
+                        <p className="text-sm text-green-800">
+                          <span className="font-medium">Advance Payment:</span> This amount will be kept as customer advance and can be adjusted against future invoices.
+                        </p>
+                      </Card>
+                    )}
                   </div>
                 )}
               </>

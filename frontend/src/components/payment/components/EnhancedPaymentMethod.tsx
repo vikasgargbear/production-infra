@@ -47,7 +47,10 @@ const EnhancedPaymentMethod: React.FC<EnhancedPaymentMethodProps> = ({
       hoverBg: 'hover:bg-emerald-100',
       selectedBg: 'bg-emerald-100 border-emerald-400',
       requiresRef: false,
-      placeholder: 'Cash payment received'
+      placeholder: 'Cash payment received',
+      refLabel: 'Reference',
+      requiresBank: false,
+      requiresDate: false
     },
     upi: {
       label: 'UPI',
@@ -62,7 +65,9 @@ const EnhancedPaymentMethod: React.FC<EnhancedPaymentMethodProps> = ({
       selectedBg: 'bg-purple-100 border-purple-400',
       requiresRef: true,
       placeholder: 'Enter UPI transaction ID',
-      refLabel: 'UPI Reference'
+      refLabel: 'UPI Reference',
+      requiresBank: false,
+      requiresDate: false
     },
     card: {
       label: 'Card',
@@ -77,7 +82,9 @@ const EnhancedPaymentMethod: React.FC<EnhancedPaymentMethodProps> = ({
       selectedBg: 'bg-blue-100 border-blue-400',
       requiresRef: true,
       placeholder: 'Last 4 digits of card',
-      refLabel: 'Card Reference'
+      refLabel: 'Card Reference',
+      requiresBank: false,
+      requiresDate: false
     },
     bank: {
       label: 'Bank Transfer',
@@ -93,7 +100,8 @@ const EnhancedPaymentMethod: React.FC<EnhancedPaymentMethodProps> = ({
       requiresRef: true,
       placeholder: 'Enter transaction reference',
       refLabel: 'Transaction ID',
-      requiresBank: true
+      requiresBank: true,
+      requiresDate: false
     },
     cheque: {
       label: 'Cheque',
@@ -262,7 +270,7 @@ const EnhancedPaymentMethod: React.FC<EnhancedPaymentMethodProps> = ({
             <div className="mt-4 p-4 bg-gray-50 rounded-lg space-y-3">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  {methodConfigs[paymentMethods[0].type].refLabel}
+                  {methodConfigs[paymentMethods[0].type].refLabel || 'Reference'}
                   <span className="text-red-500 ml-1">*</span>
                 </label>
                 <input
@@ -408,7 +416,7 @@ const EnhancedPaymentMethod: React.FC<EnhancedPaymentMethodProps> = ({
                     {config.requiresRef && (
                       <div>
                         <label className="block text-xs font-medium text-gray-600 mb-1">
-                          {config.refLabel}
+                          {config.refLabel || 'Reference'}
                         </label>
                         <input
                           type="text"

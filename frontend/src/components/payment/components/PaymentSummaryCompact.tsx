@@ -38,7 +38,7 @@ const PaymentSummaryCompact: React.FC = () => {
     });
   };
 
-  const allocatedAmount = selectedInvoices.reduce((sum: number, inv: SelectedInvoice) => 
+  const allocatedAmount = (selectedInvoices || []).reduce((sum: number, inv: SelectedInvoice) => 
     sum + inv.allocated_amount, 0
   );
   const unallocatedAmount = parseFloat(payment.amount || '0') - allocatedAmount;
@@ -92,16 +92,16 @@ const PaymentSummaryCompact: React.FC = () => {
         </div>
 
         {/* Invoice Allocation Summary */}
-        {selectedInvoices.length > 0 && (
+        {selectedInvoices && selectedInvoices.length > 0 && (
           <div className="pt-3 space-y-2">
             <div className="flex items-center justify-between text-sm">
-              <span className="text-gray-600">Invoices Allocated ({selectedInvoices.length})</span>
+              <span className="text-gray-600">Invoices Allocated ({selectedInvoices?.length || 0})</span>
               <span className="font-medium">₹{allocatedAmount.toFixed(2)}</span>
             </div>
             
             {/* Compact Invoice List */}
             <div className="space-y-1 pl-4">
-              {selectedInvoices.slice(0, 3).map((invoice: SelectedInvoice, index: number) => (
+              {(selectedInvoices || []).slice(0, 3).map((invoice: SelectedInvoice, index: number) => (
                 <div key={index} className="flex items-center justify-between text-xs">
                   <span className="text-gray-600">
                     {invoice.invoice_no} • {formatDate(invoice.invoice_date)}
@@ -109,7 +109,7 @@ const PaymentSummaryCompact: React.FC = () => {
                   <span className="font-medium text-gray-900">₹{invoice.allocated_amount.toFixed(2)}</span>
                 </div>
               ))}
-              {selectedInvoices.length > 3 && (
+              {selectedInvoices && selectedInvoices.length > 3 && (
                 <p className="text-xs text-gray-500 italic">
                   +{selectedInvoices.length - 3} more invoices
                 </p>

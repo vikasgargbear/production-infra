@@ -12,10 +12,10 @@ export { ModularPaymentEntry };
 
 // Sub Components
 // export { default as PartySelector } from './components/PartySelector'; // TODO: Implement
-import PaymentDetails from './components/PaymentDetails';
+// import PaymentDetails from './components/PaymentDetails'; // TODO: Missing component
 import PaymentSummary from './components/PaymentSummary';
 import InvoiceSelector from './components/InvoiceSelector';
-export { PaymentDetails, PaymentSummary, InvoiceSelector };
+export { PaymentSummary, InvoiceSelector };
 // export { default as PaymentModeSelector } from './components/PaymentModeSelector'; // TODO: Implement
 // export { default as InvoiceAllocation } from './components/InvoiceAllocation'; // TODO: Implement
 
@@ -71,7 +71,7 @@ export { paymentDataTransformer } from '../../services/api/utils/paymentDataTran
 // Main component interfaces
 interface PaymentComponents {
   // PartySelector: React.ComponentType<any>; // TODO: Implement
-  PaymentDetails: React.ComponentType<any>;
+  // PaymentDetails: React.ComponentType<any>; // TODO: Missing component
   // PaymentModeSelector: React.ComponentType<any>; // TODO: Implement
   PaymentSummary: React.ComponentType<any>;
   InvoiceSelector: React.ComponentType<any>;
@@ -105,7 +105,7 @@ const PaymentModule: PaymentModule = {
   // ModularPaymentEntryV3,
   components: {
     // PartySelector, // TODO: Implement
-    PaymentDetails,
+    // PaymentDetails, // TODO: Missing component
     // PaymentModeSelector, // TODO: Implement
     PaymentSummary,
     InvoiceSelector

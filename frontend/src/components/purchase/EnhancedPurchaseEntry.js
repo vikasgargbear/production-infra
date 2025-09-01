@@ -576,12 +576,10 @@ const EnhancedPurchaseEntry = ({ onClose, prefilledData = null }) => {
     setShowVerificationFlow(false);
     setExtractedPDFData(null);
     
-    // For bulk/extract method, go directly to review tab
+    // For bulk/extract method, show success message
     if (verifiedData.isBulkUpload || verifiedData.fromPDFExtract) {
-      setActiveTab('review');
       toast.success('Data verified! Please review and save the purchase entry.');
     } else {
-      setActiveTab('items'); // Go to items tab to show the loaded items
       toast.success('Data verified and loaded successfully!');
     }
   };

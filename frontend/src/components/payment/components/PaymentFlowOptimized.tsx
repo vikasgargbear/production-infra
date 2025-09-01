@@ -67,12 +67,12 @@ const PaymentFlowOptimized: React.FC = () => {
 
   // Payment modes including split
   const paymentModes = [
-    { value: 'CASH', label: 'Cash', icon: '💵', color: 'green' },
-    { value: 'UPI', label: 'UPI', icon: '📱', color: 'purple' },
-    { value: 'CARD', label: 'Card', icon: '💳', color: 'blue' },
-    { value: 'BANK_TRANSFER', label: 'Bank', icon: '🏦', color: 'indigo' },
-    { value: 'CHEQUE', label: 'Cheque', icon: '📄', color: 'gray' },
-    { value: 'SPLIT', label: 'Split', icon: '➗', color: 'orange' }
+    { value: 'CASH', label: 'Cash', icon: '💵' },
+    { value: 'UPI', label: 'UPI', icon: '📱' },
+    { value: 'CARD', label: 'Card', icon: '💳' },
+    { value: 'BANK_TRANSFER', label: 'Bank', icon: '🏦' },
+    { value: 'CHEQUE', label: 'Cheque', icon: '📄' },
+    { value: 'SPLIT', label: 'Split', icon: '➗' }
   ];
 
   const needsReference = ['UPI', 'BANK_TRANSFER', 'CHEQUE'].includes(payment.payment_mode);
@@ -103,8 +103,16 @@ const PaymentFlowOptimized: React.FC = () => {
       {/* Customer Selection */}
       {!selectedCustomer ? (
         <div className="space-y-2">
-          <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wider">SELECT CUSTOMER</h3>
-          <Card className="p-5">
+          <div className="flex items-center justify-between">
+            <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wider">SELECT CUSTOMER</h3>
+            <button
+              onClick={() => window.dispatchEvent(new CustomEvent('openCustomerModal'))}
+              className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-medium rounded-lg transition-colors"
+            >
+              + New Customer
+            </button>
+          </div>
+          <Card className="p-4">
             <CustomerSearch
               ref={customerSearchRef}
               value={selectedCustomer}
@@ -170,46 +178,44 @@ const PaymentFlowOptimized: React.FC = () => {
           {/* Amount Input */}
           <div className="space-y-2">
             <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wider">PAYMENT AMOUNT</h3>
-            <Card className="p-4">
-              <div>
-                <div className="relative">
-                  <span className="absolute left-4 top-1/2 -translate-y-1/2 text-2xl text-green-600 font-bold">₹</span>
-                  <input
-                    ref={amountRef}
-                    type="number"
-                    value={payment.amount}
-                    onChange={(e) => handleFieldChange('amount', e.target.value)}
-                    className={`w-full pl-12 pr-4 py-3 text-2xl font-bold border-2 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-500 ${
-                      errors.amount ? 'border-red-500 bg-red-50' : 'border-gray-300'
-                    }`}
-                    placeholder="0"
-                    step="1"
-                  />
-                </div>
-                {errors.amount && (
-                  <p className="text-sm text-red-500 mt-1">{errors.amount}</p>
-                )}
+            <Card className="p-3">
+              <div className="relative">
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-lg text-green-600 font-bold">₹</span>
+                <input
+                  ref={amountRef}
+                  type="number"
+                  value={payment.amount}
+                  onChange={(e) => handleFieldChange('amount', e.target.value)}
+                  className={`w-full pl-9 pr-3 py-2 text-lg font-semibold border rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 ${
+                    errors.amount ? 'border-red-500 bg-red-50' : 'border-gray-300'
+                  }`}
+                  placeholder="0"
+                  step="1"
+                />
               </div>
+              {errors.amount && (
+                <p className="text-xs text-red-500 mt-1">{errors.amount}</p>
+              )}
             </Card>
           </div>
 
           {/* Payment Mode Selection */}
           <div className="space-y-2">
             <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wider">PAYMENT METHOD</h3>
-            <div className="grid grid-cols-3 gap-2">
+            <div className="grid grid-cols-6 gap-2">
               {paymentModes.map((mode) => (
                 <button
                   key={mode.value}
                   type="button"
                   onClick={() => handlePaymentModeSelect(mode.value)}
-                  className={`p-3 rounded-lg border transition-all ${
+                  className={`p-2 rounded-lg border transition-all ${
                     payment.payment_mode === mode.value
                       ? 'border-blue-500 bg-blue-50'
                       : 'border-gray-300 hover:border-gray-400 hover:bg-gray-50'
                   }`}
                 >
-                  <div className="text-xl mb-1">{mode.icon}</div>
-                  <div className="text-xs font-medium text-gray-700">{mode.label}</div>
+                  <div className="text-base">{mode.icon}</div>
+                  <div className="text-xs font-medium text-gray-600 mt-1">{mode.label}</div>
                 </button>
               ))}
             </div>
@@ -233,56 +239,71 @@ const PaymentFlowOptimized: React.FC = () => {
             </div>
           )}
 
-          {/* Split Payment - Inline */}
+          {/* Split Payment - Better Design */}
           {showSplitModal && (
-            <div className="p-3 bg-gray-50 border border-gray-200 rounded-lg">
-              <h4 className="text-sm font-medium text-gray-700 mb-3">Split Payment Details</h4>
-              <div className="space-y-2">
+            <Card className="p-4">
+              <h4 className="text-sm font-semibold text-gray-700 uppercase tracking-wider mb-3">SPLIT PAYMENT DETAILS</h4>
+              <div className="space-y-3">
                 {splitPayments.map((split, index) => (
-                  <div key={index} className="flex items-center gap-2">
-                    <select
-                      value={split.type}
-                      onChange={(e) => updateSplitPayment(index, 'type', e.target.value)}
-                      className="px-2 py-1.5 text-sm border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    >
-                      <option value="CASH">Cash</option>
-                      <option value="UPI">UPI</option>
-                      <option value="CARD">Card</option>
-                      <option value="BANK_TRANSFER">Bank</option>
-                    </select>
-                    <div className="relative flex-1">
-                      <span className="absolute left-2 top-1/2 -translate-y-1/2 text-sm text-gray-600 font-bold">₹</span>
-                      <input
-                        type="number"
-                        value={split.amount}
-                        onChange={(e) => updateSplitPayment(index, 'amount', e.target.value)}
-                        placeholder="Amount"
-                        className="w-full pl-6 pr-2 py-1.5 text-sm border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      />
+                  <div key={index} className="bg-gray-50 p-3 rounded-lg">
+                    <div className="flex items-center gap-3">
+                      <select
+                        value={split.type}
+                        onChange={(e) => updateSplitPayment(index, 'type', e.target.value)}
+                        className="px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                      >
+                        <option value="CASH">💵 Cash</option>
+                        <option value="UPI">📱 UPI</option>
+                        <option value="CARD">💳 Card</option>
+                        <option value="BANK_TRANSFER">🏦 Bank</option>
+                      </select>
+                      <div className="relative flex-1">
+                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-600 font-semibold">₹</span>
+                        <input
+                          type="number"
+                          value={split.amount}
+                          onChange={(e) => updateSplitPayment(index, 'amount', e.target.value)}
+                          placeholder="Enter amount"
+                          className="w-full pl-8 pr-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                        />
+                      </div>
                     </div>
                     {['UPI', 'BANK_TRANSFER'].includes(split.type) && (
                       <input
                         type="text"
                         value={split.reference || ''}
                         onChange={(e) => updateSplitPayment(index, 'reference', e.target.value)}
-                        placeholder="Ref (opt)"
-                        className="w-20 px-2 py-1.5 text-sm border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        placeholder="Reference number (optional)"
+                        className="w-full mt-2 px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
                       />
                     )}
                   </div>
                 ))}
-                <div className="flex justify-between items-center pt-2 border-t">
-                  <span className="text-xs font-medium">
-                    Total: ₹{totalSplitAmount.toFixed(2)} / ₹{payment.amount || '0'}
-                  </span>
-                  {totalSplitAmount !== parseFloat(payment.amount || '0') && (
-                    <span className="text-xs text-red-600">
-                      Difference: ₹{Math.abs(totalSplitAmount - parseFloat(payment.amount || '0')).toFixed(2)}
+                
+                <button
+                  onClick={() => setSplitPayments([...splitPayments, { type: 'CASH', amount: '' }])}
+                  className="w-full py-2 text-sm text-blue-600 border border-blue-300 rounded-lg hover:bg-blue-50 transition-colors"
+                >
+                  + Add Another Payment Method
+                </button>
+                
+                <div className="bg-blue-50 p-3 rounded-lg">
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm font-medium text-gray-700">
+                      Total Split: ₹{totalSplitAmount.toFixed(2)}
                     </span>
+                    <span className="text-sm font-medium text-gray-700">
+                      Payment Amount: ₹{payment.amount || '0'}
+                    </span>
+                  </div>
+                  {totalSplitAmount !== parseFloat(payment.amount || '0') && (
+                    <p className="text-xs text-red-600 mt-2">
+                      ⚠️ Split total must equal payment amount (Difference: ₹{Math.abs(totalSplitAmount - parseFloat(payment.amount || '0')).toFixed(2)})
+                    </p>
                   )}
                 </div>
               </div>
-            </div>
+            </Card>
           )}
 
         </div>
