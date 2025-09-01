@@ -216,54 +216,66 @@ const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) =>
     
     // Fetch outstanding invoices
     try {
-      // Get customer's outstanding invoices
-      const response = await customersApi.getOutstanding(customer.customer_id || customer.id);
+      console.log('Fetching invoices for customer:', customer.customer_id || customer.id);
       
-      if (response && response.data) {
-        // The API should return invoices with outstanding amounts
-        const outstandingInvoices = response.data.map((inv: any) => ({
-          invoice_no: inv.invoice_number || inv.invoice_no || inv.invoice_id,
-          invoice_date: inv.invoice_date || inv.created_at,
-          total_amount: inv.final_amount || inv.total_amount || inv.invoice_total || 0,
-          paid_amount: inv.paid_amount || 0,
-          amount_due: inv.amount_due || inv.outstanding_amount || 
-                     ((inv.final_amount || inv.total_amount || 0) - (inv.paid_amount || 0)),
-          status: inv.payment_status || 'pending',
-          invoice_id: inv.invoice_id || inv.id,
-          customer_id: customer.customer_id || customer.id
-        }));
+      // Use the correct API endpoint for fetching customer invoices
+      const { invoicesApi } = await import('../../services/api');
+      
+      // Get all invoices for this customer
+      const response = await invoicesApi.getAll({
+        customer_id: customer.customer_id || customer.id
+      });
+      
+      console.log('Invoice API response:', response);
+      
+      if (response && response.data && Array.isArray(response.data)) {
+        // Filter for outstanding invoices
+        const outstandingInvoices = response.data
+          .filter((inv: any) => {
+            // Calculate outstanding amount
+            const totalAmount = inv.final_amount || inv.total_amount || inv.grand_total || 0;
+            const paidAmount = inv.paid_amount || 0;
+            const outstanding = totalAmount - paidAmount;
+            
+            // Only include if there's an outstanding amount
+            return outstanding > 0.01; // Account for floating point precision
+          })
+          .map((inv: any) => {
+            const totalAmount = inv.final_amount || inv.total_amount || inv.grand_total || 0;
+            const paidAmount = inv.paid_amount || 0;
+            
+            return {
+              invoice_no: inv.invoice_number || inv.invoice_no || `INV-${inv.invoice_id}`,
+              invoice_date: inv.invoice_date || inv.created_at,
+              total_amount: totalAmount,
+              paid_amount: paidAmount,
+              amount_due: totalAmount - paidAmount,
+              status: inv.payment_status || 'pending',
+              invoice_id: inv.invoice_id || inv.id,
+              customer_id: customer.customer_id || customer.id
+            };
+          });
         
+        console.log(`Found ${outstandingInvoices.length} outstanding invoices`);
         setOutstandingInvoices(outstandingInvoices);
-        console.log(`Found ${outstandingInvoices.length} outstanding invoices for customer ${customer.customer_name}`);
       } else {
+        console.log('No invoice data received');
         setOutstandingInvoices([]);
       }
     } catch (error: any) {
-      console.error('Error fetching outstanding invoices:', error);
-      // Try alternative approach - fetch from invoices endpoint
+      console.error('Error fetching invoices:', error);
+      
+      // Try the customer outstanding API as fallback
       try {
-        const { invoicesApi } = await import('../../services/api');
-        const invoiceResponse = await invoicesApi.getAll({
-          customer_id: customer.customer_id || customer.id,
-          payment_status: 'pending,partial'
-        });
+        console.log('Trying customer outstanding API...');
+        const outstandingResponse = await customersApi.getOutstanding(customer.customer_id || customer.id);
         
-        if (invoiceResponse && invoiceResponse.data) {
-          const outstandingInvoices = invoiceResponse.data
-            .filter((inv: any) => {
-              const outstanding = (inv.final_amount || inv.total_amount || 0) - (inv.paid_amount || 0);
-              return outstanding > 0;
-            })
-            .map((inv: any) => ({
-              invoice_no: inv.invoice_number || inv.invoice_id,
-              invoice_date: inv.invoice_date,
-              total_amount: inv.final_amount || inv.total_amount || 0,
-              paid_amount: inv.paid_amount || 0,
-              amount_due: (inv.final_amount || inv.total_amount || 0) - (inv.paid_amount || 0),
-              status: inv.payment_status || 'pending',
-              invoice_id: inv.invoice_id || inv.id
-            }));
+        if (outstandingResponse && outstandingResponse.data) {
+          const outstandingInvoices = Array.isArray(outstandingResponse.data) 
+            ? outstandingResponse.data 
+            : [];
           
+          console.log(`Found ${outstandingInvoices.length} outstanding invoices from customer API`);
           setOutstandingInvoices(outstandingInvoices);
         } else {
           setOutstandingInvoices([]);
