@@ -9,7 +9,9 @@ import { paymentDataTransformer } from '../../services/api/utils/paymentDataTran
 import InvoiceSelector from './components/InvoiceSelector';
 import PaymentDetails from './components/PaymentDetails';
 import PaymentDetailsEnhanced from './components/PaymentDetailsEnhanced';
+import PaymentDetailsCompact from './components/PaymentDetailsCompact';
 import PaymentSummary from './components/PaymentSummary';
+import PaymentSummaryCompact from './components/PaymentSummaryCompact';
 
 // Import global components
 import { CustomerSearch, ProductSearchSimple, GSTCalculator, ProductCreationModal, ProceedToReviewComponent, ViewHistoryButton, ModuleHeader } from '../global';
@@ -384,14 +386,18 @@ const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) =>
 
             {currentStep === 1 ? (
               <>
-                {/* Payment Details - Enhanced Version with Better UI */}
-                <div className="mb-8">
-                  <PaymentDetailsEnhanced />
+                {/* Payment Details - Compact single-line version */}
+                <div className="mb-6">
+                  <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wider mb-3 flex items-center">
+                    <CreditCard className="w-4 h-4 mr-2" />
+                    PAYMENT DETAILS
+                  </h3>
+                  <PaymentDetailsCompact />
                 </div>
 
                 {/* Customer Section */}
-                <div className="mb-8">
-                  <div className="flex items-center justify-between mb-4">
+                <div className="mb-6">
+                  <div className="flex items-center justify-between mb-3">
                     <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wider flex items-center">
                       <User className="w-4 h-4 mr-2" />
                       CUSTOMER
@@ -415,8 +421,8 @@ const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) =>
                 
                 {/* Outstanding Invoices - Only show if customer selected */}
                 {selectedCustomer && (
-                  <div className="mb-8">
-                    <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wider mb-4 flex items-center">
+                  <div className="mb-6">
+                    <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wider mb-3 flex items-center">
                       <FileText className="w-4 h-4 mr-2" />
                       OUTSTANDING INVOICES
                     </h3>
@@ -431,7 +437,7 @@ const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) =>
                   <CheckCircle className="w-4 h-4 mr-2" />
                   PAYMENT SUMMARY
                 </h3>
-                <PaymentSummary />
+                <PaymentSummaryCompact />
               </div>
             )}
           </div>
