@@ -1010,27 +1010,36 @@ const EnhancedPurchaseEntry = ({ onClose, prefilledData = null }) => {
           <table className="w-full">
             <thead>
               <tr className="border-b-2 border-gray-200 bg-gray-50">
-                <th className="text-left py-3 px-2 text-sm font-medium text-gray-700">Item</th>
-                <th className="text-center py-3 px-2 text-sm font-medium text-gray-700">Batch</th>
-                <th className="text-center py-3 px-2 text-sm font-medium text-gray-700">Expiry</th>
-                <th className="text-center py-3 px-2 text-sm font-medium text-gray-700">Qty</th>
-                <th className="text-center py-3 px-2 text-sm font-medium text-gray-700">Free</th>
-                <th className="text-right py-3 px-2 text-sm font-medium text-gray-700">MRP</th>
-                <th className="text-right py-3 px-2 text-sm font-medium text-gray-700">Cost</th>
-                <th className="text-right py-3 px-2 text-sm font-medium text-gray-700">Tax</th>
-                <th className="text-right py-3 px-2 text-sm font-medium text-gray-700">Amount</th>
+                <th className="text-left py-2 px-2 text-xs font-medium text-gray-700">Item</th>
+                <th className="text-center py-2 px-2 text-xs font-medium text-gray-700">Batch</th>
+                <th className="text-center py-2 px-2 text-xs font-medium text-gray-700">Expiry</th>
+                <th className="text-center py-2 px-2 text-xs font-medium text-gray-700">Qty</th>
+                <th className="text-center py-2 px-2 text-xs font-medium text-gray-700">Free</th>
+                <th className="text-right py-2 px-2 text-xs font-medium text-gray-700">Cost</th>
+                <th className="text-right py-2 px-2 text-xs font-medium text-gray-700">MRP</th>
+                <th className="text-right py-2 px-2 text-xs font-medium text-gray-700">Rate</th>
+                <th className="text-center py-2 px-2 text-xs font-medium text-gray-700">Disc%</th>
+                <th className="text-center py-2 px-2 text-xs font-medium text-gray-700">Tax%</th>
+                <th className="text-right py-2 px-2 text-xs font-medium text-gray-700">Tax Amt</th>
+                <th className="text-right py-2 px-2 text-xs font-medium text-gray-700">Amount</th>
               </tr>
             </thead>
             <tbody>
               {(purchase.items || []).map((item, index) => {
                 const quantity = parseFloat(item.quantity) || 0;
                 const freeQty = parseFloat(item.free_quantity) || 0;
+                const cost = parseFloat(item.purchase_price) || parseFloat(item.cost_price) || 0;
                 const mrp = parseFloat(item.mrp) || 0;
-                const purchasePrice = parseFloat(item.purchase_price) || 0;
+                const sellingPrice = parseFloat(item.selling_price) || 0;
+                const discountPercent = parseFloat(item.discount_percent) || 0;
                 const taxPercent = parseFloat(item.tax_percent) || 0;
-                const itemTotal = quantity * purchasePrice;
-                const itemTax = (itemTotal * taxPercent) / 100;
-                const totalWithTax = itemTotal + itemTax;
+                
+                // Calculate amounts
+                const baseAmount = quantity * cost;
+                const discountAmount = (baseAmount * discountPercent) / 100;
+                const discountedAmount = baseAmount - discountAmount;
+                const taxAmount = (discountedAmount * taxPercent) / 100;
+                const totalWithTax = discountedAmount + taxAmount;
                 
                 // Format expiry date if exists
                 const expiryDisplay = item.expiry_date ? 
@@ -1039,22 +1048,25 @@ const EnhancedPurchaseEntry = ({ onClose, prefilledData = null }) => {
                 
                 return (
                   <tr key={index} className="border-b border-gray-100 hover:bg-gray-50">
-                    <td className="py-3 px-2">
+                    <td className="py-2 px-2">
                       <div>
-                        <p className="text-sm font-medium">{item.product_name}</p>
+                        <p className="text-xs font-medium">{item.product_name}</p>
                         {item.hsn_code && (
-                          <p className="text-xs text-gray-500">HSN: {item.hsn_code}</p>
+                          <p className="text-[10px] text-gray-500">HSN: {item.hsn_code}</p>
                         )}
                       </div>
                     </td>
-                    <td className="text-center py-3 px-2 text-sm text-gray-600">{item.batch_no || item.batch_number || item.batch || '-'}</td>
-                    <td className="text-center py-3 px-2 text-sm text-gray-600">{expiryDisplay}</td>
-                    <td className="text-center py-3 px-2 text-sm font-medium">{quantity}</td>
-                    <td className="text-center py-3 px-2 text-sm text-gray-600">{freeQty > 0 ? freeQty : '-'}</td>
-                    <td className="text-right py-3 px-2 text-sm">{formatCurrency(mrp)}</td>
-                    <td className="text-right py-3 px-2 text-sm font-medium">{formatCurrency(purchasePrice)}</td>
-                    <td className="text-right py-3 px-2 text-sm text-gray-600">{taxPercent}%</td>
-                    <td className="text-right py-3 px-2 text-sm font-bold text-green-600">{formatCurrency(totalWithTax)}</td>
+                    <td className="text-center py-2 px-2 text-xs text-gray-600">{item.batch_no || item.batch_number || item.batch || '-'}</td>
+                    <td className="text-center py-2 px-2 text-xs text-gray-600">{expiryDisplay}</td>
+                    <td className="text-center py-2 px-2 text-xs font-medium">{quantity}</td>
+                    <td className="text-center py-2 px-2 text-xs text-gray-600">{freeQty > 0 ? freeQty : '-'}</td>
+                    <td className="text-right py-2 px-2 text-xs font-medium">{formatCurrency(cost)}</td>
+                    <td className="text-right py-2 px-2 text-xs">{formatCurrency(mrp)}</td>
+                    <td className="text-right py-2 px-2 text-xs">{formatCurrency(sellingPrice)}</td>
+                    <td className="text-center py-2 px-2 text-xs text-gray-600">{discountPercent}%</td>
+                    <td className="text-center py-2 px-2 text-xs text-gray-600">{taxPercent}%</td>
+                    <td className="text-right py-2 px-2 text-xs">{formatCurrency(taxAmount)}</td>
+                    <td className="text-right py-2 px-2 text-xs font-bold text-green-600">{formatCurrency(totalWithTax)}</td>
                   </tr>
                 );
               })}

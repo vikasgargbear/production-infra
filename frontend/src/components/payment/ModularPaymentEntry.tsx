@@ -25,16 +25,11 @@ interface KeyboardShortcut {
 }
 
 // Generate sequential receipt number
-const generateReceiptNumber = async () => {
-  try {
-    const response = await paymentsApi.generateReceiptNumber('receipt');
-    return response.receipt_number;
-  } catch (error) {
-    console.error('Error generating receipt number:', error);
-    // Fallback to local generation
-    const timestamp = Date.now();
-    return `RCT-${timestamp.toString().slice(-8)}`;
-  }
+const generateReceiptNumber = () => {
+  // Generate receipt number locally
+  const timestamp = Date.now();
+  const random = Math.floor(Math.random() * 1000);
+  return `RCT-${timestamp.toString().slice(-8)}-${random}`;
 };
 
 // Inner component that uses the context
@@ -67,11 +62,10 @@ const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) =>
   // Generate receipt number on component mount
   React.useEffect(() => {
     if (!payment.receipt_no || payment.receipt_no === 'RCT-TEMP') {
-      generateReceiptNumber().then(receiptNo => {
-        setPaymentField('receipt_no', receiptNo);
-      });
+      const receiptNo = generateReceiptNumber();
+      setPaymentField('receipt_no', receiptNo);
     }
-  }, [payment.receipt_no, setPaymentField]);
+  }, []);
 
 
   // Handle customer modal event from PaymentFlowOptimized
@@ -214,42 +208,48 @@ const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) =>
   const handleCustomerSelect = async (customer: any): Promise<void> => {
     setCustomer(customer);
     
-    // Fetch outstanding invoices
+    // Fetch outstanding invoices using the correct API service
     try {
       console.log('Fetching invoices for customer:', customer.customer_id || customer.id);
       
-      // Use the correct API endpoint for fetching customer invoices
-      const { invoicesApi } = await import('../../services/api');
+      // Import the correct invoice service used by global components
+      const InvoiceApiService = (await import('../../services/invoiceApiService')).default;
       
-      // Get all invoices for this customer
-      const response = await invoicesApi.getAll({
-        customer_id: customer.customer_id || customer.id
+      // Get invoices using the same method as global InvoiceSelector
+      const response = await InvoiceApiService.getInvoices({
+        customer_id: customer.customer_id || customer.id,
+        limit: 100,
+        offset: 0
       });
       
       console.log('Invoice API response:', response);
       
-      if (response && response.data && Array.isArray(response.data)) {
+      if (response && response.success && response.data) {
+        const invoiceData = response.data.data || response.data;
+        
         // Filter for outstanding invoices
-        const outstandingInvoices = response.data
+        const outstandingInvoices = invoiceData
           .filter((inv: any) => {
             // Calculate outstanding amount
             const totalAmount = inv.final_amount || inv.total_amount || inv.grand_total || 0;
             const paidAmount = inv.paid_amount || 0;
-            const outstanding = totalAmount - paidAmount;
+            const creditAmount = inv.credit_amount || 0;
+            const outstanding = totalAmount - paidAmount - creditAmount;
             
             // Only include if there's an outstanding amount
-            return outstanding > 0.01; // Account for floating point precision
+            return outstanding > 0.01;
           })
           .map((inv: any) => {
             const totalAmount = inv.final_amount || inv.total_amount || inv.grand_total || 0;
             const paidAmount = inv.paid_amount || 0;
+            const creditAmount = inv.credit_amount || 0;
             
             return {
               invoice_no: inv.invoice_number || inv.invoice_no || `INV-${inv.invoice_id}`,
               invoice_date: inv.invoice_date || inv.created_at,
               total_amount: totalAmount,
               paid_amount: paidAmount,
-              amount_due: totalAmount - paidAmount,
+              amount_due: totalAmount - paidAmount - creditAmount,
               status: inv.payment_status || 'pending',
               invoice_id: inv.invoice_id || inv.id,
               customer_id: customer.customer_id || customer.id
@@ -259,31 +259,15 @@ const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) =>
         console.log(`Found ${outstandingInvoices.length} outstanding invoices`);
         setOutstandingInvoices(outstandingInvoices);
       } else {
-        console.log('No invoice data received');
+        console.log('No invoice data received or API failed');
         setOutstandingInvoices([]);
       }
     } catch (error: any) {
       console.error('Error fetching invoices:', error);
+      setOutstandingInvoices([]);
       
-      // Try the customer outstanding API as fallback
-      try {
-        console.log('Trying customer outstanding API...');
-        const outstandingResponse = await customersApi.getOutstanding(customer.customer_id || customer.id);
-        
-        if (outstandingResponse && outstandingResponse.data) {
-          const outstandingInvoices = Array.isArray(outstandingResponse.data) 
-            ? outstandingResponse.data 
-            : [];
-          
-          console.log(`Found ${outstandingInvoices.length} outstanding invoices from customer API`);
-          setOutstandingInvoices(outstandingInvoices);
-        } else {
-          setOutstandingInvoices([]);
-        }
-      } catch (fallbackError) {
-        console.error('Fallback API also failed:', fallbackError);
-        setOutstandingInvoices([]);
-      }
+      // Show a helpful message to the user
+      setMessage('Could not fetch invoices. You can still proceed with payment.', 'info');
     }
   };
 
@@ -421,44 +405,48 @@ const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) =>
                 {/* Outstanding Invoices - Only show if customer selected */}
                 {selectedCustomer && (
                   <div className="mb-6">
-                    <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center justify-between mb-2">
                       <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wider flex items-center">
                         <FileText className="w-4 h-4 mr-2" />
                         INVOICE ALLOCATION
                       </h3>
                       <select
                         value={payment.allocation_method || 'manual'}
-                        onChange={(e) => setPaymentField('allocation_method', e.target.value)}
-                        className="px-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        onChange={(e) => {
+                          setPaymentField('allocation_method', e.target.value);
+                          // Auto-allocate based on method
+                          if (e.target.value !== 'manual' && e.target.value !== 'advance') {
+                            // This will trigger auto-allocation on save
+                            setPaymentField('auto_allocate', true);
+                          }
+                        }}
+                        className="px-2 py-1 text-xs border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
                       >
                         <option value="manual">Manual Selection</option>
                         <option value="fifo">Auto - FIFO (Oldest First)</option>
                         <option value="lifo">Auto - LIFO (Newest First)</option>
-                        <option value="highest">Auto - Highest Amount First</option>
+                        <option value="highest">Auto - Highest First</option>
                         <option value="advance">Keep as Advance</option>
                       </select>
                     </div>
                     
-                    {payment.allocation_method === 'manual' && <InvoiceSelector />}
-                    
-                    {payment.allocation_method !== 'manual' && payment.allocation_method !== 'advance' && (
-                      <Card className="p-3 bg-blue-50 border border-blue-200">
-                        <p className="text-sm text-blue-800">
-                          <span className="font-medium">Automatic Allocation:</span> Payment will be allocated to invoices using {' '}
-                          {payment.allocation_method === 'fifo' && 'First-In-First-Out (oldest invoices first)'}
-                          {payment.allocation_method === 'lifo' && 'Last-In-First-Out (newest invoices first)'}
-                          {payment.allocation_method === 'highest' && 'Highest Amount First'}
-                          {' '} method when saved.
-                        </p>
-                      </Card>
+                    {payment.allocation_method !== 'advance' && (
+                      <>
+                        {payment.allocation_method === 'manual' && <InvoiceSelector />}
+                        {payment.allocation_method !== 'manual' && (
+                          <div className="text-xs text-gray-600 bg-gray-50 p-2 rounded">
+                            {payment.allocation_method === 'fifo' && '📅 Will allocate to oldest invoices first'}
+                            {payment.allocation_method === 'lifo' && '📅 Will allocate to newest invoices first'}
+                            {payment.allocation_method === 'highest' && '💰 Will allocate to highest amount invoices first'}
+                          </div>
+                        )}
+                      </>
                     )}
                     
                     {payment.allocation_method === 'advance' && (
-                      <Card className="p-3 bg-green-50 border border-green-200">
-                        <p className="text-sm text-green-800">
-                          <span className="font-medium">Advance Payment:</span> This amount will be kept as customer advance and can be adjusted against future invoices.
-                        </p>
-                      </Card>
+                      <div className="text-xs text-green-700 bg-green-50 p-2 rounded">
+                        💳 Payment will be kept as customer advance
+                      </div>
                     )}
                   </div>
                 )}

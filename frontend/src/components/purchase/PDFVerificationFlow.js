@@ -360,83 +360,118 @@ const PDFVerificationFlow = ({
                 <div className="overflow-x-auto">
                   <table className="w-full text-sm">
                     <thead className="bg-gray-50 border-b">
-                      <tr>
-                        <th className="text-left px-3 py-2">Product</th>
-                        <th className="text-left px-3 py-2">Batch</th>
-                        <th className="text-left px-3 py-2">Expiry</th>
-                        <th className="text-right px-3 py-2">Qty</th>
-                        <th className="text-right px-3 py-2">Free</th>
-                        <th className="text-right px-3 py-2">Cost</th>
-                        <th className="text-right px-3 py-2">MRP</th>
-                        <th className="text-right px-3 py-2">PTR</th>
-                        <th className="text-right px-3 py-2">Tax%</th>
-                        <th className="text-right px-3 py-2">Amount</th>
-                        <th className="text-center px-3 py-2 w-20">Action</th>
+                      <tr className="text-xs">
+                        <th className="text-left px-2 py-2">Product</th>
+                        <th className="text-left px-2 py-2">Expiry</th>
+                        <th className="text-right px-2 py-2">Qty</th>
+                        <th className="text-right px-2 py-2">Free</th>
+                        <th className="text-right px-2 py-2">Disc%</th>
+                        <th className="text-right px-2 py-2">Cost</th>
+                        <th className="text-right px-2 py-2">MRP</th>
+                        <th className="text-right px-2 py-2">Rate</th>
+                        <th className="text-right px-2 py-2">Tax%</th>
+                        <th className="text-right px-2 py-2">Tax Amt</th>
+                        <th className="text-right px-2 py-2">Total</th>
+                        <th className="text-center px-2 py-2 w-16"></th>
                       </tr>
                     </thead>
                     <tbody>
                       {verifiedProducts.filter(p => !p.skipped).map((product, index) => {
-                        const amount = (parseFloat(product.quantity || 0) * parseFloat(product.cost_price || 0)).toFixed(2);
+                        // Calculate line totals
+                        const qty = parseFloat(product.quantity || 0);
+                        const cost = parseFloat(product.cost_price || 0);
+                        const discountPercent = parseFloat(product.discount_percent || 0);
+                        const taxPercent = parseFloat(product.tax_percent || 0);
+                        
+                        // Calculate base amount after discount
+                        const baseAmount = qty * cost;
+                        const discountAmount = baseAmount * (discountPercent / 100);
+                        const discountedAmount = baseAmount - discountAmount;
+                        
+                        // Calculate tax on discounted amount
+                        const taxAmount = discountedAmount * (taxPercent / 100);
+                        const totalAmount = discountedAmount + taxAmount;
+                        
                         return (
-                          <tr key={index} className="border-b hover:bg-gray-50">
-                            <td className="px-3 py-2">
+                          <tr key={index} className="border-b hover:bg-gray-50 text-xs">
+                            <td className="px-2 py-1">
                               <div>
-                                <p className="font-medium">{product.product_name}</p>
-                                {product.hsn_code && <p className="text-xs text-gray-500">HSN: {product.hsn_code}</p>}
-                                {product.isNewProduct && (
-                                  <span className="text-xs bg-blue-100 text-blue-700 px-1 rounded">New Product</span>
-                                )}
+                                <p className="font-medium truncate max-w-[150px]" title={product.product_name}>
+                                  {product.product_name}
+                                </p>
+                                {product.hsn_code && <p className="text-[10px] text-gray-500">HSN: {product.hsn_code}</p>}
                               </div>
                             </td>
-                            <td className="px-3 py-2">{product.batch_number || 'Auto'}</td>
-                            <td className="px-3 py-2 text-xs">{product.expiry_date}</td>
-                            <td className="px-3 py-2 text-right">{product.quantity}</td>
-                            <td className="px-3 py-2 text-right">{product.free_quantity || 0}</td>
-                            <td className="px-3 py-2 text-right">₹{product.cost_price || 0}</td>
-                            <td className="px-3 py-2 text-right">₹{product.mrp || 0}</td>
-                            <td className="px-3 py-2 text-right">₹{product.selling_price || product.mrp * 0.9 || 0}</td>
-                            <td className="px-3 py-2 text-right">{product.tax_percent}%</td>
-                            <td className="px-3 py-2 text-right font-medium">₹{amount}</td>
-                            <td className="px-3 py-2 text-center">
+                            <td className="px-2 py-1">{product.expiry_date}</td>
+                            <td className="px-2 py-1 text-right font-medium">{product.quantity}</td>
+                            <td className="px-2 py-1 text-right">{product.free_quantity || 0}</td>
+                            <td className="px-2 py-1 text-right">{product.discount_percent || 0}%</td>
+                            <td className="px-2 py-1 text-right">₹{cost.toFixed(2)}</td>
+                            <td className="px-2 py-1 text-right">₹{product.mrp || 0}</td>
+                            <td className="px-2 py-1 text-right">₹{product.selling_price || (product.mrp * 0.9) || 0}</td>
+                            <td className="px-2 py-1 text-right">{taxPercent}%</td>
+                            <td className="px-2 py-1 text-right">₹{taxAmount.toFixed(2)}</td>
+                            <td className="px-2 py-1 text-right font-semibold">₹{totalAmount.toFixed(2)}</td>
+                            <td className="px-2 py-1 text-center">
                               <button
                                 onClick={() => {
-                                  // Find the actual index in the full array (including skipped items)
                                   const actualIndex = verifiedProducts.findIndex(p => p === product);
                                   removeProduct(actualIndex);
                                 }}
-                                className="p-1.5 text-red-600 hover:bg-red-50 rounded transition-colors"
-                                title="Delete this product"
+                                className="p-1 text-red-600 hover:bg-red-50 rounded transition-colors"
+                                title="Delete"
                               >
-                                <Trash2 className="w-4 h-4" />
+                                <Trash2 className="w-3 h-3" />
                               </button>
                             </td>
                           </tr>
                         );
                       })}
                     </tbody>
-                    <tfoot className="bg-gray-50">
+                    <tfoot className="bg-gray-50 text-xs">
                       <tr>
-                        <td colSpan="10" className="px-3 py-2 text-right font-medium">Subtotal:</td>
-                        <td className="px-3 py-2 text-right font-medium">
-                          ₹{verifiedProducts.filter(p => !p.skipped).reduce((sum, p) => 
-                            sum + (parseFloat(p.quantity || 0) * parseFloat(p.cost_price || 0)), 0
-                          ).toFixed(2)}
-                        </td>
-                      </tr>
-                      <tr>
-                        <td colSpan="10" className="px-3 py-2 text-right font-medium">Tax Amount:</td>
-                        <td className="px-3 py-2 text-right font-medium">
+                        <td colSpan="9" className="px-2 py-1 text-right font-medium">Subtotal:</td>
+                        <td className="px-2 py-1 text-right">
                           ₹{verifiedProducts.filter(p => !p.skipped).reduce((sum, p) => {
-                            const base = parseFloat(p.quantity || 0) * parseFloat(p.cost_price || 0);
-                            return sum + (base * parseFloat(p.tax_percent || 0) / 100);
+                            const qty = parseFloat(p.quantity || 0);
+                            const cost = parseFloat(p.cost_price || 0);
+                            const discount = parseFloat(p.discount_percent || 0);
+                            const base = qty * cost;
+                            return sum + (base - (base * discount / 100));
                           }, 0).toFixed(2)}
                         </td>
+                        <td colSpan="2"></td>
                       </tr>
-                      <tr className="text-lg">
-                        <td colSpan="10" className="px-3 py-3 text-right font-semibold">Total Amount:</td>
-                        <td className="px-3 py-3 text-right font-semibold text-indigo-600">
-                          ₹{extractedData.final_amount || extractedData.total_amount || 0}
+                      <tr>
+                        <td colSpan="9" className="px-2 py-1 text-right font-medium">Total Tax:</td>
+                        <td className="px-2 py-1 text-right">
+                          ₹{verifiedProducts.filter(p => !p.skipped).reduce((sum, p) => {
+                            const qty = parseFloat(p.quantity || 0);
+                            const cost = parseFloat(p.cost_price || 0);
+                            const discount = parseFloat(p.discount_percent || 0);
+                            const tax = parseFloat(p.tax_percent || 0);
+                            const base = qty * cost;
+                            const discountedAmount = base - (base * discount / 100);
+                            return sum + (discountedAmount * tax / 100);
+                          }, 0).toFixed(2)}
                         </td>
+                        <td colSpan="2"></td>
+                      </tr>
+                      <tr className="font-semibold">
+                        <td colSpan="10" className="px-2 py-2 text-right">Grand Total:</td>
+                        <td className="px-2 py-2 text-right text-indigo-600">
+                          ₹{verifiedProducts.filter(p => !p.skipped).reduce((sum, p) => {
+                            const qty = parseFloat(p.quantity || 0);
+                            const cost = parseFloat(p.cost_price || 0);
+                            const discount = parseFloat(p.discount_percent || 0);
+                            const tax = parseFloat(p.tax_percent || 0);
+                            const base = qty * cost;
+                            const discountedAmount = base - (base * discount / 100);
+                            const taxAmount = discountedAmount * tax / 100;
+                            return sum + discountedAmount + taxAmount;
+                          }, 0).toFixed(2)}
+                        </td>
+                        <td></td>
                       </tr>
                     </tfoot>
                   </table>
