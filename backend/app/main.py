@@ -69,8 +69,8 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],  # Allow all origins for now to avoid CORS issues
     allow_credentials=True,
-    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],  # Explicitly list methods
-    allow_headers=["*"],
+    allow_methods=["*"],  # Allow all HTTP methods
+    allow_headers=["*"],  # Allow all headers including Content-Type for multipart/form-data
     expose_headers=["*"],
     max_age=3600,
 )
@@ -82,7 +82,8 @@ app.router.redirect_slashes = False
 # Handle OPTIONS requests for CORS preflight
 @app.options("/{full_path:path}")
 async def options_handler(full_path: str):
-    return {"message": "OK"}
+    """Handle CORS preflight requests"""
+    return {"message": "OK", "status": "preflight_success"}
 
 # Health check endpoint
 @app.get("/")
