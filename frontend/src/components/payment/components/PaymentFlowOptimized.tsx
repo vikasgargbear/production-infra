@@ -100,14 +100,11 @@ const PaymentFlowOptimized: React.FC = () => {
 
   return (
     <div className="space-y-4">
-      {/* Step 1: Customer Selection - Most Prominent */}
+      {/* Customer Selection */}
       {!selectedCustomer ? (
-        <Card className="p-6 border-2 border-blue-200 bg-blue-50/30">
-          <div className="space-y-4">
-            <div className="flex items-center space-x-2 mb-4">
-              <div className="w-8 h-8 rounded-full bg-blue-500 text-white flex items-center justify-center text-sm font-bold">1</div>
-              <h3 className="text-lg font-semibold text-gray-800">Select Customer</h3>
-            </div>
+        <div className="space-y-2">
+          <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wider">SELECT CUSTOMER</h3>
+          <Card className="p-5">
             <CustomerSearch
               ref={customerSearchRef}
               value={selectedCustomer}
@@ -117,183 +114,178 @@ const PaymentFlowOptimized: React.FC = () => {
               required
               autoFocus
             />
-          </div>
-        </Card>
+          </Card>
+        </div>
       ) : (
-        <Card className="p-4 bg-green-50 border border-green-200">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-3">
-              <Check className="w-5 h-5 text-green-600" />
-              <div>
-                <p className="text-sm text-gray-600">Customer</p>
-                <p className="font-semibold text-gray-900">{selectedCustomer.customer_name}</p>
+        <div className="space-y-2">
+          <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wider">CUSTOMER</h3>
+          <Card className="p-3 bg-green-50 border border-green-200">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-3">
+                <Check className="w-4 h-4 text-green-600" />
+                <p className="font-medium text-gray-900">{selectedCustomer.customer_name}</p>
               </div>
+              <button
+                onClick={() => setCustomer(null)}
+                className="text-sm text-blue-600 hover:text-blue-700"
+              >
+                Change
+              </button>
             </div>
-            <button
-              onClick={() => setCustomer(null)}
-              className="text-sm text-blue-600 hover:text-blue-700"
-            >
-              Change
-            </button>
-          </div>
-        </Card>
+          </Card>
+        </div>
       )}
 
-      {/* Step 2: Payment Details - Only show after customer selection */}
+      {/* Payment Details - Only show after customer selection */}
       {selectedCustomer && (
-        <Card className="p-5">
-          <div className="space-y-4">
-            {/* Amount Input */}
+        <div className="space-y-4">
+          {/* Date and Type - First */}
+          <div className="grid grid-cols-2 gap-4">
             <div>
-              <div className="flex items-center space-x-2 mb-2">
-                <div className="w-8 h-8 rounded-full bg-blue-500 text-white flex items-center justify-center text-sm font-bold">2</div>
-                <label className="text-lg font-semibold text-gray-800">Enter Amount</label>
-              </div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Payment Date</label>
               <div className="relative">
-                <span className="absolute left-4 top-1/2 -translate-y-1/2 text-2xl text-green-600 font-bold">₹</span>
+                <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
                 <input
-                  ref={amountRef}
-                  type="number"
-                  value={payment.amount}
-                  onChange={(e) => handleFieldChange('amount', e.target.value)}
-                  className={`w-full pl-12 pr-4 py-3 text-2xl font-bold border-2 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-500 ${
-                    errors.amount ? 'border-red-500 bg-red-50' : 'border-gray-300'
-                  }`}
-                  placeholder="0"
-                  step="1"
+                  type="date"
+                  value={payment.payment_date || new Date().toISOString().split('T')[0]}
+                  onChange={(e) => handleFieldChange('payment_date', e.target.value)}
+                  className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
               </div>
-              {errors.amount && (
-                <p className="text-sm text-red-500 mt-1">{errors.amount}</p>
-              )}
             </div>
-
-            {/* Payment Mode Selection */}
             <div>
-              <div className="flex items-center space-x-2 mb-3">
-                <div className="w-8 h-8 rounded-full bg-blue-500 text-white flex items-center justify-center text-sm font-bold">3</div>
-                <label className="text-lg font-semibold text-gray-800">Payment Method</label>
-              </div>
-              <div className="grid grid-cols-3 gap-3">
-                {paymentModes.map((mode) => (
-                  <button
-                    key={mode.value}
-                    type="button"
-                    onClick={() => handlePaymentModeSelect(mode.value)}
-                    className={`p-4 rounded-xl border-2 transition-all ${
-                      payment.payment_mode === mode.value
-                        ? 'border-blue-500 bg-blue-50 ring-2 ring-blue-200'
-                        : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
-                    }`}
-                  >
-                    <div className="text-2xl mb-1">{mode.icon}</div>
-                    <div className="text-sm font-medium text-gray-700">{mode.label}</div>
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Reference Number - Only when needed */}
-            {needsReference && (
-              <div className="p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  {payment.payment_mode === 'UPI' ? 'UPI Transaction ID' : 
-                   payment.payment_mode === 'CHEQUE' ? 'Cheque Number' : 
-                   'Reference Number'} <span className="text-red-500">*</span>
-                </label>
-                <input
-                  type="text"
-                  value={payment.reference_number || ''}
-                  onChange={(e) => handleFieldChange('reference_number', e.target.value)}
-                  className="w-full px-4 py-2.5 border-2 border-yellow-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-yellow-400"
-                  placeholder="Enter reference number"
-                  required
-                />
-              </div>
-            )}
-
-            {/* Split Payment Modal - Inline */}
-            {showSplitModal && (
-              <div className="p-4 bg-orange-50 border border-orange-200 rounded-lg">
-                <h4 className="font-medium text-gray-800 mb-3">Split Payment Details</h4>
-                <div className="space-y-2">
-                  {splitPayments.map((split, index) => (
-                    <div key={index} className="flex items-center gap-2">
-                      <select
-                        value={split.type}
-                        onChange={(e) => updateSplitPayment(index, 'type', e.target.value)}
-                        className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-400"
-                      >
-                        <option value="CASH">Cash</option>
-                        <option value="UPI">UPI</option>
-                        <option value="CARD">Card</option>
-                        <option value="BANK_TRANSFER">Bank</option>
-                      </select>
-                      <div className="relative flex-1">
-                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-orange-600 font-bold">₹</span>
-                        <input
-                          type="number"
-                          value={split.amount}
-                          onChange={(e) => updateSplitPayment(index, 'amount', e.target.value)}
-                          placeholder="Amount"
-                          className="w-full pl-8 pr-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-400"
-                        />
-                      </div>
-                      {['UPI', 'BANK_TRANSFER'].includes(split.type) && (
-                        <input
-                          type="text"
-                          value={split.reference || ''}
-                          onChange={(e) => updateSplitPayment(index, 'reference', e.target.value)}
-                          placeholder="Ref"
-                          className="w-24 px-2 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-400"
-                        />
-                      )}
-                    </div>
-                  ))}
-                  <div className="flex justify-between items-center pt-2 border-t">
-                    <span className="text-sm font-medium">
-                      Total: ₹{totalSplitAmount.toFixed(2)} / ₹{payment.amount || '0'}
-                    </span>
-                    {totalSplitAmount !== parseFloat(payment.amount || '0') && (
-                      <span className="text-sm text-red-600">
-                        Difference: ₹{Math.abs(totalSplitAmount - parseFloat(payment.amount || '0')).toFixed(2)}
-                      </span>
-                    )}
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* Date and Type - Minimal bottom row */}
-            <div className="flex gap-3 pt-3 border-t">
-              <div className="flex-1">
-                <label className="block text-xs text-gray-600 mb-1">Date</label>
-                <div className="relative">
-                  <Calendar className="absolute left-2 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-                  <input
-                    type="date"
-                    value={payment.payment_date || new Date().toISOString().split('T')[0]}
-                    onChange={(e) => handleFieldChange('payment_date', e.target.value)}
-                    className="w-full pl-8 pr-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
-                </div>
-              </div>
-
-              <div className="flex-1">
-                <label className="block text-xs text-gray-600 mb-1">Type</label>
-                <select
-                  value={payment.payment_type || 'order_payment'}
-                  onChange={(e) => handleFieldChange('payment_type', e.target.value)}
-                  className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                >
-                  <option value="order_payment">Order Payment</option>
-                  <option value="advance">Advance</option>
-                  <option value="adjustment">Adjustment</option>
-                </select>
-              </div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Payment Type</label>
+              <select
+                value={payment.payment_type || 'order_payment'}
+                onChange={(e) => handleFieldChange('payment_type', e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="order_payment">Order Payment</option>
+                <option value="advance">Advance</option>
+                <option value="adjustment">Adjustment</option>
+              </select>
             </div>
           </div>
-        </Card>
+
+          {/* Amount Input */}
+          <div className="space-y-2">
+            <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wider">PAYMENT AMOUNT</h3>
+            <Card className="p-4">
+              <div>
+                <div className="relative">
+                  <span className="absolute left-4 top-1/2 -translate-y-1/2 text-2xl text-green-600 font-bold">₹</span>
+                  <input
+                    ref={amountRef}
+                    type="number"
+                    value={payment.amount}
+                    onChange={(e) => handleFieldChange('amount', e.target.value)}
+                    className={`w-full pl-12 pr-4 py-3 text-2xl font-bold border-2 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-500 ${
+                      errors.amount ? 'border-red-500 bg-red-50' : 'border-gray-300'
+                    }`}
+                    placeholder="0"
+                    step="1"
+                  />
+                </div>
+                {errors.amount && (
+                  <p className="text-sm text-red-500 mt-1">{errors.amount}</p>
+                )}
+              </div>
+            </Card>
+          </div>
+
+          {/* Payment Mode Selection */}
+          <div className="space-y-2">
+            <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wider">PAYMENT METHOD</h3>
+            <div className="grid grid-cols-3 gap-2">
+              {paymentModes.map((mode) => (
+                <button
+                  key={mode.value}
+                  type="button"
+                  onClick={() => handlePaymentModeSelect(mode.value)}
+                  className={`p-3 rounded-lg border transition-all ${
+                    payment.payment_mode === mode.value
+                      ? 'border-blue-500 bg-blue-50'
+                      : 'border-gray-300 hover:border-gray-400 hover:bg-gray-50'
+                  }`}
+                >
+                  <div className="text-xl mb-1">{mode.icon}</div>
+                  <div className="text-xs font-medium text-gray-700">{mode.label}</div>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Reference Number - Optional */}
+          {needsReference && (
+            <div className="p-3 bg-gray-50 border border-gray-200 rounded-lg">
+              <label className="block text-sm font-medium text-gray-600 mb-2">
+                {payment.payment_mode === 'UPI' ? 'UPI Transaction ID' : 
+                 payment.payment_mode === 'CHEQUE' ? 'Cheque Number' : 
+                 'Reference Number'} <span className="text-xs text-gray-500">(Optional)</span>
+              </label>
+              <input
+                type="text"
+                value={payment.reference_number || ''}
+                onChange={(e) => handleFieldChange('reference_number', e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                placeholder="Enter reference (optional)"
+              />
+            </div>
+          )}
+
+          {/* Split Payment - Inline */}
+          {showSplitModal && (
+            <div className="p-3 bg-gray-50 border border-gray-200 rounded-lg">
+              <h4 className="text-sm font-medium text-gray-700 mb-3">Split Payment Details</h4>
+              <div className="space-y-2">
+                {splitPayments.map((split, index) => (
+                  <div key={index} className="flex items-center gap-2">
+                    <select
+                      value={split.type}
+                      onChange={(e) => updateSplitPayment(index, 'type', e.target.value)}
+                      className="px-2 py-1.5 text-sm border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    >
+                      <option value="CASH">Cash</option>
+                      <option value="UPI">UPI</option>
+                      <option value="CARD">Card</option>
+                      <option value="BANK_TRANSFER">Bank</option>
+                    </select>
+                    <div className="relative flex-1">
+                      <span className="absolute left-2 top-1/2 -translate-y-1/2 text-sm text-gray-600 font-bold">₹</span>
+                      <input
+                        type="number"
+                        value={split.amount}
+                        onChange={(e) => updateSplitPayment(index, 'amount', e.target.value)}
+                        placeholder="Amount"
+                        className="w-full pl-6 pr-2 py-1.5 text-sm border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      />
+                    </div>
+                    {['UPI', 'BANK_TRANSFER'].includes(split.type) && (
+                      <input
+                        type="text"
+                        value={split.reference || ''}
+                        onChange={(e) => updateSplitPayment(index, 'reference', e.target.value)}
+                        placeholder="Ref (opt)"
+                        className="w-20 px-2 py-1.5 text-sm border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      />
+                    )}
+                  </div>
+                ))}
+                <div className="flex justify-between items-center pt-2 border-t">
+                  <span className="text-xs font-medium">
+                    Total: ₹{totalSplitAmount.toFixed(2)} / ₹{payment.amount || '0'}
+                  </span>
+                  {totalSplitAmount !== parseFloat(payment.amount || '0') && (
+                    <span className="text-xs text-red-600">
+                      Difference: ₹{Math.abs(totalSplitAmount - parseFloat(payment.amount || '0')).toFixed(2)}
+                    </span>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
+        </div>
       )}
     </div>
   );

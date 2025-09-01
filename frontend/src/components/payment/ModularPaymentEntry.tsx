@@ -7,10 +7,7 @@ import { PaymentProvider, usePayment } from '../../contexts/PaymentContext';
 import { customersApi, salesApi, paymentsApi } from '../../services/api';
 import { paymentDataTransformer } from '../../services/api/utils/paymentDataTransformer';
 import InvoiceSelector from './components/InvoiceSelector';
-import PaymentDetails from './components/PaymentDetails';
-import PaymentDetailsEnhanced from './components/PaymentDetailsEnhanced';
-import PaymentDetailsCompact from './components/PaymentDetailsCompact';
-import PaymentDetailsOptimized from './components/PaymentDetailsOptimized';
+import PaymentFlowOptimized from './components/PaymentFlowOptimized';
 import PaymentSummary from './components/PaymentSummary';
 import PaymentSummaryCompact from './components/PaymentSummaryCompact';
 
@@ -207,51 +204,57 @@ const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) =>
   const handleCustomerSelect = async (customer: any): Promise<void> => {
     setCustomer(customer);
     
-    // Fetch outstanding invoices using invoicesApi
+    // Fetch outstanding invoices
     try {
-      // Import invoicesApi at the top of the file if not already imported
-      const { invoicesApi } = await import('../../services/api');
+      // Get customer's outstanding invoices
+      const response = await customersApi.getOutstanding(customer.customer_id || customer.id);
       
-      // Get customer's invoices with outstanding amounts
-      const response = await invoicesApi.getByCustomer(
-        customer.customer_id || customer.id,
-        {
-          payment_status: 'pending,partial', // Get unpaid and partially paid invoices
-          sort: 'invoice_date',
-          order: 'asc',
-          limit: 50
-        }
-      );
-      
-      // Transform invoices to outstanding format
-      const invoices = response.data || [];
-      const outstandingInvoices = invoices
-        .filter((inv: any) => {
-          // Only include invoices with outstanding amounts
-          const outstanding = (inv.final_amount || inv.total_amount || 0) - (inv.paid_amount || 0);
-          return outstanding > 0;
-        })
-        .map((inv: any) => ({
-          invoice_no: inv.invoice_number || inv.invoice_id,
+      if (response && response.data) {
+        // The API should return invoices with outstanding amounts
+        const outstandingInvoices = response.data.map((inv: any) => ({
+          invoice_no: inv.invoice_number || inv.invoice_no || inv.invoice_id,
           invoice_date: inv.invoice_date || inv.created_at,
-          total_amount: inv.final_amount || inv.total_amount || 0,
+          total_amount: inv.final_amount || inv.total_amount || inv.invoice_total || 0,
           paid_amount: inv.paid_amount || 0,
-          amount_due: (inv.final_amount || inv.total_amount || 0) - (inv.paid_amount || 0),
+          amount_due: inv.amount_due || inv.outstanding_amount || 
+                     ((inv.final_amount || inv.total_amount || 0) - (inv.paid_amount || 0)),
           status: inv.payment_status || 'pending',
-          invoice_id: inv.invoice_id || inv.id
+          invoice_id: inv.invoice_id || inv.id,
+          customer_id: customer.customer_id || customer.id
         }));
-      
-      setOutstandingInvoices(outstandingInvoices);
-      console.log(`Found ${outstandingInvoices.length} outstanding invoices for customer`);
-      
-    } catch (error) {
+        
+        setOutstandingInvoices(outstandingInvoices);
+        console.log(`Found ${outstandingInvoices.length} outstanding invoices for customer ${customer.customer_name}`);
+      } else {
+        setOutstandingInvoices([]);
+      }
+    } catch (error: any) {
       console.error('Error fetching outstanding invoices:', error);
-      // Try alternative API if available
+      // Try alternative approach - fetch from invoices endpoint
       try {
-        // Try using the customer API's getOutstanding method
-        const response = await customersApi.getOutstanding(customer.customer_id || customer.id);
-        if (response.data) {
-          setOutstandingInvoices(response.data);
+        const { invoicesApi } = await import('../../services/api');
+        const invoiceResponse = await invoicesApi.getAll({
+          customer_id: customer.customer_id || customer.id,
+          payment_status: 'pending,partial'
+        });
+        
+        if (invoiceResponse && invoiceResponse.data) {
+          const outstandingInvoices = invoiceResponse.data
+            .filter((inv: any) => {
+              const outstanding = (inv.final_amount || inv.total_amount || 0) - (inv.paid_amount || 0);
+              return outstanding > 0;
+            })
+            .map((inv: any) => ({
+              invoice_no: inv.invoice_number || inv.invoice_id,
+              invoice_date: inv.invoice_date,
+              total_amount: inv.final_amount || inv.total_amount || 0,
+              paid_amount: inv.paid_amount || 0,
+              amount_due: (inv.final_amount || inv.total_amount || 0) - (inv.paid_amount || 0),
+              status: inv.payment_status || 'pending',
+              invoice_id: inv.invoice_id || inv.id
+            }));
+          
+          setOutstandingInvoices(outstandingInvoices);
         } else {
           setOutstandingInvoices([]);
         }
@@ -387,43 +390,38 @@ const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) =>
 
             {currentStep === 1 ? (
               <>
-                {/* Payment Details - Optimized for fast entry */}
+                {/* New Optimized Payment Flow */}
                 <div className="mb-6">
-                  <PaymentDetailsOptimized />
+                  <PaymentFlowOptimized />
                 </div>
 
-                {/* Customer Section */}
-                <div className="mb-6">
-                  <div className="flex items-center justify-between mb-3">
-                    <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wider flex items-center">
-                      <User className="w-4 h-4 mr-2" />
-                      CUSTOMER
-                    </h3>
-                    <button
-                      onClick={() => setShowCustomerModal(true)}
-                      className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors text-sm font-medium"
-                    >
-                      Create Customer
-                    </button>
-                  </div>
-                  <CustomerSearch
-                    value={selectedCustomer}
-                    onChange={handleCustomerSelect}
-                    onCreateNew={() => setShowCustomerModal(true)}
-                    displayMode="inline"
-                    placeholder="Search customer by name, phone, or code..."
-                    required
-                  />
+                {/* Customer Creation Button - Floating */}
+                <div className="fixed bottom-20 right-6">
+                  <button
+                    onClick={() => setShowCustomerModal(true)}
+                    className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-full shadow-lg transition-colors text-sm font-medium flex items-center gap-2"
+                  >
+                    <Plus className="w-4 h-4" />
+                    New Customer
+                  </button>
                 </div>
                 
                 {/* Outstanding Invoices - Only show if customer selected */}
                 {selectedCustomer && (
                   <div className="mb-6">
-                    <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wider mb-3 flex items-center">
-                      <FileText className="w-4 h-4 mr-2" />
-                      OUTSTANDING INVOICES
-                    </h3>
-                    <InvoiceSelector />
+                    <div className="flex items-center justify-between mb-3">
+                      <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wider flex items-center">
+                        <FileText className="w-4 h-4 mr-2" />
+                        OUTSTANDING INVOICES
+                      </h3>
+                      <button
+                        onClick={() => setPaymentField('skip_invoice_allocation', !payment.skip_invoice_allocation)}
+                        className="text-sm text-blue-600 hover:text-blue-700"
+                      >
+                        {payment.skip_invoice_allocation ? 'Show Invoices' : 'Skip Invoice Selection'}
+                      </button>
+                    </div>
+                    {!payment.skip_invoice_allocation && <InvoiceSelector />}
                   </div>
                 )}
               </>
