@@ -11,7 +11,7 @@ from datetime import datetime, date
 from pydantic import BaseModel, UUID4
 from decimal import Decimal
 
-from ...db.database import get_db
+from ...core.database import get_db
 from ...core.auth import get_current_user
 from ...utils.org_utils import get_org_id_from_header
 
