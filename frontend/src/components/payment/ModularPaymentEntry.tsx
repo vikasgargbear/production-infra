@@ -49,6 +49,7 @@ const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) =>
     setMessage,
     setPaymentField,
     errors,
+    outstandingInvoices,
     setOutstandingInvoices
   } = usePayment();
 
