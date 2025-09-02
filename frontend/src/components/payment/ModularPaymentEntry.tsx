@@ -74,8 +74,20 @@ const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) =>
       setShowCustomerModal(true);
     };
     
+    const handleCustomerSelectedEvent = (event: any) => {
+      console.log('Customer selected event received:', event.detail);
+      if (event.detail) {
+        handleCustomerSelect(event.detail);
+      }
+    };
+    
     window.addEventListener('openCustomerModal', handleOpenCustomerModal);
-    return () => window.removeEventListener('openCustomerModal', handleOpenCustomerModal);
+    window.addEventListener('customerSelected', handleCustomerSelectedEvent);
+    
+    return () => {
+      window.removeEventListener('openCustomerModal', handleOpenCustomerModal);
+      window.removeEventListener('customerSelected', handleCustomerSelectedEvent);
+    };
   }, []);
 
   // Keyboard shortcuts

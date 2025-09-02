@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   Package, Search, CheckCircle, AlertCircle, ChevronLeft, 
   ChevronRight, Calendar, Hash, DollarSign, Percent, Info,
@@ -6,6 +6,7 @@ import {
 } from 'lucide-react';
 import { purchasesApi } from '../../../services/api/modules/purchases.api';
 import { debounce } from 'lodash';
+import { PurchaseProductSearch } from '../../global';
 
 /**
  * ProductVerificationModal - Verify single product with search and validation
@@ -19,11 +20,10 @@ const ProductVerificationModal = ({
   onPrevious,
   onNext
 }) => {
-  const [searchTerm, setSearchTerm] = useState(product?.product_name || '');
-  const [searchResults, setSearchResults] = useState([]);
   const [selectedProduct, setSelectedProduct] = useState(null);
-  const [searching, setSearching] = useState(false);
   const [mode, setMode] = useState('search'); // 'search', 'selected', 'new'
+  const [isExtractMode, setIsExtractMode] = useState(true); // Track if we're in extract mode
+  const productSearchRef = useRef(null);
   
   // Editable product data
   const [productData, setProductData] = useState({
@@ -104,7 +104,7 @@ const ProductVerificationModal = ({
         quantity: product?.quantity || '',
         cost_price: product?.cost_price || product?.rate || '',
         mrp: product?.mrp || '',
-        selling_price: product?.selling_price || '',
+        selling_price: product?.selling_price || '', // Don't auto-calculate in extract mode
         tax_percent: product?.tax_percent || 12,
         hsn_code: product?.hsn_code || '',
         free_quantity: product?.free_quantity || 0,
@@ -112,83 +112,56 @@ const ProductVerificationModal = ({
       });
       
       setMode('search');
-      
-      // Search for the new product only if not verified
-      if (product?.product_name) {
-        searchProduct(product.product_name);
-      }
+      setIsExtractMode(true); // We're in extract mode
     }
     
     // Reset common state
-    setSearchTerm(product?.product_name || '');
     setSelectedProduct(null);
     setValidationErrors([]);
     setValidationWarnings([]);
   }, [product, productIndex]); // Add productIndex to ensure updates when switching
 
-  // Search products - removed useCallback to avoid stale closure
-  const searchProduct = debounce(async (term) => {
-    if (!term || term.length < 2) return;
-
-    setSearching(true);
-    try {
-      const response = await purchasesApi.searchProducts({ 
-        product_name: term 
-      });
-      if (response && response.data) {
-        setSearchResults(response.data.products || []);
-        
-        // Auto-select if exact match found
-        const exactMatch = response.data.products?.find(p => p.is_exact_match);
-        if (exactMatch) {
-          selectProduct(exactMatch);
-        }
-      }
-    } catch (error) {
-      console.error('Search error:', error);
-    } finally {
-      setSearching(false);
-    }
-  }, 300);
-
-  // Select existing product
-  const selectProduct = (existingProduct) => {
-    setSelectedProduct(existingProduct);
-    setMode('selected');
+  // Handle product selection from global search
+  const handleProductSelect = (selectedProd) => {
+    // Map the selected product to our format
+    const mappedProduct = {
+      product_id: selectedProd.product_id || selectedProd.id,
+      product_name: selectedProd.product_name || selectedProd.name,
+      hsn_code: selectedProd.hsn_code || selectedProd.hsn,
+      mrp: selectedProd.mrp || productData.mrp || 0,
+      // In extract mode, don't auto-fill selling price - let it come from customer
+      selling_price: isExtractMode ? (productData.selling_price || '') : (selectedProd.selling_price || selectedProd.ptr || ''),
+      cost_price: productData.cost_price || selectedProd.cost_price || 0,
+      tax_percent: selectedProd.tax_percent || selectedProd.gst_percent || productData.tax_percent || 12,
+      // Keep extracted values for these
+      quantity: productData.quantity || 1,
+      free_quantity: productData.free_quantity || 0,
+      discount_percent: productData.discount_percent || 0,
+      batch_number: productData.batch_number || '',
+      expiry_date: productData.expiry_date || ''
+    };
     
-    // Update product data with existing product info
-    setProductData(prev => ({
-      ...prev,
-      product_id: existingProduct.product_id,
-      product_name: existingProduct.product_name,
-      hsn_code: existingProduct.hsn_code || prev.hsn_code,
-      // Suggest last pricing but keep extracted values if available
-      cost_price: prev.cost_price || existingProduct.last_cost || '',
-      mrp: prev.mrp || existingProduct.last_mrp || ''
-    }));
-
-    // Auto-calculate selling price if not set
-    if (!productData.selling_price && productData.mrp) {
-      setProductData(prev => ({
-        ...prev,
-        selling_price: (parseFloat(prev.mrp) * 0.9).toFixed(2)
-      }));
-    }
+    setProductData(mappedProduct);
+    setSelectedProduct(selectedProd);
+    setMode('selected');
+    setIsExtractMode(false); // No longer in pure extract mode after selection
   };
 
-  // Create new product
-  const createNewProduct = () => {
+  // Handle creating new product
+  const handleCreateNewProduct = () => {
     setMode('new');
     setSelectedProduct(null);
+    setIsExtractMode(false);
+    // Keep the extracted data but mark as new product
     setProductData(prev => ({
       ...prev,
       product_id: null
     }));
   };
 
-  // Auto-calculate prices
+  // Auto-calculate prices only when NOT in extract mode
   useEffect(() => {
-    if (productData.cost_price && (!productData.mrp || productData.mrp === '')) {
+    if (!isExtractMode && productData.cost_price && (!productData.mrp || productData.mrp === '')) {
       const cost = parseFloat(productData.cost_price);
       if (!isNaN(cost) && cost > 0) {
         setProductData(prev => ({
@@ -197,10 +170,11 @@ const ProductVerificationModal = ({
         }));
       }
     }
-  }, [productData.cost_price]);
+  }, [productData.cost_price, isExtractMode]);
 
   useEffect(() => {
-    if (productData.mrp && (!productData.selling_price || productData.selling_price === '')) {
+    // Don't auto-calculate selling price in extract mode - let customer provide it
+    if (!isExtractMode && productData.mrp && (!productData.selling_price || productData.selling_price === '')) {
       const mrp = parseFloat(productData.mrp);
       if (!isNaN(mrp) && mrp > 0) {
         setProductData(prev => ({
@@ -209,7 +183,7 @@ const ProductVerificationModal = ({
         }));
       }
     }
-  }, [productData.mrp]);
+  }, [productData.mrp, isExtractMode]);
 
   // Generate batch number if not provided
   const generateBatchNumber = () => {
@@ -272,11 +246,11 @@ const ProductVerificationModal = ({
     }
 
     // Auto-generate batch number if not provided
-    // Auto-calculate selling price if not provided
+    // Only auto-calculate selling price if not in extract mode and not provided
     const finalProductData = {
       ...productData,
       batch_number: productData.batch_number || generateBatchNumber(),
-      selling_price: productData.selling_price || (productData.mrp ? (parseFloat(productData.mrp) * 0.9).toFixed(2) : '0')
+      selling_price: productData.selling_price || (!isExtractMode && productData.mrp ? (parseFloat(productData.mrp) * 0.9).toFixed(2) : '0')
     };
 
     onVerified({
@@ -314,63 +288,19 @@ const ProductVerificationModal = ({
         </div>
       </div>
 
-      {/* Search Section - Improved visualization */}
+      {/* Search Section - Using Global Component */}
       <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
         <label className="block text-xs font-medium text-blue-700 mb-2 uppercase tracking-wider">
           Product Search
         </label>
-        <div className="flex items-center space-x-3">
-          <div className="relative flex-1">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-blue-500" />
-            <input
-              type="text"
-              value={searchTerm}
-              onChange={(e) => {
-                setSearchTerm(e.target.value);
-                searchProduct(e.target.value);
-              }}
-              placeholder="Type to search existing products or create new..."
-              className="w-full pl-10 pr-3 py-2 border-2 border-blue-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white"
-            />
-          </div>
-          {searching && (
-            <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-indigo-600"></div>
-          )}
-        </div>
-
-        {/* Search Results */}
-        {searchResults.length > 0 && mode === 'search' && (
-          <div className="space-y-2 max-h-40 overflow-y-auto">
-            {searchResults.map((result) => (
-              <div
-                key={result.product_id}
-                onClick={() => selectProduct(result)}
-                className="p-2 bg-white rounded border hover:bg-indigo-50 hover:border-indigo-300 cursor-pointer"
-              >
-                <div className="flex items-center justify-between">
-                  <div className="flex-1">
-                    <p className="text-sm font-medium">{result.product_name}</p>
-                    <p className="text-xs text-gray-500">
-                      {result.last_batch && `Last: Batch ${result.last_batch}`}
-                      {result.last_mrp && ` • MRP ₹${result.last_mrp}`}
-                    </p>
-                  </div>
-                  {result.is_exact_match && (
-                    <span className="text-xs bg-green-100 text-green-700 px-2 py-1 rounded">
-                      Exact Match
-                    </span>
-                  )}
-                </div>
-              </div>
-            ))}
-            <button
-              onClick={createNewProduct}
-              className="w-full p-2 text-center text-sm text-indigo-600 hover:bg-indigo-50 rounded"
-            >
-              + Create as new product
-            </button>
-          </div>
-        )}
+        <PurchaseProductSearch
+          ref={productSearchRef}
+          onAddItem={handleProductSelect}
+          onCreateProduct={handleCreateNewProduct}
+          requireBatch={false}
+          placeholder="Type to search existing products or create new..."
+          className="w-full"
+        />
 
         {/* Selected/New Product Indicator */}
         {mode === 'selected' && selectedProduct && (
@@ -431,8 +361,8 @@ const ProductVerificationModal = ({
                   discount_percent: 0
                 });
                 setMode('new');
-                setSearchTerm('');
                 setSelectedProduct(null);
+                setIsExtractMode(false);
               }}
               className="p-1.5 text-green-600 hover:bg-green-50 rounded transition-colors"
               title="Add new product"
@@ -625,7 +555,7 @@ const ProductVerificationModal = ({
                     }))}
                     min="0"
                     step="0.01"
-                    placeholder="Auto"
+                    placeholder={isExtractMode ? "Enter price" : "Auto"}
                     className="w-full pl-7 pr-2 py-2 border rounded-md focus:ring-2 focus:ring-indigo-500 bg-white"
                   />
                 </div>
