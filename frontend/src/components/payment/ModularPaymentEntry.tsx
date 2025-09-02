@@ -12,7 +12,7 @@ import PaymentSummary from './components/PaymentSummary';
 import PaymentSummaryCompact from './components/PaymentSummaryCompact';
 
 // Import global components
-import { CustomerSearch, ProductSearchSimple, GSTCalculator, ProductCreationModal, ProceedToReviewComponent, ViewHistoryButton, ModuleHeader } from '../global';
+import { CustomerSearch, ProductSearchSimple, GSTCalculator, ProductCreationModal, ProceedToReviewComponent, ViewHistoryButton, ModuleHeader, Card } from '../global';
 import CustomerCreationB2B from '../global/ui/forms/CustomerCreationB2B';
 
 interface PaymentEntryContentProps {
@@ -217,6 +217,59 @@ const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) =>
     clearMessage();
   };
 
+  // Apply allocation method to invoices
+  const applyAllocationMethod = (method: string) => {
+    if (!outstandingInvoices || outstandingInvoices.length === 0) return;
+    
+    const paymentAmount = parseFloat(payment.amount || '0');
+    if (paymentAmount <= 0) return;
+    
+    let sortedInvoices = [...outstandingInvoices];
+    
+    // Sort based on method
+    switch (method) {
+      case 'fifo':
+        // Sort by date ascending (oldest first)
+        sortedInvoices.sort((a, b) => new Date(a.invoice_date).getTime() - new Date(b.invoice_date).getTime());
+        break;
+      case 'lifo':
+        // Sort by date descending (newest first)
+        sortedInvoices.sort((a, b) => new Date(b.invoice_date).getTime() - new Date(a.invoice_date).getTime());
+        break;
+      case 'highest':
+        // Sort by amount descending (highest first)
+        sortedInvoices.sort((a, b) => b.amount_due - a.amount_due);
+        break;
+    }
+    
+    // Auto-allocate payment to sorted invoices
+    let remainingAmount = paymentAmount;
+    const allocations: any[] = [];
+    
+    for (const invoice of sortedInvoices) {
+      if (remainingAmount <= 0) break;
+      
+      const allocatedAmount = Math.min(remainingAmount, invoice.amount_due);
+      if (allocatedAmount > 0) {
+        allocations.push({
+          invoice_id: invoice.invoice_id,
+          invoice_no: invoice.invoice_no,
+          allocated_amount: allocatedAmount,
+          invoice_date: invoice.invoice_date,
+          total_amount: invoice.total_amount,
+          amount_due: invoice.amount_due
+        });
+        remainingAmount -= allocatedAmount;
+      }
+    }
+    
+    // Update payment with allocations
+    setPaymentField('allocations', allocations);
+    setPaymentField('auto_allocate', true);
+    
+    console.log(`Applied ${method} allocation:`, allocations);
+  };
+
   const handleCustomerSelect = async (customer: any): Promise<void> => {
     setCustomer(customer);
     
@@ -237,10 +290,23 @@ const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) =>
       console.log('Invoice API response:', response);
       
       if (response && response.success && response.data) {
-        const invoiceData = response.data.data || response.data;
+        // Handle different response structures
+        let invoiceArray = [];
+        if (Array.isArray(response.data)) {
+          invoiceArray = response.data;
+        } else if (response.data.data && Array.isArray(response.data.data)) {
+          invoiceArray = response.data.data;
+        } else if (response.data.invoices && Array.isArray(response.data.invoices)) {
+          invoiceArray = response.data.invoices;
+        } else {
+          console.log('Unexpected invoice data structure:', response.data);
+          invoiceArray = [];
+        }
+        
+        console.log('Invoice array:', invoiceArray);
         
         // Filter for outstanding invoices
-        const outstandingInvoices = invoiceData
+        const outstandingInvoices = invoiceArray
           .filter((inv: any) => {
             // Calculate outstanding amount
             const totalAmount = inv.final_amount || inv.total_amount || inv.grand_total || 0;
@@ -417,7 +483,7 @@ const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) =>
                 {/* Outstanding Invoices - Only show if customer selected */}
                 {selectedCustomer && (
                   <div className="mb-6">
-                    <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center justify-between mb-3">
                       <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wider flex items-center">
                         <FileText className="w-4 h-4 mr-2" />
                         INVOICE ALLOCATION
@@ -426,13 +492,12 @@ const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) =>
                         value={payment.allocation_method || 'manual'}
                         onChange={(e) => {
                           setPaymentField('allocation_method', e.target.value);
-                          // Auto-allocate based on method
+                          // Apply allocation immediately for preview
                           if (e.target.value !== 'manual' && e.target.value !== 'advance') {
-                            // This will trigger auto-allocation on save
-                            setPaymentField('auto_allocate', true);
+                            applyAllocationMethod(e.target.value);
                           }
                         }}
-                        className="px-2 py-1 text-xs border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        className="px-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                       >
                         <option value="manual">Manual Selection</option>
                         <option value="fifo">Auto - FIFO (Oldest First)</option>
@@ -442,24 +507,52 @@ const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) =>
                       </select>
                     </div>
                     
-                    {payment.allocation_method !== 'advance' && (
-                      <>
-                        {payment.allocation_method === 'manual' && <InvoiceSelector />}
-                        {payment.allocation_method !== 'manual' && (
-                          <div className="text-xs text-gray-600 bg-gray-50 p-2 rounded">
-                            {payment.allocation_method === 'fifo' && '📅 Will allocate to oldest invoices first'}
-                            {payment.allocation_method === 'lifo' && '📅 Will allocate to newest invoices first'}
-                            {payment.allocation_method === 'highest' && '💰 Will allocate to highest amount invoices first'}
+                    {/* Show allocation method prominently */}
+                    {payment.allocation_method && payment.allocation_method !== 'manual' && (
+                      <Card className={`p-4 mb-3 ${
+                        payment.allocation_method === 'advance' 
+                          ? 'bg-green-50 border-green-300' 
+                          : 'bg-blue-50 border-blue-300'
+                      }`}>
+                        <div className="flex items-start gap-3">
+                          <div className="text-2xl">
+                            {payment.allocation_method === 'fifo' && '📅'}
+                            {payment.allocation_method === 'lifo' && '📆'}
+                            {payment.allocation_method === 'highest' && '💰'}
+                            {payment.allocation_method === 'advance' && '💳'}
                           </div>
-                        )}
-                      </>
+                          <div className="flex-1">
+                            <h4 className="font-semibold text-gray-800 mb-1">
+                              {payment.allocation_method === 'fifo' && 'FIFO Allocation (Oldest First)'}
+                              {payment.allocation_method === 'lifo' && 'LIFO Allocation (Newest First)'}
+                              {payment.allocation_method === 'highest' && 'Highest Amount First'}
+                              {payment.allocation_method === 'advance' && 'Customer Advance Payment'}
+                            </h4>
+                            <p className="text-sm text-gray-700">
+                              {payment.allocation_method === 'fifo' && 'Payment will be allocated to the oldest unpaid invoices first, following standard accounting practices.'}
+                              {payment.allocation_method === 'lifo' && 'Payment will be allocated to the most recent invoices first.'}
+                              {payment.allocation_method === 'highest' && 'Payment will be allocated to invoices with the highest amounts first.'}
+                              {payment.allocation_method === 'advance' && 'This payment will be recorded as customer advance and can be adjusted against future invoices.'}
+                            </p>
+                            {payment.allocation_method !== 'advance' && outstandingInvoices.length > 0 && (
+                              <div className="mt-2 text-sm">
+                                <span className="font-medium">Preview: </span>
+                                <span className="text-gray-600">
+                                  {outstandingInvoices.length} invoices will be processed in {
+                                    payment.allocation_method === 'fifo' ? 'date order (oldest first)' :
+                                    payment.allocation_method === 'lifo' ? 'reverse date order (newest first)' :
+                                    'amount order (highest first)'
+                                  }
+                                </span>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </Card>
                     )}
                     
-                    {payment.allocation_method === 'advance' && (
-                      <div className="text-xs text-green-700 bg-green-50 p-2 rounded">
-                        💳 Payment will be kept as customer advance
-                      </div>
-                    )}
+                    {/* Show invoice selector only for manual */}
+                    {payment.allocation_method === 'manual' && <InvoiceSelector />}
                   </div>
                 )}
               </>

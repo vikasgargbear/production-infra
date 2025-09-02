@@ -27,6 +27,7 @@ import PDFUploadModal from '../PDFUploadModal';
 import PDFUploadCard from '../global/ui/PDFUploadCard';
 import BulkUploadInline from './BulkUploadInline';
 import PDFVerificationFlow from './PDFVerificationFlow';
+import EnhancedPurchaseItemsTable from './components/EnhancedPurchaseItemsTable';
 
 /**
  * EnhancedPurchaseEntry - Purchase Entry using the full global document system
@@ -192,6 +193,16 @@ const EnhancedPurchaseEntry = ({ onClose, prefilledData = null }) => {
     }
   };
 
+  // Generate invoice number if not provided
+  const generateInvoiceNumber = () => {
+    const date = new Date();
+    const year = date.getFullYear();
+    const month = (date.getMonth() + 1).toString().padStart(2, '0');
+    const day = date.getDate().toString().padStart(2, '0');
+    const random = Math.floor(Math.random() * 10000).toString().padStart(4, '0');
+    return `INV-${year}${month}${day}-${random}`;
+  };
+
   const handleAddItem = (product) => {
     // Create new item with unique ID capturing ALL available fields
     const newItem = {
@@ -328,11 +339,21 @@ const EnhancedPurchaseEntry = ({ onClose, prefilledData = null }) => {
       return;
     }
 
+    // Check if all items have expiry dates
+    const itemsWithoutExpiry = purchase.items.filter(item => !item.expiry_date);
+    if (itemsWithoutExpiry.length > 0) {
+      toast.error(`Please add expiry dates for all items. ${itemsWithoutExpiry.length} item(s) missing expiry date.`);
+      return;
+    }
+
+    // Auto-generate invoice number if not provided
+    const invoiceNumber = purchase.supplier_invoice_number || generateInvoiceNumber();
+
     setSaving(true);
     try {
       // Prepare data for backend - matching what the transformer expects
       const purchaseData = {
-        supplier_invoice_number: purchase.supplier_invoice_number,
+        supplier_invoice_number: invoiceNumber,
         invoice_date: purchase.invoice_date,
         supplier_id: parseInt(purchase.supplier_id),
         // Add amounts for the transformer
@@ -615,7 +636,7 @@ const EnhancedPurchaseEntry = ({ onClose, prefilledData = null }) => {
           label="Supplier Invoice Number"
           value={purchase.supplier_invoice_number}
           onChange={(e) => setPurchase(prev => ({ ...prev, supplier_invoice_number: e.target.value }))}
-          placeholder="Invoice number"
+          placeholder="Auto-generates if empty"
           required
           error={errors.invoice_number}
         />
@@ -699,7 +720,13 @@ const EnhancedPurchaseEntry = ({ onClose, prefilledData = null }) => {
             <h3 className="text-sm font-semibold text-gray-700">PURCHASE ITEMS</h3>
           </div>
           <div className="overflow-visible relative" style={{ minHeight: '300px', zIndex: 50 }}>
-            <ItemsTable
+            <EnhancedPurchaseItemsTable
+              items={purchase.items}
+              onUpdateItem={handleUpdateItem}
+              onRemoveItem={handleRemoveItem}
+              readOnly={false}
+            />
+            {/* Original ItemsTable commented out for reference - remove entire block below if needed
             items={purchase.items.map(item => ({
               ...item,
               rate: item.purchase_price,
@@ -919,7 +946,7 @@ const EnhancedPurchaseEntry = ({ onClose, prefilledData = null }) => {
                 }
               }
             }}
-          />
+          /> end of commented ItemsTable */
           </div>
         </>
       )}
