@@ -300,10 +300,11 @@ const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) =>
       
       console.log('Raw Invoice API response:', response);
       
-      if (response && response.success) {
-        // Get the invoices array - it's usually in response.data
-        const invoices = response.data || [];
-        console.log('Invoices from response:', invoices);
+      if (response && response.success && response.data) {
+        // The invoices are in response.data.invoices array
+        const invoices = response.data.invoices || [];
+        console.log('Invoices array:', invoices);
+        console.log('Total invoices from API:', response.data.total);
         
         // Filter and map outstanding invoices
         const outstandingInvoices = invoices
@@ -563,9 +564,43 @@ const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) =>
                         </div>
                       )}
                       
-                      {/* Show invoice selector for manual */}
+                      {/* Show invoices table for manual selection */}
                       {!isLoading && payment.allocation_method === 'manual' && outstandingInvoices.length > 0 && (
-                        <InvoiceSelector />
+                        <div>
+                          <div className="overflow-x-auto">
+                            <table className="w-full text-sm">
+                              <thead>
+                                <tr className="border-b">
+                                  <th className="text-left py-2 px-2">Invoice No</th>
+                                  <th className="text-left py-2 px-2">Date</th>
+                                  <th className="text-right py-2 px-2">Amount</th>
+                                  <th className="text-right py-2 px-2">Outstanding</th>
+                                  <th className="text-right py-2 px-2">Allocate</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {outstandingInvoices.map((invoice: any, index: number) => (
+                                  <tr key={invoice.invoice_id || index} className="border-b hover:bg-gray-50">
+                                    <td className="py-2 px-2">{invoice.invoice_no}</td>
+                                    <td className="py-2 px-2">{new Date(invoice.invoice_date).toLocaleDateString()}</td>
+                                    <td className="text-right py-2 px-2">₹{invoice.total_amount.toFixed(2)}</td>
+                                    <td className="text-right py-2 px-2 text-red-600">₹{invoice.amount_due.toFixed(2)}</td>
+                                    <td className="text-right py-2 px-2">
+                                      <input
+                                        type="checkbox"
+                                        className="rounded border-gray-300"
+                                        onChange={(e) => {
+                                          // Handle allocation selection
+                                          console.log('Selected invoice:', invoice.invoice_no);
+                                        }}
+                                      />
+                                    </td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        </div>
                       )}
                       
                       {/* Show allocated invoices preview for auto methods */}
