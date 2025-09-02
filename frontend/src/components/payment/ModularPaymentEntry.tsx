@@ -273,40 +273,39 @@ const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) =>
   const handleCustomerSelect = async (customer: any): Promise<void> => {
     setCustomer(customer);
     
-    // Fetch outstanding invoices using the correct API service
+    // Fetch outstanding invoices - using the same approach as return component
+    if (!customer) {
+      setOutstandingInvoices([]);
+      return;
+    }
+    
+    const customerId = customer.customer_id || customer.id || customer.party_id;
+    
     try {
-      console.log('Fetching invoices for customer:', customer.customer_id || customer.id);
+      console.log('Fetching invoices for customer ID:', customerId);
+      setIsLoading(true);
       
-      // Import the correct invoice service used by global components
+      // Import the invoice service
       const InvoiceApiService = (await import('../../services/invoiceApiService')).default;
       
-      // Get invoices using the same method as global InvoiceSelector
+      // Use the same API call structure as return component
       const response = await InvoiceApiService.getInvoices({
-        customer_id: customer.customer_id || customer.id,
+        customer_id: customerId,
         limit: 100,
-        offset: 0
+        offset: 0,
+        // Add filters for outstanding invoices
+        payment_status: 'pending,partial'
       });
       
-      console.log('Invoice API response:', response);
+      console.log('Raw Invoice API response:', response);
       
-      if (response && response.success && response.data) {
-        // Handle different response structures
-        let invoiceArray = [];
-        if (Array.isArray(response.data)) {
-          invoiceArray = response.data;
-        } else if (response.data.data && Array.isArray(response.data.data)) {
-          invoiceArray = response.data.data;
-        } else if (response.data.invoices && Array.isArray(response.data.invoices)) {
-          invoiceArray = response.data.invoices;
-        } else {
-          console.log('Unexpected invoice data structure:', response.data);
-          invoiceArray = [];
-        }
+      if (response && response.success) {
+        // Get the invoices array - it's usually in response.data
+        const invoices = response.data || [];
+        console.log('Invoices from response:', invoices);
         
-        console.log('Invoice array:', invoiceArray);
-        
-        // Filter for outstanding invoices
-        const outstandingInvoices = invoiceArray
+        // Filter and map outstanding invoices
+        const outstandingInvoices = invoices
           .filter((inv: any) => {
             // Calculate outstanding amount
             const totalAmount = inv.final_amount || inv.total_amount || inv.grand_total || 0;
@@ -314,8 +313,7 @@ const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) =>
             const creditAmount = inv.credit_amount || 0;
             const outstanding = totalAmount - paidAmount - creditAmount;
             
-            // Only include if there's an outstanding amount
-            return outstanding > 0.01;
+            return outstanding > 0.01; // Only include if outstanding
           })
           .map((inv: any) => {
             const totalAmount = inv.final_amount || inv.total_amount || inv.grand_total || 0;
@@ -330,22 +328,22 @@ const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) =>
               amount_due: totalAmount - paidAmount - creditAmount,
               status: inv.payment_status || 'pending',
               invoice_id: inv.invoice_id || inv.id,
-              customer_id: customer.customer_id || customer.id
+              customer_id: customerId
             };
           });
         
         console.log(`Found ${outstandingInvoices.length} outstanding invoices`);
         setOutstandingInvoices(outstandingInvoices);
       } else {
-        console.log('No invoice data received or API failed');
+        console.log('API response not successful:', response);
         setOutstandingInvoices([]);
       }
     } catch (error: any) {
       console.error('Error fetching invoices:', error);
       setOutstandingInvoices([]);
-      
-      // Show a helpful message to the user
-      setMessage('Could not fetch invoices. You can still proceed with payment.', 'info');
+      setMessage('Could not load invoices. You can still proceed with payment.', 'info');
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -480,7 +478,7 @@ const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) =>
                 </div>
 
                 
-                {/* Outstanding Invoices - Only show if customer selected */}
+                {/* Outstanding Invoices - Proper tile display */}
                 {selectedCustomer && (
                   <div className="mb-6">
                     <div className="flex items-center justify-between mb-3">
@@ -492,7 +490,6 @@ const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) =>
                         value={payment.allocation_method || 'manual'}
                         onChange={(e) => {
                           setPaymentField('allocation_method', e.target.value);
-                          // Apply allocation immediately for preview
                           if (e.target.value !== 'manual' && e.target.value !== 'advance') {
                             applyAllocationMethod(e.target.value);
                           }
@@ -507,52 +504,87 @@ const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) =>
                       </select>
                     </div>
                     
-                    {/* Show allocation method prominently */}
-                    {payment.allocation_method && payment.allocation_method !== 'manual' && (
-                      <Card className={`p-4 mb-3 ${
-                        payment.allocation_method === 'advance' 
-                          ? 'bg-green-50 border-green-300' 
-                          : 'bg-blue-50 border-blue-300'
-                      }`}>
-                        <div className="flex items-start gap-3">
-                          <div className="text-2xl">
-                            {payment.allocation_method === 'fifo' && '📅'}
-                            {payment.allocation_method === 'lifo' && '📆'}
-                            {payment.allocation_method === 'highest' && '💰'}
-                            {payment.allocation_method === 'advance' && '💳'}
+                    {/* Invoice Display Tile - Like payment amount tile */}
+                    <Card className="p-6 bg-white border border-gray-200">
+                      {/* Loading state */}
+                      {isLoading && (
+                        <div className="flex flex-col items-center justify-center py-8">
+                          <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-blue-600 mb-4"></div>
+                          <p className="text-gray-600">Loading invoices...</p>
+                        </div>
+                      )}
+                      
+                      {/* Show allocation method card */}
+                      {!isLoading && payment.allocation_method && payment.allocation_method !== 'manual' && (
+                        <div className={`p-4 rounded-lg mb-4 ${
+                          payment.allocation_method === 'advance' 
+                            ? 'bg-green-50 border border-green-300' 
+                            : 'bg-blue-50 border border-blue-300'
+                        }`}>
+                          <div className="flex items-start gap-3">
+                            <div className="text-2xl">
+                              {payment.allocation_method === 'fifo' && '📅'}
+                              {payment.allocation_method === 'lifo' && '📆'}
+                              {payment.allocation_method === 'highest' && '💰'}
+                              {payment.allocation_method === 'advance' && '💳'}
+                            </div>
+                            <div className="flex-1">
+                              <h4 className="font-semibold text-gray-800 mb-1">
+                                {payment.allocation_method === 'fifo' && 'FIFO Allocation (Oldest First)'}
+                                {payment.allocation_method === 'lifo' && 'LIFO Allocation (Newest First)'}
+                                {payment.allocation_method === 'highest' && 'Highest Amount First'}
+                                {payment.allocation_method === 'advance' && 'Customer Advance Payment'}
+                              </h4>
+                              <p className="text-sm text-gray-700">
+                                {payment.allocation_method === 'fifo' && 'Payment will be allocated to the oldest unpaid invoices first.'}
+                                {payment.allocation_method === 'lifo' && 'Payment will be allocated to the most recent invoices first.'}
+                                {payment.allocation_method === 'highest' && 'Payment will be allocated to highest amount invoices first.'}
+                                {payment.allocation_method === 'advance' && 'Payment will be recorded as customer advance for future use.'}
+                              </p>
+                              {payment.allocation_method !== 'advance' && outstandingInvoices.length > 0 && (
+                                <div className="mt-2 text-sm text-gray-600">
+                                  <strong>{outstandingInvoices.length}</strong> invoices found • Total outstanding: <strong>₹{outstandingInvoices.reduce((sum, inv) => sum + inv.amount_due, 0).toFixed(2)}</strong>
+                                </div>
+                              )}
+                            </div>
                           </div>
-                          <div className="flex-1">
-                            <h4 className="font-semibold text-gray-800 mb-1">
-                              {payment.allocation_method === 'fifo' && 'FIFO Allocation (Oldest First)'}
-                              {payment.allocation_method === 'lifo' && 'LIFO Allocation (Newest First)'}
-                              {payment.allocation_method === 'highest' && 'Highest Amount First'}
-                              {payment.allocation_method === 'advance' && 'Customer Advance Payment'}
-                            </h4>
-                            <p className="text-sm text-gray-700">
-                              {payment.allocation_method === 'fifo' && 'Payment will be allocated to the oldest unpaid invoices first, following standard accounting practices.'}
-                              {payment.allocation_method === 'lifo' && 'Payment will be allocated to the most recent invoices first.'}
-                              {payment.allocation_method === 'highest' && 'Payment will be allocated to invoices with the highest amounts first.'}
-                              {payment.allocation_method === 'advance' && 'This payment will be recorded as customer advance and can be adjusted against future invoices.'}
-                            </p>
-                            {payment.allocation_method !== 'advance' && outstandingInvoices.length > 0 && (
-                              <div className="mt-2 text-sm">
-                                <span className="font-medium">Preview: </span>
-                                <span className="text-gray-600">
-                                  {outstandingInvoices.length} invoices will be processed in {
-                                    payment.allocation_method === 'fifo' ? 'date order (oldest first)' :
-                                    payment.allocation_method === 'lifo' ? 'reverse date order (newest first)' :
-                                    'amount order (highest first)'
-                                  }
-                                </span>
+                        </div>
+                      )}
+                      
+                      {/* No invoices message */}
+                      {!isLoading && outstandingInvoices.length === 0 && payment.allocation_method !== 'advance' && (
+                        <div className="text-center py-8">
+                          <FileText className="w-12 h-12 text-gray-300 mx-auto mb-3" />
+                          <p className="text-gray-600 font-medium">No Outstanding Invoices</p>
+                          <p className="text-sm text-gray-500 mt-2">
+                            This customer has no pending invoices. The payment will be recorded as an advance.
+                          </p>
+                        </div>
+                      )}
+                      
+                      {/* Show invoice selector for manual */}
+                      {!isLoading && payment.allocation_method === 'manual' && outstandingInvoices.length > 0 && (
+                        <InvoiceSelector />
+                      )}
+                      
+                      {/* Show allocated invoices preview for auto methods */}
+                      {!isLoading && payment.allocation_method !== 'manual' && payment.allocation_method !== 'advance' && payment.allocations && payment.allocations.length > 0 && (
+                        <div>
+                          <h5 className="text-sm font-medium text-gray-700 mb-3">Allocation Preview:</h5>
+                          <div className="space-y-2">
+                            {payment.allocations.slice(0, 3).map((alloc: any, index: number) => (
+                              <div key={index} className="flex justify-between items-center p-2 bg-gray-50 rounded">
+                                <span className="text-sm text-gray-700">{alloc.invoice_no}</span>
+                                <span className="text-sm font-medium text-green-600">₹{alloc.allocated_amount.toFixed(2)}</span>
                               </div>
+                            ))}
+                            {payment.allocations.length > 3 && (
+                              <p className="text-xs text-gray-500 text-center">+{payment.allocations.length - 3} more invoices</p>
                             )}
                           </div>
                         </div>
-                      </Card>
-                    )}
-                    
-                    {/* Show invoice selector only for manual */}
-                    {payment.allocation_method === 'manual' && <InvoiceSelector />}
+                      )}
+                    </Card>
                   </div>
                 )}
               </>

@@ -726,8 +726,7 @@ const EnhancedPurchaseEntry = ({ onClose, prefilledData = null }) => {
               onRemoveItem={handleRemoveItem}
               readOnly={false}
             />
-            {/* Original ItemsTable commented out for reference - remove entire block below if needed
-            items={purchase.items.map(item => ({
+            {/* Original ItemsTable removed - using EnhancedPurchaseItemsTable instead */
               ...item,
               rate: item.purchase_price,
               tax: item.tax_percent,
@@ -946,7 +945,6 @@ const EnhancedPurchaseEntry = ({ onClose, prefilledData = null }) => {
                 }
               }
             }}
-          /> end of commented ItemsTable */
           </div>
         </>
       )}
