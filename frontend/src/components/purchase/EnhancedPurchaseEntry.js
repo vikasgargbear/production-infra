@@ -363,14 +363,20 @@ const EnhancedPurchaseEntry = ({ onClose, prefilledData = null }) => {
         final_amount: purchase.final_amount || 0,
         other_charges: purchase.other_charges || 0,
         items: purchase.items.map((item, index) => {
-          // Ensure product_id is valid
-          const productId = parseInt(item.product_id);
-          if (!productId || isNaN(productId)) {
-            console.warn(`Item ${index + 1} missing product_id:`, item);
+          // Ensure product_id is valid - only use if it's a reasonable database ID
+          let productId = null;
+          if (item.product_id && item.product_id !== item.id) {
+            const parsed = parseInt(item.product_id);
+            // Check if it's a valid database ID (not a timestamp)
+            if (!isNaN(parsed) && parsed > 0 && parsed < 2147483647) {
+              productId = parsed;
+            } else {
+              console.warn(`Item ${index + 1} has invalid product_id (too large or invalid):`, item.product_id);
+            }
           }
           
           return {
-            product_id: productId || null, // Send null if invalid, let backend validate
+            product_id: productId, // Send null for new products, let backend create them
             product_name: item.product_name || '', // Add product_name as it's required
             batch_number: item.batch_no || item.batch_number || '',
             expiry_date: item.expiry_date || null,

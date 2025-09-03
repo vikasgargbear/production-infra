@@ -335,7 +335,9 @@ const BulkUploadInline = ({ onProductsUploaded }) => {
                 selling_price: product.sale_price,
                 purchase_price: product.cost_price,
                 pack_size: product.units_per_pack,
-                id: Date.now() + index + Math.random()
+                id: Date.now() + index + Math.random(),
+                // Ensure product_id is null for new products
+                product_id: null
               });
             } else {
               errors.push({ row: index + 2, errors: rowErrors });
