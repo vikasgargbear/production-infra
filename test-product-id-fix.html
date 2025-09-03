@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Product ID Integer Overflow Fix</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            max-width: 900px;
+            margin: 40px auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .container {
+            background: white;
+            border-radius: 12px;
+            padding: 30px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.08);
+        }
+        h1 {
+            color: #dc2626;
+            margin-bottom: 10px;
+        }
+        .issue-section {
+            background: #fee2e2;
+            border: 2px solid #dc2626;
+            border-radius: 8px;
+            padding: 20px;
+            margin: 20px 0;
+        }
+        .solution-section {
+            background: #dcfce7;
+            border: 2px solid #16a34a;
+            border-radius: 8px;
+            padding: 20px;
+            margin: 20px 0;
+        }
+        .code-block {
+            background: #1e293b;
+            color: #e2e8f0;
+            padding: 15px;
+            border-radius: 6px;
+            overflow-x: auto;
+            margin: 10px 0;
+            font-family: 'Courier New', monospace;
+            font-size: 14px;
+        }
+        .error-message {
+            background: #fef2f2;
+            border-left: 4px solid #dc2626;
+            padding: 15px;
+            margin: 15px 0;
+            font-family: monospace;
+            font-size: 13px;
+            color: #991b1b;
+        }
+        .success-message {
+            background: #f0fdf4;
+            border-left: 4px solid #16a34a;
+            padding: 15px;
+            margin: 15px 0;
+            color: #14532d;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+        }
+        th, td {
+            border: 1px solid #e5e7eb;
+            padding: 10px;
+            text-align: left;
+        }
+        th {
+            background: #f9fafb;
+            font-weight: 600;
+        }
+        .number-comparison {
+            font-family: monospace;
+            font-size: 16px;
+        }
+        .too-large {
+            color: #dc2626;
+            font-weight: bold;
+        }
+        .valid {
+            color: #16a34a;
+            font-weight: bold;
+        }
+        kbd {
+            background: #f3f4f6;
+            border: 1px solid #d1d5db;
+            border-radius: 3px;
+            padding: 2px 6px;
+            font-family: monospace;
+            font-size: 13px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔧 Fixed: Product ID Integer Overflow Error</h1>
+        
+        <div class="issue-section">
+            <h2>❌ The Problem</h2>
+            <p><strong>Error:</strong> "integer out of range" when creating purchase with new products</p>
+            
+            <div class="error-message">
+psycopg2.errors.NumericValueOutOfRange: integer out of range
+[parameters: {'product_id': 1756880931076, ...}]
+            </div>
+            
+            <h3>Why it happened:</h3>
+            <table>
+                <tr>
+                    <th>Value Type</th>
+                    <th>Example Value</th>
+                    <th>Status</th>
+                </tr>
+                <tr>
+                    <td>Date.now() timestamp</td>
+                    <td class="number-comparison too-large">1756880931076</td>
+                    <td>❌ Too large for INTEGER</td>
+                </tr>
+                <tr>
+                    <td>PostgreSQL INTEGER max</td>
+                    <td class="number-comparison">2,147,483,647</td>
+                    <td>✅ Maximum allowed</td>
+                </tr>
+            </table>
+            
+            <p>The frontend was using <kbd>Date.now()</kbd> to generate temporary IDs for new products, but these timestamp values are too large for PostgreSQL INTEGER columns.</p>
+        </div>
+        
+        <div class="solution-section">
+            <h2>✅ The Solution</h2>
+            
+            <h3>1. Fixed Frontend Code</h3>
+            <p><strong>File:</strong> <code>EnhancedPurchaseEntry.js</code> (line 210)</p>
+            
+            <h4>Before (Incorrect):</h4>
+            <div class="code-block">
+product_id: product.product_id || product.id || null, // Bug: product.id might be Date.now()
+            </div>
+            
+            <h4>After (Fixed):</h4>
+            <div class="code-block">
+product_id: product.product_id || null, // Only use proper product_id, not id field
+            </div>
+            
+            <h3>2. How the Backend Handles New Products</h3>
+            <p>When <kbd>product_id</kbd> is <kbd>null</kbd> but <kbd>product_name</kbd> is provided:</p>
+            <ol>
+                <li>Backend checks if product already exists (by name)</li>
+                <li>If found → uses existing product_id</li>
+                <li>If not found → creates new product with proper ID</li>
+            </ol>
+            
+            <div class="code-block">
+# Backend logic (purchase_enhanced.py):
+if not product_id and product_name:
+    # Check for existing product
+    existing = db.execute("SELECT product_id FROM products WHERE name = ?", product_name)
+    if existing:
+        product_id = existing.product_id
+    else:
+        # Create new product with backend-generated ID
+        new_product = create_product(product_name)
+        product_id = new_product.product_id  # Proper ID from database
+            </div>
+        </div>
+        
+        <div style="background: #eff6ff; border: 1px solid #3b82f6; border-radius: 8px; padding: 20px; margin: 20px 0;">
+            <h3>📋 Testing Steps</h3>
+            <ol>
+                <li><strong>Create a purchase with a new product:</strong>
+                    <ul>
+                        <li>Go to Purchase Entry</li>
+                        <li>Search for a product that doesn't exist</li>
+                        <li>Click "Create Product"</li>
+                        <li>Fill in product details and save</li>
+                    </ul>
+                </li>
+                <li><strong>Verify the product is added correctly:</strong>
+                    <ul>
+                        <li>The product should appear in the purchase items list</li>
+                        <li>No "integer out of range" error should occur</li>
+                    </ul>
+                </li>
+                <li><strong>Complete the purchase:</strong>
+                    <ul>
+                        <li>Fill in all required fields</li>
+                        <li>Save the purchase</li>
+                        <li>Verify it saves successfully</li>
+                    </ul>
+                </li>
+            </ol>
+        </div>
+        
+        <div class="success-message">
+            <h3>✨ Result</h3>
+            <p><strong>New products are now created properly!</strong></p>
+            <ul>
+                <li>✅ Frontend sends <kbd>product_id: null</kbd> for new products</li>
+                <li>✅ Backend creates product with valid ID</li>
+                <li>✅ No more integer overflow errors</li>
+                <li>✅ Purchase creation works smoothly</li>
+            </ul>
+        </div>
+        
+        <div style="background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 8px; padding: 15px; margin-top: 30px;">
+            <h4>Technical Details</h4>
+            <p><strong>Root Cause:</strong> The <kbd>id</kbd> field (used for UI row tracking) was being mistakenly used as a fallback for <kbd>product_id</kbd></p>
+            <p><strong>Fix Applied:</strong> Removed <kbd>product.id</kbd> from the fallback chain, ensuring only valid <kbd>product_id</kbd> values are used</p>
+            <p><strong>Backend Behavior:</strong> Already handles null product_ids correctly by creating new products when needed</p>
+        </div>
+    </div>
+</body>
+</html>

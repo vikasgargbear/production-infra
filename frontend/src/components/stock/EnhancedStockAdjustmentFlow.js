@@ -179,20 +179,20 @@ const EnhancedStockAdjustmentFlow = ({ onClose }) => {
       
       // Get current stock info
       const stockResponse = await stockApi.getCurrentStock({ 
-        product_id: product.product_id || product.id,
+        product_id: product.product_id || null,
         include_batches: false 
       });
       const stockData = stockResponse.data?.[0] || {};
       
       // Check if product already added
-      if ((adjustmentData.items || []).find(item => item.product_id === (product.product_id || product.id))) {
+      if ((adjustmentData.items || []).find(item => item.product_id === product.product_id)) {
         toast.error('Product already added');
         return;
       }
       
       const newItem = {
         id: Date.now(),
-        product_id: product.product_id || product.id,
+        product_id: product.product_id || null,
         product_name: product.product_name || product.name,
         product_code: product.product_code || product.code,
         current_stock: stockData.current_stock || 0,

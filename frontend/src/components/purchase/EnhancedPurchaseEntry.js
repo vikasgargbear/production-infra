@@ -207,7 +207,7 @@ const EnhancedPurchaseEntry = ({ onClose, prefilledData = null }) => {
     // Create new item with unique ID capturing ALL available fields
     const newItem = {
       id: Date.now() + Math.random(), // Unique ID for tracking
-      product_id: product.product_id || product.id || null, // Handle different ID fields
+      product_id: product.product_id || null, // Only use product_id, not id field
       product_name: product.product_name || product.name || '',
       product_code: product.product_code,
       hsn_code: product.hsn_code || '',
@@ -260,7 +260,7 @@ const EnhancedPurchaseEntry = ({ onClose, prefilledData = null }) => {
       invoice_date: purchase.invoice_date,
       items: products.map((product, index) => ({
         // Core product info
-        product_id: product.product_id || product.id || null,
+        product_id: product.product_id || null,
         product_name: product.product_name || product.name || '',
         product_code: product.product_code,
         hsn_code: product.hsn_code || '',

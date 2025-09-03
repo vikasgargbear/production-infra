@@ -463,7 +463,7 @@ const PurchaseOrderFlow = ({ onClose, prefilledData = null }) => {
   const handleAddItem = (product) => {
     const newItem = {
       id: Date.now(),
-      product_id: product.product_id || product.id,
+      product_id: product.product_id || null,
       product_name: product.product_name || product.name,
       hsn_code: product.hsn_code || product.hsn || '',
       pack_size: product.pack_size || '1x10',

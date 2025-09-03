@@ -125,7 +125,7 @@ const ProductVerificationModal = ({
   const handleProductSelect = (selectedProd) => {
     // Map the selected product to our format
     const mappedProduct = {
-      product_id: selectedProd.product_id || selectedProd.id,
+      product_id: selectedProd.product_id || null,
       product_name: selectedProd.product_name || selectedProd.name,
       hsn_code: selectedProd.hsn_code || selectedProd.hsn,
       mrp: selectedProd.mrp || productData.mrp || 0,

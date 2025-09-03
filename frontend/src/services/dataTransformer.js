@@ -11,7 +11,7 @@ class DataTransformer {
    */
   static transformProduct(product, context = 'default') {
     const base = {
-      product_id: String(product.product_id || product.id || ''),
+      product_id: product.product_id ? String(product.product_id) : null,
       product_name: product.product_name || product.name || product.productName || '',
       hsn_code: product.hsn_code || product.hsnCode || '3004',
       gst_percent: parseFloat(product.gst_percent || product.gst_percentage || product.gst_rate || product.gstPercent || 18),
