@@ -18,6 +18,7 @@ import {
 	Target,
 	User,
 	MessageSquare,
+	WalletCards,
 	LucideIcon
 } from 'lucide-react';
 import { Button } from './global';
@@ -74,6 +75,12 @@ const Sidebar: React.FC<SidebarProps> = ({ activeTab, onTabChange }) => {
 			label: 'Batches', 
 			icon: Archive,
 			count: '89'
+		},
+		{ 
+			id: 'payment-entry', 
+			label: 'Payment Entry', 
+			icon: WalletCards,
+			count: 'Quick'
 		},
 		{ 
 			id: 'payments', 

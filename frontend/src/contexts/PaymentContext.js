@@ -12,7 +12,9 @@ const initialState = {
     payment_mode: 'CASH',
     reference_number: '',
     remarks: '',
-    payment_type: 'order_payment'
+    payment_type: 'order_payment',
+    allocation_method: 'manual',  // Manual by default - more user friendly
+    allocations: []
   },
   selectedCustomer: null,
   outstandingInvoices: [],
@@ -143,7 +145,8 @@ const paymentReducer = (state, action) => {
         ...initialState,
         payment: {
           ...initialState.payment,
-          payment_date: new Date().toISOString().split('T')[0]
+          payment_date: new Date().toISOString().split('T')[0],
+          allocation_method: 'manual'  // Keep manual as default on reset
         }
       };
 

@@ -106,8 +106,8 @@ const ModuleHub = ({
   // Keyboard navigation
   useEffect(() => {
     const handleKeyPress = (e) => {
-      // Number keys for module selection
-      if (e.key >= '1' && e.key <= '9' && !e.target.matches('input, textarea')) {
+      // Number keys for module selection - require Ctrl/Cmd modifier
+      if ((e.ctrlKey || e.metaKey) && e.key >= '1' && e.key <= '9') {
         e.preventDefault();
         const index = parseInt(e.key) - 1;
         if (modules[index]) {
@@ -305,7 +305,7 @@ const ModuleHub = ({
                 <span className="text-xs text-teal-700 font-medium">Healthcare Tip</span>
               </div>
               <p className="text-xs text-slate-600 mb-2">
-                Press number keys <kbd className="px-1.5 py-0.5 bg-teal-100 text-teal-700 rounded text-xs font-mono">1-{modules.length}</kbd> to quickly navigate between modules
+                Press <kbd className="px-1.5 py-0.5 bg-teal-100 text-teal-700 rounded text-xs font-mono">Ctrl+1</kbd> to <kbd className="px-1.5 py-0.5 bg-teal-100 text-teal-700 rounded text-xs font-mono">Ctrl+{modules.length}</kbd> to quickly navigate between modules
               </p>
               <button className="text-xs text-teal-600 hover:text-cyan-700 font-medium flex items-center gap-1 transition-colors">
                 View all shortcuts

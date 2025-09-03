@@ -144,7 +144,7 @@ const MonthYearPicker = ({
 
       {/* Calendar Picker */}
       {isOpen && (
-        <div className="absolute z-50 top-full mt-2 bg-white rounded-xl shadow-lg border border-gray-200 p-4 w-80">
+        <div className="absolute top-full mt-2 bg-white rounded-xl shadow-lg border border-gray-200 p-4 w-80" style={{ zIndex: 9999 }}>
           {/* Year selector */}
           <div className="flex items-center justify-between mb-4">
             <button

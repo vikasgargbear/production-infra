@@ -441,10 +441,6 @@ const EnhancedPurchaseEntry = ({ onClose, prefilledData = null }) => {
       errors.supplier = 'Supplier is required';
     }
     
-    if (!purchase.supplier_invoice_number) {
-      errors.invoice_number = 'Supplier invoice number is required';
-    }
-    
     if (!purchase.items || purchase.items.length === 0) {
       errors.items = 'At least one item is required';
     }
@@ -637,7 +633,6 @@ const EnhancedPurchaseEntry = ({ onClose, prefilledData = null }) => {
           value={purchase.supplier_invoice_number}
           onChange={(e) => setPurchase(prev => ({ ...prev, supplier_invoice_number: e.target.value }))}
           placeholder="Auto-generates if empty"
-          required
           error={errors.invoice_number}
         />
         <StandardDatePicker
@@ -883,7 +878,63 @@ const EnhancedPurchaseEntry = ({ onClose, prefilledData = null }) => {
 
         {/* Clean Summary Section */}
         <div className="border-t-2 border-gray-200 pt-4">
-          <div className="flex justify-end">
+          <div className="flex justify-between">
+            {/* GST Breakdown - Left Side */}
+            <div className="w-64">
+              <h4 className="text-sm font-semibold text-gray-700 mb-2">GST Breakdown</h4>
+              <div className="bg-gray-50 rounded-lg p-3 space-y-1">
+                {(() => {
+                  const gstBreakdown = {};
+                  (purchase.items || []).forEach(item => {
+                    const taxPercent = parseFloat(item.tax_percent) || 0;
+                    const quantity = parseFloat(item.quantity) || 0;
+                    const cost = parseFloat(item.purchase_price) || parseFloat(item.cost_price) || 0;
+                    const discountPercent = parseFloat(item.discount_percent) || 0;
+                    
+                    const baseAmount = quantity * cost;
+                    const discountAmount = (baseAmount * discountPercent) / 100;
+                    const discountedAmount = baseAmount - discountAmount;
+                    const taxAmount = (discountedAmount * taxPercent) / 100;
+                    
+                    if (taxPercent > 0) {
+                      if (!gstBreakdown[taxPercent]) {
+                        gstBreakdown[taxPercent] = { taxable: 0, tax: 0 };
+                      }
+                      gstBreakdown[taxPercent].taxable += discountedAmount;
+                      gstBreakdown[taxPercent].tax += taxAmount;
+                    }
+                  });
+                  
+                  const gstBands = Object.keys(gstBreakdown).sort((a, b) => a - b);
+                  
+                  if (gstBands.length === 0) {
+                    return <p className="text-xs text-gray-500">No GST applicable</p>;
+                  }
+                  
+                  return gstBands.map(band => (
+                    <div key={band} className="flex justify-between text-xs">
+                      <span className="text-gray-600">
+                        GST @ {band}%
+                        <span className="text-[10px] ml-1 text-gray-400">
+                          (₹{gstBreakdown[band].taxable.toFixed(2)})
+                        </span>
+                      </span>
+                      <span className="font-medium text-gray-800">
+                        {formatCurrency(gstBreakdown[band].tax)}
+                      </span>
+                    </div>
+                  ));
+                })()}
+                <div className="pt-2 mt-2 border-t border-gray-200">
+                  <div className="flex justify-between text-xs">
+                    <span className="font-medium text-gray-700">Total GST</span>
+                    <span className="font-bold text-gray-900">{formatCurrency(purchase.tax_amount)}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+            
+            {/* Total Summary - Right Side */}
             <div className="w-64">
               <div className="flex justify-between py-2">
                 <span className="text-sm text-gray-600">Subtotal</span>
@@ -932,7 +983,6 @@ const EnhancedPurchaseEntry = ({ onClose, prefilledData = null }) => {
         // Validation & Actions
         canProceedToReview={() => {
           return !!selectedSupplier && 
-                 !!purchase.supplier_invoice_number && 
                  purchase.items && 
                  purchase.items.length > 0;
         }}

@@ -19,7 +19,9 @@ import MasterHub from './components/master/MasterHub';
 import testBackendConnection from './utils/testBackendConnection';
 import { CompanyProvider } from './contexts/CompanyContext';
 import { EscapeKeyProvider } from './contexts/EscapeKeyContext';
+import { PaymentProvider } from './contexts/PaymentContext';
 import InitialSetup from './components/InitialSetup';
+import ModularPaymentEntry from './components/payment/ModularPaymentEntry';
 import apiClient from './services/api/apiClient';
 // import ReceivablesCollectionCenter from './components/receivables/ReceivablesCollectionCenter';
 
@@ -44,6 +46,7 @@ type TabName =
   | 'sales'
   | 'purchase'
   | 'payment'
+  | 'payment-entry'
   | 'dashboard'
   | 'products'
   | 'customers'
@@ -186,6 +189,12 @@ function App(): JSX.Element {
         return <PurchaseHub key="purchase" open={true} onClose={() => setActiveTab('home')} />;
       case 'payment':
         return <FinancialHub key="payment" open={true} onClose={() => setActiveTab('home')} />;
+      case 'payment-entry':
+        return (
+          <PaymentProvider>
+            <ModularPaymentEntry key="payment-entry" onClose={() => setActiveTab('home')} />
+          </PaymentProvider>
+        );
       case 'dashboard':
         return <Dashboard key="dashboard" />;
       case 'products':

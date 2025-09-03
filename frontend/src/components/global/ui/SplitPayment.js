@@ -233,12 +233,6 @@ const SplitPayment = ({
       {/* Single payment method - default view */}
       {(showPaymentOptions || paymentMethods[0].amount > 0 || payments.length > 0) && paymentMethods.length === 1 && (
         <div className="space-y-2">
-          {/* Helper text for credit */}
-          {totalAmount > 0 && (
-            <div className="text-xs text-gray-500 italic">
-              Leave amount as 0 or partial for credit sale
-            </div>
-          )}
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="block text-xs text-gray-600 mb-1">Method</label>
