@@ -387,7 +387,9 @@ class CustomerService:
                 payment_status, created_at
             ) VALUES (
                 (SELECT org_id FROM parties.customers WHERE customer_id = :customer_id),
-                5, -- Default branch_id (Main Branch)
+                (SELECT branch_id FROM master.org_branches 
+                 WHERE org_id = (SELECT org_id FROM parties.customers WHERE customer_id = :customer_id) 
+                 LIMIT 1),
                 'receipt', 'customer', :customer_id,
                 :reference, :payment_date, :amount,
                 (SELECT payment_method_id FROM financial.payment_methods 
