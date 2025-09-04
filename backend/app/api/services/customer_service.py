@@ -421,6 +421,91 @@ class CustomerService:
             ORDER BY created_at DESC LIMIT 1
         """), {"ref": payment_data.reference_number}).scalar()
         
+        # If invoice_ids provided, create allocations
+        if hasattr(payment_data, 'invoice_ids') and payment_data.invoice_ids:
+            remaining_amount = payment_data.amount
+            
+            for invoice_id in payment_data.invoice_ids:
+                if remaining_amount <= 0:
+                    break
+                    
+                # Get invoice outstanding amount
+                invoice_result = db.execute(text("""
+                    SELECT outstanding_amount, document_number 
+                    FROM financial.customer_outstanding 
+                    WHERE document_type = 'INVOICE' 
+                    AND document_id = :invoice_id
+                """), {"invoice_id": invoice_id}).first()
+                
+                if invoice_result and invoice_result.outstanding_amount > 0:
+                    # Allocate min of remaining payment or invoice outstanding
+                    allocation_amount = min(remaining_amount, invoice_result.outstanding_amount)
+                    
+                    # Create allocation record
+                    db.execute(text("""
+                        INSERT INTO financial.payment_allocations (
+                            payment_id, reference_type, reference_id, 
+                            reference_number, allocated_amount, created_by
+                        ) VALUES (
+                            :payment_id, 'INVOICE', :invoice_id,
+                            :invoice_number, :amount,
+                            (SELECT user_id FROM master.org_users 
+                             WHERE org_id = (SELECT org_id FROM parties.customers WHERE customer_id = :customer_id)
+                             AND is_active = true LIMIT 1)
+                        )
+                    """), {
+                        "payment_id": payment_id,
+                        "invoice_id": invoice_id,
+                        "invoice_number": invoice_result.document_number,
+                        "amount": allocation_amount,
+                        "customer_id": payment_data.customer_id
+                    })
+                    
+                    remaining_amount -= allocation_amount
+        
+        # If no allocations or payment not fully allocated, use FIFO
+        elif not hasattr(payment_data, 'invoice_ids') or not payment_data.invoice_ids:
+            # Auto-allocate using FIFO (oldest invoices first)
+            outstanding_invoices = db.execute(text("""
+                SELECT document_id, document_number, outstanding_amount
+                FROM financial.customer_outstanding
+                WHERE customer_id = :customer_id
+                AND document_type = 'INVOICE'
+                AND status IN ('open', 'partial')
+                AND outstanding_amount > 0
+                ORDER BY document_date, document_id
+            """), {"customer_id": payment_data.customer_id})
+            
+            remaining_amount = payment_data.amount
+            
+            for invoice in outstanding_invoices:
+                if remaining_amount <= 0:
+                    break
+                    
+                allocation_amount = min(remaining_amount, invoice.outstanding_amount)
+                
+                # Create allocation record
+                db.execute(text("""
+                    INSERT INTO financial.payment_allocations (
+                        payment_id, reference_type, reference_id, 
+                        reference_number, allocated_amount, created_by
+                    ) VALUES (
+                        :payment_id, 'INVOICE', :invoice_id,
+                        :invoice_number, :amount,
+                        (SELECT user_id FROM master.org_users 
+                         WHERE org_id = (SELECT org_id FROM parties.customers WHERE customer_id = :customer_id)
+                         AND is_active = true LIMIT 1)
+                    )
+                """), {
+                    "payment_id": payment_id,
+                    "invoice_id": invoice.document_id,
+                    "invoice_number": invoice.document_number,
+                    "amount": allocation_amount,
+                    "customer_id": payment_data.customer_id
+                })
+                
+                remaining_amount -= allocation_amount
+        
         allocated_amount = Decimal("0.00")
         remaining_amount = payment_data.amount
         

@@ -227,9 +227,10 @@ const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) =>
       // Make the actual API call to create payment
       // Try customer payment endpoint which exists but has a backend bug (uses wrong schema)
       try {
-        // Use the customer payment endpoint
+        // Use the customer payment endpoint with all required fields
         const customerPaymentData = {
           customer_id: selectedCustomer.customer_id || selectedCustomer.id,
+          customer_name: selectedCustomer.customer_name || selectedCustomer.name,
           payment_date: payment.payment_date || new Date().toISOString().split('T')[0],
           amount: parseFloat(payment.amount || '0'),
           payment_mode: paymentModeMap[payment.payment_mode] || 'cash',
@@ -250,16 +251,11 @@ const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) =>
           
           setPaymentField('receipt_no', paymentNumber || payment.receipt_no);
           
-          // If we have allocations, create them via separate endpoint
-          if (paymentData._allocations && paymentData._allocations.length > 0 && paymentId) {
-            try {
-              await apiClient.post('/v1/payments/payment-allocation', {
-                payment_id: paymentId,
-                allocations: paymentData._allocations
-              });
-            } catch (allocError) {
-              console.warn('Failed to create allocations, but payment was saved:', allocError);
-            }
+          // Allocations are handled by backend through invoice_ids
+          // The backend will create payment_allocations records
+          // Triggers will update customer_outstanding automatically
+          if (payment.allocations && payment.allocations.length > 0) {
+            console.log('Payment allocated to invoices:', payment.allocations);
           }
           
           setMessage('Payment saved successfully!', 'success');
