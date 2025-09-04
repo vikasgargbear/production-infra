@@ -7,6 +7,7 @@ DECLARE
     v_remaining_invoice_amount NUMERIC;
     v_payment_record RECORD;
     v_allocation_amount NUMERIC;
+    v_existing_allocation NUMERIC;
 BEGIN
     -- Only process if invoice has outstanding amount
     IF NEW.payment_status IN ('unpaid', 'partial') AND 
@@ -33,6 +34,19 @@ BEGIN
             -- Exit if invoice is fully paid
             IF v_remaining_invoice_amount <= 0 THEN
                 EXIT;
+            END IF;
+            
+            -- Check if allocation already exists for this payment and invoice
+            SELECT COALESCE(SUM(allocated_amount), 0) INTO v_existing_allocation
+            FROM financial.payment_allocations
+            WHERE payment_id = v_payment_record.payment_id
+              AND reference_type = 'INVOICE'
+              AND reference_id = NEW.invoice_id
+              AND allocation_status = 'active';
+            
+            -- Skip if already allocated
+            IF v_existing_allocation > 0 THEN
+                CONTINUE;
             END IF;
             
             -- Calculate allocation amount (min of remaining invoice amount and unallocated payment)
@@ -99,11 +113,12 @@ CREATE TRIGGER trigger_allocate_advance_payments
     EXECUTE FUNCTION allocate_advance_payments_to_invoice();
 
 -- Also trigger on invoice update (in case invoice amount changes)
+-- Only trigger if final_amount actually changed (not just payment_status)
 DROP TRIGGER IF EXISTS trigger_allocate_advance_payments_update ON sales.invoices;
 CREATE TRIGGER trigger_allocate_advance_payments_update
-    AFTER UPDATE OF final_amount, payment_status ON sales.invoices
+    AFTER UPDATE OF final_amount ON sales.invoices
     FOR EACH ROW
-    WHEN (NEW.payment_status IN ('unpaid', 'partial'))
+    WHEN (NEW.payment_status IN ('unpaid', 'partial') AND OLD.final_amount IS DISTINCT FROM NEW.final_amount)
     EXECUTE FUNCTION allocate_advance_payments_to_invoice();
 
 -- Grant necessary permissions
