@@ -393,8 +393,12 @@ class CustomerService:
                 'receipt', 'customer', :customer_id,
                 (SELECT customer_name FROM parties.customers WHERE customer_id = :customer_id),
                 :reference, :payment_date, :amount,
-                (SELECT payment_method_id FROM financial.payment_methods 
-                 WHERE method_type = :payment_mode LIMIT 1),
+                COALESCE(
+                    (SELECT payment_method_id FROM financial.payment_methods 
+                     WHERE org_id = (SELECT org_id FROM parties.customers WHERE customer_id = :customer_id)
+                     AND LOWER(method_code) = LOWER(:payment_mode) LIMIT 1),
+                    32  -- Fallback to CASH if method not found
+                ),
                 :reference, :notes,
                 'cleared', CURRENT_TIMESTAMP
             )
