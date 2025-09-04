@@ -86,16 +86,39 @@ export const notesApi = {
     };
   },
 
-  // Get invoices for linking to notes
+  // Get invoices for linking to notes - use the same pattern as everywhere else
   getLinkedInvoices: async (partyId, invoiceType = 'sales') => {
-    const response = await apiClient.get(`/api/v1/invoices`, {
-      params: { 
+    try {
+      // Import the InvoiceApiService to use the working method
+      const InvoiceApiService = require('../../invoiceApiService').default;
+      
+      // Use the same getInvoices method that works in InvoiceSelector, SalesReturnFlow, etc.
+      const response = await InvoiceApiService.getInvoices({
         customer_id: partyId,
-        payment_status: 'partial,pending',
-        limit: 100
+        limit: 100,
+        // Get unpaid and partially paid invoices for credit note
+        payment_status: 'pending,partial,unpaid'
+      });
+      
+      if (response.success && response.data) {
+        // Return in expected format
+        return {
+          invoices: response.data.invoices || response.data || []
+        };
       }
-    });
-    return response.data;
+      
+      return { invoices: [] };
+    } catch (error) {
+      console.error('Error fetching customer invoices:', error);
+      // Fallback to direct API call if service not available
+      const response = await apiClient.get('/api/v1/invoices/list', {
+        params: { 
+          customer_id: partyId,
+          limit: 100
+        }
+      });
+      return response.data;
+    }
   },
 
   // Cancel/delete a note

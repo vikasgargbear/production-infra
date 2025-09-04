@@ -155,13 +155,15 @@ const CreditNoteFlow: React.FC<CreditNoteFlowProps> = ({ onClose }) => {
         );
         
         let allInvoices = data.invoices?.map((invoice: any) => ({
-          id: invoice.invoice_id,
+          id: invoice.invoice_id || invoice.id,
           invoice_number: invoice.invoice_number,
           invoice_date: invoice.invoice_date,
-          total_amount: parseFloat(invoice.grand_total || invoice.final_amount) || 0,
-          outstanding_amount: parseFloat(invoice.grand_total || invoice.final_amount) - parseFloat(invoice.paid_amount || 0),
+          total_amount: parseFloat(invoice.final_amount || invoice.grand_total || invoice.total_amount) || 0,
+          outstanding_amount: parseFloat(invoice.credit_amount || 
+            (parseFloat(invoice.final_amount || invoice.grand_total || invoice.total_amount || 0) - 
+             parseFloat(invoice.paid_amount || 0))),
           status: invoice.payment_status || 'pending',
-          items: []
+          items: invoice.items || []
         })) || [];
 
         // Apply frontend filters
