@@ -384,7 +384,7 @@ class CustomerService:
                 org_id, branch_id, payment_type, party_type, party_id, party_name,
                 payment_number, payment_date, payment_amount, 
                 payment_method_id, reference_number, narration,
-                payment_status, created_at
+                payment_status, created_at, created_by
             ) VALUES (
                 (SELECT org_id FROM parties.customers WHERE customer_id = :customer_id),
                 (SELECT branch_id FROM master.org_branches 
@@ -400,7 +400,10 @@ class CustomerService:
                     32  -- Fallback to CASH if method not found
                 ),
                 :reference, :notes,
-                'cleared', CURRENT_TIMESTAMP
+                'cleared', CURRENT_TIMESTAMP,
+                (SELECT user_id FROM master.org_users 
+                 WHERE org_id = (SELECT org_id FROM parties.customers WHERE customer_id = :customer_id)
+                 AND is_active = true LIMIT 1)
             )
         """), {
             "customer_id": payment_data.customer_id,
