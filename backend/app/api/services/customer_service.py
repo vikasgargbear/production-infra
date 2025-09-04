@@ -220,9 +220,9 @@ class CustomerService:
                 SELECT 
                     'payment' as type,
                     payment_date as date,
-                    amount
-                FROM payments
-                WHERE customer_id = :customer_id
+                    payment_amount as amount
+                FROM financial.payments
+                WHERE party_type = 'customer' AND party_id = :customer_id
                     AND payment_date < :from_date
             ) t
         """), {
@@ -257,9 +257,9 @@ class CustomerService:
                     payment_reference as reference_number,
                     'Payment Received' as description,
                     0 as debit_amount,
-                    amount as credit_amount
-                FROM payments
-                WHERE customer_id = :customer_id
+                    payment_amount as credit_amount
+                FROM financial.payments
+                WHERE party_type = 'customer' AND party_id = :customer_id
                     AND payment_date BETWEEN :from_date AND :to_date
             ) t
             ORDER BY transaction_date, transaction_type
@@ -378,14 +378,21 @@ class CustomerService:
             timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
             payment_data.reference_number = f"PAY{timestamp}"
         
-        # Create payment record
+        # Create payment record in financial.payments table
         db.execute(text("""
-            INSERT INTO payments (
-                customer_id, payment_date, amount, payment_mode,
-                payment_reference, notes, created_at, updated_at
+            INSERT INTO financial.payments (
+                org_id, payment_type, party_type, party_id, 
+                payment_number, payment_date, payment_amount, 
+                payment_method_id, reference_number, narration,
+                payment_status, created_at
             ) VALUES (
-                :customer_id, :payment_date, :amount, :payment_mode,
-                :reference, :notes, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+                (SELECT org_id FROM parties.customers WHERE customer_id = :customer_id),
+                'receipt', 'customer', :customer_id,
+                :reference, :payment_date, :amount,
+                (SELECT payment_method_id FROM financial.payment_methods 
+                 WHERE method_type = :payment_mode LIMIT 1),
+                :reference, :notes,
+                'cleared', CURRENT_TIMESTAMP
             )
         """), {
             "customer_id": payment_data.customer_id,
@@ -396,10 +403,10 @@ class CustomerService:
             "notes": payment_data.notes
         })
         
-        # Get the created payment ID
+        # Get the created payment ID from financial.payments
         payment_id = db.execute(text("""
-            SELECT payment_id FROM payments 
-            WHERE payment_reference = :ref
+            SELECT payment_id FROM financial.payments 
+            WHERE payment_number = :ref
             ORDER BY created_at DESC LIMIT 1
         """), {"ref": payment_data.reference_number}).scalar()
         

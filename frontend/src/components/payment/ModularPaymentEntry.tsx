@@ -225,29 +225,23 @@ const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) =>
       console.log('Sending payment data to backend:', paymentData);
       
       // Make the actual API call to create payment
-      // Since /payments endpoint is not working, use invoice endpoint like InvoiceFlow does
+      // Try customer payment endpoint which exists but has a backend bug (uses wrong schema)
       try {
-        // Create a payment-only invoice (no items) to record the payment
-        const invoiceData = {
+        // Use the customer payment endpoint
+        const customerPaymentData = {
           customer_id: selectedCustomer.customer_id || selectedCustomer.id,
-          customer_name: selectedCustomer.customer_name || selectedCustomer.name,
-          branch_id: 5, // Default branch - should get from context
-          invoice_date: payment.payment_date || new Date().toISOString().split('T')[0],
-          due_date: payment.payment_date || new Date().toISOString().split('T')[0],
-          invoice_number: `PMT-${new Date().toISOString().split('T')[0]}-${Date.now()}`,
-          invoice_items: [], // No items - this is just a payment record
-          payments: [{
-            method: paymentModeMap[payment.payment_mode] || 'cash',
-            amount: parseFloat(payment.amount || '0')
-          }],
-          notes: `Payment Entry: ${payment.remarks || 'Direct payment received'}`,
-          // Mark this as a payment-only transaction
-          invoice_type: 'payment_receipt'
+          payment_date: payment.payment_date || new Date().toISOString().split('T')[0],
+          amount: parseFloat(payment.amount || '0'),
+          payment_mode: paymentModeMap[payment.payment_mode] || 'cash',
+          reference_number: payment.reference_number || `PMT-${Date.now()}`,
+          notes: payment.remarks || 'Direct payment received',
+          // If we have allocations, include invoice IDs
+          invoice_ids: payment.allocations ? payment.allocations.map((a: any) => a.invoice_id) : []
         };
         
-        console.log('Creating payment via invoice endpoint:', invoiceData);
+        console.log('Creating payment via customer endpoint:', customerPaymentData);
         
-        const response = await apiClient.post('/invoices/', invoiceData);
+        const response = await apiClient.post(`/customers/${selectedCustomer.customer_id || selectedCustomer.id}/payment`, customerPaymentData);
         
         if (response.data) {
           // Backend returns data object with payment details
