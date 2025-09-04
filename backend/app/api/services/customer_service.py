@@ -381,7 +381,7 @@ class CustomerService:
         # Create payment record in financial.payments table
         db.execute(text("""
             INSERT INTO financial.payments (
-                org_id, branch_id, payment_type, party_type, party_id, 
+                org_id, branch_id, payment_type, party_type, party_id, party_name,
                 payment_number, payment_date, payment_amount, 
                 payment_method_id, reference_number, narration,
                 payment_status, created_at
@@ -391,6 +391,7 @@ class CustomerService:
                  WHERE org_id = (SELECT org_id FROM parties.customers WHERE customer_id = :customer_id) 
                  LIMIT 1),
                 'receipt', 'customer', :customer_id,
+                (SELECT customer_name FROM parties.customers WHERE customer_id = :customer_id),
                 :reference, :payment_date, :amount,
                 (SELECT payment_method_id FROM financial.payment_methods 
                  WHERE method_type = :payment_mode LIMIT 1),
