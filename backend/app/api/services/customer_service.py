@@ -381,12 +381,13 @@ class CustomerService:
         # Create payment record in financial.payments table
         db.execute(text("""
             INSERT INTO financial.payments (
-                org_id, payment_type, party_type, party_id, 
+                org_id, branch_id, payment_type, party_type, party_id, 
                 payment_number, payment_date, payment_amount, 
                 payment_method_id, reference_number, narration,
                 payment_status, created_at
             ) VALUES (
                 (SELECT org_id FROM parties.customers WHERE customer_id = :customer_id),
+                (SELECT COALESCE(branch_id, 5) FROM parties.customers WHERE customer_id = :customer_id),
                 'receipt', 'customer', :customer_id,
                 :reference, :payment_date, :amount,
                 (SELECT payment_method_id FROM financial.payment_methods 

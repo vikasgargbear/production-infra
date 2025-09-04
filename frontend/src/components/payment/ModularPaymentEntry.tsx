@@ -244,9 +244,9 @@ const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) =>
         const response = await apiClient.post(`/customers/${selectedCustomer.customer_id || selectedCustomer.id}/payment`, customerPaymentData);
         
         if (response.data) {
-          // Backend returns data object with payment details
-          const paymentId = response.data.data?.payment_id || response.data.payment_id;
-          const paymentNumber = response.data.data?.payment_number || response.data.payment_number;
+          // Backend returns payment details
+          const paymentId = response.data.payment_id;
+          const paymentNumber = response.data.payment_reference || response.data.reference_number || payment.reference_number;
           
           setPaymentField('receipt_no', paymentNumber || payment.receipt_no);
           
