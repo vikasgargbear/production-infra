@@ -508,13 +508,18 @@ class CustomerService:
                 remaining_amount -= allocation_amount
         
         # Update payment allocation status based on what was allocated
-        total_allocated = payment_data.amount - remaining_amount if payment_id else Decimal("0.00")
+        total_allocated = payment_data.amount - remaining_amount if has_allocations else Decimal("0.00")
         
+        if not has_allocations:
+            # We already have FIFO allocation logic above, so we just need to calculate what was allocated
+            total_allocated = payment_data.amount - remaining_amount
+        
+        # Update payment with final allocation status
         if total_allocated > 0:
             db.execute(text("""
                 UPDATE financial.payments 
                 SET allocation_status = CASE 
-                    WHEN :allocated = payment_amount THEN 'allocated'
+                    WHEN :allocated >= payment_amount THEN 'allocated'
                     WHEN :allocated > 0 THEN 'partial'
                     ELSE 'unallocated'
                 END,
@@ -527,70 +532,6 @@ class CustomerService:
         
         allocated_amount = total_allocated
         remaining_amount = payment_data.amount - total_allocated
-        
-        # Auto-allocate to oldest invoices if not specified
-        if not payment_data.allocate_to_invoices:
-            # Get outstanding invoices in FIFO order
-            outstanding = db.execute(text("""
-                SELECT order_id, final_amount as outstanding
-                FROM sales.orders
-                WHERE customer_id = :customer_id
-                    AND order_status NOT IN ('cancelled', 'draft')
-                    AND final_amount > 0
-                ORDER BY order_date
-            """), {"customer_id": payment_data.customer_id})
-            
-            for invoice in outstanding:
-                if remaining_amount <= 0:
-                    break
-                
-                allocation = min(remaining_amount, Decimal(str(invoice.outstanding)))
-                
-                # Update order paid amount
-                db.execute(text("""
-                    UPDATE sales.orders
-                    SET paid_amount = paid_amount + :amount,
-                        updated_at = CURRENT_TIMESTAMP
-                    WHERE order_id = :order_id
-                """), {
-                    "amount": allocation,
-                    "order_id": invoice.order_id
-                })
-                
-                allocated_amount += allocation
-                remaining_amount -= allocation
-        else:
-            # Allocate to specific invoices
-            for order_id in payment_data.allocate_to_invoices:
-                if remaining_amount <= 0:
-                    break
-                
-                # Get outstanding amount for this invoice
-                outstanding = db.execute(text("""
-                    SELECT final_amount as outstanding
-                    FROM sales.orders
-                    WHERE order_id = :order_id AND customer_id = :customer_id
-                """), {
-                    "order_id": order_id,
-                    "customer_id": payment_data.customer_id
-                }).scalar()
-                
-                if outstanding and outstanding > 0:
-                    allocation = min(remaining_amount, Decimal(str(outstanding)))
-                    
-                    # Update order paid amount
-                    db.execute(text("""
-                        UPDATE sales.orders
-                        SET paid_amount = paid_amount + :amount,
-                            updated_at = CURRENT_TIMESTAMP
-                        WHERE order_id = :order_id
-                    """), {
-                        "amount": allocation,
-                        "order_id": order_id
-                    })
-                    
-                    allocated_amount += allocation
-                    remaining_amount -= allocation
         
         db.commit()
         
