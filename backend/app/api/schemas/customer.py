@@ -103,6 +103,8 @@ class CustomerResponse(CustomerBase):
     
     # Computed fields (optional for fast search)
     outstanding_amount: Optional[Decimal] = Field(default=Decimal("0.00"))
+    advance_balance: Optional[Decimal] = Field(default=Decimal("0.00"), description="Unallocated payment amount (customer credit)")
+    net_balance: Optional[Decimal] = Field(default=Decimal("0.00"), description="Outstanding - Advance (positive = customer owes)")
     total_business: Optional[Decimal] = Field(default=Decimal("0.00"))
     total_orders: Optional[int] = Field(default=0)
     last_order_date: Optional[date] = None
@@ -164,6 +166,8 @@ class CustomerOutstandingResponse(BaseModel):
     credit_limit: Decimal
     credit_days: int
     total_outstanding: Decimal
+    advance_balance: Decimal = Field(default=Decimal("0.00"), description="Total unallocated payments")
+    net_balance: Decimal = Field(default=Decimal("0.00"), description="Outstanding - Advance")
     available_credit: Decimal
     overdue_amount: Decimal
     invoices: List[OutstandingInvoice]
