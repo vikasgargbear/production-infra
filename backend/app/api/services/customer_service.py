@@ -506,8 +506,26 @@ class CustomerService:
                 
                 remaining_amount -= allocation_amount
         
-        allocated_amount = Decimal("0.00")
-        remaining_amount = payment_data.amount
+        # Update payment allocation status based on what was allocated
+        total_allocated = payment_data.amount - remaining_amount if payment_id else Decimal("0.00")
+        
+        if total_allocated > 0:
+            db.execute(text("""
+                UPDATE financial.payments 
+                SET allocation_status = CASE 
+                    WHEN :allocated = payment_amount THEN 'allocated'
+                    WHEN :allocated > 0 THEN 'partial'
+                    ELSE 'unallocated'
+                END,
+                allocated_amount = :allocated
+                WHERE payment_id = :payment_id
+            """), {
+                "allocated": total_allocated,
+                "payment_id": payment_id
+            })
+        
+        allocated_amount = total_allocated
+        remaining_amount = payment_data.amount - total_allocated
         
         # Auto-allocate to oldest invoices if not specified
         if not payment_data.allocate_to_invoices:
