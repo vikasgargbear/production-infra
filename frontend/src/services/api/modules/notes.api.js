@@ -7,40 +7,93 @@
 import apiClient from '../apiClient';
 
 export const notesApi = {
-  // List all notes with filters
-  list: async (params = {}) => {
-    const response = await apiClient.get('/notes', { params });
+  // List all credit notes with filters
+  listCreditNotes: async (params = {}) => {
+    const response = await apiClient.get('/api/v1/credit-notes', { params });
     return response.data;
   },
 
-  // Get note details by ID
-  get: async (noteId) => {
-    const response = await apiClient.get(`/notes/${noteId}`);
+  // List all debit notes with filters
+  listDebitNotes: async (params = {}) => {
+    const response = await apiClient.get('/api/v1/debit-notes', { params });
+    return response.data;
+  },
+
+  // Get credit note details by ID
+  getCreditNote: async (creditNoteId) => {
+    const response = await apiClient.get(`/api/v1/credit-notes/${creditNoteId}`);
+    return response.data;
+  },
+
+  // Get debit note details by ID
+  getDebitNote: async (debitNoteId) => {
+    const response = await apiClient.get(`/api/v1/debit-notes/${debitNoteId}`);
     return response.data;
   },
 
   // Create credit note
   createCreditNote: async (data) => {
-    const response = await apiClient.post('/notes/credit-note', data);
+    const response = await apiClient.post('/api/v1/credit-notes', data);
     return response.data;
   },
 
   // Create debit note
   createDebitNote: async (data) => {
-    const response = await apiClient.post('/notes/debit-note', data);
+    const response = await apiClient.post('/api/v1/debit-notes', data);
     return response.data;
   },
 
-  // Get predefined reasons for notes
-  getReasons: async () => {
-    const response = await apiClient.get('/notes/reasons/list');
+  // Update credit note
+  updateCreditNote: async (creditNoteId, data) => {
+    const response = await apiClient.put(`/api/v1/credit-notes/${creditNoteId}`, data);
     return response.data;
+  },
+
+  // Update debit note
+  updateDebitNote: async (debitNoteId, data) => {
+    const response = await apiClient.put(`/api/v1/debit-notes/${debitNoteId}`, data);
+    return response.data;
+  },
+
+  // Apply credit note to invoice
+  applyCreditNote: async (creditNoteId, applicationData) => {
+    const response = await apiClient.post(`/api/v1/credit-notes/${creditNoteId}/apply`, applicationData);
+    return response.data;
+  },
+
+  // Get credit note reasons
+  getCreditNoteReasons: async () => {
+    const response = await apiClient.get('/api/v1/credit-note-reasons');
+    return response.data;
+  },
+
+  // Get debit note reasons
+  getDebitNoteReasons: async () => {
+    const response = await apiClient.get('/api/v1/debit-note-reasons');
+    return response.data;
+  },
+
+  // Settlement types for credit notes (frontend fallback)
+  getSettlementTypes: async () => {
+    // Return standard settlement types
+    return {
+      data: [
+        { value: 'future_invoice', label: 'Adjust Against Future Invoices' },
+        { value: 'cash_refund', label: 'Cash Refund' },
+        { value: 'bank_transfer', label: 'Bank Transfer' },
+        { value: 'account_credit', label: 'Keep as Account Credit' }
+      ]
+    };
   },
 
   // Get invoices for linking to notes
   getLinkedInvoices: async (partyId, invoiceType = 'sales') => {
-    const response = await apiClient.get(`/notes/linked-invoices/${partyId}`, {
-      params: { invoice_type: invoiceType }
+    const response = await apiClient.get(`/api/v1/invoices`, {
+      params: { 
+        customer_id: partyId,
+        payment_status: 'partial,pending',
+        limit: 100
+      }
     });
     return response.data;
   },
