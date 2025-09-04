@@ -5,6 +5,7 @@ import {
   TrendingUp, TrendingDown, Edit2, X,
   HelpCircle, Loader2, RefreshCw, AlertCircle
 } from 'lucide-react';
+import apiClient from '../../services/api/apiClient';
 import { productsApi } from '../../services/api/modules/products.api';
 import { stockApi } from '../../services/api/modules/stock.api';
 import { formatCurrency } from '../../utils/formatters';
@@ -196,22 +197,51 @@ const CurrentStock = ({ open = true, onClose }) => {
     try {
       setError(null);
       
-      // Use products API with pagination - load 20 items per page
-      const response = await productsApi.getAll({
-        limit: 20,
-        skip: page * 20
+      // Use inventory batches API since products endpoint doesn't exist
+      // This will give us stock data with batch information
+      const response = await apiClient.get('/inventory/batches', {
+        params: {
+          limit: 100,
+          skip: page * 100,
+          include_expired: false
+        }
       });
       
-      // Handle different response formats from productsApi.getAll()
+      // Handle batches API response format
       let products = [];
-      if (response?.success && response?.data) {
-        products = response.data;
-      } else if (response?.data?.products) {
-        products = response.data.products;
+      if (response?.data?.batches) {
+        // Transform batch data to product-centric view
+        // Group batches by product
+        const productMap = new Map();
+        
+        response.data.batches.forEach(batch => {
+          const productId = batch.product_id;
+          if (!productMap.has(productId)) {
+            productMap.set(productId, {
+              product_id: productId,
+              product_name: batch.product_name,
+              product_code: batch.product_code,
+              category: batch.category_name || 'General',
+              current_stock: 0,
+              mrp: batch.mrp_per_unit || 0,
+              sale_price: batch.sale_price_per_unit || 0,
+              cost_price: batch.cost_per_unit || 0,
+              batches: []
+            });
+          }
+          
+          const product = productMap.get(productId);
+          product.current_stock += (batch.quantity_available || 0);
+          product.batches.push(batch);
+          
+          // Update MRP and prices to latest batch values
+          if (batch.mrp_per_unit) product.mrp = batch.mrp_per_unit;
+          if (batch.sale_price_per_unit) product.sale_price = batch.sale_price_per_unit;
+        });
+        
+        products = Array.from(productMap.values());
       } else if (response?.data && Array.isArray(response.data)) {
         products = response.data;
-      } else if (Array.isArray(response)) {
-        products = response;
       } else {
         console.warn('Unexpected API response format:', response);
         products = [];
