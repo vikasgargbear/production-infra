@@ -387,7 +387,7 @@ class CustomerService:
                 payment_status, created_at
             ) VALUES (
                 (SELECT org_id FROM parties.customers WHERE customer_id = :customer_id),
-                (SELECT COALESCE(branch_id, 5) FROM parties.customers WHERE customer_id = :customer_id),
+                5, -- Default branch_id (Main Branch)
                 'receipt', 'customer', :customer_id,
                 :reference, :payment_date, :amount,
                 (SELECT payment_method_id FROM financial.payment_methods 
