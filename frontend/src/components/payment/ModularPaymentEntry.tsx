@@ -236,8 +236,8 @@ const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) =>
           payment_mode: paymentModeMap[payment.payment_mode] || 'cash',
           reference_number: payment.reference_number || `PMT-${Date.now()}`,
           notes: payment.remarks || 'Direct payment received',
-          // If we have allocations, include invoice IDs
-          invoice_ids: payment.allocations ? payment.allocations.map((a: any) => a.invoice_id) : []
+          // Match backend schema field name
+          allocate_to_invoices: payment.allocations ? payment.allocations.map((a: any) => a.invoice_id) : []
         };
         
         console.log('Creating payment via customer endpoint:', customerPaymentData);

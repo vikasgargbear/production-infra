@@ -421,11 +421,11 @@ class CustomerService:
             ORDER BY created_at DESC LIMIT 1
         """), {"ref": payment_data.reference_number}).scalar()
         
-        # If invoice_ids provided, create allocations
-        if hasattr(payment_data, 'invoice_ids') and payment_data.invoice_ids:
+        # If allocate_to_invoices provided, create allocations
+        if hasattr(payment_data, 'allocate_to_invoices') and payment_data.allocate_to_invoices:
             remaining_amount = payment_data.amount
             
-            for invoice_id in payment_data.invoice_ids:
+            for invoice_id in payment_data.allocate_to_invoices:
                 if remaining_amount <= 0:
                     break
                     
@@ -463,8 +463,8 @@ class CustomerService:
                     
                     remaining_amount -= allocation_amount
         
-        # If no allocations or payment not fully allocated, use FIFO
-        elif not hasattr(payment_data, 'invoice_ids') or not payment_data.invoice_ids:
+        # If no allocations specified, use FIFO
+        elif not hasattr(payment_data, 'allocate_to_invoices') or not payment_data.allocate_to_invoices:
             # Auto-allocate using FIFO (oldest invoices first)
             outstanding_invoices = db.execute(text("""
                 SELECT document_id, document_number, outstanding_amount
