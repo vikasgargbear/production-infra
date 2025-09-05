@@ -145,6 +145,12 @@ const CreditNoteFlow: React.FC<CreditNoteFlowProps> = ({ onClose }) => {
       if (!customerId) {
         setCustomerInvoices([]);
         setInvoicePagination(null);
+        // Clear invoice selection and items when customer is removed
+        setNoteData(prev => ({
+          ...prev,
+          selected_invoice: null
+        }));
+        setNoteItems([]);
         return;
       }
 

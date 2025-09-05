@@ -539,18 +539,27 @@ async def update_product(
         
         field_mapping = {
             "product_name": "product_name",
+            "generic_name": "generic_name",
             "brand": "brand",
             "brand_name": "brand",
             "manufacturer": "manufacturer",
-            # Skip category_id - requires proper category management
+            "category_id": "category_id",
+            "product_type": "product_type",
+            "product_class": "product_class",
             "hsn_code": "hsn_code",
+            "unit": "unit",
+            "mrp": "mrp",
+            "selling_price": "selling_price",
+            "purchase_price": "purchase_price",
             "gst_percentage": "gst_percentage",
             "gst_rate": "gst_percentage",
             "reorder_level": "reorder_level",
+            "minimum_stock_level": "reorder_level",  # Also map minimum_stock_level to reorder_level
             "min_stock_quantity": "min_stock_quantity",
             "max_stock_quantity": "max_stock_quantity",
-            "storage_conditions": "storage_conditions",
-            "requires_cold_chain": "requires_cold_chain",
+            # storage_conditions and requires_cold_chain don't exist in current schema
+            # "storage_conditions": "storage_conditions",
+            # "requires_cold_chain": "requires_cold_chain",
             # Pack columns moved to batches table during schema cleanup
             # Keep pack_config for backward compatibility
             "pack_config": "pack_config",

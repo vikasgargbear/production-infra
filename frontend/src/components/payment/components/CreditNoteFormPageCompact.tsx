@@ -59,6 +59,15 @@ const CreditNoteFormPageCompact: React.FC<CreditNoteFormPageCompactProps> = ({
     }
   }, [selectedCustomer]);
 
+  // Clear invoice data when customer changes
+  useEffect(() => {
+    if (!selectedCustomer) {
+      // Customer was removed/cleared
+      handleFieldChange('selected_invoice', null);
+      setNoteItems([]);
+    }
+  }, [selectedCustomer]);
+
   // Simplified reason options (consistent with sales return)
   const simplifiedReasons = [
     { value: 'price_adjustment', label: 'Price Adjustment' },
@@ -167,6 +176,9 @@ const CreditNoteFormPageCompact: React.FC<CreditNoteFormPageCompactProps> = ({
           <button
             onClick={() => {
               setSelectedCustomer(null);
+              handleFieldChange('customer_id', null);
+              handleFieldChange('selected_invoice', null);
+              setNoteItems([]);
               setActiveSection('customer');
             }}
             className="text-xs text-blue-600 hover:text-blue-800"
@@ -362,7 +374,7 @@ const CreditNoteFormPageCompact: React.FC<CreditNoteFormPageCompactProps> = ({
             )}
 
             {/* Selected Invoice Items */}
-            {noteData.selected_invoice && !createWithoutInvoice && (
+            {selectedCustomer && noteData.selected_invoice && !createWithoutInvoice && (
               <div className="space-y-3">
                 <div className="flex items-center justify-between bg-blue-50 rounded-lg p-2">
                   <span className="text-sm font-medium">
