@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   Package, Search, Filter, Download, Eye, Printer, MessageCircle,
   AlertTriangle, CheckCircle, Clock, MoreVertical, Calendar, ChevronDown,
@@ -10,6 +10,7 @@ import { productsApi } from '../../services/api/modules/products.api';
 import { stockApi } from '../../services/api/modules/stock.api';
 import { formatCurrency } from '../../utils/formatters';
 import { DataTable, ModuleHeader } from '../global';
+import ProductEditModal from '../global/modals/ProductEditModal';
 import jsPDF from 'jspdf';
 
 // Enterprise-grade data validation and transformation utilities
@@ -122,7 +123,6 @@ const CurrentStock = ({ open = true, onClose }) => {
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [stockData, setStockData] = useState([]);
-  const [filteredData, setFilteredData] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('all');
   const [selectedLocation, setSelectedLocation] = useState('all');
@@ -145,29 +145,15 @@ const CurrentStock = ({ open = true, onClose }) => {
     expiryPeriod: 'all',
     packType: 'all'
   });
-  const [editForm, setEditForm] = useState({
-    category: '',
-    pack_type: '',
-    pack_size: '',
-    minimum_stock_level: '',
-    pack_unit_quantity: '',
-    sub_unit_quantity: '',
-    purchase_unit: '',
-    sale_unit: ''
-  });
+  // Edit form state removed - using global ProductEditModal instead
   
   // API data states
-  const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(null);
   const [refreshing, setRefreshing] = useState(false);
 
   useEffect(() => {
     loadStockData(0, true);
   }, []);
-
-  useEffect(() => {
-    filterData();
-  }, [stockData, searchQuery, selectedCategory, selectedLocation, showLowStock, showExpiring, moreFilters]);
 
   const loadMoreData = () => {
     if (!loadingMore && hasMore) {
@@ -189,7 +175,7 @@ const CurrentStock = ({ open = true, onClose }) => {
 
   const loadStockData = async (page = 0, reset = true) => {
     if (page === 0) {
-      setIsLoading(true);
+      setLoading(true);
     } else {
       setLoadingMore(true);
     }
@@ -197,50 +183,43 @@ const CurrentStock = ({ open = true, onClose }) => {
     try {
       setError(null);
       
-      // Use inventory batches API since products endpoint doesn't exist
-      // This will give us stock data with batch information
-      const response = await apiClient.get('/inventory/batches', {
+      // Use inventory/stock/current endpoint to get all products with stock info
+      const response = await apiClient.get('/inventory/stock/current', {
         params: {
           limit: 100,
-          skip: page * 100,
-          include_expired: false
+          skip: page * 100
         }
       });
       
-      // Handle batches API response format
+      // Handle inventory/stock/current response format
       let products = [];
-      if (response?.data?.batches) {
-        // Transform batch data to product-centric view
-        // Group batches by product
-        const productMap = new Map();
-        
-        response.data.batches.forEach(batch => {
-          const productId = batch.product_id;
-          if (!productMap.has(productId)) {
-            productMap.set(productId, {
-              product_id: productId,
-              product_name: batch.product_name,
-              product_code: batch.product_code,
-              category: batch.category_name || 'General',
-              current_stock: 0,
-              mrp: batch.mrp_per_unit || 0,
-              sale_price: batch.sale_price_per_unit || 0,
-              cost_price: batch.cost_per_unit || 0,
-              batches: []
-            });
-          }
-          
-          const product = productMap.get(productId);
-          product.current_stock += (batch.quantity_available || 0);
-          product.batches.push(batch);
-          
-          // Update MRP and prices to latest batch values
-          if (batch.mrp_per_unit) product.mrp = batch.mrp_per_unit;
-          if (batch.sale_price_per_unit) product.sale_price = batch.sale_price_per_unit;
-        });
-        
-        products = Array.from(productMap.values());
+      if (response?.data?.stocks && Array.isArray(response.data.stocks)) {
+        // Response from /inventory/stock/current endpoint
+        products = response.data.stocks.map(stock => ({
+          product_id: stock.product_id,
+          product_name: stock.product_name,
+          product_code: stock.product_code,
+          category: stock.category || 'General',  // Backend now returns category name directly
+          manufacturer: stock.manufacturer,
+          hsn_code: stock.hsn_code,
+          unit: stock.unit || 'Units',
+          current_stock: stock.total_quantity || 0,
+          available_stock: stock.available_quantity || 0,
+          reserved_stock: stock.allocated_quantity || 0,
+          mrp: stock.mrp || 0,
+          cost_price: stock.average_cost || 0,
+          sale_price: stock.sale_price || stock.mrp || 0,
+          reorder_level: stock.reorder_level || 0,
+          low_stock: stock.is_below_minimum || stock.is_below_reorder || false,
+          expiry_alert: stock.near_expiry_batches > 0,
+          total_batches: stock.total_batches || 0,
+          expired_batches: stock.expired_batches || 0,
+          near_expiry_batches: stock.near_expiry_batches || 0,
+          total_value: stock.total_value || 0,
+          batches: []
+        }));
       } else if (response?.data && Array.isArray(response.data)) {
+        // Direct array response
         products = response.data;
       } else {
         console.warn('Unexpected API response format:', response);
@@ -248,7 +227,7 @@ const CurrentStock = ({ open = true, onClose }) => {
       }
       
       // Set hasMore based on whether we got fewer items than requested
-      setHasMore(products.length === 20);
+      setHasMore(products.length === 100);  // We request 100 items per page
       
       // Enterprise-grade data validation and transformation
       console.log('Raw products from API:', products.length);
@@ -275,7 +254,7 @@ const CurrentStock = ({ open = true, onClose }) => {
       }
     } finally {
       if (page === 0) {
-        setIsLoading(false);
+        setLoading(false);
       } else {
         setLoadingMore(false);
       }
@@ -295,8 +274,7 @@ const CurrentStock = ({ open = true, onClose }) => {
     }
   };
 
-  // Multi-select functionality - Now handled by DataTable component
-  const selectedCount = Array.from(selectedIds).filter(id => filteredData.some(f => f.product_id === id)).length;
+  // Note: selectedCount calculation moved after filteredData definition to avoid initialization error
 
   const formatDate = (date) => {
     if (!date) return 'N/A';
@@ -406,8 +384,8 @@ const CurrentStock = ({ open = true, onClose }) => {
     window.open(`https://wa.me/?text=${message}`, '_blank');
   };
 
-  const filterData = () => {
-    
+  // Use useMemo to calculate filtered data - prevents re-render loops
+  const filteredData = useMemo(() => {
     // First filter out any null/undefined items with comprehensive validation
     let filtered = stockData.filter(item => {
       if (!item || typeof item !== 'object') {
@@ -516,8 +494,11 @@ const CurrentStock = ({ open = true, onClose }) => {
     const safeFiltered = filtered.filter(item => item && item.product_name);
     
     console.log('Filtered data length:', safeFiltered.length);
-    setFilteredData(safeFiltered);
-  };
+    return safeFiltered;
+  }, [stockData, searchQuery, selectedCategory, showLowStock, showExpiring, moreFilters, sortConfig]);
+
+  // Multi-select functionality - Now handled by DataTable component  
+  const selectedCount = Array.from(selectedIds).filter(id => filteredData.some(f => f.product_id === id)).length;
 
   const handleSort = (key) => {
     setSortConfig(prev => ({
@@ -598,35 +579,10 @@ const CurrentStock = ({ open = true, onClose }) => {
 
   const handleEdit = (product) => {
     setEditingProduct(product);
-    setEditForm({
-      category: product.category || '',
-      pack_type: product.pack_type || '',
-      pack_size: product.pack_size || '',
-      minimum_stock_level: product.reorder_level || '',
-      pack_unit_quantity: product.pack_unit_quantity || '',
-      sub_unit_quantity: product.sub_unit_quantity || '',
-      purchase_unit: product.purchase_unit || '',
-      sale_unit: product.sale_unit || ''
-    });
     setShowEditModal(true);
   };
 
-  const handleSaveEdit = async () => {
-    try {
-      // Include category in updates - now has proper master table linking
-      const response = await stockApi.updateProductProperties(editingProduct.product_id, editForm);
-      console.log('Product updated:', response);
-      
-      // Reload stock data to show updated values
-      await loadStockData();
-      
-      setShowEditModal(false);
-      setEditingProduct(null);
-    } catch (error) {
-      console.error('Error updating product:', error);
-      alert('Failed to update product properties');
-    }
-  };
+  // handleSaveEdit removed - handled by global ProductEditModal
 
   const columns = [
     {
@@ -1046,7 +1002,7 @@ const CurrentStock = ({ open = true, onClose }) => {
 
 
             {/* Loading State */}
-            {isLoading && stockData.length === 0 && (
+            {loading && stockData.length === 0 && (
               <div className="bg-white rounded-lg shadow-sm border border-blue-200 p-8 mb-6">
                 <div className="text-center">
                   <Loader2 className="w-8 h-8 animate-spin mx-auto mb-4 text-blue-600" />
@@ -1186,169 +1142,18 @@ const CurrentStock = ({ open = true, onClose }) => {
         </div>
       )}
 
-      {/* Edit Product Modal */}
+      {/* Global Product Edit Modal */}
       {showEditModal && editingProduct && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg shadow-xl w-full max-w-2xl max-h-[90vh] overflow-hidden">
-            <div className="p-6 border-b border-gray-200">
-              <div className="flex items-center justify-between">
-                <h2 className="text-xl font-semibold text-gray-900">Edit Product Properties</h2>
-                <button
-                  onClick={() => setShowEditModal(false)}
-                  className="text-gray-500 hover:text-gray-700"
-                >
-                  <X className="w-5 h-5" />
-                </button>
-              </div>
-            </div>
-            <div className="p-6 overflow-y-auto max-h-[calc(90vh-80px)]">
-              <div className="space-y-4">
-                <div>
-                  <h3 className="font-medium text-gray-900">{editingProduct.product_name}</h3>
-                  <p className="text-sm text-gray-500">{editingProduct.product_code}</p>
-                </div>
-                
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Category
-                  </label>
-                  <select
-                    value={editForm.category}
-                    onChange={(e) => setEditForm({...editForm, category: e.target.value})}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  >
-                    <option value="">Select Category</option>
-                    <option value="Tablet">Tablet</option>
-                    <option value="Capsule">Capsule</option>
-                    <option value="Syrup">Syrup</option>
-                    <option value="Injection">Injection</option>
-                    <option value="Powder">Powder</option>
-                    <option value="Cream">Cream</option>
-                    <option value="Drops">Drops</option>
-                  </select>
-                </div>
-                
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Pack Type
-                  </label>
-                  <input
-                    type="text"
-                    value={editForm.pack_type}
-                    onChange={(e) => setEditForm({...editForm, pack_type: e.target.value})}
-                    placeholder="e.g., Strip, Bottle, Tube"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  />
-                </div>
-                
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Pack Size
-                  </label>
-                  <input
-                    type="text"
-                    value={editForm.pack_size}
-                    onChange={(e) => setEditForm({...editForm, pack_size: e.target.value})}
-                    placeholder="e.g., 10 Tablets, 200ml, 30g"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  />
-                </div>
-                
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Reorder Level
-                  </label>
-                  <input
-                    type="number"
-                    value={editForm.minimum_stock_level}
-                    onChange={(e) => setEditForm({...editForm, minimum_stock_level: e.target.value})}
-                    placeholder="Minimum stock level"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  />
-                </div>
-                
-                <div className="border-t pt-4 mt-4">
-                  <h4 className="text-sm font-medium text-gray-700 mb-3">Unit Conversion Settings</h4>
-                  
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Purchase Unit
-                      </label>
-                      <input
-                        type="text"
-                        value={editForm.purchase_unit}
-                        onChange={(e) => setEditForm({...editForm, purchase_unit: e.target.value})}
-                        placeholder="e.g., Box"
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                      />
-                    </div>
-                    
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Box Contains
-                      </label>
-                      <input
-                        type="number"
-                        value={editForm.pack_unit_quantity}
-                        onChange={(e) => setEditForm({...editForm, pack_unit_quantity: e.target.value})}
-                        placeholder="e.g., 10"
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                      />
-                    </div>
-                    
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Sale Unit
-                      </label>
-                      <input
-                        type="text"
-                        value={editForm.sale_unit}
-                        onChange={(e) => setEditForm({...editForm, sale_unit: e.target.value})}
-                        placeholder="e.g., Strip"
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                      />
-                    </div>
-                    
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Sub-box Contains
-                      </label>
-                      <input
-                        type="number"
-                        value={editForm.sub_unit_quantity}
-                        onChange={(e) => setEditForm({...editForm, sub_unit_quantity: e.target.value})}
-                        placeholder="e.g., 10"
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                      />
-                    </div>
-                  </div>
-                  
-                  {editForm.pack_unit_quantity && editForm.sub_unit_quantity && (
-                    <div className="mt-2 text-xs text-gray-600 bg-gray-50 p-2 rounded">
-                      1 {editForm.purchase_unit || 'Box'} = {editForm.pack_unit_quantity} sub-boxes = {editForm.pack_unit_quantity * editForm.sub_unit_quantity} {editForm.sale_unit || 'strips'}
-                    </div>
-                  )}
-                </div>
-              </div>
-              
-              <div className="flex items-center justify-end space-x-3 mt-6">
-                <button
-                  onClick={() => setShowEditModal(false)}
-                  className="px-4 py-2 text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={handleSaveEdit}
-                  className="px-4 py-2 text-white bg-blue-600 hover:bg-blue-700 rounded-lg"
-                >
-                  Save Changes
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
+        <ProductEditModal
+          isOpen={showEditModal}
+          onClose={() => {
+            setShowEditModal(false);
+            setEditingProduct(null);
+            loadStockData(0, true); // Refresh data after edit
+          }}
+          product={editingProduct}
+          mode="edit"
+        />
       )}
 
       {/* Help Modal */}

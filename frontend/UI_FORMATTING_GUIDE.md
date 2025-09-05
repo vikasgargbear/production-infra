@@ -186,6 +186,128 @@ const statusColors = {
 - [ ] Global component reusability considered
 - [ ] Print/PDF output matches preview exactly
 
+## Module Header and Footer Standards
+
+### 11. Consistent Module Headers
+
+All document flows (Invoice, Sales Return, Credit/Debit Notes, etc.) MUST use the `ModuleHeader` component:
+
+```jsx
+import { ModuleHeader } from '../global';
+
+<ModuleHeader
+  title="Document Type"
+  documentNumber={documentNumber}
+  status="draft|review|completed"
+  icon={IconComponent}
+  iconColor="text-color-600"
+  onClose={onClose}
+  subtitle="Optional subtitle text"
+  actions={[
+    { label: 'Action', onClick: handler, icon: IconComponent }
+  ]}
+/>
+```
+
+#### Required Props:
+- `title`: Main document type (e.g., "Invoice", "Credit Note", "Sales Return")
+- `documentNumber`: Unique document identifier
+- `status`: Current document status
+- `icon`: Lucide icon component representing the module
+- `onClose`: Handler for closing the module
+
+### 12. Consistent Footer Actions
+
+All document flows MUST use the `ProceedToReviewComponent` for footer actions:
+
+```jsx
+import { ProceedToReviewComponent } from '../global';
+
+<ProceedToReviewComponent
+  currentStep={1|2}
+  canProceed={boolean}
+  onBack={handleBack|null}
+  onProceed={handleProceed}
+  onReset={handleReset}
+  totalItems={itemCount}
+  totalAmount={totalValue}
+  proceedText="Continue to Review|Create Document"
+  saving={isSaving}
+/>
+```
+
+#### Standard Flow:
+1. **Step 1**: Data entry → "Continue to Review"
+2. **Step 2**: Review → "Create [Document Type]"
+
+### 13. GST Toggle Implementation
+
+For documents that support GST inclusion/exclusion:
+
+```jsx
+{/* GST Toggle Bar - Place after ModuleHeader */}
+<div className="bg-white border-b border-gray-200 px-6 py-3">
+  <div className="flex items-center justify-between">
+    <div className="flex items-center space-x-4">
+      <label className="flex items-center space-x-2 cursor-pointer">
+        <input
+          type="checkbox"
+          checked={includeGST}
+          onChange={(e) => setIncludeGST(e.target.checked)}
+          className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+        />
+        <span className="text-sm font-medium text-gray-700">
+          Include GST in {DocumentType}
+        </span>
+      </label>
+      {includeGST && (
+        <span className="text-xs text-gray-500">
+          GST will be calculated and shown separately
+        </span>
+      )}
+    </div>
+  </div>
+</div>
+```
+
+### 14. Document Flow Structure
+
+Standard structure for all document creation flows:
+
+```jsx
+<div className="h-full bg-gray-50">
+  <div className="h-full flex flex-col">
+    {/* 1. Module Header */}
+    <ModuleHeader {...headerProps} />
+    
+    {/* 2. GST Toggle (if applicable) */}
+    <div className="bg-white border-b...">...</div>
+    
+    {/* 3. Keyboard Shortcuts Help Bar */}
+    <div className="bg-gray-50 px-4 py-2 text-xs text-gray-700 border-b">
+      Keyboard shortcuts: <strong>Ctrl+S</strong> - Save | ...
+    </div>
+    
+    {/* 4. Main Content Area */}
+    <div className="flex-1 overflow-y-auto">
+      {/* Content tiles/cards */}
+    </div>
+    
+    {/* 5. Footer Actions */}
+    <ProceedToReviewComponent {...footerProps} />
+  </div>
+</div>
+```
+
+### 15. Status Consistency
+
+Document status values across all modules:
+- `draft`: Initial creation/editing
+- `review`: Review before submission
+- `pending`: Awaiting approval/processing
+- `completed`: Finalized
+- `cancelled`: Cancelled/voided
+
 ## Notes
 
 This guide should be referenced when:
@@ -194,3 +316,5 @@ This guide should be referenced when:
 3. Adding new form fields or displays
 4. Implementing print/PDF functionality
 5. Reviewing UI consistency across the application
+6. Adding new document flows (ensure header/footer consistency)
+7. Implementing GST toggles in financial documents

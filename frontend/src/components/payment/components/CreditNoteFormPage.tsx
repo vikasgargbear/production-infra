@@ -1,5 +1,5 @@
 import React from 'react';
-import { Filter, Calculator, CheckCircle, FileText } from 'lucide-react';
+import { Filter, Calculator, CheckCircle, FileText, AlertCircle, X } from 'lucide-react';
 import { CustomerSearch, Select, Card } from '../../global';
 
 interface CreditNoteFormPageProps {
@@ -26,6 +26,8 @@ interface CreditNoteFormPageProps {
   handleInvoiceSelect: (invoice: any) => void;
   loadingItems: boolean;
   totals: any;
+  includeGST: boolean;
+  onIncludeGSTChange: (value: boolean) => void;
 }
 
 const CreditNoteFormPage: React.FC<CreditNoteFormPageProps> = ({
@@ -51,7 +53,9 @@ const CreditNoteFormPage: React.FC<CreditNoteFormPageProps> = ({
   invoicePage,
   handleInvoiceSelect,
   loadingItems,
-  totals
+  totals,
+  includeGST,
+  onIncludeGSTChange
 }) => {
   return (
     <div className="space-y-6">
@@ -105,15 +109,37 @@ const CreditNoteFormPage: React.FC<CreditNoteFormPageProps> = ({
       )}
 
       {/* Invoice Selection */}
-      {selectedCustomer && noteData.reason && noteData.settlement_type && (
+      {selectedCustomer && (
         <Card>
           <div className="mb-6">
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">
-              Select Invoice (Optional)
-            </h3>
-            <p className="text-sm text-gray-600 mb-4">
-              You can create a credit note without linking it to a specific invoice, or select an invoice to link this credit note.
-            </p>
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <h3 className="text-lg font-semibold text-gray-900 flex items-center">
+                  <FileText className="w-5 h-5 mr-2 text-blue-600" />
+                  Select Invoice for Credit Note
+                </h3>
+                <p className="text-sm text-gray-600 mt-1">
+                  Choose an invoice to apply this credit note against, or create a standalone credit note
+                </p>
+              </div>
+              {noteData.selected_invoice && (
+                <div className="flex items-center space-x-2 bg-green-50 px-4 py-2 rounded-full">
+                  <CheckCircle className="w-4 h-4 text-green-600" />
+                  <span className="text-sm font-medium text-green-700">
+                    Invoice Selected: {noteData.selected_invoice.invoice_number}
+                  </span>
+                  <button
+                    onClick={() => {
+                      handleFieldChange('selected_invoice', null);
+                      setNoteItems([]);
+                    }}
+                    className="ml-2 text-green-600 hover:text-green-800"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+              )}
+            </div>
             
             {/* Create without invoice toggle */}
             <div className="mb-4">
@@ -151,6 +177,23 @@ const CreditNoteFormPage: React.FC<CreditNoteFormPageProps> = ({
             {/* Show invoice selection only if not creating standalone */}
             {!createWithoutInvoice && (
               <>
+                {/* Invoice Selection Instruction */}
+                {!noteData.selected_invoice && customerInvoices.length > 0 && (
+                  <div className="bg-blue-50 border border-blue-200 p-4 rounded-lg mb-4">
+                    <div className="flex items-start space-x-2">
+                      <AlertCircle className="w-5 h-5 text-blue-600 mt-0.5" />
+                      <div>
+                        <p className="text-sm font-medium text-blue-900">
+                          Click on an invoice below to load its items
+                        </p>
+                        <p className="text-xs text-blue-700 mt-1">
+                          {customerInvoices.length} invoice{customerInvoices.length > 1 ? 's' : ''} available for selection
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+                
                 {/* Compact Filters */}
                 <div className="flex items-center justify-between mb-3">
                   <button
@@ -273,10 +316,10 @@ const CreditNoteFormPage: React.FC<CreditNoteFormPageProps> = ({
                         <div
                           key={invoice.id}
                           onClick={() => handleInvoiceSelect(invoice)}
-                          className={`border rounded-lg p-4 cursor-pointer transition-colors ${
+                          className={`relative border-2 rounded-lg p-4 cursor-pointer transition-all transform hover:scale-[1.01] ${
                             noteData.selected_invoice?.id === invoice.id
-                              ? 'border-blue-500 bg-blue-50'
-                              : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
+                              ? 'border-blue-500 bg-blue-50 shadow-md ring-2 ring-blue-200'
+                              : 'border-gray-200 hover:border-blue-300 hover:bg-gray-50 hover:shadow-sm'
                           }`}
                         >
                           <div className="flex items-center justify-between">
@@ -399,13 +442,61 @@ const CreditNoteFormPage: React.FC<CreditNoteFormPageProps> = ({
 
       {/* Invoice Items */}
       {noteData.selected_invoice && (
-        <Card>
+        <Card className="border-2 border-blue-200">
+          {/* Selected Invoice Banner */}
+          <div className="bg-gradient-to-r from-blue-50 to-indigo-50 p-4 rounded-t-lg border-b border-blue-100 -m-6 mb-6">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-3">
+                <div className="bg-white p-2 rounded-lg shadow-sm">
+                  <FileText className="w-5 h-5 text-blue-600" />
+                </div>
+                <div>
+                  <h4 className="font-semibold text-gray-900">
+                    Invoice #{noteData.selected_invoice.invoice_number} Selected
+                  </h4>
+                  <p className="text-sm text-gray-600">
+                    Date: {new Date(noteData.selected_invoice.invoice_date).toLocaleDateString()} | 
+                    Total: ₹{noteData.selected_invoice.total_amount?.toLocaleString() || '0'}
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => {
+                  handleFieldChange('selected_invoice', null);
+                  setNoteItems([]);
+                }}
+                className="p-2 hover:bg-white rounded-lg transition-colors" 
+                title="Clear invoice selection"
+              >
+                <X className="w-4 h-4 text-gray-500 hover:text-gray-700" />
+              </button>
+            </div>
+          </div>
+          
           <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-semibold text-gray-900">
-              Invoice Items
-            </h3>
+            <div className="flex items-center space-x-4">
+              <h3 className="text-lg font-semibold text-gray-900">
+                Invoice Items
+              </h3>
+              <label className="flex items-center space-x-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={includeGST}
+                  onChange={(e) => onIncludeGSTChange(e.target.checked)}
+                  className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                />
+                <span className="text-sm font-medium text-gray-700">
+                  Include GST in {noteData.note_type === 'credit' ? 'Credit' : 'Debit'} Note
+                </span>
+              </label>
+              {includeGST && (
+                <span className="text-xs text-gray-500">
+                  GST will be calculated and shown separately
+                </span>
+              )}
+            </div>
             <p className="text-sm text-gray-600">
-              Modify quantities/amounts as needed for the note
+              Adjust quantities and amounts for the credit note
             </p>
           </div>
 

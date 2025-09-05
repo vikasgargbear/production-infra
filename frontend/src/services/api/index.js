@@ -24,6 +24,7 @@ import { batchesApi } from './modules/batches.api';
 import { challansApi as challansApiModule } from './modules/challans.api';
 import { customersApi as customersApiModule } from './modules/customers.api';
 import { suppliersApi as suppliersApiModule } from './modules/suppliers.api';
+import { productsApi as productsApiModule } from './modules/products.api';
 import { deliveryApi } from './modules/delivery.api';
 import { ledgerApi } from './modules/ledger.api';
 import { notesApi } from './modules/notes.api';
@@ -45,6 +46,7 @@ import { bankAccountsAPI } from './bankAccounts.api';
 import { journalApi } from './modules/journal.api';
 import { expensesApi } from './modules/expenses.api';
 import { metadataApi } from './modules/metadata.api';
+import { gstApi } from './modules/gst.api';
 
 // Re-export everything for easy access
 export {
@@ -89,11 +91,12 @@ export {
   journalApi,
   expensesApi,
   metadataApi,
+  gstApi,
   
   // Aliases for backward compatibility
   customerAPI as customersApiOld,
   customersApiModule as customersApi,
-  productAPI as productsApi,
+  productsApiModule as productsApi,  // Use the full module with CRUD methods
   suppliersApiModule as suppliersApi,
   supplierAPI, // Export supplierAPI here only once
   invoiceAPI as invoicesApi,
@@ -114,7 +117,7 @@ export {
 const apiModules = {
   auth: authApi,
   customers: customersApiModule,
-  products: productAPI,
+  products: productsApiModule,  // Use the full module with CRUD methods
   suppliers: supplierAPI,
   invoices: invoiceAPI,
   purchases: purchasesAPI,

@@ -136,11 +136,41 @@ const ProductMaster = ({
     try {
       // Load categories from backend
       try {
-        const catResponse = await productsApi.getCategories();
-        setCategories(catResponse.data || []);
+        const catResponse = await metadataApi.getCategories();
+        // Ensure categories is always an array
+        if (Array.isArray(catResponse?.data)) {
+          setCategories(catResponse.data);
+        } else if (catResponse?.data?.categories && Array.isArray(catResponse.data.categories)) {
+          setCategories(catResponse.data.categories);
+        } else {
+          console.log('Categories not in expected format, using defaults');
+          setCategories([
+            { category_id: 1, category_name: 'Tablet' },
+            { category_id: 2, category_name: 'Capsule' },
+            { category_id: 3, category_name: 'Syrup' },
+            { category_id: 4, category_name: 'Injection' },
+            { category_id: 5, category_name: 'Cream' },
+            { category_id: 6, category_name: 'Ointment' },
+            { category_id: 7, category_name: 'Drops' },
+            { category_id: 8, category_name: 'Powder' },
+            { category_id: 9, category_name: 'Gel' },
+            { category_id: 10, category_name: 'Lotion' }
+          ]);
+        }
       } catch (e) {
-        console.log('Using default categories');
-        setCategories([]);
+        console.log('Error loading categories, using defaults:', e);
+        setCategories([
+          { category_id: 1, category_name: 'Tablet' },
+          { category_id: 2, category_name: 'Capsule' },
+          { category_id: 3, category_name: 'Syrup' },
+          { category_id: 4, category_name: 'Injection' },
+          { category_id: 5, category_name: 'Cream' },
+          { category_id: 6, category_name: 'Ointment' },
+          { category_id: 7, category_name: 'Drops' },
+          { category_id: 8, category_name: 'Powder' },
+          { category_id: 9, category_name: 'Gel' },
+          { category_id: 10, category_name: 'Lotion' }
+        ]);
       }
       
       // Load product types from backend
@@ -380,7 +410,7 @@ const ProductMaster = ({
                           className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100"
                         >
                           <option value="">Select Category</option>
-                          {categories.map(cat => (
+                          {Array.isArray(categories) && categories.map(cat => (
                             <option key={cat.category_id} value={cat.category_id}>
                               {cat.category_name}
                             </option>
@@ -397,7 +427,7 @@ const ProductMaster = ({
                           className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100"
                         >
                           <option value="">Select Type</option>
-                          {productTypes.map(type => (
+                          {Array.isArray(productTypes) && productTypes.map(type => (
                             <option key={type.type_id || type.type_name} value={type.type_name}>
                               {type.type_name}
                             </option>
@@ -414,7 +444,7 @@ const ProductMaster = ({
                           className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100"
                         >
                           <option value="">Select Class</option>
-                          {productClasses.map(cls => (
+                          {Array.isArray(productClasses) && productClasses.map(cls => (
                             <option key={cls.class_id || cls.class_name} value={cls.class_name}>
                               {cls.class_name}
                             </option>

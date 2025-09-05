@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
-  FileText, Plus, CreditCard, Receipt, CheckCircle, AlertTriangle, ArrowLeft
+  FileText, Plus, CreditCard, Receipt, CheckCircle, AlertTriangle, ArrowLeft, 
+  Search, Calendar, Save, Printer, X, Edit2, Trash2
 } from 'lucide-react';
 import {
   Button,
@@ -9,13 +10,51 @@ import {
   Select,
   DatePicker,
   DataTable,
-  SummaryCard
+  SummaryCard,
+  CustomerSearch,
+  InvoiceSelector,
+  useToast,
+  NotesSection
 } from '../global';
 import { theme, classes } from '../../config/theme.config';
+import { notesApi } from '../../services/api/modules/notes.api';
+import InvoiceApiService from '../../services/invoiceApiService';
 
 interface CreditDebitNoteSimpleProps {
   noteType?: 'credit' | 'debit';
   onClose?: () => void;
+}
+
+interface NoteItem {
+  id?: string;
+  product_id: string;
+  product_name: string;
+  batch_number?: string;
+  quantity: number;
+  original_quantity?: number;
+  max_quantity?: number;
+  rate: number;
+  discount_percent: number;
+  tax_percent: number;
+  amount: number;
+  selected?: boolean;
+}
+
+interface NoteData {
+  note_number?: string;
+  note_date: string;
+  customer_id: string;
+  customer_name?: string;
+  invoice_id: string;
+  invoice_number?: string;
+  invoice_date?: string;
+  reason: string;
+  items: NoteItem[];
+  subtotal: number;
+  tax_amount: number;
+  total_amount: number;
+  notes: string;
+  status?: string;
 }
 
 const CreditDebitNoteSimple: React.FC<CreditDebitNoteSimpleProps> = ({ 
@@ -23,15 +62,44 @@ const CreditDebitNoteSimple: React.FC<CreditDebitNoteSimpleProps> = ({
   onClose
 }) => {
   const [activeTab, setActiveTab] = useState<'create' | 'list'>('create');
-  const [noteData, setNoteData] = useState({
+  const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const toast = useToast();
+  
+  const [noteData, setNoteData] = useState<NoteData>({
     note_date: new Date().toISOString().split('T')[0],
+    customer_id: '',
+    invoice_id: '',
     reason: '',
-    amount: 0,
-    notes: ''
+    items: [],
+    subtotal: 0,
+    tax_amount: 0,
+    total_amount: 0,
+    notes: '',
+    status: 'PENDING'
   });
+
+  const [selectedCustomer, setSelectedCustomer] = useState<any>(null);
+  const [selectedInvoice, setSelectedInvoice] = useState<any>(null);
+  const [showItemsSection, setShowItemsSection] = useState(false);
 
   const isCredit = noteType === 'credit';
   
+  // Generate note number
+  const generateNoteNumber = () => {
+    const date = new Date();
+    const dateStr = date.toISOString().slice(2,10).replace(/-/g, '');
+    const randomNum = Math.floor(Math.random() * 10000).toString().padStart(4, '0');
+    return `${isCredit ? 'CN' : 'DN'}-${dateStr}${randomNum}`;
+  };
+
+  useEffect(() => {
+    setNoteData(prev => ({
+      ...prev,
+      note_number: generateNoteNumber()
+    }));
+  }, []);
+
   // Tab configuration
   const tabs = [
     { 
@@ -52,6 +120,7 @@ const CreditDebitNoteSimple: React.FC<CreditDebitNoteSimpleProps> = ({
     { value: 'DISCOUNT', label: 'Additional Discount' },
     { value: 'DAMAGE_COMPENSATION', label: 'Damage Compensation' },
     { value: 'PRICE_ADJUSTMENT', label: 'Price Adjustment' },
+    { value: 'QUALITY_ISSUE', label: 'Quality Issue' },
     { value: 'OTHER', label: 'Other' }
   ] : [
     { value: 'SHORTAGE', label: 'Shortage in Delivery' },
@@ -61,18 +130,235 @@ const CreditDebitNoteSimple: React.FC<CreditDebitNoteSimpleProps> = ({
     { value: 'OTHER', label: 'Other' }
   ];
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    console.log('Note data:', noteData);
+  // Handle customer selection
+  const handleCustomerSelect = (customer: any) => {
+    setSelectedCustomer(customer);
+    setNoteData(prev => ({
+      ...prev,
+      customer_id: customer.id || customer.customer_id,
+      customer_name: customer.name || customer.customer_name
+    }));
   };
 
-  // Calculate summary data dynamically
+  // Handle invoice selection from InvoiceSelector
+  const handleInvoiceSelect = async (invoice: any) => {
+    if (!invoice) return;
+    
+    setSelectedInvoice(invoice);
+    setNoteData(prev => ({
+      ...prev,
+      invoice_id: invoice.id || invoice.invoice_id,
+      invoice_number: invoice.invoice_number,
+      invoice_date: invoice.invoice_date
+    }));
+    
+    setShowItemsSection(true);
+    
+    // Load invoice items
+    try {
+      setLoading(true);
+      let fullInvoice;
+      
+      // Check if items are already loaded
+      if (invoice.items && invoice.items.length > 0) {
+        fullInvoice = { data: invoice };
+      } else {
+        // Load full invoice details
+        const response = await InvoiceApiService.getInvoiceById(invoice.id || invoice.invoice_id);
+        if (response.success && response.data) {
+          fullInvoice = response;
+        } else {
+          throw new Error('Failed to load invoice details');
+        }
+      }
+      
+      if (fullInvoice?.data?.items) {
+        const items = fullInvoice.data.items.map((item: any) => {
+          const gstPercent = (item.cgst_rate || 0) + (item.sgst_rate || 0) + (item.igst_rate || 0) || item.tax_percent || 0;
+          const quantity = parseFloat(item.quantity || 0);
+          const rate = parseFloat(item.unit_price || item.rate || 0);
+          const discount = parseFloat(item.discount_percent || 0);
+          
+          // Calculate amount
+          const baseAmount = quantity * rate;
+          const discountAmount = baseAmount * (discount / 100);
+          const taxableAmount = baseAmount - discountAmount;
+          const taxAmount = taxableAmount * (gstPercent / 100);
+          const totalAmount = taxableAmount + taxAmount;
+          
+          return {
+            id: item.id || item.invoice_item_id,
+            product_id: item.product_id,
+            product_name: item.product_name || item.item_name,
+            batch_number: item.batch_number || item.batch_no,
+            quantity: quantity,
+            original_quantity: quantity,
+            rate: rate,
+            discount_percent: discount,
+            tax_percent: gstPercent,
+            amount: totalAmount,
+            selected: true,
+            max_quantity: quantity
+          };
+        });
+        
+        setNoteData(prev => ({
+          ...prev,
+          items: items
+        }));
+        
+        calculateTotals(items);
+      }
+    } catch (error) {
+      console.error('Error loading invoice items:', error);
+      toast.error('Failed to load invoice items');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Calculate totals
+  const calculateTotals = (items: NoteItem[]) => {
+    let subtotal = 0;
+    let taxTotal = 0;
+    
+    items.filter(item => item.selected).forEach(item => {
+      const baseAmount = item.quantity * item.rate;
+      const discountAmount = baseAmount * (item.discount_percent / 100);
+      const taxableAmount = baseAmount - discountAmount;
+      const taxAmount = taxableAmount * (item.tax_percent / 100);
+      
+      subtotal += taxableAmount;
+      taxTotal += taxAmount;
+    });
+    
+    const total = subtotal + taxTotal;
+    
+    setNoteData(prev => ({
+      ...prev,
+      subtotal: Math.round(subtotal * 100) / 100,
+      tax_amount: Math.round(taxTotal * 100) / 100,
+      total_amount: Math.round(total * 100) / 100
+    }));
+  };
+
+  // Update item quantity
+  const updateItemQuantity = (index: number, newQuantity: number) => {
+    const updatedItems = [...noteData.items];
+    const item = updatedItems[index];
+    
+    // Ensure quantity doesn't exceed original
+    const maxQty = item.max_quantity || item.original_quantity || item.quantity;
+    item.quantity = Math.min(Math.max(0, newQuantity), maxQty);
+    
+    // Recalculate amount for this item
+    const baseAmount = item.quantity * item.rate;
+    const discountAmount = baseAmount * (item.discount_percent / 100);
+    const taxableAmount = baseAmount - discountAmount;
+    const taxAmount = taxableAmount * (item.tax_percent / 100);
+    item.amount = taxableAmount + taxAmount;
+    
+    setNoteData(prev => ({ ...prev, items: updatedItems }));
+    calculateTotals(updatedItems);
+  };
+
+  // Toggle item selection
+  const toggleItemSelection = (index: number) => {
+    const updatedItems = [...noteData.items];
+    updatedItems[index].selected = !updatedItems[index].selected;
+    setNoteData(prev => ({ ...prev, items: updatedItems }));
+    calculateTotals(updatedItems);
+  };
+
+  // Remove item
+  const removeItem = (index: number) => {
+    const updatedItems = noteData.items.filter((_, i) => i !== index);
+    setNoteData(prev => ({ ...prev, items: updatedItems }));
+    calculateTotals(updatedItems);
+  };
+
+  // Handle submit
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (!noteData.customer_id) {
+      toast.error('Please select a customer');
+      return;
+    }
+    
+    if (!noteData.invoice_id) {
+      toast.error('Please select an invoice');
+      return;
+    }
+    
+    if (!noteData.reason) {
+      toast.error('Please select a reason');
+      return;
+    }
+    
+    const selectedItems = noteData.items.filter(item => item.selected);
+    if (selectedItems.length === 0) {
+      toast.error('Please select at least one item');
+      return;
+    }
+    
+    try {
+      setSaving(true);
+      
+      const payload = {
+        ...noteData,
+        note_type: noteType.toUpperCase(),
+        items: selectedItems.map(item => ({
+          product_id: item.product_id,
+          quantity: item.quantity,
+          rate: item.rate,
+          discount_percent: item.discount_percent,
+          tax_percent: item.tax_percent,
+          amount: item.amount
+        }))
+      };
+      
+      const response = await notesApi.createCreditDebitNote(payload);
+      
+      if (response.success || response.data) {
+        toast.success(`${isCredit ? 'Credit' : 'Debit'} note created successfully`);
+        
+        // Reset form
+        setNoteData({
+          note_number: generateNoteNumber(),
+          note_date: new Date().toISOString().split('T')[0],
+          customer_id: '',
+          invoice_id: '',
+          reason: '',
+          items: [],
+          subtotal: 0,
+          tax_amount: 0,
+          total_amount: 0,
+          notes: '',
+          status: 'PENDING'
+        });
+        setSelectedCustomer(null);
+        setSelectedInvoice(null);
+        setShowItemsSection(false);
+        
+        // Switch to list tab
+        setActiveTab('list');
+      }
+    } catch (error: any) {
+      console.error('Error creating note:', error);
+      toast.error(error.message || `Failed to create ${noteType} note`);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // Calculate summary data
   const summaryItems = [
-    { label: 'Base Amount', value: noteData.amount * 0.8, isBold: false },
-    { label: 'Tax Amount', value: noteData.amount * 0.2, isBold: false },
+    { label: 'Subtotal', value: noteData.subtotal, isBold: false },
+    { label: 'Tax Amount', value: noteData.tax_amount, isBold: false },
     { 
       label: `Total ${isCredit ? 'Credit' : 'Debit'} Amount`, 
-      value: noteData.amount, 
+      value: noteData.total_amount, 
       isTotal: true,
       color: isCredit ? theme.colors.secondary.DEFAULT : theme.colors.warning.DEFAULT
     }
@@ -81,16 +367,15 @@ const CreditDebitNoteSimple: React.FC<CreditDebitNoteSimpleProps> = ({
   return (
     <div className={classes.pageContainer}>
       <div className={classes.contentWrapper}>
-        {/* Header - Using global theme classes */}
+        {/* Header */}
         <div className="mb-6">
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-3">
-              {/* Back Button */}
               {onClose && (
                 <button
                   onClick={onClose}
                   className="p-2 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors"
-                  title="Back to Home"
+                  title="Back"
                 >
                   <ArrowLeft className="w-6 h-6" />
                 </button>
@@ -106,14 +391,14 @@ const CreditDebitNoteSimple: React.FC<CreditDebitNoteSimpleProps> = ({
                   {isCredit ? 'Credit' : 'Debit'} Notes Management
                 </h1>
                 <p className={classes.bodyText}>
-                  Create and manage {isCredit ? 'credit' : 'debit'} notes for your business
+                  Create and manage {isCredit ? 'credit' : 'debit'} notes for invoices
                 </p>
               </div>
             </div>
           </div>
         </div>
 
-        {/* Tab Navigation - Using global theme */}
+        {/* Tab Navigation */}
         <div className="mb-6">
           <div className="border-b border-gray-200">
             <nav className="-mb-px flex space-x-8">
@@ -143,38 +428,23 @@ const CreditDebitNoteSimple: React.FC<CreditDebitNoteSimpleProps> = ({
         {/* Create Note Tab */}
         {activeTab === 'create' && (
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            {/* Form Section - Using global Card component */}
-            <div className="lg:col-span-2">
+            {/* Form Section */}
+            <div className="lg:col-span-2 space-y-6">
               <Card>
-                <CardSection title={`New ${isCredit ? 'Credit' : 'Debit'} Note`}>
+                <CardSection title="Basic Information">
                   <form onSubmit={handleSubmit} className="space-y-6">
-                    {/* Customer/Supplier Selection - Simplified for demo */}
+                    {/* Note Details */}
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div>
-                        <label className={classes.formLabel}>
-                          {isCredit ? 'Customer' : 'Supplier'} *
-                        </label>
+                        <label className={classes.formLabel}>Note Number</label>
                         <input
                           type="text"
-                          placeholder={`Search ${isCredit ? 'customer' : 'supplier'}...`}
-                          className={`${theme.components.input.base} mt-1`}
+                          value={noteData.note_number}
+                          className={`${theme.components.input.base} mt-1 bg-gray-50`}
+                          readOnly
                         />
                       </div>
 
-                      <div>
-                        <label className={classes.formLabel}>
-                          {isCredit ? 'Reference Invoice' : 'Reference Purchase'} *
-                        </label>
-                        <input
-                          type="text"
-                          placeholder={isCredit ? "Search invoice..." : "Search purchase..."}
-                          className={`${theme.components.input.base} mt-1`}
-                        />
-                      </div>
-                    </div>
-
-                    {/* Note Details - Using global DatePicker and Select */}
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div>
                         <label className={classes.formLabel}>Note Date *</label>
                         <DatePicker
@@ -186,7 +456,40 @@ const CreditDebitNoteSimple: React.FC<CreditDebitNoteSimpleProps> = ({
                           className="mt-1"
                         />
                       </div>
+                    </div>
 
+                    {/* Customer Selection */}
+                    <div>
+                      <label className={classes.formLabel}>Customer *</label>
+                      <CustomerSearch
+                        value={selectedCustomer}
+                        onChange={handleCustomerSelect}
+                        placeholder="Search customer by name, phone or ID..."
+                        className="mt-1"
+                      />
+                    </div>
+
+                    {/* Invoice Selection */}
+                    {selectedCustomer && (
+                      <div>
+                        <label className={classes.formLabel}>Select Invoice *</label>
+                        <InvoiceSelector
+                          customerId={selectedCustomer.id || selectedCustomer.customer_id}
+                          onSelect={handleInvoiceSelect}
+                          mode="single"
+                          filters={{}}
+                          showReturnStatus={false}
+                          showPaymentStatus={true}
+                          showItems={false}
+                          title=""
+                          filterPredicate={() => true}
+                          pageSize={5}
+                        />
+                      </div>
+                    )}
+
+                    {/* Reason and Notes */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div>
                         <label className={classes.formLabel}>Reason *</label>
                         <Select
@@ -196,30 +499,6 @@ const CreditDebitNoteSimple: React.FC<CreditDebitNoteSimpleProps> = ({
                           placeholder="Select reason..."
                           className="mt-1"
                         />
-                      </div>
-                    </div>
-
-                    {/* Amount and Notes */}
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div>
-                        <label className={classes.formLabel}>Amount *</label>
-                        <div className="mt-1 relative">
-                          <input
-                            type="number"
-                            step="0.01"
-                            value={noteData.amount}
-                            onChange={(e) => setNoteData(prev => ({ 
-                              ...prev, 
-                              amount: parseFloat(e.target.value) || 0 
-                            }))}
-                            className={`${theme.components.input.base} pl-8`}
-                            placeholder="0.00"
-                            required
-                          />
-                          <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                            <span className="text-gray-500">₹</span>
-                          </div>
-                        </div>
                       </div>
 
                       <div>
@@ -233,32 +512,150 @@ const CreditDebitNoteSimple: React.FC<CreditDebitNoteSimpleProps> = ({
                         />
                       </div>
                     </div>
-
-                    {/* Action Buttons - Using global Button component */}
-                    <div className="flex justify-end space-x-3 pt-4 border-t border-gray-200">
-                      <Button variant="secondary" type="button">
-                        Cancel
-                      </Button>
-                      <Button 
-                        variant="primary"
-                        type="submit"
-                      >
-                        <CheckCircle className="w-4 h-4 mr-2" />
-                        Create {isCredit ? 'Credit' : 'Debit'} Note
-                      </Button>
-                    </div>
                   </form>
                 </CardSection>
               </Card>
+
+              {/* Items Section */}
+              {showItemsSection && noteData.items.length > 0 && (
+                <Card>
+                  <CardSection title="Invoice Items">
+                    {loading ? (
+                      <div className="text-center py-8">
+                        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto"></div>
+                        <p className="mt-2 text-gray-500">Loading invoice items...</p>
+                      </div>
+                    ) : (
+                      <div className="space-y-4">
+                        {noteData.items.map((item, index) => (
+                          <div 
+                            key={index}
+                            className={`p-4 border rounded-lg ${
+                              item.selected ? 'border-blue-200 bg-blue-50' : 'border-gray-200 bg-gray-50'
+                            }`}
+                          >
+                            <div className="flex items-start justify-between">
+                              <div className="flex items-start space-x-3">
+                                <input
+                                  type="checkbox"
+                                  checked={item.selected}
+                                  onChange={() => toggleItemSelection(index)}
+                                  className="mt-1"
+                                />
+                                <div className="flex-1">
+                                  <p className="font-medium text-gray-900">{item.product_name}</p>
+                                  {item.batch_number && (
+                                    <p className="text-sm text-gray-500">Batch: {item.batch_number}</p>
+                                  )}
+                                  <div className="mt-2 grid grid-cols-2 md:grid-cols-4 gap-4">
+                                    <div>
+                                      <label className="text-xs text-gray-500">Quantity</label>
+                                      <input
+                                        type="number"
+                                        value={item.quantity}
+                                        onChange={(e) => updateItemQuantity(index, parseFloat(e.target.value) || 0)}
+                                        min={0}
+                                        max={item.max_quantity}
+                                        disabled={!item.selected}
+                                        className={`${theme.components.input.base} mt-1`}
+                                      />
+                                    </div>
+                                    <div>
+                                      <label className="text-xs text-gray-500">Rate</label>
+                                      <p className="mt-1 font-medium">₹{item.rate.toFixed(2)}</p>
+                                    </div>
+                                    <div>
+                                      <label className="text-xs text-gray-500">Tax %</label>
+                                      <p className="mt-1 font-medium">{item.tax_percent}%</p>
+                                    </div>
+                                    <div>
+                                      <label className="text-xs text-gray-500">Amount</label>
+                                      <p className="mt-1 font-medium text-blue-600">
+                                        ₹{item.amount.toFixed(2)}
+                                      </p>
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
+                              <button
+                                onClick={() => removeItem(index)}
+                                className="p-1 text-red-500 hover:bg-red-50 rounded"
+                                title="Remove item"
+                              >
+                                <X className="w-4 h-4" />
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </CardSection>
+                </Card>
+              )}
+
+              {/* Action Buttons */}
+              {showItemsSection && (
+                <div className="flex justify-end space-x-3">
+                  <Button 
+                    variant="secondary" 
+                    onClick={() => {
+                      setShowItemsSection(false);
+                      setSelectedInvoice(null);
+                      setNoteData(prev => ({
+                        ...prev,
+                        invoice_id: '',
+                        invoice_number: '',
+                        invoice_date: '',
+                        items: [],
+                        subtotal: 0,
+                        tax_amount: 0,
+                        total_amount: 0
+                      }));
+                    }}
+                  >
+                    Cancel
+                  </Button>
+                  <Button 
+                    variant="primary"
+                    onClick={handleSubmit}
+                    disabled={saving || noteData.items.filter(i => i.selected).length === 0}
+                  >
+                    {saving ? (
+                      <>
+                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                        Creating...
+                      </>
+                    ) : (
+                      <>
+                        <CheckCircle className="w-4 h-4 mr-2" />
+                        Create {isCredit ? 'Credit' : 'Debit'} Note
+                      </>
+                    )}
+                  </Button>
+                </div>
+              )}
             </div>
 
-            {/* Summary Section - Using global SummaryCard */}
+            {/* Summary Section */}
             <div>
               <Card>
                 <CardSection title="Note Summary">
-                  {noteData.amount > 0 ? (
+                  {noteData.total_amount > 0 ? (
                     <div className="space-y-4">
-                      {/* Note Amount Summary */}
+                      {/* Selected Invoice Info */}
+                      {selectedInvoice && (
+                        <div className="p-3 bg-gray-50 rounded-lg">
+                          <p className="text-sm font-medium text-gray-700">Invoice Details</p>
+                          <p className="text-xs text-gray-500 mt-1">
+                            Invoice: {selectedInvoice.invoice_number}
+                          </p>
+                          <p className="text-xs text-gray-500">
+                            Date: {new Date(selectedInvoice.invoice_date).toLocaleDateString()}
+                          </p>
+                        </div>
+                      )}
+                      
+                      {/* Amount Summary */}
                       <SummaryCard
                         title={`${isCredit ? 'Credit' : 'Debit'} Amount Breakdown`}
                         items={summaryItems}
@@ -274,7 +671,7 @@ const CreditDebitNoteSimple: React.FC<CreditDebitNoteSimpleProps> = ({
                         }`}>
                           {isCredit 
                             ? 'This amount will be credited to customer account'
-                            : 'This amount will be debited from supplier account'
+                            : 'This amount will be added to customer dues'
                           }
                         </p>
                       </div>
@@ -283,7 +680,7 @@ const CreditDebitNoteSimple: React.FC<CreditDebitNoteSimpleProps> = ({
                     <div className="text-center py-6">
                       <AlertTriangle className="w-8 h-8 text-gray-400 mx-auto mb-2" />
                       <p className={classes.bodyText}>
-                        Enter amount to see summary
+                        Select invoice items to see summary
                       </p>
                     </div>
                   )}
@@ -293,36 +690,15 @@ const CreditDebitNoteSimple: React.FC<CreditDebitNoteSimpleProps> = ({
           </div>
         )}
 
-        {/* List Tab - Using global DataTable */}
+        {/* List Tab */}
         {activeTab === 'list' && (
           <Card>
             <CardSection title={`${isCredit ? 'Credit' : 'Debit'} Notes`}>
-              <div className="flex items-center justify-between mb-4">
-                <div className="flex items-center space-x-4">
-                  <input
-                    type="text"
-                    placeholder={`Search ${isCredit ? 'credit' : 'debit'} notes...`}
-                    className={theme.components.input.base}
-                  />
-                  <Button variant="primary" size="sm">
-                    <Plus className="w-4 h-4 mr-1" />
-                    New Note
-                  </Button>
-                </div>
-              </div>
-              <div className={classes.bodyText}>
-                <p className="mb-4">
-                  📝 This demonstrates the updated {isCredit ? 'Credit' : 'Debit'} Note module 
-                  now using global UI theme components:
+              <div className="text-center py-8">
+                <FileText className="w-12 h-12 text-gray-400 mx-auto mb-3" />
+                <p className="text-gray-500">
+                  {isCredit ? 'Credit' : 'Debit'} notes list will appear here
                 </p>
-                <ul className="list-disc list-inside space-y-1 text-sm">
-                  <li>✅ Global Card and CardSection components</li>
-                  <li>✅ Theme-consistent colors and spacing</li>
-                  <li>✅ Global Button variants</li>
-                  <li>✅ Standardized form inputs</li>
-                  <li>✅ Global SummaryCard for totals</li>
-                  <li>✅ Consistent typography classes</li>
-                </ul>
               </div>
             </CardSection>
           </Card>

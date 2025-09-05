@@ -68,51 +68,14 @@ const StockMovement = ({ open = true, onClose }) => {
     } catch (err) {
       console.error('Error loading stock movements:', err);
       setError('Failed to load stock movement data');
-      // Set mock data for development
-      setMovements(generateMockMovements());
+      // No fallback to mock data - enterprise practice
+      setMovements([]);
     } finally {
       setLoading(false);
     }
   };
 
-  const generateMockMovements = () => {
-    const mockData = [];
-    const products = ['Paracetamol 500mg', 'Amoxicillin 250mg', 'Aspirin 100mg', 'Cough Syrup', 'Vitamin D3'];
-    const types = ['receive', 'issue', 'transfer', 'adjustment'];
-    const statuses = ['completed', 'pending', 'cancelled'];
-    
-    for (let i = 0; i < 25; i++) {
-      const type = types[Math.floor(Math.random() * types.length)];
-      const quantity = Math.floor(Math.random() * 1000) + 10;
-      const unitPrice = Math.floor(Math.random() * 100) + 5;
-      
-      mockData.push({
-        id: `mov_${i + 1}`,
-        movement_no: `STK-${String(i + 1).padStart(4, '0')}`,
-        product_name: products[Math.floor(Math.random() * products.length)],
-        movement_type: type,
-        quantity: quantity,
-        reference_no: type === 'receive' ? `PO-${Math.floor(Math.random() * 1000)}` : 
-                     type === 'issue' ? (() => {
-                       const year = new Date().getFullYear() % 100;
-                       const yearPrefix = year.toString().padStart(2, '0');
-                       const num = 10000000 + Math.floor(Math.random() * 1000);
-                       return `INV-${yearPrefix}${num}`;
-                     })() : '',
-        movement_date: new Date(Date.now() - Math.random() * 30 * 24 * 60 * 60 * 1000).toISOString(),
-        reason: type === 'adjustment' ? 'Stock count correction' : '',
-        batch_no: `B${Math.floor(Math.random() * 1000)}`,
-        location_from: type === 'transfer' ? 'Warehouse A' : '',
-        location_to: type === 'transfer' ? 'Warehouse B' : 'Main Store',
-        created_by: 'System User',
-        status: statuses[Math.floor(Math.random() * statuses.length)],
-        unit_price: unitPrice,
-        total_value: quantity * unitPrice
-      });
-    }
-    
-    return mockData.sort((a, b) => new Date(b.movement_date) - new Date(a.movement_date));
-  };
+  // Removed mock data generation - enterprise practice requires real data only
 
   const handleRefresh = async () => {
     setRefreshing(true);

@@ -60,8 +60,8 @@ const EnhancedStockAdjustmentFlow = ({ onClose }) => {
         ]);
         
         const reasons = {
-          increase: increaseResponse.data || [],
-          decrease: decreaseResponse.data || []
+          increase: Array.isArray(increaseResponse?.data) ? increaseResponse.data : increaseResponse?.data?.reasons || [],
+          decrease: Array.isArray(decreaseResponse?.data) ? decreaseResponse.data : decreaseResponse?.data?.reasons || []
         };
         
         setAdjustmentReasons(reasons);
@@ -227,8 +227,8 @@ const EnhancedStockAdjustmentFlow = ({ onClose }) => {
       ]);
       
       const reasons = {
-        increase: increaseResponse.data || [],
-        decrease: decreaseResponse.data || []
+        increase: Array.isArray(increaseResponse?.data) ? increaseResponse.data : increaseResponse?.data?.reasons || [],
+        decrease: Array.isArray(decreaseResponse?.data) ? decreaseResponse.data : decreaseResponse?.data?.reasons || []
       };
       
       setAdjustmentReasons(reasons);
@@ -554,10 +554,12 @@ Note: Use positive numbers for increase and negative for decrease. Reason codes:
                 onChange={(value) => setAdjustmentData(prev => ({ ...prev, reason: value }))}
                 options={[
                   { value: '', label: 'Select reason...' },
-                  ...adjustmentReasons[adjustmentData.adjustment_type].map(r => ({
-                    value: r.value,
-                    label: r.label
-                  }))
+                  ...(Array.isArray(adjustmentReasons[adjustmentData.adjustment_type]) 
+                    ? adjustmentReasons[adjustmentData.adjustment_type].map(r => ({
+                        value: r.value || r,
+                        label: r.label || r
+                      }))
+                    : [])
                 ]}
               />
             </div>

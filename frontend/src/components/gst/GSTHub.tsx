@@ -7,7 +7,6 @@ import { ModuleHub } from '../global';
 import GSTBalanced from './GSTBalanced';
 import GSTFilingClean from './GSTFilingClean';
 import GSTReports from './GSTReports';
-import GSTFiling from './GSTFiling';
 import GSTReconciliation from './GSTReconciliation';
 
 interface GSTHubProps {

@@ -16,7 +16,7 @@ from ...core.auth_utils import get_org_id_from_header
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/notes", tags=["credit-debit-notes"])
+router = APIRouter(tags=["credit-debit-notes"])
 
 @router.get("/")
 async def get_notes(
@@ -853,3 +853,183 @@ async def get_invoice_items_for_notes(
     except Exception as e:
         logger.error(f"Error fetching invoice items: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+# ============= NEW CREDIT/DEBIT NOTE ENDPOINTS =============
+# These endpoints work with the new sales.credit_notes and sales.debit_notes tables
+
+from app.utils.branch_utils import get_default_branch_id
+
+@router.get("/credit-note-reasons")
+async def get_credit_note_reasons():
+    """Get available credit note reason codes"""
+    return [
+        {"value": "SALES_RETURN", "label": "Sales Return"},
+        {"value": "DAMAGED_GOODS", "label": "Damaged Goods"},
+        {"value": "EXPIRED_GOODS", "label": "Expired Goods"},
+        {"value": "WRONG_BILLING", "label": "Wrong Billing"},
+        {"value": "RATE_DIFFERENCE", "label": "Rate Difference"},
+        {"value": "QUALITY_ISSUE", "label": "Quality Issue"},
+        {"value": "SHORT_SUPPLY", "label": "Short Supply"},
+        {"value": "DISCOUNT_ADJUSTMENT", "label": "Discount Adjustment"},
+        {"value": "OTHER", "label": "Other"}
+    ]
+
+@router.get("/debit-note-reasons")
+async def get_debit_note_reasons():
+    """Get available debit note reason codes"""
+    return [
+        {"value": "RATE_CORRECTION", "label": "Rate Correction"},
+        {"value": "QUANTITY_CORRECTION", "label": "Quantity Correction"},
+        {"value": "TAX_CORRECTION", "label": "Tax Correction"},
+        {"value": "FREIGHT_CHARGES", "label": "Freight Charges"},
+        {"value": "LOADING_CHARGES", "label": "Loading Charges"},
+        {"value": "INTEREST_CHARGES", "label": "Interest Charges"},
+        {"value": "PENALTY_CHARGES", "label": "Penalty Charges"},
+        {"value": "SERVICE_CHARGES", "label": "Service Charges"},
+        {"value": "OTHER", "label": "Other"}
+    ]
+
+@router.post("/credit-notes")
+async def create_credit_note(
+    data: dict,
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)
+):
+    """Create a new credit note"""
+    try:
+        # Get default branch
+        branch_id = get_default_branch_id(db, org_id)
+        
+        # Generate credit note number
+        result = db.execute(text("""
+            SELECT COALESCE(MAX(CAST(SUBSTRING(credit_note_number FROM 'CN-([0-9]+)') AS INTEGER)), 0) + 1 as next_num
+            FROM sales.credit_notes
+            WHERE org_id = :org_id
+            AND credit_note_number LIKE 'CN-%'
+        """), {"org_id": org_id}).first()
+        
+        next_num = result.next_num if result else 1
+        credit_note_number = f"CN-{next_num:06d}"
+        
+        # Calculate total amount
+        total_amount = float(data.get('credit_amount', 0)) + float(data.get('tax_amount', 0))
+        
+        # Create credit note
+        result = db.execute(text("""
+            INSERT INTO sales.credit_notes (
+                org_id, branch_id, credit_note_number, credit_note_date,
+                customer_id, reference_type, reference_id, reference_number,
+                credit_amount, tax_amount, total_amount,
+                reason_code, reason, notes,
+                is_gst_applicable, cgst_amount, sgst_amount, igst_amount,
+                status, created_by
+            ) VALUES (
+                :org_id, :branch_id, :credit_note_number, :credit_note_date,
+                :customer_id, :reference_type, :reference_id, :reference_number,
+                :credit_amount, :tax_amount, :total_amount,
+                :reason_code, :reason, :notes,
+                :is_gst_applicable, :cgst_amount, :sgst_amount, :igst_amount,
+                'draft', 1
+            ) RETURNING credit_note_id
+        """), {
+            "org_id": org_id,
+            "branch_id": branch_id,
+            "credit_note_number": credit_note_number,
+            "credit_note_date": data.get('credit_note_date', datetime.now().date()),
+            "customer_id": data.get('customer_id'),
+            "reference_type": data.get('reference_type'),
+            "reference_id": data.get('reference_id'),
+            "reference_number": data.get('reference_number'),
+            "credit_amount": data.get('credit_amount', 0),
+            "tax_amount": data.get('tax_amount', 0),
+            "total_amount": total_amount,
+            "reason_code": data.get('reason_code', 'OTHER'),
+            "reason": data.get('reason', ''),
+            "notes": data.get('notes'),
+            "is_gst_applicable": data.get('is_gst_applicable', True),
+            "cgst_amount": data.get('cgst_amount', 0),
+            "sgst_amount": data.get('sgst_amount', 0),
+            "igst_amount": data.get('igst_amount', 0)
+        })
+        
+        credit_note_id = result.scalar()
+        db.commit()
+        
+        return {"success": True, "credit_note_id": credit_note_id, "credit_note_number": credit_note_number}
+        
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Error creating credit note: {e}")
+        raise HTTPException(status_code=400, detail=str(e))
+
+@router.post("/debit-notes")
+async def create_debit_note(
+    data: dict,
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)
+):
+    """Create a new debit note"""
+    try:
+        # Get default branch
+        branch_id = get_default_branch_id(db, org_id)
+        
+        # Generate debit note number
+        result = db.execute(text("""
+            SELECT COALESCE(MAX(CAST(SUBSTRING(debit_note_number FROM 'DN-([0-9]+)') AS INTEGER)), 0) + 1 as next_num
+            FROM sales.debit_notes
+            WHERE org_id = :org_id
+            AND debit_note_number LIKE 'DN-%'
+        """), {"org_id": org_id}).first()
+        
+        next_num = result.next_num if result else 1
+        debit_note_number = f"DN-{next_num:06d}"
+        
+        # Calculate total amount
+        total_amount = float(data.get('debit_amount', 0)) + float(data.get('tax_amount', 0))
+        
+        # Create debit note
+        result = db.execute(text("""
+            INSERT INTO sales.debit_notes (
+                org_id, branch_id, debit_note_number, debit_note_date,
+                customer_id, reference_type, reference_id, reference_number,
+                debit_amount, tax_amount, total_amount,
+                reason_code, reason, notes,
+                is_gst_applicable, cgst_amount, sgst_amount, igst_amount,
+                status, created_by
+            ) VALUES (
+                :org_id, :branch_id, :debit_note_number, :debit_note_date,
+                :customer_id, :reference_type, :reference_id, :reference_number,
+                :debit_amount, :tax_amount, :total_amount,
+                :reason_code, :reason, :notes,
+                :is_gst_applicable, :cgst_amount, :sgst_amount, :igst_amount,
+                'draft', 1
+            ) RETURNING debit_note_id
+        """), {
+            "org_id": org_id,
+            "branch_id": branch_id,
+            "debit_note_number": debit_note_number,
+            "debit_note_date": data.get('debit_note_date', datetime.now().date()),
+            "customer_id": data.get('customer_id'),
+            "reference_type": data.get('reference_type'),
+            "reference_id": data.get('reference_id'),
+            "reference_number": data.get('reference_number'),
+            "debit_amount": data.get('debit_amount', 0),
+            "tax_amount": data.get('tax_amount', 0),
+            "total_amount": total_amount,
+            "reason_code": data.get('reason_code', 'OTHER'),
+            "reason": data.get('reason', ''),
+            "notes": data.get('notes'),
+            "is_gst_applicable": data.get('is_gst_applicable', True),
+            "cgst_amount": data.get('cgst_amount', 0),
+            "sgst_amount": data.get('sgst_amount', 0),
+            "igst_amount": data.get('igst_amount', 0)
+        })
+        
+        debit_note_id = result.scalar()
+        db.commit()
+        
+        return {"success": True, "debit_note_id": debit_note_id, "debit_note_number": debit_note_number}
+        
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Error creating debit note: {e}")
+        raise HTTPException(status_code=400, detail=str(e))

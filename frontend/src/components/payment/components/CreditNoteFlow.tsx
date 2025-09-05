@@ -2,9 +2,9 @@ import React, { useState, useEffect } from 'react';
 import { 
   CreditCard, Save, AlertCircle, RefreshCw, Loader2
 } from 'lucide-react';
-import { DatePicker, Button } from '../../global';
+import { DatePicker, Button, ModuleHeader, ProceedToReviewComponent } from '../../global';
 import { notesApi } from '../../../services/api/modules/notes.api';
-import CreditNoteFormPage from './CreditNoteFormPage';
+import CreditNoteFormPageCompact from './CreditNoteFormPageCompact';
 import CreditNoteReviewPage from './CreditNoteReviewPage';
 
 interface CreditNoteFlowProps {
@@ -47,6 +47,7 @@ const CreditNoteFlow: React.FC<CreditNoteFlowProps> = ({ onClose }) => {
   const [showFilters, setShowFilters] = useState(false);
   const [createWithoutInvoice, setCreateWithoutInvoice] = useState(false);
   const [showReviewPage, setShowReviewPage] = useState(false);
+  const [includeGST, setIncludeGST] = useState(true);
 
   const [noteData, setNoteData] = useState({
     note_number: `CR-${Date.now().toString().slice(-6)}`,
@@ -234,19 +235,39 @@ const CreditNoteFlow: React.FC<CreditNoteFlowProps> = ({ onClose }) => {
     // Load invoice items
     setLoadingItems(true);
     try {
-      const itemsData = await notesApi.getInvoiceItems(invoice.id);
+      // Use InvoiceApiService to get full invoice details with items
+      const InvoiceApiService = require('../../../services/invoiceApiService').default;
+      const fullInvoice = await InvoiceApiService.getInvoiceById(invoice.id);
       
-      const transformedItems = itemsData.items?.map((item: any, index: number) => ({
-        id: item.invoice_item_id || `item-${index}`,
-        product_name: item.product_name,
-        hsn_code: item.hsn_code || '',
-        quantity: item.quantity || 0,
-        rate: parseFloat(item.unit_price || item.rate || 0),
-        discount_percent: parseFloat(item.discount_percent || 0),
-        total_amount: parseFloat(item.line_total || item.total_amount || 0)
-      })) || [];
-      
-      setNoteItems(transformedItems);
+      if (fullInvoice.success && fullInvoice.data && fullInvoice.data.items) {
+        const transformedItems = fullInvoice.data.items.map((item: any, index: number) => ({
+          id: item.invoice_item_id || item.id || `item-${index}`,
+          product_name: item.product_name || item.item_name,
+          hsn_code: item.hsn_code || '',
+          quantity: parseFloat(item.quantity || 0),
+          rate: parseFloat(item.unit_price || item.rate || 0),
+          discount_percent: parseFloat(item.discount_percent || 0),
+          total_amount: parseFloat(item.line_total || item.total_amount || (item.quantity * item.unit_price) || 0)
+        }));
+        
+        setNoteItems(transformedItems);
+      } else {
+        // If invoice already has items, use them
+        if (invoice.items && invoice.items.length > 0) {
+          const transformedItems = invoice.items.map((item: any, index: number) => ({
+            id: item.invoice_item_id || item.id || `item-${index}`,
+            product_name: item.product_name || item.item_name,
+            hsn_code: item.hsn_code || '',
+            quantity: parseFloat(item.quantity || 0),
+            rate: parseFloat(item.unit_price || item.rate || 0),
+            discount_percent: parseFloat(item.discount_percent || 0),
+            total_amount: parseFloat(item.line_total || item.total_amount || 0)
+          }));
+          setNoteItems(transformedItems);
+        } else {
+          setNoteItems([]);
+        }
+      }
     } catch (error) {
       console.error('Error loading invoice items:', error);
       setError('Failed to load invoice items. Please try again.');
@@ -313,13 +334,16 @@ const CreditNoteFlow: React.FC<CreditNoteFlowProps> = ({ onClose }) => {
     setError(null);
     
     try {
+      const totals = calculateTotals();
       const payload = {
         party_id: selectedCustomer.id || selectedCustomer.customer_id || selectedCustomer.party_id,
         note_date: noteData.note_date,
-        amount: calculateTotals().grandTotal,
+        amount: includeGST ? totals.grandTotal : totals.subtotal,
         reason: noteData.reason,
         linked_invoice_id: noteData.selected_invoice?.id,
         notes: noteData.customer_remarks,
+        include_gst: includeGST,
+        tax_amount: includeGST ? totals.taxAmount : 0,
         items: noteItems.map(item => ({
           product_name: item.product_name,
           hsn_code: item.hsn_code,
@@ -356,50 +380,28 @@ const CreditNoteFlow: React.FC<CreditNoteFlowProps> = ({ onClose }) => {
   }
 
   return (
-    <div className="h-full bg-green-50">
-      <div className="h-full flex flex-col max-w-6xl mx-auto">
-        {/* Header - Similar to Sales Flow */}
-        <div className="bg-green-50 border-b border-green-200 px-6 py-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-4">
-              <CreditCard className="w-6 h-6 text-green-600" />
-              <div>
-                <h1 className="text-2xl font-bold text-gray-900">
-                  New Credit Note
-                </h1>
-                <div className="flex items-center space-x-4 mt-1">
-                  <span className="text-lg font-medium text-green-600">
-                    Credit Note #{noteData.note_number}
-                  </span>
-                  <span className="text-gray-500">•</span>
-                  <span className="text-gray-600">{new Date(noteData.note_date).toLocaleDateString('en-IN', {
-                    day: 'numeric',
-                    month: 'short',
-                    year: 'numeric'
-                  })}</span>
-                </div>
-              </div>
-            </div>
-
-            <div className="flex items-center space-x-3">
-              <button
-                onClick={handleRefresh}
-                disabled={refreshing}
-                className="inline-flex items-center px-3 py-2 border border-green-300 rounded-md bg-white text-green-700 hover:bg-green-50 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                <RefreshCw className={`h-4 w-4 mr-1 ${refreshing ? 'animate-spin' : ''}`} />
-                {refreshing ? 'Refreshing...' : 'Refresh'}
-              </button>
-              <DatePicker
-                label="Note Date"
-                value={new Date(noteData.note_date)}
-                onChange={(date) => handleFieldChange('note_date', date ? date.toISOString().split('T')[0] : '')}
-                size="sm"
-                className="w-40"
-              />
-            </div>
-          </div>
-        </div>
+    <div className="h-full bg-gray-50">
+      <div className="h-full flex flex-col">
+        {/* Header - Using Global Component for Consistency */}
+        <ModuleHeader
+          title="Credit Note"
+          documentNumber={noteData.note_number}
+          status={showReviewPage ? 'review' : 'draft'}
+          icon={CreditCard}
+          iconColor="text-green-600"
+          onClose={onClose}
+          historyType="credit_note"
+          showSaveDraft={false}
+          onSaveDraft={() => {}}
+          actions={[
+            {
+              label: refreshing ? 'Refreshing...' : 'Refresh',
+              onClick: handleRefresh,
+              icon: RefreshCw,
+              disabled: refreshing
+            }
+          ]}
+        />
 
         {/* Keyboard Shortcuts Help */}
         <div className="bg-green-50 px-4 py-2 text-xs text-green-700 border-b border-green-200">
@@ -430,7 +432,7 @@ const CreditNoteFlow: React.FC<CreditNoteFlowProps> = ({ onClose }) => {
 
             {/* Credit Note Form or Review Page */}
             {!showReviewPage ? (
-              <CreditNoteFormPage
+              <CreditNoteFormPageCompact
                 selectedCustomer={selectedCustomer}
                 setSelectedCustomer={setSelectedCustomer}
                 noteData={noteData}
@@ -444,16 +446,11 @@ const CreditNoteFlow: React.FC<CreditNoteFlowProps> = ({ onClose }) => {
                 updateNoteItem={updateNoteItem}
                 customerInvoices={customerInvoices}
                 loadingInvoices={loadingInvoices}
-                showFilters={showFilters}
-                setShowFilters={setShowFilters}
-                invoiceFilters={invoiceFilters}
-                setInvoiceFilters={setInvoiceFilters}
-                setInvoicePage={setInvoicePage}
-                invoicePagination={invoicePagination}
-                invoicePage={invoicePage}
                 handleInvoiceSelect={handleInvoiceSelect}
                 loadingItems={loadingItems}
                 totals={totals}
+                includeGST={includeGST}
+                onIncludeGSTChange={setIncludeGST}
               />
             ) : (
               <CreditNoteReviewPage
@@ -469,50 +466,36 @@ const CreditNoteFlow: React.FC<CreditNoteFlowProps> = ({ onClose }) => {
           </div>
         </div>
 
-        {/* Footer Actions */}
-        <div className="bg-white border-t border-gray-200 px-6 py-4">
-          <div className="flex items-center justify-between space-x-4">
-            <div>
-              {showReviewPage && (
-                <Button
-                  variant="ghost"
-                  onClick={() => setShowReviewPage(false)}
-                >
-                  ← Back to Form
-                </Button>
-              )}
-            </div>
-            <div className="flex items-center space-x-4">
-              <Button
-                variant="secondary"
-                onClick={onClose}
-              >
-                Cancel
-              </Button>
-              {showReviewPage ? (
-                <Button
-                  variant="primary"
-                  onClick={handleSave}
-                  disabled={saving || !canSave()}
-                  loading={saving}
-                  icon={saving ? undefined : <Save className="w-4 h-4" />}
-                >
-                  {saving ? 'Creating...' : 'Create Credit Note'}
-                </Button>
-              ) : (
-                canShowReview() && (
-                  <Button
-                    variant="primary"
-                    onClick={() => setShowReviewPage(true)}
-                    className="px-8"
-                  >
-                    Continue to Review
-                  </Button>
-                )
-              )}
-            </div>
-          </div>
-        </div>
+        {/* Footer - Using Global Component for Consistency */}
+        <ProceedToReviewComponent
+          currentStep={showReviewPage ? 2 : 1}
+          canProceed={
+            showReviewPage 
+              ? canSave()
+              : canShowReview()
+          }
+          onBack={showReviewPage ? () => setShowReviewPage(false) : null}
+          onProceed={showReviewPage ? handleSave : () => setShowReviewPage(true)}
+          onReset={() => {
+            setSelectedCustomer(null);
+            setNoteData({
+              note_number: `CR-${Date.now().toString().slice(-6)}`,
+              note_date: new Date().toISOString().split('T')[0],
+              reason: '',
+              settlement_type: '',
+              selected_invoice: null,
+              internal_notes: '',
+              customer_remarks: ''
+            });
+            setNoteItems([]);
+            setCreateWithoutInvoice(false);
+            setShowReviewPage(false);
+          }}
+          totalItems={noteItems.length}
+          totalAmount={totals.grandTotal}
+          proceedText={showReviewPage ? 'Create Credit Note' : 'Continue to Review'}
+          saving={saving}
+        />
       </div>
     </div>
   );
