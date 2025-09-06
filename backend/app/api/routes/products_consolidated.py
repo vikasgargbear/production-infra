@@ -549,7 +549,7 @@ async def update_product(
             "barcode": "barcode",
             
             # Classification
-            "category_id": "category_id",
+            "category_id": "category_id",  # Now properly handled with valid IDs from DB
             "product_type": "product_type",
             "product_class": "product_class",
             "hsn_code": "hsn_code",
@@ -595,7 +595,16 @@ async def update_product(
         
         for frontend_field, db_field in field_mapping.items():
             if frontend_field in product and db_field not in added_fields:
-                if db_field == "composition":
+                # Special handling for category_id - must be valid or NULL
+                if db_field == "category_id":
+                    category_value = product[frontend_field]
+                    # Only set category_id if it's a valid integer > 100 (our IDs start at 103)
+                    if category_value and str(category_value).isdigit() and int(category_value) > 100:
+                        update_fields.append(f"{db_field} = :{db_field}")
+                        params[db_field] = int(category_value)
+                    # Skip invalid category_ids (like 1, 2, etc from old hardcoded values)
+                    added_fields.add(db_field)
+                elif db_field == "composition":
                     # Handle JSONB field for composition
                     update_fields.append(f"{db_field} = CAST(:{db_field} AS jsonb)")
                     if isinstance(product[frontend_field], dict):

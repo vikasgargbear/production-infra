@@ -143,34 +143,12 @@ const ProductMaster = ({
         } else if (catResponse?.data?.categories && Array.isArray(catResponse.data.categories)) {
           setCategories(catResponse.data.categories);
         } else {
-          console.log('Categories not in expected format, using defaults');
-          setCategories([
-            { category_id: 1, category_name: 'Tablet' },
-            { category_id: 2, category_name: 'Capsule' },
-            { category_id: 3, category_name: 'Syrup' },
-            { category_id: 4, category_name: 'Injection' },
-            { category_id: 5, category_name: 'Cream' },
-            { category_id: 6, category_name: 'Ointment' },
-            { category_id: 7, category_name: 'Drops' },
-            { category_id: 8, category_name: 'Powder' },
-            { category_id: 9, category_name: 'Gel' },
-            { category_id: 10, category_name: 'Lotion' }
-          ]);
+          console.log('Categories not in expected format, using empty array');
+          setCategories([]);  // No hardcoding - enterprise practice
         }
       } catch (e) {
-        console.log('Error loading categories, using defaults:', e);
-        setCategories([
-          { category_id: 1, category_name: 'Tablet' },
-          { category_id: 2, category_name: 'Capsule' },
-          { category_id: 3, category_name: 'Syrup' },
-          { category_id: 4, category_name: 'Injection' },
-          { category_id: 5, category_name: 'Cream' },
-          { category_id: 6, category_name: 'Ointment' },
-          { category_id: 7, category_name: 'Drops' },
-          { category_id: 8, category_name: 'Powder' },
-          { category_id: 9, category_name: 'Gel' },
-          { category_id: 10, category_name: 'Lotion' }
-        ]);
+        console.log('Error loading categories:', e);
+        setCategories([]);  // No hardcoding - enterprise practice
       }
       
       // Load product types from backend

@@ -14,6 +14,32 @@ from ...core.auth_utils import get_org_id_from_header
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
+@router.get("/categories")
+async def get_product_categories(
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)
+):
+    """Get all product categories from database"""
+    try:
+        query = """
+            SELECT category_id, category_name, category_description
+            FROM inventory.product_categories
+            ORDER BY category_name
+        """
+        result = db.execute(text(query))
+        categories = [
+            {
+                "category_id": row.category_id,
+                "category_name": row.category_name,
+                "category_description": row.category_description
+            }
+            for row in result
+        ]
+        return categories
+    except Exception as e:
+        logger.error(f"Error fetching categories: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to fetch categories")
+
 @router.get("/pack-types")
 async def get_pack_types(db: Session = Depends(get_db),
     org_id: str = Depends(get_org_id_from_header)):

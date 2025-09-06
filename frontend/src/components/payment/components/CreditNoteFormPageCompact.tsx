@@ -80,12 +80,13 @@ const CreditNoteFormPageCompact: React.FC<CreditNoteFormPageCompactProps> = ({
     { value: 'OTHER', label: 'Other Reason' }
   ];
 
-  // Settlement options consistent with returns module
+  // Settlement options for credit note
+  // Since this is already a credit note component, we're creating a credit note by default
+  // These options indicate how the credit will be settled
   const simplifiedSettlements = [
-    { value: 'credit_note', label: 'Credit Note' },
-    { value: 'refund', label: 'Cash Refund' },
-    { value: 'adjust_future', label: 'Adjust in Future Invoice' },
-    { value: 'replacement', label: 'Product Replacement' }
+    { value: 'adjust_future', label: 'Adjust Against Future Invoices (Recommended)' },
+    { value: 'refund', label: 'Cash Refund (Requires Approval)' },
+    { value: 'bank_transfer', label: 'Bank Transfer' }
   ];
 
   const handleRemoveItem = (itemId: string) => {

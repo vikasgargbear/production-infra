@@ -896,6 +896,22 @@ async def create_credit_note(
 ):
     """Create a new credit note"""
     try:
+        # Map frontend reason codes to backend reason codes
+        reason_code_mapping = {
+            'EXPIRED': 'EXPIRED_GOODS',
+            'DAMAGED': 'DAMAGED_GOODS',
+            'WRONG_PRODUCT': 'WRONG_BILLING',
+            'QUALITY_ISSUE': 'QUALITY_ISSUE',
+            'NOT_REQUIRED': 'OTHER',
+            'DUPLICATE_ORDER': 'OTHER',
+            'PRICE_ISSUE': 'RATE_DIFFERENCE',
+            'OTHER': 'OTHER'
+        }
+        
+        # Get the reason code from data and map it
+        frontend_reason = data.get('reason', 'OTHER')
+        mapped_reason_code = reason_code_mapping.get(frontend_reason, 'OTHER')
+        
         # Get default branch
         branch_id = get_default_branch_id(db, org_id)
         
@@ -942,7 +958,7 @@ async def create_credit_note(
             "credit_amount": data.get('credit_amount', 0),
             "tax_amount": data.get('tax_amount', 0),
             "total_amount": total_amount,
-            "reason_code": data.get('reason_code', 'OTHER'),
+            "reason_code": mapped_reason_code,
             "reason": data.get('reason', ''),
             "notes": data.get('notes'),
             "is_gst_applicable": data.get('is_gst_applicable', True),
@@ -969,6 +985,22 @@ async def create_debit_note(
 ):
     """Create a new debit note"""
     try:
+        # Map frontend reason codes to backend reason codes
+        reason_code_mapping = {
+            'EXPIRED': 'OTHER',
+            'DAMAGED': 'OTHER',
+            'WRONG_PRODUCT': 'OTHER',
+            'QUALITY_ISSUE': 'OTHER',
+            'NOT_REQUIRED': 'OTHER',
+            'DUPLICATE_ORDER': 'OTHER',
+            'PRICE_ISSUE': 'RATE_CORRECTION',
+            'OTHER': 'OTHER'
+        }
+        
+        # Get the reason code from data and map it
+        frontend_reason = data.get('reason', 'OTHER')
+        mapped_reason_code = reason_code_mapping.get(frontend_reason, 'OTHER')
+        
         # Get default branch
         branch_id = get_default_branch_id(db, org_id)
         
@@ -1015,7 +1047,7 @@ async def create_debit_note(
             "debit_amount": data.get('debit_amount', 0),
             "tax_amount": data.get('tax_amount', 0),
             "total_amount": total_amount,
-            "reason_code": data.get('reason_code', 'OTHER'),
+            "reason_code": mapped_reason_code,
             "reason": data.get('reason', ''),
             "notes": data.get('notes'),
             "is_gst_applicable": data.get('is_gst_applicable', True),
