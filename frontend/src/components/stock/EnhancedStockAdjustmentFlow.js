@@ -22,6 +22,8 @@ const EnhancedStockAdjustmentFlow = ({ onClose }) => {
 
   // Refs
   const productSearchRef = useRef(null);
+  const reasonSelectRef = useRef(null);
+  const datePickerRef = useRef(null);
 
   // Adjustment data state
   const [adjustmentData, setAdjustmentData] = useState({
@@ -437,16 +439,24 @@ Note: Use positive numbers for increase and negative for decrease. Reason codes:
       )}
 
       {/* Type & Details Section */}
-      <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-        <h3 className="text-lg font-medium text-gray-900 mb-4 flex items-center">
+      <div className="mb-6">
+        <h3 className="text-lg font-medium text-gray-900 mb-3 flex items-center">
           <Settings className="w-5 h-5 mr-2 text-blue-600" />
           Adjustment Details
         </h3>
+        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
         
         {/* Adjustment Type Selection */}
         <div className="flex items-center space-x-4 mb-6">
           <button
-            onClick={() => setAdjustmentData(prev => ({ ...prev, adjustment_type: 'increase', reason: '', items: [] }))}
+            onClick={() => {
+              setAdjustmentData(prev => ({ ...prev, adjustment_type: 'increase', reason: '', items: [] }));
+              // Auto-focus reason dropdown after selection
+              setTimeout(() => {
+                const selectElement = document.querySelector('[data-reason-select]');
+                if (selectElement) selectElement.focus();
+              }, 100);
+            }}
             className={`flex-1 flex items-center justify-center space-x-2 p-3 rounded-lg border-2 transition-all ${
               adjustmentData.adjustment_type === 'increase'
                 ? 'border-green-500 bg-green-50 text-green-700'
@@ -458,7 +468,14 @@ Note: Use positive numbers for increase and negative for decrease. Reason codes:
           </button>
 
           <button
-            onClick={() => setAdjustmentData(prev => ({ ...prev, adjustment_type: 'decrease', reason: '', items: [] }))}
+            onClick={() => {
+              setAdjustmentData(prev => ({ ...prev, adjustment_type: 'decrease', reason: '', items: [] }));
+              // Auto-focus reason dropdown after selection
+              setTimeout(() => {
+                const selectElement = document.querySelector('[data-reason-select]');
+                if (selectElement) selectElement.focus();
+              }, 100);
+            }}
             className={`flex-1 flex items-center justify-center space-x-2 p-3 rounded-lg border-2 transition-all ${
               adjustmentData.adjustment_type === 'decrease'
                 ? 'border-red-500 bg-red-50 text-red-700'
@@ -486,8 +503,19 @@ Note: Use positive numbers for increase and negative for decrease. Reason codes:
                 </button>
               </label>
               <Select
+                data-reason-select
+                autoFocus
                 value={adjustmentData.reason}
-                onChange={(value) => setAdjustmentData(prev => ({ ...prev, reason: value }))}
+                onChange={(value) => {
+                  setAdjustmentData(prev => ({ ...prev, reason: value }));
+                  // Auto-focus date picker after selecting reason
+                  if (value) {
+                    setTimeout(() => {
+                      const dateElement = document.querySelector('[data-date-picker]');
+                      if (dateElement) dateElement.focus();
+                    }, 100);
+                  }
+                }}
                 options={[
                   { value: '', label: 'Select reason...' },
                   ...(Array.isArray(adjustmentReasons[adjustmentData.adjustment_type]) 
@@ -505,13 +533,21 @@ Note: Use positive numbers for increase and negative for decrease. Reason codes:
                 Adjustment Date
               </label>
               <DatePicker
+                data-date-picker
                 value={adjustmentData.adjustment_date}
-                onChange={(date) => setAdjustmentData(prev => ({ ...prev, adjustment_date: date }))}
+                onChange={(date) => {
+                  setAdjustmentData(prev => ({ ...prev, adjustment_date: date }));
+                  // Auto-open product search after date selection if reason is set
+                  if (adjustmentData.reason && !adjustmentData.items.length) {
+                    setTimeout(() => setShowProductSearch(true), 100);
+                  }
+                }}
                 maxDate={new Date()}
               />
             </div>
           </div>
         )}
+        </div>
       </div>
       
       {/* Bulk Upload Section */}
@@ -572,11 +608,12 @@ Note: Use positive numbers for increase and negative for decrease. Reason codes:
       
       {/* Product Selection Section */}
       {adjustmentData.adjustment_type && (
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-          <h3 className="text-lg font-medium text-gray-900 flex items-center mb-4">
+        <div className="mb-6">
+          <h3 className="text-lg font-medium text-gray-900 mb-3 flex items-center">
             <Package className="w-5 h-5 mr-2 text-blue-600" />
             Products to Adjust
           </h3>
+          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
           <div className="flex items-center justify-between mb-4">
             <div className="flex gap-2">
               <button
@@ -687,6 +724,7 @@ Note: Use positive numbers for increase and negative for decrease. Reason codes:
               <p className="text-sm mt-1">Click "Add Product" to start</p>
             </div>
           )}
+          </div>
         </div>
       )}
     </div>
