@@ -209,7 +209,7 @@ async def list_current_stock(
                 COALESCE(b.total_value, 0) as total_value,
                 COALESCE(b.average_cost, 0) as average_cost
             FROM inventory.products p
-            LEFT JOIN master.categories c ON p.category_id = c.category_id
+            LEFT JOIN inventory.product_categories c ON p.category_id = c.category_id
             LEFT JOIN (
                 SELECT 
                     product_id,
