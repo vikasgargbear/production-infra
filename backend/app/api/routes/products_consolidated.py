@@ -537,54 +537,87 @@ async def update_product(
         update_fields = []
         params = {"product_id": product_id, "org_id": org_id}
         
+        # Only include fields that actually exist in inventory.products table
         field_mapping = {
+            # Basic product info
             "product_name": "product_name",
             "generic_name": "generic_name",
             "brand": "brand",
-            "brand_name": "brand",
+            "brand_name": "brand",  # Map brand_name to brand column
             "manufacturer": "manufacturer",
+            "manufacturer_code": "manufacturer_code",
+            "barcode": "barcode",
+            
+            # Classification
             "category_id": "category_id",
             "product_type": "product_type",
             "product_class": "product_class",
             "hsn_code": "hsn_code",
-            "unit": "unit",
-            "mrp": "mrp",
-            "selling_price": "selling_price",
-            "purchase_price": "purchase_price",
+            
+            # Pharmaceutical details
+            "composition": "composition",
+            "strength": "strength",
+            "drug_schedule": "drug_schedule",
+            "requires_prescription": "requires_prescription",
+            "is_narcotic": "is_narcotic",
+            "is_controlled_substance": "is_controlled_substance",
+            
+            # Tax
             "gst_percentage": "gst_percentage",
-            "gst_rate": "gst_percentage",
+            "gst_rate": "gst_percentage",  # Map gst_rate to gst_percentage
+            "cess_percentage": "cess_percentage",
+            
+            # Stock management
             "reorder_level": "reorder_level",
-            "minimum_stock_level": "reorder_level",  # Also map minimum_stock_level to reorder_level
+            "minimum_stock_level": "reorder_level",  # Map to reorder_level
+            "reorder_quantity": "reorder_quantity",
             "min_stock_quantity": "min_stock_quantity",
             "max_stock_quantity": "max_stock_quantity",
-            # storage_conditions and requires_cold_chain don't exist in current schema
-            # "storage_conditions": "storage_conditions",
-            # "requires_cold_chain": "requires_cold_chain",
-            # Pack columns moved to batches table during schema cleanup
-            # Keep pack_config for backward compatibility
-            "pack_config": "pack_config",
+            "critical_stock_level": "critical_stock_level",
+            "maintain_batch": "maintain_batch",
+            "maintain_expiry": "maintain_expiry",
+            "allow_negative_stock": "allow_negative_stock",
+            
+            # Status flags
             "is_active": "is_active",
             "is_saleable": "is_saleable",
-            "is_purchasable": "is_purchasable"
+            "is_purchasable": "is_purchasable",
+            "product_status": "product_status",
+            
+            # Note: These fields are in batches table, not products:
+            # unit, mrp, selling_price, purchase_price -> moved to batches
+            # storage_conditions, requires_cold_chain -> don't exist
+            # pack_config -> doesn't exist in current schema
         }
         
         for frontend_field, db_field in field_mapping.items():
             if frontend_field in product:
-                if db_field == "pack_config":
-                    # Handle JSONB field - use direct text casting
+                if db_field == "composition":
+                    # Handle JSONB field for composition
                     update_fields.append(f"{db_field} = CAST(:{db_field} AS jsonb)")
-                    params[db_field] = json.dumps(product[frontend_field])
+                    if isinstance(product[frontend_field], dict):
+                        params[db_field] = json.dumps(product[frontend_field])
+                    else:
+                        params[db_field] = json.dumps({"active": str(product[frontend_field])})
                 else:
                     update_fields.append(f"{db_field} = :{db_field}")
                     params[db_field] = product[frontend_field]
         
-        # Handle batch-level fields that moved from products table
+        # Handle batch-level fields that are in batches table
         batch_fields = {}
         batch_field_mapping = {
+            # Pricing fields (in batches table)
+            "mrp": "mrp_per_unit",
+            "selling_price": "sale_price_per_unit", 
+            "sale_price": "sale_price_per_unit",
+            "purchase_price": "cost_per_unit",
+            "cost_price": "cost_per_unit",
+            
+            # Pack fields
             "pack_type": "pack_type",
             "pack_size": "pack_size",
-            "units_per_pack": "units_per_pack",  # Units in each package
-            "packages_per_box": "packages_per_box",  # Number of packages per box
+            "units_per_pack": "units_per_pack",
+            "packages_per_box": "packages_per_box",
             "pack_unit_quantity": "units_per_pack",  # Legacy mapping
             "sub_unit_quantity": "tablets_per_strip",  # Legacy mapping
             "purchase_unit": "pack_uom",

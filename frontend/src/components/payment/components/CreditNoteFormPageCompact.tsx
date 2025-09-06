@@ -68,19 +68,24 @@ const CreditNoteFormPageCompact: React.FC<CreditNoteFormPageCompactProps> = ({
     }
   }, [selectedCustomer]);
 
-  // Simplified reason options (consistent with sales return)
+  // Reason options consistent with sales return module
   const simplifiedReasons = [
-    { value: 'price_adjustment', label: 'Price Adjustment' },
-    { value: 'quality_issue', label: 'Quality Issue' },
-    { value: 'return_goods', label: 'Goods Returned' },
-    { value: 'discount', label: 'Additional Discount' },
-    { value: 'other', label: 'Other' }
+    { value: 'EXPIRED', label: 'Expired Product' },
+    { value: 'DAMAGED', label: 'Damaged Product' },
+    { value: 'WRONG_PRODUCT', label: 'Wrong Product Delivered' },
+    { value: 'QUALITY_ISSUE', label: 'Quality Issue' },
+    { value: 'NOT_REQUIRED', label: 'Not Required' },
+    { value: 'DUPLICATE_ORDER', label: 'Duplicate Order' },
+    { value: 'PRICE_ISSUE', label: 'Price Issue' },
+    { value: 'OTHER', label: 'Other Reason' }
   ];
 
-  // Simplified settlement options
+  // Settlement options consistent with returns module
   const simplifiedSettlements = [
     { value: 'credit_note', label: 'Credit Note' },
-    { value: 'refund', label: 'Refund' }
+    { value: 'refund', label: 'Cash Refund' },
+    { value: 'adjust_future', label: 'Adjust in Future Invoice' },
+    { value: 'replacement', label: 'Product Replacement' }
   ];
 
   const handleRemoveItem = (itemId: string) => {
@@ -89,7 +94,7 @@ const CreditNoteFormPageCompact: React.FC<CreditNoteFormPageCompactProps> = ({
 
   const isFormValid = () => {
     return selectedCustomer && 
-           noteData.date && 
+           noteData.note_date && 
            noteData.reason && 
            noteData.settlement_type &&
            (createWithoutInvoice || noteData.selected_invoice) &&
@@ -149,11 +154,13 @@ const CreditNoteFormPageCompact: React.FC<CreditNoteFormPageCompactProps> = ({
               Select Customer
             </h3>
             <CustomerSearch
-              onSelect={(customer) => {
+              value={selectedCustomer}
+              onChange={(customer) => {
                 setSelectedCustomer(customer);
-                handleFieldChange('customer_id', customer.id);
+                if (customer) {
+                  handleFieldChange('customer_id', customer.id);
+                }
               }}
-              selectedCustomer={selectedCustomer}
               placeholder="Search by name, phone, or ID..."
               className="w-full"
             />
@@ -201,8 +208,8 @@ const CreditNoteFormPageCompact: React.FC<CreditNoteFormPageCompactProps> = ({
               <input
                 ref={dateRef}
                 type="date"
-                value={noteData.date || ''}
-                onChange={(e) => handleFieldChange('date', e.target.value)}
+                value={noteData.note_date || ''}
+                onChange={(e) => handleFieldChange('note_date', e.target.value)}
                 className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500"
               />
             </div>
@@ -262,7 +269,7 @@ const CreditNoteFormPageCompact: React.FC<CreditNoteFormPageCompactProps> = ({
       {noteData.reason && noteData.settlement_type && activeSection !== 'details' && (
         <div className="bg-green-50 rounded-lg p-2 mb-3 flex items-center justify-between">
           <div className="flex items-center space-x-4 text-sm">
-            <span className="text-gray-600">Date: <strong>{noteData.date}</strong></span>
+            <span className="text-gray-600">Date: <strong>{noteData.note_date}</strong></span>
             <span className="text-gray-600">Reason: <strong>{simplifiedReasons.find(r => r.value === noteData.reason)?.label}</strong></span>
             <span className="text-gray-600">Settlement: <strong>{simplifiedSettlements.find(s => s.value === noteData.settlement_type)?.label}</strong></span>
           </div>
