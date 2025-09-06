@@ -874,6 +874,7 @@ Note: Use positive numbers for increase and negative for decrease. Reason codes:
             <thead className="bg-gray-50">
               <tr>
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Product</th>
+                <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Batch</th>
                 <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Current Stock</th>
                 <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Adjustment</th>
                 <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">New Stock</th>
@@ -885,6 +886,12 @@ Note: Use positive numbers for increase and negative for decrease. Reason codes:
                   <td className="px-4 py-3">
                     <div className="font-medium text-gray-900">{item.product_name}</div>
                     <div className="text-sm text-gray-500">{item.product_code}</div>
+                  </td>
+                  <td className="px-4 py-3 text-center">
+                    <div className="font-medium">{item.batch_number || 'Default'}</div>
+                    {item.expiry_date && (
+                      <div className="text-xs text-gray-500">Exp: {new Date(item.expiry_date).toLocaleDateString()}</div>
+                    )}
                   </td>
                   <td className="px-4 py-3 text-center">{item.current_stock}</td>
                   <td className="px-4 py-3 text-center">
