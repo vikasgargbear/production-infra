@@ -34,6 +34,32 @@ Body:
 - Add comments for complex logic
 - Keep related code together
 
+## NO HARDCODING - Best Practices
+- **Create proper config structure**:
+  ```python
+  # backend/app/core/constants.py
+  class OrderStatus:
+      PENDING = "pending"
+      COMPLETED = "completed"
+  ```
+  ```javascript
+  // frontend/src/config/constants.js
+  export const API_ENDPOINTS = {
+      BASE_URL: process.env.REACT_APP_API_URL
+  };
+  ```
+- **Use environment variables for**:
+  - API URLs, database connections
+  - Feature flags, API keys
+  - Any deployment-specific values
+- **Database for business rules**:
+  - Tax rates, discount limits
+  - Default values, business constants
+- **NEVER hardcode**:
+  - Magic numbers (use named constants)
+  - Status strings (use enums)
+  - IDs of any kind (use lookups/context)
+
 ## Database Changes
 - Must get approval before altering schema
 - Use migrations when changing structure

@@ -9,6 +9,7 @@ import {
 } from '../global';
 import { stockApi } from '../../services/api/modules/stock.api';
 import offlineStorage from '../../services/offlineStorage';
+import { ADJUSTMENT_TYPES, ADJUSTMENT_TYPE_LABELS, ADJUSTMENT_REASONS } from '../../constants/stockAdjustment';
 
 const EnhancedStockAdjustmentFlow = ({ onClose }) => {
   const [currentStep, setCurrentStep] = useState(1);
@@ -50,70 +51,9 @@ const EnhancedStockAdjustmentFlow = ({ onClose }) => {
     }));
   }, []);
 
-  // Load adjustment reasons from backend with offline caching
+  // Use constants for adjustment reasons - enterprise pattern
   useEffect(() => {
-    const loadAdjustmentReasons = async () => {
-      try {
-        const [increaseResponse, decreaseResponse] = await Promise.all([
-          stockApi.getMovementReasons('increase'),
-          stockApi.getMovementReasons('decrease')
-        ]);
-        
-        const reasons = {
-          increase: Array.isArray(increaseResponse?.data) ? increaseResponse.data : increaseResponse?.data?.reasons || [],
-          decrease: Array.isArray(decreaseResponse?.data) ? decreaseResponse.data : decreaseResponse?.data?.reasons || []
-        };
-        
-        setAdjustmentReasons(reasons);
-        await offlineStorage.storeOffline('adjustment_reasons', reasons, { persistent: true });
-        
-      } catch (error) {
-        console.error('Error loading adjustment reasons:', error);
-        
-        try {
-          const cached = await offlineStorage.getOffline('adjustment_reasons', { persistent: true });
-          if (cached && cached.data) {
-            setAdjustmentReasons(cached.data);
-          } else {
-            // Ultimate fallback to basic reasons if no cache
-            setAdjustmentReasons({
-              increase: [
-                { value: 'physical_count', label: 'Physical Count Correction' },
-                { value: 'found_stock', label: 'Found Missing Stock' },
-                { value: 'return_from_customer', label: 'Customer Return' },
-                { value: 'other_increase', label: 'Other Increase' }
-              ],
-              decrease: [
-                { value: 'damage', label: 'Damaged Goods' },
-                { value: 'expiry', label: 'Expired Products' },
-                { value: 'theft', label: 'Theft/Loss' },
-                { value: 'sample', label: 'Sample Given' },
-                { value: 'other_decrease', label: 'Other Decrease' }
-              ]
-            });
-          }
-        } catch (cacheError) {
-          console.error('Error loading from cache:', cacheError);
-          setAdjustmentReasons({
-            increase: [
-              { value: 'physical_count', label: 'Physical Count Correction' },
-              { value: 'found_stock', label: 'Found Missing Stock' },
-              { value: 'return_from_customer', label: 'Customer Return' },
-              { value: 'other_increase', label: 'Other Increase' }
-            ],
-            decrease: [
-              { value: 'damage', label: 'Damaged Goods' },
-              { value: 'expiry', label: 'Expired Products' },
-              { value: 'theft', label: 'Theft/Loss' },
-              { value: 'sample', label: 'Sample Given' },
-              { value: 'other_decrease', label: 'Other Decrease' }
-            ]
-          });
-        }
-      }
-    };
-
-    loadAdjustmentReasons();
+    setAdjustmentReasons(ADJUSTMENT_REASONS);
   }, []);
 
   // Auto-open product search when both adjustment type and reason are selected
@@ -469,10 +409,6 @@ Note: Use positive numbers for increase and negative for decrease. Reason codes:
   // Create content for step 1
   const createContent = (
     <div className="space-y-6">
-      <div className="text-sm text-blue-700 mb-4">
-        Keyboard shortcuts: <strong>Ctrl+U</strong> - Bulk Upload | <strong>Ctrl+A</strong> - Add Product | <strong>Ctrl+S</strong> - Proceed | <strong>Esc</strong> - Close
-      </div>
-
       {/* Loading State */}
       {isLoading && (
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-8">
@@ -510,7 +446,7 @@ Note: Use positive numbers for increase and negative for decrease. Reason codes:
         {/* Adjustment Type Selection */}
         <div className="flex items-center space-x-4 mb-6">
           <button
-            onClick={() => setAdjustmentData(prev => ({ ...prev, adjustment_type: 'increase', items: [] }))}
+            onClick={() => setAdjustmentData(prev => ({ ...prev, adjustment_type: 'increase', reason: '', items: [] }))}
             className={`flex-1 flex items-center justify-center space-x-2 p-3 rounded-lg border-2 transition-all ${
               adjustmentData.adjustment_type === 'increase'
                 ? 'border-green-500 bg-green-50 text-green-700'
@@ -522,7 +458,7 @@ Note: Use positive numbers for increase and negative for decrease. Reason codes:
           </button>
 
           <button
-            onClick={() => setAdjustmentData(prev => ({ ...prev, adjustment_type: 'decrease', items: [] }))}
+            onClick={() => setAdjustmentData(prev => ({ ...prev, adjustment_type: 'decrease', reason: '', items: [] }))}
             className={`flex-1 flex items-center justify-center space-x-2 p-3 rounded-lg border-2 transition-all ${
               adjustmentData.adjustment_type === 'decrease'
                 ? 'border-red-500 bg-red-50 text-red-700'

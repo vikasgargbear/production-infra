@@ -49,15 +49,23 @@ Ensure all features work correctly through comprehensive testing.
 
 ## Test Execution
 ```bash
-# Backend tests
+# Backend tests (use Railway for API tests)
 cd backend && pytest
 
 # Frontend tests  
 cd frontend && npm test
 
-# Integration tests
+# Integration tests (against Railway)
+# Use actual org_id UUID: e78d6777-35f6-4b19-994f-caaede2f021a
+# Base URL: https://pharma-backend-production-0c09.up.railway.app
 python tests/integration_test.py
 ```
+
+## Testing Rules
+- **NO HARDCODED TEST DATA in production code**
+- Test data belongs in test files only
+- Use environment variables or test configs
+- Clean up any hardcoded values after testing
 
 ## Workflow
 1. Developer requests test run

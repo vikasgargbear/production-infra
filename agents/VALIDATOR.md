@@ -32,7 +32,25 @@ Scan entire repo every cycle to ensure code quality and consistency.
 - CRUD operations handle all required fields
 - Foreign key relationships are valid
 
-### 4. Import Validation
+### 4. Code Quality - NO HARDCODING
+- **Check for ANY hardcoded values**:
+  - Magic numbers without constants
+  - Hardcoded URLs (should use env vars)
+  - Status strings not using enums
+  - IDs of any kind (org, user, branch, etc.)
+  - Business rules not in config/DB
+  - API keys/secrets in code
+- **Verify proper structure exists**:
+  - Constants files for enums/status values
+  - Config files for settings
+  - Environment variables for deployment values
+- **Flag violations in report with severity**:
+  - CRITICAL: Secrets/API keys
+  - HIGH: IDs and URLs
+  - MEDIUM: Business constants
+  - LOW: UI strings
+
+### 5. Import Validation
 - No circular dependencies
 - All imports resolve correctly
 - Unused imports flagged

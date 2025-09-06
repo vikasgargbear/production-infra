@@ -36,3 +36,33 @@ You are part of a multi-agent loop that maintains this repo.
 - Incremental improvements over big rewrites
 - Document decisions in /reports
 - Keep the structure practical, not theoretical
+
+## Testing Guidelines
+
+- **ALWAYS test backend on Railway**: https://pharma-backend-production-0c09.up.railway.app
+- Never use localhost for backend testing unless explicitly specified
+- For testing only: Use X-Org-Id: e78d6777-35f6-4b19-994f-caaede2f021a (actual UUID from DB)
+- Test data flow end-to-end after changes
+
+## NO HARDCODING RULE (CRITICAL)
+
+- **NEVER hardcode ANY values in production code**:
+  - IDs: Must come from auth context, DB lookups, or utilities
+  - URLs: Use environment variables or config files
+  - API keys/secrets: Use environment variables ONLY
+  - Business constants: Use config files or database settings
+  - Status values: Use enums or constants files
+  - Error messages: Use message catalogs or constants
+  - Default values: Use config or database defaults
+  
+- **Proper structure for necessary constants**:
+  - `/backend/app/core/constants.py` - Backend constants
+  - `/frontend/src/config/constants.js` - Frontend constants
+  - `/frontend/src/config/settings.js` - App settings
+  - `.env` files - Environment-specific values
+  - Database settings tables - Business rules/defaults
+
+- **Testing exceptions**:
+  - Hardcoded values OK for testing/debugging ONLY
+  - Must be removed before committing
+  - Use TODO comments: `// TODO: Remove hardcoded value after testing`

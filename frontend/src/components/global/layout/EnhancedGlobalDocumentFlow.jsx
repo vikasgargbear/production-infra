@@ -137,6 +137,15 @@ const EnhancedGlobalDocumentFlow = ({
       serviceMethod: 'generatePurchaseReturnNumber',
       saveLabel: 'Process Return',
       historyType: 'purchase-return'
+    },
+    'stock-adjustment': {
+      title: 'Stock Adjustment',
+      icon: 'Package',
+      color: 'amber',
+      prefix: 'ADJ',
+      serviceMethod: 'generateAdjustmentNumber',
+      saveLabel: 'Confirm Adjustment',
+      historyType: 'stock-adjustment'
     }
   };
 
