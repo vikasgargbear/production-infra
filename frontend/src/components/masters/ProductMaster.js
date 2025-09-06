@@ -5,7 +5,7 @@ import {
   FileText, Search, Plus, Trash2, Edit, Eye, ChevronDown, ChevronUp,
   Thermometer, Pill, Box, Database, CheckCircle, XCircle
 } from 'lucide-react';
-import { productsApi, metadataApi } from '../../services/api';
+import { productsApi, metadataApi, apiClient } from '../../services/api';
 import { useToast } from '../global';
 
 const ProductMaster = ({ 
@@ -136,7 +136,7 @@ const ProductMaster = ({
     try {
       // Load categories from /products/master/categories endpoint (same as ProductCreationModal)
       try {
-        const catResponse = await productsApi.get('/products/master/categories');
+        const catResponse = await apiClient.get('/products/master/categories');
         if (catResponse.data?.success && Array.isArray(catResponse.data?.data)) {
           setCategories(catResponse.data.data);
           console.log('Categories loaded:', catResponse.data.data.length);
@@ -151,7 +151,7 @@ const ProductMaster = ({
       
       // Load product types from /products/master/types endpoint (same as ProductCreationModal)
       try {
-        const typeResponse = await productsApi.get('/products/master/types');
+        const typeResponse = await apiClient.get('/products/master/types');
         if (typeResponse.data?.success && Array.isArray(typeResponse.data?.data)) {
           setProductTypes(typeResponse.data.data);
           console.log('Product types loaded:', typeResponse.data.data.length);
@@ -166,7 +166,7 @@ const ProductMaster = ({
 
       // Load product classes from /products/master/classes endpoint
       try {
-        const classResponse = await productsApi.get('/products/master/classes');
+        const classResponse = await apiClient.get('/products/master/classes');
         if (classResponse.data?.success && Array.isArray(classResponse.data?.data)) {
           setProductClasses(classResponse.data.data);
           console.log('Product classes loaded:', classResponse.data.data.length);
