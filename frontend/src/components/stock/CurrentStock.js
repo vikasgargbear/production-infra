@@ -199,8 +199,12 @@ const CurrentStock = ({ open = true, onClose }) => {
           product_id: stock.product_id,
           product_name: stock.product_name,
           product_code: stock.product_code,
+          generic_name: stock.generic_name,
           category: stock.category || 'General',  // Backend now returns category name directly
+          product_type: stock.product_type || 'standard',
+          product_class: stock.product_class || 'medicine',
           manufacturer: stock.manufacturer,
+          brand: stock.brand,
           hsn_code: stock.hsn_code,
           unit: stock.unit || 'Units',
           current_stock: stock.total_quantity || 0,

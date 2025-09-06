@@ -196,9 +196,10 @@ async def list_current_stock(
             SELECT 
                 p.product_id, p.product_code, p.product_name, p.category_id,
                 COALESCE(c.category_name, 'General') as category,
-                p.manufacturer, p.hsn_code, p.unit,
-                p.mrp, p.selling_price, p.purchase_price,
-                p.minimum_stock_level as reorder_level,
+                p.product_type, p.product_class,
+                p.manufacturer, p.brand, p.generic_name,
+                p.hsn_code,
+                p.reorder_level,
                 COALESCE(b.total_quantity, 0) as total_quantity,
                 COALESCE(b.available_quantity, 0) as available_quantity,
                 COALESCE(b.allocated_quantity, 0) as allocated_quantity,
