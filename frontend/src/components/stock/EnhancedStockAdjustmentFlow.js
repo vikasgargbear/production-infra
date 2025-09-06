@@ -40,7 +40,6 @@ const EnhancedStockAdjustmentFlow = ({ onClose }) => {
   const [showBulkUpload, setShowBulkUpload] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState(null);
   const [showBatchSelector, setShowBatchSelector] = useState(false);
-  const [adjustmentQuantity, setAdjustmentQuantity] = useState(1);
 
   // Generate adjustment number
   const generateAdjustmentNumber = () => {
@@ -128,10 +127,9 @@ const EnhancedStockAdjustmentFlow = ({ onClose }) => {
     setSelectedProduct(product);
     setShowProductSearch(false);
     setShowBatchSelector(true);
-    setAdjustmentQuantity(1); // Reset quantity for new product
   };
 
-  // Step 2: Batch selection with quantity
+  // Step 2: Quick batch selection - just add with default qty of 1
   const handleBatchSelect = (batch) => {
     if (!batch || !selectedProduct) return;
     
@@ -143,12 +141,12 @@ const EnhancedStockAdjustmentFlow = ({ onClose }) => {
       batch_id: batch.batch_id,
       batch_number: batch.batch_number,
       current_stock: batch.quantity_available || 0,
-      adjustment_quantity: adjustmentQuantity,
+      adjustment_quantity: 1, // Default quantity, editable in table
       unit: selectedProduct.unit || batch.base_uom || 'Units',
       expiry_date: batch.expiry_date,
       after_adjustment: adjustmentData.adjustment_type === 'increase' 
-        ? (batch.quantity_available || 0) + adjustmentQuantity
-        : Math.max(0, (batch.quantity_available || 0) - adjustmentQuantity)
+        ? (batch.quantity_available || 0) + 1
+        : Math.max(0, (batch.quantity_available || 0) - 1)
     };
     
     setAdjustmentData(prev => ({
@@ -159,9 +157,8 @@ const EnhancedStockAdjustmentFlow = ({ onClose }) => {
     // Reset states
     setSelectedProduct(null);
     setShowBatchSelector(false);
-    setAdjustmentQuantity(1);
     
-    toast.success(`Added ${selectedProduct.product_name} to adjustment list`);
+    toast.success(`Added ${selectedProduct.product_name} - edit quantity in table`);
   };
 
   const handleRefresh = async () => {
@@ -671,59 +668,24 @@ Note: Use positive numbers for increase and negative for decrease. Reason codes:
             </div>
           )}
           
-          {/* Batch Selection with Quantity Input */}
+          {/* Quick Batch Selection */}
           {showBatchSelector && selectedProduct && (
-            <div className="mb-4 p-4 bg-blue-50 rounded-lg border border-blue-200">
-              <div className="flex items-start justify-between mb-3">
-                <div>
-                  <h4 className="font-medium text-gray-900">Select Batch & Quantity</h4>
-                  <p className="text-sm text-gray-600 mt-1">
-                    Product: <span className="font-medium">{selectedProduct.product_name}</span>
-                  </p>
-                </div>
+            <div className="mb-4">
+              <div className="flex items-center justify-between mb-2">
+                <h4 className="text-sm font-medium text-gray-700">
+                  Select batch for <span className="font-semibold">{selectedProduct.product_name}</span>
+                </h4>
                 <button
                   onClick={() => {
                     setShowBatchSelector(false);
                     setSelectedProduct(null);
                   }}
-                  className="p-1 hover:bg-blue-100 rounded"
+                  className="p-1 hover:bg-gray-100 rounded"
                 >
-                  <X className="w-4 h-4 text-gray-600" />
+                  <X className="w-4 h-4 text-gray-500" />
                 </button>
               </div>
               
-              {/* Quantity Input */}
-              <div className="mb-4">
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Adjustment Quantity
-                </label>
-                <div className="flex items-center space-x-2">
-                  <button
-                    onClick={() => setAdjustmentQuantity(Math.max(1, adjustmentQuantity - 1))}
-                    className="px-3 py-2 border border-gray-300 rounded-lg hover:bg-gray-50"
-                  >
-                    -
-                  </button>
-                  <input
-                    type="number"
-                    value={adjustmentQuantity}
-                    onChange={(e) => setAdjustmentQuantity(Math.max(1, parseInt(e.target.value) || 1))}
-                    className="w-24 px-3 py-2 text-center border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                    min="1"
-                  />
-                  <button
-                    onClick={() => setAdjustmentQuantity(adjustmentQuantity + 1)}
-                    className="px-3 py-2 border border-gray-300 rounded-lg hover:bg-gray-50"
-                  >
-                    +
-                  </button>
-                  <span className="text-sm text-gray-600">
-                    {adjustmentData.adjustment_type === 'increase' ? '+' : '-'}{adjustmentQuantity} units
-                  </span>
-                </div>
-              </div>
-              
-              {/* Batch Selector */}
               <BatchSelector
                 show={true}
                 mode="inline"
@@ -735,8 +697,8 @@ Note: Use positive numbers for increase and negative for decrease. Reason codes:
                 }}
                 showExpiryStatus={true}
                 filterExpired={false}
-                maxHeight="300px"
-                className="border border-gray-200 rounded-lg"
+                maxHeight="250px"
+                className="border border-gray-200 rounded-lg bg-white"
               />
             </div>
           )}
