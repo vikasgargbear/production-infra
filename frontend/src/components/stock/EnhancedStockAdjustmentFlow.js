@@ -121,8 +121,7 @@ const EnhancedStockAdjustmentFlow = ({ onClose }) => {
       
       // Get current stock info
       const stockResponse = await stockApi.getCurrentStock({ 
-        product_id: product.product_id || null,
-        include_batches: false 
+        product_id: product.product_id || null
       });
       const stockData = stockResponse.data?.[0] || {};
       
@@ -609,12 +608,11 @@ Note: Use positive numbers for increase and negative for decrease. Reason codes:
       {/* Product Selection Section */}
       {adjustmentData.adjustment_type && (
         <div className="mb-6">
-          <h3 className="text-lg font-medium text-gray-900 mb-3 flex items-center">
-            <Package className="w-5 h-5 mr-2 text-blue-600" />
-            Products to Adjust
-          </h3>
-          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-          <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-lg font-medium text-gray-900 flex items-center">
+              <Package className="w-5 h-5 mr-2 text-blue-600" />
+              Products to Adjust
+            </h3>
             <div className="flex gap-2">
               <button
                 onClick={() => {
@@ -622,7 +620,7 @@ Note: Use positive numbers for increase and negative for decrease. Reason codes:
                   setShowBulkUpload(false);
                 }}
                 disabled={!adjustmentData.reason}
-                className="flex items-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="flex items-center space-x-2 px-3 py-1.5 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <Plus className="w-4 h-4" />
                 <span>Add Product</span>
@@ -632,13 +630,14 @@ Note: Use positive numbers for increase and negative for decrease. Reason codes:
                   setShowBulkUpload(!showBulkUpload);
                   setShowProductSearch(false);
                 }}
-                className="flex items-center space-x-2 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50"
+                className="flex items-center space-x-2 px-3 py-1.5 bg-purple-600 text-white text-sm rounded-lg hover:bg-purple-700"
               >
                 <Upload className="w-4 h-4" />
                 <span>Bulk Upload</span>
               </button>
             </div>
           </div>
+          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
           
           {/* Product Search Modal */}
           {showProductSearch && (

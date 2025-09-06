@@ -219,13 +219,21 @@ export const stockApi = {
     return apiClient.get(`${ENDPOINTS.STOCK.BASE}/analytics/by-category`);
   },
 
-  // Current stock endpoints - Use products API which works reliably
+  // Current stock endpoints - Use inventory/stock/current endpoint
   getCurrentStock: async (params = {}) => {
     try {
-      // Use products endpoint which includes stock data and works reliably
-      const response = await apiClient.get(ENDPOINTS.PRODUCTS.BASE, { 
+      // If specific product_id is requested, use the single product endpoint
+      if (params.product_id) {
+        const response = await apiClient.get(`/inventory/stock/current/${params.product_id}`);
+        return {
+          success: true,
+          data: [response.data] // Return as array for consistency
+        };
+      }
+      
+      // Otherwise use the list endpoint
+      const response = await apiClient.get('/inventory/stock/current', { 
         params: {
-          include_stock: true,
           limit: params.limit || 500,
           ...params
         }
@@ -235,10 +243,7 @@ export const stockApi = {
       if (response.data) {
         return {
           success: true,
-          data: {
-            products: response.data.products || response.data,
-            total: response.data.total || (response.data.products ? response.data.products.length : response.data.length)
-          }
+          data: response.data.stocks || response.data
         };
       }
       

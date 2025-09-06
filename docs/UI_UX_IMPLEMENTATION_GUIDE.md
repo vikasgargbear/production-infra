@@ -72,7 +72,41 @@ const handleTypeSelection = (type) => {
 - Improves accessibility
 - Creates intuitive flow
 
-### 3. Enterprise Constants Pattern
+### 3. Title Bar Actions Pattern
+**Place action buttons in title bar for better space usage**
+
+#### Implementation:
+```jsx
+<div className="mb-6">
+  <div className="flex items-center justify-between mb-3">
+    <h3 className="text-lg font-medium text-gray-900 flex items-center">
+      <Icon className="w-5 h-5 mr-2 text-blue-600" />
+      Section Title
+    </h3>
+    <div className="flex gap-2">
+      <button className="flex items-center space-x-2 px-3 py-1.5 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700">
+        <Plus className="w-4 h-4" />
+        <span>Add Item</span>
+      </button>
+      <button className="flex items-center space-x-2 px-3 py-1.5 bg-purple-600 text-white text-sm rounded-lg hover:bg-purple-700">
+        <Upload className="w-4 h-4" />
+        <span>Bulk Upload</span>
+      </button>
+    </div>
+  </div>
+  <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+    {/* Content */}
+  </div>
+</div>
+```
+
+**Benefits:**
+- Saves space inside cards
+- Actions immediately visible
+- Better visual hierarchy
+- Consistent with modern UI patterns
+
+### 4. Enterprise Constants Pattern
 **Never hardcode values - use centralized constants**
 
 #### File Structure:
@@ -109,7 +143,7 @@ import { ADJUSTMENT_REASONS } from '../../constants/stockAdjustment';
 const reasons = ADJUSTMENT_REASONS[adjustmentType];
 ```
 
-### 4. Conditional Display Pattern
+### 5. Conditional Display Pattern
 **Show only relevant options based on user selections**
 
 ```jsx
@@ -128,7 +162,7 @@ const handleTypeChange = (newType) => {
 };
 ```
 
-### 5. Visual Feedback Pattern
+### 6. Visual Feedback Pattern
 **Provide immediate visual feedback for user actions**
 
 ```jsx
