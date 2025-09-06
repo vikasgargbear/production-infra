@@ -590,8 +590,11 @@ async def update_product(
             # pack_config -> doesn't exist in current schema
         }
         
+        # Track which DB fields have been added to avoid duplicates
+        added_fields = set()
+        
         for frontend_field, db_field in field_mapping.items():
-            if frontend_field in product:
+            if frontend_field in product and db_field not in added_fields:
                 if db_field == "composition":
                     # Handle JSONB field for composition
                     update_fields.append(f"{db_field} = CAST(:{db_field} AS jsonb)")
@@ -602,6 +605,7 @@ async def update_product(
                 else:
                     update_fields.append(f"{db_field} = :{db_field}")
                     params[db_field] = product[frontend_field]
+                added_fields.add(db_field)
         
         # Handle batch-level fields that are in batches table
         batch_fields = {}
