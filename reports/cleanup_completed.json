@@ -1,0 +1,86 @@
+{
+  "cleanup_date": "2025-01-06",
+  "agent": "CLEANUP",
+  "summary": {
+    "files_archived": 90,
+    "space_recovered": "~2.5 MB",
+    "root_files_before": 36,
+    "root_files_after": 12
+  },
+  "archived_categories": {
+    "system_files": {
+      "count": 24,
+      "description": ".DS_Store macOS metadata files",
+      "location": "/archive/temp/system-files/"
+    },
+    "log_files": {
+      "count": 2,
+      "description": "Old log files from backend and server",
+      "location": "/archive/temp/logs/"
+    },
+    "test_html": {
+      "count": 15,
+      "description": "HTML test files from root and frontend",
+      "location": "/archive/temp/test-html/"
+    },
+    "test_scripts": {
+      "count": 7,
+      "description": "Test scripts (.py, .sh, .sql) from root",
+      "location": "/archive/temp/test-scripts/"
+    },
+    "database_scripts": {
+      "count": 6,
+      "description": "Database utility scripts from root",
+      "location": "/archive/temp/db-scripts/"
+    },
+    "old_documentation": {
+      "count": 11,
+      "description": "Old TODO and planning documents",
+      "location": "/archive/temp/old-docs/"
+    },
+    "test_data": {
+      "count": 1,
+      "description": "Frontend test-data directory",
+      "location": "/archive/temp/test-data/"
+    },
+    "duplicate_scripts": {
+      "count": 1,
+      "description": "Duplicate cleanup scripts directory",
+      "location": "/archive/temp/duplicate-scripts/"
+    },
+    "old_backend_routes": {
+      "count": 2,
+      "description": "Old party_ledger implementations",
+      "location": "/archive/duplicates/backend/"
+    },
+    "old_reports": {
+      "count": 2,
+      "description": "Old analysis reports",
+      "location": "/archive/reports/2025-01-06/"
+    }
+  },
+  "kept_files": [
+    "README.md",
+    "RAILWAY_DEPLOYMENT.md",
+    "RAILWAY_CLI_GUIDE.md",
+    "QUICK_REFERENCE.md",
+    "COMPREHENSIVE_PROJECT_DOCUMENTATION.md",
+    "DOCUMENTATION_INDEX.md",
+    "FOLDER_STRUCTURE.md",
+    "CRITICAL_COMPONENTS.md",
+    "INVENTORY_WORKFLOWS.md",
+    "PAYMENT_TRACKING_SUMMARY.md",
+    "CLAUDE.md",
+    "CLAUDE.local.md"
+  ],
+  "rollback": {
+    "git_tag": "pre-cleanup-20250106-*",
+    "archive_location": "/archive/",
+    "can_restore": true
+  },
+  "recommendations": {
+    "delete_after": "30 days",
+    "review_temp_folder": "/archive/temp/",
+    "permanent_archives": "/archive/duplicates/"
+  }
+}

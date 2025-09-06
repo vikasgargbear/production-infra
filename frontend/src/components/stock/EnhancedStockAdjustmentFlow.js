@@ -4,7 +4,7 @@ import {
   Plus, X, Trash2, Upload, Download, Loader2, RefreshCw
 } from 'lucide-react';
 import { 
-  EnhancedGlobalDocumentFlow, ProductSearchSimple, Select, DatePicker, 
+  EnhancedGlobalDocumentFlow, ProductSearchSimple, BatchSelector, Select, DatePicker, 
   NotesSection, useToast
 } from '../global';
 import { stockApi } from '../../services/api/modules/stock.api';
@@ -38,6 +38,9 @@ const EnhancedStockAdjustmentFlow = ({ onClose }) => {
   const [adjustmentReasons, setAdjustmentReasons] = useState({ increase: [], decrease: [] });
   const [showProductSearch, setShowProductSearch] = useState(false);
   const [showBulkUpload, setShowBulkUpload] = useState(false);
+  const [selectedProduct, setSelectedProduct] = useState(null);
+  const [showBatchSelector, setShowBatchSelector] = useState(false);
+  const [adjustmentQuantity, setAdjustmentQuantity] = useState(1);
 
   // Generate adjustment number
   const generateAdjustmentNumber = () => {
@@ -112,49 +115,53 @@ const EnhancedStockAdjustmentFlow = ({ onClose }) => {
     return () => document.removeEventListener('keydown', handleKeyDown);
   }, [currentStep, showProductSearch, showBulkUpload, adjustmentData.adjustment_type, adjustmentData.reason, onClose]);
 
-  const handleProductSelect = async (product) => {
+  // Step 1: Product selection - just store the product and show batch selector
+  const handleProductSelect = (product) => {
     if (!product) return;
     
-    try {
-      setIsLoading(true);
-      setError(null);
-      
-      // Get current stock info
-      const stockResponse = await stockApi.getCurrentStock({ 
-        product_id: product.product_id || null
-      });
-      const stockData = stockResponse.data?.[0] || {};
-      
-      // Check if product already added
-      if ((adjustmentData.items || []).find(item => item.product_id === product.product_id)) {
-        toast.error('Product already added');
-        return;
-      }
-      
-      const newItem = {
-        id: Date.now(),
-        product_id: product.product_id || null,
-        product_name: product.product_name || product.name,
-        product_code: product.product_code || product.code,
-        current_stock: stockData.current_stock || 0,
-        adjustment_quantity: 1,
-        unit: product.unit || 'Units',
-        after_adjustment: adjustmentData.adjustment_type === 'increase' 
-          ? (stockData.current_stock || 0) + 1
-          : Math.max(0, (stockData.current_stock || 0) - 1)
-      };
-      
-      setAdjustmentData(prev => ({
-        ...prev,
-        items: [...prev.items, newItem]
-      }));
-      setShowProductSearch(false);
-    } catch (error) {
-      console.error('Error adding product:', error);
-      setError(error.message || 'Failed to get stock information');
-    } finally {
-      setIsLoading(false);
+    // Check if product already added
+    if ((adjustmentData.items || []).find(item => item.product_id === product.product_id)) {
+      toast.error('Product already added to adjustment list');
+      return;
     }
+    
+    setSelectedProduct(product);
+    setShowProductSearch(false);
+    setShowBatchSelector(true);
+    setAdjustmentQuantity(1); // Reset quantity for new product
+  };
+
+  // Step 2: Batch selection with quantity
+  const handleBatchSelect = (batch) => {
+    if (!batch || !selectedProduct) return;
+    
+    const newItem = {
+      id: Date.now(),
+      product_id: selectedProduct.product_id,
+      product_name: selectedProduct.product_name || selectedProduct.name,
+      product_code: selectedProduct.product_code || selectedProduct.code,
+      batch_id: batch.batch_id,
+      batch_number: batch.batch_number,
+      current_stock: batch.quantity_available || 0,
+      adjustment_quantity: adjustmentQuantity,
+      unit: selectedProduct.unit || batch.base_uom || 'Units',
+      expiry_date: batch.expiry_date,
+      after_adjustment: adjustmentData.adjustment_type === 'increase' 
+        ? (batch.quantity_available || 0) + adjustmentQuantity
+        : Math.max(0, (batch.quantity_available || 0) - adjustmentQuantity)
+    };
+    
+    setAdjustmentData(prev => ({
+      ...prev,
+      items: [...prev.items, newItem]
+    }));
+    
+    // Reset states
+    setSelectedProduct(null);
+    setShowBatchSelector(false);
+    setAdjustmentQuantity(1);
+    
+    toast.success(`Added ${selectedProduct.product_name} to adjustment list`);
   };
 
   const handleRefresh = async () => {
@@ -664,6 +671,76 @@ Note: Use positive numbers for increase and negative for decrease. Reason codes:
             </div>
           )}
           
+          {/* Batch Selection with Quantity Input */}
+          {showBatchSelector && selectedProduct && (
+            <div className="mb-4 p-4 bg-blue-50 rounded-lg border border-blue-200">
+              <div className="flex items-start justify-between mb-3">
+                <div>
+                  <h4 className="font-medium text-gray-900">Select Batch & Quantity</h4>
+                  <p className="text-sm text-gray-600 mt-1">
+                    Product: <span className="font-medium">{selectedProduct.product_name}</span>
+                  </p>
+                </div>
+                <button
+                  onClick={() => {
+                    setShowBatchSelector(false);
+                    setSelectedProduct(null);
+                  }}
+                  className="p-1 hover:bg-blue-100 rounded"
+                >
+                  <X className="w-4 h-4 text-gray-600" />
+                </button>
+              </div>
+              
+              {/* Quantity Input */}
+              <div className="mb-4">
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Adjustment Quantity
+                </label>
+                <div className="flex items-center space-x-2">
+                  <button
+                    onClick={() => setAdjustmentQuantity(Math.max(1, adjustmentQuantity - 1))}
+                    className="px-3 py-2 border border-gray-300 rounded-lg hover:bg-gray-50"
+                  >
+                    -
+                  </button>
+                  <input
+                    type="number"
+                    value={adjustmentQuantity}
+                    onChange={(e) => setAdjustmentQuantity(Math.max(1, parseInt(e.target.value) || 1))}
+                    className="w-24 px-3 py-2 text-center border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                    min="1"
+                  />
+                  <button
+                    onClick={() => setAdjustmentQuantity(adjustmentQuantity + 1)}
+                    className="px-3 py-2 border border-gray-300 rounded-lg hover:bg-gray-50"
+                  >
+                    +
+                  </button>
+                  <span className="text-sm text-gray-600">
+                    {adjustmentData.adjustment_type === 'increase' ? '+' : '-'}{adjustmentQuantity} units
+                  </span>
+                </div>
+              </div>
+              
+              {/* Batch Selector */}
+              <BatchSelector
+                show={true}
+                mode="inline"
+                product={selectedProduct}
+                onBatchSelect={handleBatchSelect}
+                onClose={() => {
+                  setShowBatchSelector(false);
+                  setSelectedProduct(null);
+                }}
+                showExpiryStatus={true}
+                filterExpired={false}
+                maxHeight="300px"
+                className="border border-gray-200 rounded-lg"
+              />
+            </div>
+          )}
+          
           {/* Selected Products Table */}
           {adjustmentData.items.length > 0 ? (
             <div className="overflow-x-auto">
@@ -671,6 +748,7 @@ Note: Use positive numbers for increase and negative for decrease. Reason codes:
                 <thead className="bg-gray-50">
                   <tr>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Product</th>
+                    <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Batch</th>
                     <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Current Stock</th>
                     <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Adjustment Qty</th>
                     <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">New Stock</th>
@@ -684,6 +762,14 @@ Note: Use positive numbers for increase and negative for decrease. Reason codes:
                         <div>
                           <div className="font-medium text-gray-900">{item.product_name}</div>
                           <div className="text-sm text-gray-500">{item.product_code}</div>
+                        </div>
+                      </td>
+                      <td className="px-4 py-3 text-center">
+                        <div>
+                          <div className="font-medium">{item.batch_number || 'Default'}</div>
+                          {item.expiry_date && (
+                            <div className="text-xs text-gray-500">Exp: {new Date(item.expiry_date).toLocaleDateString()}</div>
+                          )}
                         </div>
                       </td>
                       <td className="px-4 py-3 text-center">{item.current_stock}</td>

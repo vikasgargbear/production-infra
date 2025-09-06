@@ -191,9 +191,9 @@ api.include_router(org_users.router, tags=["Organization Users"])
 api.include_router(org_users_secure.router, tags=["Secure Organization Users"])
 api.include_router(role_management.router, tags=["Role Management"])
 
-# Temporary debug endpoint for party ledger
-from .api.routes import party_ledger_debug
-api.include_router(party_ledger_debug.router, tags=["Debug"])
+# Temporary debug endpoint for party ledger - ARCHIVED during cleanup
+# from .api.routes import party_ledger_debug
+# api.include_router(party_ledger_debug.router, tags=["Debug"])
 
 # Payment allocation and improved ledger
 from .api.routes import payment_allocation, party_ledger_v2
