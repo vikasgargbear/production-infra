@@ -30,6 +30,7 @@ const ProductMaster = ({
     
     // Classification
     category_id: '',
+    type_id: '',
     product_type: '',
     product_class: '',
     hsn_code: '',
@@ -398,14 +399,23 @@ const ProductMaster = ({
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">Product Type</label>
                         <select
-                          value={formData.product_type || ''}
-                          onChange={(e) => handleInputChange('product_type', e.target.value)}
+                          value={formData.type_id || ''}
+                          onChange={(e) => {
+                            const selectedType = productTypes.find(t => t.type_id === parseInt(e.target.value));
+                            if (selectedType) {
+                              handleInputChange('type_id', selectedType.type_id);
+                              handleInputChange('product_type', selectedType.type_name);
+                            } else {
+                              handleInputChange('type_id', '');
+                              handleInputChange('product_type', '');
+                            }
+                          }}
                           disabled={mode === 'view'}
                           className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100"
                         >
                           <option value="">Select Type</option>
                           {Array.isArray(productTypes) && productTypes.map(type => (
-                            <option key={type.type_id || type.type_name} value={type.type_name}>
+                            <option key={type.type_id} value={type.type_id}>
                               {type.type_name}
                             </option>
                           ))}
