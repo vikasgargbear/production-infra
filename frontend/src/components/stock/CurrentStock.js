@@ -55,7 +55,7 @@ const ProductDataValidator = {
       generic_name: product.generic_name || '',
       
       // Category - now read from batch-level data
-      category: product.category_name || product.category || 'General', 
+      category: product.category_name || product.category || '', 
       manufacturer: product.manufacturer || '',
       brand: product.brand || '',
       product_type: product.product_type || 'standard',
@@ -200,7 +200,7 @@ const CurrentStock = ({ open = true, onClose }) => {
           product_name: stock.product_name,
           product_code: stock.product_code,
           generic_name: stock.generic_name,
-          category: stock.category || 'General',  // Backend now returns category name directly
+          category: stock.category || '',  // Backend now returns category name directly
           product_type: stock.product_type || 'standard',
           product_class: stock.product_class || 'medicine',
           manufacturer: stock.manufacturer,
@@ -619,7 +619,7 @@ const CurrentStock = ({ open = true, onClose }) => {
         return (
           <div>
             <span className="px-2 py-1 text-xs font-medium bg-gray-100 text-gray-700 rounded">
-              {row.category || 'Uncategorized'}
+              {row.category || 'No Category'}
             </span>
             {(row.pack_type || row.pack_size) && (
               <div className="text-xs text-gray-500 mt-1">

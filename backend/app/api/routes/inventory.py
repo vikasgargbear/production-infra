@@ -195,7 +195,7 @@ async def list_current_stock(
         query = """
             SELECT 
                 p.product_id, p.product_code, p.product_name, p.category_id,
-                COALESCE(c.category_name, 'General') as category,
+                c.category_name as category,
                 p.product_type, p.product_class,
                 p.manufacturer, p.brand, p.generic_name,
                 p.hsn_code,

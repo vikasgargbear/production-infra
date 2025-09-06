@@ -134,14 +134,12 @@ const ProductMaster = ({
 
   const loadMetadata = async () => {
     try {
-      // Load categories from backend
+      // Load categories from /products/master/categories endpoint (same as ProductCreationModal)
       try {
-        const catResponse = await metadataApi.getCategories();
-        // Ensure categories is always an array
-        if (Array.isArray(catResponse?.data)) {
-          setCategories(catResponse.data);
-        } else if (catResponse?.data?.categories && Array.isArray(catResponse.data.categories)) {
-          setCategories(catResponse.data.categories);
+        const catResponse = await productsApi.get('/products/master/categories');
+        if (catResponse.data?.success && Array.isArray(catResponse.data?.data)) {
+          setCategories(catResponse.data.data);
+          console.log('Categories loaded:', catResponse.data.data.length);
         } else {
           console.log('Categories not in expected format, using empty array');
           setCategories([]);  // No hardcoding - enterprise practice
@@ -151,33 +149,34 @@ const ProductMaster = ({
         setCategories([]);  // No hardcoding - enterprise practice
       }
       
-      // Load product types from backend
+      // Load product types from /products/master/types endpoint (same as ProductCreationModal)
       try {
-        const typeResponse = await productsApi.getProductTypes();
-        setProductTypes(typeResponse.data || []);
+        const typeResponse = await productsApi.get('/products/master/types');
+        if (typeResponse.data?.success && Array.isArray(typeResponse.data?.data)) {
+          setProductTypes(typeResponse.data.data);
+          console.log('Product types loaded:', typeResponse.data.data.length);
+        } else {
+          console.log('Product types not in expected format, using empty array');
+          setProductTypes([]);  // No hardcoding - enterprise practice
+        }
       } catch (e) {
-        // Fallback product types
-        setProductTypes([
-          { type_id: 1, type_name: 'Tablet' },
-          { type_id: 2, type_name: 'Capsule' },
-          { type_id: 3, type_name: 'Syrup' },
-          { type_id: 4, type_name: 'Injection' },
-          { type_id: 5, type_name: 'Cream' }
-        ]);
+        console.log('Error loading product types:', e);
+        setProductTypes([]);  // No hardcoding - enterprise practice
       }
 
-      // Load product classes
+      // Load product classes from /products/master/classes endpoint
       try {
-        const classResponse = await productsApi.getProductClasses();
-        setProductClasses(classResponse.data || []);
+        const classResponse = await productsApi.get('/products/master/classes');
+        if (classResponse.data?.success && Array.isArray(classResponse.data?.data)) {
+          setProductClasses(classResponse.data.data);
+          console.log('Product classes loaded:', classResponse.data.data.length);
+        } else {
+          console.log('Product classes not in expected format, using empty array');
+          setProductClasses([]);  // No hardcoding - enterprise practice
+        }
       } catch (e) {
-        // Fallback classes
-        setProductClasses([
-          { class_id: 1, class_name: 'Allopathic' },
-          { class_id: 2, class_name: 'Ayurvedic' },
-          { class_id: 3, class_name: 'Generic' },
-          { class_id: 4, class_name: 'OTC' }
-        ]);
+        console.log('Error loading product classes:', e);
+        setProductClasses([]);  // No hardcoding - enterprise practice
       }
     } catch (error) {
       console.error('Error loading metadata:', error);
