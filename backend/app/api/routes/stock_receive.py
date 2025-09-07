@@ -89,7 +89,6 @@ async def receive_stock(
     db: Session = Depends(get_db),
     current_org = Depends(get_current_org)
 ,
-    org_id: str = Depends(get_org_id_from_header)
 ):
     """
     Receive stock for a product by creating a new batch
@@ -212,7 +211,6 @@ async def check_stock(
     db: Session = Depends(get_db),
     current_org = Depends(get_current_org)
 ,
-    org_id: str = Depends(get_org_id_from_header)
 ):
     """
     Check available stock for a product
@@ -287,7 +285,6 @@ async def get_current_stock(
     Get current stock levels for all products
     This endpoint provides comprehensive stock information
     """
-    org_id: str = Depends(get_org_id_from_header)
     
     try:
         # Build query for stock data with batch-level pack configuration
@@ -424,7 +421,6 @@ async def update_product_properties(
     """
     Update product properties for stock management
     """
-    org_id: str = Depends(get_org_id_from_header)
     
     try:
         # Build update query dynamically
@@ -489,7 +485,6 @@ async def get_stock_alerts(
     """
     Get stock alerts for low stock, expiring items, etc.
     """
-    org_id: str = Depends(get_org_id_from_header)
     
     try:
         # Get products with low stock
@@ -594,7 +589,6 @@ async def get_batches(
     """
     Get batches with optional filters
     """
-    org_id: str = Depends(get_org_id_from_header)
     
     try:
         query = """
