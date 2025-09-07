@@ -53,7 +53,7 @@ export { ThermalPrintTemplate } from './ui/PrintUtility';
 
 // Re-export common components that are already global
 export { default as BaseModal } from '../common/BaseModal';
-export { default as ProductSearchInput } from '../common/ProductSearchInput';
+// Removed ProductSearchInput - use ProductSearchSimple instead
 export { default as CloseButton } from './ui/CloseButton';
 
 // Layout Components - NEW

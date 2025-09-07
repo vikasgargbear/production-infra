@@ -306,26 +306,38 @@ const PurchaseReturnFlow = ({ onClose }) => {
       const response = await returnsApi.getSupplierInvoiceReturnableItems(invoiceId);
       
       if (response.data.items) {
-        const processedItems = response.data.items.map(item => ({
-          ...item,
-          id: item.invoice_item_id || item.id,
-          invoice_item_id: item.invoice_item_id,
-          return_quantity: parseFloat(item.returnable_quantity || 0), // Default to full returnable qty
-          return_reason: '',
-          selected: true, // Pre-select all items like sales return
-          restock: true, // Default to restock
-          rate: item.unit_price || item.rate || 0,
-          tax_percent: item.tax_percent || 18,
-          discount_percent: item.discount_percent || 0,
-          max_returnable_qty: parseFloat(item.returnable_quantity || item.max_returnable_qty || 0),
-          quantity: parseFloat(item.invoice_quantity || item.quantity || 0),
-          batch_id: item.batch_id,
-          batch_number: item.batch_number,
-          product_name: item.product_name,
-          product_id: item.product_id,
-          hsn_code: item.hsn_code,
-          unit: item.unit || 'PCS'
-        }));
+        const processedItems = response.data.items.map(item => {
+          // Use values from backend directly - backend now sends both field names for compatibility
+          const totalQty = parseFloat(item.invoice_quantity || item.quantity || 0);
+          const freeQty = parseFloat(item.free_quantity || 0);
+          const paidQty = parseFloat(item.paid_quantity !== undefined ? item.paid_quantity : (totalQty - freeQty));
+          
+          return {
+            ...item,
+            id: item.invoice_item_id || item.id,
+            invoice_item_id: item.invoice_item_id,
+            return_quantity: 0, // Start with 0, let user choose
+            return_reason: '',
+            selected: false, // Don't pre-select
+            restock: true, // Default to restock
+            // Backend now sends both 'rate' and 'unit_price' for compatibility
+            rate: parseFloat(item.rate || item.unit_price || item.purchase_price || 0),
+            purchase_price: parseFloat(item.rate || item.unit_price || item.purchase_price || 0),
+            tax_percent: parseFloat(item.tax_percent || item.gst_percent || 18),
+            discount_percent: parseFloat(item.discount_percent || 0),
+            max_returnable_qty: parseFloat(item.returnable_quantity || item.max_returnable_qty || totalQty),
+            quantity: totalQty,
+            free_quantity: freeQty,
+            paid_quantity: paidQty,
+            batch_id: item.batch_id,
+            batch_number: item.batch_number || item.batch_no,
+            batch_no: item.batch_number || item.batch_no, // Add batch_no for compatibility
+            product_name: item.product_name,
+            product_id: item.product_id,
+            hsn_code: item.hsn_code,
+            unit: item.unit || 'PCS'
+          };
+        });
         
         setReturnData(prev => ({
           ...prev,
@@ -454,7 +466,7 @@ const PurchaseReturnFlow = ({ onClose }) => {
     returnData.items.forEach(item => {
       if (item.selected && item.return_quantity > 0) {
         const returnQty = parseFloat(item.return_quantity) || 0;
-        const rate = parseFloat(item.rate) || 0;
+        const rate = parseFloat(item.rate || item.purchase_price || item.unit_price) || 0;
         const discountPercent = parseFloat(item.discount_percent) || 0;
         
         const baseAmount = returnQty * rate;
@@ -463,6 +475,17 @@ const PurchaseReturnFlow = ({ onClose }) => {
         
         const taxPercent = parseFloat(item.tax_percent) || 0;
         const itemTax = (afterDiscount * taxPercent) / 100;
+        
+        console.log('Return calculation:', {
+          product: item.product_name,
+          returnQty,
+          rate,
+          baseAmount,
+          discountAmount,
+          afterDiscount,
+          taxPercent,
+          itemTax
+        });
         
         subtotal += afterDiscount;
         taxAmount += itemTax;

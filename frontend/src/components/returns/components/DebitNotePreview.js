@@ -1,7 +1,16 @@
 import React from 'react';
 import { FileText, Calendar, Building2, Phone, Mail, Truck } from 'lucide-react';
 
-const DebitNotePreview = ({ returnData, supplier, purchase }) => {
+const DebitNotePreview = ({ returnData, supplier = {}, purchase = {} }) => {
+  // Add safety checks for required data
+  if (!supplier || !purchase || !returnData) {
+    return (
+      <div className="p-8 text-center text-gray-500">
+        <p>Loading return information...</p>
+      </div>
+    );
+  }
+  
   const formatDate = (date) => {
     return new Date(date).toLocaleDateString('en-IN', {
       day: '2-digit',
@@ -24,8 +33,12 @@ const DebitNotePreview = ({ returnData, supplier, purchase }) => {
     const gstBreakup = {};
     
     returnItems.forEach(item => {
-      const returnAmount = item.return_quantity * item.purchase_price;
-      const taxAmount = (returnAmount * item.tax_percent) / 100;
+      const price = parseFloat(item.purchase_price || item.rate || item.unit_price || 0);
+      const discountPercent = parseFloat(item.discount_percent || 0);
+      const returnAmount = item.return_quantity * price;
+      const discountAmount = (returnAmount * discountPercent) / 100;
+      const afterDiscount = returnAmount - discountAmount;
+      const taxAmount = (afterDiscount * (item.tax_percent || 0)) / 100;
       
       if (!gstBreakup[item.tax_percent]) {
         gstBreakup[item.tax_percent] = {
@@ -36,7 +49,7 @@ const DebitNotePreview = ({ returnData, supplier, purchase }) => {
         };
       }
       
-      gstBreakup[item.tax_percent].taxableAmount += returnAmount;
+      gstBreakup[item.tax_percent].taxableAmount += afterDiscount;
       gstBreakup[item.tax_percent].cgst += taxAmount / 2;
       gstBreakup[item.tax_percent].sgst += taxAmount / 2;
       gstBreakup[item.tax_percent].totalTax += taxAmount;
@@ -95,9 +108,9 @@ const DebitNotePreview = ({ returnData, supplier, purchase }) => {
             
             <div className="text-right">
               <h1 className="text-3xl font-bold text-orange-600 mb-2">
-                {supplier.gst_number ? 'GST DEBIT NOTE' : 'RETURN NOTE'}
+                {supplier?.gst_number ? 'GST DEBIT NOTE' : 'RETURN NOTE'}
               </h1>
-              {supplier.gst_number && (
+              {supplier?.gst_number && (
                 <div className="mb-2">
                   <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
                     GST Registered Supplier
@@ -106,11 +119,11 @@ const DebitNotePreview = ({ returnData, supplier, purchase }) => {
               )}
               <div className="space-y-1">
                 <p className="text-lg font-semibold text-gray-700">
-                  {supplier.gst_number ? 'DN' : 'RN'} No: {returnData.debit_note_no || returnData.return_no}
+                  {supplier?.gst_number ? 'DN' : 'RN'} No: {returnData.debit_note_no || returnData.return_no}
                 </p>
                 <p className="text-gray-600">Date: {formatDate(returnData.return_date)}</p>
-                <p className="text-gray-600">Original Invoice: {purchase.invoice_number}</p>
-                <p className="text-gray-600">Invoice Date: {formatDate(purchase.invoice_date)}</p>
+                <p className="text-gray-600">Original Invoice: {purchase?.invoice_number || 'N/A'}</p>
+                <p className="text-gray-600">Invoice Date: {purchase?.invoice_date ? formatDate(purchase.invoice_date) : 'N/A'}</p>
               </div>
             </div>
           </div>
@@ -125,12 +138,12 @@ const DebitNotePreview = ({ returnData, supplier, purchase }) => {
                 Supplier Details
               </h3>
               <div>
-                <p className="font-semibold text-gray-900">{supplier.supplier_name}</p>
-                <p className="text-sm text-gray-600">{supplier.address}</p>
-                {supplier.gst_number && (
+                <p className="font-semibold text-gray-900">{supplier?.supplier_name || 'Supplier'}</p>
+                <p className="text-sm text-gray-600">{supplier?.address || ''}</p>
+                {supplier?.gst_number && (
                   <p className="text-sm text-gray-600 mt-1">GSTIN: {supplier.gst_number}</p>
                 )}
-                {supplier.drug_license_number && (
+                {supplier?.drug_license_number && (
                   <p className="text-sm text-gray-600">DL No: {supplier.drug_license_number}</p>
                 )}
               </div>
@@ -219,9 +232,12 @@ const DebitNotePreview = ({ returnData, supplier, purchase }) => {
               </thead>
               <tbody>
                 {returnItems.map((item, index) => {
-                  const returnAmount = item.return_quantity * item.purchase_price;
-                  const taxAmount = (returnAmount * item.tax_percent) / 100;
-                  const totalAmount = returnAmount + taxAmount;
+                  const price = item.purchase_price || item.rate || item.unit_price || 0;
+                  const returnAmount = item.return_quantity * price;
+                  const discountAmount = (returnAmount * (item.discount_percent || 0)) / 100;
+                  const afterDiscount = returnAmount - discountAmount;
+                  const taxAmount = (afterDiscount * (item.tax_percent || 0)) / 100;
+                  const totalAmount = afterDiscount + taxAmount;
 
                   return (
                     <tr key={item.id} className="border-b border-gray-200">
@@ -230,10 +246,10 @@ const DebitNotePreview = ({ returnData, supplier, purchase }) => {
                       <td className="py-3 px-2 text-sm">{item.hsn_code || '-'}</td>
                       <td className="py-3 px-2 text-sm">{item.batch_number || '-'}</td>
                       <td className="py-3 px-2 text-sm">
-                        {item.expiry_date ? formatDate(item.expiry_date) : '-'}
+                        {item.expiry_date || item.expiry ? formatDate(item.expiry_date || item.expiry) : '-'}
                       </td>
                       <td className="py-3 px-2 text-sm text-center">{item.return_quantity}</td>
-                      <td className="py-3 px-2 text-sm text-right">{formatCurrency(item.purchase_price)}</td>
+                      <td className="py-3 px-2 text-sm text-right">{formatCurrency(price)}</td>
                       <td className="py-3 px-2 text-sm text-center">{item.tax_percent}%</td>
                       <td className="py-3 px-2 text-sm text-right font-medium">{formatCurrency(totalAmount)}</td>
                     </tr>

@@ -176,33 +176,34 @@ const PurchaseListHistory: React.FC<PurchaseListHistoryProps> = ({ onClose }) =>
         // First try to get regular purchases
         response = await purchasesApi.enhanced.getAll(searchParams);
         
-        // If no purchases found, try to get supplier invoices
+        // If no purchases found, load supplier invoices instead
         if (!response.data?.purchases || response.data.purchases.length === 0) {
-          console.log('No purchases found, fetching supplier invoices...');
+          console.log('No purchases found, loading supplier invoices...');
+          
           const invoicesResponse = await purchasesApi.getReturnableInvoices(searchParams);
           
-          if (invoicesResponse.data) {
+          if (invoicesResponse.data?.invoices) {
             // Transform supplier invoices to match purchase format
-            const transformedInvoices = invoicesResponse.data.map((invoice: any) => ({
-              purchase_order_id: invoice.invoice_id,
-              po_number: invoice.invoice_no || `INV-${invoice.invoice_id}`,
+            const transformedInvoices = invoicesResponse.data.invoices.map((invoice: any) => ({
+              purchase_order_id: invoice.supplier_invoice_id,
+              po_number: invoice.supplier_invoice_number || `INV-${invoice.supplier_invoice_id}`,
               supplier_name: invoice.supplier_name || 'Unknown Supplier',
               po_date: invoice.invoice_date || invoice.created_at,
-              total_amount: parseFloat(invoice.total_amount) || 0,
+              total_amount: parseFloat(invoice.invoice_amount) || 0,
               payment_status: invoice.payment_status || 'pending',
               po_status: 'completed',
               po_type: 'supplier_invoice',
-              items_count: invoice.item_count || 0
+              items_count: invoice.total_items || 0
             }));
             
             response = {
               data: {
                 purchases: transformedInvoices,
                 pagination: {
-                  total: transformedInvoices.length,
+                  total: invoicesResponse.data.total || transformedInvoices.length,
                   page: 1,
                   per_page: searchParams.limit,
-                  total_pages: Math.ceil(transformedInvoices.length / searchParams.limit)
+                  total_pages: Math.ceil((invoicesResponse.data.total || transformedInvoices.length) / searchParams.limit)
                 }
               }
             };
@@ -210,39 +211,8 @@ const PurchaseListHistory: React.FC<PurchaseListHistoryProps> = ({ onClose }) =>
         }
       } catch (error) {
         console.error('Error fetching purchases:', error);
-        // Try supplier invoices as fallback
-        try {
-          const invoicesResponse = await purchasesApi.getReturnableInvoices(searchParams);
-          if (invoicesResponse.data) {
-            const transformedInvoices = invoicesResponse.data.map((invoice: any) => ({
-              purchase_order_id: invoice.invoice_id,
-              po_number: invoice.invoice_no || `INV-${invoice.invoice_id}`,
-              supplier_name: invoice.supplier_name || 'Unknown Supplier',
-              po_date: invoice.invoice_date || invoice.created_at,
-              total_amount: parseFloat(invoice.total_amount) || 0,
-              payment_status: invoice.payment_status || 'pending',
-              po_status: 'completed',
-              po_type: 'supplier_invoice',
-              items_count: invoice.item_count || 0
-            }));
-            
-            response = {
-              data: {
-                purchases: transformedInvoices,
-                pagination: {
-                  total: transformedInvoices.length,
-                  page: 1,
-                  per_page: searchParams.limit,
-                  total_pages: Math.ceil(transformedInvoices.length / searchParams.limit)
-                }
-              }
-            };
-          } else {
-            throw error;
-          }
-        } catch (invoiceError) {
-          throw error; // Re-throw original error if invoice fetch also fails
-        }
+        // Don't try supplier invoices until backend is fixed
+        throw error;
       }
       
       if (response.data) {
