@@ -780,12 +780,10 @@ async def create_stock_adjustment(
                         db.execute(text("""
                             UPDATE inventory.batches
                             SET quantity_available = :new_qty,
-                                quantity_damaged = quantity_damaged + :deduct_qty,
                                 updated_at = CURRENT_TIMESTAMP
                             WHERE batch_id = :batch_id
                         """), {
                             "new_qty": new_qty,
-                            "deduct_qty": deduct_qty if reason in ['damage', 'expiry'] else 0,
                             "batch_id": batch.batch_id
                         })
                         
@@ -808,7 +806,7 @@ async def create_stock_adjustment(
                         db.execute(text("""
                             UPDATE inventory.batches
                             SET quantity_available = quantity_available + :quantity,
-                                quantity_received = quantity_received + :quantity,
+                                initial_quantity = initial_quantity + :quantity,
                                 updated_at = CURRENT_TIMESTAMP
                             WHERE batch_id = :batch_id
                         """), {
@@ -821,20 +819,19 @@ async def create_stock_adjustment(
                         db.execute(text("""
                             INSERT INTO inventory.batches (
                                 org_id, product_id, batch_number,
-                                expiry_date, quantity_received, quantity_available,
-                                batch_status, notes, created_at, updated_at
+                                expiry_date, initial_quantity, quantity_available,
+                                batch_status, mrp_per_unit, source_type, created_at, updated_at
                             ) VALUES (
                                 :org_id, :product_id, :batch_number,
                                 :expiry_date, :quantity, :quantity,
-                                'active', :notes, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+                                'active', 0, 'adjustment', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
                             )
                         """), {
                             "org_id": org_id,
                             "product_id": product_id,
                             "batch_number": batch_number,
                             "expiry_date": (datetime.now() + timedelta(days=730)).date(),
-                            "quantity": quantity,
-                            "notes": f"Stock adjustment: {reason}"
+                            "quantity": quantity
                         })
             
             results.append({
