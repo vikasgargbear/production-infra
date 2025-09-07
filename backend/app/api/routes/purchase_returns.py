@@ -281,6 +281,8 @@ async def get_invoice_returnable_items(
                     sii.batch_id,
                     sii.batch_number,
                     sii.quantity as invoice_quantity,
+                    COALESCE(sii.free_quantity, 0) as free_quantity,
+                    sii.quantity - COALESCE(sii.free_quantity, 0) as paid_quantity,
                     COALESCE(sii.quantity_returned, 0) as already_returned,
                     sii.quantity - COALESCE(sii.quantity_returned, 0) as returnable_quantity,
                     sii.unit_price,
@@ -309,6 +311,8 @@ async def get_invoice_returnable_items(
                         gi.batch_id,
                         gi.batch_number,
                         gi.received_quantity as invoice_quantity,
+                        COALESCE(gi.free_quantity, 0) as free_quantity,
+                        gi.received_quantity - COALESCE(gi.free_quantity, 0) as paid_quantity,
                         COALESCE(gi.quantity_returned, 0) as already_returned,
                         gi.received_quantity - COALESCE(gi.quantity_returned, 0) as returnable_quantity,
                         gi.unit_price,
@@ -336,12 +340,17 @@ async def get_invoice_returnable_items(
                 "batch_id": item.batch_id,
                 "batch_number": item.batch_number,
                 "invoice_quantity": float(item.invoice_quantity),
+                "quantity": float(item.invoice_quantity),  # Add for compatibility
+                "free_quantity": float(item.free_quantity) if hasattr(item, 'free_quantity') else 0,
+                "paid_quantity": float(item.paid_quantity) if hasattr(item, 'paid_quantity') else float(item.invoice_quantity),
                 "already_returned": float(item.already_returned),
                 "returnable_quantity": float(item.returnable_quantity),
                 "max_returnable_qty": float(item.returnable_quantity),
                 "unit_price": float(item.unit_price) if item.unit_price else 0,
+                "rate": float(item.unit_price) if item.unit_price else 0,  # Add for compatibility
                 "discount_percent": float(item.discount_percent) if item.discount_percent else 0,
                 "tax_percent": float(item.tax_percent) if item.tax_percent else 0,
+                "gst_percent": float(item.tax_percent) if item.tax_percent else 0,  # Add for compatibility
                 "hsn_code": item.hsn_code,
                 "unit": item.unit,
                 "can_return": float(item.returnable_quantity) > 0
