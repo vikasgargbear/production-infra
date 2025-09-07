@@ -39,7 +39,7 @@ async def get_returnable_invoices(
                 si.supplier_id,
                 s.supplier_name,
                 s.gst_number as supplier_gst,
-                si.total_amount as invoice_amount,
+                si.invoice_total as invoice_amount,
                 si.grn_ids,
                 -- Count items from supplier_invoice_items or GRN items
                 COALESCE(

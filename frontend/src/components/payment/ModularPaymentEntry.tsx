@@ -165,11 +165,12 @@ const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) =>
       return false;
     }
     
-    const requiresReference = ['UPI', 'BANK_TRANSFER', 'CHEQUE'];
-    if (requiresReference.includes(payment.payment_mode) && !payment.reference_number) {
-      setMessage(`Reference number is required for ${payment.payment_mode} payments`, 'error');
-      return false;
-    }
+    // Reference number is now optional for all payment modes
+    // const requiresReference = ['UPI', 'BANK_TRANSFER', 'CHEQUE'];
+    // if (requiresReference.includes(payment.payment_mode) && !payment.reference_number) {
+    //   setMessage(`Reference number is required for ${payment.payment_mode} payments`, 'error');
+    //   return false;
+    // }
     
     return true;
   };

@@ -1153,7 +1153,12 @@ const CurrentStock = ({ open = true, onClose }) => {
           onClose={() => {
             setShowEditModal(false);
             setEditingProduct(null);
-            loadStockData(0, true); // Refresh data after edit
+          }}
+          onSave={(updatedProduct) => {
+            // Success handled by toast in ProductMaster
+            setShowEditModal(false);
+            setEditingProduct(null);
+            loadStockData(0, true); // Refresh data after successful save
           }}
           product={editingProduct}
           mode="edit"

@@ -224,14 +224,18 @@ const ProductMaster = ({
         ? await productsApi.update(product.product_id, formData)
         : await productsApi.create(formData);
       
-      if (response.success) {
+      // Check if response exists (API returns data directly, not wrapped in success flag)
+      if (response) {
         toast.success(product ? 'Product updated successfully' : 'Product created successfully');
-        onSave && onSave(response.data);
-        onClose();
+        onSave && onSave(response.data || response);
+        // Add small delay to let user see the success message
+        setTimeout(() => {
+          onClose();
+        }, 500);
       }
     } catch (err) {
       setError(err.message || 'Failed to save product');
-      toast.error('Failed to save product');
+      toast.error('Failed to save product: ' + (err.message || 'Unknown error'));
     } finally {
       setIsSaving(false);
     }

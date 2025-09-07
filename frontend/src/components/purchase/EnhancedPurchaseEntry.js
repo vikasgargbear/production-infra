@@ -28,6 +28,7 @@ import PDFUploadCard from '../global/ui/PDFUploadCard';
 import BulkUploadInline from './BulkUploadInline';
 import PDFVerificationFlow from './PDFVerificationFlow';
 import EnhancedPurchaseItemsTable from './components/EnhancedPurchaseItemsTable';
+import PurchaseItemEditModal from './components/PurchaseItemEditModal';
 
 /**
  * EnhancedPurchaseEntry - Purchase Entry using the full global document system
@@ -48,6 +49,8 @@ const EnhancedPurchaseEntry = ({ onClose, prefilledData = null }) => {
   const [showPDFUpload, setShowPDFUpload] = useState(false);
   const [showVerificationFlow, setShowVerificationFlow] = useState(false);
   const [extractedPDFData, setExtractedPDFData] = useState(null);
+  const [showItemEditModal, setShowItemEditModal] = useState(false);
+  const [newProductToAdd, setNewProductToAdd] = useState(null);
   const [createdPurchaseData, setCreatedPurchaseData] = useState(null);
   const [saving, setSaving] = useState(false);
   const [errors, setErrors] = useState({});
@@ -204,30 +207,17 @@ const EnhancedPurchaseEntry = ({ onClose, prefilledData = null }) => {
   };
 
   const handleAddItem = (product) => {
-    // Create new item with unique ID capturing ALL available fields
-    const newItem = {
+    // Open modal for batch details instead of directly adding
+    setNewProductToAdd({
       id: Date.now() + Math.random(), // Unique ID for tracking
-      product_id: product.product_id || null, // Only use product_id, not id field
+      product_id: product.product_id || null,
       product_name: product.product_name || product.name || '',
       product_code: product.product_code,
       hsn_code: product.hsn_code || '',
-      // Batch information - capture from all possible sources
-      batch_no: product.batch_no || product.batch_number || product.batch || '',
-      batch_number: product.batch_no || product.batch_number || product.batch || '',
-      // Expiry and manufacturing dates
-      expiry_date: product.expiry_date || product.expiry || '',
-      manufacturing_date: product.manufacturing_date || product.mfg_date || '',
-      // Quantities
-      quantity: product.quantity || 1,
-      free_quantity: product.free_quantity || product.free || 0,
-      // Pricing
       mrp: parseFloat(product.mrp) || 0,
-      purchase_price: parseFloat(product.purchase_price || product.cost_price || product.rate) || (parseFloat(product.mrp) || 0) * 0.7,
-      selling_price: parseFloat(product.selling_price || product.sale_price) || parseFloat(product.mrp) || 0,
-      sale_price: parseFloat(product.sale_price || product.selling_price) || parseFloat(product.mrp) || 0,
-      // Discounts and taxes
-      discount_percent: parseFloat(product.discount_percent || product.discount) || 0,
+      selling_price: parseFloat(product.sale_price || product.selling_price) || parseFloat(product.mrp) || 0,
       tax_percent: parseFloat(product.tax_percent || product.gst_percent || product.tax_rate) || 12,
+      discount_percent: parseFloat(product.discount_percent || product.discount) || 0,
       tax_amount: parseFloat(product.tax_amount) || 0,
       // Pack information
       pack_type: product.pack_type || product.packaging_type || 'STRIP',
@@ -237,12 +227,27 @@ const EnhancedPurchaseEntry = ({ onClose, prefilledData = null }) => {
       category: product.category || '',
       brand_name: product.brand_name || product.brand || '',
       unit: product.unit || product.uom || 'Strip'
-    };
+    });
     
-    setPurchase(prev => ({
-      ...prev,
-      items: [...(prev.items || []), newItem]
-    }));
+    // Open modal instead of directly adding to table
+    setShowItemEditModal(true);
+  };
+
+  // Handle saving item from modal
+  const handleSaveItemFromModal = (editedItem) => {
+    console.log('Saving item from modal:', editedItem);
+    console.log('Expiry date in saved item:', editedItem.expiry_date);
+    
+    setPurchase(prev => {
+      const newItems = [...(prev.items || []), editedItem];
+      console.log('New items array:', newItems);
+      return {
+        ...prev,
+        items: newItems
+      };
+    });
+    setNewProductToAdd(null);
+    setShowItemEditModal(false);
   };
 
   const handleBulkUpload = (products) => {
@@ -713,15 +718,15 @@ const EnhancedPurchaseEntry = ({ onClose, prefilledData = null }) => {
         />
       </div>
 
-      {/* Items Table - With Label Outside */}
+      {/* Items Table */}
       {purchase.items && purchase.items.length > 0 && (
-        <>
+        <div className="overflow-visible relative" style={{ minHeight: '300px', zIndex: 50 }}>
           <div className="flex items-center gap-2 mb-3">
             <Package className="w-5 h-5 text-gray-600" />
             <h3 className="text-sm font-semibold text-gray-700">PURCHASE ITEMS</h3>
+            <span className="ml-auto text-sm text-gray-500">{purchase.items.length} items</span>
           </div>
-          <div className="overflow-visible relative" style={{ minHeight: '300px', zIndex: 50 }}>
-            <EnhancedPurchaseItemsTable
+          <EnhancedPurchaseItemsTable
               items={purchase.items}
               onUpdateItem={handleUpdateItem}
               onRemoveItem={handleRemoveItem}
@@ -729,7 +734,6 @@ const EnhancedPurchaseEntry = ({ onClose, prefilledData = null }) => {
             />
             {/* Original ItemsTable removed - using EnhancedPurchaseItemsTable instead */}
           </div>
-        </>
       )}
       {errors.items && (
         <p className="text-red-500 text-xs mt-1">{errors.items}</p>
@@ -850,9 +854,26 @@ const EnhancedPurchaseEntry = ({ onClose, prefilledData = null }) => {
                 const totalWithTax = discountedAmount + taxAmount;
                 
                 // Format expiry date if exists
-                const expiryDisplay = item.expiry_date ? 
-                  new Date(item.expiry_date).toLocaleDateString('en-IN', { month: 'short', year: 'numeric' }) : 
-                  '-';
+                const expiryDisplay = (() => {
+                  if (!item.expiry_date) return '-';
+                  
+                  // If it's already in MM/YYYY format, just return it
+                  if (typeof item.expiry_date === 'string' && item.expiry_date.includes('/')) {
+                    return item.expiry_date;
+                  }
+                  
+                  // If it's a Date object or date string, format it
+                  try {
+                    const date = new Date(item.expiry_date);
+                    if (!isNaN(date.getTime())) {
+                      return `${(date.getMonth() + 1).toString().padStart(2, '0')}/${date.getFullYear()}`;
+                    }
+                  } catch (e) {
+                    // Fall back to the raw value if parsing fails
+                  }
+                  
+                  return item.expiry_date;
+                })();
                 
                 return (
                   <tr key={index} className="border-b border-gray-100 hover:bg-gray-50">
@@ -1140,6 +1161,21 @@ const EnhancedPurchaseEntry = ({ onClose, prefilledData = null }) => {
             itemCount: purchase.items?.length || 0,
             date: purchase.invoice_date
           }}
+        />
+      )}
+
+      {/* Purchase Item Edit Modal - Opens when product is selected */}
+      {showItemEditModal && (
+        <PurchaseItemEditModal
+          isOpen={showItemEditModal}
+          onClose={() => {
+            setShowItemEditModal(false);
+            setNewProductToAdd(null);
+          }}
+          item={newProductToAdd}
+          onSave={handleSaveItemFromModal}
+          title="Add Purchase Item - Enter Batch Details"
+          isNewItem={true}
         />
       )}
     </>

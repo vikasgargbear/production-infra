@@ -98,7 +98,7 @@ export const API_CONFIG = {
     
     // Purchase Module
     PURCHASES: {
-      BASE: '/purchases',
+      BASE: '/purchases/',  // Added trailing slash for proper routing
       ENHANCED: '/purchase-enhanced',
       CREATE: '/purchases',
       UPDATE: (id) => `/purchases/${id}`,

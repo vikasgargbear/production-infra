@@ -95,9 +95,17 @@ export const purchasesApi = {
   
   // Enhanced purchase operations
   enhanced: {
-    // Get all with enhanced data
+    // Get all with enhanced data - use regular purchases endpoint with correct params
     getAll: (params = {}) => {
-      return apiHelpers.get(ENDPOINTS.ENHANCED, { params });
+      // Map frontend params to backend expected params
+      const backendParams = {
+        skip: params.offset || 0,
+        limit: params.limit || 25,
+        ...params
+      };
+      delete backendParams.offset; // Remove offset as backend uses skip
+      
+      return apiHelpers.get(ENDPOINTS.BASE, { params: backendParams });
     },
     
     // Create with enhanced validation

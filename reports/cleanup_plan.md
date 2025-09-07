@@ -1,212 +1,214 @@
-# Cleanup Plan - 2025-01-06 (REVISED)
+# Cleanup Plan - 2025-01-06
 
-## Summary
-Identified 90+ files for archival/cleanup to improve codebase organization.
-**Total space to recover**: ~2.5 MB
-**Risk Level**: LOW-MEDIUM (more files, but all safely archived)
+## Executive Summary
+Identified **100+ files** for cleanup across frontend and backend, with potential to recover **~15MB** and significantly improve code maintainability.
 
-## 1. OS System Files to Archive (24 files, ~196 KB)
-**Action**: Move to `/archive/temp/2025-01-06/`
+## 🚨 CRITICAL DUPLICATES (High Priority)
 
-These `.DS_Store` files are macOS system files that store folder display preferences. They're not needed for the application and clutter the repository.
+### 1. Frontend Component Duplicates (~40 files, ~5MB)
 
-- [ ] `./database/.DS_Store` - macOS folder metadata
-- [ ] `./database/schemas/.DS_Store` - macOS folder metadata
-- [ ] `./.DS_Store` - macOS folder metadata
-- [ ] `./frontend/.DS_Store` - macOS folder metadata
-- [ ] `./frontend/src/.DS_Store` - macOS folder metadata
-- [ ] `./frontend/src/tests/.DS_Store` - macOS folder metadata
-- [ ] `./frontend/src/components/.DS_Store` - macOS folder metadata
-- [ ] `./frontend/src/components/global/.DS_Store` - macOS folder metadata
-- [ ] `./frontend/src/modules/.DS_Store` - macOS folder metadata
-- [ ] `./frontend/src/services/.DS_Store` - macOS folder metadata
-- [ ] `./frontend/src/services/api/.DS_Store` - macOS folder metadata
-- [ ] `./archive/.DS_Store` - macOS folder metadata (ironic!)
-- [ ] `./config/.DS_Store` - macOS folder metadata
-- [ ] `./tests/.DS_Store` - macOS folder metadata
-- [ ] `./backend/.DS_Store` - macOS folder metadata
-- [ ] `./backend/app/.DS_Store` - macOS folder metadata
-- [ ] `./backend/app/api/.DS_Store` - macOS folder metadata
-- [ ] `./backend/app/infrastructure/parsers/.DS_Store` - macOS folder metadata
-- [ ] `./backend/app/infrastructure/.DS_Store` - macOS folder metadata
-- [ ] `./backend/tests/.DS_Store` - macOS folder metadata
-- [ ] `./docs/.DS_Store` - macOS folder metadata
-- [ ] `./scripts/.DS_Store` - macOS folder metadata
-- [ ] `./infrastructure/docker/.DS_Store` - macOS folder metadata
-- [ ] `./infrastructure/.DS_Store` - macOS folder metadata
+#### **Table Components (CONSOLIDATION NEEDED)**
+- **KEEP:** `/frontend/src/components/global/ui/display/ItemsTable.js` (Global standard)
+- **ARCHIVE these duplicates:**
+  - `/frontend/src/components/global/PharmaItemsTable.js` - Legacy pharma-specific, functionality merged into global ItemsTable
+  - `/frontend/src/components/purchase/components/EnhancedPurchaseItemsTable.js` - Purchase-specific variant, use global ItemsTable instead
+  - `/frontend/src/components/purchase/components/PurchaseItemsTableWrapper.js` - Wrapper no longer needed with global ItemsTable
+  - `/frontend/src/components/returns/components/ReturnItemsTable.js` - Returns-specific, migrate to global ItemsTable
 
-## 2. Old Log Files to Archive (2 files, ~464 KB)
-**Action**: Move to `/archive/temp/2025-01-06/logs/`
+#### **Product Search Components (MAJOR DUPLICATES)**
+- **KEEP:** `/frontend/src/components/global/search/ProductSearchSimple.js` (Global standard)
+- **ARCHIVE these duplicates:**
+  - `/frontend/src/components/common/ProductSearchInput.js` - Legacy common component
+  - `/frontend/src/components/global/PurchaseProductSearch.js` - Purchase-specific, redundant
 
-These log files are from August/September and contain old debugging information:
+#### **Purchase Flow Components (MULTIPLE VERSIONS)**
+- **KEEP:** `/frontend/src/components/purchase/EnhancedPurchaseEntry.js` (Most complete)
+- **ARCHIVE these variants:**
+  - `/frontend/src/components/purchase/ModularPurchaseEntry.js` - Experimental modular approach
+  - `/frontend/src/components/purchase/SimplifiedPurchaseEntry.js` - Simplified version, features merged
+  - `/frontend/src/components/purchase/archive/*` - Already archived, can be deleted
 
-- [ ] `./backend/backend.log` (231 KB) - Last modified: Aug 26, backend debugging logs
-- [ ] `./server.log` (233 KB) - Last modified: Sep 5, server operation logs
+#### **GRN Flow Components (3 VERSIONS)**
+- **KEEP:** `/frontend/src/components/purchase/EnhancedGRNFlow.js` (Most feature-complete)
+- **ARCHIVE:**
+  - `/frontend/src/components/purchase/ModernGRNFlow.js` - UI experiment, not used
+  - `/frontend/src/components/purchase/GRNFlow.js` - Old version
 
-## 3. Test Scripts in Root (3 files)
-**Action**: Move to `/archive/temp/2025-01-06/test-scripts/`
+#### **Document Layout Components**
+- **KEEP:** `/frontend/src/components/global/layout/EnhancedGlobalDocumentFlow.jsx` (Enhanced version in use)
+- **ARCHIVE:**
+  - `/frontend/src/components/global/layout/GlobalDocumentFlow.jsx` - Old version
 
-These appear to be one-off test scripts that should not be in the root directory:
+#### **Payment Detail Components (5 VERSIONS in archive)**
+- **DELETE from archive:** (Already archived, not in use)
+  - `/frontend/src/components/payment/archive/PaymentDetails.tsx`
+  - `/frontend/src/components/payment/archive/PaymentDetailsCompact.tsx`
+  - `/frontend/src/components/payment/archive/PaymentDetailsEnhanced.tsx`
+  - `/frontend/src/components/payment/archive/PaymentDetailsOptimized.tsx`
+  - `/frontend/src/components/payment/archive/PaymentDetailsSimple.tsx`
 
-- [ ] `./test-payment-allocations.sql` - SQL test for payment allocations (likely one-time test)
-- [ ] `./test_purchase_triggers.sh` - Shell script for testing purchase triggers
-- [ ] `./test_purchase_api.sh` - Shell script for testing purchase API
+#### **Low Stock Alert (DUPLICATE)**
+- **KEEP:** `/frontend/src/components/stock/LowStockAlert.js` (Stock module version)
+- **ARCHIVE:** `/frontend/src/components/reports/LowStockAlert.js` (Duplicate in reports)
 
-## 4. Old Reports (2 files)
-**Action**: Archive to `/archive/reports/2025-01-06/`
+### 2. Backend Duplicates (~20 files, ~3MB)
 
-These are old analysis reports that have been acted upon:
+#### **Parser Implementation Duplicates**
+- **DUPLICATE STRUCTURE:** Two complete parser implementations
+  - **KEEP:** `/backend/app/infrastructure/parsers/` - Current implementation
+  - **ARCHIVE:** 
+    - `/backend/app/parsers_complete/` - Entire duplicate implementation directory
+    - `/backend/app/parsers.py` - Old single-file implementation
 
-- [ ] `./reports/duplicates_proposed.json` - Old duplicate analysis (ProductMaster already handled)
-- [ ] `./reports/duplicates_analysis.md` - Analysis report for duplicates (already completed)
+#### **Route Duplicates/Versions**
+- **party_ledger.py** vs **party_ledger_v2.py** - Keep V2, archive V1
+- **purchase_returns.py** vs **purchase_returns_enhanced.py** - Keep enhanced, archive basic
+- **purchases.py** vs **purchase_api.py** vs **purchase_enhanced.py** - Keep enhanced, archive others
+- **Already archived (can DELETE):**
+  - `/archive/duplicates/backend/app/api/routes/party_ledger_old.py`
+  - `/archive/duplicates/backend/app/api/routes/party_ledger_debug.py`
 
-## 5. Test HTML Files (15 files)
-**Action**: Archive to `/archive/temp/2025-01-06/test-html/`
+#### **Service Duplicates**
+- **KEEP:** `document_number_service_v2.py`
+- **ARCHIVE:** `document_number_service.py` (Old version)
 
-These are standalone test HTML files cluttering the codebase:
+### 3. Versioned Components Needing Cleanup
 
-### Root directory test files:
-- [ ] `./test-product-id-fix.html` - Product ID testing page
-- [ ] `./test-party-ledger-v2.html` - Party ledger v2 test
-- [ ] `./test-party-ledger.html` - Party ledger test
-- [ ] `./test-number-keys-fix.html` - Number key fix test
+#### **Components with V2, V3, V4, V5 Versions**
+- `/frontend/src/components/challan/ModularChallanCreatorV5.js` - Check for V1-V4
+- `/frontend/src/components/ledger/PartyLedgerV3.tsx` - Current version
+- `/frontend/src/components/ledger/archive/PartyLedgerV2.tsx` - Already archived, can delete
+- `/frontend/src/components/returns/PurchaseReturnFlowV2.js` - Check for V1
+- `/frontend/src/components/invoice/modals/BatchSelectionModalV2.js` - Check for V1
+- `/frontend/src/components/notes/CreditNotePreviewV2.tsx` - Check for V1
+- `/frontend/src/components/sales/InvoiceListV2.tsx` - Check for V1
 
-### Frontend test HTML files:
-- [ ] `./frontend/tests/e2e-company-data.html` - E2E company data test
-- [ ] `./frontend/tests/comprehensive-api-test.html` - API comprehensive test
-- [ ] `./frontend/test_split_payment.html` - Split payment test
-- [ ] `./frontend/set-org-id.html` - Org ID setter test
-- [ ] `./frontend/debug-storage.html` - Storage debugging
-- [ ] `./frontend/tests/address-management/test-address-segregation.html` - Address test
-- [ ] `./frontend/tests/address-management/test-address-enhanced.html` - Enhanced address test
-- [ ] `./frontend/tests/address-management/test-invoice-address.html` - Invoice address test
+### 4. Test Files Organization (~15 files)
 
-## 6. Test Python Scripts in Root (2 files)
-**Action**: Archive to `/archive/temp/2025-01-06/test-scripts/`
+#### **Misplaced Test Files**
+- `/backend/test_payment_tracking.py` - Move to `/backend/tests/`
+- `/archive/temp/test-scripts/*` - Old test scripts, can be deleted
+- Test files scattered in root directory - Move to proper test folders
 
-Root directory shouldn't have test files:
-- [ ] `./test_all_apis.py` - API testing script
-- [ ] `./test_apis_comprehensive.py` - Comprehensive API test
+### 5. Documentation Duplicates (~10 files)
 
-## 7. Old Documentation/TODO Files (10+ files)
-**Action**: Archive to `/archive/temp/2025-01-06/old-docs/`
+#### **Schema Documentation (CONSOLIDATE)**
+- **KEEP:** `/database/schema-docs/MASTER_SCHEMA_INDEX.md` (Main index)
+- **ARCHIVE/MERGE:**
+  - `/database/COMPLETE_SCHEMA_DOCUMENTATION.md` - Merge into master
+  - `/database/SCHEMA_QUICK_REFERENCE.md` - Merge useful parts
 
-These are old planning/TODO documents:
-- [ ] `./FUTURE_OPTIMIZATION_TODO.md` - Old optimization plans
-- [ ] `./DATA_OPTIMIZATION_TODO.md` - Data optimization notes
-- [ ] `./TODO_FEATURES.md` - Old feature TODO
-- [ ] `./MIGRATION_GUIDE_DYNAMIC_ORG_ID.md` - Completed migration guide
-- [ ] `./ENTERPRISE_MIGRATION_SUCCESS_REPORT.md` - Old migration report
-- [ ] `./CLEANUP_COMPLETION_SUMMARY.md` - Old cleanup summary
-- [ ] `./API_TEST_REPORT.md` - Old API test report
-- [ ] `./PERFORMANCE_ANALYSIS.md` - Old performance analysis
-- [ ] `./PURCHASE_RETURN_REVAMP_PLAN.md` - Completed revamp plan
-- [ ] `./frontend/TODO_Financial_ERP_Roadmap.md` - Old roadmap
-- [ ] `./frontend/test-purchase-verification.md` - Old test verification
+#### **Frontend Documentation (REORGANIZE)**
+- **CONSOLIDATE INTO:** `/docs/frontend/`
+- **FROM:**
+  - `/frontend/docs/frontend/*` - 7 files
+  - `/frontend/UI_FORMATTING_GUIDE.md`
+  - `/docs/UI_UX_IMPLEMENTATION_GUIDE.md`
 
-## 8. Database Test/Fix Scripts in Root (7 files)
-**Action**: Archive to `/archive/temp/2025-01-06/db-scripts/`
+### 6. Temporary & System Files
 
-These one-off scripts shouldn't be in root:
-- [ ] `./apply_purchase_triggers.sh` - Purchase trigger application
-- [ ] `./apply_section_26.sh` - Section 26 application
-- [ ] `./quick_apply_triggers.sh` - Quick trigger application
-- [ ] `./verify_outstanding_working.sh` - Outstanding verification
-- [ ] `./database_query.py` - Database query utility
-- [ ] `./parse_schema_from_sql.py` - Schema parser utility
+#### **Immediate Cleanup**
+- `/archive/.DS_Store` - macOS metadata file
+- Other `.DS_Store` files if found
+- `*.tmp`, `*.swp`, `*.bak` files
 
-## 9. Frontend Test Data (Should be fixtures)
-**Action**: Archive to `/archive/temp/2025-01-06/test-data/`
+### 7. Archive Folder Cleanup
 
-Test data scattered in frontend:
-- [ ] `./frontend/test-data/` entire directory - Move to proper test fixtures
+#### **Already Archived - Can DELETE**
+These are already in archive folders and not referenced:
+- `/frontend/src/components/payment/archive/` - 5 files
+- `/frontend/src/components/purchase/archive/` - 3 files  
+- `/frontend/src/components/returns/archive/` - 2 files
+- `/frontend/src/components/ledger/archive/` - 1 file
 
-## 10. Backend Old/Debug Routes (2 files)
-**Action**: Archive to `/archive/duplicates/backend/`
+## Impact Analysis
 
-Old API routes that are replaced:
-- [ ] `./backend/app/api/routes/party_ledger_old.py` - Old party ledger implementation
-- [ ] `./backend/app/api/routes/party_ledger_debug.py` - Debug version of party ledger
+### Files Affected: ~100
+### Storage Recovery: ~15MB
+### Import Updates Required: ~50 files
+### Risk Level: MEDIUM (many active imports)
 
-## 11. Duplicate Cleanup Scripts
-**Action**: Archive to `/archive/temp/2025-01-06/duplicate-scripts/`
+## Execution Plan
 
-Multiple copies of cleanup scripts:
-- [ ] `./scripts/cleanup/` directory (duplicate of frontend/scripts/cleanup)
-- [ ] `./frontend/scripts/cleanup/` - Keep only one set
+### Phase 1: Safe Cleanup (LOW RISK) - Immediate
+1. Delete already-archived components in archive folders
+2. Remove `.DS_Store` files
+3. Clean `/archive/temp/test-scripts/`
+4. Move misplaced test files to proper directories
 
-## Files NOT Being Touched (Safety First)
+### Phase 2: Backend Consolidation (MEDIUM RISK)
+1. Archive duplicate parser implementations
+2. Consolidate route versions (keep V2/enhanced)
+3. Update service imports
+4. Test all API endpoints
 
-### Recently Modified (Within 7 days)
-- Database SQL files in `/database/` - Recently modified, critical for migrations
+### Phase 3: Frontend Component Migration (HIGH RISK)
+1. Migrate table components to global ItemsTable
+2. Consolidate product search components
+3. Merge purchase flow variants
+4. Update ~30 import statements
+5. Test each module thoroughly
 
-### Test Files in Proper Locations
-- Files in `/frontend/src/tests/` - Proper test location, actively used
-- Files in `/backend/tests/` - Proper test location, actively used
-- `/tests/run_e2e_tests.sh` - E2E test runner, might be needed
+### Phase 4: Documentation & Organization (LOW RISK)
+1. Consolidate schema documentation
+2. Reorganize frontend documentation
+3. Create clear documentation structure
+4. Update all references
 
-### Database Fixes (Revenue Critical)
-- `/database/fixes/` directory - Contains critical database fixes, never touch
-- `/database/MASTER_DATABASE_FIXES.sql` - Master fixes file, absolutely critical
+## Verification Checklist
+- [ ] All tests pass before cleanup
+- [ ] Build succeeds (`npm run build`)
+- [ ] Frontend loads without errors
+- [ ] Backend health check passes
+- [ ] No broken imports
+- [ ] Critical workflows tested:
+  - [ ] Sales invoice creation
+  - [ ] Purchase entry
+  - [ ] Stock management
+  - [ ] Returns processing
+  - [ ] Payment allocation
+  - [ ] Party ledger
 
-### Keep These Critical Files
-- `README.md` - Main project documentation
-- `RAILWAY_DEPLOYMENT.md` - Deployment guide (needed)
-- `RAILWAY_CLI_GUIDE.md` - CLI reference (needed)
-- `QUICK_REFERENCE.md` - Quick reference guide (useful)
-- `COMPREHENSIVE_PROJECT_DOCUMENTATION.md` - Main docs (keep)
-- `DOCUMENTATION_INDEX.md` - Documentation index (keep)
-- `FOLDER_STRUCTURE.md` - Structure reference (keep)
-- `CRITICAL_COMPONENTS.md` - Critical component docs (keep)
-- `CLAUDE.md`, `CLAUDE.local.md` - Agent instructions (keep)
-- `/frontend/public/index.html` - Main app entry (keep)
-- `/frontend/public/org-id-debug.html`, `/frontend/public/fix-org-id.html` - Might be needed for org-id fixes
+## Files Requiring Manual Review
+1. Components with dynamic imports
+2. Files referenced in configuration
+3. Components used in lazy loading
+4. Test fixtures and mock data
+5. Files modified in last 7 days
 
-### Backend Tests (Keep in proper location)
-- `/backend/tests/` directory - Proper test location, actively used
-- `/tests/e2e/` directory - E2E tests in proper location
+## Rollback Plan
+```bash
+# Create backup tag before cleanup
+git tag pre-cleanup-20250106
 
-### Database Files (NEVER TOUCH)
-- `/database/fixes/` directory - Critical database fixes
-- `/database/MASTER_DATABASE_FIXES.sql` - Master fixes file
+# If issues arise
+git reset --hard pre-cleanup-20250106
+```
 
-## Risk Assessment
-- **Risk Level**: LOW-MEDIUM
-- **Business Impact**: MINIMAL (cleaning test files and old docs)
-- **Rollback Plan**: All files archived to `/archive/`, can restore instantly
+## Summary Statistics
 
-## Total Files to Archive: ~95 files
-- 24 `.DS_Store` files
-- 2 log files  
-- 15 HTML test files
-- 11 old documentation files
-- 6 shell scripts in root
-- 2 Python scripts in root
-- 2 old backend routes
-- Test data directory
-- Duplicate cleanup scripts
-- Old reports
+**Total Cleanup Opportunity:**
+- **100+ files** can be archived/consolidated
+- **~15MB** storage recovery
+- **50% reduction** in duplicate code
+- **11 archived folders** can be cleaned
+- **2 complete parser implementations** can be consolidated
+- **5+ table component variants** can be unified
+- **3+ purchase flow versions** can be merged
 
-## Space Recovery: ~2.5 MB
+**Risk Mitigation:**
+- All files ARCHIVED, not deleted (except already-archived items)
+- Phased approach from low to high risk
+- Testing after each phase
+- Clear rollback plan
 
-## Post-Cleanup Benefits
-1. **Cleaner root directory** - No test files in root
-2. **Better organization** - Test files in proper locations
-3. **Reduced confusion** - No duplicate scripts
-4. **Easier navigation** - Less clutter
-5. **Clear purpose** - Only active files remain
+## Next Steps
+1. **Review and approve** this cleanup plan
+2. **Create git backup tag**
+3. **Start with Phase 1** (lowest risk)
+4. **Document progress** in ARCHIVE_LOG.md
+5. **Test thoroughly** after each phase
 
-## Verification Steps After Cleanup
-1. `npm test` - Ensure all tests pass
-2. `npm run build` - Ensure build succeeds
-3. Check frontend loads properly
-4. Verify backend API responds
+---
 
-## Notes
-- All files will be ARCHIVED, not deleted
-- Original directory structure preserved in archive
-- Can restore any file if needed
-- No source code is being touched
-- No configuration files affected
-
-**Please review and approve this cleanup plan before execution.**
+**Recommendation:** Start with Phase 1 immediately after approval (very low risk), then carefully proceed with Phase 2-4 with testing between each phase.
