@@ -144,7 +144,7 @@ const EnhancedGlobalDocumentFlow = ({
       color: 'amber',
       prefix: 'ADJ',
       serviceMethod: 'generateAdjustmentNumber',
-      saveLabel: 'Confirm Adjustment',
+      saveLabel: 'Generate Adjustment',
       historyType: 'stock-adjustment'
     }
   };
@@ -332,17 +332,17 @@ const EnhancedGlobalDocumentFlow = ({
           />
         ) : (
           <DocumentFooter
-            totalItems={footerTotals.itemCount || 0}
-            subtotalAmount={footerTotals.subtotal || 0}
-            taxAmount={footerTotals.tax || 0}
-            roundOffAmount={footerTotals.roundOff || 0}
-            grandTotal={footerTotals.grandTotal || 0}
-            showActionButtons={true}
-            onPrint={onPrint}
-            onSave={onSave}
-            isSaving={isSaving}
-            saveLabel={config.saveLabel || saveLabel || 'Save'}
-          />
+              totalItems={footerTotals.itemCount || 0}
+              subtotalAmount={footerTotals.subtotal || 0}
+              taxAmount={footerTotals.tax || 0}
+              roundOffAmount={footerTotals.roundOff || 0}
+              grandTotal={footerTotals.grandTotal || 0}
+              showActionButtons={true}
+              onPrint={onPrint}
+              onSave={onSave}
+              isSaving={isSaving}
+              saveLabel={config.saveLabel || saveLabel || 'Save'}
+            />
         )}
 
       </div>

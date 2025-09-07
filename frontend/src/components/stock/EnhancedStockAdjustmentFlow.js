@@ -164,8 +164,7 @@ const EnhancedStockAdjustmentFlow = ({ onClose }) => {
   const handleRefresh = async () => {
     setRefreshing(true);
     try {
-      await offlineStorage.clearOfflineData('adjustment_reasons');
-      
+      // Just fetch fresh data - it will overwrite the stored data
       const [increaseResponse, decreaseResponse] = await Promise.all([
         stockApi.getMovementReasons('increase'),
         stockApi.getMovementReasons('decrease')
@@ -189,8 +188,17 @@ const EnhancedStockAdjustmentFlow = ({ onClose }) => {
   };
   
   const updateItemQuantity = (itemId, quantity) => {
-    const qty = parseInt(quantity) || 0;
-    if (qty < 0) return;
+    // Don't allow empty string or deletion to make it 0
+    if (quantity === '' || quantity === null || quantity === undefined) {
+      // Keep minimum value of 1
+      quantity = 1;
+    }
+    
+    const qty = parseInt(quantity) || 1; // Default to 1 instead of 0
+    if (qty <= 0) {
+      // Minimum quantity is 1
+      return;
+    }
     
     setAdjustmentData(prev => ({
       ...prev,
@@ -364,6 +372,8 @@ Note: Use positive numbers for increase and negative for decrease. Reason codes:
           batch_number: null
         }))
       };
+      
+      console.log('Sending adjustment payload:', adjustmentPayload);
 
       if (!navigator.onLine) {
         offlineStorage.queueOfflineOperation({
@@ -668,55 +678,76 @@ Note: Use positive numbers for increase and negative for decrease. Reason codes:
             </div>
           )}
           
-          {/* Quick Batch Selection */}
+          {/* Batch Selection Modal Popup - More Compact */}
           {showBatchSelector && selectedProduct && (
-            <div className="mb-4">
-              <div className="flex items-center justify-between mb-2">
-                <h4 className="text-sm font-medium text-gray-700">
-                  Select batch for <span className="font-semibold">{selectedProduct.product_name}</span>
-                </h4>
-                <button
-                  onClick={() => {
-                    setShowBatchSelector(false);
-                    setSelectedProduct(null);
-                  }}
-                  className="p-1 hover:bg-gray-100 rounded"
-                >
-                  <X className="w-4 h-4 text-gray-500" />
-                </button>
-              </div>
-              
-              <BatchSelector
-                show={true}
-                mode="inline"
-                product={selectedProduct}
-                onBatchSelect={handleBatchSelect}
-                onClose={() => {
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+              {/* Backdrop */}
+              <div 
+                className="absolute inset-0 bg-black bg-opacity-50"
+                onClick={() => {
                   setShowBatchSelector(false);
                   setSelectedProduct(null);
                 }}
-                showExpiryStatus={true}
-                filterExpired={false}
-                maxHeight="250px"
-                className="border border-gray-200 rounded-lg bg-white"
               />
+              
+              {/* Modal - Compact and efficient */}
+              <div className="relative bg-white rounded-lg shadow-2xl w-full max-w-4xl max-h-[85vh] overflow-hidden">
+                {/* Compact Header */}
+                <div className="flex items-center justify-between px-4 py-3 border-b bg-gray-50">
+                  <div className="flex items-center space-x-3">
+                    <Package className="h-5 w-5 text-blue-600" />
+                    <div>
+                      <h3 className="text-base font-semibold text-gray-900">Select Batch for {selectedProduct?.product_name}</h3>
+                      <p className="text-xs text-gray-500">Choose a batch - quantity can be edited after selection</p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => {
+                      setShowBatchSelector(false);
+                      setSelectedProduct(null);
+                    }}
+                    className="p-1.5 hover:bg-gray-200 rounded-lg transition-colors"
+                  >
+                    <X className="h-5 w-5 text-gray-500" />
+                  </button>
+                </div>
+                
+                {/* Body - Minimal padding, maximum content */}
+                <div className="overflow-y-auto" style={{ maxHeight: 'calc(85vh - 120px)' }}>
+                  <BatchSelector
+                    show={true}
+                    mode="inline"
+                    product={selectedProduct}
+                    onBatchSelect={handleBatchSelect}
+                    onClose={() => {
+                      setShowBatchSelector(false);
+                      setSelectedProduct(null);
+                    }}
+                    showExpiryStatus={true}
+                    filterExpired={false}
+                    maxHeight="none"
+                    className="w-full"
+                  />
+                </div>
+              </div>
             </div>
           )}
           
           {/* Selected Products Table */}
           {adjustmentData.items.length > 0 ? (
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead className="bg-gray-50">
-                  <tr>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Product</th>
-                    <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Batch</th>
-                    <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Current Stock</th>
-                    <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Adjustment Qty</th>
-                    <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">New Stock</th>
-                    <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Actions</th>
-                  </tr>
-                </thead>
+            <div>
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Product</th>
+                      <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Batch</th>
+                      <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Current Stock</th>
+                      <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Adjustment Qty</th>
+                      <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">New Stock</th>
+                      <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Actions</th>
+                    </tr>
+                  </thead>
                 <tbody className="divide-y divide-gray-200">
                   {adjustmentData.items.map((item) => (
                     <tr key={item.id}>
@@ -762,7 +793,8 @@ Note: Use positive numbers for increase and negative for decrease. Reason codes:
                     </tr>
                   ))}
                 </tbody>
-              </table>
+                </table>
+              </div>
             </div>
           ) : (
             <div className="text-center py-8 text-gray-500">
@@ -887,37 +919,6 @@ Note: Use positive numbers for increase and negative for decrease. Reason codes:
     </div>
   );
 
-  const actionButtons = {
-    step1: [
-      {
-        label: 'Cancel',
-        variant: 'secondary',
-        onClick: onClose
-      },
-      {
-        label: 'Review Adjustment',
-        variant: 'primary',
-        onClick: handleProceedToReview,
-        disabled: !adjustmentData.items.length || !adjustmentData.adjustment_type || !adjustmentData.reason
-      }
-    ],
-    step2: [
-      {
-        label: '← Back to Input',
-        variant: 'secondary',
-        onClick: () => setCurrentStep(1)
-      },
-      {
-        label: saving ? 'Processing...' : 'Confirm Adjustment',
-        variant: 'primary',
-        onClick: handleSubmit,
-        disabled: saving,
-        icon: saving ? null : Save,
-        loading: saving
-      }
-    ]
-  };
-
   return (
     <EnhancedGlobalDocumentFlow
       documentType="stock-adjustment"
@@ -925,16 +926,23 @@ Note: Use positive numbers for increase and negative for decrease. Reason codes:
       onStepChange={setCurrentStep}
       createContent={createContent}
       reviewContent={reviewContent}
-      actionButtons={actionButtons}
       documentNumber={adjustmentData.adjustment_no}
       documentIcon={Package}
       documentTitle="Stock Adjustment"
       documentSubtitle="Adjust inventory for corrections or losses"
       onClose={onClose}
+      onSave={handleSubmit}
+      isSaving={saving}
+      saveLabel="Generate Adjustment"
+      canProceedToReview={() => adjustmentData.items.length > 0 && adjustmentData.adjustment_type && adjustmentData.reason}
+      footerTotals={{
+        itemCount: adjustmentData.items.length,
+        totalAmount: adjustmentData.items.reduce((sum, item) => sum + item.adjustment_quantity, 0)
+      }}
       keyboardShortcuts={{
         'Ctrl+U': 'Bulk Upload',
         'Ctrl+A': 'Add Product',
-        'Ctrl+S': currentStep === 2 ? 'Confirm Adjustment' : 'Review',
+        'Ctrl+S': currentStep === 2 ? 'Generate Adjustment' : 'Review',
         'Esc': 'Close'
       }}
       additionalActions={[

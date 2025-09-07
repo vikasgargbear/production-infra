@@ -191,6 +191,7 @@ className={`flex-1 p-3 rounded-lg border-2 transition-all ${
   currentStep={currentStep}
   createContent={createContent}     // Step 1 content
   reviewContent={reviewContent}     // Step 2 content
+  actionButtons={actionButtons}     // Footer buttons for each step
   keyboardShortcuts={{
     'Ctrl+A': 'Add Item',
     'Ctrl+S': 'Save',
@@ -198,6 +199,71 @@ className={`flex-1 p-3 rounded-lg border-2 transition-all ${
   }}
 />
 ```
+
+### Action Buttons Pattern (Footer Buttons)
+**ALWAYS place primary actions like Generate/Create/Save in the footer via actionButtons prop**
+
+#### ❌ Wrong Way:
+```jsx
+// Don't place Generate/Create buttons in the content area
+<div className="mt-6 flex justify-center">
+  <button onClick={handleGenerate}>
+    Generate Document
+  </button>
+</div>
+```
+
+#### ✅ Correct Way:
+```jsx
+const actionButtons = {
+  step1: [
+    {
+      label: 'Cancel',
+      variant: 'secondary',
+      onClick: onClose
+    },
+    {
+      label: 'Generate Invoice',  // Primary action in footer
+      variant: 'primary',
+      onClick: handleGenerate,
+      disabled: !isValid,
+      icon: Save
+    }
+  ],
+  step2: [
+    {
+      label: '← Back',
+      variant: 'secondary',
+      onClick: () => setCurrentStep(1)
+    },
+    {
+      label: 'Confirm & Save',
+      variant: 'primary',
+      onClick: handleSubmit,
+      loading: saving
+    }
+  ]
+};
+
+// Pass to EnhancedGlobalDocumentFlow
+<EnhancedGlobalDocumentFlow
+  actionButtons={actionButtons}
+  // ... other props
+/>
+```
+
+**Standard Action Button Labels:**
+- Sales Invoice: "Generate Invoice" → "Confirm Invoice"
+- Purchase Order: "Generate Order" → "Confirm Order"
+- Stock Adjustment: "Generate Adjustment" → "Confirm Adjustment"
+- Credit Note: "Generate Credit Note" → "Confirm Credit Note"
+- Debit Note: "Generate Debit Note" → "Confirm Debit Note"
+
+**Benefits:**
+- Consistent placement across all document flows
+- Users always know where to find primary actions
+- Footer buttons are always visible (sticky)
+- Prevents duplicate buttons in content and footer
 
 ### 2. Form Section Structure
 ```jsx

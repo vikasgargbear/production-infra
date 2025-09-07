@@ -50,16 +50,20 @@ const DocumentFooter = ({
 
   return (
     <div className={`border-t border-blue-200 bg-white px-6 py-4 ${className}`}>
-      {showActionButtons && (subtotalAmount > 0 || grandTotal > 0) ? (
+      {showActionButtons ? (
         // Review page layout - single line like step 1
         <div className="flex justify-between items-center">
           <div className="flex items-center gap-6 text-sm">
-            <span className="text-gray-600">
-              Items: <strong>{totalItems}</strong>
-            </span>
-            <span className="text-gray-600">
-              Sub Total: <strong>₹{subtotalAmount.toFixed(2)}</strong>
-            </span>
+            {totalItems > 0 && (
+              <span className="text-gray-600">
+                Items: <strong>{totalItems}</strong>
+              </span>
+            )}
+            {subtotalAmount > 0 && (
+              <span className="text-gray-600">
+                Sub Total: <strong>₹{subtotalAmount.toFixed(2)}</strong>
+              </span>
+            )}
             {discountAmount > 0 && (
               <span className="text-gray-600">
                 Discount: <strong>-₹{discountAmount.toFixed(2)}</strong>
@@ -70,17 +74,21 @@ const DocumentFooter = ({
                 Delivery: <strong>+₹{deliveryCharges.toFixed(2)}</strong>
               </span>
             )}
-            <span className="text-gray-600">
-              Tax: <strong>₹{taxAmount.toFixed(2)}</strong>
-            </span>
+            {taxAmount > 0 && (
+              <span className="text-gray-600">
+                Tax: <strong>₹{taxAmount.toFixed(2)}</strong>
+              </span>
+            )}
             {roundOffAmount !== 0 && (
               <span className="text-gray-600">
                 Round Off: <strong>{roundOffAmount >= 0 ? '+' : '-'}₹{Math.abs(roundOffAmount).toFixed(2)}</strong>
               </span>
             )}
-            <span className="text-lg font-semibold text-gray-900">
-              Total: <strong>₹{grandTotal.toFixed(2)}</strong>
-            </span>
+            {grandTotal > 0 && (
+              <span className="text-lg font-semibold text-gray-900">
+                Total: <strong>₹{grandTotal.toFixed(2)}</strong>
+              </span>
+            )}
           </div>
           
           <div className="flex items-center gap-3">

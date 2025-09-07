@@ -690,7 +690,6 @@ async def create_stock_adjustment(
     """
     Create stock adjustment for damage, loss, or corrections
     """
-    org_id: str = Depends(get_org_id_from_header)
     
     try:
         # Validate adjustment data

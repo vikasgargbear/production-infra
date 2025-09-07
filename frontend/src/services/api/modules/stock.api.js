@@ -359,7 +359,7 @@ export const stockApi = {
 
   // Stock adjustments
   createAdjustment: async (data) => {
-    return apiClient.post(`${ENDPOINTS.STOCK.BASE}/adjustments`, data);
+    return apiClient.post('stock/adjustments', data);
   },
 
   getAdjustments: async (params = {}) => {
