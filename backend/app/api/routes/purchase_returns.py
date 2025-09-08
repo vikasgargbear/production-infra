@@ -15,6 +15,7 @@ import uuid
 from ...core.database import get_db
 from ...core.auth_utils import get_org_id_from_header
 from ..services.document_number_service import DocumentNumberService
+from ...utils.branch_utils import get_default_branch_id
 
 logger = logging.getLogger(__name__)
 
@@ -138,9 +139,9 @@ async def get_returnable_purchases(
             # Check how much has already been returned
             returned_query = """
                 SELECT COALESCE(SUM(ri.return_quantity), 0) as total_returned
-                FROM return_requests rr
-                JOIN return_items ri ON rr.return_id = ri.return_id
-                WHERE rr.return_number LIKE :invoice_pattern AND rr.return_type = 'PURCHASE'
+                FROM procurement.purchase_returns rr
+                JOIN procurement.purchase_return_items ri ON rr.return_id = ri.return_id
+                WHERE rr.return_number LIKE :invoice_pattern
             """
             total_returned = db.execute(
                 text(returned_query), 
@@ -222,9 +223,9 @@ async def get_purchase_items_for_return(
                     rr.return_number,
                     ri.product_id,
                     SUM(ri.return_quantity) as total_returned
-                FROM return_items ri
-                JOIN return_requests rr ON ri.return_id = rr.return_id  
-                WHERE rr.return_number LIKE :invoice_pattern AND rr.return_type = 'PURCHASE'
+                FROM procurement.purchase_return_items ri
+                JOIN procurement.purchase_returns rr ON ri.return_id = rr.return_id  
+                WHERE rr.return_number LIKE :invoice_pattern
                 GROUP BY rr.return_number, ri.product_id
             ) returned_qty ON returned_qty.product_id = pi.product_id
             WHERE pi.purchase_id = :purchase_id
@@ -416,8 +417,8 @@ async def create_purchase_return(
             # Get next debit note number
             last_dn = db.execute(
                 text("""
-                    SELECT debit_note_number FROM return_requests 
-                    WHERE return_type = 'PURCHASE' AND debit_note_number IS NOT NULL
+                    SELECT debit_note_number FROM procurement.purchase_returns 
+                    WHERE debit_note_number IS NOT NULL
                     ORDER BY created_at DESC LIMIT 1
                 """)
             ).scalar()
@@ -431,29 +432,34 @@ async def create_purchase_return(
             else:
                 debit_note_no = "DN-000001"
         
-        # Create return record using return_requests table
+        # Create return record using purchase_returns table
         # Note: purchase_id can be NULL for direct invoice returns
         result = db.execute(
             text("""
-                INSERT INTO return_requests (
-                    org_id, return_number, return_date,
-                    return_type, purchase_id, supplier_id,
-                    return_reason, return_status,
-                    total_return_amount, debit_note_number
+                INSERT INTO procurement.purchase_returns (
+                    org_id, branch_id, return_number, return_date,
+                    return_type, supplier_id,
+                    return_reason, 
+                    return_amount, tax_amount, total_amount,
+                    debit_note_number
                 ) VALUES (
-                    :org_id, :return_number, :return_date,
-                    'PURCHASE', NULL, :supplier_id,
-                    :reason, 'approved',
-                    :total_amount, :debit_note_no
+                    :org_id, :branch_id, :return_number, :return_date,
+                    'PURCHASE', :supplier_id,
+                    :reason,
+                    :subtotal, :tax_amount, :total_amount,
+                    :debit_note_no
                 )
                 RETURNING return_id
             """),
             {
-                "org_id": org_id,  # Default org
+                "org_id": org_id,
+                "branch_id": get_default_branch_id(db, org_id),
                 "return_number": return_number,
                 "return_date": return_data["return_date"],
                 "supplier_id": return_data.get("supplier_id"),
                 "reason": return_data.get("return_reason", return_data.get("reason", "")),
+                "subtotal": subtotal,
+                "tax_amount": tax_amount,
                 "total_amount": total_amount,
                 "debit_note_no": debit_note_no
             }
@@ -466,22 +472,24 @@ async def create_purchase_return(
             # Insert return item using existing return_items table
             db.execute(
                 text("""
-                    INSERT INTO return_items (
+                    INSERT INTO procurement.purchase_return_items (
                         return_id, product_id,
-                        batch_id, return_quantity, 
-                        original_price, return_price
+                        batch_id, batch_number, return_quantity, 
+                        unit_price, uom
                     ) VALUES (
                         :return_id, :product_id,
-                        :batch_id, :quantity, 
-                        :rate, :rate
+                        :batch_id, :batch_number, :quantity, 
+                        :rate, :uom
                     )
                 """),
                 {
                     "return_id": return_id,
                     "product_id": item["product_id"],
                     "batch_id": item.get("batch_id"),
+                    "batch_number": item.get("batch_number", ""),
                     "quantity": item["quantity"],
-                    "rate": Decimal(str(item["rate"]))
+                    "rate": Decimal(str(item["rate"])),
+                    "uom": item.get("unit", "PCS")
                 }
             )
             
@@ -537,7 +545,7 @@ async def cancel_purchase_return(
     try:
         # Get return details
         purchase_return = db.execute(
-            text("SELECT * FROM return_requests WHERE return_id = :return_id AND return_type = 'PURCHASE'"),
+            text("SELECT * FROM procurement.purchase_returns WHERE return_id = :return_id"),
             {"return_id": return_id}
         ).fetchone()
         
@@ -549,7 +557,7 @@ async def cancel_purchase_return(
             
         # Get return items
         items = db.execute(
-            text("SELECT * FROM return_items WHERE return_id = :return_id"),
+            text("SELECT * FROM procurement.purchase_return_items WHERE return_id = :return_id"),
             {"return_id": return_id}
         ).fetchall()
         
@@ -574,7 +582,7 @@ async def cancel_purchase_return(
         # Update return status
         db.execute(
             text("""
-                UPDATE return_requests 
+                UPDATE procurement.purchase_returns 
                 SET return_status = 'cancelled'
                 WHERE return_id = :return_id
             """),
@@ -607,9 +615,9 @@ async def get_purchase_return_details(
             SELECT pr.*, s.supplier_name as party_name, s.gst_number as party_gst,
                    -- Extract invoice ID from return number
                    SUBSTRING(pr.return_number FROM 'INV([0-9]+)$') as original_invoice_number
-            FROM return_requests pr
-            LEFT JOIN suppliers s ON pr.supplier_id = s.supplier_id
-            WHERE pr.return_id = :return_id AND pr.return_type = 'PURCHASE'
+            FROM procurement.purchase_returns pr
+            LEFT JOIN parties.suppliers s ON pr.supplier_id = s.supplier_id
+            WHERE pr.return_id = :return_id
         """
         
         return_data = db.execute(text(return_query), {"return_id": return_id}).fetchone()
