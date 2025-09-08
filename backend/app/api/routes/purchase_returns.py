@@ -400,13 +400,28 @@ async def create_purchase_return(
         # Calculate totals
         subtotal = Decimal("0")
         tax_amount = Decimal("0")
+        cgst_amount = Decimal("0")
+        sgst_amount = Decimal("0")
+        igst_amount = Decimal("0")
         total_amount = Decimal("0")
         
         selected_items = [item for item in return_data.get("items", []) if item.get("selected") and item.get("quantity", 0) > 0]
         
+        # Check if supplier is from different state for IGST
+        is_igst = False
+        # For now, assume CGST/SGST (same state). TODO: Check supplier state vs org state
+        
         for item in selected_items:
             item_total = Decimal(str(item["quantity"])) * Decimal(str(item["rate"]))
             item_tax = (item_total * Decimal(str(item.get("tax_percent", 18)))) / 100
+            
+            if is_igst:
+                igst_amount += item_tax
+            else:
+                # Split tax equally between CGST and SGST
+                cgst_amount += item_tax / 2
+                sgst_amount += item_tax / 2
+            
             subtotal += item_total
             tax_amount += item_tax
             total_amount += item_total + item_tax
@@ -477,15 +492,17 @@ async def create_purchase_return(
             text("""
                 INSERT INTO procurement.purchase_returns (
                     org_id, branch_id, return_number, return_date,
-                    return_type, supplier_id,
+                    return_type, supplier_id, supplier_invoice_id,
                     return_reason, 
                     return_amount, tax_amount, total_amount,
+                    cgst_amount, sgst_amount, igst_amount,
                     debit_note_number, created_by
                 ) VALUES (
                     :org_id, :branch_id, :return_number, :return_date,
-                    'PURCHASE', :supplier_id,
+                    'PURCHASE', :supplier_id, :supplier_invoice_id,
                     :reason,
                     :subtotal, :tax_amount, :total_amount,
+                    :cgst_amount, :sgst_amount, :igst_amount,
                     :debit_note_no, :created_by
                 )
                 RETURNING return_id
@@ -496,10 +513,14 @@ async def create_purchase_return(
                 "return_number": return_number,
                 "return_date": return_data["return_date"],
                 "supplier_id": return_data.get("supplier_id"),
+                "supplier_invoice_id": return_data.get("original_purchase_id") or return_data.get("purchase_id"),
                 "reason": return_data.get("return_reason", return_data.get("reason", "")),
                 "subtotal": subtotal,
                 "tax_amount": tax_amount,
                 "total_amount": total_amount,
+                "cgst_amount": cgst_amount,
+                "sgst_amount": sgst_amount,
+                "igst_amount": igst_amount,
                 "debit_note_no": debit_note_no,
                 "created_by": created_by
             }
@@ -509,27 +530,44 @@ async def create_purchase_return(
         
         # Create return items and update inventory
         for item in selected_items:
-            # Insert return item using existing return_items table
+            # Calculate item-level amounts
+            item_quantity = Decimal(str(item["quantity"]))
+            item_rate = Decimal(str(item["rate"]))
+            item_subtotal = item_quantity * item_rate
+            item_tax_percent = Decimal(str(item.get("tax_percent", 18)))
+            item_tax_amount = (item_subtotal * item_tax_percent) / 100
+            item_total = item_subtotal + item_tax_amount
+            
+            # Ensure batch_number is never empty
+            batch_number = item.get("batch_number") or item.get("batch_no") or "NO_BATCH"
+            
+            # Insert return item
             db.execute(
                 text("""
                     INSERT INTO procurement.purchase_return_items (
                         return_id, product_id,
                         batch_id, batch_number, return_quantity, 
-                        unit_price, uom
+                        unit_price, uom, return_value, tax_amount,
+                        item_return_reason, disposition
                     ) VALUES (
                         :return_id, :product_id,
                         :batch_id, :batch_number, :quantity, 
-                        :rate, :uom
+                        :rate, :uom, :return_value, :tax_amount,
+                        :item_reason, :disposition
                     )
                 """),
                 {
                     "return_id": return_id,
                     "product_id": item["product_id"],
-                    "batch_id": item.get("batch_id"),
-                    "batch_number": item.get("batch_number", ""),
-                    "quantity": item["quantity"],
-                    "rate": Decimal(str(item["rate"])),
-                    "uom": item.get("unit", "PCS")
+                    "batch_id": item.get("batch_id") if item.get("batch_id") else None,
+                    "batch_number": batch_number,
+                    "quantity": item_quantity,
+                    "rate": item_rate,
+                    "uom": item.get("unit", "PCS"),
+                    "return_value": item_total,
+                    "tax_amount": item_tax_amount,
+                    "item_reason": item.get("reason", return_data.get("return_reason", "")),
+                    "disposition": item.get("disposition", "RETURN_TO_SUPPLIER")
                 }
             )
             
