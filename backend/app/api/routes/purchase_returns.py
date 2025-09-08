@@ -441,13 +441,13 @@ async def create_purchase_return(
                     return_type, supplier_id,
                     return_reason, 
                     return_amount, tax_amount, total_amount,
-                    debit_note_number
+                    debit_note_number, created_by
                 ) VALUES (
                     :org_id, :branch_id, :return_number, :return_date,
                     'PURCHASE', :supplier_id,
                     :reason,
                     :subtotal, :tax_amount, :total_amount,
-                    :debit_note_no
+                    :debit_note_no, :created_by
                 )
                 RETURNING return_id
             """),
@@ -461,7 +461,8 @@ async def create_purchase_return(
                 "subtotal": subtotal,
                 "tax_amount": tax_amount,
                 "total_amount": total_amount,
-                "debit_note_no": debit_note_no
+                "debit_note_no": debit_note_no,
+                "created_by": 1  # TODO: Get from auth context when available
             }
         ).fetchone()
         
