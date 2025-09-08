@@ -383,13 +383,27 @@ const PurchaseReturnFlowV2 = ({ onClose }) => {
 
     setSaving(true);
     try {
+      // Debug logging
+      console.log('All items before filter:', returnData.items);
+      console.log('Items with selection status:', returnData.items.map(item => ({
+        name: item.product_name,
+        selected: item.selected,
+        return_quantity: item.return_quantity
+      })));
+      
+      const filteredItems = returnData.items.filter(item => {
+        const hasQuantity = parseFloat(item.return_quantity) > 0;
+        console.log(`Item ${item.product_name}: selected=${item.selected}, return_qty=${item.return_quantity}, hasQuantity=${hasQuantity}`);
+        return item.selected && hasQuantity;
+      });
+      console.log('Filtered items count:', filteredItems.length);
+      
       const returnPayload = {
         ...returnData,
         purchase_id: selectedInvoice?.supplier_invoice_id || selectedInvoice?.invoice_id,  // Set purchase_id for transformer
         reason: returnData.return_reason,  // Transformer expects 'reason' not 'return_reason'
         original_purchase: selectedInvoice,  // Keep for reference
-        items: returnData.items
-          .filter(item => item.selected && item.return_quantity > 0)
+        items: filteredItems
           .map(item => ({
             invoice_item_id: item.invoice_item_id || item.id,
             product_id: item.product_id,

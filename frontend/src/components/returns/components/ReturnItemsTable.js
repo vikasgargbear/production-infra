@@ -186,7 +186,7 @@ const ReturnItemsTable = ({
                           : (paidQty + freeQty);
                         
                         if (value <= maxQty || isManual) {
-                          onUpdateItem(item.id || index, 'return_quantity', e.target.value);
+                          onUpdateItem(item.id || index, 'return_quantity', value);
                         } else {
                           // Show error or reset to max
                           alert(`Maximum returnable quantity is ${maxQty}`);

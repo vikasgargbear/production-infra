@@ -60,6 +60,8 @@ export const returnsDataTransformer = {
         product_id: item.product_id,
         batch_id: item.batch_id || item.batch_no,
         return_quantity: parseFloat(item.return_quantity || 0),
+        quantity: parseFloat(item.return_quantity || 0),  // Backend expects 'quantity' for validation
+        selected: item.selected || true,  // Backend expects 'selected' for validation
         cost_price: parseFloat(item.cost_price || item.purchase_price || 0),
         tax_percent: parseFloat(item.tax_percent || 0),
         reason: item.reason || returnData.reason || '',

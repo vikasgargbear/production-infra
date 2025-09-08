@@ -14,6 +14,7 @@ import uuid
 
 from ...core.database import get_db
 from ...core.auth_utils import get_org_id_from_header
+from ..services.document_number_service import DocumentNumberService
 
 logger = logging.getLogger(__name__)
 

@@ -98,7 +98,7 @@ export const returnsApi = {
       throw new Error(validation.errors.join(', '));
     }
     
-    const response = await apiClient.post('purchase-returns', transformedData);
+    const response = await apiClient.post('purchase-returns/', transformedData);
     
     if (response.data) {
       response.data = returnsDataTransformer.transformBackendPurchaseReturn(response.data);
@@ -122,7 +122,7 @@ export const returnsApi = {
 
   // Get purchase returns
   getPurchaseReturns: async (params = {}) => {
-    const response = await apiClient.get('purchase-returns', { params });
+    const response = await apiClient.get('purchase-returns/', { params });
     
     if (response.data && response.data.returns) {
       response.data.returns = response.data.returns.map(ret => 
