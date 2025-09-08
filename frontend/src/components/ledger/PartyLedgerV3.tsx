@@ -298,14 +298,6 @@ const PartyLedgerV3: React.FC<PartyLedgerV3Props> = ({
       width: '150px'
     },
     {
-      key: 'description',
-      header: 'Description',
-      render: (value: any, entry: any) => {
-        console.log('[Column Render] Description:', { value, entry });
-        return entry?.description || '-';
-      }
-    },
-    {
       key: 'debit',
       header: 'Debit',
       align: 'right' as const,
@@ -342,15 +334,6 @@ const PartyLedgerV3: React.FC<PartyLedgerV3Props> = ({
         return `₹${Math.abs(balanceNum).toFixed(2)} ${isReceivable ? '(Dr)' : '(Cr)'}`;
       },
       width: '150px'
-    },
-    {
-      key: 'status',
-      header: 'Status',
-      render: (value: any, entry: any) => {
-        console.log('[Column Render] Status:', { value, entry });
-        return entry?.status || '-';
-      },
-      width: '100px'
     }
   ];
 
@@ -412,30 +395,25 @@ const PartyLedgerV3: React.FC<PartyLedgerV3Props> = ({
 
       {/* Party Selection */}
       {!initialPartyId && (
-        <div className="mb-6">
-          {partyType === 'customer' ? (
-            <CustomerSearch
-              value={selectedParty}
-              onChange={setSelectedParty}
-              placeholder="Search customer by name, phone or ID"
-            />
-          ) : (
-            <SupplierSearch
-              onChange={setSelectedParty}
-              placeholder="Search supplier by name or ID"
-            />
-          )}
-        </div>
+        partyType === 'customer' ? (
+          <CustomerSearch
+            value={selectedParty}
+            onChange={setSelectedParty}
+            placeholder="Search customer by name, phone or ID"
+            className="mb-6"
+          />
+        ) : (
+          <SupplierSearch
+            onChange={setSelectedParty}
+            placeholder="Search supplier by name or ID"
+            className="mb-6"
+          />
+        )
       )}
 
       {/* Content */}
       {(selectedParty || initialPartyId) && (
         <>
-          {/* Filters */}
-          <div className="mb-6 bg-white p-4 rounded-lg shadow">
-            {/* Filter controls */}
-          </div>
-
           {/* Ledger Table */}
           <div className="bg-white rounded-lg shadow">
             {selectedTransactions.length > 0 && (

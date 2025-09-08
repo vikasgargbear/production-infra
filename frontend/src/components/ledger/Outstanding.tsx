@@ -8,19 +8,19 @@ import { useQuery } from 'react-query';
 import {
   ChevronDown,
   ChevronRight,
-  DollarSign,
+  IndianRupee,
   AlertCircle,
   Clock,
   Download,
-  Filter,
+  FileSpreadsheet,
   Search,
   Loader2,
   RefreshCw,
   TrendingUp,
   TrendingDown,
   Calendar,
-  Phone,
-  Mail
+  BarChart3,
+  Table
 } from 'lucide-react';
 import { format, parseISO, differenceInDays } from 'date-fns';
 import apiClient from '../../services/api/apiClient';
@@ -525,8 +525,8 @@ const Outstanding: React.FC<OutstandingProps> = ({
               title="Outstanding"
               documentNumber=""
               status=""
-              icon={DollarSign}
-              iconColor="text-amber-600"
+              icon={IndianRupee}
+              iconColor="text-blue-600"
               onClose={onClose}
               onSaveDraft={() => {}}
               additionalActions={[]}
@@ -552,28 +552,23 @@ const Outstanding: React.FC<OutstandingProps> = ({
             title="Outstanding"
             documentNumber=""
             status=""
-            icon={DollarSign}
-            iconColor="text-amber-600"
+            icon={IndianRupee}
+            iconColor="text-blue-600"
             onClose={onClose}
             onSaveDraft={() => {}}
             additionalActions={[
               {
-                label: viewMode === 'summary' ? "Aging View" : "Summary View",
+                label: viewMode === 'summary' ? "View Aging Analysis" : "View Summary",
                 onClick: () => setViewMode(viewMode === 'summary' ? 'aging' : 'summary'),
-                variant: "default",
-                icon: viewMode === 'summary' ? Clock : DollarSign
+                variant: viewMode === 'aging' ? "primary" : "secondary",
+                icon: viewMode === 'summary' ? BarChart3 : Table,
+                className: "font-medium"
               },
               {
                 label: "Refresh",
                 onClick: () => refetch(),
-                variant: "primary",
-                icon: RefreshCw
-              },
-              {
-                label: "Export",
-                onClick: handleExport,
                 variant: "default",
-                icon: Download
+                icon: RefreshCw
               }
             ] as any}
           />
@@ -581,99 +576,109 @@ const Outstanding: React.FC<OutstandingProps> = ({
           <div className="flex-1 overflow-y-auto">
             <div className="max-w-7xl mx-auto px-6 py-6">
               
-              {/* Summary Cards */}
-              <div className="grid grid-cols-5 gap-4 mb-6">
-                <div className="bg-white p-4 rounded-lg shadow-sm">
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-sm text-gray-600">Total Outstanding</span>
-                    <DollarSign className="w-4 h-4 text-blue-600" />
+              {/* Summary Bar - More professional and compact */}
+              <div className="bg-white border border-gray-200 rounded-lg shadow-sm mb-6 p-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center space-x-8">
+                    <div>
+                      <span className="text-xs text-gray-500 uppercase tracking-wider">Total Outstanding</span>
+                      <div className="text-xl font-semibold text-gray-900">{formatCurrency(summary.total_receivable)}</div>
+                    </div>
+                    <div className="h-10 w-px bg-gray-200"></div>
+                    <div>
+                      <span className="text-xs text-gray-500 uppercase tracking-wider">Overdue Amount</span>
+                      <div className="text-xl font-semibold text-red-600">{formatCurrency(summary.total_overdue)}</div>
+                    </div>
+                    <div className="h-10 w-px bg-gray-200"></div>
+                    <div>
+                      <span className="text-xs text-gray-500 uppercase tracking-wider">Parties</span>
+                      <div className="text-xl font-semibold text-gray-900">{summary.party_count}</div>
+                    </div>
                   </div>
-                  <div className="text-2xl font-bold text-gray-900">
-                    {formatCurrency(summary.total_receivable)}
-                  </div>
-                  <div className="text-xs text-gray-500 mt-1">
-                    {summary.party_count} parties
-                  </div>
-                </div>
-
-                <div className="bg-white p-4 rounded-lg shadow-sm">
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-sm text-gray-600">Overdue</span>
-                    <AlertCircle className="w-4 h-4 text-red-600" />
-                  </div>
-                  <div className="text-2xl font-bold text-red-600">
-                    {formatCurrency(summary.total_overdue)}
-                  </div>
-                  <div className="text-xs text-gray-500 mt-1">
-                    {summary.overdue_party_count} parties
-                  </div>
-                </div>
-
-                <div className="bg-white p-4 rounded-lg shadow-sm">
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-sm text-gray-600">Current</span>
-                    <Clock className="w-4 h-4 text-green-600" />
-                  </div>
-                  <div className="text-2xl font-bold text-green-600">
-                    {formatCurrency(summary.aging_summary.current.amount)}
-                  </div>
-                  <div className="text-xs text-gray-500 mt-1">
-                    {summary.aging_summary.current.count} bills
-                  </div>
-                </div>
-
-                <div className="bg-white p-4 rounded-lg shadow-sm">
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-sm text-gray-600">30-60 Days</span>
-                    <Calendar className="w-4 h-4 text-orange-600" />
-                  </div>
-                  <div className="text-2xl font-bold text-orange-600">
-                    {formatCurrency(summary.aging_summary['31-60'].amount)}
-                  </div>
-                  <div className="text-xs text-gray-500 mt-1">
-                    {summary.aging_summary['31-60'].count} bills
-                  </div>
-                </div>
-
-                <div className="bg-white p-4 rounded-lg shadow-sm">
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-sm text-gray-600">90+ Days</span>
-                    <TrendingUp className="w-4 h-4 text-red-800" />
-                  </div>
-                  <div className="text-2xl font-bold text-red-800">
-                    {formatCurrency(summary.aging_summary.over_90.amount)}
-                  </div>
-                  <div className="text-xs text-gray-500 mt-1">
-                    {summary.aging_summary.over_90.count} bills
+                  
+                  {/* Aging Distribution Bar */}
+                  <div className="flex items-center space-x-4">
+                    <div className="text-xs text-gray-500 uppercase tracking-wider">Aging Distribution</div>
+                    <div className="flex items-center space-x-1">
+                      {summary.total_receivable > 0 && (
+                        <>
+                          {summary.aging_summary.current.amount > 0 && (
+                            <div 
+                              className="h-6 bg-green-500 rounded-l" 
+                              style={{width: `${(summary.aging_summary.current.amount / summary.total_receivable) * 100}px`}}
+                              title={`Current: ${formatCurrency(summary.aging_summary.current.amount)}`}
+                            />
+                          )}
+                          {summary.aging_summary['1-30'].amount > 0 && (
+                            <div 
+                              className="h-6 bg-yellow-500" 
+                              style={{width: `${(summary.aging_summary['1-30'].amount / summary.total_receivable) * 100}px`}}
+                              title={`1-30 days: ${formatCurrency(summary.aging_summary['1-30'].amount)}`}
+                            />
+                          )}
+                          {summary.aging_summary['31-60'].amount > 0 && (
+                            <div 
+                              className="h-6 bg-orange-500" 
+                              style={{width: `${(summary.aging_summary['31-60'].amount / summary.total_receivable) * 100}px`}}
+                              title={`31-60 days: ${formatCurrency(summary.aging_summary['31-60'].amount)}`}
+                            />
+                          )}
+                          {summary.aging_summary['61-90'].amount > 0 && (
+                            <div 
+                              className="h-6 bg-red-500" 
+                              style={{width: `${(summary.aging_summary['61-90'].amount / summary.total_receivable) * 100}px`}}
+                              title={`61-90 days: ${formatCurrency(summary.aging_summary['61-90'].amount)}`}
+                            />
+                          )}
+                          {summary.aging_summary.over_90.amount > 0 && (
+                            <div 
+                              className="h-6 bg-red-800 rounded-r" 
+                              style={{width: `${(summary.aging_summary.over_90.amount / summary.total_receivable) * 100}px`}}
+                              title={`90+ days: ${formatCurrency(summary.aging_summary.over_90.amount)}`}
+                            />
+                          )}
+                        </>
+                      )}
+                    </div>
                   </div>
                 </div>
               </div>
 
               {/* Filters */}
               <div className="bg-white p-4 rounded-lg shadow-sm mb-6">
-                <div className="flex items-center space-x-4">
-                  <div className="flex-1">
-                    <div className="relative">
-                      <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
-                      <input
-                        type="text"
-                        placeholder="Search by party name or phone..."
-                        value={filters.searchQuery}
-                        onChange={(e) => setFilters({ ...filters, searchQuery: e.target.value })}
-                        className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                      />
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center space-x-4 flex-1">
+                    <div className="flex-1 max-w-md">
+                      <div className="relative">
+                        <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+                        <input
+                          type="text"
+                          placeholder="Search by party name or phone..."
+                          value={filters.searchQuery}
+                          onChange={(e) => setFilters({ ...filters, searchQuery: e.target.value })}
+                          className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                        />
+                      </div>
                     </div>
+                    
+                    <Select
+                      value={filters.status}
+                      onChange={(value) => setFilters({ ...filters, status: value })}
+                      options={[
+                        { value: 'all', label: 'All Status' },
+                        { value: 'overdue', label: 'Overdue Only' },
+                        { value: 'current', label: 'Current Only' }
+                      ]}
+                    />
                   </div>
                   
-                  <Select
-                    value={filters.status}
-                    onChange={(value) => setFilters({ ...filters, status: value })}
-                    options={[
-                      { value: 'all', label: 'All Status' },
-                      { value: 'overdue', label: 'Overdue Only' },
-                      { value: 'current', label: 'Current Only' }
-                    ]}
-                  />
+                  <button
+                    onClick={handleExport}
+                    className="ml-4 px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                  >
+                    <FileSpreadsheet className="w-4 h-4 inline-block mr-2" />
+                    Export
+                  </button>
                 </div>
               </div>
 
