@@ -452,23 +452,27 @@ const PurchaseReturnFlowV2 = ({ onClose }) => {
         reason: returnData.return_reason,  // Transformer expects 'reason' not 'return_reason'
         original_purchase: selectedInvoice,  // Keep for reference
         items: filteredItems
-          .map(item => ({
-            invoice_item_id: item.invoice_item_id || item.id,
-            product_id: item.product_id,
-            batch_id: item.batch_id,
-            batch_number: item.batch_number,
-            return_quantity: item.return_quantity,  // Transformer expects this
-            quantity: item.return_quantity,  // Backend expects this
-            rate: item.rate || item.unit_price || item.purchase_price || 0,
-            unit_price: item.unit_price || item.rate || item.purchase_price || 0,
-            cost_price: item.rate || item.unit_price || item.purchase_price || 0,  // Transformer expects this
-            discount_percent: item.discount_percent || 0,
-            tax_percent: item.tax_percent || item.gst_percent || 0,
-            return_reason: item.return_reason || returnData.return_reason,
-            selected: true,
-            restock: item.restock !== false,
-            disposition: item.restock !== false ? 'RESTOCK' : 'DESTROY'
-          }))
+          .map(item => {
+            const mappedItem = {
+              invoice_item_id: item.invoice_item_id || item.id,
+              product_id: item.product_id,
+              batch_id: item.batch_id,
+              batch_number: item.batch_number,
+              return_quantity: item.return_quantity,  // Transformer expects this
+              quantity: item.return_quantity,  // Backend expects this
+              rate: item.rate || item.unit_price || item.purchase_price || 0,
+              unit_price: item.unit_price || item.rate || item.purchase_price || 0,
+              cost_price: item.rate || item.unit_price || item.purchase_price || 0,  // Transformer expects this
+              discount_percent: item.discount_percent || 0,
+              tax_percent: item.tax_percent || item.gst_percent || 0,
+              return_reason: item.return_reason || returnData.return_reason,
+              selected: true,
+              restock: item.restock !== false,
+              disposition: item.restock !== false ? 'RESTOCK' : 'DESTROY'
+            };
+            console.log('Mapped item for payload:', mappedItem);
+            return mappedItem;
+          })
       };
 
       console.log('Purchase Return Payload:', returnPayload);

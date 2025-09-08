@@ -56,18 +56,25 @@ export const returnsDataTransformer = {
       notes: returnData.notes || '',
       
       // Transform items
-      items: (returnData.items || []).map(item => ({
-        product_id: item.product_id,
-        batch_id: item.batch_id || item.batch_no,
-        return_quantity: parseFloat(item.return_quantity || 0),
-        quantity: parseFloat(item.return_quantity || 0),  // Backend expects 'quantity' for validation
-        selected: item.selected || true,  // Backend expects 'selected' for validation
-        rate: parseFloat(item.rate || item.unit_price || item.purchase_price || item.cost_price || 0),  // Backend expects 'rate'
-        cost_price: parseFloat(item.cost_price || item.purchase_price || item.rate || item.unit_price || 0),
-        tax_percent: parseFloat(item.tax_percent || 0),
-        reason: item.reason || item.return_reason || returnData.reason || returnData.return_reason || '',
-        custom_reason: item.custom_reason || returnData.custom_reason || ''
-      })),
+      items: (returnData.items || []).map(item => {
+        console.log('Transformer input item:', item);
+        const transformedItem = {
+          product_id: item.product_id,
+          batch_id: item.batch_id || item.batch_no,
+          batch_number: item.batch_number,  // Add batch_number
+          invoice_item_id: item.invoice_item_id,  // Add invoice_item_id
+          return_quantity: parseFloat(item.return_quantity || 0),
+          quantity: parseFloat(item.return_quantity || 0),  // Backend expects 'quantity' for validation
+          selected: item.selected || true,  // Backend expects 'selected' for validation
+          rate: parseFloat(item.rate || item.unit_price || item.purchase_price || item.cost_price || 0),  // Backend expects 'rate'
+          cost_price: parseFloat(item.cost_price || item.purchase_price || item.rate || item.unit_price || 0),
+          tax_percent: parseFloat(item.tax_percent || 0),
+          reason: item.reason || item.return_reason || returnData.reason || returnData.return_reason || '',
+          custom_reason: item.custom_reason || returnData.custom_reason || ''
+        };
+        console.log('Transformer output item:', transformedItem);
+        return transformedItem;
+      }),
       
       // Debit note details
       debit_note_no: returnData.debit_note_no,

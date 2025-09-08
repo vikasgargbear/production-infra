@@ -433,6 +433,10 @@ async def create_purchase_return(
         
         selected_items = [item for item in return_data.get("items", []) if item.get("selected") and item.get("quantity", 0) > 0]
         
+        logger.info(f"Processing {len(selected_items)} return items")
+        for idx, item in enumerate(selected_items):
+            logger.info(f"Item {idx}: product_id={item.get('product_id')}, batch_id={item.get('batch_id')}, batch_number={item.get('batch_number')}, invoice_item_id={item.get('invoice_item_id')}")
+        
         # Check if supplier is from different state for IGST
         is_igst = False
         # For now, assume CGST/SGST (same state). TODO: Check supplier state vs org state
