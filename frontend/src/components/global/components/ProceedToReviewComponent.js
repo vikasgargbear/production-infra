@@ -32,7 +32,7 @@ const ProceedToReviewComponent = ({
   totalAmount = 0,
   proceedText,
   resetText = "Reset",
-  backText = "Back to Edit",
+  backText = "Back",
   saving = false,
   disabled = false,
   showTotals = true,

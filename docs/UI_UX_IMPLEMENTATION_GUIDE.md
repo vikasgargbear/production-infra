@@ -143,7 +143,57 @@ import { ADJUSTMENT_REASONS } from '../../constants/stockAdjustment';
 const reasons = ADJUSTMENT_REASONS[adjustmentType];
 ```
 
-### 5. Conditional Display Pattern
+### 5. Review Page Pattern
+**For document review pages, avoid sidebars - integrate summary into main content flow**
+
+#### ❌ Wrong Way (Sidebar):
+```jsx
+<div className="flex gap-6">
+  <div className="flex-1">
+    {/* Main preview */}
+  </div>
+  <div className="w-80">
+    {/* Sidebar with details */}
+  </div>
+</div>
+```
+
+#### ✅ Correct Way (Integrated):
+```jsx
+<div className="max-w-6xl mx-auto p-6">
+  {/* Document Preview */}
+  <DocumentPreview />
+  
+  {/* Additional Details - Below preview */}
+  <div className="mt-6 bg-white rounded-lg shadow-sm border border-blue-200 p-6">
+    <NotesSection />
+  </div>
+</div>
+```
+
+**Benefits:**
+- Consistent layout across all screens
+- Better responsive design
+- No floating elements
+- Clear content hierarchy
+
+### 6. Footer Actions Pattern
+**Use ProceedToReviewComponent for consistent footer actions**
+
+```jsx
+<ProceedToReviewComponent
+  currentStep={2}
+  canProceed={true}
+  onBack={() => setCurrentStep(1)}
+  onProceed={handleSave}
+  totalAmount={totalAmount}
+  proceedText="Generate Document"
+  backText="Back"  // Simple "Back", not "Back to Edit"
+  saving={saving}
+/>
+```
+
+### 7. Conditional Display Pattern
 **Show only relevant options based on user selections**
 
 ```jsx

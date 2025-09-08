@@ -12,7 +12,6 @@ import { returnsApi, purchasesApi, suppliersApi, settingsApi, metadataApi } from
 import PurchaseInvoiceSelector from './components/PurchaseInvoiceSelector';
 import SupplierInvoiceSelector from './components/SupplierInvoiceSelector';
 import ReturnItemsTable from './components/ReturnItemsTable';
-import ReturnSummary from './components/ReturnSummary';
 import DebitNotePreview from './components/DebitNotePreview';
 import offlineStorage from '../../services/offlineStorage';
 

@@ -11,7 +11,6 @@ import {
 import { returnsApi, purchasesApi, suppliersApi, settingsApi, metadataApi } from '../../services/api';
 import SupplierInvoiceSelector from './components/SupplierInvoiceSelector';
 import ReturnItemsTable from './components/ReturnItemsTable';
-import ReturnSummary from './components/ReturnSummary';
 import DebitNotePreview from './components/DebitNotePreview';
 import offlineStorage from '../../services/offlineStorage';
 
@@ -689,95 +688,59 @@ const PurchaseReturnFlowV2 = ({ onClose }) => {
           onClose={onClose}
         />
 
-        {/* Content */}
-        <div className="flex-1 overflow-y-auto p-6">
-          <div className="max-w-7xl mx-auto">
-            <div className="grid grid-cols-3 gap-6">
-              {/* Main Content */}
-              <div className="col-span-2 space-y-6">
-                <ReturnSummary
-                  returnData={returnData}
-                  isSupplierReturn={true}
-                />
-                
-                <DebitNotePreview
-                  returnData={returnData}
-                />
-              </div>
+        {/* Content - Following Global UI Pattern (no sidebar) */}
+        <div className="flex-1 overflow-y-auto">
+          <div className="max-w-6xl mx-auto p-6">
+            {/* Main Debit Note Preview */}
+            <DebitNotePreview
+              returnData={returnData}
+              supplier={selectedSupplier}
+              purchase={selectedPurchase}
+            />
+            
+            {/* Return Notes Section - Below preview */}
+            <div className="mt-6 bg-white rounded-lg shadow-sm border border-blue-200 p-6">
+              <NotesSection
+                value={returnData.return_reason_notes}
+                onChange={(value) => setReturnData(prev => ({ 
+                  ...prev, 
+                  return_reason_notes: value 
+                }))}
+                placeholder="Add any additional notes about this return..."
+                title="Return Notes"
+                rows={4}
+              />
+            </div>
 
-              {/* Sidebar */}
-              <div className="space-y-6">
-                <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-                  <h3 className="font-semibold text-gray-900 mb-4">Return Details</h3>
-                  <dl className="space-y-3">
-                    <div>
-                      <dt className="text-sm text-gray-600">Return Method</dt>
-                      <dd className="font-medium">{returnData.return_method === 'debit_note' ? 'Debit Note' : returnData.return_method}</dd>
-                    </div>
-                    <div>
-                      <dt className="text-sm text-gray-600">Return Reason</dt>
-                      <dd className="font-medium">{returnReasons.find(r => r.value === returnData.return_reason)?.label}</dd>
-                    </div>
-                    <div>
-                      <dt className="text-sm text-gray-600">Total Amount</dt>
-                      <dd className="text-xl font-bold text-blue-600">₹{returnData.total_amount.toLocaleString()}</dd>
-                    </div>
-                  </dl>
-                </div>
-
-                <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
-                  <div className="flex items-start gap-3">
-                    <AlertCircle className="w-5 h-5 text-yellow-600 mt-0.5" />
-                    <div className="text-sm">
-                      <p className="font-medium text-yellow-900 mb-1">Important</p>
-                      <p className="text-yellow-700">
-                        Once confirmed, a debit note will be generated and the supplier will be notified.
-                      </p>
-                    </div>
-                  </div>
+            {/* Important Notice - Below notes */}
+            <div className="mt-6 bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+              <div className="flex items-start gap-3">
+                <AlertCircle className="w-5 h-5 text-yellow-600 mt-0.5" />
+                <div className="text-sm">
+                  <p className="font-medium text-yellow-900 mb-1">Important</p>
+                  <p className="text-yellow-700">
+                    Once confirmed, a debit note will be generated and the supplier will be notified.
+                    The return amount of <span className="font-bold">₹{returnData.total_amount.toFixed(2)}</span> will be adjusted against future purchases.
+                  </p>
                 </div>
               </div>
             </div>
           </div>
         </div>
 
-        {/* Footer */}
-        <div className="bg-white border-t border-gray-200 px-6 py-4">
-          <div className="max-w-7xl mx-auto flex justify-between items-center">
-            <button
-              onClick={() => setCurrentStep(1)}
-              className="px-6 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50"
-            >
-              Back to Edit
-            </button>
-            <div className="flex gap-3">
-              <button
-                onClick={handlePrint}
-                className="px-6 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 flex items-center gap-2"
-              >
-                <Printer className="w-4 h-4" />
-                Print
-              </button>
-              <button
-                onClick={handleSaveReturn}
-                disabled={saving}
-                className="px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:bg-gray-300 disabled:cursor-not-allowed flex items-center gap-2"
-              >
-                {saving ? (
-                  <>
-                    <div className="animate-spin w-4 h-4 border-2 border-white border-t-transparent rounded-full" />
-                    Saving...
-                  </>
-                ) : (
-                  <>
-                    <Save className="w-4 h-4" />
-                    Confirm Return
-                  </>
-                )}
-              </button>
-            </div>
-          </div>
-        </div>
+        {/* Footer - Using Global Component */}
+        <ProceedToReviewComponent
+          currentStep={2}
+          canProceed={true}
+          onBack={() => setCurrentStep(1)}
+          onProceed={handleSaveReturn}
+          onReset={null}
+          totalItems={returnData.items.filter(item => item.selected).length}
+          totalAmount={returnData.total_amount}
+          proceedText="Generate Debit Note"
+          backText="Back"
+          saving={saving}
+        />
       </div>
     </div>
   );
