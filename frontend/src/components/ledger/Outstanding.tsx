@@ -706,33 +706,105 @@ const Outstanding: React.FC<OutstandingProps> = ({
                   </div>
                 ) : (
                   <div>
-                    {filteredParties.map((party: PartyOutstanding) => (
-                      <div key={party.party_id}>
-                        <DataTable
-                          columns={partyColumns}
-                          data={[party]}
-                          keyField="party_id"
-                          loading={false}
-                          emptyMessage=""
-                        />
-                        
-                        {/* Expanded Invoice Details */}
-                        {expandedParties.has(party.party_id) && party.invoices && party.invoices.length > 0 && (
-                          <div className="bg-gray-50 px-12 py-4">
-                            <h4 className="text-sm font-medium text-gray-700 mb-3">
-                              Invoice Details for {party.party_name}
-                            </h4>
-                            <DataTable
-                              columns={invoiceColumns}
-                              data={party.invoices}
-                              keyField="invoice_id"
-                              loading={false}
-                              emptyMessage="No invoices found"
-                            />
-                          </div>
-                        )}
-                      </div>
-                    ))}
+                    {/* Custom table implementation for proper expand/collapse */}
+                    <table className="w-full">
+                      <thead className="bg-gray-50 border-b">
+                        <tr>
+                          <th className="w-10"></th>
+                          <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            {partyType === 'customer' ? 'Customer' : 'Supplier'}
+                          </th>
+                          <th className="text-right px-4 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Total Outstanding
+                          </th>
+                          <th className="text-center px-4 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Bills
+                          </th>
+                          <th className="text-center px-4 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Oldest Bill
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody className="bg-white divide-y divide-gray-200">
+                        {filteredParties.map((party: PartyOutstanding) => (
+                          <React.Fragment key={party.party_id}>
+                            {/* Party Row */}
+                            <tr className="hover:bg-gray-50">
+                              <td className="px-2 py-3">
+                                <button
+                                  onClick={() => togglePartyExpansion(party.party_id)}
+                                  className="p-1 hover:bg-gray-100 rounded"
+                                >
+                                  {expandedParties.has(party.party_id) ? 
+                                    <ChevronDown className="w-4 h-4" /> : 
+                                    <ChevronRight className="w-4 h-4" />
+                                  }
+                                </button>
+                              </td>
+                              <td className="px-4 py-3">
+                                <div>
+                                  <div className="font-medium">{party.party_name}</div>
+                                  {(party.party_phone || party.party_email) && (
+                                    <div className="text-xs text-gray-500">
+                                      {party.party_phone && <span className="mr-3">{party.party_phone}</span>}
+                                      {party.party_email && <span>{party.party_email}</span>}
+                                    </div>
+                                  )}
+                                </div>
+                              </td>
+                              <td className="px-4 py-3 text-right">
+                                <div className="font-medium">{formatCurrency(party.total_outstanding)}</div>
+                                {party.total_overdue > 0 && (
+                                  <div className="text-xs text-red-600">
+                                    Overdue: {formatCurrency(party.total_overdue)}
+                                  </div>
+                                )}
+                              </td>
+                              <td className="px-4 py-3 text-center">
+                                <div>{party.invoice_count}</div>
+                                {party.overdue_count > 0 && (
+                                  <div className="text-xs text-red-600">
+                                    {party.overdue_count} overdue
+                                  </div>
+                                )}
+                              </td>
+                              <td className="px-4 py-3 text-center">
+                                {party.oldest_invoice_days ? (
+                                  <span className={
+                                    party.oldest_invoice_days > 60 ? 'text-red-600' : 
+                                    party.oldest_invoice_days > 30 ? 'text-orange-600' : 'text-gray-600'
+                                  }>
+                                    {party.oldest_invoice_days} days
+                                  </span>
+                                ) : (
+                                  <span className="text-gray-400">-</span>
+                                )}
+                              </td>
+                            </tr>
+                            
+                            {/* Expanded Invoice Details - Immediately below the party row */}
+                            {expandedParties.has(party.party_id) && party.invoices && party.invoices.length > 0 && (
+                              <tr>
+                                <td colSpan={5} className="p-0">
+                                  <div className="bg-gray-50 px-12 py-4">
+                                    <h4 className="text-sm font-medium text-gray-700 mb-3">
+                                      Invoice Details for {party.party_name}
+                                    </h4>
+                                    <DataTable
+                                      columns={invoiceColumns}
+                                      data={party.invoices}
+                                      keyField="invoice_id"
+                                      loading={false}
+                                      emptyMessage="No invoices found"
+                                    />
+                                  </div>
+                                </td>
+                              </tr>
+                            )}
+                          </React.Fragment>
+                        ))}
+                      </tbody>
+                    </table>
                   </div>
                 )}
               </div>
