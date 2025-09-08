@@ -24,7 +24,7 @@ import {
 } from 'lucide-react';
 import { format, parseISO, differenceInDays } from 'date-fns';
 import apiClient from '../../services/api/apiClient';
-import { DataTable, StatusBadge, Select, ModuleHeader, CustomerSearch, SupplierSearch } from '../global';
+import { DataTable, StatusBadge, Select, ModuleHeader } from '../global';
 import { formatCurrency } from '../../utils/formatters';
 
 interface OutstandingProps {
@@ -86,18 +86,17 @@ const Outstanding: React.FC<OutstandingProps> = ({
     status: 'all', // all, overdue, current
     searchQuery: ''
   });
-  const [selectedParty, setSelectedParty] = useState<any>(null);
   const [viewMode, setViewMode] = useState<'summary' | 'aging'>('summary');
 
   // Fetch outstanding data using the sales API
   const { data, isLoading, refetch, error } = useQuery(
-    ['outstanding-data', partyType, filters, selectedParty],
+    ['outstanding-data', partyType, filters],
     async () => {
       try {
         // Use the sales/outstanding endpoint which exists
         const response = await apiClient.get('/sales/outstanding', {
           params: {
-            customer_id: selectedParty?.customer_id || selectedParty?.id || undefined
+            // No customer_id filter - get all customers
           }
         });
         
@@ -675,15 +674,6 @@ const Outstanding: React.FC<OutstandingProps> = ({
                       { value: 'current', label: 'Current Only' }
                     ]}
                   />
-
-                  {/* Party Search */}
-                  <div className="w-64">
-                    <CustomerSearch
-                      value={selectedParty}
-                      onChange={setSelectedParty}
-                      placeholder="Filter by customer"
-                    />
-                  </div>
                 </div>
               </div>
 

@@ -9,6 +9,12 @@ export const API_CONFIG = {
   BASE_URL: API_BASE_URL,
   TIMEOUT: 30000,
   
+  // Storage keys
+  AUTH: {
+    USER_KEY: 'pharma_user',
+    TOKEN_KEY: 'pharma_token'
+  },
+  
   ENDPOINTS: {
     // Authentication
     AUTH: {
@@ -143,7 +149,7 @@ export const API_CONFIG = {
       DETAILS: (id) => `/payments/${id}`,
       RECEIPTS: '/payments/receipts',
       OUTSTANDING: '/payments/outstanding',
-      LEDGER: '/party-ledger'
+      LEDGER: '/party-ledger-v2'
     },
     
     // Returns

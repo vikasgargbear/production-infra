@@ -48,7 +48,8 @@ async def get_party_statement(
                         1 as sort_order
                     FROM sales.invoices i
                     WHERE i.customer_id = :party_id
-                    AND i.org_id = :org_id                    AND i.invoice_status != 'cancelled'
+                    AND i.org_id = :org_id
+                    AND i.invoice_status != 'cancelled'
                     
                     UNION ALL
                     
@@ -66,7 +67,8 @@ async def get_party_statement(
                     FROM financial.payments p
                     WHERE p.party_id = :party_id
                     AND p.party_type = 'customer'
-                    AND p.org_id = :org_id                    AND p.payment_status != 'cancelled'
+                    AND p.org_id = :org_id
+                    AND p.payment_status != 'cancelled'
                 )
                 SELECT * FROM transactions
             """

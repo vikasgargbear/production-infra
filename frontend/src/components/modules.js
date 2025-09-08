@@ -71,7 +71,7 @@ export const ModuleRegistry = {
     name: 'Party Ledger',
     icon: 'BookOpen',
     shortcut: 'Ctrl+L',
-    path: '/party-ledger',
+    path: '/party-ledger-v2',
     component: LedgerModule,
     permissions: ['ledger.view']
   },

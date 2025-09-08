@@ -32,7 +32,12 @@ async def get_party_statement(
     """
     try:
         if party_type == "customer":
-            # Simple query using ONLY verified columns from sales.invoices
+            # Check if sales_returns table exists
+            has_returns = db.execute(
+                text("SELECT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'sales' AND table_name = 'sales_returns')")
+            ).scalar()
+            
+            # Build query with available tables
             query = """
                 WITH transactions AS (
                     -- Invoices (we KNOW these columns exist)
@@ -48,7 +53,8 @@ async def get_party_statement(
                         1 as sort_order
                     FROM sales.invoices i
                     WHERE i.customer_id = :party_id
-                    AND i.org_id = :org_id                    AND i.invoice_status != 'cancelled'
+                    AND i.org_id = :org_id
+                    AND i.invoice_status != 'cancelled'
                     
                     UNION ALL
                     
@@ -66,7 +72,33 @@ async def get_party_statement(
                     FROM financial.payments p
                     WHERE p.party_id = :party_id
                     AND p.party_type = 'customer'
-                    AND p.org_id = :org_id                    AND p.payment_status != 'cancelled'
+                    AND p.org_id = :org_id
+                    AND p.payment_status != 'cancelled'
+            """
+            
+            # Add sales returns if table exists
+            if has_returns:
+                query += """
+                    UNION ALL
+                    
+                    -- Sales Returns
+                    SELECT 
+                        sr.return_id as id,
+                        sr.return_date as date,
+                        'Sales Return' as type,
+                        sr.return_number as reference,
+                        CONCAT('Return #', sr.return_number) as description,
+                        0::numeric as debit,
+                        sr.return_amount as credit,
+                        sr.approval_status as payment_status,
+                        3 as sort_order
+                    FROM sales.sales_returns sr
+                    WHERE sr.customer_id = :party_id
+                    AND sr.org_id = :org_id
+                    AND sr.approval_status = 'approved'
+                """
+            
+            query += """
                 )
                 SELECT * FROM transactions
             """
