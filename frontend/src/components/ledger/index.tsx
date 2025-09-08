@@ -107,7 +107,6 @@ interface LedgerComponents {
   CollectionCenter: React.ComponentType<any>;
   LedgerReports: React.ComponentType<any>;
   PartyLedger: React.ComponentType<any>;
-  PartyLedgerV2: React.ComponentType<any>;
   PartyLedgerV3: React.ComponentType<any>;
 }
 
@@ -140,9 +139,8 @@ const LedgerModule: LedgerModule = {
     CollectionCenter,
     LedgerReports,
     
-    // Legacy Components
+    // Ledger Components
     PartyLedger,
-    PartyLedgerV2,
     PartyLedgerV3
   },
   
