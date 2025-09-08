@@ -287,7 +287,7 @@ async def get_party_statement_with_allocations(
         # Get current outstanding balance
         balance_query = """
             SELECT 
-                COALESCE(SUM(i.final_amount - COALESCE(i.allocated_amount, 0)), 0) as outstanding
+                COALESCE(SUM(i.final_amount - COALESCE(i.paid_amount, 0)), 0) as outstanding
             FROM sales.invoices i
             WHERE i.customer_id = :party_id
             AND i.invoice_status != 'cancelled'
@@ -344,8 +344,8 @@ async def get_reconciliation_view(
                     i.invoice_number,
                     i.invoice_date,
                     i.final_amount,
-                    COALESCE(i.allocated_amount, 0) as paid_amount,
-                    i.final_amount - COALESCE(i.allocated_amount, 0) as due_amount,
+                    COALESCE(i.paid_amount, 0) as paid_amount,
+                    i.final_amount - COALESCE(i.paid_amount, 0) as due_amount,
                     i.payment_status,
                     ARRAY_AGG(
                         CASE WHEN pa.allocation_id IS NOT NULL THEN
@@ -453,7 +453,7 @@ async def get_aging_analysis(
                         i.invoice_id,
                         i.invoice_number,
                         i.invoice_date,
-                        i.final_amount - COALESCE(i.allocated_amount, 0) as outstanding,
+                        i.final_amount - COALESCE(i.paid_amount, 0) as outstanding,
                         CURRENT_DATE - i.invoice_date as days_outstanding,
                         CASE 
                             WHEN CURRENT_DATE - i.invoice_date <= 30 THEN '0-30 days'
@@ -465,7 +465,7 @@ async def get_aging_analysis(
                     JOIN parties.customers c ON i.customer_id = c.customer_id
                     WHERE i.invoice_status != 'cancelled'
                     AND i.payment_status != 'paid'
-                    AND i.final_amount > COALESCE(i.allocated_amount, 0)
+                    AND i.final_amount > COALESCE(i.paid_amount, 0)
                 )
                 SELECT 
                     customer_id,
