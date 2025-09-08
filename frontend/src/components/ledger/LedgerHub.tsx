@@ -1,13 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { 
   DollarSign, TrendingUp, 
-  Clock, AlertTriangle, BarChart3, FileText,
+  AlertTriangle, BarChart3, FileText,
   Archive, Loader2, RefreshCw, AlertCircle
 } from 'lucide-react';
 import { ModuleHub } from '../global';
 import PartyLedgerV3 from './PartyLedgerV3';
 import Outstanding from './Outstanding';
-import AgingAnalysis from './AgingAnalysis';
 import CollectionCenter from './CollectionCenter';
 import LedgerReports from './LedgerReports';
 
@@ -45,20 +44,11 @@ const LedgerHub: React.FC<LedgerHubProps> = ({ open = true, onClose }) => {
     {
       id: 'outstanding',
       label: 'Outstanding',
-      fullLabel: 'Outstanding Balance',
-      description: 'Pending payments & bills',
+      fullLabel: 'Outstanding & Aging',
+      description: 'Pending payments with aging analysis',
       icon: DollarSign,
       color: 'amber',
       component: Outstanding
-    },
-    {
-      id: 'aging-analysis',
-      label: 'Aging',
-      fullLabel: 'Aging Analysis',
-      description: 'Overdue analysis',
-      icon: Clock,
-      color: 'red',
-      component: AgingAnalysis
     },
     {
       id: 'collection-center',

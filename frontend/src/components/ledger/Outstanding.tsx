@@ -87,6 +87,7 @@ const Outstanding: React.FC<OutstandingProps> = ({
     searchQuery: ''
   });
   const [selectedParty, setSelectedParty] = useState<any>(null);
+  const [viewMode, setViewMode] = useState<'summary' | 'aging'>('summary');
 
   // Fetch outstanding data using the sales API
   const { data, isLoading, refetch, error } = useQuery(
@@ -558,6 +559,12 @@ const Outstanding: React.FC<OutstandingProps> = ({
             onSaveDraft={() => {}}
             additionalActions={[
               {
+                label: viewMode === 'summary' ? "Aging View" : "Summary View",
+                onClick: () => setViewMode(viewMode === 'summary' ? 'aging' : 'summary'),
+                variant: "default",
+                icon: viewMode === 'summary' ? Clock : DollarSign
+              },
+              {
                 label: "Refresh",
                 onClick: () => refetch(),
                 variant: "primary",
@@ -680,9 +687,10 @@ const Outstanding: React.FC<OutstandingProps> = ({
                 </div>
               </div>
 
-              {/* Party Outstanding Table */}
-              <div className="bg-white rounded-lg shadow-sm">
-                {isLoading ? (
+              {/* Party Outstanding Table - Summary View */}
+              {viewMode === 'summary' && (
+                <div className="bg-white rounded-lg shadow-sm">
+                  {isLoading ? (
                   <div className="p-8 text-center">
                     <Loader2 className="w-8 h-8 animate-spin mx-auto mb-4 text-blue-600" />
                     <p className="text-gray-600">Loading outstanding data...</p>
@@ -807,7 +815,129 @@ const Outstanding: React.FC<OutstandingProps> = ({
                     </table>
                   </div>
                 )}
-              </div>
+                </div>
+              )}
+
+              {/* Aging Analysis View */}
+              {viewMode === 'aging' && (
+                <div className="bg-white rounded-lg shadow-sm">
+                  {isLoading ? (
+                    <div className="p-8 text-center">
+                      <Loader2 className="w-8 h-8 animate-spin mx-auto mb-4 text-blue-600" />
+                      <p className="text-gray-600">Loading aging analysis...</p>
+                    </div>
+                  ) : (
+                    <div className="p-6">
+                      <h3 className="text-lg font-semibold mb-4">Aging Analysis by Party</h3>
+                      
+                      {/* Aging Analysis Table */}
+                      <table className="w-full">
+                        <thead className="bg-gray-50 border-b">
+                          <tr>
+                            <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">
+                              Party
+                            </th>
+                            <th className="text-right px-4 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">
+                              Current
+                            </th>
+                            <th className="text-right px-4 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">
+                              1-30 Days
+                            </th>
+                            <th className="text-right px-4 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">
+                              31-60 Days
+                            </th>
+                            <th className="text-right px-4 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">
+                              61-90 Days
+                            </th>
+                            <th className="text-right px-4 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">
+                              90+ Days
+                            </th>
+                            <th className="text-right px-4 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider font-semibold">
+                              Total
+                            </th>
+                          </tr>
+                        </thead>
+                        <tbody className="bg-white divide-y divide-gray-200">
+                          {filteredParties.map((party: PartyOutstanding) => {
+                            // Calculate aging buckets for this party
+                            const buckets = {
+                              current: 0,
+                              '1-30': 0,
+                              '31-60': 0,
+                              '61-90': 0,
+                              'over_90': 0
+                            };
+                            
+                            party.invoices?.forEach(invoice => {
+                              buckets[invoice.aging_bucket] += invoice.outstanding_amount;
+                            });
+                            
+                            return (
+                              <tr key={party.party_id} className="hover:bg-gray-50">
+                                <td className="px-4 py-3">
+                                  <div className="font-medium">{party.party_name}</div>
+                                  <div className="text-xs text-gray-500">{party.invoice_count} invoices</div>
+                                </td>
+                                <td className="px-4 py-3 text-right">
+                                  {buckets.current > 0 && (
+                                    <span className="text-green-600">{formatCurrency(buckets.current)}</span>
+                                  )}
+                                </td>
+                                <td className="px-4 py-3 text-right">
+                                  {buckets['1-30'] > 0 && (
+                                    <span className="text-yellow-600">{formatCurrency(buckets['1-30'])}</span>
+                                  )}
+                                </td>
+                                <td className="px-4 py-3 text-right">
+                                  {buckets['31-60'] > 0 && (
+                                    <span className="text-orange-600">{formatCurrency(buckets['31-60'])}</span>
+                                  )}
+                                </td>
+                                <td className="px-4 py-3 text-right">
+                                  {buckets['61-90'] > 0 && (
+                                    <span className="text-red-600">{formatCurrency(buckets['61-90'])}</span>
+                                  )}
+                                </td>
+                                <td className="px-4 py-3 text-right">
+                                  {buckets.over_90 > 0 && (
+                                    <span className="text-red-800 font-semibold">{formatCurrency(buckets.over_90)}</span>
+                                  )}
+                                </td>
+                                <td className="px-4 py-3 text-right font-semibold">
+                                  {formatCurrency(party.total_outstanding)}
+                                </td>
+                              </tr>
+                            );
+                          })}
+                          
+                          {/* Total Row */}
+                          <tr className="bg-gray-50 font-semibold">
+                            <td className="px-4 py-3">TOTAL</td>
+                            <td className="px-4 py-3 text-right text-green-600">
+                              {formatCurrency(summary.aging_summary.current.amount)}
+                            </td>
+                            <td className="px-4 py-3 text-right text-yellow-600">
+                              {formatCurrency(summary.aging_summary['1-30'].amount)}
+                            </td>
+                            <td className="px-4 py-3 text-right text-orange-600">
+                              {formatCurrency(summary.aging_summary['31-60'].amount)}
+                            </td>
+                            <td className="px-4 py-3 text-right text-red-600">
+                              {formatCurrency(summary.aging_summary['61-90'].amount)}
+                            </td>
+                            <td className="px-4 py-3 text-right text-red-800">
+                              {formatCurrency(summary.aging_summary.over_90.amount)}
+                            </td>
+                            <td className="px-4 py-3 text-right text-lg">
+                              {formatCurrency(summary.total_receivable)}
+                            </td>
+                          </tr>
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           </div>
         </div>
