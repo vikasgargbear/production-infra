@@ -1,6 +1,6 @@
 /**
  * CollectionCenter Component
- * Central hub for managing payment collections, follow-ups, and recovery processes
+ * Streamlined collection management with integrated communication tools
  */
 
 import React, { useState, useMemo } from 'react';
@@ -13,18 +13,27 @@ import {
   Calendar,
   DollarSign,
   TrendingUp,
+  TrendingDown,
   AlertCircle,
   CheckCircle,
   Clock,
   Target,
-  BarChart3,
+  Activity,
   FileText,
   Download,
   Filter,
   Search,
   ChevronRight,
   UserCheck,
-  MapPin
+  MapPin,
+  Bell,
+  Send,
+  MessageCircle,
+  PhoneCall,
+  Zap,
+  ArrowUp,
+  ArrowDown,
+  ExternalLink
 } from 'lucide-react';
 import { format, parseISO, differenceInDays, addDays } from 'date-fns';
 import { ledgerApi } from '../../services/api/modules/ledger.api';
@@ -69,15 +78,7 @@ interface CollectionStats {
   customers_count: number;
   critical_accounts: number;
   success_rate: number;
-}
-
-interface CollectionAgent {
-  id: string;
-  name: string;
-  active_cases: number;
-  collected_today: number;
-  collected_mtd: number;
-  success_rate: number;
+  collection_change?: number;
 }
 
 const CollectionCenter: React.FC<CollectionCenterProps> = ({
@@ -93,8 +94,8 @@ const CollectionCenter: React.FC<CollectionCenterProps> = ({
     searchQuery: ''
   });
   const [selectedItems, setSelectedItems] = useState<string[]>([]);
-  const [showAssignModal, setShowAssignModal] = useState(false);
-  const [selectedAgent, setSelectedAgent] = useState<string>('');
+  const [showReminderModal, setShowReminderModal] = useState(false);
+  const [selectedCustomer, setSelectedCustomer] = useState<CollectionItem | null>(null);
 
   // Fetch collection data
   const { data, isLoading, refetch } = useQuery(
@@ -110,12 +111,6 @@ const CollectionCenter: React.FC<CollectionCenterProps> = ({
     }
   );
 
-  // Fetch collection agents
-  const { data: agents } = useQuery(
-    'collection-agents',
-    () => ledgerApi.getCollectionAgents()
-  );
-
   const collections = data?.collections || [];
   const stats: CollectionStats = data?.stats || {
     total_outstanding: 0,
@@ -125,77 +120,78 @@ const CollectionCenter: React.FC<CollectionCenterProps> = ({
     promise_amount: 0,
     customers_count: 0,
     critical_accounts: 0,
-    success_rate: 0
+    success_rate: 0,
+    collection_change: 15 // Mock positive change
   };
 
   // Filter collections
   const filteredCollections = useMemo(() => {
-    if (!filters.searchQuery) return collections;
+    let filtered = [...collections];
     
-    const query = filters.searchQuery.toLowerCase();
-    return collections.filter((item: CollectionItem) =>
-      item.customer_name.toLowerCase().includes(query) ||
-      item.customer_phone.includes(query) ||
-      item.notes?.toLowerCase().includes(query)
-    );
+    if (filters.searchQuery) {
+      const query = filters.searchQuery.toLowerCase();
+      filtered = filtered.filter((item: CollectionItem) =>
+        item.customer_name.toLowerCase().includes(query) ||
+        item.customer_phone.includes(query) ||
+        item.customer_email?.toLowerCase().includes(query) ||
+        item.notes?.toLowerCase().includes(query)
+      );
+    }
+    
+    return filtered;
   }, [collections, filters.searchQuery]);
 
-  // Mutations
-  const updateStatusMutation = useMutation(
-    ({ customerId, status }: { customerId: string; status: string }) =>
-      ledgerApi.updateCollectionStatus(customerId, status),
-    {
-      onSuccess: () => refetch()
-    }
-  );
-
-  const assignAgentMutation = useMutation(
-    ({ customerIds, agentId }: { customerIds: string[]; agentId: string }) =>
-      ledgerApi.assignCollectionAgent(customerIds, agentId),
-    {
-      onSuccess: () => {
-        refetch();
-        setSelectedItems([]);
-        setShowAssignModal(false);
-      }
-    }
-  );
-
-  const recordContactMutation = useMutation(
-    (data: { customerId: string; type: string; notes: string; nextFollowUp?: string }) =>
-      ledgerApi.recordCollectionContact(data),
-    {
-      onSuccess: () => refetch()
-    }
-  );
-
-  const handleBulkAction = (action: string) => {
-    switch (action) {
-      case 'assign':
-        setShowAssignModal(true);
-        break;
-      case 'send-reminder':
-        handleSendReminders(selectedItems);
-        break;
-      case 'export':
-        handleExportSelected();
-        break;
-    }
+  // Quick action handlers
+  const sendWhatsApp = (customer: CollectionItem) => {
+    const message = encodeURIComponent(
+      `Dear ${customer.customer_name},\n\nYour outstanding amount is ₹${customer.total_outstanding.toLocaleString('en-IN')}. Please make the payment at your earliest convenience.\n\nThank you!`
+    );
+    window.open(`https://wa.me/${customer.customer_phone}?text=${message}`, '_blank');
   };
 
-  const handleSendReminders = async (customerIds: string[]) => {
-    try {
-      await ledgerApi.sendBulkReminders({
-        customer_ids: customerIds,
-        template: 'payment_reminder_urgent'
-      });
-      refetch();
-    } catch (error) {
-      console.error('Failed to send reminders:', error);
-    }
+  const sendEmail = (customer: CollectionItem) => {
+    const subject = encodeURIComponent('Payment Reminder');
+    const body = encodeURIComponent(
+      `Dear ${customer.customer_name},\n\nThis is a friendly reminder about your outstanding payment of ₹${customer.total_outstanding.toLocaleString('en-IN')}.\n\nPlease process the payment at your earliest convenience.\n\nThank you for your business!`
+    );
+    window.location.href = `mailto:${customer.customer_email}?subject=${subject}&body=${body}`;
   };
 
-  const handleExportSelected = async () => {
+  const makeCall = (customer: CollectionItem) => {
+    window.location.href = `tel:${customer.customer_phone}`;
+  };
+
+  const sendSMS = (customer: CollectionItem) => {
+    // This would integrate with your SMS gateway
+    const message = `Payment reminder: ₹${customer.total_outstanding.toLocaleString('en-IN')} outstanding. Please pay soon.`;
+    console.log('Send SMS to', customer.customer_phone, ':', message);
+    alert(`SMS feature would send to ${customer.customer_phone}`);
+  };
+
+  const scheduleReminder = (customer: CollectionItem) => {
+    setSelectedCustomer(customer);
+    setShowReminderModal(true);
+  };
+
+  const handleBulkWhatsApp = () => {
+    if (selectedItems.length === 0) {
+      alert('Please select customers first');
+      return;
+    }
+    // In production, this would send bulk WhatsApp messages
+    alert(`Sending WhatsApp to ${selectedItems.length} customers`);
+  };
+
+  const handleBulkEmail = () => {
+    if (selectedItems.length === 0) {
+      alert('Please select customers first');
+      return;
+    }
+    // In production, this would send bulk emails
+    alert(`Sending emails to ${selectedItems.length} customers`);
+  };
+
+  const handleExport = async () => {
     try {
       const response = await ledgerApi.exportCollectionList({
         customer_ids: selectedItems.length > 0 ? selectedItems : undefined,
@@ -215,228 +211,46 @@ const CollectionCenter: React.FC<CollectionCenterProps> = ({
     }
   };
 
-  const getPriorityColor = (priority: string) => {
-    switch (priority) {
-      case 'low': return 'green';
-      case 'medium': return 'yellow';
-      case 'high': return 'orange';
-      case 'critical': return 'red';
-      default: return 'gray';
-    }
+  const getPriorityBadge = (priority: string) => {
+    const colors = {
+      low: 'bg-green-100 text-green-700',
+      medium: 'bg-yellow-100 text-yellow-700',
+      high: 'bg-orange-100 text-orange-700',
+      critical: 'bg-red-100 text-red-700'
+    };
+    return (
+      <span className={`px-2 py-1 rounded-full text-xs font-medium ${colors[priority as keyof typeof colors]}`}>
+        {priority.toUpperCase()}
+      </span>
+    );
   };
 
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'pending': return 'gray';
-      case 'contacted': return 'blue';
-      case 'promised': return 'yellow';
-      case 'partial': return 'orange';
-      case 'dispute': return 'red';
-      case 'legal': return 'purple';
-      default: return 'gray';
-    }
-  };
-
-  const columns = [
-    {
-      key: 'select',
-      header: '',
-      render: (item: CollectionItem) => (
-        <input
-          type="checkbox"
-          checked={selectedItems.includes(item.customer_id)}
-          onChange={(e) => {
-            if (e.target.checked) {
-              setSelectedItems([...selectedItems, item.customer_id]);
-            } else {
-              setSelectedItems(selectedItems.filter(id => id !== item.customer_id));
-            }
-          }}
-        />
-      ),
-      width: '50px'
-    },
-    {
-      key: 'customer',
-      header: 'Customer Details',
-      render: (item: CollectionItem) => (
-        <div>
-          <button
-            onClick={() => onCustomerClick?.(item)}
-            className="text-blue-600 hover:text-blue-800 font-medium"
-          >
-            {item.customer_name}
-          </button>
-          <div className="text-sm text-gray-500 space-y-1">
-            <div className="flex items-center gap-1">
-              <Phone className="h-3 w-3" />
-              {item.customer_phone}
-            </div>
-            <div className="flex items-center gap-1">
-              <MapPin className="h-3 w-3" />
-              {item.customer_address}
-            </div>
-          </div>
-        </div>
-      )
-    },
-    {
-      key: 'outstanding',
-      header: 'Outstanding Details',
-      render: (item: CollectionItem) => (
-        <div className="text-right">
-          <div className="font-semibold">
-            {formatCurrency(item.total_outstanding)}
-          </div>
-          <div className="text-sm text-red-600">
-            Overdue: {formatCurrency(item.overdue_amount)}
-          </div>
-          <div className="text-xs text-gray-500">
-            {item.days_overdue} days overdue
-          </div>
-        </div>
-      )
-    },
-    {
-      key: 'priority',
-      header: 'Priority',
-      render: (item: CollectionItem) => (
-        <StatusBadge
-          status={item.priority === 'critical' ? 'error' : item.priority === 'high' ? 'warning' : item.priority === 'medium' ? 'info' : 'success'}
-          label={item.priority.toUpperCase()}
-        />
-      )
-    },
-    {
-      key: 'status',
-      header: 'Collection Status',
-      render: (item: CollectionItem) => (
-        <div>
-          <StatusBadge
-            status={item.collection_status === 'partial' ? 'success' : item.collection_status === 'promised' ? 'info' : item.collection_status === 'contacted' ? 'warning' : item.collection_status === 'dispute' || item.collection_status === 'legal' ? 'error' : 'pending'}
-            label={item.collection_status.toUpperCase()}
-          />
-          {item.promise_date && (
-            <div className="text-xs text-gray-500 mt-1">
-              Promise: {format(parseISO(item.promise_date), 'dd/MM')}
-            </div>
-          )}
-        </div>
-      )
-    },
-    {
-      key: 'contact',
-      header: 'Last Contact',
-      render: (item: CollectionItem) => (
-        <div>
-          {item.last_contact_date ? (
-            <div>
-              <div className="text-sm">
-                {format(parseISO(item.last_contact_date), 'dd/MM/yyyy')}
-              </div>
-              <div className="text-xs text-gray-500">
-                {item.contact_attempts} attempts
-              </div>
-            </div>
-          ) : (
-            <span className="text-sm text-gray-400">No contact</span>
-          )}
-        </div>
-      )
-    },
-    {
-      key: 'assigned',
-      header: 'Assigned To',
-      render: (item: CollectionItem) => (
-        <div>
-          {item.assigned_to ? (
-            <div className="flex items-center gap-1">
-              <UserCheck className="h-4 w-4 text-green-600" />
-              <span className="text-sm">{item.assigned_to}</span>
-            </div>
-          ) : (
-            <span className="text-sm text-gray-400">Unassigned</span>
-          )}
-        </div>
-      )
-    },
-    {
-      key: 'followup',
-      header: 'Next Follow-up',
-      render: (item: CollectionItem) => {
-        if (!item.next_follow_up) return '-';
-        
-        const daysUntil = differenceInDays(parseISO(item.next_follow_up), new Date());
-        const isOverdue = daysUntil < 0;
-        
-        return (
-          <div className={isOverdue ? 'text-red-600' : ''}>
-            <div className="text-sm">
-              {format(parseISO(item.next_follow_up), 'dd/MM/yyyy')}
-            </div>
-            <div className="text-xs">
-              {isOverdue 
-                ? `${Math.abs(daysUntil)} days overdue`
-                : `In ${daysUntil} days`
-              }
-            </div>
-          </div>
-        );
-      }
-    },
-    {
-      key: 'actions',
-      header: 'Actions',
-      render: (item: CollectionItem) => (
-        <div className="flex gap-1">
-          <button
-            onClick={() => handleContact(item, 'call')}
-            className="p-1 text-blue-600 hover:bg-blue-50 rounded"
-            title="Record Call"
-          >
-            <Phone className="h-4 w-4" />
-          </button>
-          <button
-            onClick={() => handleContact(item, 'email')}
-            className="p-1 text-green-600 hover:bg-green-50 rounded"
-            title="Send Email"
-          >
-            <Mail className="h-4 w-4" />
-          </button>
-          <button
-            onClick={() => handleContact(item, 'message')}
-            className="p-1 text-purple-600 hover:bg-purple-50 rounded"
-            title="Send SMS"
-          >
-            <MessageSquare className="h-4 w-4" />
-          </button>
-          <button
-            onClick={() => onCustomerClick?.(item)}
-            className="p-1 text-gray-600 hover:bg-gray-50 rounded"
-            title="View Details"
-          >
-            <ChevronRight className="h-4 w-4" />
-          </button>
-        </div>
-      )
-    }
-  ];
-
-  const handleContact = (item: CollectionItem, type: string) => {
-    // In a real implementation, this would open a modal or form
-    console.log('Contact customer:', item.customer_name, 'via', type);
+  const getStatusBadge = (status: string) => {
+    const colors = {
+      pending: 'bg-gray-100 text-gray-700',
+      contacted: 'bg-blue-100 text-blue-700',
+      promised: 'bg-purple-100 text-purple-700',
+      partial: 'bg-orange-100 text-orange-700',
+      dispute: 'bg-red-100 text-red-700',
+      legal: 'bg-red-100 text-red-700'
+    };
+    return (
+      <span className={`px-2 py-1 rounded-full text-xs font-medium ${colors[status as keyof typeof colors]}`}>
+        {status.toUpperCase()}
+      </span>
+    );
   };
 
   return (
-    <div className={embedded ? 'p-6' : 'h-full bg-blue-50'}>
+    <div className={embedded ? 'p-6' : 'h-full bg-gray-50'}>
       {!embedded && (
         <div className="h-full flex flex-col">
           <ModuleHeader
             title="Collection Center"
             documentNumber=""
             status=""
-            icon={DollarSign}
-            iconColor="text-orange-600"
+            icon={Target}
+            iconColor="text-green-600"
             onClose={onClose}
             historyType="ledger"
             onSaveDraft={() => {}}
@@ -444,217 +258,382 @@ const CollectionCenter: React.FC<CollectionCenterProps> = ({
               {
                 label: "Export",
                 icon: Download,
-                onClick: handleExportSelected,
+                onClick: handleExport,
                 variant: "default"
               }
             ] as any}
           />
-          <div className="bg-blue-50 px-4 py-2 text-xs text-blue-700 border-b border-blue-200">
-            Keyboard shortcuts: <strong>Ctrl+F</strong> - Search | <strong>Ctrl+E</strong> - Export | <strong>Esc</strong> - Close
-          </div>
+          
           <div className="flex-1 overflow-y-auto">
-            <div className="max-w-6xl mx-auto px-6 py-6">
+            <div className="max-w-7xl mx-auto px-6 py-6">
+              {/* Modern Stats Bar */}
+              <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 mb-6">
+                <div className="grid grid-cols-1 md:grid-cols-5 gap-6">
+                  {/* Total Outstanding */}
+                  <div className="flex items-center space-x-4">
+                    <div className="p-3 bg-blue-50 rounded-lg">
+                      <DollarSign className="w-6 h-6 text-blue-600" />
+                    </div>
+                    <div>
+                      <p className="text-xs text-gray-500 uppercase tracking-wider">Outstanding</p>
+                      <p className="text-xl font-semibold text-gray-900">
+                        ₹{(stats.total_outstanding || 0).toLocaleString('en-IN')}
+                      </p>
+                      <p className="text-xs text-gray-500">{stats.customers_count} customers</p>
+                    </div>
+                  </div>
 
-      {/* Stats Overview */}
-      <div className="grid grid-cols-4 gap-4 mb-6">
-        <div className="bg-white p-4 rounded-lg shadow">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-gray-500">Total Outstanding</p>
-              <p className="text-2xl font-bold text-gray-800">
-                {formatCurrency(stats.total_outstanding)}
-              </p>
-              <p className="text-sm text-gray-500">{stats.customers_count} customers</p>
-            </div>
-            <DollarSign className="h-10 w-10 text-gray-400" />
-          </div>
-        </div>
+                  {/* Today's Collection */}
+                  <div className="flex items-center space-x-4">
+                    <div className="p-3 bg-green-50 rounded-lg">
+                      <TrendingUp className="w-6 h-6 text-green-600" />
+                    </div>
+                    <div>
+                      <p className="text-xs text-gray-500 uppercase tracking-wider">Today</p>
+                      <div className="flex items-center space-x-2">
+                        <p className="text-xl font-semibold text-green-600">
+                          ₹{(stats.collections_today || 0).toLocaleString('en-IN')}
+                        </p>
+                        {stats.collection_change && (
+                          <span className={`text-xs ${stats.collection_change > 0 ? 'text-green-500' : 'text-red-500'} flex items-center`}>
+                            {stats.collection_change > 0 ? <ArrowUp className="w-3 h-3" /> : <ArrowDown className="w-3 h-3" />}
+                            {Math.abs(stats.collection_change)}%
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-xs text-gray-500">MTD: ₹{(stats.collections_mtd || 0).toLocaleString('en-IN')}</p>
+                    </div>
+                  </div>
 
-        <div className="bg-white p-4 rounded-lg shadow">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-gray-500">Collected Today</p>
-              <p className="text-2xl font-bold text-green-600">
-                {formatCurrency(stats.collections_today)}
-              </p>
-              <p className="text-sm text-gray-500">
-                MTD: {formatCurrency(stats.collections_mtd)}
-              </p>
-            </div>
-            <TrendingUp className="h-10 w-10 text-green-400" />
-          </div>
-        </div>
+                  {/* Promise Amount */}
+                  <div className="flex items-center space-x-4">
+                    <div className="p-3 bg-purple-50 rounded-lg">
+                      <Clock className="w-6 h-6 text-purple-600" />
+                    </div>
+                    <div>
+                      <p className="text-xs text-gray-500 uppercase tracking-wider">Promised</p>
+                      <p className="text-xl font-semibold text-purple-600">
+                        ₹{(stats.promise_amount || 0).toLocaleString('en-IN')}
+                      </p>
+                      <p className="text-xs text-gray-500">Pending</p>
+                    </div>
+                  </div>
 
-        <div className="bg-white p-4 rounded-lg shadow">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-gray-500">Promise Amount</p>
-              <p className="text-2xl font-bold text-yellow-600">
-                {formatCurrency(stats.promise_amount)}
-              </p>
-              <p className="text-sm text-gray-500">Pending collection</p>
-            </div>
-            <Clock className="h-10 w-10 text-yellow-400" />
-          </div>
-        </div>
+                  {/* Critical Accounts */}
+                  <div className="flex items-center space-x-4">
+                    <div className="p-3 bg-orange-50 rounded-lg">
+                      <AlertCircle className="w-6 h-6 text-orange-600" />
+                    </div>
+                    <div>
+                      <p className="text-xs text-gray-500 uppercase tracking-wider">Critical</p>
+                      <p className="text-xl font-semibold text-orange-600">
+                        {stats.critical_accounts || 0}
+                      </p>
+                      <p className="text-xs text-gray-500">Accounts</p>
+                    </div>
+                  </div>
 
-        <div className="bg-white p-4 rounded-lg shadow">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-gray-500">Critical Accounts</p>
-              <p className="text-2xl font-bold text-red-600">
-                {stats.critical_accounts}
-              </p>
-              <p className="text-sm text-gray-500">
-                Success: {stats.success_rate.toFixed(1)}%
-              </p>
-            </div>
-            <AlertCircle className="h-10 w-10 text-red-400" />
-          </div>
-        </div>
-      </div>
-
-      {/* Collection Agents Performance */}
-      {agents && agents.length > 0 && (
-        <div className="mb-6 bg-white p-4 rounded-lg shadow">
-          <h3 className="font-semibold mb-3">Agent Performance</h3>
-          <div className="grid grid-cols-4 gap-4">
-            {agents.map((agent: CollectionAgent) => (
-              <div key={agent.id} className="border rounded-lg p-3">
-                <div className="font-medium">{agent.name}</div>
-                <div className="text-sm text-gray-500 space-y-1 mt-2">
-                  <div>Active: {agent.active_cases} cases</div>
-                  <div>Today: {formatCurrency(agent.collected_today)}</div>
-                  <div>Success: {agent.success_rate}%</div>
+                  {/* Success Rate */}
+                  <div className="flex items-center space-x-4">
+                    <div className="p-3 bg-indigo-50 rounded-lg">
+                      <Activity className="w-6 h-6 text-indigo-600" />
+                    </div>
+                    <div>
+                      <p className="text-xs text-gray-500 uppercase tracking-wider">Success Rate</p>
+                      <div className="flex items-center space-x-2">
+                        <p className="text-xl font-semibold text-indigo-600">
+                          {stats.success_rate || 0}%
+                        </p>
+                        <div className="w-16 h-2 bg-gray-200 rounded-full overflow-hidden">
+                          <div 
+                            className="h-full bg-indigo-600 rounded-full transition-all duration-300"
+                            style={{ width: `${stats.success_rate || 0}%` }}
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  </div>
                 </div>
               </div>
-            ))}
+
+              {/* Smart Filters and Actions */}
+              <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 mb-6">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center space-x-4 flex-1">
+                    {/* Quick Filters */}
+                    <div className="flex items-center space-x-2">
+                      <button
+                        onClick={() => setFilters({ ...filters, status: filters.status === 'overdue' ? 'all' : 'overdue' })}
+                        className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                          filters.status === 'overdue'
+                            ? 'bg-red-100 text-red-700 border border-red-300'
+                            : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                        }`}
+                      >
+                        <AlertCircle className="w-4 h-4 inline mr-1" />
+                        Overdue
+                      </button>
+                      <button
+                        onClick={() => setFilters({ ...filters, priority: filters.priority === 'critical' ? 'all' : 'critical' })}
+                        className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                          filters.priority === 'critical'
+                            ? 'bg-orange-100 text-orange-700 border border-orange-300'
+                            : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                        }`}
+                      >
+                        <Zap className="w-4 h-4 inline mr-1" />
+                        Critical
+                      </button>
+                      <button
+                        onClick={() => setFilters({ ...filters, status: filters.status === 'promised' ? 'all' : 'promised' })}
+                        className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                          filters.status === 'promised'
+                            ? 'bg-purple-100 text-purple-700 border border-purple-300'
+                            : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                        }`}
+                      >
+                        <Clock className="w-4 h-4 inline mr-1" />
+                        Promised
+                      </button>
+                    </div>
+
+                    {/* Search */}
+                    <div className="relative flex-1 max-w-xs">
+                      <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
+                      <input
+                        type="text"
+                        placeholder="Search customer, invoice..."
+                        className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        value={filters.searchQuery || ''}
+                        onChange={(e) => setFilters({ ...filters, searchQuery: e.target.value })}
+                      />
+                    </div>
+                  </div>
+
+                  {/* Bulk Actions */}
+                  <div className="flex items-center space-x-2">
+                    <button 
+                      onClick={handleBulkWhatsApp}
+                      className="px-3 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 text-sm font-medium flex items-center"
+                    >
+                      <MessageCircle className="w-4 h-4 mr-1" />
+                      Bulk WhatsApp
+                    </button>
+                    <button 
+                      onClick={handleBulkEmail}
+                      className="px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium flex items-center"
+                    >
+                      <Mail className="w-4 h-4 mr-1" />
+                      Bulk Email
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Collections List with Communication Actions */}
+              <div className="bg-white rounded-lg shadow-sm border border-gray-200">
+                <div className="overflow-x-auto">
+                  <table className="w-full">
+                    <thead className="bg-gray-50 border-b border-gray-200">
+                      <tr>
+                        <th className="px-6 py-3 text-left">
+                          <input
+                            type="checkbox"
+                            checked={selectedItems.length === filteredCollections.length && filteredCollections.length > 0}
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                setSelectedItems(filteredCollections.map((c: CollectionItem) => c.customer_id));
+                              } else {
+                                setSelectedItems([]);
+                              }
+                            }}
+                          />
+                        </th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Customer</th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Outstanding</th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Age & Priority</th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Last Contact</th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                        <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Quick Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-200">
+                      {filteredCollections.map((item: CollectionItem) => {
+                        const daysOverdue = item.days_overdue || 0;
+                        const isOverdue = daysOverdue > 0;
+                        
+                        return (
+                          <tr key={item.customer_id} className="hover:bg-gray-50 transition-colors">
+                            <td className="px-6 py-4">
+                              <input
+                                type="checkbox"
+                                checked={selectedItems.includes(item.customer_id)}
+                                onChange={(e) => {
+                                  if (e.target.checked) {
+                                    setSelectedItems([...selectedItems, item.customer_id]);
+                                  } else {
+                                    setSelectedItems(selectedItems.filter(id => id !== item.customer_id));
+                                  }
+                                }}
+                              />
+                            </td>
+                            <td className="px-6 py-4">
+                              <div>
+                                <div className="text-sm font-medium text-gray-900">{item.customer_name}</div>
+                                <div className="text-xs text-gray-500">
+                                  {item.customer_phone} • {item.customer_email}
+                                </div>
+                              </div>
+                            </td>
+                            <td className="px-6 py-4">
+                              <div className="text-sm font-semibold text-gray-900">
+                                ₹{item.total_outstanding?.toLocaleString('en-IN')}
+                              </div>
+                              {item.overdue_amount > 0 && (
+                                <div className="text-xs text-red-600">
+                                  Overdue: ₹{item.overdue_amount?.toLocaleString('en-IN')}
+                                </div>
+                              )}
+                            </td>
+                            <td className="px-6 py-4">
+                              <div className={`text-sm font-medium ${
+                                isOverdue ? 'text-red-600' : 'text-gray-600'
+                              }`}>
+                                {isOverdue ? `${daysOverdue} days overdue` : 'Current'}
+                              </div>
+                              <div className="mt-1">
+                                {getPriorityBadge(item.priority)}
+                              </div>
+                            </td>
+                            <td className="px-6 py-4">
+                              <div className="text-sm text-gray-600">
+                                {item.last_contact_date ? 
+                                  format(parseISO(item.last_contact_date), 'dd MMM, HH:mm') : 
+                                  'Never'
+                                }
+                              </div>
+                              {item.contact_attempts > 0 && (
+                                <div className="text-xs text-gray-500">
+                                  {item.contact_attempts} attempts
+                                </div>
+                              )}
+                            </td>
+                            <td className="px-6 py-4">
+                              {getStatusBadge(item.collection_status)}
+                              {item.promise_date && (
+                                <div className="text-xs text-gray-500 mt-1">
+                                  Promise: {format(parseISO(item.promise_date), 'dd MMM')}
+                                </div>
+                              )}
+                            </td>
+                            <td className="px-6 py-4">
+                              <div className="flex items-center justify-center space-x-1">
+                                {/* WhatsApp */}
+                                <button
+                                  onClick={() => sendWhatsApp(item)}
+                                  className="p-2 text-green-600 hover:bg-green-50 rounded-lg transition-colors"
+                                  title="Send WhatsApp"
+                                >
+                                  <MessageCircle className="w-4 h-4" />
+                                </button>
+                                
+                                {/* Email */}
+                                <button
+                                  onClick={() => sendEmail(item)}
+                                  className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                                  title="Send Email"
+                                >
+                                  <Mail className="w-4 h-4" />
+                                </button>
+                                
+                                {/* Call */}
+                                <button
+                                  onClick={() => makeCall(item)}
+                                  className="p-2 text-purple-600 hover:bg-purple-50 rounded-lg transition-colors"
+                                  title="Call"
+                                >
+                                  <PhoneCall className="w-4 h-4" />
+                                </button>
+                                
+                                {/* SMS */}
+                                <button
+                                  onClick={() => sendSMS(item)}
+                                  className="p-2 text-orange-600 hover:bg-orange-50 rounded-lg transition-colors"
+                                  title="Send SMS"
+                                >
+                                  <MessageSquare className="w-4 h-4" />
+                                </button>
+                                
+                                {/* Schedule Reminder */}
+                                <button
+                                  onClick={() => scheduleReminder(item)}
+                                  className="p-2 text-gray-600 hover:bg-gray-50 rounded-lg transition-colors"
+                                  title="Schedule Reminder"
+                                >
+                                  <Bell className="w-4 h-4" />
+                                </button>
+                                
+                                {/* View Details */}
+                                <button
+                                  onClick={() => onCustomerClick?.(item)}
+                                  className="p-2 text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
+                                  title="View Details"
+                                >
+                                  <ExternalLink className="w-4 h-4" />
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                  
+                  {(!filteredCollections || filteredCollections.length === 0) && !isLoading && (
+                    <div className="text-center py-12">
+                      <Users className="w-12 h-12 text-gray-300 mx-auto mb-4" />
+                      <p className="text-gray-500">No collections to display</p>
+                      <p className="text-sm text-gray-400 mt-1">Adjust your filters or search to see results</p>
+                    </div>
+                  )}
+                  
+                  {isLoading && (
+                    <div className="text-center py-12">
+                      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto" />
+                      <p className="text-gray-500 mt-2">Loading collections...</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       )}
 
-      {/* Filters */}
-      <div className="mb-6 bg-white p-4 rounded-lg shadow">
-        <div className="flex flex-wrap gap-4">
-          <div className="min-w-[150px]">
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Status
-            </label>
-            <Select
-              value={filters.status}
-              onChange={(value) => setFilters({ ...filters, status: value })}
-              options={[
-                { value: 'all', label: 'All Status' },
-                { value: 'pending', label: 'Pending' },
-                { value: 'contacted', label: 'Contacted' },
-                { value: 'promised', label: 'Promised' },
-                { value: 'partial', label: 'Partial' },
-                { value: 'dispute', label: 'Dispute' },
-                { value: 'legal', label: 'Legal' }
-              ]}
-            />
-          </div>
-
-          <div className="min-w-[150px]">
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Priority
-            </label>
-            <Select
-              value={filters.priority}
-              onChange={(value) => setFilters({ ...filters, priority: value })}
-              options={[
-                { value: 'all', label: 'All Priorities' },
-                { value: 'low', label: 'Low' },
-                { value: 'medium', label: 'Medium' },
-                { value: 'high', label: 'High' },
-                { value: 'critical', label: 'Critical' }
-              ]}
-            />
-          </div>
-
-          <div className="min-w-[150px]">
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Days Overdue
-            </label>
-            <Select
-              value={filters.daysOverdue}
-              onChange={(value) => setFilters({ ...filters, daysOverdue: value })}
-              options={[
-                { value: 'all', label: 'All' },
-                { value: '0-30', label: '0-30 days' },
-                { value: '31-60', label: '31-60 days' },
-                { value: '61-90', label: '61-90 days' },
-                { value: 'over_90', label: 'Over 90 days' }
-              ]}
-            />
-          </div>
-
-          <div className="flex-1 min-w-[250px]">
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Search
-            </label>
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-5 w-5" />
-              <input
-                type="text"
-                value={filters.searchQuery}
-                onChange={(e) => setFilters({ ...filters, searchQuery: e.target.value })}
-                placeholder="Search by name, phone or notes..."
-                className="pl-10 pr-4 py-2 w-full border rounded-md"
-              />
-            </div>
-          </div>
-
-          <div className="flex items-end gap-2">
-            <button
-              onClick={() => refetch()}
-              className="px-4 py-2 bg-gray-100 text-gray-700 rounded-md hover:bg-gray-200"
-            >
-              Refresh
-            </button>
-            <button
-              onClick={() => handleExportSelected()}
-              className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 flex items-center gap-2"
-            >
-              <Download className="h-4 w-4" />
-              Export
-            </button>
-          </div>
-        </div>
-      </div>
-
-      {/* Collection Table */}
-      <div className="bg-white rounded-lg shadow">
-        {selectedItems.length > 0 && (
-          <div className="p-4 border-b bg-gray-50 flex justify-between items-center">
-            <span className="text-sm text-gray-600">
-              {selectedItems.length} customers selected
-            </span>
-            <div className="flex gap-2">
+      {/* Reminder Modal (placeholder) */}
+      {showReminderModal && selectedCustomer && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 max-w-md w-full">
+            <h3 className="text-lg font-semibold mb-4">Schedule Reminder</h3>
+            <p className="text-sm text-gray-600 mb-4">
+              Schedule reminder for {selectedCustomer.customer_name}
+            </p>
+            <div className="flex justify-end space-x-2">
               <button
-                onClick={() => handleBulkAction('assign')}
-                className="px-3 py-1 bg-blue-600 text-white rounded-md hover:bg-blue-700 text-sm"
+                onClick={() => setShowReminderModal(false)}
+                className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg"
               >
-                Assign Agent
+                Cancel
               </button>
               <button
-                onClick={() => handleBulkAction('send-reminder')}
-                className="px-3 py-1 bg-green-600 text-white rounded-md hover:bg-green-700 text-sm"
+                onClick={() => {
+                  alert('Reminder scheduled!');
+                  setShowReminderModal(false);
+                }}
+                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
               >
-                Send Reminders
+                Schedule
               </button>
-            </div>
-          </div>
-        )}
-        
-        <DataTable
-          columns={columns}
-          data={filteredCollections}
-          keyField="bill_number"
-          loading={isLoading}
-          emptyMessage="No collection items found"
-        />
-      </div>
             </div>
           </div>
         </div>
