@@ -695,7 +695,7 @@ const PurchaseReturnFlowV2 = ({ onClose }) => {
             <DebitNotePreview
               returnData={returnData}
               supplier={selectedSupplier}
-              purchase={selectedPurchase}
+              purchase={selectedInvoice}
             />
             
             {/* Return Notes Section - Below preview */}
