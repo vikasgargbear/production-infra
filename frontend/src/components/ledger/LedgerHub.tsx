@@ -1,14 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { 
-  User, CreditCard, TrendingUp, 
+  DollarSign, TrendingUp, 
   Clock, AlertTriangle, BarChart3, FileText,
   Archive, Loader2, RefreshCw, AlertCircle
 } from 'lucide-react';
 import { ModuleHub } from '../global';
-import PartyStatement from './PartyStatement';
 import PartyLedgerV3 from './PartyLedgerV3';
-import PartyBalance from './PartyBalance';
-import OutstandingBills from './OutstandingBills';
+import Outstanding from './Outstanding';
 import AgingAnalysis from './AgingAnalysis';
 import CollectionCenter from './CollectionCenter';
 import LedgerReports from './LedgerReports';
@@ -37,30 +35,21 @@ const LedgerHub: React.FC<LedgerHubProps> = ({ open = true, onClose }) => {
   const ledgerModules: LedgerModule[] = [
     {
       id: 'party-statement',
-      label: 'Statement',
-      fullLabel: 'Party Statement',
+      label: 'Ledger',
+      fullLabel: 'Party Ledger',
       description: 'View transaction history',
       icon: FileText,
       color: 'blue',
       component: PartyLedgerV3
     },
     {
-      id: 'party-balance',
-      label: 'Balances',
-      fullLabel: 'Party Balances',
-      description: 'Current outstanding amounts',
-      icon: User,
-      color: 'green',
-      component: PartyBalance
-    },
-    {
-      id: 'outstanding-bills',
+      id: 'outstanding',
       label: 'Outstanding',
-      fullLabel: 'Outstanding Bills',
-      description: 'Pending payments',
-      icon: CreditCard,
+      fullLabel: 'Outstanding Balance',
+      description: 'Pending payments & bills',
+      icon: DollarSign,
       color: 'amber',
-      component: OutstandingBills
+      component: Outstanding
     },
     {
       id: 'aging-analysis',

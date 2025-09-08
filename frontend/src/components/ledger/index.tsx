@@ -5,9 +5,7 @@
 
 // Import components for default export
 import LedgerHub from './LedgerHub';
-import PartyStatement from './PartyStatement';
-import PartyBalance from './PartyBalance';
-import OutstandingBills from './OutstandingBills';
+import Outstanding from './Outstanding';
 import AgingAnalysis from './AgingAnalysis';
 import CollectionCenter from './CollectionCenter';
 import LedgerReports from './LedgerReports';
@@ -19,9 +17,7 @@ import PartyLedgerV3 from './PartyLedgerV3';
 export { default as LedgerHub } from './LedgerHub';
 
 // Core Ledger Components
-export { default as PartyStatement } from './PartyStatement';
-export { default as PartyBalance } from './PartyBalance';
-export { default as OutstandingBills } from './OutstandingBills';
+export { default as Outstanding } from './Outstanding';
 export { default as AgingAnalysis } from './AgingAnalysis';
 export { default as CollectionCenter } from './CollectionCenter';
 export { default as LedgerReports } from './LedgerReports';
@@ -110,9 +106,7 @@ export { ledgerApi } from '../../services/api/modules/ledger.api';
 
 // Component interfaces
 interface LedgerComponents {
-  PartyStatement: React.ComponentType<any>;
-  PartyBalance: React.ComponentType<any>;
-  OutstandingBills: React.ComponentType<any>;
+  Outstanding: React.ComponentType<any>;
   AgingAnalysis: React.ComponentType<any>;
   CollectionCenter: React.ComponentType<any>;
   LedgerReports: React.ComponentType<any>;
@@ -146,9 +140,7 @@ const LedgerModule: LedgerModule = {
   
   components: {
     // Core Components  
-    PartyStatement,
-    PartyBalance,
-    OutstandingBills,
+    Outstanding,
     AgingAnalysis,
     CollectionCenter,
     LedgerReports,

@@ -16,7 +16,6 @@ import { LedgerHub } from './components/ledger';
 import CreditDebitNoteFlow from './components/notes/CreditDebitNoteFlow';
 import GSTHub from './components/gst/GSTHub';
 import MasterHub from './components/master/MasterHub';
-import testBackendConnection from './utils/testBackendConnection';
 import { CompanyProvider } from './contexts/CompanyContext';
 import { EscapeKeyProvider } from './contexts/EscapeKeyContext';
 import { PaymentProvider } from './contexts/PaymentContext';
@@ -166,10 +165,8 @@ function App(): JSX.Element {
     }
   };
 
-  // Test backend connection on app load
+  // Initialize OrgIdManager on app load
   useEffect(() => {
-    testBackendConnection();
-    
     // OrgIdManager handles org_id initialization automatically
     // Just log the current state for debugging
     import('./services/OrgIdManager').then(module => {

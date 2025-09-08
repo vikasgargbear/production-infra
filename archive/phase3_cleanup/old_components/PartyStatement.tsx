@@ -292,10 +292,7 @@ const PartyStatement: React.FC<PartyStatementProps> = ({
             <div className="flex-1 overflow-y-auto">
               <div className="max-w-6xl mx-auto px-6 py-6">
                 {/* Party Selection */}
-                <div className="mb-6 bg-white p-4 rounded-lg shadow">
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Select {partyType === 'customer' ? 'Customer' : 'Supplier'}
-                  </label>
+                <div className="mb-6">
                   {partyType === 'customer' ? (
                     <CustomerSearch
                       value={selectedParty}

@@ -1,0 +1,747 @@
+/**
+ * Outstanding Component
+ * Combined view of party-wise outstanding balances with drill-down to individual bills
+ */
+
+import React, { useState, useMemo } from 'react';
+import { useQuery } from 'react-query';
+import {
+  ChevronDown,
+  ChevronRight,
+  DollarSign,
+  AlertCircle,
+  Clock,
+  Download,
+  Filter,
+  Search,
+  Loader2,
+  RefreshCw,
+  TrendingUp,
+  TrendingDown,
+  Calendar,
+  Phone,
+  Mail
+} from 'lucide-react';
+import { format, parseISO, differenceInDays } from 'date-fns';
+import apiClient from '../../services/api/apiClient';
+import { DataTable, StatusBadge, Select, ModuleHeader, CustomerSearch, SupplierSearch } from '../global';
+import { formatCurrency } from '../../utils/formatters';
+
+interface OutstandingProps {
+  partyType?: 'customer' | 'supplier';
+  embedded?: boolean;
+  onClose?: () => void;
+}
+
+interface PartyOutstanding {
+  party_id: string;
+  party_name: string;
+  party_phone: string;
+  party_email: string;
+  total_outstanding: number;
+  total_overdue: number;
+  invoice_count: number;
+  overdue_count: number;
+  oldest_invoice_days: number;
+  credit_limit?: number;
+  credit_utilization?: number;
+  invoices?: InvoiceDetail[];
+}
+
+interface InvoiceDetail {
+  invoice_id: string;
+  invoice_number: string;
+  invoice_date: string;
+  due_date: string;
+  original_amount: number;
+  paid_amount: number;
+  outstanding_amount: number;
+  days_overdue: number;
+  aging_bucket: 'current' | '1-30' | '31-60' | '61-90' | 'over_90';
+  status: 'pending' | 'partial' | 'overdue';
+}
+
+interface Summary {
+  total_receivable: number;
+  total_payable: number;
+  total_overdue: number;
+  party_count: number;
+  overdue_party_count: number;
+  aging_summary: {
+    current: { count: number; amount: number };
+    '1-30': { count: number; amount: number };
+    '31-60': { count: number; amount: number };
+    '61-90': { count: number; amount: number };
+    over_90: { count: number; amount: number };
+  };
+}
+
+const Outstanding: React.FC<OutstandingProps> = ({
+  partyType = 'customer',
+  embedded = false,
+  onClose
+}) => {
+  const [expandedParties, setExpandedParties] = useState<Set<string>>(new Set());
+  const [filters, setFilters] = useState({
+    status: 'all', // all, overdue, current
+    searchQuery: ''
+  });
+  const [selectedParty, setSelectedParty] = useState<any>(null);
+
+  // Fetch outstanding data using the sales API
+  const { data, isLoading, refetch, error } = useQuery(
+    ['outstanding-data', partyType, filters, selectedParty],
+    async () => {
+      try {
+        // Use the sales/outstanding endpoint which exists
+        const response = await apiClient.get('/sales/outstanding', {
+          params: {
+            customer_id: selectedParty?.customer_id || selectedParty?.id || undefined
+          }
+        });
+        
+        // The API returns { invoices: [], total_outstanding: number, count: number }
+        const responseData = response.data || {};
+        const invoices = Array.isArray(responseData.invoices) ? responseData.invoices : 
+                         Array.isArray(responseData) ? responseData : [];
+        
+        // Group by customer for summary view
+        const partiesMap = new Map<string, PartyOutstanding>();
+        
+        invoices.forEach((invoice: any) => {
+          const partyId = String(invoice.customer_id);
+          
+          if (!partiesMap.has(partyId)) {
+            partiesMap.set(partyId, {
+              party_id: partyId,
+              party_name: invoice.customer_name || 'Unknown Customer',
+              party_phone: invoice.customer_phone || '',
+              party_email: invoice.customer_email || '',
+              total_outstanding: 0,
+              total_overdue: 0,
+              invoice_count: 0,
+              overdue_count: 0,
+              oldest_invoice_days: 0,
+              invoices: []
+            });
+          }
+          
+          const party = partiesMap.get(partyId)!;
+          const pendingAmount = parseFloat(invoice.pending_amount || 0);
+          const daysOverdue = parseInt(invoice.days_overdue || 0);
+          
+          party.total_outstanding += pendingAmount;
+          party.invoice_count++;
+          
+          if (daysOverdue > 0) {
+            party.total_overdue += pendingAmount;
+            party.overdue_count++;
+            party.oldest_invoice_days = Math.max(party.oldest_invoice_days, daysOverdue);
+          }
+          
+          // Determine aging bucket
+          let agingBucket: InvoiceDetail['aging_bucket'] = 'current';
+          if (daysOverdue > 90) agingBucket = 'over_90';
+          else if (daysOverdue > 60) agingBucket = '61-90';
+          else if (daysOverdue > 30) agingBucket = '31-60';
+          else if (daysOverdue > 0) agingBucket = '1-30';
+          
+          // Determine status
+          let status: InvoiceDetail['status'] = 'pending';
+          if (invoice.payment_status === 'partial') status = 'partial';
+          else if (daysOverdue > 0) status = 'overdue';
+          
+          // Add invoice details
+          party.invoices!.push({
+            invoice_id: String(invoice.invoice_id),
+            invoice_number: invoice.invoice_number || '',
+            invoice_date: invoice.invoice_date || '',
+            due_date: invoice.due_date || '',
+            original_amount: parseFloat(invoice.final_amount || 0),
+            paid_amount: parseFloat(invoice.paid_amount || 0),
+            outstanding_amount: pendingAmount,
+            days_overdue: daysOverdue,
+            aging_bucket: agingBucket,
+            status: status
+          });
+        });
+        
+        const parties = Array.from(partiesMap.values());
+        
+        // Calculate summary
+        const summary: Summary = {
+          total_receivable: 0,
+          total_payable: 0,
+          total_overdue: 0,
+          party_count: parties.length,
+          overdue_party_count: 0,
+          aging_summary: {
+            current: { count: 0, amount: 0 },
+            '1-30': { count: 0, amount: 0 },
+            '31-60': { count: 0, amount: 0 },
+            '61-90': { count: 0, amount: 0 },
+            over_90: { count: 0, amount: 0 }
+          }
+        };
+        
+        // Calculate totals
+        parties.forEach(party => {
+          summary.total_receivable += party.total_outstanding;
+          summary.total_overdue += party.total_overdue;
+          if (party.overdue_count > 0) {
+            summary.overdue_party_count++;
+          }
+          
+          // Update aging summary
+          party.invoices?.forEach(invoice => {
+            const bucket = invoice.aging_bucket;
+            const amount = invoice.outstanding_amount;
+            
+            if (bucket === 'current') {
+              summary.aging_summary.current.count++;
+              summary.aging_summary.current.amount += amount;
+            } else if (bucket === '1-30') {
+              summary.aging_summary['1-30'].count++;
+              summary.aging_summary['1-30'].amount += amount;
+            } else if (bucket === '31-60') {
+              summary.aging_summary['31-60'].count++;
+              summary.aging_summary['31-60'].amount += amount;
+            } else if (bucket === '61-90') {
+              summary.aging_summary['61-90'].count++;
+              summary.aging_summary['61-90'].amount += amount;
+            } else if (bucket === 'over_90') {
+              summary.aging_summary.over_90.count++;
+              summary.aging_summary.over_90.amount += amount;
+            }
+          });
+        });
+        
+        return { parties, summary };
+      } catch (err) {
+        console.error('Failed to fetch outstanding data:', err);
+        // Return empty data structure on error
+        return {
+          parties: [],
+          summary: {
+            total_receivable: 0,
+            total_payable: 0,
+            total_overdue: 0,
+            party_count: 0,
+            overdue_party_count: 0,
+            aging_summary: {
+              current: { count: 0, amount: 0 },
+              '1-30': { count: 0, amount: 0 },
+              '31-60': { count: 0, amount: 0 },
+              '61-90': { count: 0, amount: 0 },
+              over_90: { count: 0, amount: 0 }
+            }
+          }
+        };
+      }
+    },
+    {
+      keepPreviousData: true,
+      enabled: partyType === 'customer', // Only enable for customers for now
+      retry: 1
+    }
+  );
+
+  const parties = data?.parties || [];
+  const summary = data?.summary || {
+    total_receivable: 0,
+    total_payable: 0,
+    total_overdue: 0,
+    party_count: 0,
+    overdue_party_count: 0,
+    aging_summary: {
+      current: { count: 0, amount: 0 },
+      '1-30': { count: 0, amount: 0 },
+      '31-60': { count: 0, amount: 0 },
+      '61-90': { count: 0, amount: 0 },
+      over_90: { count: 0, amount: 0 }
+    }
+  };
+
+  // Filter parties based on search and status
+  const filteredParties = useMemo(() => {
+    let filtered = parties;
+    
+    // Apply search filter
+    if (filters.searchQuery) {
+      const query = filters.searchQuery.toLowerCase();
+      filtered = filtered.filter((party: PartyOutstanding) =>
+        party.party_name.toLowerCase().includes(query) ||
+        party.party_phone?.includes(query)
+      );
+    }
+    
+    // Apply status filter
+    if (filters.status === 'overdue') {
+      filtered = filtered.filter((party: PartyOutstanding) => party.total_overdue > 0);
+    } else if (filters.status === 'current') {
+      filtered = filtered.filter((party: PartyOutstanding) => party.total_overdue === 0);
+    }
+    
+    return filtered;
+  }, [parties, filters]);
+
+  const togglePartyExpansion = (partyId: string) => {
+    const newExpanded = new Set(expandedParties);
+    if (newExpanded.has(partyId)) {
+      newExpanded.delete(partyId);
+    } else {
+      newExpanded.add(partyId);
+    }
+    setExpandedParties(newExpanded);
+  };
+
+  const handleExport = () => {
+    try {
+      // Export current view data as CSV
+      const csvData = filteredParties.map((party: PartyOutstanding) => ({
+        'Party Name': party.party_name,
+        'Phone': party.party_phone,
+        'Total Outstanding': party.total_outstanding,
+        'Overdue Amount': party.total_overdue,
+        'Invoice Count': party.invoice_count,
+        'Overdue Count': party.overdue_count,
+        'Oldest Days': party.oldest_invoice_days
+      }));
+      
+      if (csvData.length === 0) {
+        alert('No data to export');
+        return;
+      }
+      
+      // Convert to CSV
+      const headers = Object.keys(csvData[0]);
+      const csvContent = [
+        headers.join(','),
+        ...csvData.map(row => headers.map(h => `"${row[h] || ''}"`).join(','))
+      ].join('\n');
+      
+      // Create download link
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `outstanding_${partyType}_${new Date().toISOString().split('T')[0]}.csv`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error('Export failed:', error);
+      alert('Failed to export data');
+    }
+  };
+
+  const getAgingColor = (bucket: string) => {
+    switch (bucket) {
+      case 'current': return 'text-green-600';
+      case '1-30': return 'text-yellow-600';
+      case '31-60': return 'text-orange-600';
+      case '61-90': return 'text-red-600';
+      case 'over_90': return 'text-red-800';
+      default: return 'text-gray-600';
+    }
+  };
+
+  const getStatusBadge = (status: string) => {
+    switch (status) {
+      case 'overdue':
+        return <StatusBadge status="error" text="Overdue" />;
+      case 'partial':
+        return <StatusBadge status="warning" text="Partial" />;
+      case 'pending':
+        return <StatusBadge status="info" text="Pending" />;
+      default:
+        return <StatusBadge status="default" text={status} />;
+    }
+  };
+
+  // Columns for the main party table
+  const partyColumns = [
+    {
+      key: 'expand',
+      header: '',
+      render: (_: any, party: PartyOutstanding) => (
+        <button
+          onClick={() => togglePartyExpansion(party.party_id)}
+          className="p-1 hover:bg-gray-100 rounded"
+        >
+          {expandedParties.has(party.party_id) ? 
+            <ChevronDown className="w-4 h-4" /> : 
+            <ChevronRight className="w-4 h-4" />
+          }
+        </button>
+      ),
+      width: '40px'
+    },
+    {
+      key: 'party_name',
+      header: partyType === 'customer' ? 'Customer' : 'Supplier',
+      render: (_: any, party: PartyOutstanding) => (
+        <div>
+          <div className="font-medium">{party.party_name}</div>
+          {(party.party_phone || party.party_email) && (
+            <div className="text-xs text-gray-500">
+              {party.party_phone && <span className="mr-3">{party.party_phone}</span>}
+              {party.party_email && <span>{party.party_email}</span>}
+            </div>
+          )}
+        </div>
+      )
+    },
+    {
+      key: 'total_outstanding',
+      header: 'Total Outstanding',
+      align: 'right' as const,
+      render: (_: any, party: PartyOutstanding) => (
+        <div className="text-right">
+          <div className="font-medium">{formatCurrency(party.total_outstanding)}</div>
+          {party.total_overdue > 0 && (
+            <div className="text-xs text-red-600">
+              Overdue: {formatCurrency(party.total_overdue)}
+            </div>
+          )}
+        </div>
+      ),
+      width: '150px'
+    },
+    {
+      key: 'invoice_count',
+      header: 'Bills',
+      align: 'center' as const,
+      render: (_: any, party: PartyOutstanding) => (
+        <div className="text-center">
+          <div>{party.invoice_count}</div>
+          {party.overdue_count > 0 && (
+            <div className="text-xs text-red-600">
+              {party.overdue_count} overdue
+            </div>
+          )}
+        </div>
+      ),
+      width: '100px'
+    },
+    {
+      key: 'oldest_invoice',
+      header: 'Oldest Bill',
+      align: 'center' as const,
+      render: (_: any, party: PartyOutstanding) => {
+        if (!party.oldest_invoice_days) return <span className="text-gray-400">-</span>;
+        const color = party.oldest_invoice_days > 60 ? 'text-red-600' : 
+                     party.oldest_invoice_days > 30 ? 'text-orange-600' : 'text-gray-600';
+        return (
+          <span className={color}>
+            {party.oldest_invoice_days} days
+          </span>
+        );
+      },
+      width: '120px'
+    }
+  ];
+
+  // Columns for expanded invoice details
+  const invoiceColumns = [
+    {
+      key: 'invoice_number',
+      header: 'Invoice #',
+      render: (_: any, invoice: InvoiceDetail) => invoice.invoice_number,
+      width: '120px'
+    },
+    {
+      key: 'invoice_date',
+      header: 'Date',
+      render: (_: any, invoice: InvoiceDetail) => {
+        try {
+          return format(parseISO(invoice.invoice_date), 'dd/MM/yyyy');
+        } catch {
+          return invoice.invoice_date;
+        }
+      },
+      width: '100px'
+    },
+    {
+      key: 'due_date',
+      header: 'Due Date',
+      render: (_: any, invoice: InvoiceDetail) => {
+        try {
+          return format(parseISO(invoice.due_date), 'dd/MM/yyyy');
+        } catch {
+          return invoice.due_date || '-';
+        }
+      },
+      width: '100px'
+    },
+    {
+      key: 'original_amount',
+      header: 'Amount',
+      align: 'right' as const,
+      render: (_: any, invoice: InvoiceDetail) => formatCurrency(invoice.original_amount),
+      width: '120px'
+    },
+    {
+      key: 'paid_amount',
+      header: 'Paid',
+      align: 'right' as const,
+      render: (_: any, invoice: InvoiceDetail) => formatCurrency(invoice.paid_amount),
+      width: '120px'
+    },
+    {
+      key: 'outstanding_amount',
+      header: 'Outstanding',
+      align: 'right' as const,
+      render: (_: any, invoice: InvoiceDetail) => formatCurrency(invoice.outstanding_amount),
+      width: '120px'
+    },
+    {
+      key: 'aging',
+      header: 'Aging',
+      align: 'center' as const,
+      render: (_: any, invoice: InvoiceDetail) => (
+        <span className={getAgingColor(invoice.aging_bucket)}>
+          {invoice.aging_bucket === 'over_90' ? '90+' : invoice.aging_bucket}
+        </span>
+      ),
+      width: '80px'
+    },
+    {
+      key: 'status',
+      header: 'Status',
+      render: (_: any, invoice: InvoiceDetail) => getStatusBadge(invoice.status),
+      width: '100px'
+    }
+  ];
+
+  // Show message for suppliers
+  if (partyType === 'supplier') {
+    return (
+      <div className={embedded ? 'p-6' : 'h-full bg-blue-50'}>
+        {!embedded && (
+          <div className="h-full flex flex-col">
+            <ModuleHeader
+              title="Outstanding"
+              documentNumber=""
+              status=""
+              icon={DollarSign}
+              iconColor="text-amber-600"
+              onClose={onClose}
+              onSaveDraft={() => {}}
+              additionalActions={[]}
+            />
+            <div className="flex-1 flex items-center justify-center">
+              <div className="text-center">
+                <AlertCircle className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+                <p className="text-gray-600">Supplier outstanding is not available yet</p>
+                <p className="text-sm text-gray-500 mt-2">This feature will be available soon</p>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  return (
+    <div className={embedded ? 'p-6' : 'h-full bg-blue-50'}>
+      {!embedded && (
+        <div className="h-full flex flex-col">
+          <ModuleHeader
+            title="Outstanding"
+            documentNumber=""
+            status=""
+            icon={DollarSign}
+            iconColor="text-amber-600"
+            onClose={onClose}
+            onSaveDraft={() => {}}
+            additionalActions={[
+              {
+                label: "Refresh",
+                onClick: () => refetch(),
+                variant: "primary",
+                icon: RefreshCw
+              },
+              {
+                label: "Export",
+                onClick: handleExport,
+                variant: "default",
+                icon: Download
+              }
+            ] as any}
+          />
+          
+          <div className="flex-1 overflow-y-auto">
+            <div className="max-w-7xl mx-auto px-6 py-6">
+              
+              {/* Summary Cards */}
+              <div className="grid grid-cols-5 gap-4 mb-6">
+                <div className="bg-white p-4 rounded-lg shadow-sm">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-sm text-gray-600">Total Outstanding</span>
+                    <DollarSign className="w-4 h-4 text-blue-600" />
+                  </div>
+                  <div className="text-2xl font-bold text-gray-900">
+                    {formatCurrency(summary.total_receivable)}
+                  </div>
+                  <div className="text-xs text-gray-500 mt-1">
+                    {summary.party_count} parties
+                  </div>
+                </div>
+
+                <div className="bg-white p-4 rounded-lg shadow-sm">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-sm text-gray-600">Overdue</span>
+                    <AlertCircle className="w-4 h-4 text-red-600" />
+                  </div>
+                  <div className="text-2xl font-bold text-red-600">
+                    {formatCurrency(summary.total_overdue)}
+                  </div>
+                  <div className="text-xs text-gray-500 mt-1">
+                    {summary.overdue_party_count} parties
+                  </div>
+                </div>
+
+                <div className="bg-white p-4 rounded-lg shadow-sm">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-sm text-gray-600">Current</span>
+                    <Clock className="w-4 h-4 text-green-600" />
+                  </div>
+                  <div className="text-2xl font-bold text-green-600">
+                    {formatCurrency(summary.aging_summary.current.amount)}
+                  </div>
+                  <div className="text-xs text-gray-500 mt-1">
+                    {summary.aging_summary.current.count} bills
+                  </div>
+                </div>
+
+                <div className="bg-white p-4 rounded-lg shadow-sm">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-sm text-gray-600">30-60 Days</span>
+                    <Calendar className="w-4 h-4 text-orange-600" />
+                  </div>
+                  <div className="text-2xl font-bold text-orange-600">
+                    {formatCurrency(summary.aging_summary['31-60'].amount)}
+                  </div>
+                  <div className="text-xs text-gray-500 mt-1">
+                    {summary.aging_summary['31-60'].count} bills
+                  </div>
+                </div>
+
+                <div className="bg-white p-4 rounded-lg shadow-sm">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-sm text-gray-600">90+ Days</span>
+                    <TrendingUp className="w-4 h-4 text-red-800" />
+                  </div>
+                  <div className="text-2xl font-bold text-red-800">
+                    {formatCurrency(summary.aging_summary.over_90.amount)}
+                  </div>
+                  <div className="text-xs text-gray-500 mt-1">
+                    {summary.aging_summary.over_90.count} bills
+                  </div>
+                </div>
+              </div>
+
+              {/* Filters */}
+              <div className="bg-white p-4 rounded-lg shadow-sm mb-6">
+                <div className="flex items-center space-x-4">
+                  <div className="flex-1">
+                    <div className="relative">
+                      <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+                      <input
+                        type="text"
+                        placeholder="Search by party name or phone..."
+                        value={filters.searchQuery}
+                        onChange={(e) => setFilters({ ...filters, searchQuery: e.target.value })}
+                        className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      />
+                    </div>
+                  </div>
+                  
+                  <Select
+                    value={filters.status}
+                    onChange={(value) => setFilters({ ...filters, status: value })}
+                    options={[
+                      { value: 'all', label: 'All Status' },
+                      { value: 'overdue', label: 'Overdue Only' },
+                      { value: 'current', label: 'Current Only' }
+                    ]}
+                  />
+
+                  {/* Party Search */}
+                  <div className="w-64">
+                    <CustomerSearch
+                      value={selectedParty}
+                      onChange={setSelectedParty}
+                      placeholder="Filter by customer"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Party Outstanding Table */}
+              <div className="bg-white rounded-lg shadow-sm">
+                {isLoading ? (
+                  <div className="p-8 text-center">
+                    <Loader2 className="w-8 h-8 animate-spin mx-auto mb-4 text-blue-600" />
+                    <p className="text-gray-600">Loading outstanding data...</p>
+                  </div>
+                ) : error ? (
+                  <div className="p-8 text-center">
+                    <AlertCircle className="w-12 h-12 text-red-400 mx-auto mb-4" />
+                    <p className="text-red-600">Failed to load outstanding data</p>
+                    <button
+                      onClick={() => refetch()}
+                      className="mt-4 px-4 py-2 bg-red-100 text-red-700 rounded-md hover:bg-red-200"
+                    >
+                      Retry
+                    </button>
+                  </div>
+                ) : filteredParties.length === 0 ? (
+                  <div className="p-8 text-center text-gray-500">
+                    {filters.searchQuery || filters.status !== 'all' ? 
+                      'No matching records found' : 
+                      'No outstanding records found'}
+                  </div>
+                ) : (
+                  <div>
+                    {filteredParties.map((party: PartyOutstanding) => (
+                      <div key={party.party_id}>
+                        <DataTable
+                          columns={partyColumns}
+                          data={[party]}
+                          keyField="party_id"
+                          loading={false}
+                          emptyMessage=""
+                        />
+                        
+                        {/* Expanded Invoice Details */}
+                        {expandedParties.has(party.party_id) && party.invoices && party.invoices.length > 0 && (
+                          <div className="bg-gray-50 px-12 py-4">
+                            <h4 className="text-sm font-medium text-gray-700 mb-3">
+                              Invoice Details for {party.party_name}
+                            </h4>
+                            <DataTable
+                              columns={invoiceColumns}
+                              data={party.invoices}
+                              keyField="invoice_id"
+                              loading={false}
+                              emptyMessage="No invoices found"
+                            />
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+export default Outstanding;

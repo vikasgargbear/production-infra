@@ -17,6 +17,53 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/party-ledger-v2", tags=["party-ledger-v2"])
 
+@router.get("/balance/{party_id}")
+async def get_party_balance(
+    party_id: str,
+    party_type: str = Query("customer", regex="^(customer|supplier)$"),
+    as_of_date: Optional[str] = None,
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)
+):
+    """
+    Get party balance (compatible with v1 for migration)
+    """
+    try:
+        if party_type == "customer":
+            query = """
+                SELECT 
+                    COALESCE(SUM(i.final_amount), 0) - COALESCE(SUM(i.paid_amount), 0) as balance,
+                    COUNT(CASE WHEN i.payment_status != 'paid' THEN 1 END) as pending_invoices,
+                    MAX(i.invoice_date) as last_transaction_date
+                FROM sales.invoices i
+                WHERE i.customer_id = :party_id
+                AND i.invoice_status != 'cancelled'
+            """
+        else:
+            query = """
+                SELECT 
+                    COALESCE(SUM(si.total_amount), 0) - COALESCE(SUM(si.paid_amount), 0) as balance,
+                    COUNT(CASE WHEN si.payment_status != 'paid' THEN 1 END) as pending_invoices,
+                    MAX(si.invoice_date) as last_transaction_date
+                FROM procurement.supplier_invoices si
+                WHERE si.supplier_id = :party_id
+                AND si.status != 'cancelled'
+            """
+        
+        result = db.execute(text(query), {"party_id": party_id}).fetchone()
+        
+        return {
+            "party_id": party_id,
+            "party_type": party_type,
+            "balance": float(result.balance) if result else 0,
+            "pending_invoices": result.pending_invoices if result else 0,
+            "last_transaction_date": str(result.last_transaction_date) if result and result.last_transaction_date else None
+        }
+        
+    except Exception as e:
+        logger.error(f"Error fetching balance: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 @router.get("/statement/{party_id}")
 async def get_party_statement_with_allocations(
     party_id: str,
@@ -463,4 +510,77 @@ async def get_aging_analysis(
             
     except Exception as e:
         logger.error(f"Error generating aging analysis: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/outstanding-bills/{party_id}")
+async def get_outstanding_bills(
+    party_id: str,
+    party_type: str = Query("customer", regex="^(customer|supplier)$"),
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)
+):
+    """
+    Get outstanding bills for a party (compatible with v1 for migration)
+    """
+    try:
+        if party_type == "customer":
+            query = """
+                SELECT 
+                    i.invoice_id as bill_id,
+                    i.invoice_number as bill_number,
+                    i.invoice_date as bill_date,
+                    i.final_amount as bill_amount,
+                    i.paid_amount,
+                    i.final_amount - i.paid_amount as outstanding_amount,
+                    i.payment_status,
+                    CURRENT_DATE - i.invoice_date as days_overdue
+                FROM sales.invoices i
+                WHERE i.customer_id = :party_id
+                AND i.invoice_status != 'cancelled'
+                AND i.payment_status != 'paid'
+                ORDER BY i.invoice_date DESC
+            """
+        else:
+            query = """
+                SELECT 
+                    si.invoice_id as bill_id,
+                    si.invoice_number as bill_number,
+                    si.invoice_date as bill_date,
+                    si.total_amount as bill_amount,
+                    si.paid_amount,
+                    si.total_amount - si.paid_amount as outstanding_amount,
+                    si.payment_status,
+                    CURRENT_DATE - si.invoice_date as days_overdue
+                FROM procurement.supplier_invoices si
+                WHERE si.supplier_id = :party_id
+                AND si.status != 'cancelled'
+                AND si.payment_status != 'paid'
+                ORDER BY si.invoice_date DESC
+            """
+        
+        results = db.execute(text(query), {"party_id": party_id}).fetchall()
+        
+        bills = []
+        for r in results:
+            bills.append({
+                "bill_id": r.bill_id,
+                "bill_number": r.bill_number,
+                "bill_date": str(r.bill_date),
+                "bill_amount": float(r.bill_amount),
+                "paid_amount": float(r.paid_amount) if r.paid_amount else 0,
+                "outstanding_amount": float(r.outstanding_amount),
+                "payment_status": r.payment_status,
+                "days_overdue": r.days_overdue
+            })
+        
+        return {
+            "party_id": party_id,
+            "party_type": party_type,
+            "outstanding_bills": bills,
+            "total_outstanding": sum(b["outstanding_amount"] for b in bills),
+            "bill_count": len(bills)
+        }
+        
+    except Exception as e:
+        logger.error(f"Error fetching outstanding bills: {e}")
         raise HTTPException(status_code=500, detail=str(e))

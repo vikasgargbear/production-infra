@@ -32,7 +32,6 @@ import { format, parseISO, subMonths, differenceInDays } from 'date-fns';
 import { partyLedgerAPI } from '../../services/api';
 import { CustomerSearch, SupplierSearch, DatePicker, Select, DataTable, StatusBadge, ModuleHeader } from '../global';
 import { formatCurrency } from '../../utils/formatters';
-import AgingAnalysis from './AgingAnalysis';
 
 interface PartyLedgerV3Props {
   partyType?: 'customer' | 'supplier';
@@ -120,8 +119,6 @@ const PartyLedgerV3: React.FC<PartyLedgerV3Props> = ({
     searchQuery: ''
   });
   const [selectedTransactions, setSelectedTransactions] = useState<string[]>([]);
-  const [showAgingAnalysis, setShowAgingAnalysis] = useState(false);
-  const [viewMode, setViewMode] = useState<'table' | 'summary' | 'analytics'>('table');
 
   // Fetch party info - pass the entire customer object for ID extraction
   const { data: partyInfo, isLoading: loadingParty, error: partyError } = useQuery(
@@ -203,22 +200,6 @@ const PartyLedgerV3: React.FC<PartyLedgerV3Props> = ({
     return filtered;
   }, [ledgerData, filters.searchQuery]);
 
-  // Calculate analytics
-  const analytics = useMemo(() => {
-    if (!ledgerData?.entries || !ledgerData?.summary) return null;
-    
-    const monthlyTrend = calculateMonthlyTrend(ledgerData.entries);
-    const transactionBreakdown = calculateTransactionBreakdown(ledgerData.entries);
-    
-    return {
-      monthlyTrend,
-      transactionBreakdown,
-      averagePaymentDays: calculateAveragePaymentDays(ledgerData.entries),
-      creditUtilization: partyInfo?.credit_limit 
-        ? (ledgerData.summary.outstanding_amount / partyInfo.credit_limit) * 100 
-        : 0
-    };
-  }, [ledgerData, partyInfo]);
 
   const handleBulkAction = (action: 'reconcile' | 'export' | 'email') => {
     switch (action) {
@@ -245,7 +226,7 @@ const PartyLedgerV3: React.FC<PartyLedgerV3Props> = ({
         transaction_ids: transactionIds,
         format: exportFormat,
         include_summary: true,
-        include_aging: showAgingAnalysis
+        include_aging: false
       });
       
       downloadFile(response.data, `ledger-${exportFormat}-${Date.now()}.${exportFormat}`);
@@ -384,30 +365,15 @@ const PartyLedgerV3: React.FC<PartyLedgerV3Props> = ({
             icon={FileText}
             iconColor="text-blue-600"
             onClose={onClose}
-            historyType="ledger"
             onSaveDraft={() => {}}
             additionalActions={[
               {
-                label: "Refresh",
+                label: refreshing ? "Refreshing..." : "Refresh",
                 onClick: handleRefresh,
-                variant: "default",
-                icon: refreshing ? Loader2 : RefreshCw,
-                disabled: refreshing
-              },
-              {
-                label: 'Table',
-                onClick: () => setViewMode('table'),
-                variant: viewMode === 'table' ? 'primary' : 'default'
-              },
-              {
-                label: 'Summary',
-                onClick: () => setViewMode('summary'),
-                variant: viewMode === 'summary' ? 'primary' : 'default'
-              },
-              {
-                label: 'Analytics',
-                onClick: () => setViewMode('analytics'),
-                variant: viewMode === 'analytics' ? 'primary' : 'default'
+                variant: refreshing ? "secondary" : "primary",
+                icon: RefreshCw,
+                disabled: refreshing,
+                className: refreshing ? "animate-spin" : ""
               }
             ] as any}
           />
@@ -446,10 +412,7 @@ const PartyLedgerV3: React.FC<PartyLedgerV3Props> = ({
 
       {/* Party Selection */}
       {!initialPartyId && (
-        <div className="mb-6 bg-white p-4 rounded-lg shadow">
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            Select {partyType === 'customer' ? 'Customer' : 'Supplier'}
-          </label>
+        <div className="mb-6">
           {partyType === 'customer' ? (
             <CustomerSearch
               value={selectedParty}
@@ -465,8 +428,8 @@ const PartyLedgerV3: React.FC<PartyLedgerV3Props> = ({
         </div>
       )}
 
-      {/* Content based on view mode */}
-      {(selectedParty || initialPartyId) && viewMode === 'table' && (
+      {/* Content */}
+      {(selectedParty || initialPartyId) && (
         <>
           {/* Filters */}
           <div className="mb-6 bg-white p-4 rounded-lg shadow">
@@ -520,28 +483,6 @@ const PartyLedgerV3: React.FC<PartyLedgerV3Props> = ({
         </>
       )}
 
-      {/* Summary View */}
-      {(selectedParty || initialPartyId) && viewMode === 'summary' && ledgerData?.summary && (
-        <div className="space-y-6">
-          {/* Summary cards */}
-          <div className="grid grid-cols-4 gap-4">
-            {/* Add summary cards here */}
-          </div>
-          
-          {/* Aging Analysis */}
-          <AgingAnalysis
-            open={showAgingAnalysis}
-            onClose={() => setShowAgingAnalysis(false)}
-          />
-        </div>
-      )}
-
-      {/* Analytics View */}
-      {(selectedParty || initialPartyId) && viewMode === 'analytics' && analytics && (
-        <div className="space-y-6">
-          {/* Add analytics charts here */}
-        </div>
-      )}
       
             </div>
           </div>
@@ -552,21 +493,6 @@ const PartyLedgerV3: React.FC<PartyLedgerV3Props> = ({
 };
 
 // Helper functions
-function calculateMonthlyTrend(entries: LedgerEntry[]) {
-  // Implementation for monthly trend calculation
-  return [];
-}
-
-function calculateTransactionBreakdown(entries: LedgerEntry[]) {
-  // Implementation for transaction breakdown
-  return {};
-}
-
-function calculateAveragePaymentDays(entries: LedgerEntry[]) {
-  // Implementation for average payment days
-  return 0;
-}
-
 function downloadFile(data: Blob, filename: string) {
   const url = window.URL.createObjectURL(data);
   const link = document.createElement('a');
