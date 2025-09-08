@@ -64,7 +64,8 @@ async def get_party_statement(
                         p.payment_status,
                         2 as sort_order
                     FROM financial.payments p
-                    WHERE p.customer_id = :party_id
+                    WHERE p.party_id = :party_id
+                    AND p.party_type = 'customer'
                     AND p.payment_status != 'cancelled'
                 )
                 SELECT * FROM transactions
