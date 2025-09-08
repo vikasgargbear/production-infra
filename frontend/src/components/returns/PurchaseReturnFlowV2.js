@@ -175,7 +175,9 @@ const PurchaseReturnFlowV2 = ({ onClose }) => {
             invoice_item_id: item.invoice_item_id,
             return_quantity: parseFloat(item.returnable_quantity || 0), // Pre-fill with max returnable
             selected: true, // Pre-select all
-            rate: item.unit_price || item.rate || 0,
+            rate: item.unit_price || item.rate || item.purchase_price || 0,
+            unit_price: item.unit_price || item.rate || item.purchase_price || 0,
+            purchase_price: item.unit_price || item.rate || item.purchase_price || 0,
             tax_percent: item.tax_percent || 18,
             discount_percent: item.discount_percent || 0,
             max_returnable_qty: parseFloat(item.returnable_quantity || 0),
@@ -275,6 +277,8 @@ const PurchaseReturnFlowV2 = ({ onClose }) => {
       quantity: 0,
       return_quantity: 0,
       rate: 0,
+      unit_price: 0,
+      purchase_price: 0,
       tax_percent: 18,
       discount_percent: 0,
       selected: true,
@@ -411,8 +415,9 @@ const PurchaseReturnFlowV2 = ({ onClose }) => {
             batch_number: item.batch_number,
             return_quantity: item.return_quantity,  // Transformer expects this
             quantity: item.return_quantity,  // Backend expects this
-            rate: item.rate || item.unit_price || item.purchase_price,
-            cost_price: item.rate || item.unit_price || item.purchase_price,  // Transformer expects this
+            rate: item.rate || item.unit_price || item.purchase_price || 0,
+            unit_price: item.unit_price || item.rate || item.purchase_price || 0,
+            cost_price: item.rate || item.unit_price || item.purchase_price || 0,  // Transformer expects this
             discount_percent: item.discount_percent || 0,
             tax_percent: item.tax_percent || item.gst_percent || 0,
             return_reason: item.return_reason || returnData.return_reason,
@@ -421,6 +426,9 @@ const PurchaseReturnFlowV2 = ({ onClose }) => {
             disposition: item.restock !== false ? 'RESTOCK' : 'DESTROY'
           }))
       };
+
+      console.log('Purchase Return Payload:', returnPayload);
+      console.log('Items being sent:', returnPayload.items);
 
       const response = await returnsApi.createPurchaseReturn(returnPayload);
       
