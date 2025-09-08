@@ -280,8 +280,29 @@ async def get_invoice_returnable_items(
                     sii.invoice_item_id,
                     sii.product_id,
                     p.product_name,
-                    COALESCE(sii.batch_id, b.batch_id) as batch_id,
-                    sii.batch_number,
+                    COALESCE(
+                        sii.batch_id, 
+                        -- Try to find batch by matching the stored batch_number
+                        (SELECT batch_id FROM inventory.batches 
+                         WHERE product_id = sii.product_id 
+                         AND batch_number = sii.batch_number 
+                         LIMIT 1),
+                        -- If not found, get the most recent batch for this product from this supplier
+                        (SELECT batch_id FROM inventory.batches 
+                         WHERE product_id = sii.product_id 
+                         AND supplier_id = si.supplier_id
+                         ORDER BY created_at DESC 
+                         LIMIT 1)
+                    ) as batch_id,
+                    COALESCE(
+                        sii.batch_number,
+                        -- If no batch_number stored, get it from the batch
+                        (SELECT batch_number FROM inventory.batches 
+                         WHERE product_id = sii.product_id 
+                         AND supplier_id = si.supplier_id
+                         ORDER BY created_at DESC 
+                         LIMIT 1)
+                    ) as batch_number,
                     sii.quantity as invoice_quantity,
                     COALESCE(sii.free_quantity, 0) as free_quantity,
                     sii.quantity - COALESCE(sii.free_quantity, 0) as paid_quantity,
@@ -295,14 +316,17 @@ async def get_invoice_returnable_items(
                     sii.unit
                 FROM procurement.supplier_invoice_items sii
                 JOIN inventory.products p ON sii.product_id = p.product_id
-                LEFT JOIN inventory.batches b ON b.product_id = sii.product_id 
-                    AND b.batch_number = sii.batch_number
+                JOIN procurement.supplier_invoices si ON si.supplier_invoice_id = sii.supplier_invoice_id
                 WHERE sii.supplier_invoice_id = :invoice_id
                 AND sii.quantity - COALESCE(sii.quantity_returned, 0) > 0
                 ORDER BY sii.invoice_item_id
             """),
             {"invoice_id": invoice_id}
         ).fetchall()
+        
+        # Log the items found
+        for item in items:
+            logger.info(f"Returnable item: product_id={item.product_id}, batch_id={item.batch_id}, batch_number={item.batch_number}")
         
         # If no items in supplier_invoice_items, try to get from GRN
         if not items:
