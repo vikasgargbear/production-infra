@@ -1,7 +1,7 @@
 import apiClient from './apiClient';
 
-// Using v1 API - stable and working
-const BASE_URL = '/party-ledger';
+// Using simplified v2 API - based on working /sales/outstanding columns
+const BASE_URL = '/party-ledger-v2';
 
 export const partyLedgerApi = {
   // Get party info (maps to getBalance for now)
