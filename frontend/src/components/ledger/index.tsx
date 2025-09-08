@@ -9,7 +9,6 @@ import Outstanding from './Outstanding';
 import CollectionCenter from './CollectionCenter';
 import LedgerReports from './LedgerReports';
 import PartyLedger from './PartyLedger';
-import PartyLedgerV2 from './archive/PartyLedgerV2';
 import PartyLedgerV3 from './PartyLedgerV3';
 
 // Main Hub Component
@@ -20,10 +19,10 @@ export { default as Outstanding } from './Outstanding';
 export { default as CollectionCenter } from './CollectionCenter';
 export { default as LedgerReports } from './LedgerReports';
 
-// Legacy Components (for backward compatibility)
+// Ledger Components
 export { default as PartyLedger } from './PartyLedger';
-export { default as PartyLedgerV2 } from './archive/PartyLedgerV2';
 export { default as PartyLedgerV3 } from './PartyLedgerV3';
+// Note: PartyLedgerV2 has been archived - use PartyLedgerV3 instead
 
 // Ledger Constants
 export const TRANSACTION_TYPES = {
