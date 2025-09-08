@@ -385,7 +385,9 @@ const PurchaseReturnFlowV2 = ({ onClose }) => {
     try {
       const returnPayload = {
         ...returnData,
-        original_purchase: selectedInvoice,  // Add the selected invoice as original purchase
+        purchase_id: selectedInvoice?.supplier_invoice_id || selectedInvoice?.invoice_id,  // Set purchase_id for transformer
+        reason: returnData.return_reason,  // Transformer expects 'reason' not 'return_reason'
+        original_purchase: selectedInvoice,  // Keep for reference
         items: returnData.items
           .filter(item => item.selected && item.return_quantity > 0)
           .map(item => ({
@@ -393,8 +395,8 @@ const PurchaseReturnFlowV2 = ({ onClose }) => {
             product_id: item.product_id,
             batch_id: item.batch_id,
             batch_number: item.batch_number,
-            return_quantity: item.return_quantity,
-            unit_price: item.rate || item.unit_price || item.purchase_price,
+            quantity: item.return_quantity,  // Backend expects 'quantity' not 'return_quantity'
+            rate: item.rate || item.unit_price || item.purchase_price,  // Backend expects 'rate' not 'unit_price'
             discount_percent: item.discount_percent || 0,
             tax_percent: item.tax_percent || item.gst_percent || 0,
             return_reason: item.return_reason || returnData.return_reason,
