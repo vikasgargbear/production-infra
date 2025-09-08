@@ -235,7 +235,13 @@ async def get_party_statement_with_allocations(
         params["skip"] = skip
         
         # Get transactions
-        transactions = db.execute(text(query), params).fetchall()
+        try:
+            transactions = db.execute(text(query), params).fetchall()
+        except Exception as query_error:
+            logger.error(f"Error executing main query: {query_error}")
+            logger.error(f"Query was: {query[:500]}...")  # Log first 500 chars of query
+            db.rollback()
+            raise
         
         # Get party details
         if party_type == "customer":
@@ -323,6 +329,7 @@ async def get_party_statement_with_allocations(
         
     except Exception as e:
         logger.error(f"Error fetching party statement: {e}")
+        db.rollback()  # Rollback the failed transaction
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/reconciliation/{party_id}")
