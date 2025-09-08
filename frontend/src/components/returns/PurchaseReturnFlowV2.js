@@ -395,8 +395,10 @@ const PurchaseReturnFlowV2 = ({ onClose }) => {
             product_id: item.product_id,
             batch_id: item.batch_id,
             batch_number: item.batch_number,
-            quantity: item.return_quantity,  // Backend expects 'quantity' not 'return_quantity'
-            rate: item.rate || item.unit_price || item.purchase_price,  // Backend expects 'rate' not 'unit_price'
+            return_quantity: item.return_quantity,  // Transformer expects this
+            quantity: item.return_quantity,  // Backend expects this
+            rate: item.rate || item.unit_price || item.purchase_price,
+            cost_price: item.rate || item.unit_price || item.purchase_price,  // Transformer expects this
             discount_percent: item.discount_percent || 0,
             tax_percent: item.tax_percent || item.gst_percent || 0,
             return_reason: item.return_reason || returnData.return_reason,
