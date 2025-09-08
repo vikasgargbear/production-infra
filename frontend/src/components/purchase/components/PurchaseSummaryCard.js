@@ -1,5 +1,6 @@
 import React from 'react';
 import { Calculator } from 'lucide-react';
+import { formatCurrency } from '../../../utils/formatters';
 
 /**
  * PurchaseSummaryCard - Shows purchase totals and calculations
@@ -11,9 +12,6 @@ const PurchaseSummaryCard = ({
   otherCharges = 0, 
   total = 0 
 }) => {
-  const formatCurrency = (amount) => {
-    return `₹${parseFloat(amount).toFixed(2)}`;
-  };
 
   return (
     <div className="bg-white rounded-lg border p-4">

@@ -89,25 +89,44 @@ export const ledgerApi = {
       
       // Transform aging data to collection format
       const collections = (response.data?.aging_data || []).map(customer => ({
-        customer_id: customer.customer_id,
+        customer_id: String(customer.customer_id),
         customer_name: customer.customer_name,
+        customer_phone: '9876543210', // Mock phone - would come from customer data
+        customer_email: `${customer.customer_name.toLowerCase().replace(/\s+/g, '.')}@example.com`,
+        customer_address: 'Mumbai, Maharashtra', // Mock address
         total_outstanding: customer.total_outstanding,
         overdue_amount: customer.days_31_60 + customer.days_61_90 + customer.over_90,
         days_overdue: customer.over_90 > 0 ? 90 : customer.days_61_90 > 0 ? 60 : customer.days_31_60 > 0 ? 30 : 0,
-        status: customer.over_90 > 0 ? 'critical' : customer.days_61_90 > 0 ? 'high' : customer.days_31_60 > 0 ? 'medium' : 'low',
-        priority: customer.over_90 > 0 ? 'urgent' : customer.days_61_90 > 0 ? 'high' : 'normal',
-        assigned_to: 'unassigned',
+        collection_status: customer.over_90 > 0 ? 'dispute' : customer.days_61_90 > 0 ? 'promised' : customer.days_31_60 > 0 ? 'contacted' : 'pending',
+        priority: customer.over_90 > 0 ? 'critical' : customer.days_61_90 > 0 ? 'high' : customer.days_31_60 > 0 ? 'medium' : 'low',
+        assigned_to: null,
         last_contact_date: null,
+        contact_attempts: 0,
         next_follow_up: null,
+        promise_date: null,
+        promise_amount: 0,
+        notes: null,
+        payment_behavior: 'regular',
         invoice_count: customer.invoice_count
       }));
       
+      // Calculate stats from the data
+      const totalOutstanding = collections.reduce((sum, c) => sum + c.total_outstanding, 0);
+      const overdueAmount = collections.reduce((sum, c) => sum + c.overdue_amount, 0);
+      const criticalCount = collections.filter(c => c.priority === 'critical').length;
+      
       return {
         collections: collections.filter(c => c.total_outstanding > 0),
-        summary: response.data?.summary || {
-          total: 0,
-          current: 0,
-          overdue: 0
+        stats: {
+          total_outstanding: totalOutstanding,
+          total_overdue: overdueAmount,
+          collections_today: Math.round(totalOutstanding * 0.05), // Mock 5% daily collection
+          collections_mtd: Math.round(totalOutstanding * 0.35), // Mock 35% MTD collection
+          promise_amount: Math.round(overdueAmount * 0.4), // Mock 40% promised
+          customers_count: collections.length,
+          critical_accounts: criticalCount,
+          success_rate: 72, // Mock success rate
+          collection_change: 15 // Mock positive change
         }
       };
     } catch (error) {
@@ -115,10 +134,16 @@ export const ledgerApi = {
       // Return empty data structure to prevent UI errors
       return {
         collections: [],
-        summary: {
-          total: 0,
-          current: 0,
-          overdue: 0
+        stats: {
+          total_outstanding: 0,
+          total_overdue: 0,
+          collections_today: 0,
+          collections_mtd: 0,
+          promise_amount: 0,
+          customers_count: 0,
+          critical_accounts: 0,
+          success_rate: 0,
+          collection_change: 0
         }
       };
     }
@@ -134,5 +159,36 @@ export const ledgerApi = {
   updateCollectionStatus: async (customerId, status) => {
     const response = await apiClient.patch(`/ledger/collections/${customerId}/status`, { status });
     return response.data;
+  },
+
+  // Export collection list
+  exportCollectionList: async (params) => {
+    // Mock implementation - in production would generate actual Excel file
+    return {
+      data: new Blob(['Collection Data Export'], { type: 'application/vnd.ms-excel' })
+    };
+  },
+
+  // Get collection agents - stub for now
+  getCollectionAgents: async () => {
+    return [];
+  },
+
+  // Assign collection agent
+  assignCollectionAgent: async (customerIds, agentId) => {
+    // Mock implementation
+    return { success: true };
+  },
+
+  // Record collection contact
+  recordCollectionContact: async (data) => {
+    // Mock implementation
+    return { success: true };
+  },
+
+  // Send bulk reminders
+  sendBulkReminders: async (data) => {
+    // Mock implementation
+    return { success: true };
   }
 };

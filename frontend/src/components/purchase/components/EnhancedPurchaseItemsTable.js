@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Trash2, Package, Calendar, Info, AlertCircle, Edit2 } from 'lucide-react';
 import { MonthYearPicker } from '../../global';
+import { formatCurrency } from '../../../utils/formatters';
 import PurchaseItemEditModal from './PurchaseItemEditModal';
 
 /**
@@ -20,10 +21,6 @@ const EnhancedPurchaseItemsTable = ({
   const [editingItem, setEditingItem] = useState(null);
   const [editingIndex, setEditingIndex] = useState(null);
   const tableRef = useRef(null);
-
-  const formatCurrency = (amount) => {
-    return `₹${(parseFloat(amount) || 0).toFixed(2)}`;
-  };
 
   const formatDate = (date) => {
     if (!date) return '';

@@ -1,5 +1,6 @@
 import React from 'react';
 import { FileText, Calendar, Building2, Phone, Mail, Truck } from 'lucide-react';
+import { formatCurrency } from '../../../utils/formatters';
 
 const DebitNotePreview = ({ returnData, supplier = {}, purchase = {} }) => {
   // Add safety checks for required data
@@ -19,9 +20,6 @@ const DebitNotePreview = ({ returnData, supplier = {}, purchase = {} }) => {
     });
   };
 
-  const formatCurrency = (amount) => {
-    return `₹${(parseFloat(amount) || 0).toFixed(2)}`;
-  };
 
   // Get only selected items with return quantity
   const returnItems = returnData.items.filter(item => 

@@ -1,6 +1,7 @@
 import React from 'react';
 import { FileText, Calendar, User, Building2, Phone, Mail, MapPin, CreditCard } from 'lucide-react';
 import useCompanyDetails from '../../../hooks/useCompanyDetails';
+import { formatCurrency } from '../../../utils/formatters';
 
 // Return reasons for display
 const RETURN_REASONS = [
@@ -25,9 +26,6 @@ const CreditNotePreview = ({ returnData, customer, invoice, includeGst = true, c
     });
   };
 
-  const formatCurrency = (amount) => {
-    return `₹${(parseFloat(amount) || 0).toFixed(2)}`;
-  };
 
   // Get only selected items with return quantity
   const returnItems = returnData.items.filter(item => 

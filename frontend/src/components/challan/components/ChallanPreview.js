@@ -1,16 +1,10 @@
 import React from 'react';
+import { formatCurrency } from '../../../utils/formatters';
 
 const ChallanPreview = ({ 
   challan, 
   companyInfo = {} 
 }) => {
-  const formatCurrency = (amount) => {
-    return new Intl.NumberFormat('en-IN', {
-      style: 'currency',
-      currency: 'INR',
-      minimumFractionDigits: 2
-    }).format(amount);
-  };
 
   const formatDate = (date) => {
     return new Date(date).toLocaleDateString('en-IN', {
