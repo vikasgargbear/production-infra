@@ -476,22 +476,20 @@ export const CustomerSearch = forwardRef<CustomerSearchRef, CustomerSearchProps>
           <span className="text-gray-600">Select Customer</span>
         </button>
       ) : (
-        <div className={`bg-gray-50 rounded-lg p-4 ${className}`}>
-          <div className="flex justify-between items-start">
-            <div className="flex-1">
-              {renderCustomerInfo ? renderCustomerInfo(value) : defaultRenderCustomerInfo(value)}
-            </div>
-            {clearable && !disabled && (
-              <button
-                type="button"
-                onClick={handleRemoveCustomer}
-                className="ml-3 p-1 hover:bg-gray-200 rounded focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-opacity-50"
-                title="Remove customer"
-              >
-                <X className="w-4 h-4 text-gray-500" />
-              </button>
-            )}
+        <div className={`flex justify-between items-start ${className}`}>
+          <div className="flex-1">
+            {renderCustomerInfo ? renderCustomerInfo(value) : defaultRenderCustomerInfo(value)}
           </div>
+          {clearable && !disabled && (
+            <button
+              type="button"
+              onClick={handleRemoveCustomer}
+              className="ml-3 p-1 hover:bg-gray-200 rounded focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-opacity-50"
+              title="Remove customer"
+            >
+              <X className="w-4 h-4 text-gray-500" />
+            </button>
+          )}
         </div>
       )}
 
