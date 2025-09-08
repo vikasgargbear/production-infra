@@ -49,9 +49,9 @@ export const returnsDataTransformer = {
     
     return {
       supplier_id: returnData.supplier_id,
-      original_purchase_id: returnData.document_id || returnData.purchase_id,
+      original_purchase_id: returnData.document_id || returnData.purchase_id || returnData.supplier_invoice_id,
       return_date: returnData.return_date || new Date().toISOString().split('T')[0],
-      reason: returnData.reason || '',
+      reason: returnData.reason || returnData.return_reason || '',
       custom_reason: returnData.custom_reason || '',
       notes: returnData.notes || '',
       
@@ -62,9 +62,10 @@ export const returnsDataTransformer = {
         return_quantity: parseFloat(item.return_quantity || 0),
         quantity: parseFloat(item.return_quantity || 0),  // Backend expects 'quantity' for validation
         selected: item.selected || true,  // Backend expects 'selected' for validation
-        cost_price: parseFloat(item.cost_price || item.purchase_price || 0),
+        rate: parseFloat(item.rate || item.unit_price || item.purchase_price || item.cost_price || 0),  // Backend expects 'rate'
+        cost_price: parseFloat(item.cost_price || item.purchase_price || item.rate || item.unit_price || 0),
         tax_percent: parseFloat(item.tax_percent || 0),
-        reason: item.reason || returnData.reason || '',
+        reason: item.reason || item.return_reason || returnData.reason || returnData.return_reason || '',
         custom_reason: item.custom_reason || returnData.custom_reason || ''
       })),
       
