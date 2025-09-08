@@ -48,6 +48,7 @@ async def get_party_statement(
                         1 as sort_order
                     FROM sales.invoices i
                     WHERE i.customer_id = :party_id
+                    AND i.org_id = :org_id::uuid
                     AND i.invoice_status != 'cancelled'
                     
                     UNION ALL
@@ -66,6 +67,7 @@ async def get_party_statement(
                     FROM financial.payments p
                     WHERE p.party_id = :party_id
                     AND p.party_type = 'customer'
+                    AND p.org_id = :org_id::uuid
                     AND p.payment_status != 'cancelled'
                 )
                 SELECT * FROM transactions
@@ -86,7 +88,7 @@ async def get_party_statement(
             query += " ORDER BY date DESC, sort_order"
             
             # Execute query
-            result = db.execute(text(query), {"party_id": int(party_id)})
+            result = db.execute(text(query), {"party_id": int(party_id), "org_id": org_id})
             transactions = []
             running_balance = 0
             
@@ -102,8 +104,9 @@ async def get_party_statement(
                     SELECT customer_name, primary_phone, primary_email
                     FROM parties.customers
                     WHERE customer_id = :party_id
+                    AND org_id = :org_id::uuid
                 """),
-                {"party_id": int(party_id)}
+                {"party_id": int(party_id), "org_id": org_id}
             ).fetchone()
             
             # Calculate outstanding (we KNOW these columns exist)
@@ -112,10 +115,11 @@ async def get_party_statement(
                     SELECT COALESCE(SUM(final_amount - COALESCE(paid_amount, 0)), 0) as amount
                     FROM sales.invoices
                     WHERE customer_id = :party_id
+                    AND org_id = :org_id::uuid
                     AND invoice_status != 'cancelled'
                     AND payment_status != 'paid'
                 """),
-                {"party_id": int(party_id)}
+                {"party_id": int(party_id), "org_id": org_id}
             ).scalar()
             
             return {
@@ -170,10 +174,11 @@ async def get_balance(
                         COUNT(*) as invoice_count
                     FROM sales.invoices
                     WHERE customer_id = :party_id
+                    AND org_id = :org_id::uuid
                     AND invoice_status != 'cancelled'
                     AND payment_status != 'paid'
                 """),
-                {"party_id": int(party_id)}
+                {"party_id": int(party_id), "org_id": org_id}
             ).fetchone()
             
             return {
@@ -214,11 +219,12 @@ async def get_outstanding_bills(
                         END as days_overdue
                     FROM sales.invoices i
                     WHERE i.customer_id = :party_id
+                    AND i.org_id = :org_id::uuid
                     AND i.payment_status IN ('unpaid', 'partial', 'pending')
                     AND i.invoice_status != 'cancelled'
                     ORDER BY i.due_date, i.invoice_date
                 """),
-                {"party_id": int(party_id)}
+                {"party_id": int(party_id), "org_id": org_id}
             )
             
             bills = []
@@ -264,6 +270,8 @@ async def get_aging_analysis(
                         WHERE i.payment_status != 'paid'
                         AND i.invoice_status != 'cancelled'
                         AND i.final_amount > COALESCE(i.paid_amount, 0)
+                        AND i.org_id = :org_id::uuid
+                        AND c.org_id = :org_id::uuid
                     )
                     SELECT 
                         customer_id,
@@ -277,7 +285,8 @@ async def get_aging_analysis(
                     FROM aging
                     GROUP BY customer_id, customer_name
                     ORDER BY total_outstanding DESC
-                """)
+                """),
+                {"org_id": org_id}
             )
             
             aging_data = []
