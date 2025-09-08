@@ -548,12 +548,14 @@ async def create_purchase_return(
                         return_id, product_id,
                         batch_id, batch_number, return_quantity, 
                         unit_price, uom, return_value, tax_amount,
-                        item_return_reason, disposition
+                        item_return_reason, disposition,
+                        supplier_invoice_item_id
                     ) VALUES (
                         :return_id, :product_id,
                         :batch_id, :batch_number, :quantity, 
                         :rate, :uom, :return_value, :tax_amount,
-                        :item_reason, :disposition
+                        :item_reason, :disposition,
+                        :invoice_item_id
                     )
                 """),
                 {
@@ -567,7 +569,8 @@ async def create_purchase_return(
                     "return_value": item_total,
                     "tax_amount": item_tax_amount,
                     "item_reason": item.get("reason", return_data.get("return_reason", "")),
-                    "disposition": item.get("disposition", "RETURN_TO_SUPPLIER")
+                    "disposition": item.get("disposition", "RETURN_TO_SUPPLIER"),
+                    "invoice_item_id": item.get("invoice_item_id") or item.get("id")
                 }
             )
             
@@ -577,15 +580,17 @@ async def create_purchase_return(
                     text("""
                         UPDATE inventory.batches 
                         SET quantity_available = quantity_available - :quantity,
-                            quantity_returned = quantity_returned + :quantity
+                            quantity_returned = COALESCE(quantity_returned, 0) + :quantity
                         WHERE batch_id = :batch_id
                     """),
                     {
-                        "quantity": item["quantity"],
-                        "batch_id": item["batch_id"]
+                        "quantity": item_quantity,  # Use the Decimal variable we calculated
+                        "batch_id": item.get("batch_id")
                     }
                 )
-            # Note: If no batch_id, we skip stock update as we can't track non-batch items
+                logger.info(f"Updated batch {item.get('batch_id')}: decreased available by {item_quantity}, increased returned by {item_quantity}")
+            else:
+                logger.warning(f"No batch_id for product {item.get('product_id')}, skipping batch stock update")
                 
         # TODO: Update party ledger when table is available
         # For now, we'll skip ledger updates
