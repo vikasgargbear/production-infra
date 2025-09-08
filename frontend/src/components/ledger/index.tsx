@@ -6,7 +6,6 @@
 // Import components for default export
 import LedgerHub from './LedgerHub';
 import Outstanding from './Outstanding';
-import AgingAnalysis from './AgingAnalysis';
 import CollectionCenter from './CollectionCenter';
 import LedgerReports from './LedgerReports';
 import PartyLedger from './PartyLedger';
@@ -18,7 +17,6 @@ export { default as LedgerHub } from './LedgerHub';
 
 // Core Ledger Components
 export { default as Outstanding } from './Outstanding';
-export { default as AgingAnalysis } from './AgingAnalysis';
 export { default as CollectionCenter } from './CollectionCenter';
 export { default as LedgerReports } from './LedgerReports';
 
