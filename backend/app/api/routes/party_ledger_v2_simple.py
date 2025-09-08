@@ -99,7 +99,7 @@ async def get_party_statement(
             # Get customer details (we KNOW these columns exist)
             customer = db.execute(
                 text("""
-                    SELECT customer_name, primary_phone, email
+                    SELECT customer_name, primary_phone, primary_email
                     FROM parties.customers
                     WHERE customer_id = :party_id
                 """),
@@ -124,7 +124,7 @@ async def get_party_statement(
                     "id": party_id,
                     "name": customer.customer_name if customer else f"Customer {party_id}",
                     "phone": customer.primary_phone if customer else None,
-                    "email": customer.email if customer else None
+                    "email": customer.primary_email if customer else None
                 },
                 "statement": transactions,
                 "summary": {
