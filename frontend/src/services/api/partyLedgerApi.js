@@ -1,7 +1,7 @@
 import apiClient from './apiClient';
 
-// Updated to use v2 API for advanced features (payment allocations, reconciliation)
-const BASE_URL = '/party-ledger-v2';
+// Using v1 API - stable and working
+const BASE_URL = '/party-ledger';
 
 export const partyLedgerApi = {
   // Get party info (maps to getBalance for now)
