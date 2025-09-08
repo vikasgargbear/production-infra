@@ -111,7 +111,7 @@ async def get_party_statement_with_allocations(
                         -- Allocated Payments (Credit entries linked to invoices)
                         SELECT 
                             pa.allocation_id as ledger_id,
-                            pa.allocation_date::DATE as date,
+                            COALESCE(pa.created_at, p.payment_date)::DATE as date,
                             'Payment' as transaction_type,
                             'PAY' as reference_type,
                             p.payment_number as reference,
@@ -123,7 +123,7 @@ async def get_party_statement_with_allocations(
                             2 as sort_order
                         FROM financial.payment_allocations pa
                         JOIN financial.payments p ON pa.payment_id = p.payment_id
-                        JOIN sales.invoices i ON pa.invoice_id = i.invoice_id
+                        JOIN sales.invoices i ON pa.reference_id = i.invoice_id AND pa.reference_type = 'invoice'
                         WHERE i.customer_id = :party_id
                         AND p.payment_status != 'cancelled'
                         
@@ -353,12 +353,12 @@ async def get_reconciliation_view(
                                 'payment_number', p.payment_number,
                                 'payment_date', p.payment_date,
                                 'allocated_amount', pa.allocated_amount,
-                                'allocation_date', pa.allocation_date
+                                'allocation_date', pa.created_at
                             )
                         ELSE NULL END
                     ) FILTER (WHERE pa.allocation_id IS NOT NULL) as payments
                 FROM sales.invoices i
-                LEFT JOIN financial.payment_allocations pa ON i.invoice_id = pa.invoice_id
+                LEFT JOIN financial.payment_allocations pa ON i.invoice_id = pa.reference_id AND pa.reference_type = 'invoice'
                 LEFT JOIN financial.payments p ON pa.payment_id = p.payment_id
                 WHERE i.customer_id = :party_id
                 AND i.invoice_status != 'cancelled'
