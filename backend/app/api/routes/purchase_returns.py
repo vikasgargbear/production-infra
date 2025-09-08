@@ -411,6 +411,45 @@ async def create_purchase_return(
             tax_amount += item_tax
             total_amount += item_total + item_tax
             
+        # Get first user_id from org_users for this org (same pattern as sales returns)
+        created_by = None
+        try:
+            user_result = db.execute(
+                text("SELECT user_id FROM master.org_users WHERE org_id = :org_id LIMIT 1"),
+                {"org_id": org_id}
+            ).fetchone()
+            if user_result:
+                created_by = user_result.user_id
+        except:
+            pass
+        
+        if not created_by:
+            # If no user exists for this org, create a default system user
+            try:
+                result = db.execute(
+                    text("""
+                        INSERT INTO master.org_users (org_id, username, email, full_name, role, is_active)
+                        VALUES (:org_id, 'system', 'system@example.com', 'System User', 'admin', true)
+                        RETURNING user_id
+                    """),
+                    {"org_id": org_id}
+                ).fetchone()
+                if result:
+                    created_by = result.user_id
+                    db.commit()
+            except:
+                # If creation fails (duplicate), try to get the system user
+                user_result = db.execute(
+                    text("SELECT user_id FROM master.org_users WHERE org_id = :org_id AND username = 'system' LIMIT 1"),
+                    {"org_id": org_id}
+                ).fetchone()
+                if user_result:
+                    created_by = user_result.user_id
+        
+        # Ensure we have a created_by value
+        if not created_by:
+            raise HTTPException(status_code=500, detail="Unable to determine user for return creation")
+        
         # Generate debit note number only for GST suppliers
         debit_note_no = None
         if supplier.gst_number:
@@ -462,7 +501,7 @@ async def create_purchase_return(
                 "tax_amount": tax_amount,
                 "total_amount": total_amount,
                 "debit_note_no": debit_note_no,
-                "created_by": 1  # TODO: Get from auth context when available
+                "created_by": created_by
             }
         ).fetchone()
         
