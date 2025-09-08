@@ -167,9 +167,11 @@ const PurchaseReturnFlowV2 = ({ onClose }) => {
       );
       
       if (response.data.items) {
-        setReturnData(prev => ({
-          ...prev,
-          items: response.data.items.map(item => ({
+        console.log('Raw items from API:', response.data.items);
+        
+        const mappedItems = response.data.items.map(item => {
+          console.log(`Item ${item.product_name}: batch_id=${item.batch_id}, batch_number=${item.batch_number}`);
+          return {
             ...item,
             id: item.invoice_item_id || item.id,
             invoice_item_id: item.invoice_item_id,
@@ -185,7 +187,14 @@ const PurchaseReturnFlowV2 = ({ onClose }) => {
             batch_number: item.batch_number,
             disposition: 'RESTOCK',
             restock: true
-          }))
+          };
+        });
+        
+        console.log('Mapped items:', mappedItems);
+        
+        setReturnData(prev => ({
+          ...prev,
+          items: mappedItems
         }));
       }
     } catch (error) {
@@ -430,6 +439,12 @@ const PurchaseReturnFlowV2 = ({ onClose }) => {
         return item.selected && hasQuantity;
       });
       console.log('Filtered items count:', filteredItems.length);
+      console.log('Filtered items details:', filteredItems.map(item => ({
+        product_id: item.product_id,
+        batch_id: item.batch_id,
+        batch_number: item.batch_number,
+        return_quantity: item.return_quantity
+      })));
       
       const returnPayload = {
         ...returnData,

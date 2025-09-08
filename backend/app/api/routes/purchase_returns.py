@@ -280,7 +280,7 @@ async def get_invoice_returnable_items(
                     sii.invoice_item_id,
                     sii.product_id,
                     p.product_name,
-                    sii.batch_id,
+                    COALESCE(sii.batch_id, b.batch_id) as batch_id,
                     sii.batch_number,
                     sii.quantity as invoice_quantity,
                     COALESCE(sii.free_quantity, 0) as free_quantity,
@@ -295,6 +295,8 @@ async def get_invoice_returnable_items(
                     sii.unit
                 FROM procurement.supplier_invoice_items sii
                 JOIN inventory.products p ON sii.product_id = p.product_id
+                LEFT JOIN inventory.batches b ON b.product_id = sii.product_id 
+                    AND b.batch_number = sii.batch_number
                 WHERE sii.supplier_invoice_id = :invoice_id
                 AND sii.quantity - COALESCE(sii.quantity_returned, 0) > 0
                 ORDER BY sii.invoice_item_id
