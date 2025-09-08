@@ -153,20 +153,21 @@ async def get_party_statement_with_allocations(
                         
                         -- Sales Returns (Credit entries)
                         SELECT 
-                            return_id as ledger_id,
-                            return_date as date,
+                            sr.return_id as ledger_id,
+                            sr.return_date as date,
                             'Sales Return' as transaction_type,
                             'RET' as reference_type,
-                            return_number as reference,
-                            CONCAT('Return #', return_number, ' for Invoice #', invoice_number) as description,
+                            sr.return_number as reference,
+                            CONCAT('Return #', sr.return_number, CASE WHEN i.invoice_number IS NOT NULL THEN CONCAT(' for Invoice #', i.invoice_number) ELSE '' END) as description,
                             0 as debit,
-                            total_refund_amount as credit,
-                            invoice_number as linked_invoice,
-                            status,
+                            sr.total_refund_amount as credit,
+                            i.invoice_number as linked_invoice,
+                            sr.status,
                             4 as sort_order
-                        FROM sales.sales_returns
-                        WHERE customer_id = :party_id
-                        AND status = 'approved'
+                        FROM sales.sales_returns sr
+                        LEFT JOIN sales.invoices i ON sr.invoice_id = i.invoice_id
+                        WHERE sr.customer_id = :party_id
+                        AND sr.status = 'approved'
                     )
                     SELECT * FROM ledger_entries
                 """
