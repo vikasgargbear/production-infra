@@ -105,7 +105,6 @@ export { ledgerApi } from '../../services/api/modules/ledger.api';
 // Component interfaces
 interface LedgerComponents {
   Outstanding: React.ComponentType<any>;
-  AgingAnalysis: React.ComponentType<any>;
   CollectionCenter: React.ComponentType<any>;
   LedgerReports: React.ComponentType<any>;
   PartyLedger: React.ComponentType<any>;
@@ -139,7 +138,6 @@ const LedgerModule: LedgerModule = {
   components: {
     // Core Components  
     Outstanding,
-    AgingAnalysis,
     CollectionCenter,
     LedgerReports,
     

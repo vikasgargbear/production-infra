@@ -268,11 +268,11 @@ const PartyLedgerV3: React.FC<PartyLedgerV3Props> = ({
       width: '120px'
     },
     {
-      key: 'transaction_type',
+      key: 'type',
       header: 'Type',
       render: (value: any, entry: any) => {
         console.log('[Column Render] Type:', { value, entry });
-        const type = entry?.transaction_type || '-';
+        const type = entry?.type || '-';
         // Add color coding for different transaction types
         let textColor = '';
         if (type.includes('Invoice')) textColor = 'blue';
@@ -475,7 +475,7 @@ const PartyLedgerV3: React.FC<PartyLedgerV3Props> = ({
             <DataTable
               columns={columns}
               data={filteredEntries}
-              keyField="ledger_id"
+              keyField="id"
               loading={loadingLedger}
               emptyMessage="No transactions found"
             />
