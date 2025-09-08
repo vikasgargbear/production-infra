@@ -187,9 +187,6 @@ const PurchaseReturnFlowV2 = ({ onClose }) => {
             restock: true
           }))
         }));
-        
-        // Calculate totals immediately
-        calculateTotals();
       }
     } catch (error) {
       console.error('Error loading invoice items:', error);
@@ -298,20 +295,47 @@ const PurchaseReturnFlowV2 = ({ onClose }) => {
     setReturnData(prev => ({
       ...prev,
       items: prev.items.map(item => {
-        if (item.id === itemId) {
+        if (item.id === itemId || item.invoice_item_id === itemId) {
           const updated = { ...item, [field]: value };
-          
-          // Recalculate if quantity or price changes
-          if (field === 'return_quantity' || field === 'rate' || field === 'selected') {
-            setTimeout(() => calculateTotals(), 0);
-          }
-          
           return updated;
         }
         return item;
       })
     }));
   };
+  
+  // Use effect to recalculate totals when items change
+  React.useEffect(() => {
+    let subtotal = 0;
+    let taxAmount = 0;
+
+    console.log('useEffect: Calculating totals for items:', returnData.items);
+
+    returnData.items.forEach(item => {
+      if (item.selected && item.return_quantity > 0) {
+        const returnQty = parseFloat(item.return_quantity) || 0;
+        const rate = parseFloat(item.rate) || parseFloat(item.unit_price) || parseFloat(item.purchase_price) || 0;
+        const taxPercent = parseFloat(item.tax_percent) || parseFloat(item.gst_percent) || 0;
+        
+        const itemTotal = returnQty * rate;
+        const itemTax = returnData.include_gst ? (itemTotal * taxPercent / 100) : 0;
+        
+        console.log(`Item: qty=${returnQty}, rate=${rate}, tax%=${taxPercent}, total=${itemTotal}, tax=${itemTax}`);
+        
+        subtotal += itemTotal;
+        taxAmount += itemTax;
+      }
+    });
+
+    console.log(`Final totals: subtotal=${subtotal}, tax=${taxAmount}, total=${subtotal + taxAmount}`);
+
+    setReturnData(prev => ({
+      ...prev,
+      subtotal_amount: subtotal,
+      tax_amount: taxAmount,
+      total_amount: subtotal + taxAmount
+    }));
+  }, [returnData.items, returnData.include_gst]);
 
   // Remove manual item
   const removeManualItem = (itemId) => {
@@ -319,7 +343,6 @@ const PurchaseReturnFlowV2 = ({ onClose }) => {
       ...prev,
       items: prev.items.filter(item => item.id !== itemId)
     }));
-    setTimeout(() => calculateTotals(), 0);
   };
 
   // Calculate totals
@@ -327,19 +350,25 @@ const PurchaseReturnFlowV2 = ({ onClose }) => {
     let subtotal = 0;
     let taxAmount = 0;
 
+    console.log('Calculating totals for items:', returnData.items);
+
     returnData.items.forEach(item => {
       if (item.selected && item.return_quantity > 0) {
         const returnQty = parseFloat(item.return_quantity) || 0;
-        const rate = parseFloat(item.rate) || 0;
-        const taxPercent = parseFloat(item.tax_percent) || 0;
+        const rate = parseFloat(item.rate) || parseFloat(item.unit_price) || parseFloat(item.purchase_price) || 0;
+        const taxPercent = parseFloat(item.tax_percent) || parseFloat(item.gst_percent) || 0;
         
         const itemTotal = returnQty * rate;
         const itemTax = returnData.include_gst ? (itemTotal * taxPercent / 100) : 0;
+        
+        console.log(`Item: qty=${returnQty}, rate=${rate}, tax%=${taxPercent}, total=${itemTotal}, tax=${itemTax}`);
         
         subtotal += itemTotal;
         taxAmount += itemTax;
       }
     });
+
+    console.log(`Final totals: subtotal=${subtotal}, tax=${taxAmount}, total=${subtotal + taxAmount}`);
 
     setReturnData(prev => ({
       ...prev,
