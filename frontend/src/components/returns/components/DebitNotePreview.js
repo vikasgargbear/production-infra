@@ -88,133 +88,133 @@ const DebitNotePreview = ({ returnData, supplier = {}, purchase = {} }) => {
       `}</style>
 
       <div className="bg-white rounded-lg shadow-lg print:shadow-none print-section">
-        {/* Header */}
-        <div className="p-8 border-b border-gray-200">
+        {/* Header - Compact */}
+        <div className="px-8 py-4 border-b border-gray-200">
           <div className="flex justify-between items-start">
             <div>
-              {/* Company Logo and Details */}
-              <div className="mb-6">
-                <h2 className="text-2xl font-bold text-gray-900 mb-2">
+              {/* Company Details - Compact */}
+              <div>
+                <h2 className="text-xl font-bold text-gray-900 mb-1">
                   {localStorage.getItem('company_name') || 'AASO Pharmaceuticals'}
                 </h2>
-                <div className="text-sm text-gray-600 space-y-1">
+                <div className="text-xs text-gray-600 space-y-0.5">
                   <p>{localStorage.getItem('company_address') || '123 Business Street, City'}</p>
-                  <p>GSTIN: {localStorage.getItem('company_gstin') || ''}</p>
-                  <p>DL No: {localStorage.getItem('company_drug_license') || '20B/21B-XXX'}</p>
-                  <p>Phone: {localStorage.getItem('company_phone') || '+91 99999 99999'}</p>
+                  <div className="flex gap-4">
+                    <span>GSTIN: {localStorage.getItem('company_gstin') || ''}</span>
+                    <span>DL: {localStorage.getItem('company_drug_license') || '20B/21B-XXX'}</span>
+                    <span>Ph: {localStorage.getItem('company_phone') || '+91 99999 99999'}</span>
+                  </div>
                 </div>
               </div>
             </div>
             
             <div className="text-right">
-              <h1 className="text-3xl font-bold text-orange-600 mb-2">
-                {supplier?.gst_number ? 'GST DEBIT NOTE' : 'RETURN NOTE'}
+              <h1 className="text-2xl font-bold text-orange-600 mb-1">
+                {supplier?.gst_number ? 'DEBIT NOTE' : 'RETURN NOTE'}
               </h1>
-              {supplier?.gst_number && (
-                <div className="mb-2">
-                  <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                    GST Registered Supplier
-                  </span>
-                </div>
-              )}
-              <div className="space-y-1">
-                <p className="text-lg font-semibold text-gray-700">
-                  {supplier?.gst_number ? 'DN' : 'RN'} No: {returnData.debit_note_no || returnData.return_no}
+              <div className="text-sm space-y-0.5">
+                <p className="font-semibold text-gray-700">
+                  No: {returnData.debit_note_no || returnData.return_no || 'DRAFT'}
                 </p>
                 <p className="text-gray-600">Date: {formatDate(returnData.return_date)}</p>
-                <p className="text-gray-600">Original Invoice: {purchase?.invoice_number || 'N/A'}</p>
-                <p className="text-gray-600">Invoice Date: {purchase?.invoice_date ? formatDate(purchase.invoice_date) : 'N/A'}</p>
+                <p className="text-gray-600">Invoice: {purchase?.invoice_number || 'N/A'}</p>
+                {purchase?.invoice_date && (
+                  <p className="text-gray-600">Inv Date: {formatDate(purchase.invoice_date)}</p>
+                )}
               </div>
             </div>
           </div>
         </div>
 
-        {/* Supplier Details */}
-        <div className="px-8 py-4 border-b border-gray-200 bg-gray-50">
-          <div className="grid grid-cols-2 gap-x-8">
+        {/* Supplier Details and Return Reason - Combined Row */}
+        <div className="px-8 py-3 border-b border-gray-200 bg-gray-50">
+          <div className="grid grid-cols-3 gap-x-6">
+            {/* Supplier Details */}
             <div>
-              <h3 className="text-sm font-semibold text-gray-700 mb-2 flex items-center">
-                <Building2 className="w-4 h-4 mr-1" />
-                Supplier Details
+              <h3 className="text-xs font-semibold text-gray-700 mb-1 flex items-center uppercase">
+                <Building2 className="w-3 h-3 mr-1" />
+                Supplier
               </h3>
-              <div>
+              <div className="text-sm">
                 <p className="font-semibold text-gray-900">{supplier?.supplier_name || 'Supplier'}</p>
-                <p className="text-sm text-gray-600">{supplier?.address || ''}</p>
                 {supplier?.gst_number && (
-                  <p className="text-sm text-gray-600 mt-1">GSTIN: {supplier.gst_number}</p>
+                  <p className="text-gray-600">GSTIN: {supplier.gst_number}</p>
                 )}
                 {supplier?.drug_license_number && (
-                  <p className="text-sm text-gray-600">DL No: {supplier.drug_license_number}</p>
+                  <p className="text-gray-600">DL: {supplier.drug_license_number}</p>
                 )}
               </div>
             </div>
+            
+            {/* Contact Details */}
             <div>
-              <h3 className="text-sm font-semibold text-gray-700 mb-2">Contact Details</h3>
-              <div className="text-sm text-gray-600 space-y-1">
+              <h3 className="text-xs font-semibold text-gray-700 mb-1 uppercase">Contact</h3>
+              <div className="text-sm text-gray-600">
                 {supplier.phone && (
-                  <p><Phone className="w-3 h-3 inline mr-1" /> {supplier.phone}</p>
+                  <p className="flex items-center"><Phone className="w-3 h-3 mr-1" /> {supplier.phone}</p>
                 )}
                 {supplier.email && (
-                  <p><Mail className="w-3 h-3 inline mr-1" /> {supplier.email}</p>
+                  <p className="flex items-center"><Mail className="w-3 h-3 mr-1" /> {supplier.email}</p>
+                )}
+                {!supplier.phone && !supplier.email && (
+                  <p className="text-gray-400">No contact info</p>
+                )}
+              </div>
+            </div>
+            
+            {/* Return Reason */}
+            <div>
+              <h3 className="text-xs font-semibold text-gray-700 mb-1 flex items-center uppercase">
+                <FileText className="w-3 h-3 mr-1" />
+                Return Reason
+              </h3>
+              <div className="text-sm">
+                <p className="font-medium text-amber-700">
+                  {PURCHASE_RETURN_REASONS.find(r => r.value === returnData.return_reason)?.label || returnData.return_reason}
+                </p>
+                {returnData.return_reason_notes && (
+                  <p className="text-xs text-gray-600 mt-1 italic">{returnData.return_reason_notes}</p>
                 )}
               </div>
             </div>
           </div>
         </div>
 
-        {/* Return Reason */}
-        <div className="px-8 py-4 bg-amber-50 border-b border-amber-200">
-          <div className="flex items-start gap-3">
-            <FileText className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
-            <div className="flex-1">
-              <h4 className="font-semibold text-amber-900">Return Reason</h4>
-              <p className="text-sm text-amber-700 mt-1">
-                {PURCHASE_RETURN_REASONS.find(r => r.value === returnData.return_reason)?.label || returnData.return_reason}
-              </p>
-              {returnData.return_reason_notes && (
-                <p className="text-sm text-amber-600 mt-2">{returnData.return_reason_notes}</p>
-              )}
-            </div>
-          </div>
-        </div>
-
-        {/* Transport Details if provided */}
+        {/* Transport Details if provided - Compact */}
         {(returnData.transport_details.transport_mode || returnData.transport_details.vehicle_no) && (
-          <div className="px-8 py-4 bg-blue-50 border-b border-blue-200">
-            <div className="flex items-start gap-3">
-              <Truck className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
-              <div className="flex-1">
-                <h4 className="font-semibold text-blue-900">Transport Details</h4>
-                <div className="grid grid-cols-2 gap-4 text-sm text-blue-700 mt-2">
-                  {returnData.transport_details.transport_mode && (
-                    <div>
-                      <span className="font-medium">Mode:</span> {returnData.transport_details.transport_mode}
-                    </div>
-                  )}
-                  {returnData.transport_details.vehicle_no && (
-                    <div>
-                      <span className="font-medium">Vehicle:</span> {returnData.transport_details.vehicle_no}
-                    </div>
-                  )}
-                  {returnData.transport_details.transporter_name && (
-                    <div>
-                      <span className="font-medium">Transporter:</span> {returnData.transport_details.transporter_name}
-                    </div>
-                  )}
-                  {returnData.transport_details.lr_no && (
-                    <div>
-                      <span className="font-medium">LR No:</span> {returnData.transport_details.lr_no}
-                    </div>
-                  )}
-                </div>
+          <div className="px-8 py-2 bg-blue-50 border-b border-blue-200">
+            <div className="flex items-center gap-4 text-sm">
+              <div className="flex items-center">
+                <Truck className="w-4 h-4 text-blue-600 mr-2" />
+                <span className="font-semibold text-blue-900">Transport:</span>
               </div>
+              {returnData.transport_details.transport_mode && (
+                <span className="text-blue-700">
+                  <span className="font-medium">Mode:</span> {returnData.transport_details.transport_mode}
+                </span>
+              )}
+              {returnData.transport_details.vehicle_no && (
+                <span className="text-blue-700">
+                  <span className="font-medium">Vehicle:</span> {returnData.transport_details.vehicle_no}
+                </span>
+              )}
+              {returnData.transport_details.transporter_name && (
+                <span className="text-blue-700">
+                  <span className="font-medium">Transporter:</span> {returnData.transport_details.transporter_name}
+                </span>
+              )}
+              {returnData.transport_details.lr_no && (
+                <span className="text-blue-700">
+                  <span className="font-medium">LR:</span> {returnData.transport_details.lr_no}
+                </span>
+              )}
             </div>
           </div>
         )}
 
         {/* Items Table */}
-        <div className="p-8">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">Returned Items</h3>
+        <div className="px-8 py-4">
+          <h3 className="text-sm font-semibold text-gray-900 mb-3 uppercase">Returned Items</h3>
           <div className="overflow-x-auto">
             <table className="w-full border-collapse">
               <thead>
@@ -259,11 +259,11 @@ const DebitNotePreview = ({ returnData, supplier = {}, purchase = {} }) => {
             </table>
           </div>
 
-          {/* GST Breakup and Summary */}
-          <div className="mt-6 grid grid-cols-2 gap-8">
+          {/* GST Breakup and Summary - Compact */}
+          <div className="mt-4 grid grid-cols-2 gap-6">
             {/* GST Details */}
             <div>
-              <h4 className="font-semibold text-gray-900 mb-3">GST Breakup</h4>
+              <h4 className="text-sm font-semibold text-gray-900 mb-2 uppercase">GST Breakup</h4>
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-gray-200">
@@ -290,7 +290,7 @@ const DebitNotePreview = ({ returnData, supplier = {}, purchase = {} }) => {
 
             {/* Summary */}
             <div>
-              <h4 className="font-semibold text-gray-900 mb-3">Summary</h4>
+              <h4 className="text-sm font-semibold text-gray-900 mb-2 uppercase">Summary</h4>
               <div className="space-y-2">
                 <div className="flex justify-between py-2 border-b border-gray-200">
                   <span className="text-gray-600">Subtotal</span>
@@ -310,9 +310,9 @@ const DebitNotePreview = ({ returnData, supplier = {}, purchase = {} }) => {
         </div>
 
         {/* Footer */}
-        <div className="p-8 border-t border-gray-200 bg-gray-50 print:bg-white">
-          <div className="text-sm text-gray-600 text-center">
-            <p className="font-semibold mb-1">Computer Generated Debit Note</p>
+        <div className="px-8 py-3 border-t border-gray-200 bg-gray-50 print:bg-white">
+          <div className="text-xs text-gray-500 text-center">
+            <p className="font-semibold">Computer Generated Debit Note</p>
             <p>Generated on {new Date().toLocaleString('en-IN')}</p>
           </div>
         </div>

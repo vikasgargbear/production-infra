@@ -385,6 +385,7 @@ const PurchaseReturnFlowV2 = ({ onClose }) => {
     try {
       const returnPayload = {
         ...returnData,
+        original_purchase: selectedInvoice,  // Add the selected invoice as original purchase
         items: returnData.items
           .filter(item => item.selected && item.return_quantity > 0)
           .map(item => ({
@@ -393,12 +394,13 @@ const PurchaseReturnFlowV2 = ({ onClose }) => {
             batch_id: item.batch_id,
             batch_number: item.batch_number,
             return_quantity: item.return_quantity,
-            unit_price: item.rate,
+            unit_price: item.rate || item.unit_price || item.purchase_price,
             discount_percent: item.discount_percent || 0,
-            tax_percent: item.tax_percent,
+            tax_percent: item.tax_percent || item.gst_percent || 0,
             return_reason: item.return_reason || returnData.return_reason,
             selected: true,
-            restock: item.restock !== false
+            restock: item.restock !== false,
+            disposition: item.restock !== false ? 'RESTOCK' : 'DESTROY'
           }))
       };
 
