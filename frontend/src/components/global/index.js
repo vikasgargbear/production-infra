@@ -94,6 +94,11 @@ export { default as FormGrid, FormField } from './ui/FormGrid';
 export { default as ActionButton } from './ui/ActionButton';
 export { default as ContentSection } from './ui/ContentSection';
 export { default as KeyboardShortcuts, SHORTCUT_SETS } from './ui/KeyboardShortcuts';
+export { 
+  default as KeyboardNavigableTile, 
+  KeyboardNavigableForm,
+  useKeyboardShortcuts 
+} from './ui/KeyboardNavigableTile';
 
 // UI Components - NEW
 export * from './ui';
