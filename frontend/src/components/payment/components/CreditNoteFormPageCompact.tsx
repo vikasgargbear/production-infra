@@ -159,7 +159,7 @@ const CreditNoteFormPageCompact: React.FC<CreditNoteFormPageCompactProps> = ({
               onChange={(customer) => {
                 setSelectedCustomer(customer);
                 if (customer) {
-                  handleFieldChange('customer_id', customer.id);
+                  handleFieldChange('customer_id', (customer as any).customer_id || (customer as any).id);
                 }
               }}
               placeholder="Search by name, phone, or ID..."
@@ -184,7 +184,7 @@ const CreditNoteFormPageCompact: React.FC<CreditNoteFormPageCompactProps> = ({
           <button
             onClick={() => {
               setSelectedCustomer(null);
-              handleFieldChange('customer_id', null);
+              handleFieldChange('customer_id', null as any);
               handleFieldChange('selected_invoice', null);
               setNoteItems([]);
               setActiveSection('customer');

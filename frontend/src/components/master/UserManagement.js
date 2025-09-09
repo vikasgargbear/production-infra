@@ -40,7 +40,7 @@ const UserManagement = ({ open, onClose }) => {
   // Check current user's permissions
   const checkCurrentUserPermissions = () => {
     try {
-      const token = localStorage.getItem('authToken');
+      const token = localStorage.getItem('authToken') || localStorage.getItem('auth_token');
       if (token) {
         const tokenParts = token.split('.');
         if (tokenParts.length === 3) {
@@ -66,14 +66,16 @@ const UserManagement = ({ open, onClose }) => {
     setError(null);
     
     try {
-      // Check if we have auth token
-      const token = localStorage.getItem('authToken');
+      // Check if we have auth token - try both keys for compatibility
+      const token = localStorage.getItem('authToken') || localStorage.getItem('auth_token');
       console.log('🔑 Auth Token exists:', !!token);
+      console.log('🔑 Token found with key:', localStorage.getItem('authToken') ? 'authToken' : 'auth_token');
       
       if (!token) {
-        setError('Authentication required. Please login again.');
-        // Don't redirect immediately - let user see the error
-        // window.location.href = '/login';
+        console.log('❌ No auth token found in localStorage');
+        console.log('📝 Available keys in localStorage:', Object.keys(localStorage));
+        setError('You are not logged in. Please login to manage users.');
+        setIsLoading(false);
         return;
       }
       
@@ -482,9 +484,21 @@ const UserManagement = ({ open, onClose }) => {
 
       {/* Messages */}
       {error && (
-        <div className="mx-6 mt-4 p-4 bg-red-50 border border-red-200 rounded-lg flex items-center">
-          <AlertCircle className="h-5 w-5 text-red-600 mr-2" />
-          <span className="text-red-800">{error}</span>
+        <div className="mx-6 mt-4 p-4 bg-red-50 border border-red-200 rounded-lg">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center">
+              <AlertCircle className="h-5 w-5 text-red-600 mr-2" />
+              <span className="text-red-800">{error}</span>
+            </div>
+            {error.includes('not logged in') && (
+              <button
+                onClick={() => window.location.href = '/login'}
+                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm"
+              >
+                Go to Login
+              </button>
+            )}
+          </div>
         </div>
       )}
       {successMessage && (

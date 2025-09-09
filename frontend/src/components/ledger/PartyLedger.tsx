@@ -23,7 +23,7 @@ const PartyLedger: React.FC<PartyLedgerProps> = ({
   return (
     <PartyLedgerV3 
       partyType={partyType}
-      initialPartyId={partyId}
+      partyId={partyId}
       embedded={embedded}
       onClose={onClose}
     />

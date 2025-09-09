@@ -348,6 +348,7 @@ const PartyLedgerV3: React.FC<PartyLedgerV3Props> = ({
             icon={FileText}
             iconColor="text-blue-600"
             onClose={onClose}
+            historyType="ledger"
             onSaveDraft={() => {}}
             additionalActions={[
               {

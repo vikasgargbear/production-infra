@@ -10,6 +10,19 @@ import orgIdManager from '../OrgIdManager';
 // Get API URL from environment or use default
 // Always use HTTPS for production Railway deployments
 const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || 'https://pharma-backend-production-0c09.up.railway.app';
+
+// Migrate auth_token to authToken for consistency
+(() => {
+  const oldToken = localStorage.getItem('auth_token');
+  const newToken = localStorage.getItem('authToken');
+  
+  if (oldToken && !newToken) {
+    // Migrate from auth_token to authToken
+    localStorage.setItem('authToken', oldToken);
+    console.log('🔄 Migrated auth_token to authToken');
+  }
+})();
+
 // Create axios instance with default config
 const apiClient: AxiosInstance = axios.create({
   baseURL: `${API_BASE_URL}/api/`,  // Add trailing slash for proper URL joining
@@ -40,8 +53,8 @@ apiClient.interceptors.request.use(
     
     // Only check validity, no logging needed
     
-    // THEN: Get auth token - use consistent key
-    const token = localStorage.getItem('authToken');
+    // THEN: Get auth token - check both keys for compatibility
+    const token = localStorage.getItem('authToken') || localStorage.getItem('auth_token');
     
     if (token) {
       try {
@@ -119,7 +132,7 @@ apiClient.interceptors.response.use(
     // Handle specific status codes
     if (error.response?.status === 401) {
       // Check if this is actually a token issue or just missing auth
-      const token = localStorage.getItem('authToken');
+      const token = localStorage.getItem('authToken') || localStorage.getItem('auth_token');
       
       // Don't auto-redirect on 401 - let components handle it
       // This prevents redirect loops

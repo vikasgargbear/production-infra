@@ -399,14 +399,15 @@ const CreditNoteFlow: React.FC<CreditNoteFlowProps> = ({ onClose }) => {
           historyType="credit_note"
           showSaveDraft={false}
           onSaveDraft={() => {}}
-          actions={[
+          additionalActions={[
             {
               label: refreshing ? 'Refreshing...' : 'Refresh',
               onClick: handleRefresh,
+              variant: "default",
               icon: RefreshCw,
               disabled: refreshing
             }
-          ]}
+          ] as any}
         />
 
         {/* Keyboard Shortcuts Help */}

@@ -11,50 +11,16 @@ class AuthService {
     this.user = JSON.parse(localStorage.getItem('user') || '{}');
   }
 
-  // Login method
-  async login(username, password) {
-    // Demo users for testing
-    const demoUsers = [
-      { username: 'admin', password: 'admin123', role: 'Admin' },
-      { username: 'sales', password: 'sales123', role: 'Sales' },
-      { username: 'accounts', password: 'accounts123', role: 'Accounts' },
-      { username: 'warehouse', password: 'warehouse123', role: 'Warehouse' }
-    ];
-
-    // Check for demo login first
-    const demoUser = demoUsers.find(u => u.username === username && u.password === password);
-    if (demoUser) {
-      // Create a fake token for demo
-      const demoToken = `demo_token_${Date.now()}`;
-      const demoUserData = {
-        id: Math.random().toString(36).substr(2, 9),
-        username: demoUser.username,
-        role: demoUser.role,
-        email: `${demoUser.username}@demo.com`
-      };
-
-      // Store tokens and user data
-      this.token = demoToken;
-      this.user = demoUserData;
-
-      localStorage.setItem('authToken', demoToken);
-      localStorage.setItem('token', demoToken); // Also store as 'token' for compatibility
-      localStorage.setItem('user', JSON.stringify(demoUserData));
-      
-      // For demo users, ensure org_id is set using OrgIdManager
-      // OrgIdManager will handle setting default if needed
-      const orgId = orgIdManager.getOrgId();
-
-      // Set default authorization header
-      this.setAuthHeader(demoToken);
-
-      return { success: true, user: demoUserData };
-    }
-
-    // If not demo user, try actual API
+  // Login method - accepts email or username
+  async login(emailOrUsername, password) {
+    // Backend only accepts email field, convert username to email if needed
+    const email = emailOrUsername.includes('@') 
+      ? emailOrUsername 
+      : `${emailOrUsername}@pharma.com`; // Add default domain for usernames
+    
     try {
       const response = await axios.post(`${API_BASE_URL}/auth/login`, {
-        username,
+        email,
         password
       });
 

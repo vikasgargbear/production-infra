@@ -68,7 +68,7 @@ const BulkActionBar: React.FC<{
 
 const ReturnsListHistory: React.FC<ReturnsListHistoryProps> = ({ onClose }) => {
   const [searchQuery, setSearchQuery] = useState('');
-  const [showFilters, setShowFilters] = useState(false);
+  const [showFilters, setShowFilters] = useState(true);  // Show filters by default to see type selector
   const [selectedReturns, setSelectedReturns] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -101,9 +101,11 @@ const ReturnsListHistory: React.FC<ReturnsListHistoryProps> = ({ onClose }) => {
       label: 'Type',
       type: 'select' as const,
       options: [
+        { value: 'all', label: 'All Returns' },
         { value: 'sales', label: 'Sales Returns' },
         { value: 'purchase', label: 'Purchase Returns' }
-      ]
+      ],
+      defaultValue: 'all'  // Show all returns by default
     },
     {
       key: 'status',
@@ -154,51 +156,41 @@ const ReturnsListHistory: React.FC<ReturnsListHistoryProps> = ({ onClose }) => {
       ]);
       
       // Handle responses based on their status
-      const salesResponse = salesResult.status === 'fulfilled' ? salesResult.value : { data: [] };
-      const purchaseResponse = purchaseResult.status === 'fulfilled' ? purchaseResult.value : { data: [] };
-      
-      // Log any errors for debugging
-      if (salesResult.status === 'rejected') {
-        console.warn('Failed to fetch sales returns:', salesResult.reason?.message || 'Unknown error');
-      }
-      if (purchaseResult.status === 'rejected') {
-        console.warn('Failed to fetch purchase returns:', purchaseResult.reason?.message || 'Unknown error');
-      }
+      const salesResponse = salesResult.status === 'fulfilled' ? salesResult.value : null;
+      const purchaseResponse = purchaseResult.status === 'fulfilled' ? purchaseResult.value : null;
 
       // Transform and combine data
-      // Check if data is directly in response or in response.data
-      const salesData = salesResponse.data || salesResponse;
-      const purchaseData = purchaseResponse.data || purchaseResponse;
-      
-      // Handle different possible response structures
-      const salesReturnsList = salesData.returns || salesData.items || salesData || [];
-      const purchaseReturnsList = purchaseData.returns || purchaseData.items || purchaseData || [];
+      // The returnsApi methods return AxiosResponse, so we need to access .data
+      // Sales API returns { total: number, returns: [...] }
+      // Purchase API returns { data: [...] }
+      const salesReturnsList = salesResponse?.data?.returns || [];
+      const purchaseReturnsList = purchaseResponse?.data?.data || [];
       
       const salesReturns: Return[] = (Array.isArray(salesReturnsList) ? salesReturnsList : []).map((ret: any) => ({
-        id: ret.id,
-        return_no: ret.return_no || ret.sales_return_no || `SR-${ret.id}`,
+        id: ret.return_id || ret.id,  // Backend uses return_id
+        return_no: ret.return_number || ret.return_no || ret.sales_return_no || `SR-${ret.return_id || ret.id}`,
         return_type: 'sales' as const,
-        customer_name: ret.customer_name,
+        customer_name: ret.party_name || ret.customer_name || 'Unknown Customer',  // Backend uses party_name
         supplier_name: undefined,
-        original_document_no: ret.original_invoice_no || ret.invoice_no || '-',
+        original_document_no: ret.original_invoice_number || ret.original_invoice_no || ret.invoice_no || '-',
         return_date: ret.return_date,
         total_amount: ret.total_amount || 0,
-        status: ret.status || 'pending',
+        status: ret.approval_status || ret.status || 'pending',  // Backend uses approval_status
         reason: ret.return_reason || ret.reason || '-',
         created_at: ret.created_at,
         items_count: ret.items?.length || 0
       }));
 
       const purchaseReturns: Return[] = (Array.isArray(purchaseReturnsList) ? purchaseReturnsList : []).map((ret: any) => ({
-        id: ret.id,
-        return_no: ret.return_no || ret.purchase_return_no || `PR-${ret.id}`,
+        id: ret.return_id || ret.id,  // Backend uses return_id
+        return_no: ret.return_number || ret.return_no || ret.purchase_return_no || `PR-${ret.return_id || ret.id}`,
         return_type: 'purchase' as const,
         customer_name: undefined,
-        supplier_name: ret.supplier_name,
-        original_document_no: ret.original_purchase_no || ret.purchase_no || '-',
+        supplier_name: ret.party_name || ret.supplier_name || 'Unknown Supplier',  // Backend uses party_name
+        original_document_no: ret.original_invoice_number || ret.original_purchase_no || ret.purchase_no || '-',
         return_date: ret.return_date,
         total_amount: ret.total_amount || 0,
-        status: ret.status || 'pending',
+        status: ret.approval_status || ret.status || 'pending',  // Backend uses approval_status
         reason: ret.return_reason || ret.reason || '-',
         created_at: ret.created_at,
         items_count: ret.items?.length || 0

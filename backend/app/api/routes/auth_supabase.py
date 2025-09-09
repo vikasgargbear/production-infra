@@ -40,10 +40,14 @@ async def login(
         # Fallback to local authentication if Supabase not configured
         logger.warning("Supabase not configured, using local authentication")
         
-        # Check user in database
+        # Check user in database with password
+        from ...core.jwt_auth import verify_password, create_access_token
+        from datetime import timedelta
+        
         user = db.execute(text("""
             SELECT u.user_id, u.username, u.email, u.first_name, u.last_name,
-                   u.org_id, u.is_admin, u.is_active, u.auth_user_id,
+                   u.org_id, u.is_admin, u.is_active, u.auth_user_id, u.password_hash,
+                   u.role_id, u.permissions,
                    o.org_name, o.is_active as org_active
             FROM master.org_users u
             JOIN master.organizations o ON u.org_id = o.org_id
@@ -56,15 +60,64 @@ async def login(
                 detail="Invalid credentials"
             )
         
+        # Check password if password_hash exists
+        if user.password_hash:
+            if not verify_password(request.password, user.password_hash):
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="Invalid credentials"
+                )
+        else:
+            # No password set - reject login
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Password not configured for this account"
+            )
+        
         if not user.is_active or not user.org_active:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Account is not active"
             )
         
-        # For local auth, create a simple token response
+        # Get user's branch_id
+        branch_result = db.execute(text("""
+            SELECT b.branch_id 
+            FROM master.org_branches b
+            WHERE b.org_id = :org_id 
+            AND b.is_active = true
+            ORDER BY b.is_default_location DESC, b.branch_id
+            LIMIT 1
+        """), {"org_id": str(user.org_id)}).fetchone()
+        
+        branch_id = branch_result.branch_id if branch_result else None
+        
+        # Create proper JWT token
+        access_token_expires = timedelta(minutes=1440)  # 24 hours
+        access_token = create_access_token(
+            data={
+                "user_id": user.user_id,
+                "email": user.email,
+                "org_id": str(user.org_id),
+                "role_id": user.role_id,
+                "is_admin": user.is_admin,
+                "branch_id": branch_id,
+                "permissions": user.permissions if user.permissions else {}
+            },
+            expires_delta=access_token_expires
+        )
+        
+        # Update last login
+        db.execute(text("""
+            UPDATE master.org_users 
+            SET last_login = CURRENT_TIMESTAMP
+            WHERE user_id = :user_id
+        """), {"user_id": user.user_id})
+        db.commit()
+        
+        # Return proper token response
         return {
-            "access_token": "local_token_" + str(user.user_id),
+            "access_token": access_token,
             "token_type": "bearer",
             "user": {
                 "id": user.user_id,
@@ -72,7 +125,9 @@ async def login(
                 "name": f"{user.first_name} {user.last_name or ''}".strip(),
                 "org_id": str(user.org_id),
                 "org_name": user.org_name,
-                "is_admin": user.is_admin
+                "is_admin": user.is_admin,
+                "role_id": user.role_id,
+                "permissions": user.permissions if user.permissions else {}
             }
         }
     
