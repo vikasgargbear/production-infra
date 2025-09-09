@@ -40,10 +40,10 @@ async def auth_status():
 
 @router.post("/login")
 async def login(
-    form_data: OAuth2PasswordRequestForm = Depends(),
+    login_data: LoginRequest,
     db: Session = Depends(get_db)
 ):
-    """Login and get access token"""
+    """Login with email and password (JSON payload)"""
     # Find user by email
     user = db.execute(text("""
         SELECT u.user_id, u.full_name, u.email, u.password_hash, 
@@ -52,9 +52,9 @@ async def login(
         FROM master.org_users u
         JOIN master.organizations o ON u.org_id = o.org_id
         WHERE u.email = :email
-    """), {"email": form_data.username}).fetchone()
+    """), {"email": login_data.email}).fetchone()
     
-    if not user or not verify_password(form_data.password, user.password_hash):
+    if not user or not verify_password(login_data.password, user.password_hash):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect email or password",
@@ -119,6 +119,79 @@ async def login(
             "org_id": str(user.org_id),
             "org_name": user.org_name
         }
+    }
+
+@router.post("/token")
+async def login_oauth2(
+    form_data: OAuth2PasswordRequestForm = Depends(),
+    db: Session = Depends(get_db)
+):
+    """OAuth2 compatible login endpoint (for Swagger UI)"""
+    # Find user by email (username field contains email)
+    user = db.execute(text("""
+        SELECT u.user_id, u.full_name, u.email, u.password_hash, 
+               u.org_id, u.role, u.is_active,
+               o.org_name, o.is_active as org_active
+        FROM master.org_users u
+        JOIN master.organizations o ON u.org_id = o.org_id
+        WHERE u.email = :email
+    """), {"email": form_data.username}).fetchone()
+    
+    if not user or not verify_password(form_data.password, user.password_hash):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Incorrect email or password",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    
+    if not user.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="User account is deactivated"
+        )
+    
+    if not user.org_active:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Organization is not active"
+        )
+    
+    # Update last login
+    db.execute(text("""
+        UPDATE master.org_users 
+        SET last_login_at = CURRENT_TIMESTAMP
+        WHERE user_id = :user_id
+    """), {"user_id": user.user_id})
+    db.commit()
+    
+    # Get user's branch_id
+    branch_result = db.execute(text("""
+        SELECT b.branch_id 
+        FROM master.org_branches b
+        WHERE b.org_id = :org_id 
+        AND b.is_active = true
+        ORDER BY b.is_default_location DESC, b.branch_id
+        LIMIT 1
+    """), {"org_id": str(user.org_id)}).fetchone()
+    
+    branch_id = branch_result.branch_id if branch_result else None
+    
+    # Create access token
+    access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    access_token = create_access_token(
+        data={
+            "user_id": user.user_id,
+            "email": user.email,
+            "org_id": str(user.org_id),
+            "role": user.role,
+            "branch_id": branch_id
+        },
+        expires_delta=access_token_expires
+    )
+    
+    return {
+        "access_token": access_token,
+        "token_type": "bearer"
     }
 
 @router.get("/me")
