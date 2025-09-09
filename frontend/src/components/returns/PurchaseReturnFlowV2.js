@@ -186,8 +186,7 @@ const PurchaseReturnFlowV2 = ({ onClose }) => {
             restock: true
           };
         });
-        
-        
+
         setReturnData(prev => ({
           ...prev,
           items: mappedItems
@@ -312,7 +311,6 @@ const PurchaseReturnFlowV2 = ({ onClose }) => {
     let subtotal = 0;
     let taxAmount = 0;
 
-
     returnData.items.forEach(item => {
       if (item.selected && item.return_quantity > 0) {
         const returnQty = parseFloat(item.return_quantity) || 0;
@@ -321,13 +319,11 @@ const PurchaseReturnFlowV2 = ({ onClose }) => {
         
         const itemTotal = returnQty * rate;
         const itemTax = returnData.include_gst ? (itemTotal * taxPercent / 100) : 0;
-        
-        
+
         subtotal += itemTotal;
         taxAmount += itemTax;
       }
     });
-
 
     setReturnData(prev => ({
       ...prev,
@@ -350,7 +346,6 @@ const PurchaseReturnFlowV2 = ({ onClose }) => {
     let subtotal = 0;
     let taxAmount = 0;
 
-
     returnData.items.forEach(item => {
       if (item.selected && item.return_quantity > 0) {
         const returnQty = parseFloat(item.return_quantity) || 0;
@@ -359,13 +354,11 @@ const PurchaseReturnFlowV2 = ({ onClose }) => {
         
         const itemTotal = returnQty * rate;
         const itemTax = returnData.include_gst ? (itemTotal * taxPercent / 100) : 0;
-        
-        
+
         subtotal += itemTotal;
         taxAmount += itemTax;
       }
     });
-
 
     setReturnData(prev => ({
       ...prev,
@@ -447,7 +440,6 @@ const PurchaseReturnFlowV2 = ({ onClose }) => {
             return mappedItem;
           })
       };
-
 
       const response = await returnsApi.createPurchaseReturn(returnPayload);
       

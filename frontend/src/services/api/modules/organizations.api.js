@@ -10,7 +10,6 @@ import authService from '../../auth/authService';
 const getOrgId = () => {
   const orgId = authService.getOrgId();
   if (!orgId) {
-    console.warn('No organization ID found. User may need to complete setup.');
   }
   return orgId;
 };
@@ -29,7 +28,6 @@ export const organizationsApi = {
       const response = await apiClient.get(`/organizations/${organizationId}`);
       return response.data;
     } catch (error) {
-      console.error('Error fetching organization profile:', error);
       throw error;
     }
   },
@@ -44,7 +42,6 @@ export const organizationsApi = {
       const response = await apiClient.put(`/organizations/${organizationId}`, profileData);
       return response.data;
     } catch (error) {
-      console.error('Error updating organization profile:', error);
       throw error;
     }
   },
@@ -70,7 +67,6 @@ export const organizationsApi = {
       );
       return response.data;
     } catch (error) {
-      console.error('Error uploading logo:', error);
       throw error;
     }
   }
@@ -87,7 +83,6 @@ export const featureSettingsApi = {
       const response = await apiClient.get(`/organizations/${effectiveOrgId}/features`);
       return response.data;
     } catch (error) {
-      console.error('Error fetching feature settings:', error);
       throw error;
     }
   },
@@ -99,7 +94,6 @@ export const featureSettingsApi = {
       const response = await apiClient.put(`/organizations/${effectiveOrgId}/features`, features);
       return response.data;
     } catch (error) {
-      console.error('Error updating feature settings:', error);
       throw error;
     }
   }
@@ -126,7 +120,6 @@ export const authApi = {
       
       return response.data;
     } catch (error) {
-      console.error('Login error:', error);
       throw error;
     }
   },
@@ -137,7 +130,6 @@ export const authApi = {
       const response = await apiClient.get('/auth/me');
       return response.data;
     } catch (error) {
-      console.error('Error fetching current user:', error);
       throw error;
     }
   },
@@ -148,7 +140,6 @@ export const authApi = {
       const response = await apiClient.get('/auth/organizations');
       return response.data;
     } catch (error) {
-      console.error('Error fetching user organizations:', error);
       throw error;
     }
   },
@@ -166,7 +157,6 @@ export const authApi = {
       
       return response.data;
     } catch (error) {
-      console.error('Error switching organization:', error);
       throw error;
     }
   },

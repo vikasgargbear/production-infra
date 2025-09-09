@@ -511,7 +511,6 @@ const StockMovement = ({ open = true, onClose }) => {
                   />
                 </div>
 
-
                 {/* Stock In Quick Filter */}
                 <button
                   onClick={() => setSelectedType(selectedType === 'receive' ? 'all' : 'receive')}
@@ -685,7 +684,6 @@ const StockMovement = ({ open = true, onClose }) => {
                 </div>
               </div>
             )}
-
 
             {/* Data Table */}
             <div className="bg-white rounded-lg shadow-sm border border-gray-200">

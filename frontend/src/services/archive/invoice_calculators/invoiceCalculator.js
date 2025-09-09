@@ -9,7 +9,6 @@
  * Replacement: import InvoiceCalculatorEnterprise from './invoiceCalculatorEnterprise';
  */
 
-
 class InvoiceCalculator {
   /**
    * Calculate item totals including GST
@@ -159,8 +158,7 @@ class InvoiceCalculator {
       ...item,
       ...calculations
     };
-    
-    
+
     return finalItem;
   }
 

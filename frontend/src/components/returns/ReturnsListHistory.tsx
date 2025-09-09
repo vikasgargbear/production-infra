@@ -288,8 +288,7 @@ const ReturnsListHistory: React.FC<ReturnsListHistoryProps> = ({ onClose }) => {
   // Helper function to get proper status text
   const getStatusText = (status: string | undefined) => {
     if (!status) return 'Unknown';
-    
-    
+
     // Map backend statuses to display text - handle various formats
     const statusMap: Record<string, string> = {
       // Common lowercase variations

@@ -457,7 +457,6 @@ class InvoiceApiService {
     }
   }
 
-
   /**
    * Get current financial year
    * @returns {String} Financial year (e.g., "2024-25")

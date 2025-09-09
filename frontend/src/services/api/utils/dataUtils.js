@@ -45,11 +45,6 @@ export const cleanData = (data) => {
   
   // Debug: Log pack fields being sent
   if (data.pack_input || data.pack_quantity || data.pack_multiplier) {
-    console.log('cleanData - Pack fields in request:');
-    console.log('  pack_input:', data.pack_input);
-    console.log('  pack_quantity:', data.pack_quantity);
-    console.log('  pack_multiplier:', data.pack_multiplier);
-    console.log('  pack_unit_type:', data.pack_unit_type);
   }
   
   const cleanedData = {};
@@ -153,7 +148,6 @@ export const parseAPIDate = (dateString) => {
   try {
     return new Date(dateString);
   } catch (error) {
-    console.error('Error parsing date:', dateString, error);
     return null;
   }
 };

@@ -32,7 +32,6 @@ export const ordersApi = {
       
       return response;
     } catch (error) {
-      console.error('Error in ordersApi.getAll:', error);
       throw error;
     }
   },
@@ -44,20 +43,13 @@ export const ordersApi = {
   
   // Create new order
   create: async (data) => {
-    console.log('=== ORDERS API DEBUG ===');
-    console.log('ordersApi.create called with:', JSON.stringify(data, null, 2));
-    
     // Remove any order_id from create data to avoid confusion
     const { order_id, ...createData } = data;
-    console.log('Data after removing order_id:', JSON.stringify(createData, null, 2));
-    
     // Use standard API call
     try {
       const response = await apiHelpers.post(ENDPOINTS.BASE, createData);
-      console.log('Order created successfully:', response);
       return response;
     } catch (error) {
-      console.error('Order creation failed:', error);
       throw error;
     }
   },

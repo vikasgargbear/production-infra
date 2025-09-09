@@ -126,7 +126,6 @@ export const stockApi = {
       
       return response;
     } catch (error) {
-      console.error('Error fetching stock levels:', error);
       throw error;
     }
   },
@@ -155,7 +154,6 @@ export const stockApi = {
       
       return response;
     } catch (error) {
-      console.error('Error fetching product stock:', error);
       throw error;
     }
   },
@@ -249,7 +247,6 @@ export const stockApi = {
       
       return response;
     } catch (error) {
-      console.error('Error fetching current stock:', error);
       throw error;
     }
   },

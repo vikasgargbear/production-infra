@@ -26,7 +26,6 @@ export const AuthProvider = ({ children }) => {
           setUser(JSON.parse(storedUser));
         }
       } catch (err) {
-        console.error('Error loading user:', err);
       } finally {
         setLoading(false);
       }
@@ -71,7 +70,6 @@ export const AuthProvider = ({ children }) => {
     try {
       await authApi.logout();
     } catch (err) {
-      console.error('Logout error:', err);
     } finally {
       setUser(null);
       localStorage.removeItem('currentUser');

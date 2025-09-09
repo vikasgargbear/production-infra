@@ -28,8 +28,6 @@ export const secureCompanySettings = {
     if (!existingPublic.company_name) {
       SecurityService.storeCompanyPublicSettings(this.DEFAULT_PUBLIC_SETTINGS);
     }
-    
-    console.log('Secure company settings initialized');
   },
   
   /**
@@ -295,7 +293,6 @@ export const secureCompanySettings = {
       SecurityService.storeCompanySecureSettings(defaultSecure);
       return true;
     } catch (error) {
-      console.error('Failed to load secure settings:', error);
       return false;
     }
   }

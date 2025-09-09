@@ -182,7 +182,6 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
     }
   };
 
-
   // Keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (e) => {
@@ -313,7 +312,6 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
     const finalAmount = Math.round(preRoundTotal);
     const roundOff = parseFloat((finalAmount - preRoundTotal).toFixed(2));
 
-
     return {
       subtotal_amount: subtotal,
       taxable_amount: subtotal,
@@ -422,8 +420,7 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
             const anyDefaultAddr = addresses.find(addr => addr.is_default);
             
             const preferredAddr = billingAddr || shippingAddr || anyDefaultAddr || addresses[0];
-            
-            
+
             // Build full address from fetched data
             const fetchedParts = [];
             if (preferredAddr.address_line1) fetchedParts.push(preferredAddr.address_line1);
@@ -595,7 +592,6 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
         order_id: invoice.order_id ? parseInt(invoice.order_id) : null,
         challan_id: invoice.challan_id ? parseInt(invoice.challan_id) : null
       };
-      
 
       // Try direct invoice API (as per test file format)
       let response;
@@ -684,8 +680,7 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
           // Bank account for receiving payment
           bank_account_id: invoice.bank_account_id || null
         };
-        
-        
+
         response = await apiClient.post('/invoices/', invoiceData);
       } catch (error) {
         
@@ -723,8 +718,7 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
           error: errorDetails,
           timestamp: new Date().toISOString()
         }));
-        
-        
+
         // Show modal anyway with local save message
         setTimeout(() => {
           setCreatedInvoiceData({
@@ -763,8 +757,7 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
         localStorage.setItem('lastCreatedOrderId', response.data.order_id || '');
         localStorage.setItem('lastCreatedInvoiceId', invoiceId || '');
         localStorage.setItem('lastInvoiceNumber', invoiceNumber);
-        
-        
+
         // Store data for success modal
         setCreatedInvoiceData({
           invoiceNumber: invoiceNumber,
@@ -1281,7 +1274,6 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
     }
   };
 
-
   const handleWhatsAppShare = async (phoneOverride = null) => {
     // Use phoneOverride if provided (from success modal), otherwise use selectedCustomer
     const customerPhone = phoneOverride || selectedCustomer?.phone || selectedCustomer?.mobile || selectedCustomer?.primary_phone;
@@ -1429,8 +1421,7 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
       tax_amount: 0,
       total_amount: 0
     }));
-    
-    
+
     // Update invoice with imported data - MUST set customer_details for CustomerSearch
     const updatedInvoice = {
       ...invoice, // Use current invoice state, not prev
@@ -1458,8 +1449,7 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
       order_id: importData.order_id,
       challan_id: importData.challan_id
     };
-    
-    
+
     // Set invoice state directly
     setInvoice(updatedInvoice);
     
@@ -1539,7 +1529,6 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
             </div>
           )}
 
-
           {/* Content */}
           <div className="flex-1 overflow-y-auto bg-blue-50">
             <div className="max-w-6xl mx-auto px-6 py-6">
@@ -1616,7 +1605,6 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
                 clearable={true}
               />
             </div>
-
 
             {/* Products Section */}
             <div className="mb-6">
@@ -1774,7 +1762,6 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
               </button>
             </div>
           )}
-
 
           {/* Bank Account Selection */}
           <div className="mb-4">

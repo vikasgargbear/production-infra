@@ -49,8 +49,6 @@ export const EscapeKeyProvider = ({ children }) => {
           
           // Call the handler
           topHandler.callback();
-          
-          console.log(`ESC handled by: ${topHandler.name || 'unnamed handler'}`);
         }
       }
     };
@@ -69,8 +67,6 @@ export const EscapeKeyProvider = ({ children }) => {
     const handler = { id, callback, name };
     
     setHandlers(prev => [...prev, handler]);
-    
-    console.log(`ESC handler registered: ${name || id}`);
     return id;
   }, []);
 
@@ -79,7 +75,6 @@ export const EscapeKeyProvider = ({ children }) => {
     setHandlers(prev => {
       const handler = prev.find(h => h.id === id);
       if (handler) {
-        console.log(`ESC handler unregistered: ${handler.name || id}`);
       }
       return prev.filter(h => h.id !== id);
     });

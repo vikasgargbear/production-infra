@@ -87,8 +87,7 @@ const InvoiceSearch = forwardRef(({
         order: 'desc',
         status: filters.status || ['PAID', 'PARTIAL', 'UNPAID']
       });
-      
-      
+
       if (response.success || response.data) {
         const results = response.data?.invoices || response.data || [];
         setRecentInvoices(results);

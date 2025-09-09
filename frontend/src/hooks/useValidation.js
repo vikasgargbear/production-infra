@@ -34,7 +34,6 @@ export const useInvoiceValidation = (options = {}) => {
         }
       },
       onError: (error) => {
-        console.error('Validation failed:', error);
         setValidationErrors([{
           code: 'VALIDATION_ERROR',
           message: 'Validation service unavailable'
@@ -59,7 +58,6 @@ export const useInvoiceValidation = (options = {}) => {
         }
       },
       onError: (error) => {
-        console.error('Comprehensive validation failed:', error);
         setValidationErrors([{
           code: 'VALIDATION_ERROR',
           message: 'Validation service unavailable'
@@ -125,7 +123,6 @@ export const useCustomerValidation = (options = {}) => {
         }
       },
       onError: (error) => {
-        console.error('Customer validation failed:', error);
         onError?.(error);
       }
     }
@@ -160,7 +157,6 @@ export const useProductValidation = (options = {}) => {
         }
       },
       onError: (error) => {
-        console.error('Product validation failed:', error);
         onError?.(error);
       }
     }
@@ -195,7 +191,6 @@ export const useStockValidation = (options = {}) => {
         }
       },
       onError: (error) => {
-        console.error('Stock validation failed:', error);
         onError?.(error);
       }
     }
@@ -230,7 +225,6 @@ export const useCreditValidation = (options = {}) => {
         }
       },
       onError: (error) => {
-        console.error('Credit validation failed:', error);
         onError?.(error);
       }
     }

@@ -26,7 +26,6 @@ const CreditNotePreview = ({ returnData, customer, invoice, includeGst = true, c
     });
   };
 
-
   // Get only selected items with return quantity
   const returnItems = returnData.items.filter(item => 
     item.selected && item.return_quantity > 0

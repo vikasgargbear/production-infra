@@ -690,7 +690,6 @@ const EnterprisePaymentEntry: React.FC<EnterprisePaymentEntryProps> = ({ open, o
     </div>
   );
 
-
   if (!open) return null;
 
   return (

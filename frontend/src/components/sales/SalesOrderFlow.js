@@ -302,8 +302,7 @@ const SalesOrderFlow = ({ open = true, onClose }) => {
         mrp: parseFloat(item.mrp) || 0,
         line_total: 0 // Will be recalculated
       }));
-      
-      
+
       setOrder(prev => {
         const updated = {
           ...prev,
@@ -374,8 +373,7 @@ const SalesOrderFlow = ({ open = true, onClose }) => {
           const anyDefaultAddr = addresses.find(addr => addr.is_default);
           
           const preferredAddr = billingAddr || shippingAddr || anyDefaultAddr || addresses[0];
-          
-          
+
           // Build full address from fetched data
           const fetchedParts = [];
           if (preferredAddr.address_line1) fetchedParts.push(preferredAddr.address_line1);
@@ -424,8 +422,7 @@ const SalesOrderFlow = ({ open = true, onClose }) => {
     
     // If states match, use CGST/SGST, otherwise IGST
     const gstType = (cleanCustomerState === cleanCompanyState || cleanCustomerState === '') ? 'CGST/SGST' : 'IGST';
-    
-    
+
     setOrder(prev => ({
       ...prev,
       customer_id: customer.customer_id || customer.id,
@@ -574,8 +571,7 @@ const SalesOrderFlow = ({ open = true, onClose }) => {
       
       if (result.success && result.totals) {
         const formattedTotals = result.totals; // Use totals directly
-        
-        
+
         // Update items with calculated line totals from backend
         const updatedItems = items.map((item, index) => {
           const calculatedLineItem = result.line_items && result.line_items[index];
@@ -723,7 +719,6 @@ const SalesOrderFlow = ({ open = true, onClose }) => {
         // NOTE: org_id comes from auth header, NOT request body (per migration guide)
       };
 
-
       // Create sales order data matching the backend OrderCreate schema
       // NOTE: org_id comes from auth header, NOT request body (per migration guide)
       const salesOrderData = {
@@ -824,8 +819,7 @@ const SalesOrderFlow = ({ open = true, onClose }) => {
       } else if (error.message) {
         errorMessage = error.message;
       }
-      
-      
+
       setMessage(errorMessage);
       setMessageType('error');
     } finally {
@@ -961,9 +955,6 @@ Expected Delivery: ${order.expected_delivery_date}
                 />
               </div>
 
-
-
-
               {/* Products Section */}
               <div className="mb-6">
                 <div className="flex items-center justify-between mb-3">
@@ -1014,7 +1005,6 @@ Expected Delivery: ${order.expected_delivery_date}
                   />
                 </div>
               )}
-
 
             </div>
           </div>
@@ -1493,7 +1483,6 @@ Expected Delivery: ${order.expected_delivery_date}
                   </div>
                 </div>
               </div>
-
 
               {/* Customer Details Section */}
               <div className="mb-4">

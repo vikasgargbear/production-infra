@@ -10,7 +10,6 @@ export const gstApi = {
         });
         return response.data;
       } catch (error) {
-        console.error('Error fetching GST dashboard:', error);
         // Return default data structure if API fails
         return {
           taxPayable: 0,
@@ -30,7 +29,6 @@ export const gstApi = {
         });
         return response.data;
       } catch (error) {
-        console.error('Error fetching GST metrics:', error);
         return {
           currentMonth: {
             sales: 0,
@@ -60,7 +58,6 @@ export const gstApi = {
         });
         return response.data;
       } catch (error) {
-        console.error('Error fetching GST returns:', error);
         return { returns: [] };
       }
     },
@@ -72,7 +69,6 @@ export const gstApi = {
         });
         return response.data;
       } catch (error) {
-        console.error('Error fetching return status:', error);
         return {
           gstr1: { status: 'pending', amount: 0, dueDate: null, filedDate: null },
           gstr3b: { status: 'pending', amount: 0, dueDate: null, filedDate: null },
@@ -95,7 +91,6 @@ export const gstApi = {
         });
         return response.data;
       } catch (error) {
-        console.error('Error fetching GSTR-1:', error);
         return { b2b: [], b2c: [], hsn: [] };
       }
     },
@@ -107,7 +102,6 @@ export const gstApi = {
         });
         return response.data;
       } catch (error) {
-        console.error('Error fetching GSTR-3B:', error);
         return {
           outwardSupplies: { taxable: 0, integrated: 0, central: 0, state: 0 },
           inwardSupplies: { taxable: 0, integrated: 0, central: 0, state: 0 },
@@ -124,7 +118,6 @@ export const gstApi = {
         });
         return response.data;
       } catch (error) {
-        console.error('Error fetching GSTR-2A:', error);
         return { invoices: [], summary: {} };
       }
     },
@@ -136,7 +129,6 @@ export const gstApi = {
         });
         return response.data;
       } catch (error) {
-        console.error('Error fetching HSN summary:', error);
         return { hsnData: [] };
       }
     }
@@ -151,7 +143,6 @@ export const gstApi = {
         });
         return response.data;
       } catch (error) {
-        console.error('Error fetching reconciliation status:', error);
         return {
           matched: 0,
           mismatched: 0,
@@ -168,7 +159,6 @@ export const gstApi = {
         });
         return response.data;
       } catch (error) {
-        console.error('Error fetching reconciliation details:', error);
         return { records: [] };
       }
     },
@@ -185,7 +175,6 @@ export const gstApi = {
         const response = await apiClient.get('/api/v1/gst/settings');
         return response.data;
       } catch (error) {
-        console.error('Error fetching GST settings:', error);
         return {
           gstin: '',
           state: '',
@@ -204,7 +193,6 @@ export const gstApi = {
         const response = await apiClient.get('/api/v1/gst/tax-rates');
         return response.data;
       } catch (error) {
-        console.error('Error fetching tax rates:', error);
         return { rates: [] };
       }
     }
@@ -221,7 +209,6 @@ export const gstApi = {
         });
         return response.data;
       } catch (error) {
-        console.error('Error calculating tax:', error);
         // Return basic calculation
         const gstRate = 18; // Default GST rate
         const taxableAmount = amount;
@@ -255,7 +242,6 @@ export const gstApi = {
         const response = await apiClient.get('/api/v1/gst/compliance/status');
         return response.data;
       } catch (error) {
-        console.error('Error fetching compliance status:', error);
         return {
           score: 0,
           issues: [],
@@ -269,7 +255,6 @@ export const gstApi = {
         const response = await apiClient.get('/api/v1/gst/compliance/due-dates');
         return response.data;
       } catch (error) {
-        console.error('Error fetching due dates:', error);
         return { dueDates: [] };
       }
     }

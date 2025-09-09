@@ -103,8 +103,7 @@ const BatchSelectionModalV2 = ({
       gst_percent: product.gst_percent || 12, // Ensure GST percent is passed
       quantity: 1
     };
-    
-    
+
     setTimeout(() => {
       onBatchSelect(productWithBatch);
       onClose();

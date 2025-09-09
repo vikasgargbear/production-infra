@@ -20,7 +20,6 @@ const DebitNotePreview = ({ returnData, supplier = {}, purchase = {} }) => {
     });
   };
 
-
   // Get only selected items with return quantity
   const returnItems = returnData.items.filter(item => 
     item.selected && item.return_quantity > 0

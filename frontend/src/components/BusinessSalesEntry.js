@@ -640,7 +640,6 @@ const BusinessSalesEntry = ({ open, onClose }) => {
         </div>
       </div>
 
-
       {/* Loading State */}
       {isLoading && (
         <div className="mx-6 mt-4 p-4 bg-blue-50 border border-blue-200 rounded-lg flex items-center">

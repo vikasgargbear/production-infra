@@ -21,7 +21,6 @@ export const queryClient = new QueryClient({
       refetchOnMount: 'always',
       // Error handling
       onError: (error) => {
-        console.error('Query error:', error);
       }
     },
     mutations: {
@@ -29,7 +28,6 @@ export const queryClient = new QueryClient({
       retry: 1,
       // Error handling
       onError: (error) => {
-        console.error('Mutation error:', error);
       }
     }
   }

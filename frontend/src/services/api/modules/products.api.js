@@ -21,7 +21,6 @@ export const productsApi = {
   
   // Create new product
   create: (data) => {
-    console.log('products.api.js - Creating product:', data);
     const cleanedData = cleanData(data);
     return apiHelpers.post(ENDPOINTS.CREATE || ENDPOINTS.BASE, cleanedData);
   },

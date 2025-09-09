@@ -57,7 +57,6 @@ export const returnsDataTransformer = {
       
       // Transform items
       items: (returnData.items || []).map(item => {
-        console.log('Transformer input item:', item);
         const transformedItem = {
           product_id: item.product_id,
           batch_id: item.batch_id || item.batch_no,
@@ -72,7 +71,6 @@ export const returnsDataTransformer = {
           reason: item.reason || item.return_reason || returnData.reason || returnData.return_reason || '',
           custom_reason: item.custom_reason || returnData.custom_reason || ''
         };
-        console.log('Transformer output item:', transformedItem);
         return transformedItem;
       }),
       

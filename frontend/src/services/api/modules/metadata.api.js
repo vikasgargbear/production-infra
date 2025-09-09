@@ -50,7 +50,6 @@ export const metadataApi = {
         return response.data;
       }
     } catch (error) {
-      console.error('Failed to cache metadata:', error);
       return null;
     }
   },
@@ -73,7 +72,6 @@ export const metadataApi = {
       }
       return null;
     } catch (error) {
-      console.error('Failed to get cached metadata:', error);
       return null;
     }
   }

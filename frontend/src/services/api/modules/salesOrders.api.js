@@ -146,7 +146,6 @@ class SalesOrdersAPI {
 
       return response;
     } catch (error) {
-      console.error('SalesOrdersAPI.getAll error:', error);
       throw this.handleError(error);
     }
   }
@@ -175,7 +174,6 @@ class SalesOrdersAPI {
     try {
       return await apiHelpers.get(`${ENDPOINTS.BASE}/${id}`, { params });
     } catch (error) {
-      console.error(`SalesOrdersAPI.getById(${id}) error:`, error);
       throw this.handleError(error);
     }
   }
@@ -199,32 +197,22 @@ class SalesOrdersAPI {
 
       // Create sales order
       try {
-        console.log('Creating sales order...');
         const response = await apiHelpers.post(ENDPOINTS.CREATE, formattedData);
-        console.log('Sales order created successfully:', response);
-        
         // Clear relevant cache on success
         this.clearCache('getAll');
         return response;
       } catch (httpError) {
-        console.log('HTTP attempt failed:', httpError.message);
-        
         // Try HTTPS as fallback
-        console.log('Trying HTTPS fallback...');
         try {
           const httpsResponse = await apiHelpers.post(ENDPOINTS.CREATE, formattedData);
-          console.log('HTTPS POST successful:', httpsResponse);
-          
           // Clear relevant cache on success
           this.clearCache('getAll');
           return httpsResponse;
         } catch (httpsError) {
-          console.log('HTTPS attempt also failed:', httpsError.message);
           throw httpsError;
         }
       }
     } catch (error) {
-      console.error('SalesOrdersAPI.create error:', error);
       throw this.handleError(error);
     }
   }
@@ -247,7 +235,6 @@ class SalesOrdersAPI {
       this.clearCache('getAll');
       return response;
     } catch (error) {
-      console.error('SalesOrdersAPI.createBulk error:', error);
       throw this.handleError(error);
     }
   }
@@ -267,7 +254,6 @@ class SalesOrdersAPI {
       
       return response;
     } catch (error) {
-      console.error(`SalesOrdersAPI.update(${id}) error:`, error);
       throw this.handleError(error);
     }
   }
@@ -294,7 +280,6 @@ class SalesOrdersAPI {
       this.clearCache();
       return response;
     } catch (error) {
-      console.error(`SalesOrdersAPI.updateStatus(${id}, ${status}) error:`, error);
       throw this.handleError(error);
     }
   }
@@ -310,7 +295,6 @@ class SalesOrdersAPI {
       this.clearCache();
       return response;
     } catch (error) {
-      console.error(`SalesOrdersAPI.approve(${id}) error:`, error);
       throw this.handleError(error);
     }
   }
@@ -325,7 +309,6 @@ class SalesOrdersAPI {
       const response = await apiHelpers.post(ENDPOINTS.SEARCH, searchParams);
       return response;
     } catch (error) {
-      console.error('SalesOrdersAPI.search error:', error);
       throw this.handleError(error);
     }
   }
@@ -344,7 +327,6 @@ class SalesOrdersAPI {
       const response = await apiHelpers.post(ENDPOINTS.VALIDATE, orderData);
       return response;
     } catch (error) {
-      console.error('SalesOrdersAPI.validate error:', error);
       throw this.handleError(error);
     }
   }
@@ -361,7 +343,6 @@ class SalesOrdersAPI {
       this.clearCache('getAll');
       return response;
     } catch (error) {
-      console.error(`SalesOrdersAPI.duplicate(${id}) error:`, error);
       throw this.handleError(error);
     }
   }
@@ -378,7 +359,6 @@ class SalesOrdersAPI {
       this.clearCache();
       return response;
     } catch (error) {
-      console.error(`SalesOrdersAPI.convertToInvoice(${id}) error:`, error);
       throw this.handleError(error);
     }
   }
@@ -395,7 +375,6 @@ class SalesOrdersAPI {
       this.clearCache();
       return response;
     } catch (error) {
-      console.error(`SalesOrdersAPI.convertToChallan(${id}) error:`, error);
       throw this.handleError(error);
     }
   }
@@ -411,7 +390,6 @@ class SalesOrdersAPI {
       this.clearCache();
       return response;
     } catch (error) {
-      console.error(`SalesOrdersAPI.reserveInventory(${id}) error:`, error);
       throw this.handleError(error);
     }
   }
@@ -427,7 +405,6 @@ class SalesOrdersAPI {
       this.clearCache();
       return response;
     } catch (error) {
-      console.error(`SalesOrdersAPI.releaseInventory(${id}) error:`, error);
       throw this.handleError(error);
     }
   }
@@ -446,7 +423,6 @@ class SalesOrdersAPI {
       this.clearCache();
       return response;
     } catch (error) {
-      console.error(`SalesOrdersAPI.delete(${id}) error:`, error);
       throw this.handleError(error);
     }
   }
@@ -460,7 +436,6 @@ class SalesOrdersAPI {
     try {
       return await apiHelpers.get(ENDPOINTS.ANALYTICS, { params });
     } catch (error) {
-      console.error('SalesOrdersAPI.getAnalytics error:', error);
       throw this.handleError(error);
     }
   }
@@ -479,7 +454,6 @@ class SalesOrdersAPI {
       });
       return response.data;
     } catch (error) {
-      console.error(`SalesOrdersAPI.exportToPDF(${id}) error:`, error);
       throw this.handleError(error);
     }
   }
@@ -494,7 +468,6 @@ class SalesOrdersAPI {
     try {
       return await apiHelpers.post(ENDPOINTS.EMAIL(id), emailOptions);
     } catch (error) {
-      console.error(`SalesOrdersAPI.sendEmail(${id}) error:`, error);
       throw this.handleError(error);
     }
   }
@@ -509,7 +482,6 @@ class SalesOrdersAPI {
     try {
       return await apiHelpers.post(ENDPOINTS.WHATSAPP(id), whatsappOptions);
     } catch (error) {
-      console.error(`SalesOrdersAPI.sendWhatsApp(${id}) error:`, error);
       throw this.handleError(error);
     }
   }
@@ -647,9 +619,6 @@ class SalesOrdersAPI {
    */
   async processOfflineQueue() {
     if (this.offlineQueue.length === 0) return;
-
-    console.log(`Processing ${this.offlineQueue.length} offline operations...`);
-
     for (const item of this.offlineQueue) {
       try {
         switch (item.operation) {
@@ -662,7 +631,6 @@ class SalesOrdersAPI {
           // Add other operations as needed
         }
       } catch (error) {
-        console.error('Failed to process offline operation:', error);
         // Keep failed operations in queue for retry
         continue;
       }

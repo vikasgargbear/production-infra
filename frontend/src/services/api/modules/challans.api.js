@@ -154,7 +154,6 @@ export const challansApi = {
       return response;
       
     } catch (error) {
-      console.error('Error converting challan to invoice:', error);
       throw error;
     }
   },

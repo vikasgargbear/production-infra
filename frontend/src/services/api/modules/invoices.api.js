@@ -136,7 +136,6 @@ export const invoicesApi = {
       if (query && query.trim()) {
         // For now, we'll use the base endpoint with customer_id filter
         // In the future, when backend implements search, we can use the search endpoint
-        console.log('Using base invoices endpoint for search');
       }
       
       // Otherwise try to get all invoices with filters
@@ -158,8 +157,6 @@ export const invoicesApi = {
       return await apiHelpers.get(ENDPOINTS.BASE, { params: searchParams });
     } catch (error) {
       if (error.response?.status === 404) {
-        console.warn('Invoice search endpoint not found, trying offline storage');
-        
         // Try to load from offline storage instead of generating mock data
         try {
           const offlineData = await offlineStorage.getOffline('invoices', { persistent: true });
@@ -179,7 +176,6 @@ export const invoicesApi = {
             };
           }
         } catch (offlineError) {
-          console.error('Error loading from offline storage:', offlineError);
         }
         
         // No offline data available - return empty result
@@ -217,8 +213,6 @@ export const invoicesApi = {
       return response;
     } catch (error) {
       if (error.response?.status === 404) {
-        console.warn('Invoice/Orders endpoint not found, trying offline storage');
-        
         // Try to load from offline storage instead of generating mock data
         try {
           const offlineData = await offlineStorage.getOffline('invoices', { persistent: true });
@@ -233,7 +227,6 @@ export const invoicesApi = {
             };
           }
         } catch (offlineError) {
-          console.error('Error loading from offline storage:', offlineError);
         }
         
         // No offline data available - return empty result

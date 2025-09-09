@@ -45,7 +45,6 @@ export const useCompanyInfo = () => {
       return response;
 
     } catch (err) {
-      console.error('Error loading company info:', err);
       setError(err.message || 'Failed to load company information');
       
       // Fallback to default values
@@ -81,7 +80,6 @@ export const useCompanyInfo = () => {
       localStorage.setItem('companyInfo', JSON.stringify(response));
       return response;
     } catch (err) {
-      console.error('Error updating company info:', err);
       setError(err.message || 'Failed to update company information');
       throw err;
     }

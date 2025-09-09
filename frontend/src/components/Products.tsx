@@ -192,7 +192,6 @@ const Products: React.FC = () => {
       if (!productData.product_name) {
         throw new Error('Product name is required');
       }
-      
 
       try {
         if (editingProduct) {
@@ -202,14 +201,12 @@ const Products: React.FC = () => {
           // Use API service instead of direct axios calls
           const response = await api.post('/products/', productData);
         }
-        
-        
+
         // Reset form and close modal
         form.reset();
         setShowAddModal(false);
         setEditingProduct(null);
-        
-        
+
       } catch (error: any) {
         throw error; // Re-throw to be caught by the outer try/catch
       }

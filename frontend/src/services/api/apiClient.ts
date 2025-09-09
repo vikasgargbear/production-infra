@@ -19,7 +19,6 @@ const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || 'https://pharma-backe
   if (oldToken && !newToken) {
     // Migrate from auth_token to authToken
     localStorage.setItem('authToken', oldToken);
-    console.log('🔄 Migrated auth_token to authToken');
   }
 })();
 
@@ -82,8 +81,7 @@ apiClient.interceptors.request.use(
               orgIdManager.setOrgId(orgIdFromToken);
               config.headers['X-Org-Id'] = orgIdFromToken;
             }
-            
-            
+
           } else if (!isPublicEndpoint) {
             // Token expired - only redirect if not an auth endpoint
             localStorage.removeItem('authToken');
@@ -109,7 +107,6 @@ apiClient.interceptors.request.use(
       if (!isPublicPath) {
         // Don't redirect immediately - let the API call fail with 401
         // The component can then handle the error appropriately
-        console.warn('No auth token for protected endpoint:', config.url);
         // window.location.href = '/login?reason=not_authenticated';
         // return Promise.reject(new Error('Authentication required'));
       }
@@ -136,11 +133,8 @@ apiClient.interceptors.response.use(
       
       // Don't auto-redirect on 401 - let components handle it
       // This prevents redirect loops
-      console.warn('401 Unauthorized response for:', error.config?.url);
-      
       if (token) {
         // We had a token but it was rejected - likely expired
-        console.warn('Token was rejected by server - may be expired');
         // Don't auto-remove token or redirect - let user manually logout
         // localStorage.removeItem('authToken');
         // sessionStorage.clear(); // Clear any session data

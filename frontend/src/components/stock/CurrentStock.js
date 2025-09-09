@@ -985,7 +985,6 @@ const CurrentStock = ({ open = true, onClose }) => {
               </div>
             )}
 
-
             {/* Loading State */}
             {loading && stockData.length === 0 && (
               <div className="bg-white rounded-lg shadow-sm border border-blue-200 p-8 mb-6">

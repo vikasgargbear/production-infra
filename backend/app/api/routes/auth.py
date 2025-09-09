@@ -3,10 +3,11 @@ Authentication endpoints
 """
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordRequestForm
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from sqlalchemy import text
 from datetime import timedelta
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional
 import uuid
 
 from ...core.database import get_db
@@ -15,6 +16,11 @@ from ...core.jwt_auth import (
     ACCESS_TOKEN_EXPIRE_MINUTES, get_current_user_and_org,
     verify_user_org_access
 )
+
+# Pydantic models for login
+class LoginRequest(BaseModel):
+    email: str
+    password: str
 
 router = APIRouter(tags=["authentication"])
 

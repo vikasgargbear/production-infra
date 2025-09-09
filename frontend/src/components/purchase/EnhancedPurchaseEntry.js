@@ -628,7 +628,6 @@ const EnhancedPurchaseEntry = ({ onClose, prefilledData = null }) => {
         </div>
       </div>
 
-
       {/* Invoice Details - Standardized Components */}
       <div className="grid grid-cols-3 gap-4 mb-6">
         <StandardFormInput

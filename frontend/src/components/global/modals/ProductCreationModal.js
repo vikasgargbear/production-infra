@@ -75,8 +75,7 @@ const ProductCreationModal = ({
           productsApi.get('/products/master/categories'),
           productsApi.get('/products/master/types')
         ]);
-        
-        
+
         if (categoriesResponse.data?.success) {
           setCategories(categoriesResponse.data.data);
         }
@@ -279,7 +278,6 @@ const ProductCreationModal = ({
         sale_price_per_unit: parseFloat(newProduct.sale_price) || 0
       };
 
-      
       // Ensure pack fields are properly typed before sending
       const apiData = {
         ...productData,
@@ -805,7 +803,6 @@ const ProductCreationModal = ({
                 </div>
               </div>
             </div>
-
 
             {/* Batch Details */}
             <div className="space-y-4">

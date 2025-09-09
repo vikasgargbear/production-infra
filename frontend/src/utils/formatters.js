@@ -19,7 +19,6 @@ export const formatDate = (date, locale = 'en-IN') => {
       day: 'numeric'
     });
   } catch (error) {
-    console.error('Error formatting date:', error);
     return String(date);
   }
 };
@@ -39,7 +38,6 @@ export const formatCurrency = (amount, decimals = 2) => {
     
     return `₹${numAmount.toFixed(decimals).replace(/\B(?=(\d{3})+(?!\d))/g, ',')}`;
   } catch (error) {
-    console.error('Error formatting currency:', error);
     return '₹0.00';
   }
 };
@@ -82,7 +80,6 @@ export const formatPercentage = (value, decimals = 2) => {
     
     return `${numValue.toFixed(decimals)}%`;
   } catch (error) {
-    console.error('Error formatting percentage:', error);
     return '0%';
   }
 };
@@ -102,7 +99,6 @@ export const formatNumber = (value, decimals = 0) => {
     
     return numValue.toFixed(decimals).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
   } catch (error) {
-    console.error('Error formatting number:', error);
     return '0';
   }
 };

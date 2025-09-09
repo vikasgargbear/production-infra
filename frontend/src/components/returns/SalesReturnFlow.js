@@ -105,7 +105,6 @@ const SalesReturnFlow = ({ onClose }) => {
     loadReturnReasons();
   }, []);
 
-
   // Generate return number with consistent format
   const generateReturnNumber = () => {
     const date = new Date();
@@ -445,7 +444,6 @@ const SalesReturnFlow = ({ onClose }) => {
       items: prev.items.filter(item => item.id !== itemId)
     }));
   };
-
 
   // Update return item - handle both index and id based updates
   const updateReturnItem = (indexOrId, field, value) => {
@@ -1137,7 +1135,6 @@ const SalesReturnFlow = ({ onClose }) => {
           buttonText=""
         />
       </div>
-
 
       {/* Customer Creation Modal */}
       {showCustomerModal && (

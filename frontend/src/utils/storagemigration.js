@@ -13,8 +13,6 @@ class StorageMigration {
    * Migrate all localStorage data to secure storage
    */
   static async migrateToSecureStorage() {
-    console.log('Starting storage migration...');
-    
     try {
       // Migrate company settings
       this.migrateCompanySettings();
@@ -31,11 +29,8 @@ class StorageMigration {
       // Mark migration as completed
       localStorage.setItem('storage_migration_completed', 'true');
       localStorage.setItem('storage_migration_date', new Date().toISOString());
-      
-      console.log('Storage migration completed successfully');
       return true;
     } catch (error) {
-      console.error('Storage migration failed:', error);
       return false;
     }
   }
@@ -44,8 +39,6 @@ class StorageMigration {
    * Migrate company settings from localStorage
    */
   static migrateCompanySettings() {
-    console.log('Migrating company settings...');
-    
     // Migrate public settings
     const publicSettings = {
       company_name: localStorage.getItem('companyName'),
@@ -127,8 +120,6 @@ class StorageMigration {
    * Migrate invoice drafts from localStorage
    */
   static migrateInvoiceDrafts() {
-    console.log('Migrating invoice drafts...');
-    
     const drafts = [];
     
     // Look for draft data in localStorage
@@ -160,20 +151,15 @@ class StorageMigration {
           SecurityService.storeDraft(draftId, safeDraft);
           drafts.push(draftId);
         } catch (error) {
-          console.warn(`Failed to migrate draft ${key}:`, error);
         }
       }
     }
-    
-    console.log(`Migrated ${drafts.length} invoice drafts`);
   }
   
   /**
    * Migrate user preferences from localStorage
    */
   static migrateUserPreferences() {
-    console.log('Migrating user preferences...');
-    
     const preferences = {
       theme: localStorage.getItem('userTheme'),
       language: localStorage.getItem('userLanguage'),
@@ -198,8 +184,6 @@ class StorageMigration {
    * Clean up old localStorage data
    */
   static cleanupOldData() {
-    console.log('Cleaning up old localStorage data...');
-    
     const keysToRemove = [
       // Company settings (sensitive)
       'companyGST', 'companyGSTIN', 'companyStateCode',
@@ -227,7 +211,6 @@ class StorageMigration {
     keysToRemove.forEach(key => {
       if (localStorage.getItem(key)) {
         localStorage.removeItem(key);
-        console.log(`Removed sensitive data: ${key}`);
       }
     });
     
@@ -253,11 +236,8 @@ class StorageMigration {
     keysToCheck.forEach(key => {
       if (sensitivePatterns.some(pattern => pattern.test(key))) {
         localStorage.removeItem(key);
-        console.log(`Removed pattern-matched sensitive data: ${key}`);
       }
     });
-    
-    console.log('localStorage cleanup completed');
   }
   
   /**

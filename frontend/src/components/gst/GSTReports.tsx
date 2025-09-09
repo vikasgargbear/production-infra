@@ -74,8 +74,6 @@ const GSTReports: React.FC<GSTReportsProps> = ({ open, onClose }) => {
   const [error, setError] = useState<string | null>(null);
   const [reportData, setReportData] = useState<GSTR1Data | null>(null);
 
-
-
   const reportTypes: ReportType[] = [
     {
       id: 'gstr-1',

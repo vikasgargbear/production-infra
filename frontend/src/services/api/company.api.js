@@ -14,7 +14,6 @@ export const companyAPI = {
       const response = await apiClient.get('/company/info');
       return response.data;
     } catch (error) {
-      console.error('Error fetching company info:', error);
       throw error;
     }
   },
@@ -27,7 +26,6 @@ export const companyAPI = {
       const response = await apiClient.put('/company/info', companyData);
       return response.data;
     } catch (error) {
-      console.error('Error updating company info:', error);
       throw error;
     }
   },
@@ -40,7 +38,6 @@ export const companyAPI = {
       const response = await apiClient.get('/company/org-id');
       return response.data;
     } catch (error) {
-      console.error('Error fetching org ID:', error);
       throw error;
     }
   },
@@ -53,7 +50,6 @@ export const companyAPI = {
       const response = await apiClient.get('/company/settings');
       return response.data;
     } catch (error) {
-      console.error('Error fetching company settings:', error);
       throw error;
     }
   },
@@ -66,7 +62,6 @@ export const companyAPI = {
       const response = await apiClient.put('/company/settings', settings);
       return response.data;
     } catch (error) {
-      console.error('Error updating company settings:', error);
       throw error;
     }
   }

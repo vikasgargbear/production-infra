@@ -33,7 +33,6 @@ apiClient.interceptors.request.use((config) => {
                           config.url?.includes('/login');
   
   if (!orgIdManager.isValidOrgId(orgId) && !isPublicEndpoint) {
-    console.warn('[apiClientExports] Using fallback org_id for:', config.url);
   }
   
   // Then add auth token if it exists
@@ -88,7 +87,6 @@ export const customerAPI = {
         total: response.data?.total || customers.length || 0
       };
     } catch (error) {
-      console.error('Customer search failed:', error);
       return {
         success: false,
         data: [],
@@ -144,7 +142,6 @@ export const customerAPI = {
         total: response.data?.total || customers.length || 0
       };
     } catch (error) {
-      console.error('Error fetching customers:', error);
       return {
         success: false,
         data: [],
@@ -186,7 +183,6 @@ export const productAPI = {
         try {
           if (!window.__productSearchFallbackWarned) {
             // Warn only once per session to avoid console spam
-            console.warn('Product search timeout or server slow; using fallback path.');
             window.__productSearchFallbackWarned = true;
           }
           const response = await apiClient.get('/products/', {
@@ -204,7 +200,6 @@ export const productAPI = {
             warning: 'Using fallback search',
           };
         } catch (fallbackError) {
-          console.error('Product search failed completely:', fallbackError);
           return {
             success: false,
             data: [],
@@ -213,8 +208,6 @@ export const productAPI = {
           };
         }
       }
-      
-      console.error('Product search failed:', error);
       return {
         success: false,
         data: [],
@@ -262,7 +255,6 @@ export const productAPI = {
         total: response.data?.length || 0
       };
     } catch (error) {
-      console.error('Error fetching products:', error);
       return {
         success: false,
         data: [],
@@ -349,7 +341,6 @@ export const ordersAPI = {
         total: response.data?.total || orders.length || 0
       };
     } catch (error) {
-      console.error('Orders search failed:', error);
       return {
         success: false,
         data: [],
@@ -367,7 +358,6 @@ export const ordersAPI = {
         data: response.data
       };
     } catch (error) {
-      console.error('Get order failed:', error);
       return {
         success: false,
         data: null,
@@ -384,7 +374,6 @@ export const ordersAPI = {
         data: response.data
       };
     } catch (error) {
-      console.error('Create order failed:', error);
       return {
         success: false,
         data: null,
@@ -482,7 +471,6 @@ export const supplierAPI = {
         total: response.data?.total || suppliers.length || 0
       };
     } catch (error) {
-      console.error('Supplier search failed:', error);
       return {
         success: false,
         data: [],
@@ -518,7 +506,6 @@ export const supplierAPI = {
         total: response.data?.total || suppliers.length || 0
       };
     } catch (error) {
-      console.error('Error fetching suppliers:', error);
       return {
         success: false,
         data: [],
@@ -574,7 +561,6 @@ export const challansAPI = {
         total: response.data?.total || challans.length || 0
       };
     } catch (error) {
-      console.error('Challan search failed:', error);
       return {
         success: false,
         data: [],
@@ -595,7 +581,6 @@ export const challansAPI = {
         data: response.data
       };
     } catch (error) {
-      console.error('Get challan failed:', error);
       return {
         success: false,
         data: null,
@@ -615,7 +600,6 @@ export const challansAPI = {
         data: response.data
       };
     } catch (error) {
-      console.error('Create challan failed:', error);
       return {
         success: false,
         data: null,
@@ -635,7 +619,6 @@ export const challansAPI = {
         data: response.data
       };
     } catch (error) {
-      console.error('Update challan failed:', error);
       return {
         success: false,
         data: null,
@@ -669,7 +652,6 @@ export const salesOrdersAPI = {
         total: response.data?.total || orders.length || 0
       };
     } catch (error) {
-      console.error('Sales orders search failed:', error);
       return {
         success: false,
         data: [],

@@ -152,14 +152,6 @@ export const validateItem = (item) => {
   if (item.mrp !== undefined && item.mrp !== null) {
     const mrp = parseFloat(item.mrp);
     const purchasePrice = parseFloat(item.purchase_price);
-    
-    console.log('MRP Validation:', { 
-      mrp, 
-      purchasePrice, 
-      'mrp < purchasePrice': mrp < purchasePrice,
-      item 
-    });
-    
     if (mrp < purchasePrice) {
       result.addError('mrp', 'MRP should be greater than or equal to purchase price');
     }
@@ -281,7 +273,6 @@ export const checkDuplicateInvoice = async (invoiceNumber, supplierId, excludePu
     // For now, return false (no duplicate)
     return false;
   } catch (error) {
-    console.error('Error checking duplicate invoice:', error);
     return false;
   }
 };

@@ -66,7 +66,6 @@ const CustomerCreationB2B = ({ onClose, onCustomerCreated }) => {
 
   const [errors, setErrors] = useState({});
 
-
   // Handle copying business contact info to contact person
   useEffect(() => {
     if (useBusinessContactInfo && customerType === 'B2B') {
@@ -180,7 +179,6 @@ const CustomerCreationB2B = ({ onClose, onCustomerCreated }) => {
     // Reset contact info copying when switching types
     setUseBusinessContactInfo(false);
   };
-
 
   const generateCustomerCode = () => {
     // Generate customer code based on business name

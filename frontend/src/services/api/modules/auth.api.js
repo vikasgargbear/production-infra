@@ -26,7 +26,6 @@ export const authApi = {
     try {
       await apiHelpers.post(ENDPOINTS.LOGOUT);
     } catch (error) {
-      console.error('Logout error:', error);
     } finally {
       // Clear local storage
       localStorage.clear();

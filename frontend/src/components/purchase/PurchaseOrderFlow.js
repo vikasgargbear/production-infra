@@ -571,7 +571,6 @@ const PurchaseOrderFlow = ({ onClose, prefilledData = null }) => {
     }
   };
 
-
   const handleWhatsAppShare = () => {
     if (!selectedSupplier?.phone) {
       setMessage('Supplier phone number not available');

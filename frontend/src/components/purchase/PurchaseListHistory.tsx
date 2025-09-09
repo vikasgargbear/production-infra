@@ -167,8 +167,7 @@ const PurchaseListHistory: React.FC<PurchaseListHistoryProps> = ({ onClose }) =>
       if (filters.search && filters.search.trim()) {
         searchParams.search = filters.search.trim();
       }
-      
-      
+
       // Try to get supplier invoices as they represent actual purchases
       let response;
       try {
@@ -229,7 +228,6 @@ const PurchaseListHistory: React.FC<PurchaseListHistoryProps> = ({ onClose }) =>
           items_count: purchase.items_count || purchase.items?.length || 0
         })) || [];
 
-        
         setPurchases(transformedPurchases);
         
         // Use the pagination data from the API response
@@ -517,13 +515,10 @@ const PurchaseListHistory: React.FC<PurchaseListHistoryProps> = ({ onClose }) =>
     alert(`More options for purchase: ${purchase.po_number}`);
   };
 
-
-
   // Helper function to get proper status text
   const getStatusText = (status: string | undefined) => {
     if (!status) return 'Unknown';
-    
-    
+
     // Map backend statuses to display text - handle various formats
     const statusMap: Record<string, string> = {
       // Common lowercase variations

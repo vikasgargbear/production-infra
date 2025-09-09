@@ -131,7 +131,6 @@ const PDFUploadModal = ({ isOpen, onClose, onDataExtracted }) => {
   };
 
   if (!isOpen) return null;
-  
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[100]">

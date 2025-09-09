@@ -130,7 +130,6 @@ export const ledgerApi = {
         }
       };
     } catch (error) {
-      console.error('Error fetching collection data:', error);
       // Return empty data structure to prevent UI errors
       return {
         collections: [],

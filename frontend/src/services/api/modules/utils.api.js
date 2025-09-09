@@ -25,7 +25,6 @@ export const apiUtils = {
         };
       });
     } catch (error) {
-      console.error('Error fetching orders with customers:', error);
       throw error;
     }
   },
@@ -52,7 +51,6 @@ export const apiUtils = {
         };
       });
     } catch (error) {
-      console.error('Error fetching batches with products:', error);
       throw error;
     }
   },
@@ -66,7 +64,6 @@ export const apiUtils = {
         const response = await dashboardApi.getStats();
         return response.data;
       } catch (dashboardError) {
-        console.warn('Dashboard API not available, calculating stats manually:', dashboardError.message);
         // Fallback to manual calculation
         const { productsApi, customersApi, ordersApi, paymentsApi } = await import('../index');
         
@@ -90,7 +87,6 @@ export const apiUtils = {
         };
       }
     } catch (error) {
-      console.error('Error fetching dashboard stats:', error);
       throw error;
     }
   }

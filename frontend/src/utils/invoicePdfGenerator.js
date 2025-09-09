@@ -55,7 +55,6 @@ export const downloadInvoicePDF = (invoiceData) => {
           document.body.removeChild(iframe);
         }, 1000);
       } catch (error) {
-        console.error('Error downloading PDF:', error);
         // Fallback to new window approach
         const printWindow = window.open('', '_blank');
         printWindow.document.write(invoiceHTML);

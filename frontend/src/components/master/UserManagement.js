@@ -78,8 +78,7 @@ const UserManagement = ({ open, onClose }) => {
           const payload = JSON.parse(atob(tokenParts[1]));
           const expiry = payload.exp * 1000;
           const now = Date.now();
-          
-          
+
           if (now > expiry) {
             setError('Session expired. Please login again.');
             // Don't remove token or redirect - let the API call fail and handle it there

@@ -87,13 +87,11 @@ export const CompanyProvider = ({ children }) => {
         }
         
         } catch (apiError) {
-          console.warn('Failed to fetch latest company data from API, using cached data:', apiError);
           // Continue with cached data - don't throw error
         }
       }
       
     } catch (error) {
-      console.error('Error loading company data:', error);
       setError(error);
       // Set default values if everything fails
       setCompanyInfo(DEFAULT_COMPANY_INFO);
@@ -128,13 +126,11 @@ export const CompanyProvider = ({ children }) => {
           throw new Error(response.message || 'Failed to update company info');
         }
       } catch (apiError) {
-        console.warn('Failed to update company info via API:', apiError);
         // Continue with local update - don't revert
       }
       
       return { success: true, data: updatedInfo };
     } catch (error) {
-      console.error('Error updating company info:', error);
       setError(error);
       return { success: false, error };
     } finally {

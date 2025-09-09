@@ -155,7 +155,6 @@ function App(): JSX.Element {
       const response = await apiClient.get('/setup/check');
       setSetupComplete(response.data.setup_complete);
     } catch (error) {
-      console.error('Error checking setup status:', error);
       // If backend is unreachable but we have an org_id, assume setup is complete
       const existingOrgId = localStorage.getItem('pharma_org_id') || 
                            sessionStorage.getItem('pharma_org_id');
@@ -171,7 +170,6 @@ function App(): JSX.Element {
     // Just log the current state for debugging
     import('./services/OrgIdManager').then(module => {
       const manager = module.default;
-      console.log('[App] OrgIdManager initialized with org_id:', manager.getOrgId());
     });
   }, []);
 

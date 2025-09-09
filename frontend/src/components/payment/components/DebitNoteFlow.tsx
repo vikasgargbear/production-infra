@@ -329,7 +329,6 @@ const DebitNoteFlow: React.FC<DebitNoteFlowProps> = ({ onClose }) => {
           Keyboard shortcuts: <strong>Ctrl+N</strong> - Add Customer | <strong>Ctrl+F</strong> - Search Invoice | <strong>Ctrl+S</strong> - Save Draft | <strong>Esc</strong> - Close
         </div>
 
-
         {/* Content */}
         <div className="flex-1 overflow-y-auto bg-orange-50">
           <div className="px-6 py-6">

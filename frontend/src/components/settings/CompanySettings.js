@@ -116,8 +116,7 @@ const CompanySettings = () => {
       setSaving(true);
       setError(null);
       setSuccess(false);
-      
-      
+
       // Prepare data for saving
       const dataToSave = {
         ...companyInfo,

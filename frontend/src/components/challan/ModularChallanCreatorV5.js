@@ -128,8 +128,7 @@ const ModularChallanCreatorV5 = ({ open = true, onClose }) => {
         const anyDefaultAddr = addresses.find(addr => addr.is_default);
         
         const preferredAddr = billingAddr || shippingAddr || anyDefaultAddr || addresses[0];
-        
-        
+
         return {
           address: preferredAddr.address_line1 || '',
           city: preferredAddr.city || '',
@@ -213,8 +212,7 @@ const ModularChallanCreatorV5 = ({ open = true, onClose }) => {
         gst_percent: parseFloat(item.gst_percent || item.tax_rate) || 18,
         line_total: 0 // Will be recalculated
       }));
-      
-      
+
       setChallan(prev => {
         const updated = {
           ...prev,
@@ -297,8 +295,7 @@ const ModularChallanCreatorV5 = ({ open = true, onClose }) => {
           state: state,
           pincode: pincode
         };
-        
-        
+
         // Update selectedCustomer state so UI shows the fetched address
         setSelectedCustomer(customer);
       }
@@ -497,7 +494,6 @@ const ModularChallanCreatorV5 = ({ open = true, onClose }) => {
         total_amount: totalAmount
       };
 
-      
       const response = await challansApi.create(challanData);
       
       if (response.data) {
@@ -1058,8 +1054,7 @@ Expected Delivery: ${challan.expected_delivery_date}
                 />
               </div>
             )}
-            
-            
+
             {/* Challan Preview */}
             <ChallanPreview 
               challan={{

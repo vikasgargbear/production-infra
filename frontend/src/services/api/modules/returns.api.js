@@ -63,7 +63,6 @@ export const returnsApi = {
     return apiClient.post(endpoint, data);
   },
 
-
   // Get returnable items for a document
   getReturnableItems: async (documentType, documentId) => {
     return apiClient.get(ENDPOINTS.RETURNS.RETURNABLE_ITEMS, {

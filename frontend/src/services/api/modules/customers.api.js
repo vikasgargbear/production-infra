@@ -117,7 +117,6 @@ export const customersApi = {
         });
       })
       .catch(error => {
-      console.error('Error fetching customer outstanding:', error);
       // Return mock data structure for Outstanding Management component
       return {
         data: [

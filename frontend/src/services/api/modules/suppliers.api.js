@@ -20,7 +20,6 @@ export const suppliersApi = {
   // Create new supplier
   create: (data) => {
     const cleanedData = cleanData(data);
-    console.log('Cleaned supplier data being sent to API:', cleanedData);
     return apiHelpers.post(ENDPOINTS.BASE, cleanedData);
   },
   
@@ -74,7 +73,6 @@ export const suppliersApi = {
         });
       })
       .catch(error => {
-      console.error('Error fetching supplier outstanding:', error);
       // Return mock data structure for Outstanding Management component
       return {
         data: [

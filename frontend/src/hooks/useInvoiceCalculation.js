@@ -15,9 +15,6 @@ import InvoiceApiService from '../services/invoiceApiService';
  * 
  * Migration: Replace useInvoiceCalculation() with direct API calls
  */
-
-console.warn('⚠️ DEPRECATED: useInvoiceCalculation hook is deprecated. Use InvoiceCalculatorEnterprise directly.');
-
 /**
  * Hook for real-time invoice calculations
  * @param {Object} options - Hook options
@@ -43,7 +40,6 @@ export const useInvoiceCalculation = (options = {}) => {
         }
       },
       onError: (error) => {
-        console.error('Calculation failed:', error);
         onError?.(error);
       }
     }
@@ -54,7 +50,6 @@ export const useInvoiceCalculation = (options = {}) => {
     (invoiceData) => InvoiceApiService.validateInvoice(invoiceData),
     {
       onError: (error) => {
-        console.error('Validation failed:', error);
       }
     }
   );
@@ -64,7 +59,6 @@ export const useInvoiceCalculation = (options = {}) => {
     ({ customerId, amount }) => InvoiceApiService.checkCustomerCredit(customerId, amount),
     {
       onError: (error) => {
-        console.error('Credit check failed:', error);
       }
     }
   );
@@ -226,7 +220,6 @@ export const useInvoiceNumber = () => {
     (options) => InvoiceApiService.generateInvoiceNumber(options),
     {
       onError: (error) => {
-        console.error('Invoice number generation failed:', error);
       }
     }
   );

@@ -33,7 +33,6 @@ const useCompanyDetails = () => {
           setLoading(false);
           return;
         } catch (e) {
-          console.warn('Failed to parse cached company details:', e);
         }
       }
 
@@ -99,7 +98,6 @@ const useCompanyDetails = () => {
           });
         }
       } catch (err) {
-        console.error('Error fetching company details:', err);
         setError(err);
         
         // Fall back to localStorage individual items

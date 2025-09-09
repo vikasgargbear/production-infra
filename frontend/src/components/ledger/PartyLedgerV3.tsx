@@ -199,7 +199,6 @@ const PartyLedgerV3: React.FC<PartyLedgerV3Props> = ({
     return filtered;
   }, [ledgerData, filters.searchQuery]);
 
-
   const handleBulkAction = (action: 'reconcile' | 'export' | 'email') => {
     switch (action) {
       case 'reconcile':
@@ -445,7 +444,6 @@ const PartyLedgerV3: React.FC<PartyLedgerV3Props> = ({
         </>
       )}
 
-      
             </div>
           </div>
         </div>

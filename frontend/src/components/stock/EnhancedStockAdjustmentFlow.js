@@ -369,7 +369,6 @@ Note: Use positive numbers for increase and negative for decrease. Reason codes:
           batch_number: null
         }))
       };
-      
 
       if (!navigator.onLine) {
         offlineStorage.queueOfflineOperation({

@@ -144,7 +144,6 @@ const ProductSearchSimple = forwardRef(({ onAddItem, onCreateProduct, showBatchS
     }
   };
 
-
   const handleKeyDown = (e) => {
     if (e.key === 'Escape') {
       e.stopPropagation(); // Stop ESC from bubbling up to parent

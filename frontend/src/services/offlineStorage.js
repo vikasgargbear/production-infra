@@ -206,7 +206,6 @@ class OfflineStorageService {
       this.offlineQueue = failedOperations;
       this.saveOfflineQueue();
 
-      
       if (successfulOperations.length > 0) {
         this.showSyncSuccess(successfulOperations.length);
       }

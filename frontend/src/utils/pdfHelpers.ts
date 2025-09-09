@@ -59,7 +59,6 @@ export const generateAndDownloadPDF = async (
     // Download the PDF
     pdfGenerator.download(filename);
   } catch (error) {
-    console.error('Error generating PDF:', error);
     throw error;
   }
 };
@@ -317,7 +316,6 @@ export const previewPDF = async (
     // Preview in new window
     pdfGenerator.preview();
   } catch (error) {
-    console.error('Error previewing PDF:', error);
     throw error;
   }
 };
@@ -350,7 +348,6 @@ export const getPDFBase64 = async (
 
     return await pdfGenerator.getBase64();
   } catch (error) {
-    console.error('Error generating PDF base64:', error);
     throw error;
   }
 };

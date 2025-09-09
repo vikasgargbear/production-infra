@@ -86,7 +86,6 @@ const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) =>
     }
   }, [payment.amount, outstandingInvoices, payment.allocation_method]);
 
-
   // Handle customer modal event from PaymentFlowOptimized
   React.useEffect(() => {
     const handleOpenCustomerModal = () => {
@@ -211,7 +210,6 @@ const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) =>
         })) : []
       };
 
-      
       // Basic validation
       if (!paymentData.amount || paymentData.amount <= 0 || isNaN(paymentData.amount)) {
         setMessage('Payment amount is required and must be a valid number', 'error');
@@ -219,7 +217,6 @@ const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) =>
         return;
       }
 
-      
       // Make the actual API call to create payment
       // Try customer payment endpoint which exists but has a backend bug (uses wrong schema)
       try {
@@ -235,8 +232,7 @@ const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) =>
           // Match backend schema field name
           allocate_to_invoices: payment.allocations ? payment.allocations.map((a: any) => a.invoice_id) : []
         };
-        
-        
+
         const response = await apiClient.post(`/customers/${selectedCustomer.customer_id || selectedCustomer.id}/payment`, customerPaymentData);
         
         if (response.data) {
@@ -426,8 +422,7 @@ const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) =>
         // Add filters for outstanding invoices
         payment_status: 'pending,partial'
       });
-      
-      
+
       if (response && response.success && response.data) {
         // The invoices are in response.data.invoices array
         const invoices = response.data.invoices || [];
@@ -626,7 +621,6 @@ const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) =>
                   <PaymentFlowOptimized />
                 </div>
 
-                
                 {/* Outstanding Invoices - Proper tile display */}
                 {selectedCustomer && (
                   <div className="mb-6">

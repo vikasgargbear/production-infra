@@ -109,7 +109,6 @@ export const notesApi = {
       
       return { invoices: [] };
     } catch (error) {
-      console.error('Error fetching customer invoices:', error);
       // Fallback to direct API call if service not available
       const response = await apiClient.get('/v1/invoices', {
         params: { 

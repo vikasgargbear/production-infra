@@ -33,7 +33,6 @@ export const simpleEncode = (text, key = 'default-key') => {
     
     return encoded;
   } catch (error) {
-    console.error('Encoding failed:', error);
     return text; // Fallback to plain text
   }
 };
@@ -66,7 +65,6 @@ export const simpleDecode = (encodedText, key = 'default-key') => {
     const decoded = atob(base64);
     return decoded;
   } catch (error) {
-    console.error('Decoding failed:', error);
     return encodedText; // Fallback to encoded text
   }
 };

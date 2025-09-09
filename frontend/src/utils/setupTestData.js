@@ -30,16 +30,13 @@ export const createTestCustomer = async () => {
     
     if (!response.ok) {
       const error = await response.json();
-      console.error('Failed to create customer:', error);
       return { success: false, error };
     }
     
     const data = await response.json();
-    console.log('Customer created successfully:', data);
     return { success: true, data };
     
   } catch (error) {
-    console.error('Error creating test customer:', error);
     return { success: false, error: error.message };
   }
 };
@@ -55,14 +52,12 @@ export const checkOrgSetup = async () => {
     
     if (response.ok) {
       const data = await response.json();
-      console.log('Current organization:', data);
       return { hasOrg: true, org: data };
     }
     
     return { hasOrg: false };
     
   } catch (error) {
-    console.error('Error checking org:', error);
     return { hasOrg: false, error: error.message };
   }
 };

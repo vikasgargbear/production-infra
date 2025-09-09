@@ -91,7 +91,6 @@ export const settingsApi = {
         return await apiClient.get('/notifications', { params: filters });
       } catch (error) {
         if (error.response?.status === 404) {
-          console.warn('Notifications endpoint not implemented, returning empty array');
           return { data: [] };
         }
         throw error;
@@ -102,7 +101,6 @@ export const settingsApi = {
         return await apiClient.get('/notifications/unread');
       } catch (error) {
         if (error.response?.status === 404) {
-          console.warn('Notifications endpoint not implemented, returning empty array');
           return { data: [] };
         }
         throw error;

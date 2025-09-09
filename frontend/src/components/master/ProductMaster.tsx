@@ -360,7 +360,6 @@ const ProductMaster: React.FC<ProductMasterProps> = () => {
     </>
   );
 
-
   return (
     <GlobalLayout
       title="Product Master"

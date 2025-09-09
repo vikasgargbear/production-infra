@@ -224,8 +224,7 @@ class SearchCache {
             data = response.data[type];
           }
         }
-        
-        
+
         // Store in preloaded data
         this.preloadedData.set(type, data);
         
@@ -237,7 +236,6 @@ class SearchCache {
         
         return data;
       }).catch(error => {
-        console.error(`Failed to preload ${type}:`, error);
         this.pendingRequests.delete(type);
         return [];
       });
@@ -247,7 +245,6 @@ class SearchCache {
       
       return promise;
     } catch (error) {
-      console.error(`Failed to preload ${type}:`, error);
       return [];
     }
   }
@@ -367,7 +364,6 @@ export const smartSearch = async (type, query, apiSearchFunction, options = {}) 
     
     return results;
   } catch (error) {
-    console.error(`Search failed for ${type}:`, error);
     return [];
   }
 };
