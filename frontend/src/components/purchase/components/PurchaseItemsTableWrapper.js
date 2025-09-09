@@ -1,9 +1,9 @@
 import React from 'react';
 import { usePurchase } from '../../../contexts/PurchaseContext';
-import PharmaItemsTable from '../../global/PharmaItemsTable';
+import { ItemsTable } from '../../global';
 
 /**
- * Wrapper component to connect PharmaItemsTable with PurchaseContext
+ * Wrapper component to connect ItemsTable with PurchaseContext
  * Handles all purchase-specific logic and data flow
  */
 const PurchaseItemsTableWrapper = () => {
@@ -45,7 +45,7 @@ const PurchaseItemsTableWrapper = () => {
   };
 
   return (
-    <PharmaItemsTable
+    <ItemsTable
       items={purchase.items || []}
       onUpdateItem={handleUpdateItem}
       onRemoveItem={handleRemoveItem}

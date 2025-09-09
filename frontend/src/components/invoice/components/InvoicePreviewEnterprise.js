@@ -31,7 +31,7 @@ const InvoicePreviewEnterprise = ({
           free_quantity: item.free_quantity || 0,
           unit_price: item.sale_price || item.rate || item.unit_price,
           discount_percent: item.discount_percent || 0,
-          gst_percent: item.gst_percent || 12
+          gst_percent: item.gst_percent || 0
         })),
         gst_type: invoice.gst_type || 'CGST/SGST',
         delivery_charges: invoice.delivery_charges || 0,
@@ -357,7 +357,7 @@ const InvoicePreviewEnterprise = ({
                 const baseQuantity = parseFloat(item.base_quantity || (item.quantity - (item.free_quantity || 0)));
                 const rate = parseFloat(item.sale_price || item.rate || 0);
                 const discount = parseFloat(item.discount_percent || 0);
-                const gstPercent = parseFloat(item.gst_percent || 12);
+                const gstPercent = parseFloat(item.gst_percent || 0);
                 
                 const subtotal = baseQuantity * rate;
                 const discountAmount = (subtotal * discount) / 100;

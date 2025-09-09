@@ -4,6 +4,7 @@ import {
   CheckCircle, MessageCircle, FileInput, Printer,
   X, AlertCircle, FileText, Truck, User, Package, MapPin
 } from 'lucide-react';
+import { toast } from 'react-toastify';
 import { 
   CustomerSearch, 
   ProductSearchSimple, 
@@ -298,7 +299,7 @@ const SalesOrderFlow = ({ open = true, onClose }) => {
         sale_price: parseFloat(item.sale_price || item.rate || item.unit_price) || 0,
         unit_price: parseFloat(item.unit_price || item.rate || item.sale_price) || 0,
         discount_percent: parseFloat(item.discount_percent) || 0,
-        gst_percent: parseFloat(item.gst_percent || item.tax_rate) || 18,
+        gst_percent: parseFloat(item.gst_percent || item.tax_rate) || 0,
         mrp: parseFloat(item.mrp) || 0,
         line_total: 0 // Will be recalculated
       }));
@@ -317,8 +318,10 @@ const SalesOrderFlow = ({ open = true, onClose }) => {
         recalculateTotals(formattedItems);
       }, 100);
     } else {
-      setMessage('⚠️ No items found in the selected document');
+      const warningMsg = 'No items found in the selected document';
+      setMessage(warningMsg);
       setMessageType('warning');
+      toast.warning(warningMsg);
     }
   };
 
@@ -449,7 +452,7 @@ const SalesOrderFlow = ({ open = true, onClose }) => {
       const quantity = 1;
       const unitPrice = product.sale_price || product.mrp || 0;
       const discountPercent = 0;
-      const gstPercent = product.gst_percent || 12;
+      const gstPercent = product.gst_percent || 0;
       
       const subtotal = quantity * unitPrice;
       const discountAmount = (subtotal * discountPercent) / 100;
@@ -516,7 +519,7 @@ const SalesOrderFlow = ({ open = true, onClose }) => {
           const quantity = parseFloat(updatedItem.quantity) || 0;
           const unitPrice = parseFloat(updatedItem.unit_price) || 0;
           const discountPercent = parseFloat(updatedItem.discount_percent) || 0;
-          const gstPercent = parseFloat(updatedItem.gst_percent) || 12;
+          const gstPercent = parseFloat(updatedItem.gst_percent) || 0;
           
           const subtotal = quantity * unitPrice;
           const discountAmount = (subtotal * discountPercent) / 100;
@@ -607,6 +610,7 @@ const SalesOrderFlow = ({ open = true, onClose }) => {
         }));
       }
     } catch (error) {
+      toast.warning('Using local calculation. Backend calculation unavailable.');
       // Fallback calculation on error
       const fallbackTotals = calculateFallbackTotals(items);
       setOrder(prev => ({
@@ -627,7 +631,7 @@ const SalesOrderFlow = ({ open = true, onClose }) => {
       const quantity = parseFloat(item.quantity) || 0;
       const unitPrice = parseFloat(item.unit_price) || 0;
       const discountPercent = parseFloat(item.discount_percent) || 0;
-      const gstPercent = parseFloat(item.gst_percent) || 12;
+      const gstPercent = parseFloat(item.gst_percent) || 0;
       
       const lineSubtotal = quantity * unitPrice;
       const itemDiscount = (lineSubtotal * discountPercent) / 100;
@@ -798,11 +802,13 @@ const SalesOrderFlow = ({ open = true, onClose }) => {
         });
         
         // Show success modal instead of message
+        toast.success('Sales order created successfully!');
         setShowSuccessModal(true);
       } else {
         throw new Error('Invalid response from server');
       }
     } catch (error) {
+      toast.error('Failed to create sales order');
       
       // Check for validation errors
       let errorMessage = 'Failed to create sales order';
@@ -822,6 +828,7 @@ const SalesOrderFlow = ({ open = true, onClose }) => {
 
       setMessage(errorMessage);
       setMessageType('error');
+      toast.error(errorMessage);
     } finally {
       setSaving(false);
     }
@@ -1416,7 +1423,7 @@ Expected Delivery: ${order.expected_delivery_date}
                   free_quantity: item.free_quantity || 0,
                   unit_price: item.unit_price,
                   discount_percent: item.discount_percent || 0,
-                  gst_percent: item.gst_percent || 18,
+                  gst_percent: item.gst_percent || 0,
                   total: item.calculated_total || item.total
                 })),
                 totals: {

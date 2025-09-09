@@ -82,7 +82,7 @@ const StockWriteOffFlow = ({ onClose }) => {
           current_stock: item.current_stock || item.quantity,
           cost_price: item.cost_price || item.purchase_price || 0,
           mrp: item.mrp,
-          gst_percent: item.gst_percent || 18,
+          gst_percent: item.gst_percent || 0,
           write_off_quantity: 0,
           selected: false,
           is_expired: new Date(item.expiry_date) < new Date(),

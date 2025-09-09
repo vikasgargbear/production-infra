@@ -1,5 +1,6 @@
 import React from 'react';
 import { Trash2, Plus } from 'lucide-react';
+import { toast } from 'react-toastify';
 
 /**
  * Global ItemsTable Component
@@ -145,7 +146,61 @@ const ItemsTable = ({
     tax: {
       label: 'Tax %',
       align: 'center',
-      render: (item) => <span>{item.tax || item.tax_rate || item.gst_percent || 0}%</span>
+      render: (item, index) => {
+        // Parse GST value - handle undefined, null, empty string
+        const gstValue = item.gst_percent ?? item.tax_rate ?? item.tax ?? '';
+        const gstPercent = gstValue === '' ? '' : parseFloat(gstValue) || 0;
+        const hasGSTSet = gstValue !== '' && gstValue !== null && gstValue !== undefined;
+        
+        // If readonly mode, always show as text
+        if (readOnly) {
+          return <span>{gstPercent === '' ? '0' : gstPercent}%</span>;
+        }
+        
+        // If GST is already set, show as text with option to edit on click
+        if (hasGSTSet) {
+          return <span className="cursor-pointer hover:text-blue-600" title="Click to edit">{gstPercent}%</span>;
+        }
+        
+        // Show editable input for missing GST (optional field)
+        return (
+          <div className="flex items-center justify-center">
+            <input
+              type="number"
+              value={gstPercent}
+              onChange={(e) => {
+                // Allow empty value (treated as 0%)
+                const inputValue = e.target.value;
+                const value = inputValue === '' ? 0 : parseFloat(inputValue) || 0;
+                
+                onUpdateItem(index, 'gst_percent', value);
+                onUpdateItem(index, 'tax_rate', value);
+                onUpdateItem(index, 'tax', value);
+                
+                // Save GST for future use if > 0
+                if (value > 0 && item.product_id) {
+                  toast.info(`GST ${value}% set for ${item.product_name}`);
+                }
+              }}
+              onBlur={(e) => {
+                // If left empty, set to 0
+                if (e.target.value === '') {
+                  onUpdateItem(index, 'gst_percent', 0);
+                  onUpdateItem(index, 'tax_rate', 0);
+                  onUpdateItem(index, 'tax', 0);
+                }
+              }}
+              placeholder="0"
+              className="w-20 px-2 py-1 text-center border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              min="0"
+              max="100"
+              step="0.5"
+              title="Enter GST % (optional - defaults to 0%)"
+            />
+            <span className="ml-1 text-gray-600">%</span>
+          </div>
+        );
+      }
     },
     total: { 
       label: 'Total', 

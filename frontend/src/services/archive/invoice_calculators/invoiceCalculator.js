@@ -19,7 +19,7 @@ class InvoiceCalculator {
     const quantity = parseFloat(item.quantity) || 0;
     const rate = parseFloat(item.sale_price || item.rate || item.selling_price) || 0;
     const discountPercent = parseFloat(item.discount_percent) || 0;
-    const gstPercent = parseFloat(item.gst_percent) || 12;
+    const gstPercent = parseFloat(item.gst_percent) || 0;
     
     // CRITICAL FIX: Use base_quantity for billing calculations (not total quantity)
     // base_quantity = billable items only, quantity = total delivered (includes free items)
@@ -143,7 +143,7 @@ class InvoiceCalculator {
       base_quantity: quantity - (productData.free_quantity || 0), // Billable quantity = total - free
       
       // Tax & Discount
-      gst_percent: productData.gst_percent || 12,
+      gst_percent: productData.gst_percent || 0,
       discount_percent: discountPercent,
       
       // Other info

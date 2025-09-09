@@ -81,6 +81,17 @@ apiClient.interceptors.request.use(
               orgIdManager.setOrgId(orgIdFromToken);
               config.headers['X-Org-Id'] = orgIdFromToken;
             }
+            
+            // Debug logging for /users/ endpoint
+            if (config.url?.includes('/users/')) {
+              console.log('ApiClient - Users API Request:', {
+                url: config.url,
+                hasToken: true,
+                tokenLength: token.length,
+                orgId: config.headers['X-Org-Id'],
+                authHeader: config.headers.Authorization?.substring(0, 30) + '...'
+              });
+            }
 
           } else if (!isPublicEndpoint) {
             // Token expired - only redirect if not an auth endpoint

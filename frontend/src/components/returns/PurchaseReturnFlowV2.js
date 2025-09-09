@@ -6,11 +6,10 @@ import {
 import { 
   SupplierSearch, ProductSearchSimple, ModuleHeader,
   DatePicker, Select, NumberInput, NotesSection, useToast, ViewHistoryButton,
-  ProceedToReviewComponent, StandardDatePicker
+  ProceedToReviewComponent, StandardDatePicker, ItemsTable
 } from '../global';
 import { returnsApi, purchasesApi, suppliersApi, settingsApi, metadataApi } from '../../services/api';
 import SupplierInvoiceSelector from './components/SupplierInvoiceSelector';
-import ReturnItemsTable from './components/ReturnItemsTable';
 import DebitNotePreview from './components/DebitNotePreview';
 import offlineStorage from '../../services/offlineStorage';
 
@@ -639,7 +638,7 @@ const PurchaseReturnFlowV2 = ({ onClose }) => {
                     )}
                   </div>
 
-                  <ReturnItemsTable
+                  <ItemsTable
                     items={returnData.items}
                     onUpdateItem={updateReturnItem}
                     onRemoveItem={showManualEntry ? removeManualItem : null}

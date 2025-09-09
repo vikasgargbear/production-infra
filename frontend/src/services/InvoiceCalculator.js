@@ -30,7 +30,7 @@ class InvoiceCalculator {
           free_quantity: parseFloat(item.free_quantity) || 0,
           unit_price: parseFloat(item.rate || item.sale_price) || 0,
           discount_percent: parseFloat(item.discount_percent) || 0,
-          gst_percent: parseFloat(item.gst_percent) || 12
+          gst_percent: parseFloat(item.gst_percent) || 0
         })),
         delivery_charges: parseFloat(invoiceData.delivery_charges) || 0,
         discount_amount: parseFloat(invoiceData.discount_amount) || 0

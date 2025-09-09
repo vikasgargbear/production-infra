@@ -35,7 +35,7 @@ const ProductVerificationModal = ({
     cost_price: product?.cost_price || product?.rate || '',
     mrp: product?.mrp || '',
     selling_price: product?.selling_price || '',
-    tax_percent: product?.tax_percent || 12,
+    tax_percent: product?.tax_percent || 0,
     hsn_code: product?.hsn_code || '',
     free_quantity: product?.free_quantity || 0,
     discount_percent: product?.discount_percent || 0
@@ -104,7 +104,7 @@ const ProductVerificationModal = ({
         cost_price: product?.cost_price || product?.rate || '',
         mrp: product?.mrp || '',
         selling_price: product?.selling_price || '', // Don't auto-calculate in extract mode
-        tax_percent: product?.tax_percent || 12,
+        tax_percent: product?.tax_percent || 0,
         hsn_code: product?.hsn_code || '',
         free_quantity: product?.free_quantity || 0,
         discount_percent: product?.discount_percent || 0

@@ -19,7 +19,7 @@ class EnterpriseCalculator {
     const baseQuantity = parseFloat(item.base_quantity !== undefined ? item.base_quantity : item.quantity) || 0;
     const freeQuantity = parseFloat(item.free_quantity) || 0;
     const discountPercent = parseFloat(item.discount_percent || item.discount) || 0;
-    const gstPercent = parseFloat(item.gst_percent || item.tax_rate || item.gst) || 12;
+    const gstPercent = parseFloat(item.gst_percent || item.tax_rate || item.gst) || 0;
     
     // PRODUCTION LOGIC: Use base_quantity ONLY for billing calculations
     // Free items are truly FREE and don't affect pricing

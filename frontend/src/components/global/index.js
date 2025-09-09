@@ -18,7 +18,7 @@ export { default as HistoricalDataSearch } from './search/HistoricalDataSearch';
 export { default as InvoiceSelector } from './InvoiceSelector';
 
 // Table Components
-export { default as PharmaItemsTable } from './PharmaItemsTable';
+// PharmaItemsTable removed - using ItemsTable from ./ui instead
 
 // Modal Components
 export { default as BatchSelector } from './modals/BatchSelector';
@@ -27,12 +27,18 @@ export { default as ProductEditModal } from './modals/ProductEditModal';
 export { default as CustomerCreation } from './ui/forms/CustomerCreation';
 export { default as SupplierCreationModal } from './modals/SupplierCreationModal';
 export { default as GenericSuccessModal } from './modals/GenericSuccessModal';
+export { default as DocumentImportModal } from './modals/DocumentImportModal';
 
 // Calculator Components
 export { default as GSTCalculator } from './calculators/GSTCalculator';
 
 // Display Components
 export { default as OutstandingInvoicesTable } from './display/OutstandingInvoicesTable';
+
+// Summary Components - EXTRACTED FROM SALES MODULE
+export { default as BillSummary } from './BillSummary';
+export { default as PaymentDetails } from './PaymentDetails';
+export { default as TransportDetails } from './TransportDetails';
 
 // Action Components
 export { default as ProceedToReviewComponent } from './components/ProceedToReviewComponent';
@@ -92,6 +98,7 @@ export { default as KeyboardShortcuts, SHORTCUT_SETS } from './ui/KeyboardShortc
 // UI Components - NEW
 export * from './ui';
 export { default as Button } from './ui/Button.tsx';
+export { default as CompactPaymentMethod, PaymentBadge } from './ui/CompactPaymentMethod';
 export { 
   // Forms
   Select,

@@ -37,7 +37,7 @@ api.interceptors.response.use(
           const quantity = parseFloat(item.quantity) || 0;
           const rate = parseFloat(item.sale_price) || 0;
           const discountPercent = parseFloat(item.discount_percent) || 0;
-          const gstPercent = parseFloat(item.gst_percent) || 12; // Product-specific GST rate
+          const gstPercent = parseFloat(item.gst_percent) || 0; // Product-specific GST rate
           
           // Calculate item totals
           const itemGross = quantity * rate;

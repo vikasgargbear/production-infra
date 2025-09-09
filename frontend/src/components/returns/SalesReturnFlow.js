@@ -6,12 +6,11 @@ import {
 import { 
   CustomerSearch, ProductSearchSimple, ModuleHeader,
   DatePicker, Select, NumberInput, NotesSection, useToast, ViewHistoryButton,
-  ProceedToReviewComponent, StandardDatePicker, InvoiceSelector
+  ProceedToReviewComponent, StandardDatePicker, InvoiceSelector, ItemsTable
 } from '../global';
 import CustomerCreationB2B from '../global/ui/forms/CustomerCreationB2B';
 import { returnsApi, customersApi, customerAPI, settingsApi, metadataApi } from '../../services/api';
 import InvoiceApiService from '../../services/invoiceApiService';
-import ReturnItemsTable from './components/ReturnItemsTable';
 import ReturnSummary from './components/ReturnSummary';
 import CreditNotePreview from './components/CreditNotePreview';
 import offlineStorage from '../../services/offlineStorage';
@@ -394,7 +393,7 @@ const SalesReturnFlow = ({ onClose }) => {
     
     // Get the selling price from product data
     const sellingPrice = parseFloat(product.sale_price || product.selling_price || product.unit_price || product.mrp || 0);
-    const gstPercent = parseFloat(product.gst_percent || product.tax_rate || 18);
+    const gstPercent = parseFloat(product.gst_percent || product.tax_rate || 0);
     
     const newItem = {
       id: `manual-${manualItemCounter}`,
@@ -1007,7 +1006,7 @@ const SalesReturnFlow = ({ onClose }) => {
                   
                   {/* Show items table or empty state */}
                   {returnData.items.length > 0 ? (
-                    <ReturnItemsTable
+                    <ItemsTable
                       items={returnData.items}
                       onUpdateItem={updateReturnItem}
                       onRemoveItem={showManualEntry ? removeManualItem : undefined}

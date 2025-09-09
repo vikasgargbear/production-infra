@@ -315,7 +315,7 @@ const GSTCalculatorComponent = ({
                        calculator.getStateFromPincode(orderData.shippingPincode),
         supplyType: orderData.supplyType || 'GOODS',
         amount: parseFloat(orderData.taxableAmount),
-        gstRate: parseFloat(orderData.gstRate || 18),
+        gstRate: parseFloat(orderData.gstRate || 0),
         hsnCode: orderData.hsnCode,
         customerType: orderData.customerType,
         isExport: orderData.isExport || false,

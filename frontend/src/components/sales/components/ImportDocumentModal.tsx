@@ -216,8 +216,8 @@ const ImportDocumentModal: React.FC<ImportDocumentModalProps> = ({ isOpen, onClo
               sale_price: item.unit_price,
               discount_percent: 0,
               free_quantity: 0,
-              gst_percent: item.gst_percent || 12,
-              tax_rate: item.gst_percent || 12,
+              gst_percent: item.gst_percent || 0,
+              tax_rate: item.gst_percent || 0,
               available_quantity: item.quantity
             })),
             // Link references

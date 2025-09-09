@@ -8,7 +8,7 @@ import {
 } from 'lucide-react';
 import { suppliersApi, productsApi, purchaseApi } from '../../services/api';
 import { searchCache } from '../../utils/searchCache';
-import { SupplierSearch, PurchaseProductSearch, PharmaItemsTable, NotesSection, ProductCreationModal, GSTCalculator, ViewHistoryButton, ModuleHeader, StandardDatePicker, DocumentFooter } from '../global';
+import { SupplierSearch, PurchaseProductSearch, ItemsTable, NotesSection, ProductCreationModal, GSTCalculator, ViewHistoryButton, ModuleHeader, StandardDatePicker, DocumentFooter } from '../global';
 import PurchaseOrderPreview from './components/PurchaseOrderPreview';
 import SupplierCreationModal from '../global/modals/SupplierCreationModal';
 import ShareModal from '../common/ShareModal';
@@ -875,7 +875,7 @@ ${localStorage.getItem('company_name') || 'AASO Pharmaceuticals'}
                 )}
 
                 {purchaseOrder.items.length > 0 ? (
-                  <PharmaItemsTable
+                  <ItemsTable
                     items={purchaseOrder.items}
                     onUpdateItem={updateItem}
                     onRemoveItem={removeItem}

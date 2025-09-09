@@ -19,6 +19,18 @@ export const companyAPI = {
   },
 
   /**
+   * Get complete company profile including bank accounts
+   */
+  getCompanyProfile: async () => {
+    try {
+      const response = await apiClient.get('/company/profile');
+      return response.data;
+    } catch (error) {
+      throw error;
+    }
+  },
+
+  /**
    * Update company information
    */
   updateCompanyInfo: async (companyData) => {
@@ -36,6 +48,32 @@ export const companyAPI = {
   getOrganizationId: async () => {
     try {
       const response = await apiClient.get('/company/org-id');
+      return response.data;
+    } catch (error) {
+      throw error;
+    }
+  },
+
+  /**
+   * Get all bank accounts
+   */
+  getBankAccounts: async () => {
+    try {
+      const response = await apiClient.get('/company/bank-accounts');
+      return response.data;
+    } catch (error) {
+      throw error;
+    }
+  },
+
+  /**
+   * Upload payment QR code
+   */
+  uploadQRCode: async (qrCodeBase64) => {
+    try {
+      const response = await apiClient.post('/company/qr-code', {
+        qr_code: qrCodeBase64
+      });
       return response.data;
     } catch (error) {
       throw error;

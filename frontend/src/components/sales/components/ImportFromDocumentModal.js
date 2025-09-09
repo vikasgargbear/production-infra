@@ -105,7 +105,7 @@ const ImportFromDocumentModal = ({ isOpen, onClose, onImport }) => {
         sale_price: item.unit_price || item.rate || item.sale_price,
         discount_percent: item.discount_percent || 0,
         free_quantity: item.free_quantity || 0,
-        gst_percent: item.gst_percent || item.tax_rate || 18
+        gst_percent: item.gst_percent || item.tax_rate || 0
       })),
       reference_no: documentType === 'invoice' ? 
         `INV-${selectedDoc.invoice_number || selectedDoc.invoice_id}` : 

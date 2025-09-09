@@ -628,7 +628,7 @@ const generateInvoiceHTML = (invoiceData) => {
                             <td style="text-align: center;">${item.quantity || 1}</td>
                             <td style="text-align: right;">₹${(item.mrp || item.unit_price || 0).toFixed(2)}</td>
                             <td style="text-align: right;">₹${(item.unit_price || 0).toFixed(2)}</td>
-                            <td style="text-align: right;">${item.tax_percent || item.gst_percent || 12}%</td>
+                            <td style="text-align: right;">${item.tax_percent || item.gst_percent || 0}%</td>
                             <td style="text-align: right; font-weight: 500;">₹${(item.line_total || item.total || 0).toFixed(2)}</td>
                         </tr>
                     `).join('')}

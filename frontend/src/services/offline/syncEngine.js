@@ -1,0 +1,318 @@
+// Sync Engine for Offline Support
+import offlineDB from './offlineDatabase';
+import apiClient from '../api/apiClient';
+import { toast } from 'react-toastify';
+
+class SyncEngine {
+  constructor() {
+    this.isSyncing = false;
+    this.syncInterval = null;
+    this.retryTimeout = null;
+    this.maxRetries = 3;
+    this.retryDelay = 5000; // 5 seconds
+  }
+
+  // Start automatic sync
+  startAutoSync(interval = 30000) { // Default 30 seconds
+    if (this.syncInterval) {
+      clearInterval(this.syncInterval);
+    }
+
+    this.syncInterval = setInterval(() => {
+      if (navigator.onLine && !this.isSyncing) {
+        this.startSync();
+      }
+    }, interval);
+
+    // Initial sync if online
+    if (navigator.onLine) {
+      this.startSync();
+    }
+  }
+
+  // Stop automatic sync
+  stopAutoSync() {
+    if (this.syncInterval) {
+      clearInterval(this.syncInterval);
+      this.syncInterval = null;
+    }
+    if (this.retryTimeout) {
+      clearTimeout(this.retryTimeout);
+      this.retryTimeout = null;
+    }
+  }
+
+  // Main sync function
+  async startSync() {
+    if (this.isSyncing || !navigator.onLine) {
+      return { success: false, message: 'Already syncing or offline' };
+    }
+
+    this.isSyncing = true;
+    const results = {
+      success: true,
+      synced: 0,
+      failed: 0,
+      conflicts: 0,
+      errors: []
+    };
+
+    try {
+      console.log('[SyncEngine] Starting sync...');
+      
+      // Get all pending items from sync queue
+      const pendingItems = await offlineDB.getSyncQueue();
+      
+      if (pendingItems.length === 0) {
+        console.log('[SyncEngine] No items to sync');
+        return { ...results, message: 'No items to sync' };
+      }
+
+      console.log(`[SyncEngine] Found ${pendingItems.length} items to sync`);
+
+      // Process each item
+      for (const item of pendingItems) {
+        try {
+          const syncResult = await this.syncItem(item);
+          
+          if (syncResult.success) {
+            results.synced++;
+            // Remove from sync queue
+            await offlineDB.removeFromSyncQueue(item.id);
+          } else if (syncResult.conflict) {
+            results.conflicts++;
+            // Mark as conflict for manual resolution
+            await offlineDB.markSyncConflict(item.id, syncResult.error);
+          } else {
+            results.failed++;
+            results.errors.push(syncResult.error);
+            // Increment retry count
+            await offlineDB.incrementSyncRetry(item.id);
+          }
+        } catch (error) {
+          console.error('[SyncEngine] Error syncing item:', error);
+          results.failed++;
+          results.errors.push(error.message);
+        }
+      }
+
+      // Update sync stats
+      await offlineDB.updateSyncStats({
+        lastSync: new Date().toISOString(),
+        synced: results.synced,
+        failed: results.failed,
+        conflicts: results.conflicts
+      });
+
+      console.log('[SyncEngine] Sync completed:', results);
+      
+      // Show notification if items were synced
+      if (results.synced > 0) {
+        toast.success(`Synced ${results.synced} items successfully`);
+      }
+      
+      if (results.failed > 0) {
+        toast.warning(`${results.failed} items failed to sync`);
+      }
+
+      if (results.conflicts > 0) {
+        toast.info(`${results.conflicts} conflicts need manual resolution`);
+      }
+
+      return results;
+
+    } catch (error) {
+      console.error('[SyncEngine] Sync failed:', error);
+      toast.error('Sync failed. Will retry automatically.');
+      
+      // Schedule retry
+      this.scheduleRetry();
+      
+      return {
+        success: false,
+        message: error.message,
+        ...results
+      };
+    } finally {
+      this.isSyncing = false;
+    }
+  }
+
+  // Sync individual item
+  async syncItem(item) {
+    try {
+      let response;
+      
+      switch (item.type) {
+        case 'invoice':
+          response = await this.syncInvoice(item.data);
+          break;
+          
+        case 'customer':
+          response = await this.syncCustomer(item.data);
+          break;
+          
+        case 'product':
+          response = await this.syncProduct(item.data);
+          break;
+          
+        case 'payment':
+          response = await this.syncPayment(item.data);
+          break;
+          
+        default:
+          throw new Error(`Unknown sync type: ${item.type}`);
+      }
+
+      return { success: true, response };
+      
+    } catch (error) {
+      // Check if it's a conflict (409) or version mismatch
+      if (error.response?.status === 409) {
+        return { 
+          success: false, 
+          conflict: true, 
+          error: 'Version conflict - data was modified on server' 
+        };
+      }
+      
+      return { 
+        success: false, 
+        error: error.message 
+      };
+    }
+  }
+
+  // Sync invoice
+  async syncInvoice(invoiceData) {
+    // Remove local-only fields
+    const { _localId, _syncStatus, ...invoice } = invoiceData;
+    
+    // If it has a server ID, update; otherwise create
+    if (invoice.invoice_id && !invoice.invoice_id.startsWith('LOCAL_')) {
+      return await apiClient.put(`/invoices/${invoice.invoice_id}`, invoice);
+    } else {
+      // Create new invoice
+      const response = await apiClient.post('/invoices', invoice);
+      
+      // Update local database with server ID
+      if (response.data?.invoice_id) {
+        await offlineDB.updateLocalId(
+          'invoices', 
+          invoiceData._localId, 
+          response.data.invoice_id
+        );
+      }
+      
+      return response;
+    }
+  }
+
+  // Sync customer
+  async syncCustomer(customerData) {
+    const { _localId, _syncStatus, ...customer } = customerData;
+    
+    if (customer.customer_id && !customer.customer_id.startsWith('LOCAL_')) {
+      return await apiClient.put(`/customers/${customer.customer_id}`, customer);
+    } else {
+      const response = await apiClient.post('/customers', customer);
+      
+      if (response.data?.customer_id) {
+        await offlineDB.updateLocalId(
+          'customers', 
+          customerData._localId, 
+          response.data.customer_id
+        );
+      }
+      
+      return response;
+    }
+  }
+
+  // Sync product
+  async syncProduct(productData) {
+    const { _localId, _syncStatus, ...product } = productData;
+    
+    if (product.product_id && !product.product_id.startsWith('LOCAL_')) {
+      return await apiClient.put(`/products/${product.product_id}`, product);
+    } else {
+      const response = await apiClient.post('/products', product);
+      
+      if (response.data?.product_id) {
+        await offlineDB.updateLocalId(
+          'products', 
+          productData._localId, 
+          response.data.product_id
+        );
+      }
+      
+      return response;
+    }
+  }
+
+  // Sync payment
+  async syncPayment(paymentData) {
+    const { _localId, _syncStatus, ...payment } = paymentData;
+    
+    if (payment.payment_id && !payment.payment_id.startsWith('LOCAL_')) {
+      return await apiClient.put(`/payments/${payment.payment_id}`, payment);
+    } else {
+      return await apiClient.post('/payments', payment);
+    }
+  }
+
+  // Schedule retry for failed syncs
+  scheduleRetry(delay = this.retryDelay) {
+    if (this.retryTimeout) {
+      clearTimeout(this.retryTimeout);
+    }
+
+    this.retryTimeout = setTimeout(() => {
+      if (navigator.onLine && !this.isSyncing) {
+        console.log('[SyncEngine] Retrying sync...');
+        this.startSync();
+      }
+    }, delay);
+  }
+
+  // Force sync (user-triggered)
+  async forceSync() {
+    if (!navigator.onLine) {
+      toast.error('Cannot sync while offline');
+      return { success: false, message: 'Device is offline' };
+    }
+
+    if (this.isSyncing) {
+      toast.info('Sync already in progress');
+      return { success: false, message: 'Sync already in progress' };
+    }
+
+    toast.info('Starting sync...');
+    return await this.startSync();
+  }
+
+  // Get sync status
+  getSyncStatus() {
+    return {
+      isSyncing: this.isSyncing,
+      isAutoSyncEnabled: !!this.syncInterval,
+      isOnline: navigator.onLine
+    };
+  }
+
+  // Clear all sync data (for debugging/reset)
+  async clearSyncData() {
+    await offlineDB.clearSyncQueue();
+    await offlineDB.updateSyncStats({
+      lastSync: null,
+      synced: 0,
+      failed: 0,
+      conflicts: 0
+    });
+    toast.info('Sync data cleared');
+  }
+}
+
+// Export singleton instance
+const syncEngine = new SyncEngine();
+export default syncEngine;

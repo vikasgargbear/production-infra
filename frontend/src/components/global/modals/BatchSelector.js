@@ -175,11 +175,20 @@ const BatchSelector = ({
     
     const productWithBatch = {
       ...product,
-      ...batch,
       batch_id: batch.batch_id,
       batch_number: batch.batch_number,
+      batch_no: batch.batch_number,
       available_quantity: batch.quantity_available,
-      quantity: 1 // Default quantity
+      quantity: 1, // Default quantity
+      // IMPORTANT: Use batch-specific pricing
+      mrp: batch.mrp || product.mrp || 0,
+      sale_price: batch.sale_price || product.sale_price || 0,
+      rate: batch.sale_price || product.sale_price || 0,
+      expiry_date: batch.expiry_date,
+      manufacturing_date: batch.manufacturing_date,
+      // IMPORTANT: Preserve product GST information (no default - user must enter)
+      gst_percent: product.gst_percent || product.gst_rate || product.tax_rate || '',
+      tax_rate: product.gst_percent || product.gst_rate || product.tax_rate || ''
     };
     
     setTimeout(() => {

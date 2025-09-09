@@ -38,8 +38,11 @@ export const CompanyProvider = ({ children }) => {
         phone: localStorage.getItem('companyPhone') || DEFAULT_COMPANY_INFO.phone,
         email: localStorage.getItem('companyEmail') || DEFAULT_COMPANY_INFO.email,
         gst: localStorage.getItem('companyGST') || DEFAULT_COMPANY_INFO.gst,
+        drugLicense: localStorage.getItem('companyDrugLicense') || DEFAULT_COMPANY_INFO.drugLicense,
         state: localStorage.getItem('companyState') || 'Gujarat',
-        logo: localStorage.getItem('companyLogo') || null
+        logo: localStorage.getItem('companyLogo') || null,
+        bankAccounts: JSON.parse(localStorage.getItem('companyBankAccounts') || '[]'),
+        paymentQR: localStorage.getItem('companyPaymentQR') || null
       };
       
       const cachedOrgId = localStorage.getItem('orgId');
@@ -51,40 +54,78 @@ export const CompanyProvider = ({ children }) => {
       const currentOrgId = sessionStorage.getItem('pharma_org_id') || localStorage.getItem('pharma_org_id');
       if (currentOrgId) {
         try {
-          const [companyResponse, orgResponse] = await Promise.all([
-            companyAPI.getCompanyInfo(),
-            companyAPI.getOrganizationId()
-          ]);
+          // Fetch complete profile with bank accounts
+          const profileResponse = await companyAPI.getCompanyProfile();
         
-        if (companyResponse.success) {
-          const apiCompanyInfo = {
-            name: companyResponse.data.name || cachedCompanyInfo.name,
-            address: companyResponse.data.address || cachedCompanyInfo.address,
-            phone: companyResponse.data.phone || cachedCompanyInfo.phone,
-            email: companyResponse.data.email || cachedCompanyInfo.email,
-            gst: companyResponse.data.gst_number || cachedCompanyInfo.gst,
-            state: companyResponse.data.state || cachedCompanyInfo.state,
-            logo: companyResponse.data.logo || cachedCompanyInfo.logo
-          };
-          
-          setCompanyInfo(apiCompanyInfo);
-          
-          // Update localStorage with fresh data
-          localStorage.setItem('companyName', apiCompanyInfo.name);
-          localStorage.setItem('companyAddress', apiCompanyInfo.address);
-          localStorage.setItem('companyPhone', apiCompanyInfo.phone);
-          localStorage.setItem('companyEmail', apiCompanyInfo.email);
-          localStorage.setItem('companyGST', apiCompanyInfo.gst);
-          localStorage.setItem('companyState', apiCompanyInfo.state);
-          if (apiCompanyInfo.logo) {
-            localStorage.setItem('companyLogo', apiCompanyInfo.logo);
+          if (profileResponse.success && profileResponse.data) {
+            const profileData = profileResponse.data;
+            
+            const apiCompanyInfo = {
+              name: profileData.name || cachedCompanyInfo.name,
+              address: profileData.address || cachedCompanyInfo.address,
+              phone: profileData.phone || cachedCompanyInfo.phone,
+              email: profileData.email || cachedCompanyInfo.email,
+              gst: profileData.gst || cachedCompanyInfo.gst,
+              drugLicense: profileData.drug_license_no || cachedCompanyInfo.drugLicense,
+              state: profileData.state || cachedCompanyInfo.state,
+              logo: profileData.logo || cachedCompanyInfo.logo,
+              bankAccounts: profileData.bank_accounts || [],
+              paymentQR: profileData.payment_qr_code || null
+            };
+            
+            setCompanyInfo(apiCompanyInfo);
+            
+            // Update localStorage with fresh data
+            localStorage.setItem('companyName', apiCompanyInfo.name);
+            localStorage.setItem('companyAddress', apiCompanyInfo.address);
+            localStorage.setItem('companyPhone', apiCompanyInfo.phone);
+            localStorage.setItem('companyEmail', apiCompanyInfo.email);
+            localStorage.setItem('companyGST', apiCompanyInfo.gst);
+            localStorage.setItem('companyDrugLicense', apiCompanyInfo.drugLicense);
+            localStorage.setItem('companyState', apiCompanyInfo.state);
+            localStorage.setItem('companyBankAccounts', JSON.stringify(apiCompanyInfo.bankAccounts));
+            if (apiCompanyInfo.logo) {
+              localStorage.setItem('companyLogo', apiCompanyInfo.logo);
+            }
+            if (apiCompanyInfo.paymentQR) {
+              localStorage.setItem('companyPaymentQR', apiCompanyInfo.paymentQR);
+            }
+            
+            // Also get org ID
+            const orgResponse = await companyAPI.getOrganizationId();
+            if (orgResponse.org_id) {
+              setOrgId(orgResponse.org_id);
+              localStorage.setItem('orgId', orgResponse.org_id);
+            }
+          } else {
+            // Fallback to old API if new one fails
+            const [companyResponse, orgResponse] = await Promise.all([
+              companyAPI.getCompanyInfo(),
+              companyAPI.getOrganizationId()
+            ]);
+            
+            if (companyResponse) {
+              const apiCompanyInfo = {
+                name: companyResponse.name || cachedCompanyInfo.name,
+                address: companyResponse.address || cachedCompanyInfo.address,
+                phone: companyResponse.phone || cachedCompanyInfo.phone,
+                email: companyResponse.email || cachedCompanyInfo.email,
+                gst: companyResponse.gst || cachedCompanyInfo.gst,
+                drugLicense: companyResponse.drug_license_no || cachedCompanyInfo.drugLicense,
+                state: companyResponse.state || cachedCompanyInfo.state,
+                logo: companyResponse.logo || cachedCompanyInfo.logo,
+                bankAccounts: cachedCompanyInfo.bankAccounts,
+                paymentQR: cachedCompanyInfo.paymentQR
+              };
+              
+              setCompanyInfo(apiCompanyInfo);
+            }
+            
+            if (orgResponse && orgResponse.org_id) {
+              setOrgId(orgResponse.org_id);
+              localStorage.setItem('orgId', orgResponse.org_id);
+            }
           }
-        }
-        
-        if (orgResponse.success && orgResponse.data.org_id) {
-          setOrgId(orgResponse.data.org_id);
-          localStorage.setItem('orgId', orgResponse.data.org_id);
-        }
         
         } catch (apiError) {
           // Continue with cached data - don't throw error

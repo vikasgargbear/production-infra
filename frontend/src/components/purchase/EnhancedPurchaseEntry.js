@@ -27,7 +27,6 @@ import PDFUploadModal from '../PDFUploadModal';
 import PDFUploadCard from '../global/ui/PDFUploadCard';
 import BulkUploadInline from './BulkUploadInline';
 import PDFVerificationFlow from './PDFVerificationFlow';
-import EnhancedPurchaseItemsTable from './components/EnhancedPurchaseItemsTable';
 import PurchaseItemEditModal from './components/PurchaseItemEditModal';
 
 /**
@@ -215,7 +214,7 @@ const EnhancedPurchaseEntry = ({ onClose, prefilledData = null }) => {
       hsn_code: product.hsn_code || '',
       mrp: parseFloat(product.mrp) || 0,
       selling_price: parseFloat(product.sale_price || product.selling_price) || parseFloat(product.mrp) || 0,
-      tax_percent: parseFloat(product.tax_percent || product.gst_percent || product.tax_rate) || 12,
+      tax_percent: parseFloat(product.tax_percent || product.gst_percent || product.tax_rate) || 0,
       discount_percent: parseFloat(product.discount_percent || product.discount) || 0,
       tax_amount: parseFloat(product.tax_amount) || 0,
       // Pack information
@@ -278,7 +277,7 @@ const EnhancedPurchaseEntry = ({ onClose, prefilledData = null }) => {
         selling_price: parseFloat(product.selling_price || product.sale_price) || parseFloat(product.mrp) || 0,
         // Discounts and taxes
         discount_percent: parseFloat(product.discount_percent || product.discount) || 0,
-        tax_percent: parseFloat(product.tax_percent || product.gst_percent || product.tax_rate) || 12,
+        tax_percent: parseFloat(product.tax_percent || product.gst_percent || product.tax_rate) || 0,
         // Pack information
         pack_type: product.pack_type || product.packaging_type || 'STRIP',
         pack_size: product.pack_size || product.units_per_pack || 10,
@@ -716,13 +715,13 @@ const EnhancedPurchaseEntry = ({ onClose, prefilledData = null }) => {
             <h3 className="text-sm font-semibold text-gray-700">PURCHASE ITEMS</h3>
             <span className="ml-auto text-sm text-gray-500">{purchase.items.length} items</span>
           </div>
-          <EnhancedPurchaseItemsTable
+          <ItemsTable
               items={purchase.items}
               onUpdateItem={handleUpdateItem}
               onRemoveItem={handleRemoveItem}
               readOnly={false}
             />
-            {/* Original ItemsTable removed - using EnhancedPurchaseItemsTable instead */}
+            {/* Using global ItemsTable component */}
           </div>
       )}
       {errors.items && (
@@ -1091,7 +1090,7 @@ const EnhancedPurchaseEntry = ({ onClose, prefilledData = null }) => {
                 mrp: parseFloat(item.mrp) || 0,
                 selling_price: parseFloat(item.selling_price || item.sale_price) || parseFloat(item.mrp) || 0,
                 discount_percent: parseFloat(item.discount_percent) || 0,
-                tax_percent: parseFloat(item.tax_percent || item.gst_percent) || 12,
+                tax_percent: parseFloat(item.tax_percent || item.gst_percent) || 0,
                 pack_type: item.pack_type || 'STRIP',
                 pack_size: item.pack_size || 10
               })),

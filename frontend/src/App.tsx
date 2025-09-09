@@ -16,12 +16,17 @@ import { LedgerHub } from './components/ledger';
 import CreditDebitNoteFlow from './components/notes/CreditDebitNoteFlow';
 import GSTHub from './components/gst/GSTHub';
 import MasterHub from './components/master/MasterHub';
+import AuthDiagnostic from './components/AuthDiagnostic';
 import { CompanyProvider } from './contexts/CompanyContext';
 import { EscapeKeyProvider } from './contexts/EscapeKeyContext';
 import { PaymentProvider } from './contexts/PaymentContext';
 import InitialSetup from './components/InitialSetup';
 import ModularPaymentEntry from './components/payment/ModularPaymentEntry';
 import apiClient from './services/api/apiClient';
+import OfflineIndicator from './components/global/ui/OfflineIndicator';
+import * as serviceWorkerRegistration from './serviceWorkerRegistration';
+import { ToastContainer } from 'react-toastify';
+import 'react-toastify/dist/ReactToastify.css';
 // import ReceivablesCollectionCenter from './components/receivables/ReceivablesCollectionCenter';
 
 // Lazy load components for better performance and code splitting
@@ -245,6 +250,17 @@ function App(): JSX.Element {
     }
   };
 
+  // Check if user wants to see auth diagnostic
+  if (window.location.pathname === '/auth-diagnostic' || window.location.hash === '#auth-diagnostic') {
+    return (
+      <ErrorBoundary>
+        <ToastProvider>
+          <AuthDiagnostic />
+        </ToastProvider>
+      </ErrorBoundary>
+    );
+  }
+
   // Show loading while checking setup status
   if (isCheckingSetup) {
     return <LoadingSpinner />;
@@ -284,6 +300,8 @@ function App(): JSX.Element {
                 <Suspense fallback={<LoadingSpinner />}>
                   {renderActiveComponent()}
                 </Suspense>
+                <OfflineIndicator />
+                <ToastContainer position="top-right" />
               </div>
             </ErrorBoundary>
           </ToastProvider>

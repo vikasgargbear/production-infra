@@ -38,7 +38,7 @@ const InvoicePreview = ({
       
       const discountAmount = (baseQuantity * rate * discount) / 100;
       const itemAmount = (baseQuantity * rate) - discountAmount;
-      const gstPercent = parseFloat(item.gst_percent) || parseFloat(item.tax_rate) || 12;
+      const gstPercent = parseFloat(item.gst_percent) || parseFloat(item.tax_rate) || 0;
       const taxAmount = (itemAmount * gstPercent) / 100;
       
       subtotal += itemAmount;
@@ -138,10 +138,10 @@ const InvoicePreview = ({
                     </div>
                   )}
                   <div className="flex-1">
-                    <h2 className="text-xl font-bold text-gray-900">{companyInfo.name}</h2>
-                    <p className="text-sm text-gray-600 mt-1">{companyInfo.address}</p>
-                    <p className="text-sm text-gray-600">GSTIN: {companyInfo.gstin}</p>
-                    <p className="text-sm text-gray-600">DL No: {companyInfo.drugLicense}</p>
+                    <h2 className="text-xl font-bold text-gray-900">{companyInfo.name || 'Your Company Name'}</h2>
+                    <p className="text-sm text-gray-600 mt-1">{companyInfo.address || 'Company Address'}</p>
+                    <p className="text-sm text-gray-600">GSTIN: {companyInfo.gst || companyInfo.gstin || 'Not Configured'}</p>
+                    <p className="text-sm text-gray-600">DL No: {companyInfo.drugLicense || 'Not Configured'}</p>
                   </div>
                 </div>
               </div>
@@ -154,18 +154,45 @@ const InvoicePreview = ({
                   {/* Bank Details on left */}
                   <div className="flex-1">
                     <h3 className="text-xs font-semibold text-gray-700 uppercase tracking-wider mb-2">Bank Details</h3>
-                    <div className="text-sm text-gray-600 space-y-1">
-                      <p className="font-semibold text-gray-900">{companyInfo.bankName || 'SBI'}</p>
-                      <p>A/C: {companyInfo.accountNumber || '1234567890'}</p>
-                      <p>IFSC: {companyInfo.ifsc || 'SBIN0001234'}</p>
-                    </div>
+                    {(() => {
+                      // Get selected bank account from invoice or use default
+                      const selectedBank = invoice.bank_account_id && companyInfo.bankAccounts
+                        ? companyInfo.bankAccounts.find(acc => acc.id === invoice.bank_account_id)
+                        : companyInfo.bankAccounts?.[0]; // Default to first account
+                      
+                      if (selectedBank) {
+                        return (
+                          <div className="text-sm text-gray-600 space-y-1">
+                            <p className="font-semibold text-gray-900">{selectedBank.bank_name}</p>
+                            <p>A/C: {selectedBank.account_number}</p>
+                            <p>IFSC: {selectedBank.ifsc_code}</p>
+                            {selectedBank.branch_name && (
+                              <p className="text-xs">Branch: {selectedBank.branch_name}</p>
+                            )}
+                          </div>
+                        );
+                      } else {
+                        return (
+                          <div className="text-sm text-gray-500 italic">
+                            <p>No bank account configured</p>
+                            <p className="text-xs mt-1">Please add bank details in company settings</p>
+                          </div>
+                        );
+                      }
+                    })()}
                   </div>
                   {/* QR Code on right */}
                   <div className="text-center ml-3">
                     <h3 className="text-[10px] font-semibold text-gray-700 uppercase tracking-wider mb-1">
                       {invoice.payment_mode === 'UPI' ? 'UPI' : 'Pay QR'}
                     </h3>
-                    {invoice.payment_mode === 'UPI' || invoice.payment_mode === 'BANK_TRANSFER' ? (
+                    {companyInfo.paymentQR ? (
+                      <img 
+                        src={companyInfo.paymentQR} 
+                        alt="Payment QR" 
+                        className="w-16 h-16 object-contain"
+                      />
+                    ) : invoice.payment_mode === 'UPI' || invoice.payment_mode === 'BANK_TRANSFER' ? (
                       <>
                         <div className="w-16 h-16 bg-white rounded border border-gray-300 flex items-center justify-center">
                           <div className="text-xs text-gray-400">
@@ -174,12 +201,15 @@ const InvoicePreview = ({
                             </svg>
                           </div>
                         </div>
-                        <p className="text-[9px] text-gray-600 mt-1">{companyInfo.upiId || 'aasopharma@paytm'}</p>
+                        <p className="text-[9px] text-gray-600 mt-1">QR not configured</p>
                       </>
                     ) : (
                       <div className="h-16 flex items-center justify-center">
                         <p className="text-[10px] text-gray-400">N/A</p>
                       </div>
+                    )}
+                    {companyInfo.paymentQR && (
+                      <p className="text-[9px] text-gray-600 mt-1">Scan to Pay</p>
                     )}
                   </div>
                 </div>
@@ -337,7 +367,7 @@ const InvoicePreview = ({
                   <td className="px-3 py-3 text-sm text-right font-medium text-gray-900">{formatCurrency(item.sale_price || item.rate || 0)}</td>
                   <td className="px-3 py-3 text-sm text-center text-gray-600">{item.discount_percent || 0}%</td>
                   <td className="px-3 py-3 text-sm text-center text-gray-600">{item.free_quantity || 0}</td>
-                  <td className="px-3 py-3 text-sm text-center text-gray-600">{item.gst_percent || 12}%</td>
+                  <td className="px-3 py-3 text-sm text-center text-gray-600">{item.gst_percent || 0}%</td>
                   <td className="px-3 py-3 text-sm text-right text-gray-600">
                     {(() => {
                       // Calculate GST on the fly to avoid state issues - FIXED to use base_quantity
@@ -345,7 +375,7 @@ const InvoicePreview = ({
                       const subtotal = (item.sale_price || item.rate || 0) * baseQuantity;
                       const discount = (subtotal * (item.discount_percent || 0)) / 100;
                       const taxable = subtotal - discount;
-                      const gst = (taxable * (item.gst_percent || 12)) / 100;
+                      const gst = (taxable * (item.gst_percent || 0)) / 100;
                       return invoice.gst_type !== 'IGST' ? formatCurrency(gst / 2) : '-';
                     })()}
                   </td>
@@ -356,7 +386,7 @@ const InvoicePreview = ({
                       const subtotal = (item.sale_price || item.rate || 0) * baseQuantity;
                       const discount = (subtotal * (item.discount_percent || 0)) / 100;
                       const taxable = subtotal - discount;
-                      const gst = (taxable * (item.gst_percent || 12)) / 100;
+                      const gst = (taxable * (item.gst_percent || 0)) / 100;
                       return invoice.gst_type !== 'IGST' ? formatCurrency(gst / 2) : '-';
                     })()}
                   </td>
@@ -366,7 +396,7 @@ const InvoicePreview = ({
                       const baseQuantity = parseFloat(item.base_quantity || item.baseQuantity || (quantity - (parseFloat(item.free_quantity) || 0)));
                       const rate = parseFloat(item.rate) || parseFloat(item.sale_price) || 0;
                       const discount = parseFloat(item.discount_percent) || 0;
-                      const gstPercent = parseFloat(item.gst_percent) || parseFloat(item.tax_rate) || 12;
+                      const gstPercent = parseFloat(item.gst_percent) || parseFloat(item.tax_rate) || 0;
                       
                       const discountAmount = (baseQuantity * rate * discount) / 100;
                       const baseAmount = (baseQuantity * rate) - discountAmount;

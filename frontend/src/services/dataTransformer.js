@@ -14,7 +14,8 @@ class DataTransformer {
       product_id: product.product_id ? String(product.product_id) : null,
       product_name: product.product_name || product.name || product.productName || '',
       hsn_code: product.hsn_code || product.hsnCode || '3004',
-      gst_percent: parseFloat(product.gst_percent || product.gst_percentage || product.gst_rate || product.gstPercent || 18),
+      // Parse GST and only use if it's a valid non-zero value
+      gst_percent: parseFloat(product.gst_percentage || product.gst_percent || product.gst_rate || product.gstPercent || 0) || '',
       mrp: parseFloat(product.mrp || 0),
       sale_price: parseFloat(product.sale_price || product.selling_price || product.rate || product.mrp || 0),
       manufacturer: product.manufacturer || product.company || '',
@@ -145,9 +146,10 @@ class DataTransformer {
       expiry_date: batch.expiry_date || batch.expiryDate || '',
       manufacturing_date: batch.manufacturing_date || batch.mfg_date || batch.mfgDate || '',
       quantity_available: parseInt(batch.quantity_available || batch.quantity || batch.stock || 0),
-      mrp: parseFloat(batch.mrp || product?.mrp || 0),
-      sale_price: parseFloat(batch.sale_price || batch.selling_price || batch.rate || product?.sale_price || 0),
-      purchase_price: parseFloat(batch.purchase_price || batch.cost || 0),
+      // IMPORTANT: Backend sends mrp_per_unit, sale_price_per_unit, cost_per_unit
+      mrp: parseFloat(batch.mrp_per_unit || batch.mrp || product?.mrp || 0),
+      sale_price: parseFloat(batch.sale_price_per_unit || batch.sale_price || batch.selling_price || batch.rate || product?.sale_price || 0),
+      purchase_price: parseFloat(batch.cost_per_unit || batch.purchase_price || batch.cost || 0),
       // Calculate days to expiry
       days_to_expiry: batch.expiry_date ? Math.floor((new Date(batch.expiry_date) - new Date()) / (1000 * 60 * 60 * 24)) : null
     };
@@ -199,7 +201,7 @@ class DataTransformer {
     const quantity = parseInt(item.quantity) || 0;
     const price = this.formatNumber(item.sale_price || item.rate);
     const discountPercent = this.formatNumber(item.discount_percent || 0);
-    const taxPercent = this.formatNumber(item.gst_percent || 12);
+    const taxPercent = this.formatNumber(item.gst_percent || 0);
     
     // Calculate tax amount
     const discountAmount = (price * quantity * discountPercent) / 100;
@@ -236,7 +238,7 @@ class DataTransformer {
         ...item,
         sale_price: item.price || item.unit_price || item.rate,
         quantity: item.quantity,
-        gst_percent: item.gst_percent || item.tax_percent || 12,
+        gst_percent: item.gst_percent || item.tax_percent || 0,
         discount_percent: item.discount_percent || 0
       })),
       gross_amount: apiData.gross_amount || apiData.subtotal,
@@ -309,7 +311,7 @@ class DataTransformer {
       product_code: productData.product_code || null,
       manufacturer: productData.manufacturer || null,
       hsn_code: productData.hsn_code || '3004',
-      gst_percent: parseFloat(productData.gst_percent || 12),
+      gst_percent: parseFloat(productData.gst_percent || 0),
       mrp: parseFloat(productData.mrp || 0),
       sale_price: parseFloat(productData.sale_price || 0),
       cost_price: parseFloat(productData.cost_price || 0),

@@ -90,14 +90,14 @@ const GSTR1Report = ({ open, onClose }) => {
           reverseCharge: 'N',
           invoiceType: 'Regular',
           taxableValue: taxableAmount,
-          rate: sale.gst_percent || 18,
+          rate: sale.gst_percent || 0,
           cgst: cgst,
           sgst: sgst,
           igst: igst
         });
       } else {
         // B2C - aggregate by tax rate
-        const rateKey = `${sale.gst_percent || 18}%`;
+        const rateKey = `${sale.gst_percent || 0}%`;
         const existing = b2cSales.find(item => item.rate === rateKey);
         if (existing) {
           existing.taxableValue += taxableAmount;

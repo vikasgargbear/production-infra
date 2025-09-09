@@ -22,7 +22,7 @@ class SimpleInvoiceCalculator {
       const freeQuantity = parseFloat(item.free_quantity) || 0;
       const rate = parseFloat(item.rate || item.sale_price || item.unit_price) || 0;
       const discountPercent = parseFloat(item.discount_percent || item.discount) || 0;
-      const gstPercent = parseFloat(item.gst_percent || item.tax_rate || item.gst) || 12;
+      const gstPercent = parseFloat(item.gst_percent || item.tax_rate || item.gst) || 0;
       
       // IMPORTANT: base_quantity is what customer pays for
       // If item has base_quantity set, use it. Otherwise, quantity IS the base_quantity

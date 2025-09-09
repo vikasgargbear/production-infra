@@ -236,7 +236,7 @@ const SalesRegister = ({ open, onClose }) => {
             'Rate': item.sale_price || 0,
             'Discount': item.discount || 0,
             'Amount': item.amount || 0,
-            'GST %': item.gst_percent || 18
+            'GST %': item.gst_percent || 0
           });
         });
       }

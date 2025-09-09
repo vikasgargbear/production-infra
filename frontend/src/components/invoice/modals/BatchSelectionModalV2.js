@@ -100,7 +100,7 @@ const BatchSelectionModalV2 = ({
       available_quantity: batch.quantity_available,
       mrp: batch.mrp || product.mrp,
       sale_price: batch.sale_price || batch.selling_price || product.sale_price || product.mrp || 0,
-      gst_percent: product.gst_percent || 12, // Ensure GST percent is passed
+      gst_percent: product.gst_percent || 0, // Ensure GST percent is passed
       quantity: 1
     };
 

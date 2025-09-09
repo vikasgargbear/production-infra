@@ -209,7 +209,7 @@ const ModularChallanCreatorV5 = ({ open = true, onClose }) => {
         rate: parseFloat(item.rate || item.unit_price || item.sale_price) || 0,
         sale_price: parseFloat(item.sale_price || item.rate || item.unit_price) || 0,
         mrp: parseFloat(item.mrp) || 0,
-        gst_percent: parseFloat(item.gst_percent || item.tax_rate) || 18,
+        gst_percent: parseFloat(item.gst_percent || item.tax_rate) || 0,
         line_total: 0 // Will be recalculated
       }));
 
@@ -351,7 +351,7 @@ const ModularChallanCreatorV5 = ({ open = true, onClose }) => {
         sale_price: unitPrice, // For ItemsTable compatibility
         total: total, // Pre-calculated total
         line_total: total, // For ItemsTable compatibility
-        gst_percent: product.gst_percent || 18,
+        gst_percent: product.gst_percent || 0,
         manufacturer: product.manufacturer,
         category: product.category
       };

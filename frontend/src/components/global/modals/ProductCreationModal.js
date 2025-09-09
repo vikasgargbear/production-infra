@@ -320,7 +320,7 @@ const ProductCreationModal = ({
           sale_price: parseFloat(newProduct.sale_price) || 0,
           rate: parseFloat(newProduct.sale_price) || 0, // rate is same as sale_price for invoice
           cost_price: parseFloat(newProduct.cost_price) || 0,
-          gst_percent: parseFloat(newProduct.gst_percentage) || 12,
+          gst_percent: parseFloat(newProduct.gst_percentage) || 0,
           hsn_code: newProduct.hsn_code || '3004',
           // Include pack configuration for frontend use (individual fields)
           pack_type: packConfig.sale_unit || 'STRIP',

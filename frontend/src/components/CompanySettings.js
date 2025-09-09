@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { X, Save, Upload, Building2 } from 'lucide-react';
+import { X, Save, Upload, Building2, QrCode } from 'lucide-react';
 import { useToast } from './global/ui/feedback/Toast';
-import { organizationsApi } from '../services/api';
+import { organizationsApi, companyAPI } from '../services/api';
 import { useCompany } from '../contexts/CompanyContext';
 
 const CompanySettings = ({ open = true, onClose }) => {
@@ -19,11 +19,13 @@ const CompanySettings = ({ open = true, onClose }) => {
     accountNumber: companyInfo.account_number || '',
     ifscCode: companyInfo.ifsc_code || '',
     digitalSignature: companyInfo.logo || '',
-    businessType: companyInfo.business_settings?.business_type || 'b2b'
+    businessType: companyInfo.business_settings?.business_type || 'b2b',
+    paymentQR: companyInfo.paymentQR || ''
   });
 
   const [logoPreview, setLogoPreview] = useState(settings.companyLogo);
   const [signaturePreview, setSignaturePreview] = useState(settings.digitalSignature);
+  const [qrPreview, setQrPreview] = useState(settings.paymentQR);
 
   useEffect(() => {
     if (open) {
@@ -69,6 +71,18 @@ const CompanySettings = ({ open = true, onClose }) => {
     }
   };
 
+  const handleQRUpload = (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setQrPreview(reader.result);
+        setSettings({ ...settings, paymentQR: reader.result });
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
   const handleSave = async () => {
     setIsLoading(true);
 
@@ -93,6 +107,12 @@ const CompanySettings = ({ open = true, onClose }) => {
       };
 
       await updateCompanyInfo(companyData);
+      
+      // Upload QR code if changed
+      if (settings.paymentQR && settings.paymentQR !== companyInfo.paymentQR) {
+        await companyAPI.uploadQRCode(settings.paymentQR);
+      }
+      
       toast.saved('Company Settings');
     } catch (error) {
       toast.error('Failed to save settings. Please try again later.');
@@ -306,6 +326,47 @@ const CompanySettings = ({ open = true, onClose }) => {
             </div>
           </div>
 
+          {/* Payment QR Code Section */}
+          <div className="border-t border-gray-200 pt-6">
+            <h3 className="text-lg font-medium text-gray-900 mb-4 flex items-center">
+              <QrCode className="w-5 h-5 mr-2" />
+              Payment QR Code
+            </h3>
+            
+            <div className="flex items-center space-x-4">
+              {qrPreview ? (
+                <img 
+                  src={qrPreview} 
+                  alt="Payment QR Code" 
+                  className="h-32 w-32 object-contain border border-gray-300 rounded-lg p-2"
+                />
+              ) : (
+                <div className="h-32 w-32 border-2 border-dashed border-gray-300 rounded-lg flex items-center justify-center">
+                  <QrCode className="w-12 h-12 text-gray-400" />
+                </div>
+              )}
+              <div>
+                <input
+                  type="file"
+                  id="qr-upload"
+                  accept="image/*"
+                  onChange={handleQRUpload}
+                  className="hidden"
+                />
+                <label
+                  htmlFor="qr-upload"
+                  className="cursor-pointer inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50"
+                >
+                  <Upload className="w-4 h-4 mr-2" />
+                  Upload QR Code
+                </label>
+                <p className="text-xs text-gray-500 mt-2">
+                  Upload your UPI/Payment QR code to display on invoices
+                </p>
+              </div>
+            </div>
+          </div>
+
           {/* Digital Signature Section */}
           <div className="border-t border-gray-200 pt-6">
             <h3 className="text-lg font-medium text-gray-900 mb-4">Digital Signature</h3>
@@ -326,3 +387,32 @@ const CompanySettings = ({ open = true, onClose }) => {
                 <input
                   type="file"
                   id="signature-upload"
+                  accept="image/*"
+                  onChange={(e) => {
+                    const file = e.target.files[0];
+                    if (file) {
+                      const reader = new FileReader();
+                      reader.onloadend = () => {
+                        setSignatureUpload(reader.result);
+                      };
+                      reader.readAsDataURL(file);
+                    }
+                  }}
+                  className="hidden"
+                />
+                <label
+                  htmlFor="signature-upload"
+                  className="cursor-pointer px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
+                >
+                  Upload Signature
+                </label>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export default CompanySettings;

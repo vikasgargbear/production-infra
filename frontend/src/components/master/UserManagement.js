@@ -78,14 +78,30 @@ const UserManagement = ({ open, onClose }) => {
           const payload = JSON.parse(atob(tokenParts[1]));
           const expiry = payload.exp * 1000;
           const now = Date.now();
+          
+          // Debug logging
+          console.log('UserManagement - Token validation:', {
+            hasToken: !!token,
+            payload: payload,
+            orgId: payload.org_id,
+            expiryTime: new Date(expiry).toISOString(),
+            currentTime: new Date(now).toISOString(),
+            isExpired: now > expiry
+          });
 
           if (now > expiry) {
             setError('Session expired. Please login again.');
+            localStorage.removeItem('authToken');
+            localStorage.removeItem('auth_token');
+            setIsLoading(false);
+            return;
           }
         }
       } catch (e) {
+        console.error('Token parsing error:', e);
       }
       
+      console.log('UserManagement - Making API call to /users/');
       const response = await usersApi.getAll();
       
       // Handle different response formats

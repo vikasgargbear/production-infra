@@ -107,7 +107,7 @@ const ImportFromInvoiceModal = ({ isOpen, onClose, onImport }) => {
         unit: item.unit || 'NOS',
         mrp: item.mrp,
         unit_price: item.unit_price || item.selling_price,
-        gst_percent: item.tax_percent || item.gst_percent || 18,
+        gst_percent: item.tax_percent || item.gst_percent || 0,
         manufacturer: item.manufacturer,
         category: item.category
       })),

@@ -72,7 +72,7 @@ export const testSalesIntegration = async () => {
         quantity: 10,
         rate: selectedProduct.sale_price,
         mrp: selectedProduct.mrp,
-        tax_rate: selectedProduct.gst_percent || 12,
+        tax_rate: selectedProduct.gst_percent || 0,
         unit: selectedProduct.unit || 'strip'
       }],
       discount_amount: 50,

@@ -201,7 +201,7 @@ const ProductSearchSimple = forwardRef(({ onAddItem, onCreateProduct, showBatchS
                           </div>
                           <div className="text-right">
                             <div className="font-medium text-blue-600">₹{product.sale_price || product.selling_price || product.mrp || 0}</div>
-                            <div className="text-xs text-gray-500">+GST {product.gst_percent || product.tax_rate || 18}%</div>
+                            <div className="text-xs text-gray-500">+GST {product.gst_percent || product.tax_rate || 0}%</div>
                           </div>
                         </div>
                       </div>

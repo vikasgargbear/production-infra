@@ -5,6 +5,7 @@ import {
   Save, Calculator, History, ArrowLeft, ArrowRight, FileInput, MessageCircle,
   Loader2, Clock
 } from 'lucide-react';
+import { toast } from 'react-toastify';
 import KeyboardShortcuts, { SHORTCUT_SETS } from '../global/ui/KeyboardShortcuts';
 import { StandardDatePicker } from '../global';
 import { customerAPI, productAPI, invoiceAPI, ordersAPI, salesOrdersAPI, apiClient } from '../../services/api';
@@ -101,6 +102,7 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
         return response.data.invoice_number;
       }
     } catch (error) {
+      toast.warning('Using local invoice number generation');
     }
     
     // Fallback to local generation with proper format
@@ -176,7 +178,9 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
       // This prevents wasting numbers on every component load
       
     } catch (error) {
-      setError('Failed to load required data. Please check your connection and try again.');
+      const errorMessage = 'Failed to load required data. Please check your connection and try again.';
+      setError(errorMessage);
+      toast.error(errorMessage);
     } finally {
       setIsLoading(false);
     }
@@ -291,7 +295,7 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
       const baseQuantity = parseFloat(item.base_quantity) || 0;
       const rate = parseFloat(item.rate || item.sale_price) || 0;
       const discountPercent = parseFloat(item.discount_percent || item.discount_percentage) || 0;
-      const taxPercent = parseFloat(item.gst_percent || item.tax_rate || item.tax_percentage) || 12;
+      const taxPercent = parseFloat(item.gst_percent || item.tax_rate || item.tax_percentage) || 0;
 
       const lineTotal = baseQuantity * rate;
       const discountAmount = (lineTotal * discountPercent) / 100;
@@ -498,8 +502,8 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
         sale_price: product.sale_price || 0,
         discount_percent: 0,
         free_quantity: 0,
-        gst_percent: product.gst_percent || 12,
-        tax_rate: product.gst_percent || 12,
+        gst_percent: product.gst_percent || product.tax_rate || '',
+        tax_rate: product.gst_percent || product.tax_rate || '',
         // Pack information
         packages_per_box: product.packages_per_box || null,
         units_per_pack: product.units_per_pack || null,
@@ -521,20 +525,26 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
   const validateInvoice = (checkPayment = false) => {
     
     if (!selectedCustomer) {
-      setMessage('Please select a customer');
+      const errorMsg = 'Please select a customer';
+      setMessage(errorMsg);
       setMessageType('error');
+      toast.error(errorMsg);
       return false;
     }
 
     if (!invoice.items || invoice.items.length === 0) {
-      setMessage('Please add at least one item');
+      const errorMsg = 'Please add at least one item';
+      setMessage(errorMsg);
       setMessageType('error');
+      toast.error(errorMsg);
       return false;
     }
 
     if (checkPayment && !invoice.payment_mode) {
-      setMessage('Please select a payment method');
+      const errorMsg = 'Please select a payment method';
+      setMessage(errorMsg);
       setMessageType('error');
+      toast.error(errorMsg);
       return false;
     }
 
@@ -649,7 +659,7 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
               free_quantity: freeQuantity, // Free items
               unit_price: parseFloat(item.rate || item.sale_price || 0),
               discount_percent: parseFloat(item.discount_percent || 0),
-              gst_percent: parseFloat(item.gst_percent || item.tax_rate || 12)
+              gst_percent: parseFloat(item.gst_percent || item.tax_rate || 0)
               // No calculated amounts - backend handles all calculations
             };
           }),
@@ -704,7 +714,7 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
         }
         
         // Show error to user
-        // toast.error(`Backend error: ${errorDetails}`);
+        toast.error(`Backend error: ${errorDetails}`);
         
         // Still save locally and show success
         const date = new Date();
@@ -731,7 +741,7 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
             items: invoice.invoice_items || []
           });
           setShowSuccessModal(true);
-          // toast.warning(`Invoice ${fallbackInvoiceNumber} saved locally (backend issue)`);
+          toast.warning(`Invoice ${fallbackInvoiceNumber} saved locally (backend issue)`);
         }, 3000);
         
         setSaving(false);
@@ -773,14 +783,14 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
         setShowSuccessModal(true);
         
         // Also show success message as backup
-        // toast.success(`Invoice ${invoiceNumber} created successfully!`);
+        toast.success(`Invoice ${invoiceNumber} created successfully!`);
       } else {
         // If no response data, still show success
         const date = new Date();
         const dateStr = date.toISOString().slice(2,10).replace(/-/g, ''); // YYMMDD  
         const randomNum = Math.floor(Math.random() * 10000).toString().padStart(4, '0');
         const fallbackInvoiceNumber = `INV-${dateStr}${randomNum}`;
-        // toast.success(`Invoice ${fallbackInvoiceNumber} created!`);
+        toast.success(`Invoice ${fallbackInvoiceNumber} created!`);
         
         // Still show modal with fallback data
         setCreatedInvoiceData({
@@ -814,7 +824,7 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
         errorMessage = error.message;
       }
       
-      // toast.error(errorMessage);
+      toast.error(errorMessage);
     } finally {
       setSaving(false);
     }
@@ -1012,7 +1022,7 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
         <span>Rate: ${parseFloat(item.unit_price || 0).toFixed(2)}</span>
         <span>Amt: ${parseFloat(item.line_total || (item.quantity * item.unit_price)).toFixed(2)}</span>
       </div>
-      ${item.discount_percent > 0 ? `<div style="font-size: 9px;">Disc: ${item.discount_percent}% | GST: ${item.gst_percent || 12}%</div>` : ''}
+      ${item.discount_percent > 0 ? `<div style="font-size: 9px;">Disc: ${item.discount_percent}% | GST: ${item.gst_percent || 0}%</div>` : ''}
     </div>
   `).join('')}
 
@@ -1301,7 +1311,7 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
       
       const discountAmount = (quantity * rate * discount) / 100;
       const itemAmount = (quantity * rate) - discountAmount;
-      const gstPercent = parseFloat(item.gst_percent) || parseFloat(item.tax_rate) || 12;
+      const gstPercent = parseFloat(item.gst_percent) || parseFloat(item.tax_rate) || 0;
       const taxAmount = (itemAmount * gstPercent) / 100;
       
       subtotal += itemAmount;
@@ -1406,8 +1416,8 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
       // Discounts and taxes
       discount_percent: parseFloat(item.discount_percent || item.discount_percentage || 0),
       discount_percentage: parseFloat(item.discount_percent || item.discount_percentage || 0),
-      gst_percent: parseFloat(item.gst_percent || item.tax_rate || item.tax_percent || item.tax_percentage || 18),
-      tax_percentage: parseFloat(item.gst_percent || item.tax_rate || item.tax_percent || item.tax_percentage || 18),
+      gst_percent: parseFloat(item.gst_percent || item.tax_rate || item.tax_percent || item.tax_percentage || 0),
+      tax_percentage: parseFloat(item.gst_percent || item.tax_rate || item.tax_percent || item.tax_percentage || 0),
       
       // Batch and other details
       batch_no: item.batch_no || item.batch_number,
@@ -1671,7 +1681,7 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
             onCustomerCreated={(customer) => {
               handleCustomerSelect(customer);
               setShowCustomerModal(false);
-              // toast.success('Customer created successfully');
+              toast.success('Customer created successfully');
             }}
           />
         )}
@@ -1923,7 +1933,7 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
                 free_quantity: item.free_quantity || 0,
                 unit_price: item.unit_price || item.selling_price,
                 discount_percent: item.discount_percent || 0,
-                gst_percent: item.gst_percent || item.tax_percent || 18,
+                gst_percent: item.gst_percent || item.tax_percent || 0,
                 total: item.total || item.line_total
               })),
               totals: {
