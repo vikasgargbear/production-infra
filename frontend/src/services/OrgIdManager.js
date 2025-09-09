@@ -28,14 +28,10 @@ class OrgIdManager {
    * This runs synchronously to ensure org_id is available
    */
   initialize() {
-    console.log('[OrgIdManager] Initializing...');
-    
     // Try to get existing org_id
     let orgId = this.getFromStorage();
     
     if (!orgId) {
-      console.log('[OrgIdManager] No org_id found, checking authentication...');
-      
       // Check if user is authenticated
       const token = localStorage.getItem('authToken') || 
                    localStorage.getItem('auth_token') ||
@@ -43,17 +39,14 @@ class OrgIdManager {
       
       if (token) {
         // User is authenticated but no org_id - use default
-        console.log('[OrgIdManager] Authenticated user without org_id, setting default...');
         orgId = this.DEFAULT_ORG_ID;
         this.setInStorage(orgId);
       } else {
         // Not authenticated - still set default for demo/testing
-        console.log('[OrgIdManager] No authentication, setting default for demo...');
         orgId = this.DEFAULT_ORG_ID;
         this.setInStorage(orgId);
       }
     } else {
-      console.log('[OrgIdManager] Found existing org_id:', orgId);
       // Ensure it's in all storage locations
       this.syncStorage(orgId);
     }
@@ -63,8 +56,6 @@ class OrgIdManager {
     
     // Set up storage event listener for cross-tab sync
     this.setupStorageListener();
-    
-    console.log('[OrgIdManager] Initialization complete. Org ID:', this.currentOrgId);
   }
 
   /**
@@ -101,8 +92,6 @@ class OrgIdManager {
     sessionStorage.setItem('pharma_org_id', orgId);
     sessionStorage.setItem('org_id', orgId);
     sessionStorage.setItem('orgId', orgId);
-    
-    console.log('[OrgIdManager] Org ID set in all storage locations:', orgId);
   }
 
   /**
@@ -141,7 +130,6 @@ class OrgIdManager {
     }
     
     // Last resort - use default and save it
-    console.warn('[OrgIdManager] Using fallback org_id');
     this.currentOrgId = this.DEFAULT_ORG_ID;
     this.setInStorage(this.DEFAULT_ORG_ID);
     return this.DEFAULT_ORG_ID;
@@ -152,11 +140,9 @@ class OrgIdManager {
    */
   setOrgId(orgId) {
     if (!orgId) {
-      console.error('[OrgIdManager] Cannot set empty org_id');
       return false;
     }
     
-    console.log('[OrgIdManager] Updating org_id to:', orgId);
     this.currentOrgId = orgId;
     this.setInStorage(orgId);
     
@@ -170,7 +156,6 @@ class OrgIdManager {
    * Clear org_id (e.g., on logout)
    */
   clearOrgId() {
-    console.log('[OrgIdManager] Clearing org_id...');
     this.currentOrgId = null;
     
     // Clear from all storage locations
@@ -186,7 +171,6 @@ class OrgIdManager {
   setupStorageListener() {
     window.addEventListener('storage', (e) => {
       if (this.STORAGE_KEYS.includes(e.key) && e.newValue) {
-        console.log('[OrgIdManager] Org ID changed in another tab:', e.newValue);
         this.currentOrgId = e.newValue;
         this.syncStorage(e.newValue);
       }
@@ -210,7 +194,7 @@ class OrgIdManager {
       try {
         callback(orgId);
       } catch (error) {
-        console.error('[OrgIdManager] Listener error:', error);
+        // Silently handle listener errors
       }
     });
   }

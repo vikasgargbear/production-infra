@@ -23,6 +23,7 @@ const UserManagement = ({ open, onClose }) => {
   const [successMessage, setSuccessMessage] = useState('');
   const [isSaving, setIsSaving] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [currentUserRole, setCurrentUserRole] = useState(null);
   
   // User data
   const [users, setUsers] = useState([]);
@@ -31,9 +32,33 @@ const UserManagement = ({ open, onClose }) => {
   useEffect(() => {
     console.log('UserManagement useEffect - open:', open);
     if (open) {
+      checkCurrentUserPermissions();
       loadUsers();
     }
   }, [open]);
+
+  // Check current user's permissions
+  const checkCurrentUserPermissions = () => {
+    try {
+      const token = localStorage.getItem('authToken');
+      if (token) {
+        const tokenParts = token.split('.');
+        if (tokenParts.length === 3) {
+          const payload = JSON.parse(atob(tokenParts[1]));
+          console.log('🔑 Current user token payload:', payload);
+          setCurrentUserRole(payload.role || payload.role_id);
+          
+          // Check if user has admin/owner role
+          const userRole = payload.role || payload.role_id;
+          if (!['admin', 'owner', 'administrator'].includes(userRole?.toLowerCase())) {
+            console.warn('⚠️ Current user role may not have permission to manage users:', userRole);
+          }
+        }
+      }
+    } catch (e) {
+      console.error('Error checking user permissions:', e);
+    }
+  };
 
   // Load users from backend
   const loadUsers = async () => {
@@ -41,6 +66,41 @@ const UserManagement = ({ open, onClose }) => {
     setError(null);
     
     try {
+      // Check if we have auth token
+      const token = localStorage.getItem('authToken');
+      console.log('🔑 Auth Token exists:', !!token);
+      
+      if (!token) {
+        setError('Authentication required. Please login again.');
+        // Don't redirect immediately - let user see the error
+        // window.location.href = '/login';
+        return;
+      }
+      
+      // Validate token format and expiry
+      try {
+        const tokenParts = token.split('.');
+        if (tokenParts.length === 3) {
+          const payload = JSON.parse(atob(tokenParts[1]));
+          const expiry = payload.exp * 1000;
+          const now = Date.now();
+          
+          console.log('🔑 Token expiry:', new Date(expiry).toLocaleString());
+          console.log('🔑 Current time:', new Date(now).toLocaleString());
+          
+          if (now > expiry) {
+            console.error('❌ Token expired!');
+            setError('Session expired. Please login again.');
+            // Don't remove token or redirect - let the API call fail and handle it there
+            // localStorage.removeItem('authToken');
+            // setTimeout(() => window.location.href = '/login', 2000);
+            // return;
+          }
+        }
+      } catch (e) {
+        console.error('Error validating token:', e);
+      }
+      
       console.log('🔍 Calling API to load users...');
       const response = await usersApi.getAll();
       console.log('📥 Users API Response:', response);
@@ -93,11 +153,34 @@ const UserManagement = ({ open, onClose }) => {
       setUsers(transformedUsers);
     } catch (error) {
       console.error('Error loading users:', error);
-      setError('Failed to load users. Please check your connection and try again.');
+      
+      // Detailed error handling
+      if (error.response) {
+        console.error('Response status:', error.response.status);
+        console.error('Response data:', error.response.data);
+        
+        if (error.response.status === 401) {
+          setError('Authentication failed. Your session may have expired. Please login again.');
+          // Don't auto-redirect - let user close the modal and login manually
+          // localStorage.removeItem('authToken');
+          // setTimeout(() => window.location.href = '/login', 3000);
+        } else if (error.response.status === 403) {
+          setError('Access denied. You do not have permission to view users.');
+        } else if (error.response.status === 500) {
+          setError('Server error. Please contact support if this persists.');
+        } else {
+          setError(`Failed to load users: ${error.response.data?.detail || error.response.data?.message || 'Unknown error'}`);
+        }
+      } else if (error.request) {
+        setError('Network error. Please check your connection and try again.');
+      } else {
+        setError(`Error: ${error.message}`);
+      }
+      
       setUsers([]);
       
       // Show user-friendly error message
-      setTimeout(() => setError(null), 10000);
+      setTimeout(() => setError(null), 15000);
     } finally {
       setIsLoading(false);
     }

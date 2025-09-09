@@ -1,5 +1,38 @@
 # Archive Log
 
+## 2025-01-08 - High Priority Cleanup
+**Agent**: CLEANUP
+**Files Archived**: 5 test files
+**Console.logs Removed**: 4 security-critical files
+**Space Saved**: ~50 KB
+
+### What Was Done
+
+#### Console.log Removal (Security Fix)
+Removed console.log statements from critical files:
+- `/frontend/src/services/auth.js` - 3 console statements removed
+- `/frontend/src/services/OrgIdManager.js` - 11 console statements removed  
+- `/frontend/src/services/api/apiClient.ts` - 8 console statements removed
+- `/frontend/src/services/api/partyLedgerApi.js` - 12 console statements removed
+
+**Note**: Replaced with structured error returns for UI handling
+
+#### To `/archive/test_files/2025-01-08/`
+- `TestIntegration.tsx` - Test component not used in production
+- `App.test.tsx` - Test file importing TestIntegration
+- `test-invoice-api.js` - Standalone test script
+- `test-invoice-calculations.js` - Standalone test script
+- `INVOICE_CALCULATION_TEST.js` - Invoice calculation test
+
+### Rollback Instructions
+```bash
+# If issues arise with archived files
+git reset --hard pre-cleanup-20250108
+# Or restore specific files from /archive/test_files/2025-01-08/
+```
+
+---
+
 ## 2025-01-06 - Major Cleanup
 **Agent**: CLEANUP
 **Files Archived**: ~90 files

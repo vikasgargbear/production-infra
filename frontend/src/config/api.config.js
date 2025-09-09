@@ -154,12 +154,16 @@ export const API_CONFIG = {
     
     // Returns
     RETURNS: {
+      BASE: '/returns',
       SALES: '/sale-returns',
       PURCHASES: '/purchase-returns',
+      CUSTOMER_RETURNS: '/sale-returns',  // Alias for SALES
+      SUPPLIER_RETURNS: '/purchase-returns',  // Alias for PURCHASES
       CREATE_SALE_RETURN: '/sale-returns',
       CREATE_PURCHASE_RETURN: '/purchase-returns',
       APPROVE: (id) => `/returns/${id}/approve`,
-      REJECT: (id) => `/returns/${id}/reject`
+      REJECT: (id) => `/returns/${id}/reject`,
+      RETURNABLE_ITEMS: '/returns/returnable-items'
     },
     
     // Reports

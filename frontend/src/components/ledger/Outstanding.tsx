@@ -350,13 +350,13 @@ const Outstanding: React.FC<OutstandingProps> = ({
   const getStatusBadge = (status: string) => {
     switch (status) {
       case 'overdue':
-        return <StatusBadge status="error" text="Overdue" />;
+        return <StatusBadge status="error" label="Overdue" />;
       case 'partial':
-        return <StatusBadge status="warning" text="Partial" />;
+        return <StatusBadge status="warning" label="Partial" />;
       case 'pending':
-        return <StatusBadge status="info" text="Pending" />;
+        return <StatusBadge status="info" label="Pending" />;
       default:
-        return <StatusBadge status="default" text={status} />;
+        return <StatusBadge status="default" label={status} />;
     }
   };
 

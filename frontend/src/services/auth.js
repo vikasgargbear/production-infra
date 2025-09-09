@@ -44,7 +44,6 @@ class AuthService {
       // For demo users, ensure org_id is set using OrgIdManager
       // OrgIdManager will handle setting default if needed
       const orgId = orgIdManager.getOrgId();
-      console.log('Demo user org_id:', orgId);
 
       // Set default authorization header
       this.setAuthHeader(demoToken);
@@ -81,7 +80,6 @@ class AuthService {
 
       return { success: true, user };
     } catch (error) {
-      console.error('Login error:', error);
       return { 
         success: false, 
         error: error.response?.data?.message || 'Login failed. Please check your credentials.' 
@@ -121,7 +119,6 @@ class AuthService {
 
       return access_token;
     } catch (error) {
-      console.error('Token refresh failed:', error);
       this.logout();
       return null;
     }

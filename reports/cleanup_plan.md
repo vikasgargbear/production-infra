@@ -1,7 +1,30 @@
-# Cleanup Plan - 2025-01-06
+# Cleanup Plan - 2025-01-08 (Updated)
 
 ## Executive Summary
-Identified **100+ files** for cleanup across frontend and backend, with potential to recover **~15MB** and significantly improve code maintainability.
+Comprehensive analysis identified **180+ files** for cleanup across frontend and backend:
+- **129 files** with console.log statements to remove
+- **50+ files** with commented code blocks
+- **50 files** with TODO/FIXME comments
+- **100+ files** duplicate components and test files
+- Potential to recover **~20MB** and significantly improve code quality.
+
+## 🚨 NEW: Console.log Cleanup (129 files)
+
+### Critical Security Risk Files:
+- `/frontend/src/services/api/partyLedgerApi.js` - API debugging logs
+- `/frontend/src/services/api/apiClient.ts` - Base API client logs
+- `/frontend/src/services/auth.js` - Authentication logs (SECURITY RISK)
+- `/frontend/src/services/OrgIdManager.js` - Organization management logs
+
+### Component Files with Console.logs:
+- `/frontend/src/components/ledger/PartyLedgerV3.tsx`
+- `/frontend/src/components/payment/ModularPaymentEntry.tsx`
+- `/frontend/src/components/purchase/EnhancedPurchaseEntry.js`
+- `/frontend/src/components/sales/InvoiceFlow.js`
+- `/frontend/src/components/stock/CurrentStock.js`
+- And 120+ more files...
+
+**Action**: Remove all console.log statements (except in test/development files)
 
 ## 🚨 CRITICAL DUPLICATES (High Priority)
 
@@ -112,7 +135,22 @@ Identified **100+ files** for cleanup across frontend and backend, with potentia
 - Other `.DS_Store` files if found
 - `*.tmp`, `*.swp`, `*.bak` files
 
-### 7. Archive Folder Cleanup
+### 7. TODO/FIXME Comments (50 files)
+
+#### Backend TODOs:
+- `/backend/app/api/routes/purchase_returns.py` - TODO: Add batch tracking
+- `/backend/app/api/routes/products_consolidated.py` - TODO: Optimize query performance
+- `/backend/app/api/services/customer_service.py` - TODO: Add caching
+- `/backend/app/api/services/invoice_service.py` - TODO: Refactor calculation logic
+
+#### Frontend TODOs:
+- `/frontend/src/components/purchase/EnhancedPurchaseEntry.js` - TODO: Add validation
+- `/frontend/src/components/payment/ModularPaymentEntry.tsx` - TODO: Split payment logic
+- `/frontend/src/services/invoiceApiService.js` - TODO: Error handling improvements
+
+**Action**: Create tickets for each TODO or address immediately if simple
+
+### 8. Archive Folder Cleanup
 
 #### **Already Archived - Can DELETE**
 These are already in archive folders and not referenced:
@@ -123,18 +161,22 @@ These are already in archive folders and not referenced:
 
 ## Impact Analysis
 
-### Files Affected: ~100
-### Storage Recovery: ~15MB
+### Files Affected: ~180+
+### Storage Recovery: ~20MB
+### Console.log Removals: 129 files
+### TODO/FIXME Comments: 50 files
 ### Import Updates Required: ~50 files
 ### Risk Level: MEDIUM (many active imports)
 
 ## Execution Plan
 
 ### Phase 1: Safe Cleanup (LOW RISK) - Immediate
-1. Delete already-archived components in archive folders
-2. Remove `.DS_Store` files
-3. Clean `/archive/temp/test-scripts/`
-4. Move misplaced test files to proper directories
+1. Remove console.log statements from all 129 files
+2. Delete already-archived components in archive folders
+3. Remove `.DS_Store` files
+4. Clean `/archive/temp/test-scripts/`
+5. Move misplaced test files to proper directories
+6. Clean up obvious commented code blocks
 
 ### Phase 2: Backend Consolidation (MEDIUM RISK)
 1. Archive duplicate parser implementations
@@ -188,8 +230,12 @@ git reset --hard pre-cleanup-20250106
 ## Summary Statistics
 
 **Total Cleanup Opportunity:**
+- **180+ files** require cleanup action
+- **129 files** with console.log statements to remove
+- **50+ files** with commented code to clean
+- **50 files** with TODO/FIXME comments to address
 - **100+ files** can be archived/consolidated
-- **~15MB** storage recovery
+- **~20MB** storage recovery
 - **50% reduction** in duplicate code
 - **11 archived folders** can be cleaned
 - **2 complete parser implementations** can be consolidated

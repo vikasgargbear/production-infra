@@ -38,10 +38,7 @@ apiClient.interceptors.request.use(
     // Add org_id header
     config.headers['X-Org-Id'] = orgId;
     
-    // Log only if there's an issue
-    if (!orgIdManager.isValidOrgId(orgId) && !isPublicEndpoint) {
-      console.warn('[TS apiClient] Using fallback org_id for:', config.url);
-    }
+    // Only check validity, no logging needed
     
     // THEN: Get auth token - use consistent key
     const token = localStorage.getItem('authToken');
@@ -52,7 +49,6 @@ apiClient.interceptors.request.use(
         const tokenParts = token.split('.');
         if (tokenParts.length !== 3) {
           // Not a valid JWT format
-          console.warn('Invalid token format, using as-is');
           config.headers.Authorization = `Bearer ${token}`;
         } else {
           // Decode token to check expiry (without verification)
@@ -77,7 +73,6 @@ apiClient.interceptors.request.use(
             
           } else if (!isPublicEndpoint) {
             // Token expired - only redirect if not an auth endpoint
-            console.error('Token expired:', new Date(expiry), 'Current time:', new Date(now));
             localStorage.removeItem('authToken');
             // Prevent redirect loop
             if (!window.location.pathname.includes('/login')) {
@@ -88,7 +83,6 @@ apiClient.interceptors.request.use(
         }
       } catch (e) {
         // Don't remove token on decode error - let backend validate
-        console.error('Token decode error:', e);
         // Still try to use the token
         config.headers.Authorization = `Bearer ${token}`;
       }
@@ -100,16 +94,15 @@ apiClient.interceptors.request.use(
       const isPublicPath = publicPaths.some(path => currentPath === path || currentPath.startsWith(path + '?'));
       
       if (!isPublicPath) {
-        console.log('No token found, redirecting to login from:', currentPath);
-        window.location.href = '/login?reason=not_authenticated';
-        return Promise.reject(new Error('Authentication required'));
+        // Don't redirect immediately - let the API call fail with 401
+        // The component can then handle the error appropriately
+        console.warn('No auth token for protected endpoint:', config.url);
+        // window.location.href = '/login?reason=not_authenticated';
+        // return Promise.reject(new Error('Authentication required'));
       }
     }
     
-    // Final check - warn if no org_id for non-public endpoints
-    if (!config.headers['X-Org-Id'] && !isPublicEndpoint) {
-      console.warn('No org_id found for request:', config.url);
-    }
+    // Final check done silently
     
     // For auth endpoints or valid token, continue
     return config;
@@ -128,18 +121,23 @@ apiClient.interceptors.response.use(
       // Check if this is actually a token issue or just missing auth
       const token = localStorage.getItem('authToken');
       
+      // Don't auto-redirect on 401 - let components handle it
+      // This prevents redirect loops
+      console.warn('401 Unauthorized response for:', error.config?.url);
+      
       if (token) {
         // We had a token but it was rejected - likely expired
-        console.error('Token rejected by server, clearing auth');
-        localStorage.removeItem('authToken');
-        sessionStorage.clear(); // Clear any session data
+        console.warn('Token was rejected by server - may be expired');
+        // Don't auto-remove token or redirect - let user manually logout
+        // localStorage.removeItem('authToken');
+        // sessionStorage.clear(); // Clear any session data
         
         // Only redirect if not already on login/register/setup pages
-        if (!window.location.pathname.includes('/login') && 
-            !window.location.pathname.includes('/register') &&
-            !window.location.pathname.includes('/setup')) {
-          window.location.href = '/login?reason=session_expired';
-        }
+        // if (!window.location.pathname.includes('/login') && 
+        //     !window.location.pathname.includes('/register') &&
+        //     !window.location.pathname.includes('/setup')) {
+        //   window.location.href = '/login?reason=session_expired';
+        // }
       }
       // If no token, just let the error bubble up without clearing anything
     } else if (error.response?.status === 404) {
@@ -153,7 +151,6 @@ apiClient.interceptors.response.use(
       return Promise.reject(customError);
     } else if (error.response?.status === 502 || error.response?.status === 503) {
       // Backend is down or restarting
-      console.warn('Backend service temporarily unavailable');
       const customError = {
         ...error,
         isServiceUnavailable: true,

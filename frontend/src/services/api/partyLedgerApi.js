@@ -6,10 +6,9 @@ const BASE_URL = '/party-ledger-v2';
 export const partyLedgerApi = {
   // Get party info (maps to getBalance for now)
   getPartyInfo: async (partyId) => {
-    // If partyId is undefined or null, check if we have a selected customer
+    // If partyId is undefined or null, return empty result
     if (!partyId) {
-      console.log('[PartyLedgerAPI] getPartyInfo called with null/undefined');
-      return { balance: 0, transaction_count: 0 };
+      return { balance: 0, transaction_count: 0, error: 'No party ID provided' };
     }
     
     // Extract ID from various possible formats
@@ -17,9 +16,6 @@ export const partyLedgerApi = {
     
     // If partyId is an object, try to extract the ID
     if (partyId && typeof partyId === 'object') {
-      console.log('[PartyLedgerAPI] Received customer object:', partyId);
-      console.log('[PartyLedgerAPI] customer_id field:', partyId.customer_id);
-      
       actualId = partyId.customer_id || 
                  partyId.id || 
                  partyId.ID ||
@@ -38,18 +34,16 @@ export const partyLedgerApi = {
       
       if (!actualId && partyId.customer_code && customerCodeMapping[partyId.customer_code]) {
         actualId = customerCodeMapping[partyId.customer_code];
-        console.log('[PartyLedgerAPI] Using hardcoded mapping for customer_code:', partyId.customer_code, '-> ID:', actualId);
       }
-      
-      console.log('[PartyLedgerAPI] getPartyInfo - Party object:', partyId);
-      console.log('[PartyLedgerAPI] getPartyInfo - All keys:', Object.keys(partyId));
     }
     
-    console.log('[PartyLedgerAPI] getPartyInfo - extracted ID:', actualId);
-    
     if (!actualId) {
-      console.error('[PartyLedgerAPI] Could not extract ID from party object:', partyId);
-      return { balance: 0, transaction_count: 0 };
+      // Return error in structured format for UI to handle
+      return { 
+        balance: 0, 
+        transaction_count: 0,
+        error: 'Could not extract party ID from provided data'
+      };
     }
     
     const response = await apiClient.get(`${BASE_URL}/balance/${actualId}`, {
@@ -64,8 +58,7 @@ export const partyLedgerApi = {
     
     // If no party_id provided, return empty result
     if (!party_id) {
-      console.log('[PartyLedgerAPI] getEnhancedLedger - No party_id provided, returning empty result');
-      return { entries: [], summary: {} };
+      return { entries: [], summary: {}, error: 'No party ID provided' };
     }
     
     // Extract ID from various possible formats
@@ -73,10 +66,6 @@ export const partyLedgerApi = {
     
     // If party_id is an object, try to extract the ID
     if (party_id && typeof party_id === 'object') {
-      console.log('[PartyLedgerAPI] getEnhancedLedger - Received customer object:', party_id);
-      console.log('[PartyLedgerAPI] getEnhancedLedger - customer_id field:', party_id?.customer_id);
-      console.log('[PartyLedgerAPI] getEnhancedLedger - All keys:', party_id ? Object.keys(party_id) : 'null/undefined');
-      
       // Try different possible field names
       actualId = party_id.customer_id || 
                  party_id.id || 
@@ -97,19 +86,16 @@ export const partyLedgerApi = {
       
       if (!actualId && party_id.customer_code && customerCodeMapping[party_id.customer_code]) {
         actualId = customerCodeMapping[party_id.customer_code];
-        console.log('[PartyLedgerAPI] Using hardcoded mapping for customer_code:', party_id.customer_code, '-> ID:', actualId);
       }
-      
-      console.log('[PartyLedgerAPI] Party object:', party_id);
-      console.log('[PartyLedgerAPI] All keys:', Object.keys(party_id));
     }
     
-    console.log('[PartyLedgerAPI] getEnhancedLedger - extracted ID:', actualId, 'from party_id:', party_id);
-    
-    // If we still don't have an ID, log error
+    // If we still don't have an ID, return structured error
     if (!actualId) {
-      console.error('[PartyLedgerAPI] Could not extract ID from party object:', party_id);
-      return { entries: [], summary: {} };
+      return { 
+        entries: [], 
+        summary: {},
+        error: 'Could not extract party ID from provided data'
+      };
     }
     
     const response = await apiClient.get(`${BASE_URL}/statement/${actualId}`, {
@@ -118,9 +104,6 @@ export const partyLedgerApi = {
     
     // Map the response to match frontend expectations
     const data = response.data;
-    console.log('[PartyLedgerAPI] Raw response from statement API:', data);
-    console.log('[PartyLedgerAPI] Statement entries count:', data.statement?.length);
-    console.log('[PartyLedgerAPI] First entry:', data.statement?.[0]);
     
     return {
       entries: data.statement || [], // Frontend expects 'entries', API returns 'statement'

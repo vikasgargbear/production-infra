@@ -113,22 +113,38 @@ const CollectionCenter: React.FC<CollectionCenterProps> = ({
         
         const invoices = response.data?.invoices || [];
         
+        // Get unique customer IDs to fetch their details
+        const customerIds = [...new Set(invoices.map((inv: any) => inv.customer_id))];
+        
+        // Fetch customer details for phone/email (if we have an endpoint)
+        // For now, we'll work with what we have from invoices
+        const customerDetailsMap = new Map();
+        
+        // Try to get customer details from a customer API if available
+        // This is where phone/email would come from in a real implementation
+        
         // Group by customer for collection view
         const customerMap = new Map();
         
         invoices.forEach((invoice: any) => {
           const customerId = invoice.customer_id;
+          const customerName = invoice.customer_name || `Customer ${customerId}`;
+          
           if (!customerMap.has(customerId)) {
+            // In a real implementation, fetch from customers API:
+            // const customerDetails = await apiClient.get(`/customers/${customerId}`);
+            // For now, we don't have phone/email in the invoice data
             customerMap.set(customerId, {
               customer_id: String(customerId),
-              customer_name: invoice.customer_name || `Customer ${customerId}`,
-              customer_phone: invoice.customer_phone || '9876543210',
-              customer_email: invoice.customer_email || `customer${customerId}@example.com`,
-              customer_address: invoice.customer_address || 'Mumbai, Maharashtra',
+              customer_name: customerName,
+              customer_phone: '', // Would come from customer details API
+              customer_email: '', // Would come from customer details API
+              customer_address: '', // Would come from customer details API
               total_outstanding: 0,
               overdue_amount: 0,
               days_overdue: 0,
               oldest_invoice_date: invoice.invoice_date,
+              last_payment_date: null,
               invoices: [],
               collection_status: 'pending',
               priority: 'low',
@@ -144,27 +160,50 @@ const CollectionCenter: React.FC<CollectionCenterProps> = ({
           }
           
           const customer = customerMap.get(customerId);
-          customer.total_outstanding += parseFloat(invoice.outstanding_amount || 0);
+          
+          // Calculate outstanding like Outstanding component does
+          const finalAmount = parseFloat(invoice.final_amount || 0);
+          const paidAmount = parseFloat(invoice.paid_amount || 0);
+          const outstandingAmount = finalAmount - paidAmount;
+          
+          customer.total_outstanding += outstandingAmount;
           
           // Calculate overdue
           const dueDate = invoice.due_date ? new Date(invoice.due_date) : new Date(invoice.invoice_date);
           const daysOverdue = differenceInDays(new Date(), dueDate);
           
           if (daysOverdue > 0) {
-            customer.overdue_amount += parseFloat(invoice.outstanding_amount || 0);
+            customer.overdue_amount += outstandingAmount;
             customer.days_overdue = Math.max(customer.days_overdue, daysOverdue);
           }
           
-          // Set priority based on days overdue
-          if (customer.days_overdue > 90) {
+          // Update oldest invoice date
+          if (new Date(invoice.invoice_date) < new Date(customer.oldest_invoice_date)) {
+            customer.oldest_invoice_date = invoice.invoice_date;
+          }
+          
+          // Track last payment as proxy for last contact
+          if (paidAmount > 0 && invoice.last_payment_date) {
+            if (!customer.last_payment_date || new Date(invoice.last_payment_date) > new Date(customer.last_payment_date)) {
+              customer.last_payment_date = invoice.last_payment_date;
+              customer.last_contact_date = invoice.last_payment_date;
+              customer.contact_attempts = 1; // At least one payment was made
+            }
+          }
+          
+          // Set priority based on days overdue and amount
+          if (customer.days_overdue > 90 || customer.total_outstanding > 100000) {
             customer.priority = 'critical';
             customer.collection_status = 'dispute';
-          } else if (customer.days_overdue > 60) {
+          } else if (customer.days_overdue > 60 || customer.total_outstanding > 50000) {
             customer.priority = 'high';
             customer.collection_status = 'promised';
-          } else if (customer.days_overdue > 30) {
+          } else if (customer.days_overdue > 30 || customer.total_outstanding > 20000) {
             customer.priority = 'medium';
             customer.collection_status = 'contacted';
+          } else if (customer.days_overdue > 7) {
+            customer.priority = 'low';
+            customer.collection_status = 'pending';
           }
           
           customer.invoices.push(invoice);
@@ -262,13 +301,23 @@ const CollectionCenter: React.FC<CollectionCenterProps> = ({
 
   // Quick action handlers
   const sendWhatsApp = (customer: CollectionItem) => {
+    if (!customer.customer_phone) {
+      alert('No phone number available for this customer');
+      return;
+    }
     const message = encodeURIComponent(
       `Dear ${customer.customer_name},\n\nYour outstanding amount is ₹${customer.total_outstanding.toLocaleString('en-IN')}. Please make the payment at your earliest convenience.\n\nThank you!`
     );
-    window.open(`https://wa.me/${customer.customer_phone}?text=${message}`, '_blank');
+    // Remove any non-numeric characters from phone number
+    const cleanPhone = customer.customer_phone.replace(/\D/g, '');
+    window.open(`https://wa.me/${cleanPhone}?text=${message}`, '_blank');
   };
 
   const sendEmail = (customer: CollectionItem) => {
+    if (!customer.customer_email) {
+      alert('No email address available for this customer');
+      return;
+    }
     const subject = encodeURIComponent('Payment Reminder');
     const body = encodeURIComponent(
       `Dear ${customer.customer_name},\n\nThis is a friendly reminder about your outstanding payment of ₹${customer.total_outstanding.toLocaleString('en-IN')}.\n\nPlease process the payment at your earliest convenience.\n\nThank you for your business!`
@@ -277,14 +326,21 @@ const CollectionCenter: React.FC<CollectionCenterProps> = ({
   };
 
   const makeCall = (customer: CollectionItem) => {
+    if (!customer.customer_phone) {
+      alert('No phone number available for this customer');
+      return;
+    }
     window.location.href = `tel:${customer.customer_phone}`;
   };
 
   const sendSMS = (customer: CollectionItem) => {
+    if (!customer.customer_phone) {
+      alert('No phone number available for this customer');
+      return;
+    }
     // This would integrate with your SMS gateway
     const message = `Payment reminder: ₹${customer.total_outstanding.toLocaleString('en-IN')} outstanding. Please pay soon.`;
-    console.log('Send SMS to', customer.customer_phone, ':', message);
-    alert(`SMS feature would send to ${customer.customer_phone}`);
+    alert(`SMS would be sent to ${customer.customer_phone}: "${message}"`);
   };
 
   const scheduleReminder = (customer: CollectionItem) => {
@@ -604,7 +660,7 @@ const CollectionCenter: React.FC<CollectionCenterProps> = ({
                               <div>
                                 <div className="text-sm font-medium text-gray-900">{item.customer_name}</div>
                                 <div className="text-xs text-gray-500">
-                                  {item.customer_phone} • {item.customer_email}
+                                  {item.customer_phone || 'No phone'} • {item.customer_email || 'No email'}
                                 </div>
                               </div>
                             </td>

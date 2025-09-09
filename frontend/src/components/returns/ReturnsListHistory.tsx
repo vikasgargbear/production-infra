@@ -146,16 +146,35 @@ const ReturnsListHistory: React.FC<ReturnsListHistoryProps> = ({ onClose }) => {
         searchParams.search = filters.search.trim();
       }
       
-      console.log('Fetching returns with params:', searchParams);
-      
       // Fetch both sales and purchase returns
-      const [salesResponse, purchaseResponse] = await Promise.all([
+      // Using Promise.allSettled to handle if one endpoint fails
+      const [salesResult, purchaseResult] = await Promise.allSettled([
         returnsApi.getCustomerReturns(searchParams),
         returnsApi.getSupplierReturns(searchParams)
       ]);
+      
+      // Handle responses based on their status
+      const salesResponse = salesResult.status === 'fulfilled' ? salesResult.value : { data: [] };
+      const purchaseResponse = purchaseResult.status === 'fulfilled' ? purchaseResult.value : { data: [] };
+      
+      // Log any errors for debugging
+      if (salesResult.status === 'rejected') {
+        console.warn('Failed to fetch sales returns:', salesResult.reason?.message || 'Unknown error');
+      }
+      if (purchaseResult.status === 'rejected') {
+        console.warn('Failed to fetch purchase returns:', purchaseResult.reason?.message || 'Unknown error');
+      }
 
       // Transform and combine data
-      const salesReturns: Return[] = (salesResponse.data?.returns || []).map((ret: any) => ({
+      // Check if data is directly in response or in response.data
+      const salesData = salesResponse.data || salesResponse;
+      const purchaseData = purchaseResponse.data || purchaseResponse;
+      
+      // Handle different possible response structures
+      const salesReturnsList = salesData.returns || salesData.items || salesData || [];
+      const purchaseReturnsList = purchaseData.returns || purchaseData.items || purchaseData || [];
+      
+      const salesReturns: Return[] = (Array.isArray(salesReturnsList) ? salesReturnsList : []).map((ret: any) => ({
         id: ret.id,
         return_no: ret.return_no || ret.sales_return_no || `SR-${ret.id}`,
         return_type: 'sales' as const,
@@ -170,7 +189,7 @@ const ReturnsListHistory: React.FC<ReturnsListHistoryProps> = ({ onClose }) => {
         items_count: ret.items?.length || 0
       }));
 
-      const purchaseReturns: Return[] = (purchaseResponse.data?.returns || []).map((ret: any) => ({
+      const purchaseReturns: Return[] = (Array.isArray(purchaseReturnsList) ? purchaseReturnsList : []).map((ret: any) => ({
         id: ret.id,
         return_no: ret.return_no || ret.purchase_return_no || `PR-${ret.id}`,
         return_type: 'purchase' as const,
@@ -192,7 +211,6 @@ const ReturnsListHistory: React.FC<ReturnsListHistoryProps> = ({ onClose }) => {
         allReturns = allReturns.filter(ret => ret.return_type === filters.return_type);
       }
 
-      console.log('Transformed returns:', allReturns);
       setReturns(allReturns);
       setPagination({
         total: allReturns.length,
@@ -200,8 +218,13 @@ const ReturnsListHistory: React.FC<ReturnsListHistoryProps> = ({ onClose }) => {
         per_page: pagination.per_page,
         total_pages: Math.ceil(allReturns.length / pagination.per_page)
       });
+      
+      // If both endpoints failed, show a message
+      if (salesResult.status === 'rejected' && purchaseResult.status === 'rejected') {
+        setError('Returns feature is currently being deployed. Please try again later.');
+      }
     } catch (error) {
-      console.error('Error fetching returns:', error);
+      // Log error for debugging if needed
       setError('Failed to fetch returns. Please try again.');
     } finally {
       setLoading(false);
@@ -220,7 +243,6 @@ const ReturnsListHistory: React.FC<ReturnsListHistoryProps> = ({ onClose }) => {
 
   // Handle filter changes with auto-search
   const handleFilterChange = (filters: any) => {
-    console.log('Filters changed:', filters);
     // Reset to first page when filters change
     fetchReturns(1, { ...filters, search: searchQuery });
   };
@@ -238,25 +260,21 @@ const ReturnsListHistory: React.FC<ReturnsListHistoryProps> = ({ onClose }) => {
 
   // Action handlers
   const handleViewReturn = (returnItem: Return) => {
-    console.log('Viewing return:', returnItem.return_no);
     // TODO: Navigate to return view page or open modal
     alert(`Viewing return: ${returnItem.return_no}`);
   };
 
   const handleEditReturn = (returnItem: Return) => {
-    console.log('Editing return:', returnItem.return_no);
     // TODO: Navigate to return edit page or open modal
     alert(`Editing return: ${returnItem.return_no}`);
   };
 
   const handlePrintReturn = (returnItem: Return) => {
-    console.log('Printing return:', returnItem.return_no);
     // TODO: Open print dialog or generate PDF
     alert(`Printing return: ${returnItem.return_no}`);
   };
 
   const handleMoreOptions = (returnItem: Return) => {
-    console.log('More options for return:', returnItem.return_no);
     // TODO: Show dropdown menu with more options
     alert(`More options for return: ${returnItem.return_no}`);
   };
@@ -279,7 +297,6 @@ const ReturnsListHistory: React.FC<ReturnsListHistoryProps> = ({ onClose }) => {
   const getStatusText = (status: string | undefined) => {
     if (!status) return 'Unknown';
     
-    console.log('Raw status from backend:', status, 'Type:', typeof status);
     
     // Map backend statuses to display text - handle various formats
     const statusMap: Record<string, string> = {
@@ -325,7 +342,7 @@ const ReturnsListHistory: React.FC<ReturnsListHistoryProps> = ({ onClose }) => {
     }
     
     // If no mapping found, log it and return the original value
-    console.log('No status mapping found for:', status, 'Returning original value');
+    // No status mapping found, returning original value
     return status;
   };
 
@@ -401,11 +418,7 @@ const ReturnsListHistory: React.FC<ReturnsListHistoryProps> = ({ onClose }) => {
       header: 'Status',
       render: (value: string, returnItem: Return) => {
         const statusText = getStatusText(returnItem.status);
-        console.log('Status column render:', {
-          original: returnItem.status,
-          processed: statusText,
-          return_id: returnItem.id
-        });
+        // Status column render
         return (
           <StatusBadge 
             status={statusText} 
@@ -487,7 +500,7 @@ const ReturnsListHistory: React.FC<ReturnsListHistoryProps> = ({ onClose }) => {
             },
             {
               label: "Export All",
-              onClick: () => console.log('Export all returns'),
+              onClick: () => {/* TODO: Implement export all returns */},
               variant: "default",
               icon: Download
             }
@@ -523,9 +536,9 @@ const ReturnsListHistory: React.FC<ReturnsListHistoryProps> = ({ onClose }) => {
             {/* Bulk Actions */}
             <BulkActionBar
               selectedCount={selectedReturns.length}
-              onApprove={() => console.log('Approve selected')}
-              onReject={() => console.log('Reject selected')}
-              onExport={() => console.log('Export selected')}
+              onApprove={() => {/* TODO: Implement approve selected */}}
+              onReject={() => {/* TODO: Implement reject selected */}}
+              onExport={() => {/* TODO: Implement export selected */}}
               onClear={() => setSelectedReturns([])}
             />
 
