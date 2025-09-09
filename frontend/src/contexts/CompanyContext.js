@@ -23,7 +23,17 @@ export const CompanyProvider = ({ children }) => {
     const timer = setTimeout(() => {
       loadCompanyData();
     }, 100);
-    return () => clearTimeout(timer);
+    
+    // Also reload when focus returns to window (in case settings changed)
+    const handleFocus = () => {
+      loadCompanyData();
+    };
+    window.addEventListener('focus', handleFocus);
+    
+    return () => {
+      clearTimeout(timer);
+      window.removeEventListener('focus', handleFocus);
+    };
   }, []);
 
   const loadCompanyData = async () => {
