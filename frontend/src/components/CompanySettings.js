@@ -95,7 +95,6 @@ const CompanySettings = ({ open = true, onClose }) => {
       await updateCompanyInfo(companyData);
       toast.saved('Company Settings');
     } catch (error) {
-      console.error('Error saving company settings:', error);
       toast.error('Failed to save settings. Please try again later.');
     } finally {
       setIsLoading(false);

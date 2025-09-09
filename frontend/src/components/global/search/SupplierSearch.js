@@ -68,7 +68,6 @@ const SupplierSearch = forwardRef(({
           searchCache.set('suppliers', 'all', suppliers);
         }
       } catch (error) {
-        console.error('Error preloading suppliers:', error);
       }
     };
 
@@ -95,7 +94,6 @@ const SupplierSearch = forwardRef(({
         
         setSearchResults(results);
       } catch (error) {
-        console.error('Error searching suppliers:', error);
         
         // Fallback to direct API search if smartSearch fails
         try {
@@ -108,7 +106,6 @@ const SupplierSearch = forwardRef(({
             searchCache.setItems('suppliers', results);
           }
         } catch (apiError) {
-          console.error('API search also failed:', apiError);
           setSearchResults([]);
         }
       } finally {

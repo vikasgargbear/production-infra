@@ -64,7 +64,6 @@ const BatchMaster = ({ open, onClose }) => {
         setError('No batch data available');
       }
     } catch (error) {
-      console.error('Error loading batches:', error);
       setError('Failed to load batches. Please check your connection and try again.');
       setBatches([]);
     } finally {
@@ -100,7 +99,6 @@ const BatchMaster = ({ open, onClose }) => {
         setProducts([]);
       }
     } catch (error) {
-      console.error('Error loading products:', error);
       setProducts([]);
       setError('Failed to load products. Some features may be limited.');
     }
@@ -216,7 +214,6 @@ const BatchMaster = ({ open, onClose }) => {
       setTimeout(() => setSuccessMessage(''), 3000);
       handleCloseModal();
     } catch (error) {
-      console.error('Error saving batch:', error);
       setError('Failed to save batch. Please try again.');
       // Fallback to local state update
       if (editingBatch) {
@@ -288,7 +285,6 @@ const BatchMaster = ({ open, onClose }) => {
         setBatches(prev => prev.filter(b => b.id !== id));
         setSuccessMessage('Batch deleted successfully!');
       } catch (error) {
-        console.error('Error deleting batch:', error);
         // Fallback to local state update
         setBatches(prev => prev.filter(b => b.id !== id));
         setSuccessMessage('Batch deleted locally!');

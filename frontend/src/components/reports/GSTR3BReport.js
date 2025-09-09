@@ -91,7 +91,6 @@ const GSTR3BReport = ({ open, onClose }) => {
 
       processGSTR3BData(sales, purchases);
     } catch (error) {
-      console.error('Error loading GSTR-3B data:', error);
     } finally {
       setLoading(false);
     }

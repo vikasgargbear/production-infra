@@ -299,11 +299,9 @@ const ProfitLossStatement: React.FC = () => {
   };
 
   const exportToPDF = () => {
-    console.log('Exporting to PDF...');
   };
 
   const exportToExcel = () => {
-    console.log('Exporting to Excel...');
   };
 
   const handlePrint = () => {

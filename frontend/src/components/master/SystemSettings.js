@@ -102,7 +102,6 @@ const SystemSettings = ({ open, onClose }) => {
     
     try {
       const response = await settingsApi.system.getAll();
-      console.log('System Settings API Response:', response);
       
       if (response?.data) {
         // Map API response to component state
@@ -119,7 +118,6 @@ const SystemSettings = ({ open, onClose }) => {
         }
       }
     } catch (error) {
-      console.error('Error loading system settings:', error);
       // Fallback to localStorage
       const savedSettings = localStorage.getItem('systemSettings');
       if (savedSettings) {
@@ -157,7 +155,6 @@ const SystemSettings = ({ open, onClose }) => {
         localStorage.setItem('systemSettings', JSON.stringify(settings));
       }
     } catch (error) {
-      console.error('Error saving settings:', error);
       setError('Failed to save settings to server.');
       // Fallback to localStorage
       localStorage.setItem('systemSettings', JSON.stringify(settings));

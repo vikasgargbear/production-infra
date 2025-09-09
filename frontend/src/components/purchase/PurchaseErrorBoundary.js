@@ -20,8 +20,6 @@ class PurchaseErrorBoundary extends React.Component {
   componentDidCatch(error, errorInfo) {
     // Log error to console in development
     if (process.env.NODE_ENV === 'development') {
-      console.error('Purchase Module Error:', error);
-      console.error('Error Info:', errorInfo);
     }
 
     // You can also log the error to an error reporting service here

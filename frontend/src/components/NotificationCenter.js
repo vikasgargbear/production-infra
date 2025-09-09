@@ -46,13 +46,11 @@ const NotificationCenter = ({ isOpen, onClose }) => {
         setNotifications([]);
       }
     } catch (error) {
-      console.error('Error loading notifications:', error);
       
       // Try to load from offline storage instead of using mock data
       const offlineData = await offlineStorage.getOffline('notifications', { critical: true });
       
       if (offlineData && !offlineStorage.isDataStale(offlineData, 30)) { // 30 minutes max for notifications
-        console.log('📱 Using offline notifications data');
         setNotifications(offlineData.data);
         
         // Show offline indicator
@@ -75,7 +73,6 @@ const NotificationCenter = ({ isOpen, onClose }) => {
     try {
       await loadNotifications();
     } catch (error) {
-      console.error('Error refreshing notifications:', error);
       setError('Failed to refresh notifications. Please try again.');
     } finally {
       setRefreshing(false);
@@ -93,7 +90,6 @@ const NotificationCenter = ({ isOpen, onClose }) => {
       // Try to update on server
       await settingsApi.notifications.markAsRead(id);
     } catch (error) {
-      console.error('Error marking notification as read:', error);
       
       // Queue for offline processing
       offlineStorage.queueOfflineOperation({
@@ -112,7 +108,6 @@ const NotificationCenter = ({ isOpen, onClose }) => {
       // Try to delete on server
       await settingsApi.notifications.delete(id);
     } catch (error) {
-      console.error('Error deleting notification:', error);
       
       // Queue for offline processing
       offlineStorage.queueOfflineOperation({
@@ -133,7 +128,6 @@ const NotificationCenter = ({ isOpen, onClose }) => {
       // Try to update on server
       await settingsApi.notifications.markAllAsRead();
     } catch (error) {
-      console.error('Error marking all notifications as read:', error);
       
       // Queue for offline processing
       offlineStorage.queueOfflineOperation({

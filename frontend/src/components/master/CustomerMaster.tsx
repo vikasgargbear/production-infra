@@ -79,13 +79,11 @@ const CustomerMaster: React.FC<CustomerMasterProps> = () => {
       setIsLoading(true);
       setError(null);
       const response = await customersApi.getAll();
-      console.log('Customers API Response:', response);
       
       // Handle different response formats
       const customerData = response.data?.customers || response.data?.data || response.data || [];
       setCustomers(Array.isArray(customerData) ? customerData : []);
     } catch (err) {
-      console.error('Error loading customers:', err);
       setError('Failed to load customers. Please try again.');
       // Set empty array on error to prevent crashes
       setCustomers([]);
@@ -141,7 +139,6 @@ const CustomerMaster: React.FC<CustomerMasterProps> = () => {
       toast.success(`Customer ${action}d successfully`);
       loadCustomers();
     } catch (err) {
-      console.error(`Error ${action}ing customer:`, err);
       toast.error(`Failed to ${action} customer.`);
     }
   };
@@ -169,7 +166,6 @@ const CustomerMaster: React.FC<CustomerMasterProps> = () => {
       setSelectedCustomers([]);
       loadCustomers();
     } catch (err) {
-      console.error('Error bulk deactivating customers:', err);
       toast.error('Failed to deactivate some customers.');
     }
   };

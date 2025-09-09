@@ -69,7 +69,6 @@ const BulkOperations = ({ open, onClose }) => {
         setExportJobs(exportResponse.data);
       }
     } catch (error) {
-      console.error('Error loading bulk operations:', error);
       setError('Failed to load bulk operations. Please try again.');
     } finally {
       setIsLoading(false);
@@ -82,7 +81,6 @@ const BulkOperations = ({ open, onClose }) => {
     try {
       await loadJobs();
     } catch (error) {
-      console.error('Error refreshing jobs:', error);
       setError('Failed to refresh jobs. Please try again.');
     } finally {
       setRefreshing(false);
@@ -117,7 +115,6 @@ const BulkOperations = ({ open, onClose }) => {
         setError('File upload failed. Please try again.');
       }
     } catch (error) {
-      console.error('Error uploading file:', error);
       setError('File upload failed. Please try again.');
     } finally {
       setIsProcessing(false);
@@ -132,7 +129,6 @@ const BulkOperations = ({ open, onClose }) => {
         await loadJobs();
       }
     } catch (error) {
-      console.error('Error starting job:', error);
       setError('Failed to start job. Please try again.');
     }
   };
@@ -144,7 +140,6 @@ const BulkOperations = ({ open, onClose }) => {
         await loadJobs();
       }
     } catch (error) {
-      console.error('Error pausing job:', error);
       setError('Failed to pause job. Please try again.');
     }
   };
@@ -158,7 +153,6 @@ const BulkOperations = ({ open, onClose }) => {
         await loadJobs();
       }
     } catch (error) {
-      console.error('Error deleting job:', error);
       setError('Failed to delete job. Please try again.');
     }
   };

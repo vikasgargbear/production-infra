@@ -62,7 +62,6 @@ const InvoiceSearch = forwardRef(({
   // Fetch recent invoices
   const fetchRecentInvoices = useCallback(async () => {
     if (!customerId) {
-      console.log('No customerId provided for recent invoices');
       return;
     }
     
@@ -72,13 +71,11 @@ const InvoiceSearch = forwardRef(({
     
     // Check cache first
     if (cache[cacheKey]) {
-      console.log('Using cached recent invoices:', cache[cacheKey].length);
       setRecentInvoices(cache[cacheKey]);
       setInvoices(cache[cacheKey]); // Also set as current invoices
       return;
     }
 
-    console.log('Fetching recent invoices for customer:', customerIdStr);
     setLoading(true);
     setError(null);
 
@@ -91,11 +88,9 @@ const InvoiceSearch = forwardRef(({
         status: filters.status || ['PAID', 'PARTIAL', 'UNPAID']
       });
       
-      console.log('Recent invoices response:', response);
       
       if (response.success || response.data) {
         const results = response.data?.invoices || response.data || [];
-        console.log('Recent invoices found:', results.length);
         setRecentInvoices(results);
         
         // If no search query, also set as current invoices
@@ -110,7 +105,6 @@ const InvoiceSearch = forwardRef(({
         }));
       }
     } catch (err) {
-      console.error('Error fetching recent invoices:', err);
       // Don't show error for recent invoices fetch
       setRecentInvoices([]);
       setInvoices([]);
@@ -169,7 +163,6 @@ const InvoiceSearch = forwardRef(({
         throw new Error(response.error?.message || 'Search failed');
       }
     } catch (err) {
-      console.error('Invoice search error:', err);
       setError(err.message);
       setInvoices([]);
       onError?.(err);

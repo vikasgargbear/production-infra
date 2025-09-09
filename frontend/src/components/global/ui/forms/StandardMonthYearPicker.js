@@ -74,7 +74,6 @@ const StandardMonthYearPicker = ({
         }
       }
     } catch (e) {
-      console.warn('Invalid date format:', dateValue);
     }
     
     return '';
@@ -104,7 +103,6 @@ const StandardMonthYearPicker = ({
         }
       }
     } catch (e) {
-      console.warn('Failed to parse display value:', displayVal);
     }
     
     return '';

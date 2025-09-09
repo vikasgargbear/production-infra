@@ -105,7 +105,6 @@ const PurchaseSearch = forwardRef(({
       
       setPurchases(recentPurchases);
     } catch (err) {
-      console.error('Error fetching recent purchases:', err);
       setError('Failed to load recent purchases');
       if (onError) onError(err);
     } finally {
@@ -144,7 +143,6 @@ const PurchaseSearch = forwardRef(({
       setPurchases(searchResults);
       setShowDropdown(true);
     } catch (err) {
-      console.error('Error searching purchases:', err);
       setError('Failed to search purchases');
       if (onError) onError(err);
     } finally {

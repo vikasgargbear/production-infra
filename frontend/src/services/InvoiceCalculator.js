@@ -44,7 +44,6 @@ class InvoiceCalculator {
         };
       }
     } catch (error) {
-      console.log('Backend calculation failed, using local:', error);
     }
 
     // Fallback to local calculation

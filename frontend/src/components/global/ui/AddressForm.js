@@ -86,7 +86,6 @@ const AddressForm = ({
         }
       }
     } catch (error) {
-      console.error('Error fetching addresses:', error);
       // Fallback to customer data if fetch fails
       const fallbackAddress = {
         id: 'default',
@@ -209,7 +208,6 @@ const AddressForm = ({
           await fetchCustomerAddresses(customer.customer_id);
         }
       } catch (error) {
-        console.error('Error saving address:', error);
       }
     }
     

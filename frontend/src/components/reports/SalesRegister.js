@@ -82,7 +82,6 @@ const SalesRegister = ({ open, onClose }) => {
       setSalesData(processedSales);
       calculateSummary(processedSales);
     } catch (error) {
-      console.error('Error loading sales data:', error);
     } finally {
       setLoading(false);
     }

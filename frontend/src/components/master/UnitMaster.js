@@ -32,7 +32,6 @@ const UnitMaster = ({ open, onClose }) => {
     
     try {
       const response = await settingsApi.units.getAll();
-      console.log('Units API Response:', response);
       
       // Handle different response formats
       let unitData = [];
@@ -44,7 +43,6 @@ const UnitMaster = ({ open, onClose }) => {
       
       setUnits(unitData || []);
     } catch (error) {
-      console.error('Error loading units:', error);
       setError('Failed to load units. Please try again.');
       setUnits([]);
     } finally {
@@ -59,7 +57,6 @@ const UnitMaster = ({ open, onClose }) => {
     try {
       await loadUnits();
     } catch (error) {
-      console.error('Refresh failed:', error);
       setError('Failed to refresh data');
     } finally {
       setRefreshing(false);
@@ -131,7 +128,6 @@ const UnitMaster = ({ open, onClose }) => {
       setTimeout(() => setSuccessMessage(''), 3000);
       handleCloseModal();
     } catch (error) {
-      console.error('Error saving unit:', error);
       setError('Failed to save unit. Please try again.');
     }
   };
@@ -168,7 +164,6 @@ const UnitMaster = ({ open, onClose }) => {
         await loadUnits();
         setTimeout(() => setSuccessMessage(''), 3000);
       } catch (error) {
-        console.error('Error deleting unit:', error);
         setError('Failed to delete unit. Please try again.');
       }
     }
@@ -183,7 +178,6 @@ const UnitMaster = ({ open, onClose }) => {
       await loadUnits();
       setTimeout(() => setSuccessMessage(''), 3000);
     } catch (error) {
-      console.error('Error updating unit status:', error);
       setError('Failed to update unit status. Please try again.');
     }
   };

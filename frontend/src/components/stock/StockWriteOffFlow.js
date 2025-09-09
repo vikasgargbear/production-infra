@@ -93,7 +93,6 @@ const StockWriteOffFlow = ({ onClose }) => {
       }
     } catch (error) {
       toast.error('Failed to load expiring stock');
-      console.error('Error loading expiring stock:', error);
     } finally {
       setLoading(false);
     }
@@ -223,7 +222,6 @@ const StockWriteOffFlow = ({ onClose }) => {
       }, 2000);
     } catch (error) {
       toast.error(error.message || 'Failed to create write-off');
-      console.error('Error creating write-off:', error);
     } finally {
       setSaving(false);
     }

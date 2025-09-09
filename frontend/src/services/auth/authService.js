@@ -121,7 +121,6 @@ class AuthService {
 
       if (!response.ok) {
         const error = await response.json();
-        console.error('Login failed:', error);
         return false;
       }
 
@@ -142,7 +141,6 @@ class AuthService {
 
       return true;
     } catch (error) {
-      console.error('Login error:', error);
       return false;
     }
   }

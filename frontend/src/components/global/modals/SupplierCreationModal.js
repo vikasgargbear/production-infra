@@ -194,7 +194,6 @@ const SupplierCreationModal = ({
       // Prepare data for API using DataTransformer
       const supplierData = DataTransformer.prepareSupplierForAPI(formData);
       
-      console.log('Sending supplier data:', supplierData);
       const response = await supplierAPI.create(supplierData);
       
       if (response) {
@@ -215,7 +214,6 @@ const SupplierCreationModal = ({
         throw new Error('Failed to create supplier');
       }
     } catch (error) {
-      console.error('Error creating supplier:', error);
       const errorMessage = error.response?.data?.detail || error.message || 'Failed to create supplier';
       toast.error(errorMessage);
     } finally {

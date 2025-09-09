@@ -44,7 +44,6 @@ const ThirdPartyIntegrations = ({ open, onClose }) => {
         setIntegrations([]);
       }
     } catch (error) {
-      console.error('Error loading integrations:', error);
       setError('Failed to load integrations. Please try again.');
       setIntegrations([]);
     } finally {
@@ -58,7 +57,6 @@ const ThirdPartyIntegrations = ({ open, onClose }) => {
     try {
       await loadIntegrations();
     } catch (error) {
-      console.error('Error refreshing integrations:', error);
       setError('Failed to refresh integrations. Please try again.');
     } finally {
       setRefreshing(false);
@@ -106,7 +104,6 @@ const ThirdPartyIntegrations = ({ open, onClose }) => {
         ));
       }
     } catch (error) {
-      console.error('Connection test failed:', error);
     } finally {
       setTestingConnection(null);
     }
@@ -123,7 +120,6 @@ const ThirdPartyIntegrations = ({ open, onClose }) => {
         ));
       }
     } catch (error) {
-      console.error('Failed to toggle integration:', error);
     }
   };
 
@@ -145,7 +141,6 @@ const ThirdPartyIntegrations = ({ open, onClose }) => {
         setConfiguring(null);
       }
     } catch (error) {
-      console.error('Failed to save configuration:', error);
     }
   };
 

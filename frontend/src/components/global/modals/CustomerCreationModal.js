@@ -45,12 +45,10 @@ const CustomerCreationModal = ({ show, onClose, onCustomerCreated }) => {
       });
 
       const response = await customerAPI.create(customerData);
-      console.log('Customer creation response:', response);
       
       // The API returns the created customer directly, not wrapped in data
       if (response) {
         const createdCustomer = DataTransformer.transformCustomer(response, 'display');
-        console.log('Created customer:', createdCustomer);
         
         if (onCustomerCreated) {
           onCustomerCreated(createdCustomer);
@@ -83,11 +81,9 @@ const CustomerCreationModal = ({ show, onClose, onCustomerCreated }) => {
         // Close modal
         onClose();
       } else {
-        console.error('Unexpected response structure:', response);
         setErrors(['Customer created but response format unexpected']);
       }
     } catch (error) {
-      console.error('Error saving customer:', error);
       if (error.response?.data?.detail) {
         if (Array.isArray(error.response.data.detail)) {
           setErrors(error.response.data.detail.map(err => {

@@ -329,7 +329,6 @@ const GSTCalculatorComponent = ({
         onCalculationComplete(result);
       }
     } catch (error) {
-      console.error('GST Calculation Error:', error);
       setGstResult({
         errors: [`Calculation failed: ${error.message}`]
       });

@@ -177,7 +177,6 @@ const PartyEditModal = ({
       
       onClose();
     } catch (err) {
-      console.error('Error saving party:', err);
       setError(err.response?.data?.message || 'Failed to save party. Please try again.');
     } finally {
       setIsSaving(false);

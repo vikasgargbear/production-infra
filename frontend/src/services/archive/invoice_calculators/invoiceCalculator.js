@@ -9,7 +9,6 @@
  * Replacement: import InvoiceCalculatorEnterprise from './invoiceCalculatorEnterprise';
  */
 
-console.warn('⚠️ DEPRECATED: invoiceCalculator.js is deprecated. Use invoiceCalculatorEnterprise.js instead.');
 
 class InvoiceCalculator {
   /**

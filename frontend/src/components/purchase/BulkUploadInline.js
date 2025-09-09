@@ -359,7 +359,6 @@ const BulkUploadInline = ({ onProductsUploaded }) => {
           }
           
         } catch (error) {
-          console.error('Error parsing Excel:', error);
           toast.error('Failed to parse Excel file');
         } finally {
           setUploading(false);
@@ -373,7 +372,6 @@ const BulkUploadInline = ({ onProductsUploaded }) => {
       reader.readAsArrayBuffer(file);
       
     } catch (error) {
-      console.error('Error reading file:', error);
       toast.error('Failed to read file');
       setUploading(false);
     }

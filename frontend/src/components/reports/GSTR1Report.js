@@ -46,7 +46,6 @@ const GSTR1Report = ({ open, onClose }) => {
       setSalesData(sales);
       processGSTR1Data(sales);
     } catch (error) {
-      console.error('Error loading sales data:', error);
     } finally {
       setLoading(false);
     }

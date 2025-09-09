@@ -58,14 +58,12 @@ const PartySearch = ({
         setParties([]);
       }
     } catch (error) {
-      console.error('Error loading parties:', error);
       
       // Try to load from offline storage instead of using mock data
       const storageKey = `parties_${partyType}_${searchQuery || 'all'}`;
       const offlineData = await offlineStorage.getOffline(storageKey, { persistent: true });
       
       if (offlineData && !offlineStorage.isDataStale(offlineData, 60)) { // 1 hour max for party data
-        console.log('📱 Using offline party data');
         setParties(offlineData.data);
         
         // Show offline indicator
@@ -88,7 +86,6 @@ const PartySearch = ({
     try {
       await loadParties(searchTerm);
     } catch (error) {
-      console.error('Error refreshing parties:', error);
       setError('Failed to refresh data. Please try again.');
     } finally {
       setRefreshing(false);

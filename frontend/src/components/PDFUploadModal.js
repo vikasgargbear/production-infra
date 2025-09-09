@@ -12,20 +12,16 @@ const PDFUploadModal = ({ isOpen, onClose, onDataExtracted }) => {
   
   // Debug state changes
   useEffect(() => {
-    console.log('📊 State Update - extractedData:', extractedData);
   }, [extractedData]);
   
   useEffect(() => {
-    console.log('📝 State Update - editedData:', editedData);
   }, [editedData]);
   
   // Reset state only when modal is opened fresh (not when closing)
   useEffect(() => {
     if (isOpen) {
-      console.log('🔓 Modal opened, current extractedData:', extractedData);
       // Don't reset if we have extracted data to show
       if (!extractedData && !file) {
-        console.log('🧹 Resetting state for fresh modal open');
         setError('');
       }
     }
@@ -51,22 +47,15 @@ const PDFUploadModal = ({ isOpen, onClose, onDataExtracted }) => {
 
     try {
       const response = await purchasesApi.parseInvoice(formData);
-      console.log('Full API Response:', response);
-      console.log('Response data:', response.data);
-      console.log('Response status:', response.status);
       
       // Always show the extracted data, even if it's just a template
       if (response && response.data && response.data.extracted_data) {
-        console.log('Setting extracted data:', response.data.extracted_data);
-        console.log('Items in extracted data:', response.data.extracted_data.items);
         
         // Get the extracted data
         const extractedInfo = response.data.extracted_data;
-        console.log('📋 Extracted data:', extractedInfo);
         
         // Directly proceed to verification flow without showing the review UI
         if (response.data.success) {
-          console.log('✅ Extraction successful with', extractedInfo.items?.length || 0, 'items');
           
           // Immediately call onDataExtracted to proceed to verification flow
           onDataExtracted(extractedInfo);
@@ -78,31 +67,23 @@ const PDFUploadModal = ({ isOpen, onClose, onDataExtracted }) => {
           setEditedData(null);
         } else {
           // If extraction wasn't fully successful, show the review UI
-          console.log('⚠️ Partial extraction, showing review UI');
           
           setExtractedData(prevData => {
-            console.log('Previous extractedData:', prevData);
-            console.log('New extractedData:', extractedInfo);
             return extractedInfo;
           });
           
           setEditedData(prevData => {
-            console.log('Previous editedData:', prevData);
             const newData = {...extractedInfo};
-            console.log('New editedData:', newData);
             return newData;
           });
           
           if (response.data.message) {
-            console.log('ℹ️ Parse message:', response.data.message);
           }
         }
       } else {
-        console.error('❌ No extracted_data in response:', response);
         setError('Failed to extract data from PDF - no data returned');
       }
     } catch (error) {
-      console.error('❌ Upload failed:', error);
       setError(error.response?.data?.detail || 'Failed to upload PDF');
     } finally {
       setLoading(false);
@@ -126,7 +107,6 @@ const PDFUploadModal = ({ isOpen, onClose, onDataExtracted }) => {
   };
 
   const handleConfirm = () => {
-    console.log('🚀 Confirming with data:', editedData);
     onDataExtracted(editedData);
     onClose();
     // Reset state
@@ -137,7 +117,6 @@ const PDFUploadModal = ({ isOpen, onClose, onDataExtracted }) => {
   };
   
   const handleClose = () => {
-    console.log('❌ Closing modal');
     // Don't reset extracted data when closing - keep it for review
     // Only reset if user hasn't extracted data yet
     if (!extractedData) {
@@ -153,14 +132,6 @@ const PDFUploadModal = ({ isOpen, onClose, onDataExtracted }) => {
 
   if (!isOpen) return null;
   
-  console.log('PDFUploadModal State:', { 
-    isOpen, 
-    hasFile: !!file, 
-    hasExtractedData: !!extractedData,
-    extractedDataLength: extractedData?.items?.length || 0,
-    extractedData: extractedData,
-    editedData: editedData
-  });
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[100]">
@@ -191,7 +162,6 @@ const PDFUploadModal = ({ isOpen, onClose, onDataExtracted }) => {
           <div>Force render count: {forceRender}</div>
           <button 
             onClick={() => {
-              console.log('Force render clicked, current extractedData:', extractedData);
               setForceRender(prev => prev + 1);
             }}
             className="mt-1 px-2 py-1 bg-blue-500 text-white text-xs rounded mr-2"
@@ -200,7 +170,6 @@ const PDFUploadModal = ({ isOpen, onClose, onDataExtracted }) => {
           </button>
           <button 
             onClick={() => {
-              console.log('Setting test data');
               const testData = {
                 supplier_name: 'TEST SUPPLIER',
                 invoice_number: 'TEST-001',

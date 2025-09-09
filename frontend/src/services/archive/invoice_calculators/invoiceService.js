@@ -14,7 +14,6 @@ export const invoiceService = {
       const response = await api.post('/quick-sale/', saleData);
       return response.data;
     } catch (error) {
-      console.error('Quick sale failed:', error);
       throw error;
     }
   },
@@ -39,7 +38,6 @@ export const invoiceService = {
       
       return detailsResponse.data;
     } catch (error) {
-      console.error('Invoice generation failed:', error);
       throw error;
     }
   },
@@ -54,7 +52,6 @@ export const invoiceService = {
       const response = await invoicesApi.getDetails(invoiceId);
       return response.data;
     } catch (error) {
-      console.error('Failed to get invoice details:', error);
       throw error;
     }
   },
@@ -68,7 +65,6 @@ export const invoiceService = {
     try {
       await invoicesApi.updatePdfUrl(invoiceId, pdfUrl);
     } catch (error) {
-      console.error('Failed to update PDF URL:', error);
       throw error;
     }
   },
@@ -83,7 +79,6 @@ export const invoiceService = {
       const response = await invoicesApi.recordPayment(invoiceId, paymentData);
       return response.data;
     } catch (error) {
-      console.error('Failed to record payment:', error);
       throw error;
     }
   },
@@ -139,7 +134,6 @@ export const invoiceService = {
       const invoices = invoicesResponse.data || [];
       return invoices.find(inv => inv.order_id === orderId) || null;
     } catch (error) {
-      console.error('Failed to fetch invoices:', error);
       return null;
     }
   }

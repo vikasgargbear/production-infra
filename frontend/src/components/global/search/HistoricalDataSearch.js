@@ -115,7 +115,6 @@ const HistoricalDataSearch = forwardRef(({
       const response = await recentFunction(recentLimit);
       setRecentData(response.data || []);
     } catch (err) {
-      console.error(`Error fetching recent ${dataType}:`, err);
     } finally {
       setLoading(false);
     }
@@ -124,7 +123,6 @@ const HistoricalDataSearch = forwardRef(({
   // Search data
   const searchData = useCallback(async (query) => {
     if (!searchFunction) {
-      console.error('searchFunction is required');
       return;
     }
 
@@ -154,7 +152,6 @@ const HistoricalDataSearch = forwardRef(({
       setData(results);
       onSearchComplete?.(results);
     } catch (err) {
-      console.error(`Error searching ${dataType}:`, err);
       setError(err.message);
       setData([]);
       onError?.(err);

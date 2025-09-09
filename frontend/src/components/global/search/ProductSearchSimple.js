@@ -45,7 +45,6 @@ const ProductSearchSimple = forwardRef(({ onAddItem, onCreateProduct, showBatchS
           searchCache.set('products', 'all', products);
         }
       } catch (error) {
-        console.error('Error preloading products:', error);
       }
     };
 
@@ -76,7 +75,6 @@ const ProductSearchSimple = forwardRef(({ onAddItem, onCreateProduct, showBatchS
         );
         setSearchResults(transformedResults);
       } catch (error) {
-        console.error('Error searching products:', error);
         
         // Fallback to direct API search if smartSearch fails
         try {
@@ -94,7 +92,6 @@ const ProductSearchSimple = forwardRef(({ onAddItem, onCreateProduct, showBatchS
             searchCache.setItems('products', results);
           }
         } catch (apiError) {
-          console.error('API search also failed:', apiError);
           setSearchResults([]);
         }
       } finally {
@@ -242,14 +239,11 @@ const ProductSearchSimple = forwardRef(({ onAddItem, onCreateProduct, showBatchS
                         onClick={(e) => {
                           e.preventDefault();
                           e.stopPropagation();
-                          console.log('Create product clicked:', searchQuery);
-                          console.log('onCreateProduct type:', typeof onCreateProduct);
                           setShowDropdown(false);
                           // Pass the search query to pre-fill product name
                           if (typeof onCreateProduct === 'function') {
                             onCreateProduct(searchQuery);
                           } else {
-                            console.error('onCreateProduct is not a function:', onCreateProduct);
                           }
                         }}
                         variant="primary"

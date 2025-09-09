@@ -147,7 +147,6 @@ const HistoryTable = ({
       doc.save(pdfFilename);
     } catch (error) {
       // Fallback to simple PDF without table formatting
-      console.warn('jspdf-autotable not available, using simple PDF export');
       
       const doc = new jsPDF();
       doc.setFontSize(16);

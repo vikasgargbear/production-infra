@@ -168,7 +168,6 @@ const PurchaseListHistory: React.FC<PurchaseListHistoryProps> = ({ onClose }) =>
         searchParams.search = filters.search.trim();
       }
       
-      console.log('Fetching purchases with params:', searchParams);
       
       // Try to get supplier invoices as they represent actual purchases
       let response;
@@ -178,7 +177,6 @@ const PurchaseListHistory: React.FC<PurchaseListHistoryProps> = ({ onClose }) =>
         
         // If no purchases found, load supplier invoices instead
         if (!response.data?.purchases || response.data.purchases.length === 0) {
-          console.log('No purchases found, loading supplier invoices...');
           
           const invoicesResponse = await purchasesApi.getReturnableInvoices(searchParams);
           
@@ -210,7 +208,6 @@ const PurchaseListHistory: React.FC<PurchaseListHistoryProps> = ({ onClose }) =>
           }
         }
       } catch (error) {
-        console.error('Error fetching purchases:', error);
         // Don't try supplier invoices until backend is fixed
         throw error;
       }
@@ -232,8 +229,6 @@ const PurchaseListHistory: React.FC<PurchaseListHistoryProps> = ({ onClose }) =>
           items_count: purchase.items_count || purchase.items?.length || 0
         })) || [];
 
-        console.log('Transformed purchases:', transformedPurchases);
-        console.log('Pagination data from API:', response.data.pagination);
         
         setPurchases(transformedPurchases);
         
@@ -258,7 +253,6 @@ const PurchaseListHistory: React.FC<PurchaseListHistoryProps> = ({ onClose }) =>
         setError('No data received from API');
       }
     } catch (error) {
-      console.error('Error fetching purchases:', error);
       setError('Failed to fetch purchases. Please try again.');
     } finally {
       setLoading(false);
@@ -282,7 +276,6 @@ const PurchaseListHistory: React.FC<PurchaseListHistoryProps> = ({ onClose }) =>
       setRefreshSuccess(true);
       setTimeout(() => setRefreshSuccess(false), 2000);
     } catch (error) {
-      console.error('Failed to refresh purchases:', error);
     } finally {
       setRefreshing(false);
     }
@@ -302,7 +295,6 @@ const PurchaseListHistory: React.FC<PurchaseListHistoryProps> = ({ onClose }) =>
       setExportSuccess(true);
       setTimeout(() => setExportSuccess(false), 3000);
     } catch (error) {
-      console.error('Failed to export purchases:', error);
     } finally {
       setExporting(false);
     }
@@ -359,7 +351,6 @@ const PurchaseListHistory: React.FC<PurchaseListHistoryProps> = ({ onClose }) =>
 
   // Handle filter changes with auto-search
   const handleFilterChange = (filters: any) => {
-    console.log('Filters changed:', filters);
     // Reset to first page when filters change
     fetchPurchases(1, { ...filters, search: searchQuery });
   };
@@ -507,25 +498,21 @@ const PurchaseListHistory: React.FC<PurchaseListHistoryProps> = ({ onClose }) =>
 
   // Action handlers
   const handleViewPurchase = (purchase: Purchase) => {
-    console.log('Viewing purchase:', purchase.po_number);
     // TODO: Navigate to purchase view page or open modal
     alert(`Viewing purchase: ${purchase.po_number}`);
   };
 
   const handleEditPurchase = (purchase: Purchase) => {
-    console.log('Editing purchase:', purchase.po_number);
     // TODO: Navigate to purchase edit page or open modal
     alert(`Editing purchase: ${purchase.po_number}`);
   };
 
   const handlePrintPurchase = (purchase: Purchase) => {
-    console.log('Printing purchase:', purchase.po_number);
     // For now, just alert until proper purchase print is implemented
     alert(`Print functionality for purchase ${purchase.po_number} will be implemented soon.`);
   };
 
   const handleMoreOptions = (purchase: Purchase) => {
-    console.log('More options for purchase:', purchase.po_number);
     // TODO: Show dropdown menu with more options
     alert(`More options for purchase: ${purchase.po_number}`);
   };
@@ -536,7 +523,6 @@ const PurchaseListHistory: React.FC<PurchaseListHistoryProps> = ({ onClose }) =>
   const getStatusText = (status: string | undefined) => {
     if (!status) return 'Unknown';
     
-    console.log('Raw status from backend:', status, 'Type:', typeof status);
     
     // Map backend statuses to display text - handle various formats
     const statusMap: Record<string, string> = {
@@ -586,7 +572,6 @@ const PurchaseListHistory: React.FC<PurchaseListHistoryProps> = ({ onClose }) =>
     }
     
     // If no mapping found, log it and return the original value
-    console.log('No status mapping found for:', status, 'Returning original value');
     return status;
   };
 
@@ -645,11 +630,6 @@ const PurchaseListHistory: React.FC<PurchaseListHistoryProps> = ({ onClose }) =>
       header: 'Status',
       render: (value: string, purchase: Purchase) => {
         const statusText = getStatusText(purchase.po_status);
-        console.log('Status column render:', {
-          original: purchase.po_status,
-          processed: statusText,
-          purchase_id: purchase.id
-        });
         return (
           <StatusBadge 
             status={statusText} 
@@ -664,11 +644,6 @@ const PurchaseListHistory: React.FC<PurchaseListHistoryProps> = ({ onClose }) =>
       header: 'Payment',
       render: (value: string, purchase: Purchase) => {
         const paymentText = getStatusText(purchase.payment_status);
-        console.log('Payment column render:', {
-          original: purchase.payment_status,
-          processed: paymentText,
-          purchase_id: purchase.id
-        });
         return (
           <StatusBadge 
             status={paymentText} 

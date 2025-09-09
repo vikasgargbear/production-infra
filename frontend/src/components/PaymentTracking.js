@@ -69,13 +69,11 @@ const PaymentTracking = () => {
         setFilteredPayments([]);
       }
     } catch (error) {
-      console.error('Error loading payments:', error);
       
       // Try to load from offline storage instead of using mock data
       const offlineData = await offlineStorage.getOffline('payments', { critical: true });
       
       if (offlineData && !offlineStorage.isDataStale(offlineData, 30)) { // 30 minutes max for payment data
-        console.log('📱 Using offline payment data');
         setPayments(offlineData.data);
         setFilteredPayments(offlineData.data);
         
@@ -100,7 +98,6 @@ const PaymentTracking = () => {
     try {
       await loadPayments();
     } catch (error) {
-      console.error('Error refreshing payments:', error);
       setError('Failed to refresh data. Please try again.');
     } finally {
       setRefreshing(false);

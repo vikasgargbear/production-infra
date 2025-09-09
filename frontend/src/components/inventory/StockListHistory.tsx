@@ -110,7 +110,6 @@ const StockListHistory: React.FC<StockListHistoryProps> = ({ onClose }) => {
         setMovements(movementsData);
         return;
       } catch (stockApiError) {
-        console.warn('Stock movements endpoint not available, deriving from transactions...');
       }
 
       // Fallback: Derive stock movements from existing transaction data
@@ -118,7 +117,6 @@ const StockListHistory: React.FC<StockListHistoryProps> = ({ onClose }) => {
       setMovements(derivedMovements);
 
     } catch (err) {
-      console.error('Error loading stock movements:', err);
       setError('Failed to load stock movement history. Backend stock tracking may not be fully configured.');
     } finally {
       setLoading(false);
@@ -161,7 +159,6 @@ const StockListHistory: React.FC<StockListHistoryProps> = ({ onClose }) => {
           }
         });
       } catch (purchaseError) {
-        console.warn('Could not fetch purchases for stock movements');
       }
 
       // Get recent sales (stock-out movements)
@@ -191,7 +188,6 @@ const StockListHistory: React.FC<StockListHistoryProps> = ({ onClose }) => {
           }
         });
       } catch (invoiceError) {
-        console.warn('Could not fetch invoices for stock movements');
       }
 
       // Sort by date (newest first)
@@ -200,7 +196,6 @@ const StockListHistory: React.FC<StockListHistoryProps> = ({ onClose }) => {
       return movements.slice(0, 100); // Limit to 100 most recent
       
     } catch (error) {
-      console.error('Error deriving stock movements:', error);
       return [];
     }
   };

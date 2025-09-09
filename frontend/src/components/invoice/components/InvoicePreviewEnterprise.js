@@ -42,7 +42,6 @@ const InvoicePreviewEnterprise = ({
       setCalculatedTotals(result.totals);
       
     } catch (error) {
-      console.error('Failed to calculate totals:', error);
       // Keep existing totals on error
     } finally {
       setIsCalculating(false);

@@ -57,11 +57,9 @@ const ViewHistoryButton = React.forwardRef(({
           try {
             response = await invoiceAPI.search({ limit: 10 });
           } catch (e1) {
-            console.error('Invoice API failed, trying orders as fallback:', e1);
             try {
               response = await ordersAPI.search({ limit: 10 });
             } catch (e2) {
-              console.error('Orders API also failed:', e2);
               response = { data: [] };
             }
           }
@@ -101,7 +99,6 @@ const ViewHistoryButton = React.forwardRef(({
               rawData: challan
             }));
           } catch (error) {
-            console.error('Error loading challan history:', error);
             formattedItems = [];
           }
           break;
@@ -137,7 +134,6 @@ const ViewHistoryButton = React.forwardRef(({
               rawData: purchase
             }));
           } catch (error) {
-            console.error('Error loading purchase history:', error);
             formattedItems = [];
           }
           break;
@@ -174,7 +170,6 @@ const ViewHistoryButton = React.forwardRef(({
             ];
             formattedItems = allReturns.sort((a, b) => new Date(b.date) - new Date(a.date));
           } catch (error) {
-            console.error('Error loading returns history:', error);
             formattedItems = [];
           }
           break;
@@ -195,7 +190,6 @@ const ViewHistoryButton = React.forwardRef(({
               rawData: movement
             }));
           } catch (error) {
-            console.error('Error loading stock history:', error);
             formattedItems = [];
           }
           break;
@@ -205,13 +199,11 @@ const ViewHistoryButton = React.forwardRef(({
           try {
             response = await salesOrdersAPI.getAll({ limit: 10 });
           } catch (error) {
-            console.error('Sales orders API failed:', error);
             try {
               response = await ordersAPI.search({ 
                 limit: 10
               });
             } catch (orderError) {
-              console.error('Orders API also failed:', orderError);
               response = { data: [] };
             }
           }
@@ -236,7 +228,6 @@ const ViewHistoryButton = React.forwardRef(({
       setHistoryItems(formattedItems);
       setSelectedIds(new Set());
     } catch (error) {
-      console.error(`Error loading ${historyType} history:`, error);
       setHistoryItems([]);
       setSelectedIds(new Set());
     } finally {
@@ -477,7 +468,6 @@ const ViewHistoryButton = React.forwardRef(({
     if (itemsToDuplicate.length === 0) return;
     
     // This would typically call an API to duplicate items
-    console.log('Duplicating items:', itemsToDuplicate);
   };
 
   // Refresh history

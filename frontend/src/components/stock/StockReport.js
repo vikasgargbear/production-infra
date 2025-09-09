@@ -100,7 +100,6 @@ const StockReport = ({ open = true, onClose }) => {
           setReportData([]);
       }
     } catch (error) {
-      console.error('Error loading report data:', error);
       setError(error.message || 'Failed to load report data');
       setReportData([]);
     } finally {
@@ -114,7 +113,6 @@ const StockReport = ({ open = true, onClose }) => {
     try {
       await loadReportData();
     } catch (error) {
-      console.error('Refresh failed:', error);
       setError('Failed to refresh data');
     } finally {
       setRefreshing(false);
@@ -176,7 +174,6 @@ const StockReport = ({ open = true, onClose }) => {
       
       alert('Report exported successfully!');
     } catch (error) {
-      console.error('Error exporting report:', error);
       alert('Failed to export report');
     }
   };

@@ -235,7 +235,6 @@ const CustomerMaster = ({
       const discountResponse = await metadataApi.getDiscountGroups();
       setDiscountGroups(discountResponse.data || []);
     } catch (error) {
-      console.error('Error loading metadata:', error);
     }
   };
 
@@ -375,7 +374,6 @@ const CustomerMaster = ({
       
       onClose();
     } catch (err) {
-      console.error('Error saving customer:', err);
       setError(err.response?.data?.message || 'Failed to save customer');
     } finally {
       setIsSaving(false);

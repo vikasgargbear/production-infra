@@ -116,7 +116,6 @@ const SalesReport: React.FC = () => {
       setTableData(mockTableData);
 
     } catch (error) {
-      console.error('Error loading sales data:', error);
     } finally {
       setLoading(false);
     }
@@ -184,7 +183,6 @@ const SalesReport: React.FC = () => {
   };
 
   const handleExport = (format: 'pdf' | 'excel' | 'csv') => {
-    console.log(`Exporting as ${format}`);
     // Implement export functionality
   };
 

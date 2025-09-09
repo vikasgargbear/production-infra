@@ -113,7 +113,6 @@ const InvoiceSelector: React.FC<InvoiceSelectorProps> = ({
         setError(response.error?.message || 'Failed to fetch invoices');
       }
     } catch (error) {
-      console.error('Error fetching invoices:', error);
       setError('Failed to fetch invoices. Please try again.');
     } finally {
       setLoading(false);

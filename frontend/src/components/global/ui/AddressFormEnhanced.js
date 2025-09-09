@@ -53,7 +53,6 @@ const AddressFormEnhanced = ({
         
         // If no addresses of this type exist, allow creation but don't show dropdown
         if (filteredAddresses.length === 0) {
-          console.log(`No ${addressType} addresses found for customer`);
           // Keep form empty for new address creation
         } else {
           // Auto-select default address
@@ -64,7 +63,6 @@ const AddressFormEnhanced = ({
         }
       }
     } catch (error) {
-      console.error('Failed to fetch customer addresses:', error);
     } finally {
       setLoadingAddresses(false);
     }
@@ -181,7 +179,6 @@ const AddressFormEnhanced = ({
           onSave(formData);
         }
       } catch (error) {
-        console.error('Failed to save address:', error);
       }
     } else if (onSave) {
       onSave(formData);

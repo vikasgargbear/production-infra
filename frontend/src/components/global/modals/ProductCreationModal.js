@@ -71,27 +71,21 @@ const ProductCreationModal = ({
         setLoadingMasterData(true);
         
         // Load categories and product types in parallel
-        console.log('Loading master data...');
         const [categoriesResponse, typesResponse] = await Promise.all([
           productsApi.get('/products/master/categories'),
           productsApi.get('/products/master/types')
         ]);
         
-        console.log('Categories response:', categoriesResponse);
-        console.log('Types response:', typesResponse);
         
         if (categoriesResponse.data?.success) {
           setCategories(categoriesResponse.data.data);
-          console.log('Categories loaded:', categoriesResponse.data.data.length);
         }
         
         if (typesResponse.data?.success) {
           setProductTypes(typesResponse.data.data);
-          console.log('Product types loaded:', typesResponse.data.data.length);
         }
         
       } catch (error) {
-        console.error('Error loading master data:', error);
         setErrors(['Failed to load categories and product types']);
       } finally {
         setLoadingMasterData(false);
@@ -132,10 +126,8 @@ const ProductCreationModal = ({
         });
         setCustomCategoryName('');
         setShowCustomCategory(false);
-        console.log('New category created:', newCategory);
       }
     } catch (error) {
-      console.error('Error creating category:', error);
       if (error.response?.data?.detail?.includes('already exists')) {
         setErrors(['Category already exists']);
       } else {
@@ -164,10 +156,8 @@ const ProductCreationModal = ({
         });
         setCustomTypeName('');
         setShowCustomType(false);
-        console.log('New type created:', newType);
       }
     } catch (error) {
-      console.error('Error creating type:', error);
       if (error.response?.data?.detail?.includes('already exists')) {
         setErrors(['Product type already exists']);
       } else {
@@ -289,12 +279,6 @@ const ProductCreationModal = ({
         sale_price_per_unit: parseFloat(newProduct.sale_price) || 0
       };
 
-      console.log('Pack Config state:', packConfig);
-      console.log('Pack fields being sent:');
-      console.log('  pack_input:', productData.pack_input);
-      console.log('  units_per_pack:', packConfig.qty_per_strip);
-      console.log('  packages_per_box (strips_per_box):', packConfig.strips_per_box);
-      console.log('Sending product data to API:', productData);
       
       // Ensure pack fields are properly typed before sending
       const apiData = {
@@ -310,9 +294,7 @@ const ProductCreationModal = ({
         unit_measurement: productData.unit_measurement
       };
       
-      console.log('Final API data being sent:', apiData);
       const productResponse = await productAPI.create(apiData);
-      console.log('Product creation response:', productResponse);
       
       // API returns the product directly, not wrapped in data
       if (productResponse) {
@@ -361,9 +343,6 @@ const ProductCreationModal = ({
         onClose();
       }
     } catch (error) {
-      console.error('Error saving product:', error);
-      console.error('Error response:', error.response);
-      console.error('Error data:', error.response?.data);
       
       let errorMessages = [];
       

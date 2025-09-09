@@ -274,7 +274,6 @@ const CustomerCreationB2B = ({ onClose, onCustomerCreated }) => {
         }, 1500);
       }
     } catch (error) {
-      console.error('Error creating B2B customer:', error);
       
       // Queue on server error/network issues as well
       offlineStorage.queueOfflineOperation({

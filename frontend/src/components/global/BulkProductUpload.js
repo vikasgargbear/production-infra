@@ -272,7 +272,6 @@ const BulkProductUpload = ({
         }
         
       } catch (error) {
-        console.error('Error parsing file:', error);
         toast.error('Failed to parse file. Please check the format.');
       } finally {
         setUploading(false);
@@ -400,7 +399,6 @@ const BulkProductUpload = ({
       }
       
     } catch (error) {
-      console.error('Error saving products:', error);
       toast.error('Failed to save products');
     } finally {
       setSaving(false);

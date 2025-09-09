@@ -164,7 +164,6 @@ const SupplierCreationForm = ({
         throw new Error('Failed to create supplier');
       }
     } catch (error) {
-      console.error('Error creating supplier:', error);
       const errorMessage = error.response?.data?.detail || error.message || 'Failed to create supplier';
       setErrors({ submit: errorMessage });
     } finally {

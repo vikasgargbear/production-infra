@@ -180,7 +180,6 @@ class GlobalPDFGenerator {
         };
       }
     } catch (error) {
-      console.error('Error loading company info from backend:', error);
       // Company info stays empty if backend fails
     }
   }

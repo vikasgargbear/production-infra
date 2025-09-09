@@ -71,8 +71,6 @@ const BatchSelectionModalV2 = ({
         setBatches([defaultBatch]);
       }
     } catch (error) {
-      console.error('Error fetching batches:', error);
-      console.error('Error response:', error.response);
       
       // Create a fallback batch if API fails
       const fallbackBatch = DataTransformer.transformBatch({

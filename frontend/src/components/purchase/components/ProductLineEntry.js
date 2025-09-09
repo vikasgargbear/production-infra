@@ -32,7 +32,6 @@ const ProductLineEntry = ({ item, index, onUpdate, onRemove }) => {
           setShowDropdown(true);
         }
       } catch (error) {
-        console.error('Search error:', error);
         setSearchResults([]);
       } finally {
         setSearching(false);

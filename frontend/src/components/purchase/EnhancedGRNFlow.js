@@ -71,7 +71,6 @@ const EnhancedGRNFlow = ({ onClose, prefilledData = null }) => {
         const grnNumber = await documentNumberService.generateGRNNumber();
         setGrn(prev => ({ ...prev, grn_no: grnNumber }));
       } catch (error) {
-        console.warn('Failed to generate GRN number:', error);
         const fallbackNumber = `GRN-${Date.now().toString().slice(-8)}`;
         setGrn(prev => ({ ...prev, grn_no: fallbackNumber }));
       }
@@ -221,7 +220,6 @@ const EnhancedGRNFlow = ({ onClose, prefilledData = null }) => {
         notes: grn.notes
       };
 
-      console.log('Saving GRN with data:', grnData);
       const response = await purchaseApi.createGRN(grnData);
       
       if (response && response.data) {
@@ -240,7 +238,6 @@ const EnhancedGRNFlow = ({ onClose, prefilledData = null }) => {
         searchCache.clear();
       }
     } catch (error) {
-      console.error('Error creating GRN:', error);
       const errorMessage = error.response?.data?.detail || error.message || 'Failed to create GRN';
       toast.error(errorMessage);
     } finally {
@@ -338,7 +335,6 @@ const EnhancedGRNFlow = ({ onClose, prefilledData = null }) => {
           value={selectedSupplier}
           onChange={handleSupplierSelect}
           onCreateNew={(searchQuery) => {
-            console.log('Creating supplier with name:', searchQuery);
             setShowSupplierModal(true);
           }}
           displayMode="compact"
@@ -367,7 +363,6 @@ const EnhancedGRNFlow = ({ onClose, prefilledData = null }) => {
         <ProductSearchSimple
           onAddItem={handleAddItem}
           onCreateProduct={(searchQuery) => {
-            console.log('Creating product with name:', searchQuery);
             setShowProductModal(true);
           }}
           showBatchSelection={false}

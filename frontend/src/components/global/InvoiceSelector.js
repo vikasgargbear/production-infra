@@ -140,7 +140,6 @@ const InvoiceSelector = ({
         setTotalPages(Math.ceil(total / pageSize));
       }
     } catch (err) {
-      console.error('Error fetching invoices:', err);
       setError('Failed to load invoices. Please try again.');
       setInvoices([]);
     } finally {

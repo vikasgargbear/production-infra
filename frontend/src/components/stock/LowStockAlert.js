@@ -122,7 +122,6 @@ const LowStockAlert = ({ open = true, onClose }) => {
         outOfStock: outOfStockCount
       });
     } catch (error) {
-      console.error('Error loading alerts:', error);
       setError(error.message || 'Failed to load alerts');
       setAlerts([]);
     } finally {
@@ -136,7 +135,6 @@ const LowStockAlert = ({ open = true, onClose }) => {
     try {
       await loadAlerts();
     } catch (error) {
-      console.error('Refresh failed:', error);
       setError('Failed to refresh data');
     } finally {
       setRefreshing(false);
@@ -166,7 +164,6 @@ const LowStockAlert = ({ open = true, onClose }) => {
 
   const handleCreatePurchaseOrder = (product) => {
     // Navigate to purchase order creation with pre-filled product
-    console.log('Create PO for:', product);
     
     // Calculate suggested order quantity based on reorder level and current usage
     const suggestedQty = Math.max(
@@ -238,7 +235,6 @@ const LowStockAlert = ({ open = true, onClose }) => {
     // In a real implementation, this would create multiple POs or a bulk PO flow
     alert(`Bulk PO Creation:\n${totalItems} items across ${supplierCount} suppliers\n\nSuppliers: ${Object.keys(supplierGroups).join(', ')}`);
     
-    console.log('Bulk PO Data:', supplierGroups);
   };
 
   const handleUpdateReorderLevel = async (productId, newLevel) => {
@@ -250,7 +246,6 @@ const LowStockAlert = ({ open = true, onClose }) => {
       // Reload alerts
       loadAlerts();
     } catch (error) {
-      console.error('Error updating reorder level:', error);
       alert('Failed to update reorder level');
     }
   };

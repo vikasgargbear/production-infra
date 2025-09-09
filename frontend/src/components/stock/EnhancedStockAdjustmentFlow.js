@@ -180,7 +180,6 @@ const EnhancedStockAdjustmentFlow = ({ onClose }) => {
       
       toast.success('Adjustment reasons refreshed');
     } catch (error) {
-      console.error('Error refreshing adjustment reasons:', error);
       toast.error('Failed to refresh reasons');
     } finally {
       setRefreshing(false);
@@ -275,7 +274,6 @@ Note: Use positive numbers for increase and negative for decrease. Reason codes:
             });
             currentStock = stockResponse.data?.[0]?.current_stock || 0;
           } catch (stockError) {
-            console.warn(`Could not fetch stock for ${productCode}:`, stockError);
             currentStock = 0;
           }
           
@@ -322,7 +320,6 @@ Note: Use positive numbers for increase and negative for decrease. Reason codes:
         
         setShowBulkUpload(false);
       } catch (error) {
-        console.error('Error parsing CSV:', error);
         toast.error('Failed to parse CSV file. Please check the format.');
       }
     };
@@ -373,7 +370,6 @@ Note: Use positive numbers for increase and negative for decrease. Reason codes:
         }))
       };
       
-      console.log('Sending adjustment payload:', adjustmentPayload);
 
       if (!navigator.onLine) {
         offlineStorage.queueOfflineOperation({
@@ -395,7 +391,6 @@ Note: Use positive numbers for increase and negative for decrease. Reason codes:
       }, 1500);
       
     } catch (error) {
-      console.error('Error creating adjustment:', error);
       
       // Queue on server error/network issues as well
       offlineStorage.queueOfflineOperation({
@@ -668,7 +663,6 @@ Note: Use positive numbers for increase and negative for decrease. Reason codes:
               <ProductSearchSimple
                 onAddItem={handleProductSelect}
                 onCreateProduct={(searchQuery) => {
-                  console.log('Creating product with name:', searchQuery);
                   // Handle product creation if needed
                 }}
                 showBatchSelection={false}

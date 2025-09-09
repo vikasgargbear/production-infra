@@ -20,17 +20,14 @@ const ProductDataValidator = {
    */
   validateProductData(product) {
     if (!product || typeof product !== 'object') {
-      console.error('Invalid product: not an object', product);
       return false;
     }
     
     if (!product.product_id || typeof product.product_id !== 'number') {
-      console.error('Invalid product: missing or invalid product_id', product);
       return false;
     }
     
     if (!product.product_name || typeof product.product_name !== 'string') {
-      console.error('Invalid product: missing or invalid product_name', product);
       return false;
     }
     
@@ -226,7 +223,6 @@ const CurrentStock = ({ open = true, onClose }) => {
         // Direct array response
         products = response.data;
       } else {
-        console.warn('Unexpected API response format:', response);
         products = [];
       }
       
@@ -234,11 +230,8 @@ const CurrentStock = ({ open = true, onClose }) => {
       setHasMore(products.length === 100);  // We request 100 items per page
       
       // Enterprise-grade data validation and transformation
-      console.log('Raw products from API:', products.length);
       const validProducts = products.filter(ProductDataValidator.validateProductData);
-      console.log('Valid products after validation:', validProducts.length);
       const transformedData = validProducts.map(ProductDataValidator.transformProductToStockItem);
-      console.log('Transformed data items:', transformedData.length);
       
       if (reset || page === 0) {
         setAllProducts(transformedData);
@@ -249,7 +242,6 @@ const CurrentStock = ({ open = true, onClose }) => {
       }
       
     } catch (error) {
-      console.error('Error loading stock data:', error);
       setError(error.message || 'Failed to load stock data');
       
       if (page === 0) {
@@ -271,7 +263,6 @@ const CurrentStock = ({ open = true, onClose }) => {
     try {
       await loadStockData(0, true);
     } catch (error) {
-      console.error('Refresh failed:', error);
       setError('Failed to refresh data');
     } finally {
       setRefreshing(false);
@@ -324,7 +315,6 @@ const CurrentStock = ({ open = true, onClose }) => {
       doc.save('current-stock-export.pdf');
     } catch (error) {
       // Fallback to simple PDF
-      console.warn('jspdf-autotable not available, using simple PDF export');
       
       const doc = new jsPDF();
       doc.setFontSize(16);
@@ -393,15 +383,12 @@ const CurrentStock = ({ open = true, onClose }) => {
     // First filter out any null/undefined items with comprehensive validation
     let filtered = stockData.filter(item => {
       if (!item || typeof item !== 'object') {
-        console.warn('Filtering out invalid item (not object):', item);
         return false;
       }
       if (!item.product_name || typeof item.product_name !== 'string') {
-        console.warn('Filtering out item with invalid product_name:', item);
         return false;
       }
       if (!item.product_id) {
-        console.warn('Filtering out item with missing product_id:', item);
         return false;
       }
       return true;
@@ -480,7 +467,6 @@ const CurrentStock = ({ open = true, onClose }) => {
     // Sort with safety checks
     filtered.sort((a, b) => {
       if (!a || !b) {
-        console.warn('Undefined items in sort:', { a, b });
         return 0;
       }
       
@@ -497,7 +483,6 @@ const CurrentStock = ({ open = true, onClose }) => {
     // Final safety check before setting data
     const safeFiltered = filtered.filter(item => item && item.product_name);
     
-    console.log('Filtered data length:', safeFiltered.length);
     return safeFiltered;
   }, [stockData, searchQuery, selectedCategory, showLowStock, showExpiring, moreFilters, sortConfig]);
 
@@ -561,7 +546,6 @@ const CurrentStock = ({ open = true, onClose }) => {
       
       alert(`Successfully exported ${filteredData.length} items to CSV`);
     } catch (error) {
-      console.error('Export error:', error);
       alert('Failed to export data. Please try again.');
     }
   };
@@ -595,7 +579,6 @@ const CurrentStock = ({ open = true, onClose }) => {
       sortable: true,
       render: (value, row) => {
         if (!row || !row.product_name) {
-          console.error('Invalid row data in product column:', row);
           return <div className="text-red-500">Invalid Product Data</div>;
         }
         return (
@@ -612,7 +595,6 @@ const CurrentStock = ({ open = true, onClose }) => {
       sortable: true,
       render: (value, row) => {
         if (!row) {
-          console.error('Invalid row data in category column:', row);
           return <div className="text-red-500">Invalid Data</div>;
         }
         
@@ -636,7 +618,6 @@ const CurrentStock = ({ open = true, onClose }) => {
       sortable: true,
       render: (value, row) => {
         if (!row || typeof row.current_stock === 'undefined') {
-          console.error('Invalid row data in stock column:', row);
           return <div className="text-red-500">Invalid Stock Data</div>;
         }
         

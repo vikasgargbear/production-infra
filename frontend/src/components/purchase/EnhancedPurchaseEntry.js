@@ -92,7 +92,6 @@ const EnhancedPurchaseEntry = ({ onClose, prefilledData = null }) => {
         const purchaseNumber = await documentNumberService.generatePurchaseNumber();
         setPurchase(prev => ({ ...prev, purchase_number: purchaseNumber }));
       } catch (error) {
-        console.warn('Failed to generate purchase number:', error);
         const date = new Date();
         const dateStr = date.toISOString().slice(2,10).replace(/-/g, ''); // YYMMDD
         const randomNum = Math.floor(Math.random() * 10000).toString().padStart(4, '0');
@@ -235,12 +234,9 @@ const EnhancedPurchaseEntry = ({ onClose, prefilledData = null }) => {
 
   // Handle saving item from modal
   const handleSaveItemFromModal = (editedItem) => {
-    console.log('Saving item from modal:', editedItem);
-    console.log('Expiry date in saved item:', editedItem.expiry_date);
     
     setPurchase(prev => {
       const newItems = [...(prev.items || []), editedItem];
-      console.log('New items array:', newItems);
       return {
         ...prev,
         items: newItems
@@ -376,7 +372,6 @@ const EnhancedPurchaseEntry = ({ onClose, prefilledData = null }) => {
             if (!isNaN(parsed) && parsed > 0 && parsed < 2147483647) {
               productId = parsed;
             } else {
-              console.warn(`Item ${index + 1} has invalid product_id (too large or invalid):`, item.product_id);
             }
           }
           
@@ -417,7 +412,6 @@ const EnhancedPurchaseEntry = ({ onClose, prefilledData = null }) => {
         lr_number: purchase.lr_number
       };
 
-      console.log('Saving purchase with data:', purchaseData);
       const response = await purchasesApi.create(purchaseData);
       
       if (response && response.data) {
@@ -437,7 +431,6 @@ const EnhancedPurchaseEntry = ({ onClose, prefilledData = null }) => {
         searchCache.clear();
       }
     } catch (error) {
-      console.error('Error creating purchase:', error);
       const errorMessage = error.response?.data?.detail || error.message || 'Failed to create purchase';
       toast.error(errorMessage);
     } finally {
@@ -503,7 +496,6 @@ const EnhancedPurchaseEntry = ({ onClose, prefilledData = null }) => {
         toast.success('PDF parsed! Please verify the extracted information.');
       }
     } catch (error) {
-      console.error('Error uploading PDF:', error);
       toast.error('Failed to parse PDF. Please try again.');
     }
   };
@@ -708,7 +700,6 @@ const EnhancedPurchaseEntry = ({ onClose, prefilledData = null }) => {
         <ProductSearchSimple
           onAddItem={handleAddItem}
           onCreateProduct={(searchQuery) => {
-            console.log('Creating product with name:', searchQuery);
             setShowProductModal(true);
             // TODO: Pass searchQuery to pre-fill product name in modal
           }}
@@ -1079,7 +1070,6 @@ const EnhancedPurchaseEntry = ({ onClose, prefilledData = null }) => {
           isOpen={showPDFUpload}
           onClose={() => setShowPDFUpload(false)}
           onDataExtracted={(data) => {
-            console.log('📥 Received extracted data:', data);
             
             // Store extracted data and show verification flow
             const extractedPDFData = {

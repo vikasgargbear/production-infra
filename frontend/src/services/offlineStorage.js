@@ -42,7 +42,6 @@ class OfflineStorageService {
    * Handle coming back online
    */
   async handleOnline() {
-    console.log('🌐 Connection restored - syncing offline data...');
     this.showOfflineIndicator(false);
     await this.syncOfflineData();
   }
@@ -51,7 +50,6 @@ class OfflineStorageService {
    * Handle going offline
    */
   handleOffline() {
-    console.log('📴 Connection lost - switching to offline mode...');
     this.showOfflineIndicator(true);
   }
 
@@ -103,10 +101,8 @@ class OfflineStorageService {
         await this.storeInIndexedDB(key, offlineData);
       }
 
-      console.log(`💾 Data stored offline: ${key}`);
       return true;
     } catch (error) {
-      console.error('Error storing offline data:', error);
       return false;
     }
   }
@@ -134,7 +130,6 @@ class OfflineStorageService {
 
       return null;
     } catch (error) {
-      console.error('Error retrieving offline data:', error);
       return null;
     }
   }
@@ -154,7 +149,6 @@ class OfflineStorageService {
     this.offlineQueue.push(queueItem);
     this.saveOfflineQueue();
     
-    console.log(`📋 Operation queued for offline processing: ${operation.type}`);
   }
 
   /**
@@ -164,7 +158,6 @@ class OfflineStorageService {
     try {
       localStorage.setItem('offlineQueue', JSON.stringify(this.offlineQueue));
     } catch (error) {
-      console.error('Error saving offline queue:', error);
     }
   }
 
@@ -176,10 +169,8 @@ class OfflineStorageService {
       const saved = localStorage.getItem('offlineQueue');
       if (saved) {
         this.offlineQueue = JSON.parse(saved);
-        console.log(`📋 Loaded ${this.offlineQueue.length} offline operations`);
       }
     } catch (error) {
-      console.error('Error loading offline queue:', error);
       this.offlineQueue = [];
     }
   }
@@ -193,7 +184,6 @@ class OfflineStorageService {
     }
 
     this.syncInProgress = true;
-    console.log(`🔄 Syncing ${this.offlineQueue.length} offline operations...`);
 
     try {
       const successfulOperations = [];
@@ -208,7 +198,6 @@ class OfflineStorageService {
             failedOperations.push(item);
           }
         } catch (error) {
-          console.error('Error processing offline operation:', error);
           failedOperations.push(item);
         }
       }
@@ -217,13 +206,11 @@ class OfflineStorageService {
       this.offlineQueue = failedOperations;
       this.saveOfflineQueue();
 
-      console.log(`✅ Synced ${successfulOperations.length} operations, ${failedOperations.length} failed`);
       
       if (successfulOperations.length > 0) {
         this.showSyncSuccess(successfulOperations.length);
       }
     } catch (error) {
-      console.error('Error during sync:', error);
     } finally {
       this.syncInProgress = false;
     }
@@ -244,7 +231,6 @@ class OfflineStorageService {
       
       // Max 3 retry attempts for any operation
       if (queueItem.retryCount > 3) {
-        console.warn(`Operation ${operation.type} failed after 3 attempts, removing from queue`);
         return true; // Remove from queue
       }
       
@@ -262,11 +248,9 @@ class OfflineStorageService {
         case 'CREATE_SUPPLIER':
           return await this.syncSupplierCreate(operation.data, queueItem.retryCount);
         default:
-          console.warn('Unknown operation type:', operation.type);
           return true; // Remove unknown operations from queue
       }
     } catch (error) {
-      console.error('Error processing operation:', error);
       return false;
     }
   }
@@ -281,7 +265,6 @@ class OfflineStorageService {
       const response = await stockApi.createAdjustment(data);
       return response.success;
     } catch (error) {
-      console.error('Error syncing stock adjustment:', error);
       return false;
     }
   }
@@ -298,12 +281,10 @@ class OfflineStorageService {
     } catch (error) {
       // For 422 errors (validation), don't retry - the data is invalid
       if (error?.response?.status === 422) {
-        console.warn('Customer creation failed validation, removing from queue:', error.response?.data);
         return true; // Return true to remove from queue
       }
       // For other errors, only log on first attempt
       if (attemptCount === 1) {
-        console.debug('Customer sync will retry later');
       }
       return false;
     }
@@ -321,12 +302,10 @@ class OfflineStorageService {
     } catch (error) {
       // For 422 errors (validation), don't retry - the data is invalid
       if (error?.response?.status === 422) {
-        console.warn('Supplier creation failed validation, removing from queue:', error.response?.data);
         return true; // Return true to remove from queue
       }
       // For other errors, only log on first attempt
       if (attemptCount === 1) {
-        console.debug('Supplier sync will retry later');
       }
       return false;
     }
@@ -342,7 +321,6 @@ class OfflineStorageService {
       const response = await paymentsApi.createPayment(data);
       return response.success;
     } catch (error) {
-      console.error('Error syncing payment record:', error);
       return false;
     }
   }
@@ -357,7 +335,6 @@ class OfflineStorageService {
       const response = await stockApi.updateBatch(data.batch_id, data.updates);
       return response.success;
     } catch (error) {
-      console.error('Error syncing batch update:', error);
       return false;
     }
   }
@@ -372,7 +349,6 @@ class OfflineStorageService {
       const response = await invoicesApi.createInvoice(data);
       return response.success;
     } catch (error) {
-      console.error('Error syncing invoice creation:', error);
       return false;
     }
   }
@@ -386,7 +362,6 @@ class OfflineStorageService {
       window.__toast.success(`Synced ${count} offline operations`);
     } else {
       // Fallback to console log
-      console.log(`✅ Successfully synced ${count} offline operations`);
     }
   }
 
@@ -417,7 +392,6 @@ class OfflineStorageService {
             const data = JSON.parse(localStorage.getItem(key));
             if (data.timestamp && (now - data.timestamp) > maxAge) {
               localStorage.removeItem(key);
-              console.log(`🗑️ Cleared old offline data: ${key}`);
             }
           } catch (error) {
             // Remove invalid data
@@ -426,7 +400,6 @@ class OfflineStorageService {
         }
       });
     } catch (error) {
-      console.error('Error clearing old data:', error);
     }
   }
 
@@ -487,7 +460,6 @@ class OfflineStorageService {
       
       return true;
     } catch (error) {
-      console.error('Error storing in IndexedDB:', error);
       return false;
     }
   }
@@ -513,7 +485,6 @@ class OfflineStorageService {
         request.onerror = () => reject(request.error);
       });
     } catch (error) {
-      console.error('Error getting from IndexedDB:', error);
       return null;
     }
   }

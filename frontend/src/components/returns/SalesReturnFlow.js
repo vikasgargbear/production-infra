@@ -99,7 +99,6 @@ const SalesReturnFlow = ({ onClose }) => {
         }
       } catch (error) {
         // Silently fail and keep using default reasons
-        console.warn('Using default return reasons:', error.message);
       }
     };
 
@@ -232,7 +231,6 @@ const SalesReturnFlow = ({ onClose }) => {
           }));
         }
       } catch (error) {
-        console.error('Error loading invoice items:', error);
         toast.error('Failed to load invoice items');
       }
     } else {
@@ -344,7 +342,6 @@ const SalesReturnFlow = ({ onClose }) => {
         setCustomerDues(0);
       }
     } catch (error) {
-      console.warn('Could not fetch full customer details:', error);
       // Use basic customer data we already have
       setCustomerDues(0);
     }
@@ -384,7 +381,6 @@ const SalesReturnFlow = ({ onClose }) => {
         }));
       }
     } catch (error) {
-      console.error('Error fetching batches:', error);
     }
   };
 
@@ -641,7 +637,6 @@ const SalesReturnFlow = ({ onClose }) => {
         : error.message || 'Failed to create return';
       
       toast.error(errorMessage);
-      console.error('Error creating return:', error);
     } finally {
       setSaving(false);
     }

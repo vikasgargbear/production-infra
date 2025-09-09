@@ -125,7 +125,6 @@ const Orders: React.FC = () => {
       setCustomers(customersResponse.data || []);
       setProducts(productsResponse.data || []);
     } catch (err) {
-      console.error('Error fetching data:', err);
       setError('Failed to load orders. Please refresh the page.');
       setOrders([]);
     } finally {
@@ -222,7 +221,6 @@ const Orders: React.FC = () => {
       // Refresh the orders list
       await fetchData();
     } catch (err: any) {
-      console.error('Error saving order:', err);
       setError('Failed to save order. Please try again.');
     } finally {
       setSubmitting(false);
@@ -241,10 +239,8 @@ const Orders: React.FC = () => {
         setLoading(true);
         // Use the centralized API service instead of ordersApi
         await api.delete(`/orders/${orderId}`);
-        console.log('Order deleted successfully');
         await fetchData(); // Refresh the orders list
       } catch (err) {
-        console.error('Error deleting order:', err);
         setError('Failed to delete order. Please try again.');
       } finally {
         setLoading(false);
@@ -283,9 +279,7 @@ const Orders: React.FC = () => {
       // Generate and download PDF
       try {
         downloadInvoicePDF(invoiceDetails);
-        console.log('Invoice PDF generated successfully:', invoiceDetails.invoice_number);
       } catch (pdfError) {
-        console.error('PDF generation failed:', pdfError);
         // Fallback to JSON download if PDF fails
         const dataStr = JSON.stringify(invoiceDetails, null, 2);
         const dataUri = 'data:application/json;charset=utf-8,'+ encodeURIComponent(dataStr);
@@ -298,7 +292,6 @@ const Orders: React.FC = () => {
       }
       
     } catch (err: any) {
-      console.error('Failed to generate invoice:', err);
       setError(err.response?.data?.detail || 'Failed to generate invoice');
     } finally {
       setGeneratingInvoice(prev => ({ ...prev, [orderId]: false }));

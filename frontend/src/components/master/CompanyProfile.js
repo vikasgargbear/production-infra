@@ -94,9 +94,7 @@ const CompanyProfile = ({ open, onClose }) => {
       setIsLoading(true);
       setError(null);
       
-      console.log('🔍 Fetching company profile...');
       const response = await companyAPI.getCompanyInfo();
-      console.log('📥 Company API Response:', response);
       
       if (response) {
         const data = response;
@@ -160,7 +158,6 @@ const CompanyProfile = ({ open, onClose }) => {
         setError('No organization data available');
       }
     } catch (error) {
-      console.error('Error fetching organization profile:', error);
       setError('Failed to load organization profile. Please check your connection and try again.');
       
       // Show user-friendly error message
@@ -275,7 +272,6 @@ const CompanyProfile = ({ open, onClose }) => {
         }, 3000);
       }
     } catch (error) {
-      console.error('Error saving company profile:', error);
       setError('Failed to save company profile. Please try again.');
     } finally {
       setIsSaving(false);

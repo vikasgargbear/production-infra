@@ -30,7 +30,6 @@ const UserManagement = ({ open, onClose }) => {
 
   // Load users on component mount
   useEffect(() => {
-    console.log('UserManagement useEffect - open:', open);
     if (open) {
       checkCurrentUserPermissions();
       loadUsers();
@@ -45,18 +44,15 @@ const UserManagement = ({ open, onClose }) => {
         const tokenParts = token.split('.');
         if (tokenParts.length === 3) {
           const payload = JSON.parse(atob(tokenParts[1]));
-          console.log('🔑 Current user token payload:', payload);
           setCurrentUserRole(payload.role || payload.role_id);
           
           // Check if user has admin/owner role
           const userRole = payload.role || payload.role_id;
           if (!['admin', 'owner', 'administrator'].includes(userRole?.toLowerCase())) {
-            console.warn('⚠️ Current user role may not have permission to manage users:', userRole);
           }
         }
       }
     } catch (e) {
-      console.error('Error checking user permissions:', e);
     }
   };
 
@@ -68,12 +64,8 @@ const UserManagement = ({ open, onClose }) => {
     try {
       // Check if we have auth token - try both keys for compatibility
       const token = localStorage.getItem('authToken') || localStorage.getItem('auth_token');
-      console.log('🔑 Auth Token exists:', !!token);
-      console.log('🔑 Token found with key:', localStorage.getItem('authToken') ? 'authToken' : 'auth_token');
       
       if (!token) {
-        console.log('❌ No auth token found in localStorage');
-        console.log('📝 Available keys in localStorage:', Object.keys(localStorage));
         setError('You are not logged in. Please login to manage users.');
         setIsLoading(false);
         return;
@@ -87,11 +79,8 @@ const UserManagement = ({ open, onClose }) => {
           const expiry = payload.exp * 1000;
           const now = Date.now();
           
-          console.log('🔑 Token expiry:', new Date(expiry).toLocaleString());
-          console.log('🔑 Current time:', new Date(now).toLocaleString());
           
           if (now > expiry) {
-            console.error('❌ Token expired!');
             setError('Session expired. Please login again.');
             // Don't remove token or redirect - let the API call fail and handle it there
             // localStorage.removeItem('authToken');
@@ -100,28 +89,21 @@ const UserManagement = ({ open, onClose }) => {
           }
         }
       } catch (e) {
-        console.error('Error validating token:', e);
       }
       
-      console.log('🔍 Calling API to load users...');
       const response = await usersApi.getAll();
-      console.log('📥 Users API Response:', response);
       
       // Handle different response formats
       let userData = [];
       
       // The API returns response.data which contains another data field
       if (response?.data?.data) {
-        console.log('📥 Found users in response.data.data:', response.data.data);
         userData = response.data.data;
       } else if (response?.data && Array.isArray(response.data)) {
-        console.log('📥 Found users in response.data:', response.data);
         userData = response.data;
       } else if (Array.isArray(response)) {
-        console.log('📥 Found users in response:', response);
         userData = response;
       } else {
-        console.log('⚠️ Unexpected response format:', response);
         setError('No user data available');
         setUsers([]);
         return;
@@ -154,12 +136,9 @@ const UserManagement = ({ open, onClose }) => {
       
       setUsers(transformedUsers);
     } catch (error) {
-      console.error('Error loading users:', error);
       
       // Detailed error handling
       if (error.response) {
-        console.error('Response status:', error.response.status);
-        console.error('Response data:', error.response.data);
         
         if (error.response.status === 401) {
           setError('Authentication failed. Your session may have expired. Please login again.');
@@ -286,8 +265,6 @@ const UserManagement = ({ open, onClose }) => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    console.log('Form submitted:', formData);
-    console.log('Is editing:', editingUser);
     
     if (!editingUser && formData.password !== formData.confirmPassword) {
       setError('Passwords do not match!');
@@ -344,7 +321,6 @@ const UserManagement = ({ open, onClose }) => {
       
       handleCloseModal();
     } catch (error) {
-      console.error('Error saving user:', error);
       setError(error.response?.data?.message || 'Failed to save user. Please try again.');
     } finally {
       setIsSaving(false);
@@ -377,7 +353,6 @@ const UserManagement = ({ open, onClose }) => {
         await loadUsers();
         setTimeout(() => setSuccessMessage(''), 3000);
       } catch (error) {
-        console.error('Error deleting user:', error);
         setError('Failed to delete user. Please try again.');
         setTimeout(() => setError(null), 5000);
       } finally {
@@ -401,7 +376,6 @@ const UserManagement = ({ open, onClose }) => {
       setSuccessMessage('User status updated successfully!');
       setTimeout(() => setSuccessMessage(''), 3000);
     } catch (error) {
-      console.error('Error updating user status:', error);
       setError('Failed to update user status.');
       setTimeout(() => setError(null), 5000);
     } finally {
@@ -418,7 +392,6 @@ const UserManagement = ({ open, onClose }) => {
         setSuccessMessage('Password reset link sent to user email!');
         setTimeout(() => setSuccessMessage(''), 5000);
       } catch (error) {
-        console.error('Error resetting password:', error);
         setError('Failed to reset password.');
         setTimeout(() => setError(null), 5000);
       } finally {

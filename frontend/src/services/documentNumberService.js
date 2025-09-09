@@ -35,13 +35,11 @@ class DocumentNumberService {
         lastError = error;
         retries--;
         if (retries > 0) {
-          console.warn(`Invoice number generation failed, retrying... (${retries} attempts left)`);
           await new Promise(resolve => setTimeout(resolve, 1000)); // Wait 1 second before retry
         }
       }
     }
     
-    console.error('Failed to generate invoice number after 3 attempts:', lastError);
     // Return a temporary placeholder - the user should retry
     return 'INV-TEMP-' + Date.now().toString().slice(-6);
   }
@@ -78,7 +76,6 @@ class DocumentNumberService {
     } catch (error) {
       // Only log non-404 errors once
       if (error?.response?.status !== 404) {
-        console.warn('Purchase order number generation error:', error.message);
       }
     }
     
@@ -109,7 +106,6 @@ class DocumentNumberService {
         return response.data.grn_number;
       }
     } catch (error) {
-      console.warn('Backend GRN number generation failed:', error);
     }
     
     // Fallback to client-side generation matching backend format
@@ -132,7 +128,6 @@ class DocumentNumberService {
         return response.data.return_number;
       }
     } catch (error) {
-      console.warn('Backend return number generation failed:', error);
     }
     
     // Fallback to client-side generation
@@ -151,7 +146,6 @@ class DocumentNumberService {
         return response.data.return_number;
       }
     } catch (error) {
-      console.warn('Backend sales return number generation failed:', error);
     }
     
     // Fallback to client-side generation
@@ -170,7 +164,6 @@ class DocumentNumberService {
         return response.data.challan_number;
       }
     } catch (error) {
-      console.warn('Backend challan number generation failed:', error);
     }
     
     // Fallback to client-side generation matching backend format
@@ -193,7 +186,6 @@ class DocumentNumberService {
         return response.data.order_number;
       }
     } catch (error) {
-      console.warn('Backend sales order number generation failed:', error);
     }
     
     // Fallback to client-side generation matching backend format

@@ -24,7 +24,6 @@ const SupplierQuickSelect = ({ value, onChange }) => {
           const response = await suppliersApi.search({ limit: 10 });
           setSuppliers(response.data || []);
         } catch (error) {
-          console.error('Error loading suppliers:', error);
         } finally {
           setLoading(false);
         }
@@ -39,7 +38,6 @@ const SupplierQuickSelect = ({ value, onChange }) => {
         });
         setSuppliers(response.data || []);
       } catch (error) {
-        console.error('Error searching suppliers:', error);
       } finally {
         setLoading(false);
       }

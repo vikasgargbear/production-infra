@@ -130,7 +130,6 @@ const LowStockAlert = ({ open, onClose }) => {
       setCriticalItems(critical);
       setExpiringItems(expiring);
     } catch (error) {
-      console.error('Error loading stock data:', error);
     } finally {
       setLoading(false);
     }
@@ -233,7 +232,6 @@ const LowStockAlert = ({ open, onClose }) => {
       }
     });
 
-    console.log('Purchase orders to be generated:', ordersBySupplier);
     alert('Purchase order generation would be implemented here');
   };
 

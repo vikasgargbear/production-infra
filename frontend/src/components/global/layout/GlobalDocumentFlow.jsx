@@ -115,7 +115,6 @@ const GlobalDocumentFlow = ({
           setGeneratedNumber(number);
           onNumberGenerated?.(number);
         } catch (error) {
-          console.warn(`Failed to generate ${documentType} number:`, error);
           // Fallback
           const fallbackNumber = `${config.prefix}-${Date.now().toString().slice(-8)}`;
           setGeneratedNumber(fallbackNumber);

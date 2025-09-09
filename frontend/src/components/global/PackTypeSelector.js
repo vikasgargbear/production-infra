@@ -133,7 +133,6 @@ const PackTypeSelector = ({
         unit_type: parsed.unitSuffix || localPackData.unit_type // Update unit type if suffix present
       };
       setLocalPackData(newData);
-      console.log('PackTypeSelector - Parsed pack data:', newData);
       onChange(newData);
     }
   };

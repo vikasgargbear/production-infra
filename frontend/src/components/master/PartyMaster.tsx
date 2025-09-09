@@ -61,9 +61,6 @@ const PartyMaster: React.FC<PartyMasterProps> = ({ open, onClose }) => {
       
       if (filterType === 'all' || filterType === 'customer') {
         const customersResponse = await customersApi.getAll();
-        console.log('Customers API Response:', customersResponse);
-        console.log('Customers data structure:', customersResponse.data);
-        console.log('First customer:', customersResponse.data?.[0] || customersResponse.data?.data?.[0] || customersResponse.data?.customers?.[0]);
         // Handle different response formats
         let customersData: any[] = [];
         if (customersResponse.data) {
@@ -81,7 +78,6 @@ const PartyMaster: React.FC<PartyMasterProps> = ({ open, onClose }) => {
       
       if (filterType === 'all' || filterType === 'supplier') {
         const suppliersResponse = await suppliersApi.getAll();
-        console.log('Suppliers API Response:', suppliersResponse);
         // Handle different response formats
         let suppliersData: any[] = [];
         if (suppliersResponse.data) {
@@ -99,7 +95,6 @@ const PartyMaster: React.FC<PartyMasterProps> = ({ open, onClose }) => {
       
       setParties(allParties);
     } catch (err) {
-      console.error('Error loading parties:', err);
       setError('Failed to load parties. Please try again.');
     } finally {
       setIsLoading(false);
@@ -148,7 +143,6 @@ const PartyMaster: React.FC<PartyMasterProps> = ({ open, onClose }) => {
       
       setParties(searchResults);
     } catch (err) {
-      console.error('Error searching parties:', err);
       setError('Failed to search parties.');
     } finally {
       setIsLoading(false);
@@ -187,7 +181,6 @@ const PartyMaster: React.FC<PartyMasterProps> = ({ open, onClose }) => {
       loadParties();
       setTimeout(() => setSuccessMessage(''), 3000);
     } catch (err) {
-      console.error('Error deleting party:', err);
       setError('Failed to delete party.');
     }
   };

@@ -162,7 +162,6 @@ class InvoiceApiService {
         throw new Error('Calculation failed - no response data');
       }
     } catch (error) {
-      console.error('Invoice calculation failed:', error);
       return {
         success: false,
         error: error.response?.data?.error || {
@@ -195,7 +194,6 @@ class InvoiceApiService {
         data: response.data
       };
     } catch (error) {
-      console.error('Invoice validation failed:', error);
       return {
         success: false,
         error: error.response?.data?.error || {
@@ -224,7 +222,6 @@ class InvoiceApiService {
         data: response.data
       };
     } catch (error) {
-      console.error('Credit check failed:', error);
       return {
         success: false,
         error: error.response?.data?.error || {
@@ -258,7 +255,6 @@ class InvoiceApiService {
         data: response.data
       };
     } catch (error) {
-      console.error('Draft save failed:', error);
       return {
         success: false,
         error: error.response?.data?.error || {
@@ -282,7 +278,6 @@ class InvoiceApiService {
         data: response.data
       };
     } catch (error) {
-      console.error('Failed to fetch drafts:', error);
       return {
         success: false,
         error: error.response?.data?.error || {
@@ -315,7 +310,6 @@ class InvoiceApiService {
       // If API doesn't return expected format, throw error
       throw new Error('Invalid response from server');
     } catch (error) {
-      console.error('Failed to generate invoice number from API:', error);
       // NO FALLBACK - throw error to force backend usage
       throw new Error('Unable to generate invoice number. Please check your connection and try again.');
     }
@@ -340,7 +334,6 @@ class InvoiceApiService {
         }
       };
     } catch (error) {
-      console.error('Failed to fetch company settings:', error);
       return {
         success: false,
         error: error.response?.data?.error || {
@@ -371,7 +364,6 @@ class InvoiceApiService {
         data: response.data
       };
     } catch (error) {
-      console.error('Enhanced product search failed:', error);
       return {
         success: false,
         error: error.response?.data?.error || {
@@ -400,7 +392,6 @@ class InvoiceApiService {
         data: response.data
       };
     } catch (error) {
-      console.error('Enhanced customer search failed:', error);
       return {
         success: false,
         error: error.response?.data?.error || {
@@ -432,7 +423,6 @@ class InvoiceApiService {
         data: response.data
       };
     } catch (error) {
-      console.error('Failed to fetch invoices:', error);
       return {
         success: false,
         error: error.response?.data?.error || {
@@ -457,7 +447,6 @@ class InvoiceApiService {
         data: response.data
       };
     } catch (error) {
-      console.error('Failed to fetch invoice:', error);
       return {
         success: false,
         error: error.response?.data?.error || {
@@ -515,7 +504,6 @@ class InvoiceApiService {
       
       throw new Error(response.data.message || 'Failed to generate invoice from order');
     } catch (error) {
-      console.error('Error generating invoice from order:', error);
       throw error;
     }
   }

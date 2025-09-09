@@ -66,7 +66,6 @@ const StockMovement = ({ open = true, onClose }) => {
 
       setMovements(movementsData);
     } catch (err) {
-      console.error('Error loading stock movements:', err);
       setError('Failed to load stock movement data');
       // No fallback to mock data - enterprise practice
       setMovements([]);
@@ -182,7 +181,6 @@ const StockMovement = ({ open = true, onClose }) => {
       
       alert(`Successfully exported ${itemsToExport.length} movements to CSV`);
     } catch (error) {
-      console.error('CSV Export error:', error);
       alert('Failed to export movements. Please try again.');
     }
   };
@@ -221,7 +219,6 @@ const StockMovement = ({ open = true, onClose }) => {
 
       doc.save('stock-movements-export.pdf');
     } catch (error) {
-      console.warn('jspdf-autotable not available, using simple PDF export');
       
       const doc = new jsPDF();
       doc.setFontSize(16);

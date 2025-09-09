@@ -36,7 +36,6 @@ export const supabaseUsers = {
         created_at: profile.created_at
       }));
     } catch (error) {
-      console.error('Error fetching users:', error);
       throw error;
     }
   },
@@ -72,7 +71,6 @@ export const supabaseUsers = {
 
       return profile;
     } catch (error) {
-      console.error('Error creating user:', error);
       throw error;
     }
   },
@@ -97,7 +95,6 @@ export const supabaseUsers = {
       if (error) throw error;
       return data;
     } catch (error) {
-      console.error('Error updating user:', error);
       throw error;
     }
   },
@@ -114,7 +111,6 @@ export const supabaseUsers = {
       if (error) throw error;
       return { success: true };
     } catch (error) {
-      console.error('Error deleting user:', error);
       throw error;
     }
   },
@@ -139,7 +135,6 @@ export const supabaseUsers = {
       
       return { success: true };
     } catch (error) {
-      console.error('Error resetting password:', error);
       throw error;
     }
   }

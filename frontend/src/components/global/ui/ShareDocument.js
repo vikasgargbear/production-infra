@@ -209,7 +209,6 @@ const ShareDocument = ({
         onClose();
       }, 1000);
     } catch (error) {
-      console.error('Error sending email:', error);
       setSendingEmail(false);
     }
   };

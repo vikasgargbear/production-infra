@@ -136,7 +136,6 @@ const GRNFlow = ({ onClose }) => {
         onClose();
       }, 2000);
     } catch (error) {
-      console.error('Error creating GRN:', error);
       const errorMessage = error.response?.data?.detail || error.message || 'Failed to create GRN';
       setMessage(errorMessage, 'error');
     } finally {

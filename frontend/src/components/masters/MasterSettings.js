@@ -134,7 +134,6 @@ const MasterSettings = () => {
         }
       }
     } catch (error) {
-      console.error('Error loading data:', error);
       toast.error('Failed to load data');
     } finally {
       setLoading(false);
@@ -202,7 +201,6 @@ const MasterSettings = () => {
       loadData();
     } catch (error) {
       toast.error('Failed to delete item');
-      console.error('Delete error:', error);
     }
   };
 

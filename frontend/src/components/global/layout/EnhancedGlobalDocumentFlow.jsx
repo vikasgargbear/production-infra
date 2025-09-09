@@ -180,7 +180,6 @@ const EnhancedGlobalDocumentFlow = ({
               number = await documentNumberService[serviceMethod]();
             } catch (serviceError) {
               // Service failed, use fallback
-              console.debug(`Document number service failed, using fallback`);
             }
           }
           
@@ -194,7 +193,6 @@ const EnhancedGlobalDocumentFlow = ({
             onDocumentUpdate(prev => ({ ...prev, documentNumber: number }));
           }
         } catch (error) {
-          console.error(`Failed to generate ${documentType} number:`, error);
           // Even on error, mark as generated to prevent infinite retries
           setHasGeneratedNumber(true);
         } finally {
@@ -261,7 +259,7 @@ const EnhancedGlobalDocumentFlow = ({
   // Handle proceed to review
   const handleProceedToReview = () => {
     if (canProceedToReview?.() === false) {
-      toast?.error?.('Please complete all required fields') || console.error('Please complete all required fields');
+      toast?.error?.('Please complete all required fields');
       return;
     }
     handleStepChange(2);
@@ -294,7 +292,6 @@ const EnhancedGlobalDocumentFlow = ({
           additionalActions={stepActions}
           showSaveDraft={localStep === 1}
           onSaveDraft={() => {
-            console.log('Save draft clicked');
             // TODO: Implement draft saving
           }}
         />

@@ -24,7 +24,6 @@ class EnterpriseInvoiceCalculator {
       
       return await response.json();
     } catch (error) {
-      console.error('Invoice calculation error:', error);
       throw error;
     }
   }
@@ -79,7 +78,6 @@ class EnterpriseInvoiceCalculator {
       return calculated;
     } catch (error) {
       // 4. Handle error without breaking UI
-      console.error('Calculation failed, keeping current values:', error);
       throw error;
     }
   }
@@ -98,7 +96,6 @@ class EnterpriseInvoiceCalculator {
       
       return await response.json();
     } catch (error) {
-      console.error('Batch calculation error:', error);
       throw error;
     }
   }

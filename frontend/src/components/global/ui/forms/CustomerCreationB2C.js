@@ -199,7 +199,6 @@ const CustomerCreationB2C = ({ onClose, onCustomerCreated }) => {
         }, 1500);
       }
     } catch (error) {
-      console.error('Error creating B2C customer:', error);
       
       // Queue on error as well
       offlineStorage.queueOfflineOperation({

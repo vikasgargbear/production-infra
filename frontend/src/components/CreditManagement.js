@@ -112,13 +112,11 @@ const CreditManagement = () => {
         });
       }
     } catch (error) {
-      console.error('Error loading credit management data:', error);
       
       // Try to load from offline storage instead of using mock data
       const offlineData = await offlineStorage.getOffline('credit_management', { critical: true });
       
       if (offlineData && !offlineStorage.isDataStale(offlineData, 60)) { // 1 hour max for credit data
-        console.log('📱 Using offline credit management data');
         setCustomers(offlineData.data.customers);
         setFilteredCustomers(offlineData.data.customers);
         setCreditStats(offlineData.data.stats);
@@ -150,7 +148,6 @@ const CreditManagement = () => {
     try {
       await loadCreditData();
     } catch (error) {
-      console.error('Error refreshing credit data:', error);
       setError('Failed to refresh data. Please try again.');
     } finally {
       setRefreshing(false);

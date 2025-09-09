@@ -180,7 +180,6 @@ const PurchaseOrderFlow = ({ onClose, prefilledData = null }) => {
         }, 1500);
       }
     } catch (error) {
-      console.error('Error saving purchase order:', error);
       setMessage('Failed to save purchase order');
       setMessageType('error');
     } finally {
@@ -201,7 +200,6 @@ const PurchaseOrderFlow = ({ onClose, prefilledData = null }) => {
         return response.data.po_number;
       }
     } catch (error) {
-      console.error('Error generating PO number:', error);
     }
     
     // Fallback to local generation with consistent format
@@ -308,7 +306,6 @@ const PurchaseOrderFlow = ({ onClose, prefilledData = null }) => {
       setPurchaseOrder(prev => ({ ...prev, po_no: poNo }));
       
     } catch (error) {
-      console.error('Error loading initial data:', error);
       setError('Failed to load required data. Please check your connection and try again.');
     } finally {
       setIsLoading(false);
@@ -520,7 +517,6 @@ const PurchaseOrderFlow = ({ onClose, prefilledData = null }) => {
 
     // Drug license is optional - just log warning if missing
     if (!purchaseOrder.drug_license_no) {
-      console.warn('Supplier drug license number not provided');
     }
 
     return true;
@@ -567,7 +563,6 @@ const PurchaseOrderFlow = ({ onClose, prefilledData = null }) => {
         }, 2000);
       }
     } catch (error) {
-      console.error('Error creating purchase order:', error);
       const errorMessage = error.response?.data?.detail || error.message || 'Failed to create purchase order';
       setMessage(errorMessage);
       setMessageType('error');

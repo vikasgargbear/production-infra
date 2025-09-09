@@ -69,7 +69,6 @@ const EnhancedPurchaseOrderFlow = ({ onClose, prefilledData = null }) => {
         const poNumber = await documentNumberService.generatePONumber();
         setPurchaseOrder(prev => ({ ...prev, po_no: poNumber }));
       } catch (error) {
-        console.warn('Failed to generate PO number:', error);
         const fallbackNumber = `PO-${Date.now().toString().slice(-8)}`;
         setPurchaseOrder(prev => ({ ...prev, po_no: fallbackNumber }));
       }
@@ -217,7 +216,6 @@ const EnhancedPurchaseOrderFlow = ({ onClose, prefilledData = null }) => {
         notes: purchaseOrder.notes
       };
 
-      console.log('Saving purchase order with data:', poData);
       const response = await purchaseApi.createPurchaseOrder(poData);
       
       if (response && response.data) {
@@ -236,7 +234,6 @@ const EnhancedPurchaseOrderFlow = ({ onClose, prefilledData = null }) => {
         searchCache.clear();
       }
     } catch (error) {
-      console.error('Error creating purchase order:', error);
       const errorMessage = error.response?.data?.detail || error.message || 'Failed to create purchase order';
       toast.error(errorMessage);
     } finally {
@@ -314,7 +311,6 @@ const EnhancedPurchaseOrderFlow = ({ onClose, prefilledData = null }) => {
           value={selectedSupplier}
           onChange={handleSupplierSelect}
           onCreateNew={(searchQuery) => {
-            console.log('Creating supplier with name:', searchQuery);
             setShowSupplierModal(true);
           }}
           displayMode="compact"
@@ -343,7 +339,6 @@ const EnhancedPurchaseOrderFlow = ({ onClose, prefilledData = null }) => {
         <ProductSearchSimple
           onAddItem={handleAddItem}
           onCreateProduct={(searchQuery) => {
-            console.log('Creating product with name:', searchQuery);
             setShowProductModal(true);
           }}
           showBatchSelection={false}

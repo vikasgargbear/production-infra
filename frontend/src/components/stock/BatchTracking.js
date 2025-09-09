@@ -69,13 +69,11 @@ const BatchTracking = ({ open = true, onClose }) => {
         });
       }
     } catch (error) {
-      console.error('Error loading batches:', error);
       
       // Try to load from offline storage instead of using mock data
       const offlineData = await offlineStorage.getOffline('batches', { critical: true });
       
       if (offlineData && !offlineStorage.isDataStale(offlineData, 120)) { // 2 hours max
-        console.log('📱 Using offline batch data');
         setBatches(offlineData.data);
         calculateStats(offlineData.data);
         
@@ -167,13 +165,11 @@ const BatchTracking = ({ open = true, onClose }) => {
         setBatchMovements([]);
       }
     } catch (error) {
-      console.error('Error loading batch movements:', error);
       
       // Try to load from offline storage
       const offlineData = await offlineStorage.getOffline(`batch_movements_${batchId}`, { persistent: true });
       
       if (offlineData && !offlineStorage.isDataStale(offlineData, 60)) { // 1 hour max for movements
-        console.log('📱 Using offline movement data');
         setBatchMovements(offlineData.data);
       } else {
         setBatchMovements([]);
@@ -194,7 +190,6 @@ const BatchTracking = ({ open = true, onClose }) => {
         await loadBatchMovements(selectedBatch.batch_id);
       }
     } catch (error) {
-      console.error('Error refreshing data:', error);
       setError('Failed to refresh data. Please try again.');
     } finally {
       setRefreshing(false);
@@ -327,7 +322,6 @@ const BatchTracking = ({ open = true, onClose }) => {
 
       doc.save('batch-tracking-export.pdf');
     } catch (error) {
-      console.warn('jspdf-autotable not available, using simple PDF export');
       
       const doc = new jsPDF();
       doc.setFontSize(16);

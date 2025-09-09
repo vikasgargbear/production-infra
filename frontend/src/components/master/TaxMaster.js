@@ -32,7 +32,6 @@ const TaxMaster = ({ open, onClose }) => {
     
     try {
       const response = await settingsApi.taxes.getAll();
-      console.log('Tax API Response:', response);
       
       // Handle different response formats
       let taxData = [];
@@ -44,7 +43,6 @@ const TaxMaster = ({ open, onClose }) => {
       
       setTaxes(taxData || []);
     } catch (error) {
-      console.error('Error loading taxes:', error);
       setError('Failed to load tax rates. Please try again.');
       setTaxes([]);
     } finally {
@@ -59,7 +57,6 @@ const TaxMaster = ({ open, onClose }) => {
     try {
       await loadTaxes();
     } catch (error) {
-      console.error('Refresh failed:', error);
       setError('Failed to refresh data');
     } finally {
       setRefreshing(false);
@@ -145,7 +142,6 @@ const TaxMaster = ({ open, onClose }) => {
       setTimeout(() => setSuccessMessage(''), 3000);
       handleCloseModal();
     } catch (error) {
-      console.error('Error saving tax:', error);
       setError('Failed to save tax. Please try again.');
     }
   };
@@ -173,7 +169,6 @@ const TaxMaster = ({ open, onClose }) => {
         await loadTaxes();
         setTimeout(() => setSuccessMessage(''), 3000);
       } catch (error) {
-        console.error('Error deleting tax:', error);
         setError('Failed to delete tax. Please try again.');
       }
     }
@@ -188,7 +183,6 @@ const TaxMaster = ({ open, onClose }) => {
       await loadTaxes();
       setTimeout(() => setSuccessMessage(''), 3000);
     } catch (error) {
-      console.error('Error updating tax status:', error);
       setError('Failed to update tax status. Please try again.');
     }
   };

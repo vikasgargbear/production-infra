@@ -61,7 +61,6 @@ const ProductVerificationModal = ({
         return date.toISOString().split('T')[0];
       }
     } catch (e) {
-      console.error('Error parsing date:', e);
     }
     
     return dateStr;

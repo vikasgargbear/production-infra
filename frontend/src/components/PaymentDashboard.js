@@ -115,13 +115,11 @@ const PaymentDashboard = () => {
       });
       
     } catch (error) {
-      console.error('Error loading payment analytics:', error);
       
       // Try to load from offline storage instead of using mock data
       const offlineData = await offlineStorage.getOffline(`payment_analytics_${dateRange}`, { persistent: true });
       
       if (offlineData && !offlineStorage.isDataStale(offlineData, 60)) { // 1 hour max for analytics
-        console.log('📱 Using offline payment analytics data');
         setAnalytics(offlineData.data);
         
         // Show offline indicator
@@ -170,7 +168,6 @@ const PaymentDashboard = () => {
     try {
       await loadAnalytics();
     } catch (error) {
-      console.error('Error refreshing analytics:', error);
       setError('Failed to refresh data. Please try again.');
     } finally {
       setRefreshing(false);

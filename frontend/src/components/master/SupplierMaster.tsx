@@ -80,13 +80,11 @@ const SupplierMaster: React.FC<SupplierMasterProps> = () => {
       setError(null);
       // Ensure trailing slash for backend compatibility
       const response = await suppliersApi.getAll();
-      console.log('Suppliers API Response:', response);
       
       // Handle different response formats
       const supplierData = response.data?.suppliers || response.data?.data || response.data || [];
       setSuppliers(Array.isArray(supplierData) ? supplierData : []);
     } catch (err) {
-      console.error('Error loading suppliers:', err);
       setError('Failed to load suppliers. Please try again.');
       // Set empty array on error to prevent crashes
       setSuppliers([]);
@@ -143,7 +141,6 @@ const SupplierMaster: React.FC<SupplierMasterProps> = () => {
       toast.success(`Supplier ${action}d successfully`);
       loadSuppliers();
     } catch (err) {
-      console.error(`Error ${action}ing supplier:`, err);
       toast.error(`Failed to ${action} supplier.`);
     }
   };
@@ -171,7 +168,6 @@ const SupplierMaster: React.FC<SupplierMasterProps> = () => {
       setSelectedSuppliers([]);
       loadSuppliers();
     } catch (err) {
-      console.error('Error bulk deactivating suppliers:', err);
       toast.error('Failed to deactivate some suppliers.');
     }
   };

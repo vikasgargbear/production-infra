@@ -3,7 +3,7 @@ Permission middleware and decorators for role-based access control
 """
 from functools import wraps
 from typing import List, Optional, Dict, Any
-from fastapi import HTTPException, Depends, status
+from fastapi import HTTPException, Depends, status, Header
 from sqlalchemy.orm import Session
 from sqlalchemy import text
 import jwt
@@ -49,7 +49,7 @@ class PermissionChecker:
         self.require_admin = require_admin
     
     async def __call__(self, 
-                       authorization: str = None,
+                       authorization: str = Header(None),
                        db: Session = Depends(get_db)) -> Dict[str, Any]:
         """
         Check if user has required permissions
@@ -230,7 +230,7 @@ def require_permission(module: str = None, permission: str = None, require_admin
     
     return decorator
 
-def get_current_user(authorization: str = None, db: Session = Depends(get_db)) -> Dict[str, Any]:
+def get_current_user(authorization: str = Header(None), db: Session = Depends(get_db)) -> Dict[str, Any]:
     """
     Get current user from JWT token
     """

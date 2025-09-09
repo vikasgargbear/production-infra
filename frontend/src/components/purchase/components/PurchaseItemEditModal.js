@@ -50,7 +50,6 @@ const PurchaseItemEditModal = ({
   if (!isOpen) return null;
 
   const handleFieldChange = (field, value) => {
-    console.log(`Setting ${field} to:`, value);
     setEditedItem(prev => ({
       ...prev,
       [field]: value
@@ -103,8 +102,6 @@ const PurchaseItemEditModal = ({
       tax_percent: editedItem.tax_percent || 0
     };
     
-    console.log('Full item being saved:', itemToSave);
-    console.log('Expiry date specifically:', itemToSave.expiry_date);
     onSave(itemToSave);
     onClose();
   };

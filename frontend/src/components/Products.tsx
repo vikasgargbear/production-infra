@@ -124,7 +124,6 @@ const Products: React.FC = () => {
       const response = await api.get('/products/');
       setProducts(response.data || []);
     } catch (err) {
-      console.error("Error fetching products:", err);
       setError("Failed to load products. Please refresh the page.");
       setProducts([]);
     } finally {
@@ -194,40 +193,30 @@ const Products: React.FC = () => {
         throw new Error('Product name is required');
       }
       
-      console.log('Saving product with data:', productData);
 
       try {
         if (editingProduct) {
           // Use API service instead of direct axios calls
-          console.log('Updating product with data:', productData);
           const response = await api.put(`/products/${editingProduct.product_id}`, productData);
-          console.log('Update response:', response.data);
         } else {
           // Use API service instead of direct axios calls
-          console.log('Creating product with data:', productData);
           const response = await api.post('/products/', productData);
-          console.log('Create response:', response.data);
         }
         
-        console.log('✅ Product saved successfully - about to close modal');
         
         // Reset form and close modal
         form.reset();
         setShowAddModal(false);
         setEditingProduct(null);
         
-        console.log('✅ Modal should be closed now');
         
       } catch (error: any) {
-        console.error('❌ API Error details:', error.response?.data || error.message);
-        console.error('❌ Full error:', error);
         throw error; // Re-throw to be caught by the outer try/catch
       }
       
       // Refresh the products list
       await fetchProducts();
     } catch (err: any) {
-      console.error("Error saving product:", err);
       setError("Failed to save product. Please try again.");
       // TODO: Consider closing modal on error with proper error display
       // Currently modal stays open on error, which might confuse users
@@ -248,10 +237,8 @@ const Products: React.FC = () => {
         setLoading(true);
         // Use the centralized API service instead of productsApi
         await api.delete(`/products/${productId}`);
-        console.log('Product deleted successfully');
         await fetchProducts(); // Refresh the products list
       } catch (err) {
-        console.error("Error deleting product:", err);
         setError("Failed to delete product. Please try again.");
       } finally {
         setLoading(false);

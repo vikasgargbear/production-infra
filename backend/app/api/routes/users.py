@@ -30,8 +30,7 @@ def get_users(
     limit: int = 100,
     search: Optional[str] = Query(None, description="Search by username or email"),
     db: Session = Depends(get_db),
-    current_user: Dict[str, Any] = Depends(PermissionChecker("master", "view")),
-    authorization: str = Header(None)
+    current_user: Dict[str, Any] = Depends(PermissionChecker("master", "view"))
 ):
     """Get users with optional search"""
     try:

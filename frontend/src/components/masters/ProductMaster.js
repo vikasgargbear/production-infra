@@ -140,13 +140,10 @@ const ProductMaster = ({
         const catResponse = await apiClient.get('/products/master/categories');
         if (catResponse.data?.success && Array.isArray(catResponse.data?.data)) {
           setCategories(catResponse.data.data);
-          console.log('Categories loaded:', catResponse.data.data.length);
         } else {
-          console.log('Categories not in expected format, using empty array');
           setCategories([]);  // No hardcoding - enterprise practice
         }
       } catch (e) {
-        console.log('Error loading categories:', e);
         setCategories([]);  // No hardcoding - enterprise practice
       }
       
@@ -155,13 +152,10 @@ const ProductMaster = ({
         const typeResponse = await apiClient.get('/products/master/types');
         if (typeResponse.data?.success && Array.isArray(typeResponse.data?.data)) {
           setProductTypes(typeResponse.data.data);
-          console.log('Product types loaded:', typeResponse.data.data.length);
         } else {
-          console.log('Product types not in expected format, using empty array');
           setProductTypes([]);  // No hardcoding - enterprise practice
         }
       } catch (e) {
-        console.log('Error loading product types:', e);
         setProductTypes([]);  // No hardcoding - enterprise practice
       }
 
@@ -170,17 +164,13 @@ const ProductMaster = ({
         const classResponse = await apiClient.get('/products/master/classes');
         if (classResponse.data?.success && Array.isArray(classResponse.data?.data)) {
           setProductClasses(classResponse.data.data);
-          console.log('Product classes loaded:', classResponse.data.data.length);
         } else {
-          console.log('Product classes not in expected format, using empty array');
           setProductClasses([]);  // No hardcoding - enterprise practice
         }
       } catch (e) {
-        console.log('Error loading product classes:', e);
         setProductClasses([]);  // No hardcoding - enterprise practice
       }
     } catch (error) {
-      console.error('Error loading metadata:', error);
     }
   };
 

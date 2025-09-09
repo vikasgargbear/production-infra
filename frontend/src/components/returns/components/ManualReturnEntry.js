@@ -73,7 +73,6 @@ export default function ManualReturnEntry({ items, onItemsChange, onClose }) {
       };
       setManualItems(newItems);
     } catch (error) {
-      console.error('Failed to load batches:', error);
       const newItems = [...manualItems];
       newItems[index] = {
         ...newItems[index],

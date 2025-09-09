@@ -31,7 +31,6 @@ export function useReturnReasons() {
         }
       }
     } catch (e) {
-      console.error('Failed to parse cached return reasons:', e);
     }
     return [];
   });
@@ -72,7 +71,6 @@ export function useReturnReasons() {
         cacheReasons(DEFAULT_REASONS);
       }
     } catch (error) {
-      console.error('Failed to load return reasons:', error);
       setError(error.message);
       
       // Fallback to default reasons
@@ -90,7 +88,6 @@ export function useReturnReasons() {
         timestamp: Date.now()
       }));
     } catch (e) {
-      console.error('Failed to cache return reasons:', e);
     }
   };
 

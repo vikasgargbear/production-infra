@@ -130,7 +130,6 @@ const SupplierEditModal: React.FC<SupplierEditModalProps> = ({
         states: [] // Could load from backend or let user type
       });
     } catch (err) {
-      console.log('Using defaults for metadata');
     }
   };
 
@@ -205,7 +204,6 @@ const SupplierEditModal: React.FC<SupplierEditModalProps> = ({
       onSave();
       onClose();
     } catch (err: any) {
-      console.error('Error saving supplier:', err);
       setError(err.response?.data?.message || 'Failed to save supplier');
     } finally {
       setIsSaving(false);

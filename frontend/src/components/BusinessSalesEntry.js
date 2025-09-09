@@ -90,7 +90,6 @@ const BusinessSalesEntry = ({ open, onClose }) => {
         loadMedicalReps()
       ]);
     } catch (error) {
-      console.error('Error loading data:', error);
       setError('Failed to load required data. Please check your connection and try again.');
     } finally {
       setIsLoading(false);
@@ -107,7 +106,6 @@ const BusinessSalesEntry = ({ open, onClose }) => {
         setCustomers([]);
       }
     } catch (error) {
-      console.error('Error loading customers:', error);
       setCustomers([]);
     }
   };
@@ -122,7 +120,6 @@ const BusinessSalesEntry = ({ open, onClose }) => {
         setProducts([]);
       }
     } catch (error) {
-      console.error('Error loading products:', error);
       setProducts([]);
     }
   };
@@ -139,7 +136,6 @@ const BusinessSalesEntry = ({ open, onClose }) => {
         setChallans([]);
       }
     } catch (error) {
-      console.error('Error loading challans:', error);
       setChallans([]);
     }
   };
@@ -182,7 +178,6 @@ const BusinessSalesEntry = ({ open, onClose }) => {
         setTransportModes(fallbackTransportModes);
       }
     } catch (error) {
-      console.error('Error loading transport modes:', error);
       // Use minimal fallback if API fails
       const fallbackTransportModes = [
         {
@@ -210,7 +205,6 @@ const BusinessSalesEntry = ({ open, onClose }) => {
         setMedicalReps([]);
       }
     } catch (error) {
-      console.error('Error loading medical reps:', error);
       setMedicalReps([]);
     }
   };
@@ -460,7 +454,6 @@ const BusinessSalesEntry = ({ open, onClose }) => {
         toast.error('Failed to save invoice. Please check your data and try again.');
       }
     } catch (error) {
-      console.error('Error saving invoice:', error);
       toast.error('Network error. Please check your connection and try again.');
     } finally {
       setIsLoading(false);
@@ -472,7 +465,6 @@ const BusinessSalesEntry = ({ open, onClose }) => {
     try {
       toast.info('PDF generation feature coming soon!', 3000);
     } catch (error) {
-      console.error('Error generating PDF:', error);
       toast.error('Failed to generate PDF. Please try again.');
     }
   };
@@ -482,7 +474,6 @@ const BusinessSalesEntry = ({ open, onClose }) => {
     try {
       toast.info('WhatsApp PDF generation feature coming soon!', 3000);
     } catch (error) {
-      console.error('Error generating WhatsApp PDF:', error);
       toast.error('Failed to generate WhatsApp PDF. Please try again.');
     }
   };
@@ -527,7 +518,6 @@ const BusinessSalesEntry = ({ open, onClose }) => {
   // Select batch for item (placeholder function)
   const selectBatch = (itemId, batch) => {
     // This function can be implemented later when batch functionality is needed
-    console.log('Batch selection:', itemId, batch);
   };
 
   // Get expiry status (placeholder function)
