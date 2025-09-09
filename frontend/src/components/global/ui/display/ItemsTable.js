@@ -1,6 +1,61 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Trash2, Plus } from 'lucide-react';
 import { toast } from 'react-toastify';
+
+/**
+ * TaxInputCell Component
+ * Handles GST/Tax input with proper state management
+ * Only updates on blur or Enter key to avoid premature updates
+ */
+const TaxInputCell = ({ item, index, onUpdateItem, gstPercent: initialGst }) => {
+  const [localValue, setLocalValue] = useState(initialGst === 0 ? '' : initialGst.toString());
+  const [isFocused, setIsFocused] = useState(false);
+  
+  const handleUpdate = (value) => {
+    // Parse the value
+    const numericValue = value === '' ? 0 : parseFloat(value) || 0;
+    
+    // Update all tax-related fields
+    onUpdateItem(index, 'gst_percent', numericValue);
+    onUpdateItem(index, 'tax_rate', numericValue);
+    onUpdateItem(index, 'tax', numericValue);
+    
+    // Show toast only for valid values on blur
+    if (numericValue > 0 && item.product_id) {
+      toast.info(`GST ${numericValue}% set for ${item.product_name}`);
+    }
+  };
+  
+  return (
+    <div className="flex items-center justify-center">
+      <input
+        type="text"
+        value={localValue}
+        onChange={(e) => {
+          // Only allow numbers and decimal point
+          const value = e.target.value.replace(/[^0-9.]/g, '');
+          setLocalValue(value);
+        }}
+        onBlur={(e) => {
+          handleUpdate(e.target.value);
+          setIsFocused(false);
+        }}
+        onFocus={() => setIsFocused(true)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') {
+            e.preventDefault();
+            handleUpdate(localValue);
+            e.target.blur();
+          }
+        }}
+        placeholder="0"
+        className="w-20 px-2 py-1 text-center border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+        title="Enter GST % (optional - defaults to 0%)"
+      />
+      <span className="ml-1 text-gray-600">%</span>
+    </div>
+  );
+};
 
 /**
  * Global ItemsTable Component
@@ -163,43 +218,12 @@ const ItemsTable = ({
         }
         
         // Show editable input for missing GST (optional field)
-        return (
-          <div className="flex items-center justify-center">
-            <input
-              type="number"
-              value={gstPercent}
-              onChange={(e) => {
-                // Allow empty value (treated as 0%)
-                const inputValue = e.target.value;
-                const value = inputValue === '' ? 0 : parseFloat(inputValue) || 0;
-                
-                onUpdateItem(index, 'gst_percent', value);
-                onUpdateItem(index, 'tax_rate', value);
-                onUpdateItem(index, 'tax', value);
-                
-                // Save GST for future use if > 0
-                if (value > 0 && item.product_id) {
-                  toast.info(`GST ${value}% set for ${item.product_name}`);
-                }
-              }}
-              onBlur={(e) => {
-                // If left empty, set to 0
-                if (e.target.value === '') {
-                  onUpdateItem(index, 'gst_percent', 0);
-                  onUpdateItem(index, 'tax_rate', 0);
-                  onUpdateItem(index, 'tax', 0);
-                }
-              }}
-              placeholder="0"
-              className="w-20 px-2 py-1 text-center border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              min="0"
-              max="100"
-              step="0.5"
-              title="Enter GST % (optional - defaults to 0%)"
-            />
-            <span className="ml-1 text-gray-600">%</span>
-          </div>
-        );
+        return <TaxInputCell 
+          item={item} 
+          index={index} 
+          onUpdateItem={onUpdateItem}
+          gstPercent={gstPercent}
+        />;
       }
     },
     total: { 
