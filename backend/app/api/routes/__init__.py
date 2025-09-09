@@ -10,7 +10,7 @@ from .invoices import router as invoices_router
 from .order_items import router as order_items_router
 from .users import router as users_router
 from .suppliers import router as suppliers_router
-from .purchases import router as purchases_router
+from .purchase_enhanced import router as purchases_router  # Use purchase_enhanced as purchases
 from .delivery_challan import router as delivery_challan_router
 from .dashboard import router as dashboard_router
 from .stock_adjustments import router as stock_adjustments_router
@@ -18,9 +18,9 @@ from .tax_entries import router as tax_entries_router
 from .purchase_upload import router as purchase_upload_router
 from .purchase_enhanced import router as purchase_enhanced_router
 from .sale_returns import router as sale_returns_api_router
-from .purchase_returns import router as purchase_returns_router
+from .purchase_returns_enhanced import router as purchase_returns_router  # Use purchase_returns_enhanced
 from .stock_movements import router as stock_movements_router
-from .party_ledger import router as party_ledger_router
+from .party_ledger_v2 import router as party_ledger_router  # Use party_ledger_v2
 from .credit_debit_notes import router as credit_debit_notes_router
 from .sales import router as sales_router
 from .collection_center_simple import router as collection_center_router
