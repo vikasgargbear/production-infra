@@ -12,12 +12,6 @@ export { CreditDebitNote, NotesHub };
 // export { default as CreditNoteEntry } from './components/CreditNoteEntry';
 // export { default as DebitNoteEntry } from './components/DebitNoteEntry';
 
-// Sub Components - TODO: Implement these
-// export { default as NoteTypeSelector } from './components/NoteTypeSelector';
-// export { default as NoteDetails } from './components/NoteDetails';
-// export { default as NoteItemsTable } from './components/NoteItemsTable';
-// export { default as NoteAdjustment } from './components/NoteAdjustment';
-// export { default as NoteSummary } from './components/NoteSummary';
 
 // Note Constants
 export const NOTE_TYPES = {

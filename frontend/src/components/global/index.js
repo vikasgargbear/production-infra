@@ -132,14 +132,6 @@ export {
 // Filter Components - NEW
 export { default as InlineFilterPanel } from './InlineFilterPanel';
 
-// Ledger Components - temporarily commented out as ledger is empty
-// export * from './ledger';
-// export {
-//   PartyLedgerBalance,
-//   PartyStatement,
-//   OutstandingBills,
-//   AgingAnalysis
-// } from './ledger';
 
 // Navigation Components
 export * from './navigation';

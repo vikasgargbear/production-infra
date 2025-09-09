@@ -159,10 +159,6 @@ const ReturnsListHistory: React.FC<ReturnsListHistoryProps> = ({ onClose }) => {
       const salesResponse = salesResult.status === 'fulfilled' ? salesResult.value : null;
       const purchaseResponse = purchaseResult.status === 'fulfilled' ? purchaseResult.value : null;
 
-      // Transform and combine data
-      // The returnsApi methods return AxiosResponse, so we need to access .data
-      // Sales API returns { total: number, returns: [...] }
-      // Purchase API returns { data: [...] }
       const salesReturnsList = salesResponse?.data?.returns || [];
       const purchaseReturnsList = purchaseResponse?.data?.data || [];
       
@@ -491,7 +487,6 @@ const ReturnsListHistory: React.FC<ReturnsListHistoryProps> = ({ onClose }) => {
             },
             {
               label: "Export All",
-              onClick: () => {/* TODO: Implement export all returns */},
               variant: "default",
               icon: Download
             }
@@ -529,7 +524,6 @@ const ReturnsListHistory: React.FC<ReturnsListHistoryProps> = ({ onClose }) => {
               selectedCount={selectedReturns.length}
               onApprove={() => {/* TODO: Implement approve selected */}}
               onReject={() => {/* TODO: Implement reject selected */}}
-              onExport={() => {/* TODO: Implement export selected */}}
               onClear={() => setSelectedReturns([])}
             />
 

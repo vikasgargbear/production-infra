@@ -10,9 +10,6 @@ export { ModularPaymentEntry };
 // export { default as ModularPaymentEntryV2 } from './ModularPaymentEntryV2';
 // export { default as ModularPaymentEntryV3 } from './ModularPaymentEntryV3';
 
-// Sub Components
-// export { default as PartySelector } from './components/PartySelector'; // TODO: Implement
-// import PaymentDetails from './components/PaymentDetails'; // TODO: Missing component
 import PaymentSummary from './components/PaymentSummary';
 import InvoiceSelector from './components/InvoiceSelector';
 export { PaymentSummary, InvoiceSelector };

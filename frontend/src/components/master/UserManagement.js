@@ -81,10 +81,6 @@ const UserManagement = ({ open, onClose }) => {
 
           if (now > expiry) {
             setError('Session expired. Please login again.');
-            // Don't remove token or redirect - let the API call fail and handle it there
-            // localStorage.removeItem('authToken');
-            // setTimeout(() => window.location.href = '/login', 2000);
-            // return;
           }
         }
       } catch (e) {
@@ -141,9 +137,6 @@ const UserManagement = ({ open, onClose }) => {
         
         if (error.response.status === 401) {
           setError('Authentication failed. Your session may have expired. Please login again.');
-          // Don't auto-redirect - let user close the modal and login manually
-          // localStorage.removeItem('authToken');
-          // setTimeout(() => window.location.href = '/login', 3000);
         } else if (error.response.status === 403) {
           setError('Access denied. You do not have permission to view users.');
         } else if (error.response.status === 500) {

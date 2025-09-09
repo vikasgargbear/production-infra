@@ -44,9 +44,6 @@ const Home: React.FC<HomeProps> = ({ setActiveTab }) => {
     const loadData = async () => {
       try {
         setLoading(true);
-        // Skip notifications loading since endpoint doesn't exist yet
-        // TODO: Implement notifications endpoint on backend
-        // const notifications = await settingsApi.notifications.getAll();
         
         // Load any other required data here
         setError(null); // Clear any previous errors

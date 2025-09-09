@@ -131,9 +131,6 @@ const CollectionCenter: React.FC<CollectionCenterProps> = ({
           const customerName = invoice.customer_name || `Customer ${customerId}`;
           
           if (!customerMap.has(customerId)) {
-            // In a real implementation, fetch from customers API:
-            // const customerDetails = await apiClient.get(`/customers/${customerId}`);
-            // For now, we don't have phone/email in the invoice data
             customerMap.set(customerId, {
               customer_id: String(customerId),
               customer_name: customerName,

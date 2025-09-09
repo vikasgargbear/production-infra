@@ -262,13 +262,6 @@ export const validateField = (fieldName, value, formData = {}) => {
 // Helper to check for duplicate invoice
 export const checkDuplicateInvoice = async (invoiceNumber, supplierId, excludePurchaseId = null) => {
   try {
-    // This would be an API call in real implementation
-    // const response = await purchasesApi.checkDuplicate({
-    //   invoice_number: invoiceNumber,
-    //   supplier_id: supplierId,
-    //   exclude_id: excludePurchaseId
-    // });
-    // return response.data.exists;
     
     // For now, return false (no duplicate)
     return false;

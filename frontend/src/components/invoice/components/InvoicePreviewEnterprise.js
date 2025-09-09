@@ -239,7 +239,6 @@ const InvoicePreviewEnterprise = ({
         </div>
 
         {/* Customer & Transport Section - Below header */}
-        {/* Hide in preview mode but show in print/PDF - use CSS class for print visibility */}
         {showAddresses && (
           <div className={`mb-4 ${isPrintMode ? '' : 'hidden print:block'}`}>
             <div className="grid grid-cols-3 gap-3">

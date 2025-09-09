@@ -34,10 +34,6 @@ const ItemsTable = ({
     if (item.total_amount !== undefined) return item.total_amount;
     if (item.itemTotal !== undefined) return item.itemTotal;
     
-    // Fallback: Display calculation using correct business logic
-    // base_quantity = what customer pays for (billable)
-    // free_quantity = additional free items given with base quantity  
-    // total_quantity = base_quantity + free_quantity (what customer receives)
     const baseQuantity = parseFloat(item.base_quantity || item.quantity) || 0;  // What customer pays for
     const rate = parseFloat(item.rate || item.sale_price || item.unit_price) || 0;
     const discount = parseFloat(item.discount || item.discount_percent) || 0;
