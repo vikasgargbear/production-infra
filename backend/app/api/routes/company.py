@@ -369,6 +369,168 @@ def get_organization_id(
     """Get current organization ID"""
     return {"org_id": org_id}
 
+@router.get("/profile")
+def get_company_profile(
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)
+):
+    """Get complete company profile including all bank accounts"""
+    try:
+        # Get company info
+        company_info = get_company_info(db, org_id)
+        
+        # Get all bank accounts
+        bank_query = """
+            SELECT 
+                bank_account_id as id,
+                account_name,
+                account_number,
+                bank_name,
+                branch_name,
+                ifsc_code,
+                account_type,
+                is_default_account,
+                is_active
+            FROM master.org_bank_accounts
+            WHERE org_id = :org_id AND is_active = true
+            ORDER BY is_default_account DESC, created_at ASC
+        """
+        bank_result = db.execute(text(bank_query), {"org_id": org_id})
+        bank_accounts = []
+        
+        for row in bank_result:
+            bank_accounts.append({
+                "id": row.id,
+                "account_name": row.account_name or "",
+                "account_number": row.account_number or "",
+                "bank_name": row.bank_name or "",
+                "branch_name": row.branch_name or "",
+                "ifsc_code": row.ifsc_code or "",
+                "account_type": row.account_type or "CURRENT",
+                "is_default": row.is_default_account or False
+            })
+        
+        # Get payment QR code if exists
+        settings_query = """
+            SELECT setting_value 
+            FROM system_config.system_settings
+            WHERE org_id = :org_id AND setting_key = 'payment_qr_code'
+        """
+        qr_result = db.execute(text(settings_query), {"org_id": org_id})
+        qr_data = qr_result.first()
+        payment_qr_code = qr_data.setting_value if qr_data else None
+        
+        # Return complete profile
+        return {
+            "success": True,
+            "data": {
+                **company_info,
+                "bank_accounts": bank_accounts,
+                "payment_qr_code": payment_qr_code
+            }
+        }
+        
+    except Exception as e:
+        logger.error(f"Error fetching company profile: {str(e)}")
+        return {
+            "success": False,
+            "error": str(e),
+            "data": {
+                **get_company_info(db, org_id),
+                "bank_accounts": [],
+                "payment_qr_code": None
+            }
+        }
+
+@router.get("/bank-accounts")
+def get_bank_accounts(
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)
+):
+    """Get all bank accounts for the organization"""
+    try:
+        query = """
+            SELECT 
+                bank_account_id as id,
+                account_name,
+                account_number,
+                bank_name,
+                branch_name,
+                ifsc_code,
+                account_type,
+                is_default_account,
+                is_active
+            FROM master.org_bank_accounts
+            WHERE org_id = :org_id AND is_active = true
+            ORDER BY is_default_account DESC, created_at ASC
+        """
+        
+        result = db.execute(text(query), {"org_id": org_id})
+        bank_accounts = []
+        
+        for row in result:
+            bank_accounts.append({
+                "id": row.id,
+                "account_name": row.account_name or "",
+                "account_number": row.account_number or "",
+                "bank_name": row.bank_name or "",
+                "branch_name": row.branch_name or "",
+                "ifsc_code": row.ifsc_code or "",
+                "account_type": row.account_type or "CURRENT",
+                "is_default": row.is_default_account or False
+            })
+        
+        return {
+            "success": True,
+            "data": bank_accounts
+        }
+        
+    except Exception as e:
+        logger.error(f"Error fetching bank accounts: {str(e)}")
+        return {
+            "success": False,
+            "error": str(e),
+            "data": []
+        }
+
+@router.post("/qr-code")
+def upload_qr_code(
+    qr_data: Dict[str, str] = Body(...),
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)
+):
+    """Upload payment QR code"""
+    try:
+        qr_code_base64 = qr_data.get("qr_code", "")
+        
+        if not qr_code_base64:
+            raise HTTPException(status_code=400, detail="QR code data is required")
+        
+        # Store QR code in system settings
+        query = """
+            INSERT INTO system_config.system_settings (org_id, setting_key, setting_value)
+            VALUES (:org_id, 'payment_qr_code', :qr_code)
+            ON CONFLICT (org_id, setting_key)
+            DO UPDATE SET setting_value = :qr_code, updated_at = CURRENT_TIMESTAMP
+        """
+        
+        db.execute(text(query), {
+            "org_id": org_id,
+            "qr_code": qr_code_base64
+        })
+        
+        db.commit()
+        
+        return {
+            "success": True,
+            "message": "QR code uploaded successfully"
+        }
+        
+    except Exception as e:
+        logger.error(f"Error uploading QR code: {str(e)}")
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Failed to upload QR code: {str(e)}")
+
 @router.get("/settings")
 def get_company_settings(
     db: Session = Depends(get_db),

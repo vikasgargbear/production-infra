@@ -1,5 +1,7 @@
 /**
  * API Client for PostgreSQL Function Wrappers
+ * Uses consolidated /api/pg/* endpoints that wrap PostgreSQL functions
+ */
 
 import axios, { AxiosInstance, AxiosError } from 'axios';
 // @ts-ignore - JavaScript module
@@ -103,6 +105,10 @@ apiClient.interceptors.request.use(
       const isPublicPath = publicPaths.some(path => currentPath === path || currentPath.startsWith(path + '?'));
       
       if (!isPublicPath) {
+        // Don't redirect immediately - let the API call fail with 401
+        // The component can then handle the error appropriately
+        // window.location.href = '/login?reason=not_authenticated';
+        // return Promise.reject(new Error('Authentication required'));
       }
     }
     
@@ -128,7 +134,17 @@ apiClient.interceptors.response.use(
       // Don't auto-redirect on 401 - let components handle it
       // This prevents redirect loops
       if (token) {
+        // We had a token but it was rejected - likely expired
+        // Don't auto-remove token or redirect - let user manually logout
+        // localStorage.removeItem('authToken');
+        // sessionStorage.clear(); // Clear any session data
         
+        // Only redirect if not already on login/register/setup pages
+        // if (!window.location.pathname.includes('/login') && 
+        //     !window.location.pathname.includes('/register') &&
+        //     !window.location.pathname.includes('/setup')) {
+        //   window.location.href = '/login?reason=session_expired';
+        // }
       }
       // If no token, just let the error bubble up without clearing anything
     } else if (error.response?.status === 404) {
