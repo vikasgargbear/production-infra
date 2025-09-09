@@ -351,6 +351,13 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
           // Keep base_quantity as is - it's what customer pays for
           updatedItem.free_quantity = parseFloat(value) || 0;
           // Don't change base_quantity when free_quantity changes!
+        } else if (field === 'gst_percent' || field === 'tax_rate' || field === 'tax') {
+          // Ensure all GST-related fields are updated together
+          const gstValue = parseFloat(value) || 0;
+          updatedItem.gst_percent = gstValue;
+          updatedItem.tax_rate = gstValue;
+          updatedItem.tax = gstValue;
+          updatedItem.tax_percent = gstValue;
         }
         
         return updatedItem;

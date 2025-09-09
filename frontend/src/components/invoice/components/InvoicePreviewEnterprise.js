@@ -178,11 +178,32 @@ const InvoicePreviewEnterprise = ({
                   {/* Bank Details on left */}
                   <div className="flex-1">
                     <h3 className="text-xs font-semibold text-gray-700 uppercase tracking-wider mb-2">Bank Details</h3>
-                    <div className="text-sm text-gray-600 space-y-1">
-                      <p className="font-semibold text-gray-900">{companyInfo.bankName || 'SBI'}</p>
-                      <p>A/C: {companyInfo.accountNumber || '1234567890'}</p>
-                      <p>IFSC: {companyInfo.ifsc || 'SBIN0001234'}</p>
-                    </div>
+                    {(() => {
+                      // Get selected bank account from invoice or use default
+                      const selectedBank = invoice.bank_account_id && companyInfo.bankAccounts
+                        ? companyInfo.bankAccounts.find(acc => acc.id === invoice.bank_account_id)
+                        : companyInfo.bankAccounts?.[0]; // Default to first account
+                      
+                      if (selectedBank) {
+                        return (
+                          <div className="text-sm text-gray-600 space-y-1">
+                            <p className="font-semibold text-gray-900">{selectedBank.bank_name}</p>
+                            <p>A/C: {selectedBank.account_number}</p>
+                            <p>IFSC: {selectedBank.ifsc_code}</p>
+                            {selectedBank.branch_name && (
+                              <p className="text-xs">Branch: {selectedBank.branch_name}</p>
+                            )}
+                          </div>
+                        );
+                      } else {
+                        return (
+                          <div className="text-sm text-gray-500 italic">
+                            <p>No bank account configured</p>
+                            <p className="text-xs mt-1">Please add bank details in company settings</p>
+                          </div>
+                        );
+                      }
+                    })()}
                   </div>
                   {/* QR Code on right */}
                   <div className="text-center ml-3">
