@@ -63,7 +63,6 @@ const NotificationsAlerts = ({ open, onClose }) => {
       }
 
     } catch (error) {
-      console.error('Error loading notification data:', error);
       setError('Failed to load notification settings. Please try again.');
       setAlertRules([]);
       setNotifications([]);
@@ -79,7 +78,6 @@ const NotificationsAlerts = ({ open, onClose }) => {
     try {
       await loadNotificationData();
     } catch (error) {
-      console.error('Refresh failed:', error);
       setError('Failed to refresh data');
     } finally {
       setRefreshing(false);
@@ -188,7 +186,6 @@ const NotificationsAlerts = ({ open, onClose }) => {
       setHasChanges(false);
       // Show success message
     } catch (error) {
-      console.error('Error saving preferences:', error);
       setError('Failed to save preferences. Please try again.');
     }
   };
@@ -203,7 +200,6 @@ const NotificationsAlerts = ({ open, onClose }) => {
         r.id === ruleId ? { ...r, enabled: !r.enabled } : r
       ));
     } catch (error) {
-      console.error('Error updating rule:', error);
       setError('Failed to update rule. Please try again.');
     }
   };
@@ -214,7 +210,6 @@ const NotificationsAlerts = ({ open, onClose }) => {
         await settingsApi.notifications.rules.delete(ruleId);
         setAlertRules(prev => prev.filter(r => r.id !== ruleId));
       } catch (error) {
-        console.error('Error deleting rule:', error);
         setError('Failed to delete rule. Please try again.');
       }
     }
@@ -227,7 +222,6 @@ const NotificationsAlerts = ({ open, onClose }) => {
         n.id === notificationId ? { ...n, read: true } : n
       ));
     } catch (error) {
-      console.error('Error marking notification as read:', error);
     }
   };
 
@@ -237,7 +231,6 @@ const NotificationsAlerts = ({ open, onClose }) => {
         await settingsApi.notifications.clearAll();
         setNotifications([]);
       } catch (error) {
-        console.error('Error clearing notifications:', error);
         setError('Failed to clear notifications. Please try again.');
       }
     }

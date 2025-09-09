@@ -47,7 +47,6 @@ const CompanyProfile = () => {
         }
       }
     } catch (error) {
-      console.error('Error fetching company profile:', error);
       setError('Failed to load company profile');
       // Use default values if fetch fails
       const defaultInfo = {
@@ -118,7 +117,6 @@ const CompanyProfile = () => {
       localStorage.setItem('companyInfo', JSON.stringify(companyInfo));
       
     } catch (error) {
-      console.error('Error saving company profile:', error);
       setError('Failed to save company profile');
     } finally {
       setSaving(false);

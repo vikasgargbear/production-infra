@@ -181,7 +181,6 @@ const SalesOrderFlow = ({ open = true, onClose }) => {
           throw new Error('No users returned');
         }
       } catch (error) {
-        console.error('Error loading employees:', error);
         // Try to get current user from auth
         const currentUser = authApi.getCurrentUser();
         
@@ -265,10 +264,6 @@ const SalesOrderFlow = ({ open = true, onClose }) => {
 
   // Handle import from invoice/challan
   const handleImport = (importData) => {
-    console.log('=== IMPORT DATA RECEIVED IN SALES ORDER ===');
-    console.log('Full import data:', importData);
-    console.log('Items in import data:', importData.items);
-    console.log('Items count:', importData.items?.length || 0);
     
     // Set customer details
     if (importData.customer_id) {
@@ -308,9 +303,6 @@ const SalesOrderFlow = ({ open = true, onClose }) => {
         line_total: 0 // Will be recalculated
       }));
       
-      console.log('=== FORMATTED ITEMS FOR SALES ORDER ===');
-      console.log('Formatted items count:', formattedItems.length);
-      console.log('First formatted item:', formattedItems[0]);
       
       setOrder(prev => {
         const updated = {
@@ -318,17 +310,14 @@ const SalesOrderFlow = ({ open = true, onClose }) => {
           items: formattedItems,
           notes: importData.notes || prev.notes
         };
-        console.log('Updated order with items:', updated);
         return updated;
       });
       
       // Recalculate totals after a small delay to ensure state is updated
       setTimeout(() => {
-        console.log('Recalculating totals for imported items');
         recalculateTotals(formattedItems);
       }, 100);
     } else {
-      console.warn('No items found in import data!');
       setMessage('⚠️ No items found in the selected document');
       setMessageType('warning');
     }
@@ -386,7 +375,6 @@ const SalesOrderFlow = ({ open = true, onClose }) => {
           
           const preferredAddr = billingAddr || shippingAddr || anyDefaultAddr || addresses[0];
           
-          console.log('Found address data:', preferredAddr);
           
           // Build full address from fetched data
           const fetchedParts = [];
@@ -423,7 +411,6 @@ const SalesOrderFlow = ({ open = true, onClose }) => {
           setSelectedCustomer(customer);
         }
       } catch (error) {
-        console.error('Failed to fetch customer addresses:', error);
       }
     }
     
@@ -438,11 +425,6 @@ const SalesOrderFlow = ({ open = true, onClose }) => {
     // If states match, use CGST/SGST, otherwise IGST
     const gstType = (cleanCustomerState === cleanCompanyState || cleanCustomerState === '') ? 'CGST/SGST' : 'IGST';
     
-    console.log('GST Type Determination:', {
-      customerState: cleanCustomerState,
-      companyState: cleanCompanyState,
-      gstType: gstType
-    });
     
     setOrder(prev => ({
       ...prev,
@@ -593,8 +575,6 @@ const SalesOrderFlow = ({ open = true, onClose }) => {
       if (result.success && result.totals) {
         const formattedTotals = result.totals; // Use totals directly
         
-        console.log('Calculation result:', result);
-        console.log('Formatted totals:', formattedTotals);
         
         // Update items with calculated line totals from backend
         const updatedItems = items.map((item, index) => {
@@ -622,7 +602,6 @@ const SalesOrderFlow = ({ open = true, onClose }) => {
           calculatedLineItems: result.line_items
         }));
       } else {
-        console.error('Sales order calculation failed:', result.error);
         // Fallback calculation if the enterprise calculator fails
         const fallbackTotals = calculateFallbackTotals(items);
         setOrder(prev => ({
@@ -632,7 +611,6 @@ const SalesOrderFlow = ({ open = true, onClose }) => {
         }));
       }
     } catch (error) {
-      console.error('Error calculating sales order totals:', error);
       // Fallback calculation on error
       const fallbackTotals = calculateFallbackTotals(items);
       setOrder(prev => ({
@@ -830,7 +808,6 @@ const SalesOrderFlow = ({ open = true, onClose }) => {
         throw new Error('Invalid response from server');
       }
     } catch (error) {
-      console.error('Error creating order:', error);
       
       // Check for validation errors
       let errorMessage = 'Failed to create sales order';
@@ -848,7 +825,6 @@ const SalesOrderFlow = ({ open = true, onClose }) => {
         errorMessage = error.message;
       }
       
-      console.error('Detailed error:', error.response?.data);
       
       setMessage(errorMessage);
       setMessageType('error');

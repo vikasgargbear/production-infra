@@ -224,7 +224,6 @@ const SalesDashboard: React.FC<SalesDashboardProps> = () => {
       }
 
     } catch (error) {
-      console.error('Error fetching sales data:', error);
       setError('Failed to load sales data. Please try again.');
     } finally {
       setLoading(false);

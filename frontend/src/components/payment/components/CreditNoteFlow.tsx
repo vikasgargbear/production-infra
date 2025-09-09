@@ -84,7 +84,6 @@ const CreditNoteFlow: React.FC<CreditNoteFlowProps> = ({ onClose }) => {
         setSettlementOptions(settlementsResponse.data);
       }
     } catch (error) {
-      console.error('Error loading initial data:', error);
       // Fallback to basic options if API fails
       setReasonOptions([
         { value: 'discount', label: 'Additional Discount Given' },
@@ -131,7 +130,6 @@ const CreditNoteFlow: React.FC<CreditNoteFlowProps> = ({ onClose }) => {
     try {
       await loadInitialData();
     } catch (error) {
-      console.error('Error refreshing data:', error);
       setError('Failed to refresh data. Please try again.');
     } finally {
       setRefreshing(false);
@@ -221,7 +219,6 @@ const CreditNoteFlow: React.FC<CreditNoteFlowProps> = ({ onClose }) => {
           has_prev: invoicePage > 1
         });
       } catch (error) {
-        console.error('Error fetching customer invoices:', error);
         setError('Failed to load customer invoices. Please try again.');
       } finally {
         setLoadingInvoices(false);
@@ -275,7 +272,6 @@ const CreditNoteFlow: React.FC<CreditNoteFlowProps> = ({ onClose }) => {
         }
       }
     } catch (error) {
-      console.error('Error loading invoice items:', error);
       setError('Failed to load invoice items. Please try again.');
       setNoteItems([]);
     } finally {
@@ -365,7 +361,6 @@ const CreditNoteFlow: React.FC<CreditNoteFlowProps> = ({ onClose }) => {
       if (onClose) onClose();
       
     } catch (error) {
-      console.error('Error saving note:', error);
       setError(`Error saving credit note: ${error instanceof Error ? error.message : 'Unknown error'}`);
     } finally {
       setSaving(false);

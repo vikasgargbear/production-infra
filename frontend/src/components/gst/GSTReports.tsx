@@ -164,14 +164,12 @@ const GSTReports: React.FC<GSTReportsProps> = ({ open, onClose }) => {
       });
       
     } catch (err) {
-      console.error('Error loading GST report data:', err);
       
       // Try to load from offline storage instead of using mock data
       const storageKey = `gst_report_${selectedReport}_${dateRange.from}_${dateRange.to}`;
       const offlineData = await offlineStorage.getOffline(storageKey, { critical: true });
       
       if (offlineData && !offlineStorage.isDataStale(offlineData, 120)) { // 2 hours max for GST report data
-        console.log('📱 Using offline GST report data');
         setReportData(offlineData.data);
         
         // Show offline indicator
@@ -199,7 +197,6 @@ const GSTReports: React.FC<GSTReportsProps> = ({ open, onClose }) => {
       
       throw new Error('Invalid response format from GSTR-1 API');
     } catch (err) {
-      console.warn('GSTR-1 API failed, trying invoice data fallback:', err);
       return await loadGSTR1FromInvoices();
     }
   };
@@ -218,7 +215,6 @@ const GSTReports: React.FC<GSTReportsProps> = ({ open, onClose }) => {
 
       throw new Error('No invoice data available');
     } catch (err) {
-      console.warn('Invoice API failed, no fallback data available:', err);
       throw new Error('Unable to load GSTR-1 data from any source');
     }
   };
@@ -236,7 +232,6 @@ const GSTReports: React.FC<GSTReportsProps> = ({ open, onClose }) => {
       
       throw new Error('Invalid response format from GSTR-3B API');
     } catch (err) {
-      console.warn('GSTR-3B API failed:', err);
       throw new Error('Unable to load GSTR-3B data');
     }
   };
@@ -254,7 +249,6 @@ const GSTReports: React.FC<GSTReportsProps> = ({ open, onClose }) => {
       
       throw new Error('Invalid response format from GSTR-2B API');
     } catch (err) {
-      console.warn('GSTR-2B API failed:', err);
       throw new Error('Unable to load GSTR-2B data');
     }
   };
@@ -272,7 +266,6 @@ const GSTReports: React.FC<GSTReportsProps> = ({ open, onClose }) => {
       
       throw new Error('Invalid response format from HSN API');
     } catch (err) {
-      console.warn('HSN API failed:', err);
       throw new Error('Unable to load HSN summary data');
     }
   };
@@ -291,7 +284,6 @@ const GSTReports: React.FC<GSTReportsProps> = ({ open, onClose }) => {
       
       throw new Error('Invalid response format from party-wise API');
     } catch (err) {
-      console.warn('Party-wise API failed, using fallback:', err);
       // Return empty data structure instead of mock data
       return {
         b2b: [],
@@ -325,7 +317,6 @@ const GSTReports: React.FC<GSTReportsProps> = ({ open, onClose }) => {
       
       throw new Error('Invalid response format from GST payable API');
     } catch (err) {
-      console.warn('GST payable API failed, using fallback:', err);
       // Return empty data structure instead of mock data
       return {
         b2b: [],
@@ -492,9 +483,7 @@ const GSTReports: React.FC<GSTReportsProps> = ({ open, onClose }) => {
       link.remove();
       window.URL.revokeObjectURL(url);
       
-      console.log(`${selectedReport.toUpperCase()} exported successfully in ${format} format`);
     } catch (err) {
-      console.error('Export failed:', err);
       alert(`Export failed: ${err instanceof Error ? err.message : 'Unknown error'}`);
     } finally {
       setLoading(false);

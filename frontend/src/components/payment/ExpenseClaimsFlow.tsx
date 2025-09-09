@@ -51,7 +51,6 @@ const ExpenseClaimsFlow: React.FC<ExpenseClaimsFlowProps> = ({ onClose }) => {
       setEmployeeName('Current User');
       
     } catch (error) {
-      console.error('Error loading initial data:', error);
       setError('Failed to load expense types');
       // Fallback expense types
       setExpenseTypes([
@@ -149,7 +148,6 @@ const ExpenseClaimsFlow: React.FC<ExpenseClaimsFlowProps> = ({ onClose }) => {
       setPurpose('');
       
     } catch (error) {
-      console.error('Error saving expense claim:', error);
       setError(error instanceof Error ? error.message : 'Error saving expense claim');
     } finally {
       setSaving(false);

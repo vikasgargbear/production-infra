@@ -20,7 +20,8 @@ class Settings:
     API_PREFIX: str = "/api"  # Consolidated API prefix
     
     # Security settings
-    SECRET_KEY: str = os.environ.get("SECRET_KEY", "your-secret-key-here")
+    # Use JWT_SECRET_KEY as primary, fall back to SECRET_KEY for backward compatibility
+    SECRET_KEY: str = os.environ.get("JWT_SECRET_KEY", os.environ.get("SECRET_KEY", "your-secret-key-here"))
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
     

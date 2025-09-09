@@ -52,7 +52,6 @@ const FinancialJournalFlow: React.FC<FinancialJournalFlowProps> = ({ onClose }) 
       setAccounts(accountsResponse.accounts || []);
       
     } catch (error) {
-      console.error('Error loading initial data:', error);
       setError('Failed to load chart of accounts');
       // Fallback accounts
       setAccounts([
@@ -186,7 +185,6 @@ const FinancialJournalFlow: React.FC<FinancialJournalFlowProps> = ({ onClose }) 
       setNarration('');
       
     } catch (error) {
-      console.error('Error saving journal entry:', error);
       setError(error instanceof Error ? error.message : 'Error saving journal entry');
     } finally {
       setSaving(false);

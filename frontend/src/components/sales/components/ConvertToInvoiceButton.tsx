@@ -37,7 +37,6 @@ const ConvertToInvoiceButton: React.FC<ConvertToInvoiceButtonProps> = ({
         }
       }
     } catch (error: any) {
-      console.error('Error converting to invoice:', error);
       alert(`Failed to convert to invoice: ${error.response?.data?.detail || error.message}`);
     } finally {
       setConverting(false);

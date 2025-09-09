@@ -66,7 +66,6 @@ const NotesHistory = ({ onClose, onSelectNote }) => {
           }));
           notesList.push(...creditNotes);
         } catch (err) {
-          console.error('Failed to fetch credit notes:', err);
         }
       }
       
@@ -95,7 +94,6 @@ const NotesHistory = ({ onClose, onSelectNote }) => {
           }));
           notesList.push(...debitNotes);
         } catch (err) {
-          console.error('Failed to fetch debit notes:', err);
         }
       }
       
@@ -109,7 +107,6 @@ const NotesHistory = ({ onClose, onSelectNote }) => {
       setNotes(notesList);
       applyFilters(notesList);
     } catch (error) {
-      console.error('Error fetching notes:', error);
       toast.error('Failed to fetch notes');
     } finally {
       setLoading(false);

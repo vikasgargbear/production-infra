@@ -85,7 +85,6 @@ const PaymentHistory = ({ onClose, onSelectPayment }) => {
           }));
           transactionsList.push(...payments);
         } catch (err) {
-          console.error('Failed to fetch payments:', err);
         }
       }
       
@@ -116,7 +115,6 @@ const PaymentHistory = ({ onClose, onSelectPayment }) => {
           }));
           transactionsList.push(...receipts);
         } catch (err) {
-          console.error('Failed to fetch receipts:', err);
         }
       }
       
@@ -145,7 +143,6 @@ const PaymentHistory = ({ onClose, onSelectPayment }) => {
       setTransactions(transactionsList);
       applyFilters(transactionsList);
     } catch (error) {
-      console.error('Error fetching transactions:', error);
       toast.error('Failed to fetch transactions');
     } finally {
       setLoading(false);

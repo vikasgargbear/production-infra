@@ -34,7 +34,6 @@ const DataValidationEngine = ({ open, onClose }) => {
         setValidationRules([]);
       }
     } catch (error) {
-      console.error('Error loading validation rules:', error);
       setError('Failed to load validation rules. Please try again.');
       setValidationRules([]);
     }
@@ -49,7 +48,6 @@ const DataValidationEngine = ({ open, onClose }) => {
         setValidationResults([]);
       }
     } catch (error) {
-      console.error('Error loading validation results:', error);
       setError('Failed to load validation results. Please try again.');
       setValidationResults([]);
     } finally {
@@ -63,7 +61,6 @@ const DataValidationEngine = ({ open, onClose }) => {
     try {
       await Promise.all([loadValidationRules(), loadValidationResults()]);
     } catch (error) {
-      console.error('Error refreshing data:', error);
       setError('Failed to refresh data. Please try again.');
     } finally {
       setRefreshing(false);
@@ -86,7 +83,6 @@ const DataValidationEngine = ({ open, onClose }) => {
         setError('Failed to start validation. Please try again.');
       }
     } catch (error) {
-      console.error('Error running validation:', error);
       setError('Failed to start validation. Please try again.');
     } finally {
       setIsRunning(false);
@@ -102,7 +98,6 @@ const DataValidationEngine = ({ open, onClose }) => {
         ));
       }
     } catch (error) {
-      console.error('Error toggling rule:', error);
       setError('Failed to update rule. Please try again.');
     }
   };
@@ -117,7 +112,6 @@ const DataValidationEngine = ({ open, onClose }) => {
         Toast.success('Rule deleted successfully');
       }
     } catch (error) {
-      console.error('Error deleting rule:', error);
       setError('Failed to delete rule. Please try again.');
     }
   };
@@ -133,7 +127,6 @@ const DataValidationEngine = ({ open, onClose }) => {
         a.click();
       }
     } catch (error) {
-      console.error('Error exporting results:', error);
       setError('Failed to export results. Please try again.');
     }
   };

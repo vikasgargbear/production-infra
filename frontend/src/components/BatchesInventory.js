@@ -69,7 +69,6 @@ const BatchesInventory = () => {
         });
       }
     } catch (err) {
-      console.error('Error loading data:', err);
       
       // Try to load from offline storage instead of using mock data
       const [offlineBatches, offlineProducts] = await Promise.all([
@@ -80,7 +79,6 @@ const BatchesInventory = () => {
       let hasOfflineData = false;
       
       if (offlineBatches && !offlineStorage.isDataStale(offlineBatches, 60)) { // 1 hour max for batch data
-        console.log('📱 Using offline batches data');
         setBatches(offlineBatches.data);
         hasOfflineData = true;
       } else {
@@ -88,7 +86,6 @@ const BatchesInventory = () => {
       }
       
       if (offlineProducts && !offlineStorage.isDataStale(offlineProducts, 120)) { // 2 hours max for product data
-        console.log('📱 Using offline products data');
         setProducts(offlineProducts.data);
         hasOfflineData = true;
       } else {
@@ -183,7 +180,6 @@ const BatchesInventory = () => {
         });
       }
     } catch (err) {
-      console.error('Error creating batch:', err);
       alert(`Failed to create batch: ${err instanceof Error ? err.message : 'Unknown error'}`);
     } finally {
       setIsLoading(false);

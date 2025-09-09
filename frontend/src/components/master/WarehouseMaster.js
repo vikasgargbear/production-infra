@@ -35,7 +35,6 @@ const WarehouseMaster = ({ open, onClose }) => {
     
     try {
       const response = await settingsApi.warehouses.getAll();
-      console.log('Warehouses API Response:', response);
       
       // Handle different response formats
       let warehouseData = [];
@@ -47,7 +46,6 @@ const WarehouseMaster = ({ open, onClose }) => {
       
       setWarehouses(warehouseData || []);
     } catch (error) {
-      console.error('Error loading warehouses:', error);
       setError('Failed to load warehouses. Please try again.');
       setWarehouses([]);
     } finally {
@@ -62,7 +60,6 @@ const WarehouseMaster = ({ open, onClose }) => {
     try {
       await loadWarehouses();
     } catch (error) {
-      console.error('Refresh failed:', error);
       setError('Failed to refresh data');
     } finally {
       setRefreshing(false);
@@ -142,7 +139,6 @@ const WarehouseMaster = ({ open, onClose }) => {
       setTimeout(() => setSuccessMessage(''), 3000);
       handleCloseModal();
     } catch (error) {
-      console.error('Error saving warehouse:', error);
       setError('Failed to save warehouse. Please try again.');
     }
   };
@@ -177,7 +173,6 @@ const WarehouseMaster = ({ open, onClose }) => {
         await loadWarehouses();
         setTimeout(() => setSuccessMessage(''), 3000);
       } catch (error) {
-        console.error('Error deleting warehouse:', error);
         setError('Failed to delete warehouse. Please try again.');
       }
     }
@@ -192,7 +187,6 @@ const WarehouseMaster = ({ open, onClose }) => {
       await loadWarehouses();
       setTimeout(() => setSuccessMessage(''), 3000);
     } catch (error) {
-      console.error('Error updating warehouse status:', error);
       setError('Failed to update warehouse status. Please try again.');
     }
   };

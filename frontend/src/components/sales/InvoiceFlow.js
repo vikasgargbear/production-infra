@@ -101,7 +101,6 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
         return response.data.invoice_number;
       }
     } catch (error) {
-      console.warn('Failed to generate invoice number from API:', error);
     }
     
     // Fallback to local generation with proper format
@@ -177,7 +176,6 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
       // This prevents wasting numbers on every component load
       
     } catch (error) {
-      console.error('Error loading initial data:', error);
       setError('Failed to load required data. Please check your connection and try again.');
     } finally {
       setIsLoading(false);
@@ -315,7 +313,6 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
     const finalAmount = Math.round(preRoundTotal);
     const roundOff = parseFloat((finalAmount - preRoundTotal).toFixed(2));
 
-    console.log('Fallback - Taxable:', subtotal, 'Tax:', totalTax, 'PreRound:', preRoundTotal, 'Final:', finalAmount, 'Round:', roundOff);
 
     return {
       subtotal_amount: subtotal,
@@ -380,12 +377,10 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
   // ENTERPRISE CALCULATION: Real-time frontend calculations with backend validation
 
   const handleCustomerSelect = async (customer) => {
-    console.log('handleCustomerSelect called with:', customer);
     setSelectedCustomer(customer);
     
     // Handle null customer (removal case) early
     if (!customer) {
-      console.log('Customer removed');
       setInvoice(prev => ({
         ...prev,
         customer_id: null,
@@ -428,12 +423,6 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
             
             const preferredAddr = billingAddr || shippingAddr || anyDefaultAddr || addresses[0];
             
-            console.log('Found address data:', {
-              total: addresses.length,
-              types: addresses.map(a => a.address_type),
-              selected: preferredAddr.address_type,
-              address: preferredAddr
-            });
             
             // Build full address from fetched data
             const fetchedParts = [];
@@ -460,7 +449,6 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
             setSelectedCustomer(customer);
           }
         } catch (error) {
-          console.error('Failed to fetch customer addresses:', error);
         }
       }
       
@@ -534,8 +522,6 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
   };
 
   const validateInvoice = (checkPayment = false) => {
-    console.log('validateInvoice - selectedCustomer:', selectedCustomer);
-    console.log('validateInvoice - invoice.items:', invoice.items);
     
     if (!selectedCustomer) {
       setMessage('Please select a customer');
@@ -610,8 +596,6 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
         challan_id: invoice.challan_id ? parseInt(invoice.challan_id) : null
       };
       
-      console.log('Creating quick sale with payload:', saleData);
-      console.log('API Base URL:', apiClient.defaults.baseURL);
 
       // Try direct invoice API (as per test file format)
       let response;
@@ -701,20 +685,9 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
           bank_account_id: invoice.bank_account_id || null
         };
         
-        console.log('Sending invoice to backend:', JSON.stringify(invoiceData, null, 2));
-        console.log('API endpoint:', `${apiClient.defaults.baseURL}/invoices/`);
-        console.log('Quantity fields sent:');
-        console.log('  - quantity: total (base + free) for inventory deduction');
-        console.log('  - base_quantity: billable qty for revenue calculation');
-        console.log('  - free_quantity: free items for tracking/analytics');
         
         response = await apiClient.post('/invoices/', invoiceData);
-        console.log('Invoice created successfully:', response.data);
       } catch (error) {
-        console.error('Invoice creation failed - Full details:');
-        console.error('Error response:', error.response?.data);
-        console.error('Error status:', error.response?.status);
-        console.error('Error headers:', error.response?.headers);
         
         // Parse the specific error
         let errorDetails = 'Unknown error';
@@ -737,7 +710,6 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
         
         // Show error to user
         // toast.error(`Backend error: ${errorDetails}`);
-        console.error(`Backend error: ${errorDetails}`);
         
         // Still save locally and show success
         const date = new Date();
@@ -752,7 +724,6 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
           timestamp: new Date().toISOString()
         }));
         
-        console.log('Saved failed invoice data to localStorage for debugging');
         
         // Show modal anyway with local save message
         setTimeout(() => {
@@ -767,7 +738,6 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
           });
           setShowSuccessModal(true);
           // toast.warning(`Invoice ${fallbackInvoiceNumber} saved locally (backend issue)`);
-          console.warn(`Invoice ${fallbackInvoiceNumber} saved locally (backend issue)`);
         }, 3000);
         
         setSaving(false);
@@ -794,12 +764,6 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
         localStorage.setItem('lastCreatedInvoiceId', invoiceId || '');
         localStorage.setItem('lastInvoiceNumber', invoiceNumber);
         
-        console.log('Invoice saved successfully:', {
-          invoiceNumber,
-          invoiceId,
-          customerName: selectedCustomer?.customer_name || invoice.customer_name,
-          totalAmount: invoice.net_amount
-        });
         
         // Store data for success modal
         setCreatedInvoiceData({
@@ -817,8 +781,6 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
         
         // Also show success message as backup
         // toast.success(`Invoice ${invoiceNumber} created successfully!`);
-        console.log(`Invoice ${invoiceNumber} created successfully!`);
-        console.log('SUCCESS: Setting message:', `✅ Invoice ${invoiceNumber} created successfully!`);
       } else {
         // If no response data, still show success
         const date = new Date();
@@ -826,7 +788,6 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
         const randomNum = Math.floor(Math.random() * 10000).toString().padStart(4, '0');
         const fallbackInvoiceNumber = `INV-${dateStr}${randomNum}`;
         // toast.success(`Invoice ${fallbackInvoiceNumber} created!`);
-        console.log(`Invoice ${fallbackInvoiceNumber} created!`);
         
         // Still show modal with fallback data
         setCreatedInvoiceData({
@@ -841,7 +802,6 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
         setShowSuccessModal(true);
       }
     } catch (error) {
-      console.error('Error creating invoice:', error);
       let errorMessage = 'Failed to create invoice';
       
       if (error.response?.data?.detail) {
@@ -862,7 +822,6 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
       }
       
       // toast.error(errorMessage);
-      console.error(errorMessage);
     } finally {
       setSaving(false);
     }
@@ -881,7 +840,6 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
       // Get the invoice preview element
       const element = document.getElementById('invoice-preview');
       if (!element) {
-        console.error('Invoice preview element not found');
         setToast({ show: true, message: 'Please wait for the invoice to load', type: 'warning' });
         return false;
       }
@@ -930,7 +888,6 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
       setToast({ show: true, message: 'PDF downloaded successfully!', type: 'success' });
       return true;
     } catch (error) {
-      console.error('Error generating PDF:', error);
       setToast({ show: true, message: 'Failed to generate PDF', type: 'error' });
       return false;
     }
@@ -1367,14 +1324,6 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
     const totalAmount = Math.round(totalWithTax);
 
     // Debug logging
-    console.log('Invoice calculation for WhatsApp:', {
-      subtotal,
-      totalTax,
-      deliveryCharges,
-      invoiceDiscount,
-      totalAmount,
-      items: invoice.items
-    });
 
     // Create WhatsApp message
     const message = encodeURIComponent(
@@ -1405,10 +1354,6 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
 
   // Handle import from challan/order
   const handleImport = (importData) => {
-    console.log('=== IMPORT DATA RECEIVED ===');
-    console.log('Full import data:', importData);
-    console.log('Items received:', importData.items);
-    console.log('Items count:', importData.items?.length || 0);
     
     // Close the modal first
     setShowImportModal(false);
@@ -1436,7 +1381,6 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
     
     // Check if we have items to import
     if (!importData.items || importData.items.length === 0) {
-      console.warn('No items found in import data!');
       setMessage('⚠️ No items found in the selected document. Please select a different document.');
       setMessageType('warning');
       setTimeout(() => {
@@ -1486,10 +1430,6 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
       total_amount: 0
     }));
     
-    console.log('=== TRANSFORMED DATA ===');
-    console.log('Transformed items count:', transformedItems.length);
-    console.log('First transformed item:', transformedItems[0]);
-    console.log('Customer data:', customerData);
     
     // Update invoice with imported data - MUST set customer_details for CustomerSearch
     const updatedInvoice = {
@@ -1519,10 +1459,6 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
       challan_id: importData.challan_id
     };
     
-    console.log('Setting invoice with imported data:');
-    console.log('- Customer:', updatedInvoice.customer_name);
-    console.log('- Items count:', updatedInvoice.items.length);
-    console.log('- First item:', updatedInvoice.items[0]);
     
     // Set invoice state directly
     setInvoice(updatedInvoice);
@@ -1573,7 +1509,6 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
             historyType="invoice"
             showSaveDraft={true}
             onSaveDraft={() => {
-              console.log('Save draft clicked');
               // TODO: Implement save draft
             }}
             additionalActions={[]}
@@ -1749,7 +1684,6 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
               handleCustomerSelect(customer);
               setShowCustomerModal(false);
               // toast.success('Customer created successfully');
-              console.log('Customer created successfully');
             }}
           />
         )}

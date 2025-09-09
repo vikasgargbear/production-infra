@@ -73,7 +73,6 @@ const EnhancedLogin: React.FC<EnhancedLoginProps> = ({ onLogin }) => {
         setError('Invalid username or password');
       }
     } catch (err) {
-      console.error('Login error:', err);
       setError('Login failed. Please try again.');
     } finally {
       setIsLoading(false);

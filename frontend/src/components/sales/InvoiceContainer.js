@@ -25,15 +25,12 @@ const InvoiceContainer = ({ onClose }) => {
         break;
       case 'analytics':
         // Navigate to analytics view
-        console.log('Navigate to analytics');
         break;
       case 'customers':
         // Navigate to customers view
-        console.log('Navigate to customers');
         break;
       case 'products':
         // Navigate to products view
-        console.log('Navigate to products');
         break;
       default:
         break;

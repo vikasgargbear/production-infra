@@ -61,7 +61,6 @@ const Profile = () => {
       toast.updated('Company Profile', 4000);
     } catch (error) {
       toast.error('Failed to save company profile', 4000);
-      console.error('Error saving company profile:', error);
     }
   };
 

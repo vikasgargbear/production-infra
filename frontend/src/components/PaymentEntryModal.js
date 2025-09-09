@@ -101,13 +101,11 @@ const PaymentEntryModal = ({ open, onClose }) => {
       }
       
     } catch (err) {
-      console.error('Error loading customers:', err);
       
       // Try to load from offline storage instead of using mock data
       const offlineData = await offlineStorage.getOffline('customers', { persistent: true });
       
       if (offlineData && !offlineStorage.isDataStale(offlineData, 60)) { // 1 hour max for customer data
-        console.log('📱 Using offline customer data');
         setCustomers(offlineData.data);
         setError('Currently using offline data. Some information may be outdated.');
       } else {
@@ -147,13 +145,11 @@ const PaymentEntryModal = ({ open, onClose }) => {
         setCustomerInvoices([]);
       }
     } catch (err) {
-      console.error('Error loading customer invoices:', err);
       
       // Try to load from offline storage instead of using mock data
       const offlineData = await offlineStorage.getOffline(`customer_invoices_${customerId}`, { persistent: true });
       
       if (offlineData && !offlineStorage.isDataStale(offlineData, 30)) { // 30 minutes max for invoice data
-        console.log('📱 Using offline customer invoice data');
         setCustomerInvoices(offlineData.data);
         setError('Currently using offline data. Some information may be outdated.');
       } else {
@@ -177,7 +173,6 @@ const PaymentEntryModal = ({ open, onClose }) => {
         await loadCustomerInvoices(selectedCustomer.id);
       }
     } catch (error) {
-      console.error('Error refreshing data:', error);
       setError('Failed to refresh data. Please try again.');
     } finally {
       setRefreshing(false);

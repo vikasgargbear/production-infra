@@ -65,13 +65,11 @@ const OutstandingManagement: React.FC<OutstandingManagementProps> = ({ onClose }
       });
       
     } catch (err) {
-      console.error('Error loading outstanding data:', err);
       
       // Try to load from offline storage instead of using mock data
       const offlineData = await offlineStorage.getOffline('outstanding_management_data', { critical: true });
       
       if (offlineData && !offlineStorage.isDataStale(offlineData, 60)) { // 1 hour max for outstanding data
-        console.log('📱 Using offline outstanding data');
         setCustomerOutstanding(offlineData.data.customers || []);
         setSupplierOutstanding(offlineData.data.suppliers || []);
         
@@ -96,7 +94,6 @@ const OutstandingManagement: React.FC<OutstandingManagementProps> = ({ onClose }
     try {
       await loadOutstandingData();
     } catch (error) {
-      console.error('Error refreshing outstanding data:', error);
       setError('Failed to refresh data. Please try again.');
     } finally {
       setRefreshing(false);

@@ -218,7 +218,6 @@ const Outstanding: React.FC<OutstandingProps> = ({
         
         return { parties, summary };
       } catch (err) {
-        console.error('Failed to fetch outstanding data:', err);
         // Return empty data structure on error
         return {
           parties: [],
@@ -331,7 +330,6 @@ const Outstanding: React.FC<OutstandingProps> = ({
       document.body.removeChild(link);
       window.URL.revokeObjectURL(url);
     } catch (error) {
-      console.error('Export failed:', error);
       alert('Failed to export data');
     }
   };

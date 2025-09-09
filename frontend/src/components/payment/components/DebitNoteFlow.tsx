@@ -153,7 +153,6 @@ const DebitNoteFlow: React.FC<DebitNoteFlowProps> = ({ onClose }) => {
           has_prev: invoicePage > 1
         });
       } catch (error) {
-        console.error('Error fetching customer invoices:', error);
         setError('Failed to load customer invoices. Please try again.');
       } finally {
         setLoadingInvoices(false);
@@ -192,13 +191,11 @@ const DebitNoteFlow: React.FC<DebitNoteFlowProps> = ({ onClose }) => {
       });
       
     } catch (error) {
-      console.error('Error loading invoice items:', error);
       
       // Try to load from offline storage instead of using mock data
       const offlineData = await offlineStorage.getOffline(`invoice_items_${invoice.id}`, { persistent: true });
       
       if (offlineData && !offlineStorage.isDataStale(offlineData, 60)) { // 1 hour max for invoice items
-        console.log('📱 Using offline invoice items data');
         setNoteItems(offlineData.data);
         setError('Currently using offline data. Some information may be outdated.');
       } else {
@@ -273,7 +270,6 @@ const DebitNoteFlow: React.FC<DebitNoteFlowProps> = ({ onClose }) => {
       if (onClose) onClose();
       
     } catch (error) {
-      console.error('Error saving note:', error);
       alert(`Error saving debit note: ${error instanceof Error ? error.message : 'Unknown error'}`);
     } finally {
       setSaving(false);

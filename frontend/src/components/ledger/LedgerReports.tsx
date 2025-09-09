@@ -120,7 +120,6 @@ const LedgerReports: React.FC<LedgerReportsProps> = ({ embedded = false, onClose
       // For now, we'll just set a default state
       
     } catch (error) {
-      console.error('Error loading initial ledger report data:', error);
       setError('Failed to load initial ledger report data');
     } finally {
       setIsLoading(false);
@@ -182,7 +181,6 @@ const LedgerReports: React.FC<LedgerReportsProps> = ({ embedded = false, onClose
       link.download = `ledger-report-${selectedReport}-${format(new Date(), 'yyyy-MM-dd')}.${exportFormat}`;
       link.click();
     } catch (error) {
-      console.error('Export failed:', error);
     }
   };
 

@@ -62,7 +62,6 @@ const PaymentFlowOptimized: React.FC = () => {
   };
 
   const handleCustomerSelect = (customer: any) => {
-    console.log('Customer selected in PaymentFlowOptimized:', customer);
     setCustomer(customer);
     // Trigger the parent's handleCustomerSelect to fetch invoices
     window.dispatchEvent(new CustomEvent('customerSelected', { detail: customer }));

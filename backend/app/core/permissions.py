@@ -63,8 +63,10 @@ class PermissionChecker:
         token = authorization.replace("Bearer ", "")
         
         try:
-            # Decode JWT token
-            payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
+            # Decode JWT token - use same secret as jwt_auth module
+            import os
+            jwt_secret = os.getenv("JWT_SECRET_KEY", settings.SECRET_KEY)
+            payload = jwt.decode(token, jwt_secret, algorithms=[settings.ALGORITHM])
             user_id = payload.get("user_id")
             org_id = payload.get("org_id")
             

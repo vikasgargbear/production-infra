@@ -40,7 +40,6 @@ export class ErrorBoundary extends Component<Props, State> {
   }
 
   componentDidCatch(error: Error, errorInfo: ErrorInfo) {
-    console.error('ErrorBoundary caught an error:', error, errorInfo);
     
     // Update state with error info
     this.setState({
@@ -230,7 +229,6 @@ export function withErrorBoundary<P extends object>(
  */
 export function useErrorHandler() {
   return (error: Error) => {
-    console.error('Error caught by useErrorHandler:', error);
     
     // You can add custom error handling logic here
     // For example, show a toast notification

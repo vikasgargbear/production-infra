@@ -120,7 +120,6 @@ const PaymentRecordingModal: React.FC<PaymentRecordingModalProps> = ({
       });
       onClose();
     } catch (error: any) {
-      console.error('Error recording payment:', error);
       let errorMessage = 'Failed to record payment';
       if (error.response?.data?.detail) {
         if (typeof error.response.data.detail === 'string') {

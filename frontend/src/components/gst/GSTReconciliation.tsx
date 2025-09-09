@@ -125,13 +125,11 @@ const GSTReconciliation: React.FC = () => {
       });
       
     } catch (err) {
-      console.error('Error loading GST reconciliation data:', err);
       
       // Try to load from offline storage instead of using mock data
       const offlineData = await offlineStorage.getOffline('gst_reconciliation', { critical: true });
       
       if (offlineData && !offlineStorage.isDataStale(offlineData, 60)) { // 1 hour max for GST data
-        console.log('📱 Using offline GST reconciliation data');
         setReconciliationData(offlineData.data);
         
         // Show offline indicator
@@ -157,7 +155,6 @@ const GSTReconciliation: React.FC = () => {
     try {
       await loadReconciliationData();
     } catch (error) {
-      console.error('Error refreshing GST reconciliation data:', error);
       setError('Failed to refresh data. Please try again.');
     } finally {
       setRefreshing(false);
@@ -180,13 +177,11 @@ const GSTReconciliation: React.FC = () => {
         // Show success message
         setError(null);
         // You could use a toast notification here instead of alert
-        console.log('Auto-reconciliation completed successfully!');
       } else {
         throw new Error('Auto-reconciliation failed');
       }
       
     } catch (err) {
-      console.error('Auto-reconciliation failed:', err);
       setError(`Auto-reconciliation failed: ${err instanceof Error ? err.message : 'Unknown error'}`);
     } finally {
       setRefreshing(false);
@@ -250,7 +245,6 @@ const GSTReconciliation: React.FC = () => {
         window.URL.revokeObjectURL(url);
       }
     } catch (err) {
-      console.error('Export failed:', err);
       setError('Failed to export data. Please try again.');
     }
   };

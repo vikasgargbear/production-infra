@@ -49,7 +49,6 @@ const InitialSetup = ({ onSetupComplete }) => {
         }
       }
     } catch (error) {
-      console.error('Error checking setup status:', error);
     } finally {
       setIsLoading(false);
     }
@@ -84,7 +83,6 @@ const InitialSetup = ({ onSetupComplete }) => {
         }, 2000);
       }
     } catch (error) {
-      console.error('Setup error:', error);
       toast.error(error.response?.data?.detail || 'Failed to complete setup', 3000);
     } finally {
       setIsSubmitting(false);

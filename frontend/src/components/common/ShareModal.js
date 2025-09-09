@@ -68,7 +68,6 @@ ${localStorage.getItem('company_name') || 'Your Company'}`
       await onSend(emailData);
       onClose();
     } catch (error) {
-      console.error('Error sending email:', error);
     } finally {
       setSending(false);
     }

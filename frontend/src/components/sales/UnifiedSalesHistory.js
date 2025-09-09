@@ -84,7 +84,6 @@ const UnifiedSalesHistory = ({ onClose, onSelectDocument }) => {
             }));
             return invoices;
           }).catch(err => {
-            console.error('Failed to fetch invoices:', err);
             return [];
           })
         );
@@ -112,7 +111,6 @@ const UnifiedSalesHistory = ({ onClose, onSelectDocument }) => {
             }));
             return challans;
           }).catch(err => {
-            console.error('Failed to fetch challans:', err);
             return [];
           })
         );
@@ -140,7 +138,6 @@ const UnifiedSalesHistory = ({ onClose, onSelectDocument }) => {
             }));
             return orders;
           }).catch(err => {
-            console.error('Failed to fetch sales orders:', err);
             return [];
           })
         );
@@ -162,7 +159,6 @@ const UnifiedSalesHistory = ({ onClose, onSelectDocument }) => {
       setDocuments(documentList);
       applyFilters(documentList);
     } catch (error) {
-      console.error('Error fetching documents:', error);
       toast.error('Failed to fetch documents');
     } finally {
       setLoading(false);

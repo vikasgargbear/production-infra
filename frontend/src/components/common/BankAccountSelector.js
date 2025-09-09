@@ -51,7 +51,6 @@ const BankAccountSelector = ({
       
       setAccounts(filteredAccounts);
     } catch (error) {
-      console.error('Error fetching bank accounts:', error);
       setAccounts([]);
     } finally {
       setLoading(false);

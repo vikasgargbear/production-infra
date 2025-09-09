@@ -67,11 +67,8 @@ const ProductMaster: React.FC<ProductMasterProps> = () => {
       setIsLoading(true);
       setError(null);
       const response = await productsApi.getAll();
-      console.log('Products API Response:', response);
-      console.log('First product:', response.data?.[0]);
       setProducts(response.data || []);
     } catch (err) {
-      console.error('Error loading products:', err);
       setError('Failed to load products. Please try again.');
     } finally {
       setIsLoading(false);
@@ -89,7 +86,6 @@ const ProductMaster: React.FC<ProductMasterProps> = () => {
       const uniqueCategories = [...new Set(products.map(p => p.category).filter(Boolean))] as string[];
       setCategories(['All', ...uniqueCategories]);
     } catch (err) {
-      console.error('Error loading categories:', err);
     }
   };
   
@@ -105,7 +101,6 @@ const ProductMaster: React.FC<ProductMasterProps> = () => {
       const response = await productsApi.search(query);
       setProducts(response.data || []);
     } catch (err) {
-      console.error('Error searching products:', err);
       setError('Failed to search products.');
     } finally {
       setIsLoading(false);
@@ -176,7 +171,6 @@ const ProductMaster: React.FC<ProductMasterProps> = () => {
       toast.success(`Product ${action}d successfully`);
       loadProducts();
     } catch (err) {
-      console.error(`Error ${action}ing product:`, err);
       toast.error(`Failed to ${action} product. It may be in use by active transactions.`);
     }
   };
@@ -217,7 +211,6 @@ const ProductMaster: React.FC<ProductMasterProps> = () => {
       setSelectedProducts([]);
       loadProducts();
     } catch (err) {
-      console.error('Error bulk deactivating products:', err);
       toast.error('Failed to deactivate some products.');
     }
   };

@@ -246,7 +246,6 @@ const CollectionCenter: React.FC<CollectionCenterProps> = ({
           }
         };
       } catch (error) {
-        console.error('Error fetching outstanding data:', error);
         // Return empty structure on error
         return {
           collections: [],
@@ -380,7 +379,6 @@ const CollectionCenter: React.FC<CollectionCenterProps> = ({
       link.download = `collection-list-${format(new Date(), 'yyyy-MM-dd')}.csv`;
       link.click();
     } catch (error) {
-      console.error('Export failed:', error);
     }
   };
 

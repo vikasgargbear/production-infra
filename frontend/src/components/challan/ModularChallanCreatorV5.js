@@ -79,7 +79,6 @@ const ModularChallanCreatorV5 = ({ open = true, onClose }) => {
             break;
           case 'n':
             e.preventDefault();
-            console.log('Keyboard shortcut Ctrl+N pressed - opening customer creation');
             setShowCreateCustomer(true);
             break;
           case 'i':
@@ -130,12 +129,6 @@ const ModularChallanCreatorV5 = ({ open = true, onClose }) => {
         
         const preferredAddr = billingAddr || shippingAddr || anyDefaultAddr || addresses[0];
         
-        console.log('Found address data:', {
-          total: addresses.length,
-          types: addresses.map(a => a.address_type),
-          selected: preferredAddr.address_type,
-          address: preferredAddr
-        });
         
         return {
           address: preferredAddr.address_line1 || '',
@@ -145,11 +138,9 @@ const ModularChallanCreatorV5 = ({ open = true, onClose }) => {
         };
       }
       
-      console.warn(`Customer ${customerId} has no addresses in database`);
       return null;
       
     } catch (error) {
-      console.error('Error fetching customer addresses:', error);
       return null;
     }
   };
@@ -183,10 +174,6 @@ const ModularChallanCreatorV5 = ({ open = true, onClose }) => {
 
   // Handle import from invoice/order
   const handleImport = (importData) => {
-    console.log('=== IMPORT DATA RECEIVED IN CHALLAN ===');
-    console.log('Full import data:', importData);
-    console.log('Items in import data:', importData.items);
-    console.log('Items count:', importData.items?.length || 0);
     
     // Set customer details
     if (importData.customer_id) {
@@ -227,9 +214,6 @@ const ModularChallanCreatorV5 = ({ open = true, onClose }) => {
         line_total: 0 // Will be recalculated
       }));
       
-      console.log('=== FORMATTED ITEMS FOR CHALLAN ===');
-      console.log('Formatted items count:', formattedItems.length);
-      console.log('First formatted item:', formattedItems[0]);
       
       setChallan(prev => {
         const updated = {
@@ -237,17 +221,14 @@ const ModularChallanCreatorV5 = ({ open = true, onClose }) => {
           items: formattedItems,
           notes: importData.notes || prev.notes
         };
-        console.log('Updated challan with items:', updated);
         return updated;
       });
       
       // Recalculate totals after a small delay
       setTimeout(() => {
-        console.log('Recalculating totals for imported items');
         recalculateTotals(formattedItems);
       }, 100);
     } else {
-      console.warn('No items found in import data!');
       setMessage('⚠️ No items found in the selected document');
       setMessageType('warning');
     }
@@ -288,20 +269,10 @@ const ModularChallanCreatorV5 = ({ open = true, onClose }) => {
     let billingAddress = addressParts.join(', ');
     
     // Debug log to see what customer data we're getting
-    console.log('Customer data received:', {
-      customerId: customer.customer_id,
-      hasAddress: !!address,
-      hasCity: !!city,
-      hasState: !!state,
-      hasPhone: !!phone,
-      fullAddress: billingAddress,
-      rawCustomer: customer
-    });
     
     // If no address data, fetch addresses separately
     // This happens when customers only have shipping addresses (not billing)
     if (!address && !city && customer.customer_id) {
-      console.warn(`Customer ${customer.customer_id} has no address in view - fetching addresses separately`);
       
       setFetchingAddress(true);
       
@@ -327,7 +298,6 @@ const ModularChallanCreatorV5 = ({ open = true, onClose }) => {
           pincode: pincode
         };
         
-        console.log('Fetched address data:', addressData);
         
         // Update selectedCustomer state so UI shows the fetched address
         setSelectedCustomer(customer);
@@ -504,11 +474,6 @@ const ModularChallanCreatorV5 = ({ open = true, onClose }) => {
       ) + (parseFloat(challan.freight_charges) || 0);
 
       // Debug freight amount
-      console.log('=== CHALLAN SAVE DEBUG ===');
-      console.log('Current challan state:', challan);
-      console.log('challan.freight_charges from state:', challan.freight_charges);
-      console.log('parsed freight_charges:', parseFloat(challan.freight_charges) || 0);
-      console.log('totalAmount (with freight):', totalAmount);
 
       // Prepare challan data with complete delivery address
       const challanData = {
@@ -532,8 +497,6 @@ const ModularChallanCreatorV5 = ({ open = true, onClose }) => {
         total_amount: totalAmount
       };
 
-      console.log('Final challanData being sent:', challanData);
-      console.log('Freight in data:', challanData.freight_charges);
       
       const response = await challansApi.create(challanData);
       
@@ -551,7 +514,6 @@ const ModularChallanCreatorV5 = ({ open = true, onClose }) => {
         setShowSuccessModal(true);
       }
     } catch (error) {
-      console.error('Error saving challan:', error);
       let errorMsg = 'Failed to save challan';
       if (error.response?.data?.detail) {
         if (Array.isArray(error.response.data.detail)) {
@@ -751,7 +713,6 @@ Expected Delivery: ${challan.expected_delivery_date}
             showSaveDraft={true}
             onSaveDraft={() => {
               // TODO: Implement save draft
-              console.log('Save draft clicked');
             }}
           />
 
@@ -813,10 +774,8 @@ Expected Delivery: ${challan.expected_delivery_date}
                   value={selectedCustomer}
                   onChange={handleCustomerSelect}
                   onCreateNew={() => {
-                    console.log('Opening customer creation - user can choose B2B or B2C');
                     // Let the component handle the type selection with toggle
                     setShowCreateCustomer(true);
-                    console.log('State updated - showCreateCustomer:', true);
                   }}
                   displayMode="inline"
                   placeholder="Search customer by name, phone, or code..."
@@ -843,10 +802,8 @@ Expected Delivery: ${challan.expected_delivery_date}
                 <ProductSearchSimple
                   onAddItem={handleProductSelect}
                   onCreateProduct={(productName) => {
-                    console.log('onCreateProduct called with:', productName);
                     setNewProductName(productName || '');
                     setShowCreateProduct(true);
-                    console.log('showCreateProduct should be true now');
                   }}
                 />
               </div>
@@ -893,7 +850,6 @@ Expected Delivery: ${challan.expected_delivery_date}
           <CustomerCreationB2B
             onClose={() => setShowCreateCustomer(false)}
             onCustomerCreated={(customer) => {
-              console.log('Customer created:', customer);
               handleCustomerSelect(customer);
               setShowCreateCustomer(false);
             }}
@@ -906,12 +862,10 @@ Expected Delivery: ${challan.expected_delivery_date}
             <ProductCreationModal
               show={showCreateProduct}
               onClose={() => {
-                console.log('Modal onClose called');
                 setShowCreateProduct(false);
                 setNewProductName('');
               }}
               onProductCreated={(product) => {
-                console.log('Product created:', product);
                 handleProductSelect(product);
                 setShowCreateProduct(false);
                 setNewProductName('');
@@ -1020,7 +974,6 @@ Expected Delivery: ${challan.expected_delivery_date}
                       value={challan.freight_charges || ''}
                       onChange={(e) => {
                         const value = parseFloat(e.target.value) || 0;
-                        console.log('Freight input changed to:', value);
                         setChallan(prev => ({ 
                           ...prev, 
                           freight_charges: value 

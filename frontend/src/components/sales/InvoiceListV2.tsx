@@ -313,7 +313,6 @@ const InvoiceListV2: React.FC<InvoiceListProps> = ({ onClose }) => {
         setError(response.error?.message || 'Failed to fetch invoices');
       }
     } catch (error) {
-      console.error('Error fetching invoices:', error);
       setError('Failed to fetch invoices. Please try again.');
     } finally {
       setLoading(false);
@@ -494,7 +493,6 @@ const InvoiceListV2: React.FC<InvoiceListProps> = ({ onClose }) => {
         alert('Failed to load invoice details. Please try again.');
       }
     } catch (error) {
-      console.error('Error printing invoice:', error);
       alert('Failed to print invoice. Please try again.');
     }
   };
@@ -515,7 +513,6 @@ const InvoiceListV2: React.FC<InvoiceListProps> = ({ onClose }) => {
         alert('Failed to load invoice details. Please try again.');
       }
     } catch (error) {
-      console.error('Error downloading invoice:', error);
       alert('Failed to download invoice. Please try again.');
     }
   };

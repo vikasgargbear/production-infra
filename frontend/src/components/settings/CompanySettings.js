@@ -39,9 +39,7 @@ const CompanySettings = () => {
       setLoading(true);
       setError(null);
       
-      console.log('Fetching company info...');
       const response = await companyAPI.getCompanyInfo();
-      console.log('Company info received:', response);
       
       if (response) {
         setCompanyInfo(response);
@@ -50,7 +48,6 @@ const CompanySettings = () => {
         }
       }
     } catch (error) {
-      console.error('Error fetching company profile:', error);
       let errorMessage = 'Failed to load company profile';
       if (error.response?.data?.detail) {
         if (typeof error.response.data.detail === 'string') {
@@ -120,7 +117,6 @@ const CompanySettings = () => {
       setError(null);
       setSuccess(false);
       
-      console.log('Saving company info:', companyInfo);
       
       // Prepare data for saving
       const dataToSave = {
@@ -130,7 +126,6 @@ const CompanySettings = () => {
       
       // Save company info using the correct API
       const response = await companyAPI.updateCompanyInfo(dataToSave);
-      console.log('Save response:', response);
       
       setCompanyInfo(response);
       setSuccess(true);
@@ -143,7 +138,6 @@ const CompanySettings = () => {
       setTimeout(() => setSuccess(false), 3000);
       
     } catch (error) {
-      console.error('Error saving company profile:', error);
       let errorMessage = 'Failed to save company profile';
       if (error.response?.data?.detail) {
         if (typeof error.response.data.detail === 'string') {

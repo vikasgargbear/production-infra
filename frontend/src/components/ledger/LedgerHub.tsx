@@ -84,7 +84,6 @@ const LedgerHub: React.FC<LedgerHubProps> = ({ open = true, onClose }) => {
       // For now, we'll just set a default state
       
     } catch (error) {
-      console.error('Error loading initial ledger data:', error);
       setError('Failed to load initial ledger data');
     } finally {
       setIsLoading(false);

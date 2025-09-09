@@ -128,7 +128,6 @@ const CustomerEditModal: React.FC<CustomerEditModalProps> = ({
         states: [] // Could load from backend or let user type
       });
     } catch (err) {
-      console.log('Using defaults for metadata');
     }
   };
 
@@ -198,7 +197,6 @@ const CustomerEditModal: React.FC<CustomerEditModalProps> = ({
       onSave();
       onClose();
     } catch (err: any) {
-      console.error('Error saving customer:', err);
       setError(err.response?.data?.message || 'Failed to save customer');
     } finally {
       setIsSaving(false);

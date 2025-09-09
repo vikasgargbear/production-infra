@@ -52,7 +52,6 @@ const Home: React.FC<HomeProps> = ({ setActiveTab }) => {
         setError(null); // Clear any previous errors
       } catch (err) {
         setError('Failed to load data');
-        console.error('Home data loading error:', err);
       } finally {
         setLoading(false);
       }

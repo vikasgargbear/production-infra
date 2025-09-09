@@ -31,7 +31,6 @@ const SalesOrderManagement = () => {
       const response = await salesOrdersAPI.list(params);
       setOrders(response.data || []);
     } catch (error) {
-      console.error('Error loading orders:', error);
     } finally {
       setLoading(false);
     }
@@ -177,7 +176,6 @@ const SalesOrderManagement = () => {
       doc.save('sales-orders-export.pdf');
     } catch (error) {
       // Fallback to simple PDF
-      console.warn('jspdf-autotable not available, using simple PDF export');
       
       const doc = new jsPDF();
       doc.setFontSize(16);

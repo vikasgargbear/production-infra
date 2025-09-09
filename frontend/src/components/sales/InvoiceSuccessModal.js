@@ -23,7 +23,6 @@ const InvoiceSuccessModal = ({
         setCopied(false);
       }, 2000);
     }).catch(err => {
-      console.error('Failed to copy:', err);
       // Fallback for older browsers
       const textArea = document.createElement('textarea');
       textArea.value = invoiceNumber;

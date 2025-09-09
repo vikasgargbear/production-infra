@@ -42,7 +42,6 @@ const InvoiceManagement = () => {
       const response = await invoicesApi.getAll(params);
       setInvoices(response.data || []);
     } catch (error) {
-      console.error('Error loading invoices:', error);
     } finally {
       setLoading(false);
     }
@@ -52,7 +51,6 @@ const InvoiceManagement = () => {
     try {
       await invoicesApi.getPDF(invoiceId);
     } catch (error) {
-      console.error('Error printing invoice:', error);
       alert('Failed to download invoice PDF');
     }
   };
@@ -67,7 +65,6 @@ const InvoiceManagement = () => {
       await invoicesApi.sendWhatsApp(invoice.invoice_id, invoice.customer_phone);
       alert('WhatsApp message sent successfully');
     } catch (error) {
-      console.error('Error sending WhatsApp:', error);
       alert('Failed to send WhatsApp message');
     }
   };
@@ -98,7 +95,6 @@ const InvoiceManagement = () => {
       alert('Invoice cancelled successfully');
       loadInvoices();
     } catch (error) {
-      console.error('Error cancelling invoice:', error);
       alert('Failed to cancel invoice');
     }
   };
@@ -242,7 +238,6 @@ const InvoiceManagement = () => {
       doc.save('invoices-export.pdf');
     } catch (error) {
       // Fallback to simple PDF
-      console.warn('jspdf-autotable not available, using simple PDF export');
       
       const doc = new jsPDF();
       doc.setFontSize(16);

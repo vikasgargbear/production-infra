@@ -119,14 +119,12 @@ const ImportDocumentModal: React.FC<ImportDocumentModalProps> = ({ isOpen, onClo
             
             // If no results, try delivery API as fallback
             if (!results.length) {
-              console.log('Trying delivery API fallback...');
               const deliveryResponse = await fetch('/api/delivery-challans/')
                 .then(res => res.json())
                 .catch(() => ({ data: [] }));
               results = deliveryResponse.data || [];
             }
           } catch (error) {
-            console.error('Challans API error:', error);
             results = []; // No mock data - let user know API is not working
           }
           break;
@@ -137,7 +135,6 @@ const ImportDocumentModal: React.FC<ImportDocumentModalProps> = ({ isOpen, onClo
       
       setDocuments(results);
     } catch (error) {
-      console.error('Error loading documents:', error);
       setDocuments([]);
     } finally {
       setLoading(false);
@@ -170,7 +167,6 @@ const ImportDocumentModal: React.FC<ImportDocumentModalProps> = ({ isOpen, onClo
       
       setDocuments(results);
     } catch (error) {
-      console.error('Error searching:', error);
     } finally {
       setLoading(false);
     }
@@ -184,15 +180,12 @@ const ImportDocumentModal: React.FC<ImportDocumentModalProps> = ({ isOpen, onClo
     try {
       if (documentType === 'challan') {
         // For challans, get the challan data and populate the form (don't create invoice yet)
-        console.log('Importing challan:', selectedDoc.challan_id);
         
         let challan: Document;
         try {
           const challanResponse = await challansApi.getById(selectedDoc.challan_id!);
           challan = challanResponse.data;
-          console.log('Fetched challan data:', challan);
         } catch (fetchError) {
-          console.error('Failed to fetch challan data:', fetchError);
           // Use the selectedDoc data directly if fetch fails
           challan = selectedDoc;
         }
@@ -238,7 +231,6 @@ const ImportDocumentModal: React.FC<ImportDocumentModalProps> = ({ isOpen, onClo
             }
           };
           
-          console.log('Sending import data to form:', importData);
           onImport(importData);
         }
       } else {
@@ -268,7 +260,6 @@ const ImportDocumentModal: React.FC<ImportDocumentModalProps> = ({ isOpen, onClo
       
       onClose();
     } catch (error: any) {
-      console.error('Error importing document:', error);
       alert(`Failed to import: ${error.response?.data?.detail || error.message}`);
     } finally {
       setLoading(false);

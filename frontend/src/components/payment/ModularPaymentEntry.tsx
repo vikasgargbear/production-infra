@@ -94,7 +94,6 @@ const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) =>
     };
     
     const handleCustomerSelectedEvent = (event: any) => {
-      console.log('Customer selected event received:', event.detail);
       if (event.detail) {
         handleCustomerSelect(event.detail);
       }
@@ -212,18 +211,14 @@ const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) =>
         })) : []
       };
 
-      console.log('Payment object:', payment);
-      console.log('Payment amount:', payment.amount, 'Parsed:', paymentData.amount);
       
       // Basic validation
       if (!paymentData.amount || paymentData.amount <= 0 || isNaN(paymentData.amount)) {
-        console.error('Validation failed - Amount:', paymentData.amount, 'Raw:', payment.amount);
         setMessage('Payment amount is required and must be a valid number', 'error');
         setSaving(false);
         return;
       }
 
-      console.log('Sending payment data to backend:', paymentData);
       
       // Make the actual API call to create payment
       // Try customer payment endpoint which exists but has a backend bug (uses wrong schema)
@@ -241,7 +236,6 @@ const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) =>
           allocate_to_invoices: payment.allocations ? payment.allocations.map((a: any) => a.invoice_id) : []
         };
         
-        console.log('Creating payment via customer endpoint:', customerPaymentData);
         
         const response = await apiClient.post(`/customers/${selectedCustomer.customer_id || selectedCustomer.id}/payment`, customerPaymentData);
         
@@ -256,7 +250,6 @@ const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) =>
           // The backend will create payment_allocations records
           // Triggers will update customer_outstanding automatically
           if (payment.allocations && payment.allocations.length > 0) {
-            console.log('Payment allocated to invoices:', payment.allocations);
           }
           
           setMessage('Payment saved successfully!', 'success');
@@ -265,25 +258,21 @@ const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) =>
           throw new Error('Failed to save payment');
         }
       } catch (apiError: any) {
-        console.error('Backend API error:', apiError);
         
         // If backend returns 405, simulate success for now
         // TODO: Fix backend payment endpoint
         if (apiError.response?.status === 405 || apiError.response?.status === 404 || apiError.code === 'ERR_NETWORK') {
-          console.warn('Backend payment API not available (405), recording locally');
           const simulatedReceiptNo = `RCT-${new Date().toISOString().split('T')[0]}-${Math.floor(Math.random() * 10000).toString().padStart(4, '0')}`;
           setPaymentField('receipt_no', simulatedReceiptNo);
           setMessage('Payment recorded locally (backend pending)', 'warning');
           setCurrentStep(3);
           
           // Log for debugging
-          console.log('Payment data that would be sent:', paymentData);
         } else {
           throw apiError;
         }
       }
     } catch (error: any) {
-      console.error('Error saving payment:', error);
       setMessage(error.response?.data?.message || 'Failed to save payment. Please try again.', 'error');
     } finally {
       setSaving(false);
@@ -351,7 +340,6 @@ const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) =>
     setPaymentField('allocations', allocations);
     setPaymentField('auto_allocate', true);
     
-    console.log(`Applied ${method} allocation:`, allocations);
   };
 
   // Handle manual invoice selection with proper allocation amounts
@@ -425,7 +413,6 @@ const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) =>
     const customerId = customer.customer_id || customer.id || customer.party_id;
     
     try {
-      console.log('Fetching invoices for customer ID:', customerId);
       setIsLoading(true);
       
       // Import the invoice service
@@ -440,20 +427,16 @@ const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) =>
         payment_status: 'pending,partial'
       });
       
-      console.log('Raw Invoice API response:', response);
       
       if (response && response.success && response.data) {
         // The invoices are in response.data.invoices array
         const invoices = response.data.invoices || [];
-        console.log('Invoices array:', invoices);
-        console.log('Total invoices from API:', response.data.total);
         
         // Filter and map outstanding invoices
         const outstandingInvoices = invoices
           .filter((inv: any) => {
             // Log first invoice to see structure
             if (invoices.indexOf(inv) === 0) {
-              console.log('Sample invoice structure:', inv);
             }
             
             // credit_amount IS the outstanding amount (what's unpaid)
@@ -497,7 +480,6 @@ const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) =>
           new Date(a.invoice_date).getTime() - new Date(b.invoice_date).getTime()
         );
         
-        console.log(`Found ${outstandingInvoices.length} outstanding invoices`);
         setOutstandingInvoices(outstandingInvoices);
         
         // Keep manual as default - don't auto-allocate
@@ -505,11 +487,9 @@ const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) =>
           setPaymentField('allocation_method', 'manual');
         }
       } else {
-        console.log('API response not successful:', response);
         setOutstandingInvoices([]);
       }
     } catch (error: any) {
-      console.error('Error fetching invoices:', error);
       setOutstandingInvoices([]);
       // Don't show error message, just silently handle it
     } finally {
@@ -576,7 +556,6 @@ const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) =>
           historyType="payment"
           showSaveDraft={currentStep === 1}
           onSaveDraft={() => {
-            console.log('Save draft clicked');
             // TODO: Implement save draft
           }}
           additionalActions={[

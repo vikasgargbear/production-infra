@@ -95,7 +95,6 @@ const PurchaseReturnFlowV2 = ({ onClose }) => {
           await offlineStorage.storeOffline('purchase_return_reasons', fetchedReasons, { persistent: true });
         }
       } catch (error) {
-        console.warn('Using default return reasons:', error.message);
       }
     };
 
@@ -167,10 +166,8 @@ const PurchaseReturnFlowV2 = ({ onClose }) => {
       );
       
       if (response.data.items) {
-        console.log('Raw items from API:', response.data.items);
         
         const mappedItems = response.data.items.map(item => {
-          console.log(`Item ${item.product_name}: batch_id=${item.batch_id}, batch_number=${item.batch_number}`);
           return {
             ...item,
             id: item.invoice_item_id || item.id,
@@ -190,7 +187,6 @@ const PurchaseReturnFlowV2 = ({ onClose }) => {
           };
         });
         
-        console.log('Mapped items:', mappedItems);
         
         setReturnData(prev => ({
           ...prev,
@@ -198,7 +194,6 @@ const PurchaseReturnFlowV2 = ({ onClose }) => {
         }));
       }
     } catch (error) {
-      console.error('Error loading invoice items:', error);
       toast.error('Failed to load invoice items');
     } finally {
       setLoading(false);
@@ -253,7 +248,6 @@ const PurchaseReturnFlowV2 = ({ onClose }) => {
       });
       setReturnableInvoices(response.data?.invoices || []);
     } catch (error) {
-      console.error('Error fetching invoices:', error);
       toast.error('Failed to fetch supplier invoices');
     } finally {
       setLoading(false);
@@ -318,7 +312,6 @@ const PurchaseReturnFlowV2 = ({ onClose }) => {
     let subtotal = 0;
     let taxAmount = 0;
 
-    console.log('useEffect: Calculating totals for items:', returnData.items);
 
     returnData.items.forEach(item => {
       if (item.selected && item.return_quantity > 0) {
@@ -329,14 +322,12 @@ const PurchaseReturnFlowV2 = ({ onClose }) => {
         const itemTotal = returnQty * rate;
         const itemTax = returnData.include_gst ? (itemTotal * taxPercent / 100) : 0;
         
-        console.log(`Item: qty=${returnQty}, rate=${rate}, tax%=${taxPercent}, total=${itemTotal}, tax=${itemTax}`);
         
         subtotal += itemTotal;
         taxAmount += itemTax;
       }
     });
 
-    console.log(`Final totals: subtotal=${subtotal}, tax=${taxAmount}, total=${subtotal + taxAmount}`);
 
     setReturnData(prev => ({
       ...prev,
@@ -359,7 +350,6 @@ const PurchaseReturnFlowV2 = ({ onClose }) => {
     let subtotal = 0;
     let taxAmount = 0;
 
-    console.log('Calculating totals for items:', returnData.items);
 
     returnData.items.forEach(item => {
       if (item.selected && item.return_quantity > 0) {
@@ -370,14 +360,12 @@ const PurchaseReturnFlowV2 = ({ onClose }) => {
         const itemTotal = returnQty * rate;
         const itemTax = returnData.include_gst ? (itemTotal * taxPercent / 100) : 0;
         
-        console.log(`Item: qty=${returnQty}, rate=${rate}, tax%=${taxPercent}, total=${itemTotal}, tax=${itemTax}`);
         
         subtotal += itemTotal;
         taxAmount += itemTax;
       }
     });
 
-    console.log(`Final totals: subtotal=${subtotal}, tax=${taxAmount}, total=${subtotal + taxAmount}`);
 
     setReturnData(prev => ({
       ...prev,
@@ -426,25 +414,11 @@ const PurchaseReturnFlowV2 = ({ onClose }) => {
     setSaving(true);
     try {
       // Debug logging
-      console.log('All items before filter:', returnData.items);
-      console.log('Items with selection status:', returnData.items.map(item => ({
-        name: item.product_name,
-        selected: item.selected,
-        return_quantity: item.return_quantity
-      })));
       
       const filteredItems = returnData.items.filter(item => {
         const hasQuantity = parseFloat(item.return_quantity) > 0;
-        console.log(`Item ${item.product_name}: selected=${item.selected}, return_qty=${item.return_quantity}, hasQuantity=${hasQuantity}`);
         return item.selected && hasQuantity;
       });
-      console.log('Filtered items count:', filteredItems.length);
-      console.log('Filtered items details:', filteredItems.map(item => ({
-        product_id: item.product_id,
-        batch_id: item.batch_id,
-        batch_number: item.batch_number,
-        return_quantity: item.return_quantity
-      })));
       
       const returnPayload = {
         ...returnData,
@@ -470,13 +444,10 @@ const PurchaseReturnFlowV2 = ({ onClose }) => {
               restock: item.restock !== false,
               disposition: item.restock !== false ? 'RESTOCK' : 'DESTROY'
             };
-            console.log('Mapped item for payload:', mappedItem);
             return mappedItem;
           })
       };
 
-      console.log('Purchase Return Payload:', returnPayload);
-      console.log('Items being sent:', returnPayload.items);
 
       const response = await returnsApi.createPurchaseReturn(returnPayload);
       
@@ -487,7 +458,6 @@ const PurchaseReturnFlowV2 = ({ onClose }) => {
       }, 1500);
     } catch (error) {
       toast.error(error.message || 'Failed to create return');
-      console.error('Error creating return:', error);
     } finally {
       setSaving(false);
     }

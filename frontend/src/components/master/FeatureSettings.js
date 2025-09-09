@@ -87,13 +87,6 @@ const FeatureSettings = ({ open, onClose }) => {
         setFeatures(response.data.features || response.data);
       }
     } catch (error) {
-      console.error('Error fetching feature settings:', error);
-      console.error('Error details:', {
-        message: error.message,
-        response: error.response?.data,
-        status: error.response?.status,
-        url: error.config?.url
-      });
       setError('Failed to load feature settings. Please try again.');
     } finally {
       setIsLoading(false);
@@ -129,7 +122,6 @@ const FeatureSettings = ({ open, onClose }) => {
         }, 3000);
       }
     } catch (error) {
-      console.error('Error saving feature settings:', error);
       setError('Failed to save feature settings. Please try again.');
     } finally {
       setIsSaving(false);

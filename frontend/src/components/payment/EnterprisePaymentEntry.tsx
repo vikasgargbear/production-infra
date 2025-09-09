@@ -135,7 +135,6 @@ const EnterprisePaymentEntry: React.FC<EnterprisePaymentEntryProps> = ({ open, o
   const checkLocalPayments = () => {
     const localPayments: LocalPayment[] = JSON.parse(localStorage.getItem('localPayments') || '[]');
     if (localPayments.length > 0) {
-      console.log('📋 Locally stored payments:', localPayments);
       alert(`Found ${localPayments.length} payments stored locally:\n\n${localPayments.map(p => 
         `₹${p.amount} - ${p.payment_date} - ${p.remarks || 'Advance Payment'}`
       ).join('\n')}\n\nThese will be synced once backend is fixed.`);
@@ -168,15 +167,12 @@ const EnterprisePaymentEntry: React.FC<EnterprisePaymentEntryProps> = ({ open, o
         setOutstandingInvoices([]);
       }
     } catch (error: any) {
-      console.error('Error fetching outstanding invoices:', error);
-      console.error('Error details:', error.response?.data);
       
       // Set empty array but don't show error to user since payments can still be recorded as advance
       setOutstandingInvoices([]);
       
       // Only log the error for debugging
       if (error.response?.status === 500) {
-        console.warn('Outstanding invoices endpoint has server error, continuing with advance payment option');
       }
     } finally {
       setLoading(false);
@@ -350,17 +346,8 @@ const EnterprisePaymentEntry: React.FC<EnterprisePaymentEntryProps> = ({ open, o
     };
     
     try {
-      console.log('🔍 FRONTEND: Raw form data before sending:');
-      console.log('- Party:', formData.party);
-      console.log('- Payment Type:', formData.paymentType);
-      console.log('- Payment Methods:', formData.paymentMethods);
-      console.log('- Total Amount:', totalAmount);
-      console.log('- Selected Invoices:', selectedInvoices);
-      console.log('- Outstanding Invoices:', outstandingInvoices.length);
       
-      console.log('🚀 FRONTEND: Final payload to API:', JSON.stringify(paymentData, null, 2));
       const response = await paymentsApi.create(paymentData);
-      console.log('Payment saved successfully:', response.data);
       
       // Show success message with backend status
       if (response.data?.message === 'Payment recorded locally (backend unavailable)') {
@@ -372,8 +359,6 @@ const EnterprisePaymentEntry: React.FC<EnterprisePaymentEntryProps> = ({ open, o
       // Reset form and close
       onClose();
     } catch (error: any) {
-      console.error('Error saving payment:', error);
-      console.error('Error response:', error.response);
       
       // Show error message with more details
       let errorMessage = 'Failed to save payment';

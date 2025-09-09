@@ -33,10 +33,8 @@ const BankAccountManager = ({ companyData, onUpdate }) => {
       const data = await bankAccountsAPI.getBankAccounts();
       setAccounts(data || []);
     } catch (error) {
-      console.error('Error fetching bank accounts:', error);
       // Check if it's a 404 (API not deployed yet) vs actual error
       if (error.response?.status === 404) {
-        console.log('Bank accounts API not available yet - showing empty state');
         // Don't show error for 404, just show empty state
         setAccounts([]);
       } else {
@@ -99,7 +97,6 @@ const BankAccountManager = ({ companyData, onUpdate }) => {
         onUpdate(accountToAdd);
       }
     } catch (error) {
-      console.error('Error saving bank account:', error);
       if (error.response?.status === 404) {
         setError('Bank account service is being deployed. Please try again in a few moments.');
       } else {
@@ -120,7 +117,6 @@ const BankAccountManager = ({ companyData, onUpdate }) => {
       await fetchAccounts();
       setError(null);
     } catch (error) {
-      console.error('Error deleting bank account:', error);
       setError('Failed to delete bank account. Please try again.');
     }
   };
@@ -137,7 +133,6 @@ const BankAccountManager = ({ companyData, onUpdate }) => {
       }
       setError(null);
     } catch (error) {
-      console.error('Error setting default account:', error);
       setError('Failed to set default account. Please try again.');
     }
   };

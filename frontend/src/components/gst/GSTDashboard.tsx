@@ -116,13 +116,11 @@ const GSTDashboard: React.FC<GSTDashboardProps> = () => {
       });
       
     } catch (err) {
-      console.error('Error loading GST dashboard data:', err);
       
       // Try to load from offline storage instead of using mock data
       const offlineData = await offlineStorage.getOffline(`gst_dashboard_${selectedPeriod}`, { critical: true });
       
       if (offlineData && !offlineStorage.isDataStale(offlineData, 60)) { // 1 hour max for GST dashboard data
-        console.log('📱 Using offline GST dashboard data');
         setDashboardData(offlineData.data);
         
         // Show offline indicator
@@ -160,7 +158,6 @@ const GSTDashboard: React.FC<GSTDashboardProps> = () => {
     try {
       await loadDashboardData();
     } catch (error) {
-      console.error('Error refreshing GST dashboard data:', error);
       setError('Failed to refresh data. Please try again.');
     } finally {
       setRefreshing(false);

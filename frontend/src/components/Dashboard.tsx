@@ -423,7 +423,6 @@ const Dashboard: React.FC = () => {
       updateChartData(revenueResponse.data?.data || []);
 
     } catch (error) {
-      console.error('Error fetching dashboard data:', error);
       setError('Failed to load dashboard data. Please try again.');
     } finally {
       setLoading(false);

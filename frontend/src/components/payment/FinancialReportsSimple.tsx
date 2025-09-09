@@ -71,7 +71,6 @@ const FinancialReportsSimple: React.FC<FinancialReportsSimpleProps> = ({ onClose
     try {
       // For now, nothing to refresh globally; keep UX consistent
     } catch (error) {
-      console.error('Error refreshing data:', error);
       setError('Failed to refresh data. Please try again.');
     } finally {
       setRefreshing(false);
@@ -84,7 +83,6 @@ const FinancialReportsSimple: React.FC<FinancialReportsSimpleProps> = ({ onClose
     setError(null);
     
     try {
-      console.log(`Generating ${reportId} for ${selectedPeriod}`);
       
       let reportResponse;
       
@@ -127,14 +125,12 @@ const FinancialReportsSimple: React.FC<FinancialReportsSimpleProps> = ({ onClose
       }
       
     } catch (error) {
-      console.error('Error generating report:', error);
       
       // Try to load from offline storage instead of using mock data
       const storageKey = `financial_report_${reportId}_${selectedPeriod}`;
       const offlineData = await offlineStorage.getOffline(storageKey, { critical: true });
       
       if (offlineData && !offlineStorage.isDataStale(offlineData, 120)) { // 2 hours max for report data
-        console.log('📱 Using offline financial report data');
         setReportData(offlineData.data);
         setError('Currently using offline data. Some information may be outdated.');
       } else {

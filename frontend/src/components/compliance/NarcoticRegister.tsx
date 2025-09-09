@@ -475,13 +475,11 @@ const NarcoticRegister: React.FC = () => {
       });
       
     } catch (err) {
-      console.error('Error loading narcotic entries:', err);
       
       // Try to load from offline storage instead of using mock data
       const offlineData = await offlineStorage.getOffline('narcotic_entries', { critical: true });
       
       if (offlineData && !offlineStorage.isDataStale(offlineData, 60)) { // 1 hour max for narcotic data
-        console.log('📱 Using offline narcotic entries data');
         setEntries(offlineData.data);
         setError('Currently using offline data. Some information may be outdated.');
       } else {
@@ -521,7 +519,6 @@ const NarcoticRegister: React.FC = () => {
       setLoading(true);
       
       // Here you would save to backend
-      console.log('Saving narcotic entry with prescription:', prescription);
       
       // Create a new entry
       const newEntry: NarcoticEntry = {
@@ -557,7 +554,6 @@ const NarcoticRegister: React.FC = () => {
       // await narcoticApi.createEntry(newEntry);
       
     } catch (err) {
-      console.error('Failed to save narcotic entry:', err);
       alert(`Failed to save entry: ${err instanceof Error ? err.message : 'Unknown error'}`);
     } finally {
       setLoading(false);

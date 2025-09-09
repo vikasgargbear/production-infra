@@ -210,7 +210,6 @@ const CreditDebitNoteSimple: React.FC<CreditDebitNoteSimpleProps> = ({
         calculateTotals(items);
       }
     } catch (error) {
-      console.error('Error loading invoice items:', error);
       toast.error('Failed to load invoice items');
     } finally {
       setLoading(false);
@@ -345,7 +344,6 @@ const CreditDebitNoteSimple: React.FC<CreditDebitNoteSimpleProps> = ({
         setActiveTab('list');
       }
     } catch (error: any) {
-      console.error('Error creating note:', error);
       toast.error(error.message || `Failed to create ${noteType} note`);
     } finally {
       setSaving(false);

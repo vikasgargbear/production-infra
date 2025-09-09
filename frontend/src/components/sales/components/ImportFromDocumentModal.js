@@ -35,7 +35,6 @@ const ImportFromDocumentModal = ({ isOpen, onClose, onImport }) => {
       
       setDocuments(results);
     } catch (error) {
-      console.error('Error loading documents:', error);
       setDocuments([]);
     } finally {
       setLoading(false);
@@ -66,7 +65,6 @@ const ImportFromDocumentModal = ({ isOpen, onClose, onImport }) => {
       
       setDocuments(results);
     } catch (error) {
-      console.error('Error searching:', error);
       setDocuments([]);
     } finally {
       setLoading(false);

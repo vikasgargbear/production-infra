@@ -156,7 +156,6 @@ const PartyLedgerV3: React.FC<PartyLedgerV3Props> = ({
     try {
       await refetch();
     } catch (error) {
-      console.error('Refresh failed:', error);
       setErrorMessage('Failed to refresh data');
     } finally {
       setRefreshing(false);
@@ -231,7 +230,6 @@ const PartyLedgerV3: React.FC<PartyLedgerV3Props> = ({
       
       downloadFile(response.data, `ledger-${exportFormat}-${Date.now()}.${exportFormat}`);
     } catch (error) {
-      console.error('Export failed:', error);
     }
   };
 
@@ -247,7 +245,6 @@ const PartyLedgerV3: React.FC<PartyLedgerV3Props> = ({
       
       // Show success message
     } catch (error) {
-      console.error('Email failed:', error);
     }
   };
 
@@ -257,7 +254,6 @@ const PartyLedgerV3: React.FC<PartyLedgerV3Props> = ({
       key: 'date',
       header: 'Date',
       render: (value: any, entry: any) => {
-        console.log('[Column Render] Date:', { value, entry });
         if (!entry || !entry.date) return '-';
         try {
           return format(parseISO(entry.date), 'dd/MM/yyyy');
@@ -271,7 +267,6 @@ const PartyLedgerV3: React.FC<PartyLedgerV3Props> = ({
       key: 'type',
       header: 'Type',
       render: (value: any, entry: any) => {
-        console.log('[Column Render] Type:', { value, entry });
         const type = entry?.type || '-';
         // Add color coding for different transaction types
         let textColor = '';
@@ -292,7 +287,6 @@ const PartyLedgerV3: React.FC<PartyLedgerV3Props> = ({
       key: 'reference',
       header: 'Reference',
       render: (value: any, entry: any) => {
-        console.log('[Column Render] Reference:', { value, entry });
         return entry?.reference || entry?.reference_number || '-';
       },
       width: '150px'
@@ -302,7 +296,6 @@ const PartyLedgerV3: React.FC<PartyLedgerV3Props> = ({
       header: 'Debit',
       align: 'right' as const,
       render: (value: any, entry: any) => {
-        console.log('[Column Render] Debit:', { value, entry });
         if (!entry || !entry.debit) return '-';
         const amount = parseFloat(String(entry.debit));
         return amount > 0 ? `₹${amount.toFixed(2)}` : '-';
@@ -314,7 +307,6 @@ const PartyLedgerV3: React.FC<PartyLedgerV3Props> = ({
       header: 'Credit',
       align: 'right' as const,
       render: (value: any, entry: any) => {
-        console.log('[Column Render] Credit:', { value, entry });
         if (!entry || !entry.credit) return '-';
         const amount = parseFloat(String(entry.credit));
         return amount > 0 ? `₹${amount.toFixed(2)}` : '-';
@@ -326,7 +318,6 @@ const PartyLedgerV3: React.FC<PartyLedgerV3Props> = ({
       header: 'Balance',
       align: 'right' as const,
       render: (value: any, entry: any) => {
-        console.log('[Column Render] Balance:', { value, entry });
         if (!entry) return '-';
         const balance = entry.running_balance ?? entry.balance ?? 0;
         const balanceNum = parseFloat(String(balance));
@@ -440,14 +431,6 @@ const PartyLedgerV3: React.FC<PartyLedgerV3Props> = ({
             )}
             
             {(() => {
-              console.log('[PartyLedgerV3] Rendering DataTable with:', {
-                filteredEntries: filteredEntries,
-                entriesCount: filteredEntries?.length,
-                firstEntry: filteredEntries?.[0],
-                columnsCount: columns.length,
-                loading: loadingLedger,
-                ledgerData: ledgerData
-              });
               return null;
             })()}
             

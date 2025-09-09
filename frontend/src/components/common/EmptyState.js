@@ -39,7 +39,6 @@ const EmptyState = ({
 
   // Ensure we have a valid component
   if (!IconComponent || typeof IconComponent !== 'function') {
-    console.error('EmptyState: Invalid icon component', IconComponent);
     IconComponent = Package; // Fallback to Package
   }
 

@@ -83,7 +83,6 @@ const GSTBalanced: React.FC<GSTBalancedProps> = () => {
 
       setReturnStatus(returnsData);
     } catch (error) {
-      console.error('Error fetching GST data:', error);
       setError('Failed to load GST data. Please try again.');
       
       // Set default data on error
@@ -180,7 +179,6 @@ const GSTBalanced: React.FC<GSTBalancedProps> = () => {
 
   // Handle return click
   const handleReturnClick = (returnType: string) => {
-    console.log(`Navigate to ${returnType}`);
     // Navigate to specific return filing page
   };
 

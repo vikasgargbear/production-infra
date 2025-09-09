@@ -39,7 +39,6 @@ const ImportFromInvoiceModal = ({ isOpen, onClose, onImport }) => {
       }
       setSearchResults(results);
     } catch (error) {
-      console.error('Error loading recent documents:', error);
       setSearchResults([]);
     } finally {
       setLoading(false);
@@ -71,7 +70,6 @@ const ImportFromInvoiceModal = ({ isOpen, onClose, onImport }) => {
       }
       setSearchResults(results);
     } catch (error) {
-      console.error('Search error:', error);
       setSearchResults([]);
     } finally {
       setLoading(false);

@@ -75,13 +75,11 @@ const BankReconciliationFlow: React.FC<BankReconciliationFlowProps> = ({ onClose
       });
       
     } catch (err) {
-      console.error('Error loading bank reconciliation data:', err);
       
       // Try to load from offline storage instead of using mock data
       const offlineData = await offlineStorage.getOffline('bank_reconciliation_data', { critical: true });
       
       if (offlineData && !offlineStorage.isDataStale(offlineData, 60)) { // 1 hour max for reconciliation data
-        console.log('📱 Using offline bank reconciliation data');
         setBankAccounts(offlineData.data.accounts || []);
         setUnreconciledTransactions(offlineData.data.transactions || []);
         
@@ -106,7 +104,6 @@ const BankReconciliationFlow: React.FC<BankReconciliationFlowProps> = ({ onClose
     try {
       await loadReconciliationData();
     } catch (error) {
-      console.error('Error refreshing bank reconciliation data:', error);
       setError('Failed to refresh data. Please try again.');
     } finally {
       setRefreshing(false);
@@ -153,7 +150,6 @@ const BankReconciliationFlow: React.FC<BankReconciliationFlowProps> = ({ onClose
         setError('Reconciliation failed. Please try again.');
       }
     } catch (error) {
-      console.error('Error during reconciliation:', error);
       setError('Error during reconciliation. Please check your connection and try again.');
     } finally {
       setReconciling(false);
