@@ -1,10 +1,11 @@
-import React, { useState, useEffect } from 'react';
-import { Plus, X, CreditCard, Banknote, Smartphone, Building2, FileText, AlertCircle, Check, Coins, ChevronRight } from 'lucide-react';
+import React, { useState, useEffect, useCallback } from 'react';
+import { Plus, X, CreditCard, Banknote, Smartphone, Building2, FileText, AlertCircle, Check, Coins } from 'lucide-react';
 
 /**
- * Modern SplitPayment Component
- * Side-by-side layout with payment options on left, details on right
- * Similar to Stripe, Square, and modern payment UIs
+ * Simplified SplitPayment Component
+ * - Dropdown for single payment method selection
+ * - Checkbox to enable split payment mode
+ * - Clean, intuitive UI
  */
 const SplitPayment = ({ 
   totalAmount = 0, 
@@ -17,149 +18,105 @@ const SplitPayment = ({
   defaultPaymentMethod = null
 }) => {
   const [selectedMethod, setSelectedMethod] = useState('cash');
-  const [paymentDetails, setPaymentDetails] = useState({
-    amount: totalAmount,
-    reference: ''
-  });
-  const [splitPayments, setSplitPayments] = useState([]);
+  const [paymentAmount, setPaymentAmount] = useState(totalAmount);
+  const [reference, setReference] = useState('');
   const [isSplitMode, setIsSplitMode] = useState(false);
+  const [splitPayments, setSplitPayments] = useState([
+    { id: '1', method: 'cash', amount: 0, reference: '' },
+    { id: '2', method: 'upi', amount: 0, reference: '' }
+  ]);
 
-  // Payment method options with modern icons and colors
-  const paymentOptions = [
-    { 
-      value: 'cash', 
-      label: 'Full Cash', 
-      icon: Banknote, 
-      color: 'green',
-      bgColor: 'bg-green-50 hover:bg-green-100 border-green-200',
-      selectedBg: 'bg-green-100 border-green-400',
-      textColor: 'text-green-700',
-      description: 'Immediate payment'
-    },
-    { 
-      value: 'upi', 
-      label: 'Full UPI', 
-      icon: Smartphone, 
-      color: 'purple',
-      bgColor: 'bg-purple-50 hover:bg-purple-100 border-purple-200',
-      selectedBg: 'bg-purple-100 border-purple-400',
-      textColor: 'text-purple-700',
-      description: 'Digital payment'
-    },
-    { 
-      value: 'card', 
-      label: 'Full Card', 
-      icon: CreditCard, 
-      color: 'blue',
-      bgColor: 'bg-blue-50 hover:bg-blue-100 border-blue-200',
-      selectedBg: 'bg-blue-100 border-blue-400',
-      textColor: 'text-blue-700',
-      description: 'Debit/Credit card'
-    },
-    { 
-      value: 'bank', 
-      label: 'Full Bank', 
-      icon: Building2, 
-      color: 'indigo',
-      bgColor: 'bg-indigo-50 hover:bg-indigo-100 border-indigo-200',
-      selectedBg: 'bg-indigo-100 border-indigo-400',
-      textColor: 'text-indigo-700',
-      description: 'Bank transfer'
-    },
-    { 
-      value: 'check', 
-      label: 'Full Check', 
-      icon: FileText, 
-      color: 'gray',
-      bgColor: 'bg-gray-50 hover:bg-gray-100 border-gray-200',
-      selectedBg: 'bg-gray-100 border-gray-400',
-      textColor: 'text-gray-700',
-      description: 'Check payment'
-    }
+  // Payment method options
+  const paymentMethods = [
+    { value: 'cash', label: 'Cash', icon: Banknote, color: 'green' },
+    { value: 'upi', label: 'UPI', icon: Smartphone, color: 'purple' },
+    { value: 'card', label: 'Card', icon: CreditCard, color: 'blue' },
+    { value: 'bank', label: 'Bank Transfer', icon: Building2, color: 'indigo' },
+    { value: 'check', label: 'Check', icon: FileText, color: 'gray' },
+    { value: 'credit', label: 'Credit (Pay Later)', icon: AlertCircle, color: 'orange' }
   ];
 
-  // Special options
-  const specialOptions = [
-    {
-      value: 'split',
-      label: 'Split Payment',
-      icon: Coins,
-      color: 'indigo',
-      bgColor: 'bg-indigo-50 hover:bg-indigo-100 border-indigo-200',
-      selectedBg: 'bg-indigo-100 border-indigo-400',
-      textColor: 'text-indigo-700',
-      description: 'Multiple methods'
-    },
-    {
-      value: 'credit',
-      label: 'Full Credit',
-      icon: AlertCircle,
-      color: 'orange',
-      bgColor: 'bg-orange-50 hover:bg-orange-100 border-orange-200',
-      selectedBg: 'bg-orange-100 border-orange-400',
-      textColor: 'text-orange-700',
-      description: 'Pay later'
-    }
-  ];
-
-  // Initialize from props
+  // Initialize from props - only run once
   useEffect(() => {
     if (payments && payments.length > 0) {
       if (payments.length === 1) {
         setSelectedMethod(payments[0].method);
-        setPaymentDetails({
-          amount: payments[0].amount,
-          reference: payments[0].reference || ''
-        });
+        setPaymentAmount(payments[0].amount);
+        setReference(payments[0].reference || '');
+        setIsSplitMode(false);
       } else {
         setIsSplitMode(true);
         setSplitPayments(payments);
       }
     } else if (defaultPaymentMethod) {
-      setSelectedMethod(defaultPaymentMethod === 'credit' ? 'credit' : defaultPaymentMethod);
-    }
-  }, [payments, defaultPaymentMethod]);
-
-  // Update parent when payment changes
-  useEffect(() => {
-    if (!readOnly && onChange) {
-      if (isSplitMode) {
-        onChange(splitPayments);
-        const totalPaid = splitPayments.reduce((sum, p) => sum + (p.amount || 0), 0);
-        onPaymentStatusChange?.(totalPaid >= totalAmount ? 'paid' : totalPaid > 0 ? 'partial' : 'pending');
+      setSelectedMethod(defaultPaymentMethod);
+      if (defaultPaymentMethod !== 'credit') {
+        setPaymentAmount(totalAmount);
       } else {
-        const paymentAmount = selectedMethod === 'credit' ? 0 : paymentDetails.amount;
-        onChange([{
-          id: '1',
-          method: selectedMethod,
-          amount: paymentAmount,
-          reference: paymentDetails.reference
-        }]);
-        onPaymentStatusChange?.(
-          selectedMethod === 'credit' ? 'pending' : 
-          paymentAmount >= totalAmount ? 'paid' : 
-          paymentAmount > 0 ? 'partial' : 'pending'
-        );
+        setPaymentAmount(0);
       }
     }
-  }, [selectedMethod, paymentDetails, splitPayments, isSplitMode, totalAmount, onChange, onPaymentStatusChange, readOnly]);
+  }, []); // Empty dependency array - only run on mount
 
-  const handleMethodSelect = (method) => {
-    if (readOnly) return;
-    
-    if (method === 'split') {
-      setIsSplitMode(true);
+  // Update parent when payment changes - use callback to avoid infinite loops
+  const updateParent = useCallback(() => {
+    if (!onChange) return;
+
+    if (isSplitMode) {
+      onChange(splitPayments);
+      const totalPaid = splitPayments.reduce((sum, p) => sum + (p.amount || 0), 0);
+      onPaymentStatusChange?.(
+        totalPaid >= totalAmount ? 'paid' : 
+        totalPaid > 0 ? 'partial' : 'pending'
+      );
+    } else {
+      const actualAmount = selectedMethod === 'credit' ? 0 : paymentAmount;
+      onChange([{
+        id: '1',
+        method: selectedMethod,
+        amount: actualAmount,
+        reference: reference
+      }]);
+      onPaymentStatusChange?.(
+        selectedMethod === 'credit' ? 'pending' :
+        actualAmount >= totalAmount ? 'paid' : 
+        actualAmount > 0 ? 'partial' : 'pending'
+      );
+    }
+  }, [selectedMethod, paymentAmount, reference, isSplitMode, splitPayments, totalAmount, onChange, onPaymentStatusChange]);
+
+  // Debounced update to avoid too many updates
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      updateParent();
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [updateParent]);
+
+  const handleMethodChange = (e) => {
+    const method = e.target.value;
+    setSelectedMethod(method);
+    if (method === 'credit') {
+      setPaymentAmount(0);
+      setReference('');
+    } else if (method !== selectedMethod) {
+      setPaymentAmount(totalAmount);
+      setReference('');
+    }
+  };
+
+  const handleSplitToggle = () => {
+    setIsSplitMode(!isSplitMode);
+    if (!isSplitMode) {
+      // Entering split mode
       setSplitPayments([
         { id: '1', method: 'cash', amount: 0, reference: '' },
         { id: '2', method: 'upi', amount: 0, reference: '' }
       ]);
     } else {
-      setIsSplitMode(false);
-      setSelectedMethod(method);
-      setPaymentDetails({
-        amount: method === 'credit' ? 0 : totalAmount,
-        reference: ''
-      });
+      // Exiting split mode
+      setPaymentAmount(totalAmount);
+      setReference('');
     }
   };
 
@@ -189,285 +146,280 @@ const SplitPayment = ({
 
   const totalPaid = isSplitMode 
     ? splitPayments.reduce((sum, p) => sum + (p.amount || 0), 0)
-    : selectedMethod === 'credit' ? 0 : paymentDetails.amount;
+    : selectedMethod === 'credit' ? 0 : paymentAmount;
   const remaining = totalAmount - totalPaid;
   const isFullyPaid = totalPaid >= totalAmount;
 
+  const getPaymentIcon = (method) => {
+    const methodInfo = paymentMethods.find(m => m.value === method);
+    return methodInfo ? methodInfo.icon : Banknote;
+  };
+
+  const getPaymentColor = (method) => {
+    const methodInfo = paymentMethods.find(m => m.value === method);
+    return methodInfo ? methodInfo.color : 'gray';
+  };
+
+  const getReferenceLabel = (method) => {
+    switch(method) {
+      case 'upi': return 'UPI Transaction ID';
+      case 'card': return 'Last 4 Digits';
+      case 'bank': return 'Reference Number';
+      case 'check': return 'Check Number';
+      default: return 'Reference';
+    }
+  };
+
+  const getReferencePlaceholder = (method) => {
+    switch(method) {
+      case 'upi': return 'e.g., 412345678900';
+      case 'card': return 'e.g., 1234';
+      case 'bank': return 'e.g., NEFT/RTGS/IMPS ref';
+      case 'check': return 'e.g., 123456';
+      default: return 'Reference number';
+    }
+  };
+
   return (
     <div className={`${className}`}>
-      {/* Modern Side-by-Side Layout */}
-      <div className="flex gap-4">
-        {/* Left Side - Payment Method Selection */}
-        <div className="w-1/3 space-y-2">
-          <div className="text-xs font-medium text-gray-600 mb-2">Select Payment Method</div>
-          
-          {/* Regular Payment Methods */}
-          <div className="space-y-1.5">
-            {paymentOptions.map(option => {
-              const Icon = option.icon;
-              const isSelected = !isSplitMode && selectedMethod === option.value;
-              return (
-                <button
-                  key={option.value}
-                  onClick={() => handleMethodSelect(option.value)}
-                  disabled={readOnly}
-                  className={`w-full text-left p-2.5 rounded-lg border transition-all ${
-                    isSelected 
-                      ? `${option.selectedBg} border-2` 
-                      : `${option.bgColor} border`
-                  } ${readOnly ? 'opacity-60 cursor-not-allowed' : 'cursor-pointer'}`}
-                >
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <Icon className={`w-4 h-4 ${option.textColor}`} />
-                      <div>
-                        <div className={`text-sm font-medium ${option.textColor}`}>
-                          {option.label}
-                        </div>
-                        <div className="text-xs text-gray-500">{option.description}</div>
-                      </div>
-                    </div>
-                    {isSelected && (
-                      <Check className={`w-4 h-4 ${option.textColor}`} />
-                    )}
-                  </div>
-                </button>
-              );
-            })}
+      {/* Header with Split Payment Toggle */}
+      <div className="flex items-center justify-between mb-3">
+        <div className="text-sm font-medium text-gray-700">Payment Details</div>
+        <label className="flex items-center gap-2 cursor-pointer">
+          <input
+            type="checkbox"
+            checked={isSplitMode}
+            onChange={handleSplitToggle}
+            disabled={readOnly}
+            className="w-4 h-4 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500"
+          />
+          <span className="text-sm text-gray-600 flex items-center gap-1">
+            <Coins className="w-4 h-4" />
+            Split Payment
+          </span>
+        </label>
+      </div>
+
+      {/* Main Payment Interface */}
+      {!isSplitMode ? (
+        // Single Payment Mode
+        <div className="space-y-3">
+          {/* Payment Method Dropdown */}
+          <div>
+            <label className="block text-xs font-medium text-gray-600 mb-1">Payment Method</label>
+            <select
+              value={selectedMethod}
+              onChange={handleMethodChange}
+              disabled={readOnly}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+            >
+              {paymentMethods.map(method => (
+                <option key={method.value} value={method.value}>
+                  {method.label}
+                </option>
+              ))}
+            </select>
           </div>
 
-          {/* Divider */}
-          <div className="border-t border-gray-200 my-2"></div>
-
-          {/* Special Options */}
-          <div className="space-y-1.5">
-            {specialOptions.map(option => {
-              const Icon = option.icon;
-              const isSelected = (option.value === 'split' && isSplitMode) || 
-                               (!isSplitMode && selectedMethod === option.value);
-              return (
-                <button
-                  key={option.value}
-                  onClick={() => handleMethodSelect(option.value)}
-                  disabled={readOnly}
-                  className={`w-full text-left p-2.5 rounded-lg border transition-all ${
-                    isSelected 
-                      ? `${option.selectedBg} border-2` 
-                      : `${option.bgColor} border`
-                  } ${readOnly ? 'opacity-60 cursor-not-allowed' : 'cursor-pointer'}`}
-                >
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <Icon className={`w-4 h-4 ${option.textColor}`} />
-                      <div>
-                        <div className={`text-sm font-medium ${option.textColor}`}>
-                          {option.label}
-                        </div>
-                        <div className="text-xs text-gray-500">{option.description}</div>
-                      </div>
-                    </div>
-                    {isSelected && (
-                      <Check className={`w-4 h-4 ${option.textColor}`} />
-                    )}
-                  </div>
-                </button>
-              );
-            })}
-          </div>
-        </div>
-
-        {/* Right Side - Payment Details Entry */}
-        <div className="flex-1">
-          <div className="text-xs font-medium text-gray-600 mb-2">Payment Details</div>
-          
-          {/* Show different UI based on mode */}
-          {isSplitMode ? (
-            // Split Payment Mode
-            <div className="bg-gray-50 rounded-lg p-3 space-y-3">
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-sm font-medium text-gray-700">Split Payment Methods</span>
-                <button
-                  onClick={addSplitPayment}
-                  disabled={readOnly || splitPayments.length >= 5}
-                  className="text-xs bg-indigo-600 text-white px-2 py-1 rounded hover:bg-indigo-700 disabled:opacity-50"
-                >
-                  <Plus className="w-3 h-3 inline mr-1" />
-                  Add Method
-                </button>
-              </div>
-
-              {splitPayments.map((payment, index) => {
-                const Icon = getPaymentIcon(payment.method);
-                return (
-                  <div key={payment.id} className="bg-white rounded border border-gray-200 p-2">
-                    <div className="flex items-center gap-2">
-                      <Icon className="w-4 h-4 text-gray-500" />
-                      <select
-                        value={payment.method}
-                        onChange={(e) => updateSplitPayment(payment.id, 'method', e.target.value)}
-                        disabled={readOnly}
-                        className="flex-1 text-sm border border-gray-300 rounded px-2 py-1"
-                      >
-                        {paymentOptions.map(opt => (
-                          <option key={opt.value} value={opt.value}>{opt.label.replace('Full ', '')}</option>
-                        ))}
-                      </select>
-                      <input
-                        type="number"
-                        value={payment.amount}
-                        onChange={(e) => updateSplitPayment(payment.id, 'amount', e.target.value)}
-                        disabled={readOnly}
-                        placeholder="Amount"
-                        className="w-24 text-sm border border-gray-300 rounded px-2 py-1"
-                      />
-                      {payment.method !== 'cash' && (
-                        <input
-                          type="text"
-                          value={payment.reference}
-                          onChange={(e) => updateSplitPayment(payment.id, 'reference', e.target.value)}
-                          disabled={readOnly}
-                          placeholder="Ref#"
-                          className="w-20 text-sm border border-gray-300 rounded px-2 py-1"
-                        />
-                      )}
-                      {splitPayments.length > 2 && (
-                        <button
-                          onClick={() => removeSplitPayment(payment.id)}
-                          disabled={readOnly}
-                          className="text-red-500 hover:text-red-700"
-                        >
-                          <X className="w-4 h-4" />
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          ) : selectedMethod === 'credit' ? (
-            // Credit Mode
-            <div className="bg-orange-50 rounded-lg p-4">
-              <div className="flex items-center gap-2 mb-3">
+          {/* Credit Warning */}
+          {selectedMethod === 'credit' ? (
+            <div className="bg-orange-50 border border-orange-200 rounded-lg p-3">
+              <div className="flex items-center gap-2">
                 <AlertCircle className="w-5 h-5 text-orange-600" />
-                <span className="text-sm font-medium text-orange-900">Full Amount on Credit</span>
-              </div>
-              <div className="space-y-2">
-                <div className="text-2xl font-bold text-orange-700">₹{totalAmount.toFixed(2)}</div>
-                <div className="text-sm text-orange-600">
-                  This invoice will be marked as unpaid. The customer owes the full amount.
-                </div>
-                <div className="bg-orange-100 rounded p-2 text-xs text-orange-700">
-                  💡 Payment can be recorded later when received
+                <div>
+                  <div className="text-sm font-medium text-orange-900">Full Amount on Credit</div>
+                  <div className="text-xs text-orange-700 mt-1">
+                    Invoice Total: ₹{totalAmount.toFixed(2)} will be marked as unpaid
+                  </div>
                 </div>
               </div>
             </div>
           ) : (
-            // Regular Payment Mode
-            <div className="bg-gray-50 rounded-lg p-4">
-              <div className="space-y-3">
+            <>
+              {/* Amount Input */}
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">Amount</label>
+                <div className="flex items-center gap-2">
+                  <span className="text-gray-500">₹</span>
+                  <input
+                    type="number"
+                    value={paymentAmount}
+                    onChange={(e) => setPaymentAmount(parseFloat(e.target.value) || 0)}
+                    disabled={readOnly}
+                    className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                    placeholder="0.00"
+                  />
+                  {paymentAmount < totalAmount && (
+                    <button
+                      onClick={() => setPaymentAmount(totalAmount)}
+                      disabled={readOnly}
+                      className="text-xs bg-blue-100 text-blue-700 px-3 py-2 rounded-lg hover:bg-blue-200"
+                    >
+                      Full Amount
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {/* Reference Input (for non-cash payments) */}
+              {selectedMethod !== 'cash' && (
                 <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">Amount</label>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">
+                    {getReferenceLabel(selectedMethod)}
+                  </label>
+                  <input
+                    type="text"
+                    value={reference}
+                    onChange={(e) => setReference(e.target.value)}
+                    disabled={readOnly}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                    placeholder={getReferencePlaceholder(selectedMethod)}
+                  />
+                </div>
+              )}
+            </>
+          )}
+
+          {/* Payment Summary */}
+          <div className="bg-gray-50 rounded-lg p-3 space-y-1">
+            <div className="flex justify-between text-sm">
+              <span className="text-gray-600">Invoice Total</span>
+              <span className="font-medium">₹{totalAmount.toFixed(2)}</span>
+            </div>
+            <div className="flex justify-between text-sm">
+              <span className="text-gray-600">Amount Paid</span>
+              <span className={`font-medium ${isFullyPaid ? 'text-green-600' : ''}`}>
+                ₹{totalPaid.toFixed(2)}
+              </span>
+            </div>
+            {remaining > 0 && (
+              <div className="flex justify-between text-sm pt-1 border-t">
+                <span className="text-gray-600">Remaining (Credit)</span>
+                <span className="font-medium text-orange-600">₹{remaining.toFixed(2)}</span>
+              </div>
+            )}
+          </div>
+
+          {/* Status Badge */}
+          {isFullyPaid ? (
+            <div className="bg-green-100 text-green-700 px-3 py-2 rounded-lg text-sm font-medium flex items-center gap-2">
+              <Check className="w-4 h-4" />
+              Fully Paid
+            </div>
+          ) : totalPaid > 0 ? (
+            <div className="bg-yellow-100 text-yellow-700 px-3 py-2 rounded-lg text-sm">
+              Partial Payment - ₹{remaining.toFixed(2)} goes to credit
+            </div>
+          ) : (
+            <div className="bg-orange-100 text-orange-700 px-3 py-2 rounded-lg text-sm">
+              Unpaid - Full amount on credit
+            </div>
+          )}
+        </div>
+      ) : (
+        // Split Payment Mode
+        <div className="space-y-3">
+          <div className="bg-indigo-50 border border-indigo-200 rounded-lg p-3">
+            <div className="flex items-center justify-between mb-3">
+              <span className="text-sm font-medium text-indigo-900">Split Payment Methods</span>
+              <button
+                onClick={addSplitPayment}
+                disabled={readOnly || splitPayments.length >= 5}
+                className="text-xs bg-indigo-600 text-white px-2 py-1 rounded hover:bg-indigo-700 disabled:opacity-50"
+              >
+                <Plus className="w-3 h-3 inline mr-1" />
+                Add
+              </button>
+            </div>
+
+            {splitPayments.map((payment, index) => {
+              const Icon = getPaymentIcon(payment.method);
+              return (
+                <div key={payment.id} className="bg-white rounded-lg border border-gray-200 p-2 mb-2">
                   <div className="flex items-center gap-2">
-                    <span className="text-gray-500">₹</span>
+                    <Icon className={`w-4 h-4 text-${getPaymentColor(payment.method)}-500`} />
+                    <select
+                      value={payment.method}
+                      onChange={(e) => updateSplitPayment(payment.id, 'method', e.target.value)}
+                      disabled={readOnly}
+                      className="flex-1 text-sm border border-gray-300 rounded px-2 py-1"
+                    >
+                      {paymentMethods.filter(m => m.value !== 'credit').map(method => (
+                        <option key={method.value} value={method.value}>{method.label}</option>
+                      ))}
+                    </select>
                     <input
                       type="number"
-                      value={paymentDetails.amount}
-                      onChange={(e) => setPaymentDetails({ ...paymentDetails, amount: parseFloat(e.target.value) || 0 })}
+                      value={payment.amount}
+                      onChange={(e) => updateSplitPayment(payment.id, 'amount', e.target.value)}
                       disabled={readOnly}
-                      className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                      placeholder="0.00"
+                      placeholder="₹0"
+                      className="w-24 text-sm border border-gray-300 rounded px-2 py-1"
                     />
-                    {paymentDetails.amount < totalAmount && (
+                    {payment.method !== 'cash' && (
+                      <input
+                        type="text"
+                        value={payment.reference}
+                        onChange={(e) => updateSplitPayment(payment.id, 'reference', e.target.value)}
+                        disabled={readOnly}
+                        placeholder="Ref"
+                        className="w-20 text-sm border border-gray-300 rounded px-2 py-1"
+                      />
+                    )}
+                    {splitPayments.length > 2 && (
                       <button
-                        onClick={() => setPaymentDetails({ ...paymentDetails, amount: totalAmount })}
-                        className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded hover:bg-blue-200"
+                        onClick={() => removeSplitPayment(payment.id)}
+                        disabled={readOnly}
+                        className="text-red-500 hover:text-red-700"
                       >
-                        Full Amount
+                        <X className="w-4 h-4" />
                       </button>
                     )}
                   </div>
                 </div>
+              );
+            })}
 
-                {selectedMethod !== 'cash' && (
-                  <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-1">
-                      {selectedMethod === 'upi' ? 'Transaction ID' : 
-                       selectedMethod === 'card' ? 'Last 4 Digits' :
-                       selectedMethod === 'bank' ? 'Reference Number' :
-                       selectedMethod === 'check' ? 'Check Number' : 'Reference'}
-                    </label>
-                    <input
-                      type="text"
-                      value={paymentDetails.reference}
-                      onChange={(e) => setPaymentDetails({ ...paymentDetails, reference: e.target.value })}
-                      disabled={readOnly}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                      placeholder={
-                        selectedMethod === 'upi' ? 'UPI transaction ID' :
-                        selectedMethod === 'card' ? '1234' :
-                        selectedMethod === 'bank' ? 'NEFT/RTGS/IMPS ref' :
-                        selectedMethod === 'check' ? 'Check number' : 'Reference'
-                      }
-                    />
-                  </div>
-                )}
-
-                {/* Payment Status */}
-                <div className="border-t pt-2">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs text-gray-600">Invoice Total</span>
-                    <span className="text-sm font-medium">₹{totalAmount.toFixed(2)}</span>
-                  </div>
-                  <div className="flex items-center justify-between mt-1">
-                    <span className="text-xs text-gray-600">Amount Paid</span>
-                    <span className={`text-sm font-medium ${isFullyPaid ? 'text-green-600' : 'text-gray-900'}`}>
-                      ₹{paymentDetails.amount.toFixed(2)}
-                    </span>
-                  </div>
-                  {remaining > 0 && (
-                    <div className="flex items-center justify-between mt-1">
-                      <span className="text-xs text-gray-600">Remaining (Credit)</span>
-                      <span className="text-sm font-medium text-orange-600">₹{remaining.toFixed(2)}</span>
-                    </div>
-                  )}
-                </div>
+            {/* Split Payment Summary */}
+            <div className="bg-gray-50 rounded p-2 mt-2 space-y-1">
+              <div className="flex justify-between text-xs">
+                <span className="text-gray-600">Invoice Total</span>
+                <span className="font-medium">₹{totalAmount.toFixed(2)}</span>
               </div>
+              <div className="flex justify-between text-xs">
+                <span className="text-gray-600">Total Paid</span>
+                <span className={`font-medium ${isFullyPaid ? 'text-green-600' : ''}`}>
+                  ₹{totalPaid.toFixed(2)}
+                </span>
+              </div>
+              {remaining > 0 && (
+                <div className="flex justify-between text-xs pt-1 border-t">
+                  <span className="text-gray-600">Remaining</span>
+                  <span className="font-medium text-orange-600">₹{remaining.toFixed(2)}</span>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Status Badge */}
+          {isFullyPaid ? (
+            <div className="bg-green-100 text-green-700 px-3 py-2 rounded-lg text-sm font-medium flex items-center gap-2">
+              <Check className="w-4 h-4" />
+              Fully Paid
+            </div>
+          ) : totalPaid > 0 ? (
+            <div className="bg-yellow-100 text-yellow-700 px-3 py-2 rounded-lg text-sm">
+              Partial Payment - ₹{remaining.toFixed(2)} goes to credit
+            </div>
+          ) : (
+            <div className="bg-orange-100 text-orange-700 px-3 py-2 rounded-lg text-sm">
+              No payment received - Full amount on credit
             </div>
           )}
-
-          {/* Summary Status Badge */}
-          <div className="mt-3">
-            {isFullyPaid ? (
-              <div className="bg-green-100 text-green-700 px-3 py-2 rounded-lg text-sm font-medium flex items-center gap-2">
-                <Check className="w-4 h-4" />
-                Fully Paid
-              </div>
-            ) : totalPaid > 0 ? (
-              <div className="bg-yellow-100 text-yellow-700 px-3 py-2 rounded-lg text-sm font-medium">
-                Partial Payment - ₹{remaining.toFixed(2)} goes to credit
-              </div>
-            ) : (
-              <div className="bg-orange-100 text-orange-700 px-3 py-2 rounded-lg text-sm font-medium">
-                Unpaid - Full amount on credit
-              </div>
-            )}
-          </div>
         </div>
-      </div>
+      )}
     </div>
   );
-};
-
-// Helper function to get icon
-const getPaymentIcon = (method) => {
-  const icons = {
-    cash: Banknote,
-    card: CreditCard,
-    upi: Smartphone,
-    bank: Building2,
-    check: FileText
-  };
-  return icons[method] || Banknote;
 };
 
 export default SplitPayment;
