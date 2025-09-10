@@ -277,9 +277,22 @@ const AddressForm = ({
           )}
         </div>
         
-        <div className="text-sm text-gray-600 bg-blue-50 p-3 rounded border border-blue-200">
-          <p className="font-medium text-blue-900 mb-1">Using Billing Address</p>
-          <p className="text-xs">{buildAddressString(billingAddressData)}</p>
+        {/* Display the billing address directly without redundant text */}
+        <div className="text-sm text-gray-600">
+          {billingAddressData?.address_line1 && (
+            <p className="text-xs">{billingAddressData.address_line1}</p>
+          )}
+          {billingAddressData?.address_line2 && (
+            <p className="text-xs">{billingAddressData.address_line2}</p>
+          )}
+          {(billingAddressData?.city || billingAddressData?.state || billingAddressData?.pincode) && (
+            <p className="text-xs">
+              {[billingAddressData.city, billingAddressData.state, billingAddressData.pincode].filter(Boolean).join(', ')}
+            </p>
+          )}
+          {billingAddressData?.mobile && (
+            <p className="text-xs">{billingAddressData.mobile}</p>
+          )}
         </div>
       </div>
     );
