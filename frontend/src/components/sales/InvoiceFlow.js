@@ -48,7 +48,7 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
   const [sameAsShipping, setSameAsShipping] = useState(true);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [toast, setToast] = useState({ show: false, message: '', type: 'info' });
+  const [toastMessage, setToastMessage] = useState({ show: false, message: '', type: 'info' });
 
   // Refs for keyboard navigation
   const customerSearchRef = useRef(null);
@@ -845,12 +845,12 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
   // Direct PDF Download - uses html2pdf.js with clean capture
   const handlePDFDownload = async (invoiceData = null) => {
     try {
-      setToast({ show: true, message: 'Generating PDF...', type: 'info' });
+      setToastMessage({ show: true, message: 'Generating PDF...', type: 'info' });
       
       // Get the invoice preview element
       const element = document.getElementById('invoice-preview');
       if (!element) {
-        setToast({ show: true, message: 'Please wait for the invoice to load', type: 'warning' });
+        setToastMessage({ show: true, message: 'Please wait for the invoice to load', type: 'warning' });
         return false;
       }
 
@@ -895,10 +895,10 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
       // Generate and download the PDF from the cloned element
       await html2pdf().set(opt).from(clonedElement).save();
       
-      setToast({ show: true, message: 'PDF downloaded successfully!', type: 'success' });
+      setToastMessage({ show: true, message: 'PDF downloaded successfully!', type: 'success' });
       return true;
     } catch (error) {
-      setToast({ show: true, message: 'Failed to generate PDF', type: 'error' });
+      setToastMessage({ show: true, message: 'Failed to generate PDF', type: 'error' });
       return false;
     }
   };
