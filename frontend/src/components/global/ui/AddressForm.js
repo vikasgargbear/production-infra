@@ -49,7 +49,7 @@ const AddressForm = ({
                           customer.primary_phone || customer.contact_number || 
                           addressData?.mobile || '';
       
-      setFormData({
+      const newFormData = {
         address_line1: customer.address || addressData?.address_line1 || '',
         address_line2: customer.address2 || addressData?.address_line2 || '',
         city: customer.city || addressData?.city || '',
@@ -58,7 +58,14 @@ const AddressForm = ({
         country: customer.country || addressData?.country || 'India',
         mobile: mobileNumber,
         landmark: customer.landmark || addressData?.landmark || ''
-      });
+      };
+      
+      setFormData(newFormData);
+      
+      // Also update parent with the complete data including mobile
+      if (onSave && addressType === 'billing') {
+        onSave(newFormData);
+      }
     }
   }, [customer]);
 
