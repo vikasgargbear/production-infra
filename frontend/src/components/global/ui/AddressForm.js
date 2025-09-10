@@ -257,6 +257,8 @@ const AddressForm = ({
 
   // For shipping address - handle same as billing
   if (addressType === 'shipping' && sameAsBilling && billingAddressData) {
+    // Get mobile from billingAddressData or fallback to customer phone
+    const mobileNumber = billingAddressData?.mobile || customer?.phone || customer?.mobile;
     return (
       <div className={`bg-gray-50 border border-gray-200 rounded-lg p-4 ${className}`}>
         <div className="flex items-center justify-between mb-3">
@@ -286,10 +288,10 @@ const AddressForm = ({
             <p>
               {[billingAddressData?.city, billingAddressData?.state, billingAddressData?.pincode].filter(Boolean).join(', ')}
             </p>
-            {billingAddressData?.mobile && (
+            {mobileNumber && (
               <p className="flex items-center gap-1 text-xs text-gray-700 font-medium">
                 <Phone className="w-3 h-3" />
-                {billingAddressData.mobile}
+                {mobileNumber}
               </p>
             )}
           </div>
