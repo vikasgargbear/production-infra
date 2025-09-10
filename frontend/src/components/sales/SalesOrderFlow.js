@@ -1512,20 +1512,53 @@ Expected Delivery: ${order.expected_delivery_date}
                       )}
                     </div>
                     
-                    {/* Expected Delivery Below Customer - Reduced Height */}
-                    <div className="bg-gray-50 border border-gray-200 rounded-lg px-3 py-2">
-                      <label className="text-xs font-semibold text-gray-700 block flex items-center">
-                        <span className="text-red-500 mr-1">*</span>
-                        Expected Delivery
-                      </label>
-                      <input
-                        type="date"
-                        value={order.expected_delivery_date}
-                        onChange={(e) => setOrder(prev => ({ ...prev, expected_delivery_date: e.target.value }))}
-                        className="w-full px-2 py-1 text-sm border-0 bg-transparent focus:outline-none print:appearance-none"
-                        style={{ WebkitAppearance: 'none' }}
-                        required
-                      />
+                    {/* Bank Details Tile - Moved Up for better space utilization */}
+                    <div className="bg-gray-50 border border-gray-200 rounded-lg p-3">
+                      <p className="text-xs font-semibold text-gray-700 mb-2">Bank Information</p>
+                      {/* Print-friendly display */}
+                      <div className="hidden print:block text-xs text-gray-600 space-y-1">
+                        {selectedBankAccount ? (
+                          <>
+                            <div>{selectedBankAccount.bank_name}</div>
+                            <div>A/c: {selectedBankAccount.account_number}</div>
+                            <div>IFSC: {selectedBankAccount.ifsc_code}</div>
+                            {selectedBankAccount.upi_id && (
+                              <div>UPI: {selectedBankAccount.upi_id}</div>
+                            )}
+                          </>
+                        ) : (
+                          <div className="text-gray-400">No bank account selected</div>
+                        )}
+                      </div>
+                      {/* Interactive selector for screen */}
+                      <div className="print:hidden">
+                        <BankAccountSelector
+                          selectedAccount={selectedBankAccount}
+                          onSelect={(account) => {
+                            setSelectedBankAccount(account);
+                            if (account) {
+                              setOrder(prev => ({
+                                ...prev,
+                                bank_name: account.bank_name,
+                                account_number: account.account_number,
+                                ifsc_code: account.ifsc_code,
+                                upi_id: account.upi_id || ''
+                              }));
+                            }
+                          }}
+                          className="w-full"
+                          compact={true}
+                        />
+                        {selectedBankAccount && (
+                          <div className="mt-2 space-y-1 text-xs text-gray-600">
+                            <div>A/c: {selectedBankAccount.account_number}</div>
+                            <div>IFSC: {selectedBankAccount.ifsc_code}</div>
+                            {selectedBankAccount.upi_id && (
+                              <div>UPI: {selectedBankAccount.upi_id}</div>
+                            )}
+                          </div>
+                        )}
+                      </div>
                     </div>
                   </div>
                   
@@ -1556,35 +1589,24 @@ Expected Delivery: ${order.expected_delivery_date}
                       </select>
                     </div>
                     
-                    {/* Bank Details Tile - Using BankAccountSelector */}
-                    <div className="bg-gray-50 border border-gray-200 rounded-lg p-3">
-                      <p className="text-xs font-semibold text-gray-700 mb-2">Bank Information</p>
-                      <BankAccountSelector
-                        selectedAccount={selectedBankAccount}
-                        onSelect={(account) => {
-                          setSelectedBankAccount(account);
-                          if (account) {
-                            setOrder(prev => ({
-                              ...prev,
-                              bank_name: account.bank_name,
-                              account_number: account.account_number,
-                              ifsc_code: account.ifsc_code,
-                              upi_id: account.upi_id || ''
-                            }));
-                          }
-                        }}
-                        className="w-full"
-                        compact={true}
+                    {/* Expected Delivery - Moved Down, No Asterisk (Not Mandatory) */}
+                    <div className="bg-gray-50 border border-gray-200 rounded-lg px-3 py-2">
+                      <label className="text-xs font-semibold text-gray-700 block">
+                        Expected Delivery
+                      </label>
+                      {/* Print-friendly display */}
+                      <span className="hidden print:inline text-sm text-gray-900">
+                        {order.expected_delivery_date ? new Date(order.expected_delivery_date).toLocaleDateString('en-IN') : 'Not specified'}
+                      </span>
+                      {/* Interactive input for screen */}
+                      <input
+                        type="date"
+                        value={order.expected_delivery_date}
+                        onChange={(e) => setOrder(prev => ({ ...prev, expected_delivery_date: e.target.value }))}
+                        className="w-full px-2 py-1 text-sm border-0 bg-transparent focus:outline-none print:hidden"
+                        style={{ WebkitAppearance: 'none' }}
+                        min={new Date().toISOString().split('T')[0]}
                       />
-                      {selectedBankAccount && (
-                        <div className="mt-2 space-y-1 text-xs text-gray-600">
-                          <div>A/c: {selectedBankAccount.account_number}</div>
-                          <div>IFSC: {selectedBankAccount.ifsc_code}</div>
-                          {selectedBankAccount.upi_id && (
-                            <div>UPI: {selectedBankAccount.upi_id}</div>
-                          )}
-                        </div>
-                      )}
                     </div>
                   </div>
                 </div>
