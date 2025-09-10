@@ -134,7 +134,12 @@ const SplitPayment = ({
 
   const updateSplitPayment = (id, field, value) => {
     setSplitPayments(splitPayments.map(p => 
-      p.id === id ? { ...p, [field]: field === 'amount' ? parseFloat(value) || 0 : value } : p
+      p.id === id ? { 
+        ...p, 
+        [field]: field === 'amount' 
+          ? (value === '' ? '' : parseFloat(value) || 0)
+          : value 
+      } : p
     ));
   };
 
@@ -145,7 +150,7 @@ const SplitPayment = ({
   };
 
   const totalPaid = isSplitMode 
-    ? splitPayments.reduce((sum, p) => sum + (p.amount || 0), 0)
+    ? splitPayments.reduce((sum, p) => sum + (p.amount === '' ? 0 : parseFloat(p.amount) || 0), 0)
     : selectedMethod === 'credit' ? 0 : paymentAmount;
   const remaining = totalAmount - totalPaid;
   const isFullyPaid = totalPaid >= totalAmount;
@@ -240,8 +245,8 @@ const SplitPayment = ({
                     <span className="text-gray-500 text-sm">₹</span>
                     <input
                       type="number"
-                      value={paymentAmount}
-                      onChange={(e) => setPaymentAmount(parseFloat(e.target.value) || 0)}
+                      value={paymentAmount === 0 ? '' : paymentAmount}
+                      onChange={(e) => setPaymentAmount(e.target.value === '' ? 0 : parseFloat(e.target.value) || 0)}
                       disabled={readOnly}
                       className={`${inputClass} flex-1`}
                       placeholder="0.00"
@@ -278,8 +283,8 @@ const SplitPayment = ({
                     <span className="text-gray-500 text-sm">₹</span>
                     <input
                       type="number"
-                      value={paymentAmount}
-                      onChange={(e) => setPaymentAmount(parseFloat(e.target.value) || 0)}
+                      value={paymentAmount === 0 ? '' : paymentAmount}
+                      onChange={(e) => setPaymentAmount(e.target.value === '' ? 0 : parseFloat(e.target.value) || 0)}
                       disabled={readOnly}
                       className={`${inputClass} flex-1`}
                       placeholder="0.00"
@@ -354,7 +359,7 @@ const SplitPayment = ({
                       <span className="text-gray-500 text-sm">₹</span>
                       <input
                         type="number"
-                        value={payment.amount}
+                        value={payment.amount === '' ? '' : payment.amount}
                         onChange={(e) => updateSplitPayment(payment.id, 'amount', e.target.value)}
                         disabled={readOnly}
                         placeholder="0.00"
@@ -382,7 +387,7 @@ const SplitPayment = ({
                       <span className="text-gray-500 text-sm">₹</span>
                       <input
                         type="number"
-                        value={payment.amount}
+                        value={payment.amount === '' ? '' : payment.amount}
                         onChange={(e) => updateSplitPayment(payment.id, 'amount', e.target.value)}
                         disabled={readOnly}
                         placeholder="0.00"
