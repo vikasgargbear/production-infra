@@ -180,7 +180,7 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
     } catch (error) {
       const errorMessage = 'Failed to load required data. Please check your connection and try again.';
       setError(errorMessage);
-      toast.error(errorMessage);
+      toast(errorMessage, { type: 'error' });
     } finally {
       setIsLoading(false);
     }
@@ -535,7 +535,7 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
       const errorMsg = 'Please select a customer';
       setMessage(errorMsg);
       setMessageType('error');
-      toast.error(errorMsg);
+      toast(errorMsg, { type: 'error' });
       return false;
     }
 
@@ -543,7 +543,7 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
       const errorMsg = 'Please add at least one item';
       setMessage(errorMsg);
       setMessageType('error');
-      toast.error(errorMsg);
+      toast(errorMsg, { type: 'error' });
       return false;
     }
 
@@ -551,7 +551,7 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
       const errorMsg = 'Please select a payment method';
       setMessage(errorMsg);
       setMessageType('error');
-      toast.error(errorMsg);
+      toast(errorMsg, { type: 'error' });
       return false;
     }
 
@@ -721,7 +721,7 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
         }
         
         // Show error to user
-        toast.error(`Backend error: ${errorDetails}`);
+        toast(`Backend error: ${errorDetails}`, { type: 'error' });
         
         // Still save locally and show success
         const date = new Date();
@@ -831,7 +831,7 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
         errorMessage = error.message;
       }
       
-      toast.error(errorMessage);
+      toast(errorMessage, { type: 'error' });
     } finally {
       setSaving(false);
     }
@@ -1780,31 +1780,31 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
             </div>
           )}
 
-          {/* Bank Account Selection */}
+          {/* Combined Payment & Bank Details - Space Optimized */}
           <div className="mb-4">
-            <h3 className="text-xs font-semibold text-gray-600 uppercase tracking-wider mb-1.5 px-1">RECEIVING BANK ACCOUNT</h3>
-            <div className="bg-white rounded-lg border border-gray-200 p-3">
-              <BankAccountSelector
-                value={invoice.bank_account_id}
-                onChange={(accountData) => {
-                  setInvoice(prev => ({
-                    ...prev,
-                    bank_account_id: accountData.bank_account_id,
-                    selected_bank_details: accountData // Store full details for display
-                  }));
-                }}
-                transactionType="receipt"
-                autoSelectDefault={true}
-                placeholder="Select account to receive payment"
-              />
-            </div>
-          </div>
-
-          {/* Payment Details - Using Global Component */}
-          <div className="mb-4">
-            <h3 className="text-xs font-semibold text-gray-600 uppercase tracking-wider mb-1.5 px-1">PAYMENT METHOD</h3>
-            <div className="bg-white rounded-lg border border-gray-200 p-3">
-              <SplitPayment
+            <h3 className="text-xs font-semibold text-gray-600 uppercase tracking-wider mb-1.5 px-1">PAYMENT & BANK DETAILS</h3>
+            <div className="bg-white rounded-lg border border-gray-200 p-3 space-y-3">
+              {/* Bank Account Selection - Compact */}
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">Receiving Bank Account</label>
+                <BankAccountSelector
+                  value={invoice.bank_account_id}
+                  onChange={(accountData) => {
+                    setInvoice(prev => ({
+                      ...prev,
+                      bank_account_id: accountData.bank_account_id,
+                      selected_bank_details: accountData // Store full details for display
+                    }));
+                  }}
+                  transactionType="receipt"
+                  autoSelectDefault={true}
+                  placeholder="Select account to receive payment"
+                />
+              </div>
+              
+              {/* Divider */}
+              <div className="border-t border-gray-200 pt-3">
+                <SplitPayment
                 totalAmount={parseFloat(invoice.totals?.final_amount || invoice.net_amount) || 0}
                 payments={[
                   {
@@ -1831,7 +1831,8 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
                   }));
                 }}
                 allowSplit={true}  // Enable split payments
-              />
+                />
+              </div>
             </div>
           </div>
 

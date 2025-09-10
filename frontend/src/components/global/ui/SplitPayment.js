@@ -146,15 +146,14 @@ const SplitPayment = ({
 
   return (
     <div className={`${className}`}>
-      {/* Payment selection prompt */}
+      {/* Payment selection prompt - compact */}
       {totalAmount > 0 && !showPaymentOptions && paymentMethods.length === 1 && paymentMethods[0].amount === 0 && (
-        <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 space-y-3">
-          <div className="flex items-center gap-2">
-            <AlertCircle className="w-4 h-4 text-blue-600" />
-            <span className="text-sm font-medium text-blue-900">Select Payment Method</span>
-          </div>
-          <div className="text-sm text-blue-800">
-            Invoice Total: <span className="font-bold">₹{totalAmount.toFixed(2)}</span>
+        <div className="bg-blue-50 border border-blue-200 rounded p-2">
+          <div className="flex items-center justify-between mb-2">
+            <div className="flex items-center gap-2">
+              <AlertCircle className="w-4 h-4 text-blue-600" />
+              <span className="text-sm font-medium text-blue-900">Payment (₹{totalAmount.toFixed(2)})</span>
+            </div>
           </div>
           <div className="flex flex-wrap gap-2">
             <button
@@ -162,7 +161,7 @@ const SplitPayment = ({
                 setPaymentMethods([{ id: 1, method: 'cash', amount: totalAmount, reference: '' }]);
                 setShowPaymentOptions(true);
               }}
-              className={`px-3 py-1.5 text-white text-sm rounded transition-colors ${
+              className={`px-2 py-1 text-white text-xs rounded transition-colors ${
                 defaultPaymentMethod === 'cash' 
                   ? 'bg-green-700 hover:bg-green-800 ring-2 ring-green-400 font-semibold' 
                   : 'bg-green-600 hover:bg-green-700'
@@ -175,7 +174,7 @@ const SplitPayment = ({
                 setPaymentMethods([{ id: 1, method: 'upi', amount: totalAmount, reference: '' }]);
                 setShowPaymentOptions(true);
               }}
-              className={`px-3 py-1.5 text-white text-sm rounded transition-colors ${
+              className={`px-2 py-1 text-white text-xs rounded transition-colors ${
                 defaultPaymentMethod === 'upi' 
                   ? 'bg-purple-700 hover:bg-purple-800 ring-2 ring-purple-400 font-semibold' 
                   : 'bg-purple-600 hover:bg-purple-700'
@@ -188,7 +187,7 @@ const SplitPayment = ({
                 setPaymentMethods([{ id: 1, method: 'card', amount: totalAmount, reference: '' }]);
                 setShowPaymentOptions(true);
               }}
-              className={`px-3 py-1.5 text-white text-sm rounded transition-colors ${
+              className={`px-2 py-1 text-white text-xs rounded transition-colors ${
                 defaultPaymentMethod === 'card' 
                   ? 'bg-blue-700 hover:bg-blue-800 ring-2 ring-blue-400 font-semibold' 
                   : 'bg-blue-600 hover:bg-blue-700'
@@ -204,7 +203,7 @@ const SplitPayment = ({
                 ]);
                 setShowPaymentOptions(true);
               }}
-              className="px-3 py-1.5 bg-indigo-600 text-white text-sm rounded hover:bg-indigo-700 transition-colors"
+              className="px-2 py-1 bg-indigo-600 text-white text-xs rounded hover:bg-indigo-700 transition-colors"
             >
               Split Payment
             </button>
@@ -213,7 +212,7 @@ const SplitPayment = ({
                 setPaymentMethods([{ id: 1, method: 'cash', amount: 0, reference: '' }]);
                 setShowPaymentOptions(true);
               }}
-              className={`px-3 py-1.5 text-white text-sm rounded transition-colors ${
+              className={`px-2 py-1 text-white text-xs rounded transition-colors ${
                 defaultPaymentMethod === 'credit' 
                   ? 'bg-orange-700 hover:bg-orange-800 ring-2 ring-orange-400 font-semibold' 
                   : 'bg-orange-600 hover:bg-orange-700'
