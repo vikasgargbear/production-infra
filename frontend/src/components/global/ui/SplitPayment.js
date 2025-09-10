@@ -364,7 +364,7 @@ const SplitPayment = ({
                   </>
                 )}
                 
-                {/* For other methods - 33/33/33 split */}
+                {/* For other methods - 35/35/30 split */}
                 {showReference && (
                   <>
                     <select
@@ -372,13 +372,13 @@ const SplitPayment = ({
                       onChange={(e) => updateSplitPayment(payment.id, 'method', e.target.value)}
                       disabled={readOnly}
                       className={selectClass}
-                      style={{ minWidth: '120px' }}
+                      style={{ width: '35%', minWidth: '120px' }}
                     >
                       {paymentMethods.filter(m => m.value !== 'credit').map(method => (
                         <option key={method.value} value={method.value}>{method.label}</option>
                       ))}
                     </select>
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2" style={{ width: '35%' }}>
                       <span className="text-gray-500 text-sm">₹</span>
                       <input
                         type="number"
@@ -386,8 +386,7 @@ const SplitPayment = ({
                         onChange={(e) => updateSplitPayment(payment.id, 'amount', e.target.value)}
                         disabled={readOnly}
                         placeholder="0.00"
-                        className={inputClass}
-                        style={{ width: '100px' }}
+                        className={`${inputClass} w-full`}
                       />
                     </div>
                     <input
@@ -396,7 +395,8 @@ const SplitPayment = ({
                       onChange={(e) => updateSplitPayment(payment.id, 'reference', e.target.value)}
                       disabled={readOnly}
                       placeholder={`${getReferenceLabel(payment.method)}`}
-                      className={`${inputClass} flex-1`}
+                      className={inputClass}
+                      style={{ width: '30%' }}
                     />
                   </>
                 )}
