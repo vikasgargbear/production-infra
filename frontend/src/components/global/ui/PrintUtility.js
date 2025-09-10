@@ -220,10 +220,10 @@ export const ThermalPrintTemplate = React.forwardRef(({
                 {item.free_quantity > 0 && `+${item.free_quantity}F`}
               </span>
               <span style={{ width: '15%', textAlign: 'right' }}>
-                {parseFloat(item.unit_price || 0).toFixed(2)}
+                {parseFloat(item.unit_price || item.rate || item.selling_price || 0).toFixed(2)}
               </span>
               <span style={{ width: '20%', textAlign: 'right' }}>
-                {parseFloat(item.total || item.line_total || (item.quantity * item.unit_price)).toFixed(2)}
+                {parseFloat(item.total || item.line_total || (item.quantity * (item.unit_price || item.rate || item.selling_price || 0))).toFixed(2)}
               </span>
             </div>
             {(item.discount_percent > 0 || item.gst_percent > 0) && (

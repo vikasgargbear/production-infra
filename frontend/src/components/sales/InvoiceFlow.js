@@ -1026,8 +1026,8 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
       ${item.batch_no ? `<div style="font-size: 9px;">Batch: ${item.batch_no}</div>` : ''}
       <div class="row">
         <span>Qty: ${item.quantity}${item.free_quantity > 0 ? `+${item.free_quantity}F` : ''}</span>
-        <span>Rate: ${parseFloat(item.unit_price || 0).toFixed(2)}</span>
-        <span>Amt: ${parseFloat(item.line_total || (item.quantity * item.unit_price)).toFixed(2)}</span>
+        <span>Rate: ${parseFloat(item.unit_price || item.rate || item.selling_price || 0).toFixed(2)}</span>
+        <span>Amt: ${parseFloat(item.line_total || item.total || (item.quantity * (item.unit_price || item.rate || item.selling_price || 0))).toFixed(2)}</span>
       </div>
       ${item.discount_percent > 0 ? `<div style="font-size: 9px;">Disc: ${item.discount_percent}% | GST: ${item.gst_percent || 0}%</div>` : ''}
     </div>
