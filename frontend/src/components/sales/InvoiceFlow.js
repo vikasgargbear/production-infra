@@ -1660,7 +1660,7 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
                     grandTotal: invoice.net_amount
                   }}
                   showTotals={false}
-                  title="Invoice Items"
+                  title=""
                 />
               </div>
             )}
