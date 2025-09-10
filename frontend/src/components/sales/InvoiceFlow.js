@@ -789,8 +789,7 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
         // Show success modal
         setShowSuccessModal(true);
         
-        // Also show success message as backup
-        toast.success(`Invoice ${invoiceNumber} created successfully!`);
+        // Success notification handled by GenericSuccessModal with auto-close
       } else {
         // If no response data, still show success
         const date = new Date();
@@ -2198,6 +2197,7 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
           documentType="invoice"
           customerName={createdInvoiceData.customerName}
           totalAmount={createdInvoiceData.totalAmount}
+          autoCloseDelay={5}
           documentData={{
             customerPhone: createdInvoiceData.customerPhone,
             customerEmail: createdInvoiceData.customerEmail,
