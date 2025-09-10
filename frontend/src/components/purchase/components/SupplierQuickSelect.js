@@ -24,6 +24,8 @@ const SupplierQuickSelect = ({ value, onChange }) => {
           const response = await suppliersApi.search({ limit: 10 });
           setSuppliers(response.data || []);
         } catch (error) {
+          // Silently handle error for recent suppliers
+          setSuppliers([]);
         } finally {
           setLoading(false);
         }
@@ -38,6 +40,8 @@ const SupplierQuickSelect = ({ value, onChange }) => {
         });
         setSuppliers(response.data || []);
       } catch (error) {
+        // Silently handle search error
+        setSuppliers([]);
       } finally {
         setLoading(false);
       }

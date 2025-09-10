@@ -218,12 +218,12 @@ const PurchaseItemEditModal = ({
                   Pack Size
                 </label>
                 <input
-                  type="number"
+                  type="text"
+                  inputMode="decimal"
                   value={editedItem.pack_size || ''}
-                  onChange={(e) => handleFieldChange('pack_size', e.target.value)}
+                  onChange={(e) => handleFieldChange('pack_size', e.target.value === '' ? '' : parseFloat(e.target.value) || 0)}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
                   placeholder="1"
-                  min="1"
                 />
               </div>
 
@@ -232,12 +232,12 @@ const PurchaseItemEditModal = ({
                   Units/Pack
                 </label>
                 <input
-                  type="number"
+                  type="text"
+                  inputMode="decimal"
                   value={editedItem.units_per_pack || ''}
-                  onChange={(e) => handleFieldChange('units_per_pack', e.target.value)}
+                  onChange={(e) => handleFieldChange('units_per_pack', e.target.value === '' ? '' : parseFloat(e.target.value) || 0)}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
                   placeholder="1"
-                  min="1"
                 />
               </div>
             </div>
@@ -252,12 +252,12 @@ const PurchaseItemEditModal = ({
                   Purchase Quantity
                 </label>
                 <input
-                  type="number"
+                  type="text"
+                  inputMode="decimal"
                   value={editedItem.quantity || ''}
-                  onChange={(e) => handleFieldChange('quantity', e.target.value)}
+                  onChange={(e) => handleFieldChange('quantity', e.target.value === '' ? '' : parseFloat(e.target.value) || 0)}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
                   placeholder="Enter quantity"
-                  min="1"
                 />
               </div>
 
@@ -267,12 +267,12 @@ const PurchaseItemEditModal = ({
                   Free Quantity
                 </label>
                 <input
-                  type="number"
+                  type="text"
+                  inputMode="decimal"
                   value={editedItem.free_quantity || ''}
-                  onChange={(e) => handleFieldChange('free_quantity', e.target.value)}
+                  onChange={(e) => handleFieldChange('free_quantity', e.target.value === '' ? '' : parseFloat(e.target.value) || 0)}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
                   placeholder="0"
-                  min="0"
                 />
               </div>
             </div>
@@ -293,13 +293,12 @@ const PurchaseItemEditModal = ({
                 <div className="relative">
                   <span className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-500">₹</span>
                   <input
-                    type="number"
+                    type="text"
+                    inputMode="decimal"
                     value={editedItem.mrp || ''}
-                    onChange={(e) => handleFieldChange('mrp', e.target.value)}
+                    onChange={(e) => handleFieldChange('mrp', e.target.value === '' ? '' : parseFloat(e.target.value) || 0)}
                     className="w-full pl-8 pr-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
                     placeholder="0.00"
-                    step="0.01"
-                    min="0"
                   />
                 </div>
               </div>
@@ -312,13 +311,12 @@ const PurchaseItemEditModal = ({
                 <div className="relative">
                   <span className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-500">₹</span>
                   <input
-                    type="number"
+                    type="text"
+                    inputMode="decimal"
                     value={editedItem.purchase_price || ''}
-                    onChange={(e) => handleFieldChange('purchase_price', e.target.value)}
+                    onChange={(e) => handleFieldChange('purchase_price', e.target.value === '' ? '' : parseFloat(e.target.value) || 0)}
                     className="w-full pl-8 pr-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
                     placeholder="0.00"
-                    step="0.01"
-                    min="0"
                   />
                 </div>
               </div>
@@ -331,13 +329,12 @@ const PurchaseItemEditModal = ({
                 <div className="relative">
                   <span className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-500">₹</span>
                   <input
-                    type="number"
+                    type="text"
+                    inputMode="decimal"
                     value={editedItem.selling_price || ''}
-                    onChange={(e) => handleFieldChange('selling_price', e.target.value)}
+                    onChange={(e) => handleFieldChange('selling_price', e.target.value === '' ? '' : parseFloat(e.target.value) || 0)}
                     className="w-full pl-8 pr-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
                     placeholder="0.00"
-                    step="0.01"
-                    min="0"
                   />
                 </div>
               </div>
@@ -373,14 +370,12 @@ const PurchaseItemEditModal = ({
                   Discount %
                 </label>
                 <input
-                  type="number"
+                  type="text"
+                  inputMode="decimal"
                   value={editedItem.discount_percent || ''}
-                  onChange={(e) => handleFieldChange('discount_percent', e.target.value)}
+                  onChange={(e) => handleFieldChange('discount_percent', e.target.value === '' ? '' : parseFloat(e.target.value) || 0)}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
                   placeholder="0"
-                  step="0.01"
-                  min="0"
-                  max="100"
                 />
               </div>
 
@@ -389,13 +384,12 @@ const PurchaseItemEditModal = ({
                   Scheme Discount ₹
                 </label>
                 <input
-                  type="number"
+                  type="text"
+                  inputMode="decimal"
                   value={editedItem.scheme_discount || ''}
-                  onChange={(e) => handleFieldChange('scheme_discount', e.target.value)}
+                  onChange={(e) => handleFieldChange('scheme_discount', e.target.value === '' ? '' : parseFloat(e.target.value) || 0)}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
                   placeholder="0.00"
-                  step="0.01"
-                  min="0"
                 />
               </div>
             </div>

@@ -1007,9 +1007,9 @@ const PurchaseListHistory: React.FC<PurchaseListHistoryProps> = ({ onClose }) =>
             {/* Bulk Actions */}
             <BulkActionBar
               selectedCount={selectedPurchases.length}
-              onMarkReceived={() => console.log('Mark as received')}
-              onMarkPaid={() => console.log('Mark as paid')}
-              onExport={() => console.log('Export selected')}
+              onMarkReceived={() => {/* TODO: Implement mark as received */}}
+              onMarkPaid={() => {/* TODO: Implement mark as paid */}}
+              onExport={() => {/* TODO: Implement export selected */}}
               onClear={() => setSelectedPurchases([])}
             />
 

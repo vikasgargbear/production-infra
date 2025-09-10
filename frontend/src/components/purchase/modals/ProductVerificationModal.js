@@ -455,13 +455,13 @@ const ProductVerificationModal = ({
                   Purchase Qty <span className="text-red-500">*</span>
                 </label>
                 <input
-                  type="number"
+                  type="text"
+                  inputMode="decimal"
                   value={productData.quantity}
                   onChange={(e) => setProductData(prev => ({ 
                     ...prev, 
-                    quantity: e.target.value 
+                    quantity: e.target.value === '' ? '' : parseFloat(e.target.value) || 0 
                   }))}
-                  min="0"
                   className="w-full px-3 py-2 border rounded-md focus:ring-2 focus:ring-indigo-500 bg-white font-semibold"
                 />
               </div>
@@ -470,13 +470,13 @@ const ProductVerificationModal = ({
                   Free Qty
                 </label>
                 <input
-                  type="number"
+                  type="text"
+                  inputMode="decimal"
                   value={productData.free_quantity}
                   onChange={(e) => setProductData(prev => ({ 
                     ...prev, 
-                    free_quantity: e.target.value 
+                    free_quantity: e.target.value === '' ? '' : parseFloat(e.target.value) || 0 
                   }))}
-                  min="0"
                   className="w-full px-3 py-2 border rounded-md focus:ring-2 focus:ring-indigo-500 bg-white"
                 />
               </div>
@@ -508,14 +508,13 @@ const ProductVerificationModal = ({
                 <div className="relative">
                   <span className="absolute left-2 top-1/2 transform -translate-y-1/2 text-gray-500">₹</span>
                   <input
-                    type="number"
+                    type="text"
+                    inputMode="decimal"
                     value={productData.cost_price}
                     onChange={(e) => setProductData(prev => ({ 
                       ...prev, 
-                      cost_price: e.target.value 
+                      cost_price: e.target.value === '' ? '' : parseFloat(e.target.value) || 0 
                     }))}
-                    min="0"
-                    step="0.01"
                     className="w-full pl-7 pr-2 py-2 border rounded-md focus:ring-2 focus:ring-indigo-500 bg-white font-semibold"
                   />
                 </div>
@@ -527,14 +526,13 @@ const ProductVerificationModal = ({
                 <div className="relative">
                   <span className="absolute left-2 top-1/2 transform -translate-y-1/2 text-gray-500">₹</span>
                   <input
-                    type="number"
+                    type="text"
+                    inputMode="decimal"
                     value={productData.mrp}
                     onChange={(e) => setProductData(prev => ({ 
                       ...prev, 
-                      mrp: e.target.value 
+                      mrp: e.target.value === '' ? '' : parseFloat(e.target.value) || 0 
                     }))}
-                    min="0"
-                    step="0.01"
                     className="w-full pl-7 pr-2 py-2 border rounded-md focus:ring-2 focus:ring-indigo-500 bg-white"
                   />
                 </div>
@@ -546,14 +544,13 @@ const ProductVerificationModal = ({
                 <div className="relative">
                   <span className="absolute left-2 top-1/2 transform -translate-y-1/2 text-gray-500">₹</span>
                   <input
-                    type="number"
+                    type="text"
+                    inputMode="decimal"
                     value={productData.selling_price}
                     onChange={(e) => setProductData(prev => ({ 
                       ...prev, 
-                      selling_price: e.target.value 
+                      selling_price: e.target.value === '' ? '' : parseFloat(e.target.value) || 0 
                     }))}
-                    min="0"
-                    step="0.01"
                     placeholder={isExtractMode ? "Enter price" : "Auto"}
                     className="w-full pl-7 pr-2 py-2 border rounded-md focus:ring-2 focus:ring-indigo-500 bg-white"
                   />
@@ -608,13 +605,13 @@ const ProductVerificationModal = ({
                   Discount %
                 </label>
                 <input
-                  type="number"
+                  type="text"
+                  inputMode="decimal"
                   value={productData.discount_percent}
                   onChange={(e) => setProductData(prev => ({ 
                     ...prev, 
-                    discount_percent: e.target.value 
+                    discount_percent: e.target.value === '' ? '' : parseFloat(e.target.value) || 0
                   }))}
-                  min="0"
                   max="100"
                   placeholder="0"
                   className="w-full px-3 py-2 border rounded-md focus:ring-2 focus:ring-indigo-500 bg-white"

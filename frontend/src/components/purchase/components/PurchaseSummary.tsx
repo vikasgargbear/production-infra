@@ -82,12 +82,11 @@ const PurchaseSummary: React.FC<PurchaseSummaryProps> = () => {
                 <div className="flex items-center">
                   <span className="text-gray-500 mr-1">₹</span>
                   <input
-                    type="number"
+                    type="text"
+                    inputMode="decimal"
                     value={row.value}
-                    onChange={(e) => handleDiscountChange(e.target.value)}
+                    onChange={(e) => handleDiscountChange(e.target.value === '' ? '' : parseFloat(e.target.value) || 0)}
                     className="w-24 text-right px-2 py-1 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500"
-                    min="0"
-                    step="0.01"
                   />
                 </div>
               ) : (

@@ -967,7 +967,7 @@ ${localStorage.getItem('company_name') || 'AASO Pharmaceuticals'}
                       value={purchaseOrder.buyer_drug_license_no}
                       onChange={(e) => setPurchaseOrder(prev => ({ ...prev, buyer_drug_license_no: e.target.value }))}
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                      placeholder="20B/21B-XXX"
+                      placeholder="Enter drug license number"
                     />
                   </div>
 
@@ -999,11 +999,10 @@ ${localStorage.getItem('company_name') || 'AASO Pharmaceuticals'}
                       Discount Amount
                     </label>
                     <input
-                      type="number"
+                      type="text"
+                      inputMode="decimal"
                       value={purchaseOrder.discount_amount}
-                      onChange={(e) => setPurchaseOrder(prev => ({ ...prev, discount_amount: e.target.value }))}
-                      min="0"
-                      step="0.01"
+                      onChange={(e) => setPurchaseOrder(prev => ({ ...prev, discount_amount: e.target.value === '' ? '' : parseFloat(e.target.value) || 0 }))}
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
                     />
                   </div>
@@ -1013,11 +1012,10 @@ ${localStorage.getItem('company_name') || 'AASO Pharmaceuticals'}
                       Freight Charges
                     </label>
                     <input
-                      type="number"
+                      type="text"
+                      inputMode="decimal"
                       value={purchaseOrder.freight_charges}
-                      onChange={(e) => setPurchaseOrder(prev => ({ ...prev, freight_charges: e.target.value }))}
-                      min="0"
-                      step="0.01"
+                      onChange={(e) => setPurchaseOrder(prev => ({ ...prev, freight_charges: e.target.value === '' ? '' : parseFloat(e.target.value) || 0 }))}
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
                     />
                   </div>
@@ -1027,11 +1025,10 @@ ${localStorage.getItem('company_name') || 'AASO Pharmaceuticals'}
                       Insurance Charges
                     </label>
                     <input
-                      type="number"
+                      type="text"
+                      inputMode="decimal"
                       value={purchaseOrder.insurance_charges}
-                      onChange={(e) => setPurchaseOrder(prev => ({ ...prev, insurance_charges: e.target.value }))}
-                      min="0"
-                      step="0.01"
+                      onChange={(e) => setPurchaseOrder(prev => ({ ...prev, insurance_charges: e.target.value === '' ? '' : parseFloat(e.target.value) || 0 }))}
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
                     />
                   </div>
@@ -1041,11 +1038,10 @@ ${localStorage.getItem('company_name') || 'AASO Pharmaceuticals'}
                       Other Charges
                     </label>
                     <input
-                      type="number"
+                      type="text"
+                      inputMode="decimal"
                       value={purchaseOrder.other_charges}
-                      onChange={(e) => setPurchaseOrder(prev => ({ ...prev, other_charges: e.target.value }))}
-                      min="0"
-                      step="0.01"
+                      onChange={(e) => setPurchaseOrder(prev => ({ ...prev, other_charges: e.target.value === '' ? '' : parseFloat(e.target.value) || 0 }))}
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
                     />
                   </div>

@@ -1,7 +1,7 @@
 import React, { useRef, useState, useEffect } from 'react';
 import { Upload, FileSpreadsheet, Download, AlertCircle } from 'lucide-react';
 import * as XLSX from 'xlsx';
-import { useToast } from '../global/ui';
+import { useToast } from '../global';
 
 /**
  * BulkUploadInline - Inline Excel upload that adds directly to purchase items

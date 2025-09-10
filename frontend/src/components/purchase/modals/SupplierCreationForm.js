@@ -559,9 +559,10 @@ const SupplierCreationForm = ({
                 Payment Terms (Days)
               </label>
               <input
-                type="number"
+                type="text"
+                inputMode="numeric"
                 value={formData.payment_terms}
-                onChange={(e) => handleInputChange('payment_terms', e.target.value)}
+                onChange={(e) => handleInputChange('payment_terms', e.target.value === '' ? '' : parseInt(e.target.value) || 0)}
                 className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500"
                 placeholder="30"
               />
