@@ -277,22 +277,22 @@ const AddressForm = ({
           )}
         </div>
         
-        {/* Display the billing address directly without redundant text */}
+        {/* Display the billing address exactly as billing address displays */}
         <div className="text-sm text-gray-600">
-          {billingAddressData?.address_line1 && (
-            <p className="text-xs">{billingAddressData.address_line1}</p>
-          )}
-          {billingAddressData?.address_line2 && (
-            <p className="text-xs">{billingAddressData.address_line2}</p>
-          )}
-          {(billingAddressData?.city || billingAddressData?.state || billingAddressData?.pincode) && (
-            <p className="text-xs">
-              {[billingAddressData.city, billingAddressData.state, billingAddressData.pincode].filter(Boolean).join(', ')}
+          <div className="space-y-1">
+            {billingAddressData?.address_line1 && <p>{billingAddressData.address_line1}</p>}
+            {billingAddressData?.address_line2 && <p>{billingAddressData.address_line2}</p>}
+            {billingAddressData?.landmark && <p className="text-xs text-gray-500">Near {billingAddressData.landmark}</p>}
+            <p>
+              {[billingAddressData?.city, billingAddressData?.state, billingAddressData?.pincode].filter(Boolean).join(', ')}
             </p>
-          )}
-          {billingAddressData?.mobile && (
-            <p className="text-xs">{billingAddressData.mobile}</p>
-          )}
+            {billingAddressData?.mobile && (
+              <p className="flex items-center gap-1 text-xs text-gray-700 font-medium">
+                <Phone className="w-3 h-3" />
+                {billingAddressData.mobile}
+              </p>
+            )}
+          </div>
         </div>
       </div>
     );
