@@ -326,41 +326,31 @@ const SplitPayment = ({
           )}
         </div>
       ) : (
-        // Split Payment Mode - Properly sized
+        // Split Payment Mode - Compact inline layout
         <div className="space-y-3">
-          <div className="bg-indigo-50 border border-indigo-200 rounded-lg p-3">
-            <div className="flex items-center justify-between mb-3">
-              <span className="text-sm font-medium text-indigo-900">Split Payment Methods</span>
-              <button
-                onClick={addSplitPayment}
-                disabled={readOnly || splitPayments.length >= 5}
-                className="text-xs bg-indigo-600 text-white px-3 py-1 rounded hover:bg-indigo-700 disabled:opacity-50"
-              >
-                + Add Method
-              </button>
-            </div>
-
-            {splitPayments.map((payment) => {
-              const Icon = getPaymentIcon(payment.method);
-              return (
-                <div key={payment.id} className="grid grid-cols-12 gap-2 mb-2 items-center">
-                  <div className="col-span-1">
-                    <Icon className="w-4 h-4 text-gray-500" />
-                  </div>
-                  <div className="col-span-3">
+          {/* Split payment rows */}
+          {splitPayments.map((payment, index) => {
+            const Icon = getPaymentIcon(payment.method);
+            const showReference = payment.method !== 'cash';
+            
+            return (
+              <div key={payment.id} className="flex items-center gap-3">
+                <Icon className="w-4 h-4 text-gray-500 flex-shrink-0" />
+                
+                {/* For cash - 50/50 split */}
+                {!showReference && (
+                  <>
                     <select
                       value={payment.method}
                       onChange={(e) => updateSplitPayment(payment.id, 'method', e.target.value)}
                       disabled={readOnly}
-                      className="w-full text-sm border border-gray-300 rounded-lg px-2 py-1.5"
+                      className={`${selectClass} flex-1`}
                     >
                       {paymentMethods.filter(m => m.value !== 'credit').map(method => (
                         <option key={method.value} value={method.value}>{method.label}</option>
                       ))}
                     </select>
-                  </div>
-                  <div className="col-span-3">
-                    <div className="flex items-center gap-1">
+                    <div className="flex items-center gap-2 flex-1">
                       <span className="text-gray-500 text-sm">₹</span>
                       <input
                         type="number"
@@ -368,50 +358,86 @@ const SplitPayment = ({
                         onChange={(e) => updateSplitPayment(payment.id, 'amount', e.target.value)}
                         disabled={readOnly}
                         placeholder="0.00"
-                        className="w-full text-sm border border-gray-300 rounded-lg px-2 py-1.5"
+                        className={`${inputClass} flex-1`}
                       />
                     </div>
-                  </div>
-                  {payment.method !== 'cash' ? (
-                    <div className="col-span-4">
+                  </>
+                )}
+                
+                {/* For other methods - 33/33/33 split */}
+                {showReference && (
+                  <>
+                    <select
+                      value={payment.method}
+                      onChange={(e) => updateSplitPayment(payment.id, 'method', e.target.value)}
+                      disabled={readOnly}
+                      className={selectClass}
+                      style={{ minWidth: '120px' }}
+                    >
+                      {paymentMethods.filter(m => m.value !== 'credit').map(method => (
+                        <option key={method.value} value={method.value}>{method.label}</option>
+                      ))}
+                    </select>
+                    <div className="flex items-center gap-2">
+                      <span className="text-gray-500 text-sm">₹</span>
                       <input
-                        type="text"
-                        value={payment.reference}
-                        onChange={(e) => updateSplitPayment(payment.id, 'reference', e.target.value)}
+                        type="number"
+                        value={payment.amount}
+                        onChange={(e) => updateSplitPayment(payment.id, 'amount', e.target.value)}
                         disabled={readOnly}
-                        placeholder={`${getReferenceLabel(payment.method)}`}
-                        className="w-full text-sm border border-gray-300 rounded-lg px-2 py-1.5"
+                        placeholder="0.00"
+                        className={inputClass}
+                        style={{ width: '100px' }}
                       />
                     </div>
-                  ) : (
-                    <div className="col-span-4"></div>
-                  )}
-                  <div className="col-span-1">
-                    {splitPayments.length > 2 && (
-                      <button
-                        onClick={() => removeSplitPayment(payment.id)}
-                        disabled={readOnly}
-                        className="text-red-500 hover:text-red-700"
-                      >
-                        <X className="w-4 h-4" />
-                      </button>
-                    )}
-                  </div>
-                </div>
-              );
-            })}
+                    <input
+                      type="text"
+                      value={payment.reference}
+                      onChange={(e) => updateSplitPayment(payment.id, 'reference', e.target.value)}
+                      disabled={readOnly}
+                      placeholder={`${getReferenceLabel(payment.method)}`}
+                      className={`${inputClass} flex-1`}
+                    />
+                  </>
+                )}
+                
+                {/* Remove button */}
+                {splitPayments.length > 2 && (
+                  <button
+                    onClick={() => removeSplitPayment(payment.id)}
+                    disabled={readOnly}
+                    className="text-red-500 hover:text-red-700 p-1"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                )}
+                
+                {/* Add button on first row */}
+                {index === 0 && splitPayments.length < 5 && (
+                  <button
+                    onClick={addSplitPayment}
+                    disabled={readOnly}
+                    className="text-xs bg-indigo-600 text-white px-3 py-2 rounded-lg hover:bg-indigo-700"
+                  >
+                    + Add
+                  </button>
+                )}
+              </div>
+            );
+          })}
 
-            {/* Split payment totals */}
-            <div className="text-sm text-gray-700 mt-3 pt-3 border-t flex items-center justify-between">
-              <span>Total: ₹{totalAmount.toFixed(2)}</span>
+          {/* Compact totals - only show if amounts don't match */}
+          {totalPaid !== totalAmount && (
+            <div className="text-sm bg-gray-50 rounded-lg px-3 py-2 flex items-center justify-between">
+              <span className="text-gray-600">Total: ₹{totalAmount.toFixed(2)}</span>
               <span className={totalPaid >= totalAmount ? 'text-green-600 font-medium' : 'text-gray-900'}>
                 Paid: ₹{totalPaid.toFixed(2)}
               </span>
               {remaining > 0 && (
-                <span className="text-amber-600">Credit: ₹{remaining.toFixed(2)}</span>
+                <span className="text-amber-600">Balance: ₹{remaining.toFixed(2)}</span>
               )}
             </div>
-          </div>
+          )}
 
           {/* Status Badge */}
           {isFullyPaid ? (
@@ -420,8 +446,8 @@ const SplitPayment = ({
               Paid in full
             </div>
           ) : totalPaid > 0 ? (
-            <div className="bg-amber-100 text-amber-800 px-3 py-2 rounded-lg text-sm">
-              Partial payment - ₹{remaining.toFixed(2)} credit
+            <div className="bg-amber-100 text-amber-800 px-3 py-2 rounded-lg text-sm font-medium">
+              Partial: ₹{totalPaid.toFixed(2)} paid, ₹{remaining.toFixed(2)} credit
             </div>
           ) : (
             <div className="bg-gray-100 text-gray-700 px-3 py-2 rounded-lg text-sm">

@@ -524,6 +524,7 @@ const ReturnsListHistory: React.FC<ReturnsListHistoryProps> = ({ onClose }) => {
               selectedCount={selectedReturns.length}
               onApprove={() => {/* TODO: Implement approve selected */}}
               onReject={() => {/* TODO: Implement reject selected */}}
+              onExport={() => {/* TODO: Implement export selected */}}
               onClear={() => setSelectedReturns([])}
             />
 

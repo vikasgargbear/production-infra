@@ -208,10 +208,10 @@ class OfflineDatabase {
     return db.getAll('sync_queue');
   }
 
-  async removeFromSyncQueue(id) {
-    const db = await this.init();
-    return db.delete('sync_queue', id);
-  }
+  // async removeFromSyncQueue(id) {
+  //   const db = await this.init();
+  //   return db.delete('sync_queue', id);
+  // }
 
   // Preallocated Numbers Management
   async addPreallocatedNumbers(type, numbers) {

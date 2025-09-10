@@ -393,7 +393,9 @@ const CompanySettings = ({ open = true, onClose }) => {
                     if (file) {
                       const reader = new FileReader();
                       reader.onloadend = () => {
-                        setSignatureUpload(reader.result);
+                        // TODO: Handle signature upload
+                        // setSignatureUpload(reader.result);
+                        console.log('Signature uploaded:', file.name);
                       };
                       reader.readAsDataURL(file);
                     }
