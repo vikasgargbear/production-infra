@@ -1780,31 +1780,32 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
             </div>
           )}
 
-          {/* Combined Payment & Bank Details - Space Optimized */}
-          <div className="mb-4">
-            <h3 className="text-xs font-semibold text-gray-600 uppercase tracking-wider mb-1.5 px-1">PAYMENT & BANK DETAILS</h3>
-            <div className="bg-white rounded-lg border border-gray-200 p-3 space-y-3">
-              {/* Bank Account Selection - Compact */}
-              <div>
-                <label className="block text-xs font-medium text-gray-600 mb-1">Receiving Bank Account</label>
-                <BankAccountSelector
-                  value={invoice.bank_account_id}
-                  onChange={(accountData) => {
-                    setInvoice(prev => ({
-                      ...prev,
-                      bank_account_id: accountData.bank_account_id,
-                      selected_bank_details: accountData // Store full details for display
-                    }));
-                  }}
-                  transactionType="receipt"
-                  autoSelectDefault={true}
-                  placeholder="Select account to receive payment"
-                />
+          {/* Ultra-Compact Payment & Bank Section */}
+          <div className="mb-3">
+            <h3 className="text-xs font-semibold text-gray-600 uppercase tracking-wider mb-1.5 px-1">PAYMENT & BANK</h3>
+            <div className="bg-white rounded-lg border border-gray-200 p-2.5">
+              {/* Bank and Payment on same row */}
+              <div className="flex items-center gap-3 mb-2">
+                <div className="flex-1">
+                  <BankAccountSelector
+                    value={invoice.bank_account_id}
+                    onChange={(accountData) => {
+                      setInvoice(prev => ({
+                        ...prev,
+                        bank_account_id: accountData.bank_account_id,
+                        selected_bank_details: accountData
+                      }));
+                    }}
+                    transactionType="receipt"
+                    autoSelectDefault={true}
+                    placeholder="Bank account"
+                    compact={true}
+                  />
+                </div>
               </div>
               
-              {/* Divider */}
-              <div className="border-t border-gray-200 pt-3">
-                <SplitPayment
+              {/* Payment component without wrapper */}
+              <SplitPayment
                 totalAmount={parseFloat(invoice.totals?.final_amount || invoice.net_amount) || 0}
                 payments={[
                   {
@@ -1814,14 +1815,12 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
                       parseFloat(invoice.totals?.final_amount || invoice.net_amount) || 0 : 0
                   }
                 ]}
-                onChange={(payments, paymentInfo) => {
-                  // Store all payments for split payment support
+                onChange={(payments) => {
                   setInvoice(prev => ({
                     ...prev,
-                    payments: payments, // Store all payment methods
-                    payment_mode: payments[0]?.method || 'cash', // Keep primary for backward compat
-                    payment_amount: payments.reduce((sum, p) => sum + (p.amount || 0), 0), // Total paid
-                    payment_status: paymentInfo?.status || 'Pending'
+                    payments: payments,
+                    payment_mode: payments[0]?.method || 'cash',
+                    payment_amount: payments.reduce((sum, p) => sum + (p.amount || 0), 0)
                   }));
                 }}
                 onPaymentStatusChange={(status) => {
@@ -1830,9 +1829,8 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
                     payment_status: status
                   }));
                 }}
-                allowSplit={true}  // Enable split payments
-                />
-              </div>
+                allowSplit={true}
+              />
             </div>
           </div>
 
