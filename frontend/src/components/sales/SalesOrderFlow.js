@@ -20,6 +20,7 @@ import {
   PrintUtility
 } from '../global';
 import CustomerCreation from '../global/ui/forms/CustomerCreation';
+import BankAccountSelector from '../common/BankAccountSelector';
 import { ordersApi, salesApi, api, apiClient, usersApi, authApi } from '../../services/api';
 import salesOrdersAPI from '../../services/api/modules/salesOrders.api';
 import { invoicesApi as invoicesApiModule } from '../../services/api/modules/invoices.api';
@@ -109,6 +110,7 @@ const SalesOrderFlow = ({ open = true, onClose }) => {
   const [employees, setEmployees] = useState([]);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [createdOrderData, setCreatedOrderData] = useState(null);
+  const [selectedBankAccount, setSelectedBankAccount] = useState(null);
 
   // Generate order number with consistent format
   const generateOrderNumber = () => {
@@ -1554,50 +1556,35 @@ Expected Delivery: ${order.expected_delivery_date}
                       </select>
                     </div>
                     
-                    {/* Bank Details Tile - Editable */}
+                    {/* Bank Details Tile - Using BankAccountSelector */}
                     <div className="bg-gray-50 border border-gray-200 rounded-lg p-3">
                       <p className="text-xs font-semibold text-gray-700 mb-2">Bank Information</p>
-                      <div className="space-y-1">
-                        <input
-                          type="text"
-                          value={order.bank_name || companyInfo.bank_name || 'State Bank of India'}
-                          onChange={(e) => setOrder(prev => ({ ...prev, bank_name: e.target.value }))}
-                          className="w-full px-2 py-1 text-xs text-gray-600 bg-transparent border-b border-gray-300 focus:border-blue-500 focus:outline-none"
-                          placeholder="Bank Name"
-                        />
-                        <div className="flex gap-2">
-                          <span className="text-xs text-gray-500">A/c:</span>
-                          <input
-                            type="text"
-                            value={order.account_number || companyInfo.account_number || '1234567890'}
-                            onChange={(e) => setOrder(prev => ({ ...prev, account_number: e.target.value }))}
-                            className="flex-1 px-1 text-xs text-gray-500 bg-transparent border-b border-gray-300 focus:border-blue-500 focus:outline-none"
-                            placeholder="Account Number"
-                          />
+                      <BankAccountSelector
+                        selectedAccount={selectedBankAccount}
+                        onSelect={(account) => {
+                          setSelectedBankAccount(account);
+                          if (account) {
+                            setOrder(prev => ({
+                              ...prev,
+                              bank_name: account.bank_name,
+                              account_number: account.account_number,
+                              ifsc_code: account.ifsc_code,
+                              upi_id: account.upi_id || ''
+                            }));
+                          }
+                        }}
+                        className="w-full"
+                        compact={true}
+                      />
+                      {selectedBankAccount && (
+                        <div className="mt-2 space-y-1 text-xs text-gray-600">
+                          <div>A/c: {selectedBankAccount.account_number}</div>
+                          <div>IFSC: {selectedBankAccount.ifsc_code}</div>
+                          {selectedBankAccount.upi_id && (
+                            <div>UPI: {selectedBankAccount.upi_id}</div>
+                          )}
                         </div>
-                        <div className="flex gap-2">
-                          <span className="text-xs text-gray-500">IFSC:</span>
-                          <input
-                            type="text"
-                            value={order.ifsc_code || companyInfo.ifsc_code || 'SBIN0001234'}
-                            onChange={(e) => setOrder(prev => ({ ...prev, ifsc_code: e.target.value }))}
-                            className="flex-1 px-1 text-xs text-gray-500 bg-transparent border-b border-gray-300 focus:border-blue-500 focus:outline-none"
-                            placeholder="IFSC Code"
-                          />
-                        </div>
-                        {(order.upi_id || companyInfo.upi_id) && (
-                          <div className="flex gap-2">
-                            <span className="text-xs text-gray-500">UPI:</span>
-                            <input
-                              type="text"
-                              value={order.upi_id || companyInfo.upi_id || ''}
-                              onChange={(e) => setOrder(prev => ({ ...prev, upi_id: e.target.value }))}
-                              className="flex-1 px-1 text-xs text-gray-500 bg-transparent border-b border-gray-300 focus:border-blue-500 focus:outline-none"
-                              placeholder="UPI ID"
-                            />
-                          </div>
-                        )}
-                      </div>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -1837,6 +1824,7 @@ Expected Delivery: ${order.expected_delivery_date}
           documentType="sales-order"
           customerName={createdOrderData?.customerName}
           totalAmount={createdOrderData?.totalAmount}
+          autoCloseDelay={5}
           additionalActions={[
             {
               label: "Create Another Order",
