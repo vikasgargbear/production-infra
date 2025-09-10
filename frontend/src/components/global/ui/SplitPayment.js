@@ -426,19 +426,6 @@ const SplitPayment = ({
             );
           })}
 
-          {/* Compact totals - only show if amounts don't match */}
-          {totalPaid !== totalAmount && (
-            <div className="text-sm bg-gray-50 rounded-lg px-3 py-2 flex items-center justify-between">
-              <span className="text-gray-600">Total: ₹{totalAmount.toFixed(2)}</span>
-              <span className={totalPaid >= totalAmount ? 'text-green-600 font-medium' : 'text-gray-900'}>
-                Paid: ₹{totalPaid.toFixed(2)}
-              </span>
-              {remaining > 0 && (
-                <span className="text-amber-600">Balance: ₹{remaining.toFixed(2)}</span>
-              )}
-            </div>
-          )}
-
           {/* Status Badge */}
           {isFullyPaid ? (
             <div className="bg-emerald-100 text-emerald-800 px-3 py-2 rounded-lg text-sm font-medium flex items-center gap-2">
