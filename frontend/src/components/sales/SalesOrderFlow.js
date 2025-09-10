@@ -1515,15 +1515,15 @@ Expected Delivery: ${order.expected_delivery_date}
                     {/* Bank Details Tile - Moved Up for better space utilization */}
                     <div className="bg-gray-50 border border-gray-200 rounded-lg p-3">
                       <p className="text-xs font-semibold text-gray-700 mb-2">Bank Information</p>
-                      {/* Print-friendly display */}
+                      {/* Print-friendly display - Use order state which has the bank info */}
                       <div className="hidden print:block text-xs text-gray-600 space-y-1">
-                        {selectedBankAccount ? (
+                        {order.bank_name ? (
                           <>
-                            <div>{selectedBankAccount.bank_name}</div>
-                            <div>A/c: {selectedBankAccount.account_number}</div>
-                            <div>IFSC: {selectedBankAccount.ifsc_code}</div>
-                            {selectedBankAccount.upi_id && (
-                              <div>UPI: {selectedBankAccount.upi_id}</div>
+                            <div>{order.bank_name}</div>
+                            <div>A/c: {order.account_number}</div>
+                            <div>IFSC: {order.ifsc_code}</div>
+                            {order.upi_id && (
+                              <div>UPI: {order.upi_id}</div>
                             )}
                           </>
                         ) : (
@@ -1534,7 +1534,7 @@ Expected Delivery: ${order.expected_delivery_date}
                       <div className="print:hidden">
                         <BankAccountSelector
                           selectedAccount={selectedBankAccount}
-                          onSelect={(account) => {
+                          onChange={(account) => {
                             setSelectedBankAccount(account);
                             if (account) {
                               setOrder(prev => ({
@@ -1546,6 +1546,7 @@ Expected Delivery: ${order.expected_delivery_date}
                               }));
                             }
                           }}
+                          autoSelectDefault={true}
                           className="w-full"
                           compact={true}
                         />
