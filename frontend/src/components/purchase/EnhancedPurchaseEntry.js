@@ -8,7 +8,6 @@ import {
   DocumentSummaryTop,
   SupplierSearch,
   ProductSearchSimple,
-  ItemsTable,
   SupplierCreationModal,
   ProductCreationModal,
   GenericSuccessModal,
@@ -22,7 +21,7 @@ import {
   SplitPayment
 } from '../global';
 import documentNumberService from '../../services/documentNumberService';
-import { PURCHASE_CONFIG } from '../../config/purchase.config';
+import { PURCHASE_CONFIG, formatCurrency } from '../../config/purchase.config';
 import PDFUploadModal from '../PDFUploadModal';
 import PDFUploadCard from '../global/ui/PDFUploadCard';
 import BulkUploadInline from './BulkUploadInline';
@@ -50,6 +49,7 @@ const EnhancedPurchaseEntry = ({ onClose, prefilledData = null }) => {
   const [extractedPDFData, setExtractedPDFData] = useState(null);
   const [showItemEditModal, setShowItemEditModal] = useState(false);
   const [newProductToAdd, setNewProductToAdd] = useState(null);
+  const [currentEditItem, setCurrentEditItem] = useState(null);
   const [createdPurchaseData, setCreatedPurchaseData] = useState(null);
   const [saving, setSaving] = useState(false);
   const [errors, setErrors] = useState({});
@@ -715,14 +715,110 @@ const EnhancedPurchaseEntry = ({ onClose, prefilledData = null }) => {
             <h3 className="text-sm font-semibold text-gray-700">PURCHASE ITEMS</h3>
             <span className="ml-auto text-sm text-gray-500">{purchase.items.length} items</span>
           </div>
-          <ItemsTable
-              items={purchase.items}
-              onUpdateItem={handleUpdateItem}
-              onRemoveItem={handleRemoveItem}
-              readOnly={false}
-            />
-            {/* Using global ItemsTable component */}
+          
+          {/* Enhanced Items Table with Edit */}
+          <div className="overflow-x-auto">
+            <table className="w-full border-collapse">
+              <thead>
+                <tr className="border-b-2 border-gray-200 bg-gray-50">
+                  <th className="text-left py-2 px-3 text-xs font-medium text-gray-700">Product</th>
+                  <th className="text-center py-2 px-2 text-xs font-medium text-gray-700">Batch</th>
+                  <th className="text-center py-2 px-2 text-xs font-medium text-gray-700">Expiry</th>
+                  <th className="text-center py-2 px-2 text-xs font-medium text-gray-700">Qty</th>
+                  <th className="text-center py-2 px-2 text-xs font-medium text-gray-700">Free</th>
+                  <th className="text-right py-2 px-2 text-xs font-medium text-gray-700">Cost</th>
+                  <th className="text-right py-2 px-2 text-xs font-medium text-gray-700">MRP</th>
+                  <th className="text-right py-2 px-2 text-xs font-medium text-gray-700">Rate</th>
+                  <th className="text-center py-2 px-2 text-xs font-medium text-gray-700">Disc%</th>
+                  <th className="text-center py-2 px-2 text-xs font-medium text-gray-700">Tax%</th>
+                  <th className="text-right py-2 px-2 text-xs font-medium text-gray-700">Amount</th>
+                  <th className="text-center py-2 px-2 text-xs font-medium text-gray-700">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {purchase.items.map((item, index) => {
+                  const quantity = parseFloat(item.quantity) || 0;
+                  const freeQty = parseFloat(item.free_quantity) || 0;
+                  const cost = parseFloat(item.purchase_price) || parseFloat(item.cost_price) || 0;
+                  const mrp = parseFloat(item.mrp) || 0;
+                  const sellingPrice = parseFloat(item.selling_price) || 0;
+                  const discountPercent = parseFloat(item.discount_percent) || 0;
+                  const taxPercent = parseFloat(item.tax_percent) || 0;
+                  
+                  // Calculate amounts
+                  const baseAmount = quantity * cost;
+                  const discountAmount = (baseAmount * discountPercent) / 100;
+                  const discountedAmount = baseAmount - discountAmount;
+                  const taxAmount = (discountedAmount * taxPercent) / 100;
+                  const totalAmount = discountedAmount + taxAmount;
+                  
+                  // Format expiry date if exists
+                  const expiryDisplay = (() => {
+                    if (!item.expiry_date) return '-';
+                    if (typeof item.expiry_date === 'string' && item.expiry_date.includes('/')) {
+                      return item.expiry_date;
+                    }
+                    try {
+                      const date = new Date(item.expiry_date);
+                      if (!isNaN(date.getTime())) {
+                        return `${(date.getMonth() + 1).toString().padStart(2, '0')}/${date.getFullYear()}`;
+                      }
+                    } catch (e) {}
+                    return item.expiry_date;
+                  })();
+                  
+                  return (
+                    <tr key={index} className="border-b border-gray-100 hover:bg-gray-50">
+                      <td className="py-2 px-3">
+                        <div>
+                          <p className="text-xs font-medium">{item.product_name}</p>
+                          {item.hsn_code && (
+                            <p className="text-[10px] text-gray-500">HSN: {item.hsn_code}</p>
+                          )}
+                        </div>
+                      </td>
+                      <td className="text-center py-2 px-2 text-xs">{item.batch_no || item.batch_number || '-'}</td>
+                      <td className="text-center py-2 px-2 text-xs">{expiryDisplay}</td>
+                      <td className="text-center py-2 px-2 text-xs font-medium">{quantity}</td>
+                      <td className="text-center py-2 px-2 text-xs">{freeQty > 0 ? freeQty : '-'}</td>
+                      <td className="text-right py-2 px-2 text-xs font-medium">{formatCurrency(cost)}</td>
+                      <td className="text-right py-2 px-2 text-xs">{formatCurrency(mrp)}</td>
+                      <td className="text-right py-2 px-2 text-xs">{formatCurrency(sellingPrice)}</td>
+                      <td className="text-center py-2 px-2 text-xs">{discountPercent}%</td>
+                      <td className="text-center py-2 px-2 text-xs">{taxPercent}%</td>
+                      <td className="text-right py-2 px-2 text-xs font-bold text-green-600">{formatCurrency(totalAmount)}</td>
+                      <td className="text-center py-2 px-2">
+                        <div className="flex items-center justify-center gap-1">
+                          <button
+                            onClick={() => {
+                              setCurrentEditItem({ ...item, index });
+                              setShowItemEditModal(true);
+                            }}
+                            className="p-1 text-blue-600 hover:bg-blue-50 rounded"
+                            title="Edit"
+                          >
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                            </svg>
+                          </button>
+                          <button
+                            onClick={() => handleRemoveItem(index)}
+                            className="p-1 text-red-600 hover:bg-red-50 rounded"
+                            title="Delete"
+                          >
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                            </svg>
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
           </div>
+        </div>
       )}
       {errors.items && (
         <p className="text-red-500 text-xs mt-1">{errors.items}</p>
@@ -1152,18 +1248,29 @@ const EnhancedPurchaseEntry = ({ onClose, prefilledData = null }) => {
         />
       )}
 
-      {/* Purchase Item Edit Modal - Opens when product is selected */}
+      {/* Purchase Item Edit Modal - Opens when product is selected or edit clicked */}
       {showItemEditModal && (
         <PurchaseItemEditModal
           isOpen={showItemEditModal}
           onClose={() => {
             setShowItemEditModal(false);
             setNewProductToAdd(null);
+            setCurrentEditItem(null);
           }}
-          item={newProductToAdd}
-          onSave={handleSaveItemFromModal}
-          title="Add Purchase Item - Enter Batch Details"
-          isNewItem={true}
+          item={currentEditItem || newProductToAdd}
+          onSave={(updatedItem) => {
+            if (currentEditItem && currentEditItem.index !== undefined) {
+              // Editing existing item
+              handleUpdateItem(currentEditItem.index, updatedItem);
+              setCurrentEditItem(null);
+            } else {
+              // Adding new item
+              handleSaveItemFromModal(updatedItem);
+            }
+            setShowItemEditModal(false);
+          }}
+          title={currentEditItem ? "Edit Purchase Item" : "Add Purchase Item - Enter Batch Details"}
+          isNewItem={!currentEditItem}
         />
       )}
     </>
