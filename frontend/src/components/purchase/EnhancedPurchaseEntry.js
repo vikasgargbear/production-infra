@@ -233,6 +233,8 @@ const EnhancedPurchaseEntry = ({ onClose, prefilledData = null }) => {
 
   // Handle saving item from modal
   const handleSaveItemFromModal = (editedItem) => {
+    console.log('Item from modal:', editedItem); // Debug
+    console.log('Expiry date:', editedItem.expiry_date); // Debug expiry
     setPurchase(prev => {
       const newItems = [...(prev.items || []), editedItem];
       return {
@@ -776,13 +778,76 @@ const EnhancedPurchaseEntry = ({ onClose, prefilledData = null }) => {
                         </div>
                       </td>
                       <td className="text-center py-2 px-2 text-xs">{expiryDisplay}</td>
-                      <td className="text-center py-2 px-2 text-xs font-medium">{quantity}</td>
-                      <td className="text-center py-2 px-2 text-xs">{freeQty > 0 ? freeQty : '-'}</td>
-                      <td className="text-right py-2 px-2 text-xs font-medium">{formatCurrency(cost)}</td>
-                      <td className="text-right py-2 px-2 text-xs">{formatCurrency(mrp)}</td>
-                      <td className="text-right py-2 px-2 text-xs">{formatCurrency(sellingPrice)}</td>
-                      <td className="text-center py-2 px-2 text-xs">{discountPercent}%</td>
-                      <td className="text-center py-2 px-2 text-xs">{taxPercent}%</td>
+                      <td className="text-center py-2 px-2">
+                        <input
+                          type="number"
+                          value={item.quantity || ''}
+                          onChange={(e) => handleUpdateItem(index, 'quantity', e.target.value)}
+                          className="w-16 px-1 py-1 text-xs text-center border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
+                          min="1"
+                        />
+                      </td>
+                      <td className="text-center py-2 px-2">
+                        <input
+                          type="number"
+                          value={item.free_quantity || ''}
+                          onChange={(e) => handleUpdateItem(index, 'free_quantity', e.target.value)}
+                          className="w-14 px-1 py-1 text-xs text-center border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
+                          min="0"
+                        />
+                      </td>
+                      <td className="text-right py-2 px-2">
+                        <input
+                          type="number"
+                          value={item.purchase_price || item.cost_price || ''}
+                          onChange={(e) => handleUpdateItem(index, 'purchase_price', e.target.value)}
+                          className="w-20 px-1 py-1 text-xs text-right border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
+                          min="0"
+                          step="0.01"
+                        />
+                      </td>
+                      <td className="text-right py-2 px-2">
+                        <input
+                          type="number"
+                          value={item.mrp || ''}
+                          onChange={(e) => handleUpdateItem(index, 'mrp', e.target.value)}
+                          className="w-20 px-1 py-1 text-xs text-right border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
+                          min="0"
+                          step="0.01"
+                        />
+                      </td>
+                      <td className="text-right py-2 px-2">
+                        <input
+                          type="number"
+                          value={item.selling_price || ''}
+                          onChange={(e) => handleUpdateItem(index, 'selling_price', e.target.value)}
+                          className="w-20 px-1 py-1 text-xs text-right border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
+                          min="0"
+                          step="0.01"
+                        />
+                      </td>
+                      <td className="text-center py-2 px-2">
+                        <input
+                          type="number"
+                          value={item.discount_percent || ''}
+                          onChange={(e) => handleUpdateItem(index, 'discount_percent', e.target.value)}
+                          className="w-14 px-1 py-1 text-xs text-center border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
+                          min="0"
+                          max="100"
+                          step="0.01"
+                        />
+                      </td>
+                      <td className="text-center py-2 px-2">
+                        <input
+                          type="number"
+                          value={item.tax_percent || ''}
+                          onChange={(e) => handleUpdateItem(index, 'tax_percent', e.target.value)}
+                          className="w-14 px-1 py-1 text-xs text-center border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
+                          min="0"
+                          max="100"
+                          step="0.01"
+                        />
+                      </td>
                       <td className="text-right py-2 px-2 text-xs font-bold text-green-600">{formatCurrency(totalAmount)}</td>
                       <td className="text-center py-2 px-2">
                         <div className="flex items-center justify-center gap-1">
