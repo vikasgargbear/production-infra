@@ -727,67 +727,74 @@ const EnhancedPurchaseEntry = ({ onClose, prefilledData = null }) => {
               discount: item.discount_percent || 0,
               tax: item.tax_percent || 0,
               gst_percent: item.tax_percent || 0,
-              free: item.free_quantity || 0
+              free: item.free_quantity || 0,
+              // Add expiry to product name for display
+              product_name: item.product_name + (item.expiry_date ? ` (Exp: ${
+                typeof item.expiry_date === 'string' && item.expiry_date.includes('/') 
+                  ? item.expiry_date 
+                  : (() => {
+                    try {
+                      const date = new Date(item.expiry_date);
+                      if (!isNaN(date.getTime())) {
+                        return `${(date.getMonth() + 1).toString().padStart(2, '0')}/${date.getFullYear()}`;
+                      }
+                    } catch (e) {}
+                    return item.expiry_date;
+                  })()
+              })` : '')
             }))}
-            onUpdateItem={handleUpdateItem}
+            onUpdateItem={(index, field, value) => {
+              // Map the field names back when updating
+              const mappedField = field === 'discount' ? 'discount_percent' : 
+                                 field === 'tax' ? 'tax_percent' :
+                                 field === 'gst_percent' ? 'tax_percent' :
+                                 field === 'free' ? 'free_quantity' :
+                                 field === 'rate' ? 'purchase_price' : field;
+              handleUpdateItem(index, mappedField, value);
+            }}
             onRemoveItem={handleRemoveItem}
             readOnly={false}
-            showActions={true}
-            columns={['product', 'expiry', 'quantity', 'free', 'cost', 'mrp', 'selling', 'discount', 'tax', 'total', 'actions']}
+            showActions={false}
+            columns={['product', 'quantity', 'free', 'mrp', 'rate', 'discount', 'tax', 'total']}
             customColumns={{
-              expiry: {
-                label: 'Expiry',
-                align: 'center',
-                render: (item) => {
-                  if (!item.expiry_date) return '-';
-                  if (typeof item.expiry_date === 'string' && item.expiry_date.includes('/')) {
-                    return item.expiry_date;
-                  }
-                  try {
-                    const date = new Date(item.expiry_date);
-                    if (!isNaN(date.getTime())) {
-                      return `${(date.getMonth() + 1).toString().padStart(2, '0')}/${date.getFullYear()}`;
-                    }
-                  } catch (e) {}
-                  return item.expiry_date;
-                }
-              },
-              cost: {
-                label: 'Cost',
-                align: 'right',
-                render: (item) => formatCurrency(parseFloat(item.purchase_price) || parseFloat(item.cost_price) || 0)
-              },
-              selling: {
-                label: 'S.Price',
-                align: 'right',
-                render: (item) => formatCurrency(parseFloat(item.selling_price) || 0)
-              },
-              actions: {
-                label: 'Actions',
-                align: 'center',
+              product: {
+                label: 'Product',
+                align: 'left',
                 render: (item, index) => (
-                  <div className="flex items-center justify-center gap-1">
-                    <button
-                      onClick={() => {
-                        setCurrentEditItem({ ...item, index });
-                        setShowItemEditModal(true);
-                      }}
-                      className="p-1 text-blue-600 hover:bg-blue-50 rounded"
-                      title="Edit"
-                    >
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                      </svg>
-                    </button>
-                    <button
-                      onClick={() => handleRemoveItem(index)}
-                      className="p-1 text-red-600 hover:bg-red-50 rounded"
-                      title="Delete"
-                    >
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                      </svg>
-                    </button>
+                  <div className="flex items-center justify-between">
+                    <div className="flex-1">
+                      <p className="font-medium text-gray-900">
+                        {item.product_name || '-'}
+                      </p>
+                      {item.hsn_code && (
+                        <p className="text-xs text-gray-500 mt-0.5">
+                          HSN: {item.hsn_code}
+                        </p>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-1 ml-2">
+                      <button
+                        onClick={() => {
+                          setCurrentEditItem({ ...item, index });
+                          setShowItemEditModal(true);
+                        }}
+                        className="p-1 text-blue-600 hover:bg-blue-50 rounded"
+                        title="Edit"
+                      >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                        </svg>
+                      </button>
+                      <button
+                        onClick={() => handleRemoveItem(index)}
+                        className="p-1 text-red-600 hover:bg-red-50 rounded"
+                        title="Delete"
+                      >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                        </svg>
+                      </button>
+                    </div>
                   </div>
                 )
               }
