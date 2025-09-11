@@ -233,7 +233,6 @@ const EnhancedPurchaseEntry = ({ onClose, prefilledData = null }) => {
 
   // Handle saving item from modal
   const handleSaveItemFromModal = (editedItem) => {
-    
     setPurchase(prev => {
       const newItems = [...(prev.items || []), editedItem];
       return {
@@ -722,7 +721,6 @@ const EnhancedPurchaseEntry = ({ onClose, prefilledData = null }) => {
               <thead>
                 <tr className="border-b-2 border-gray-200 bg-gray-50">
                   <th className="text-left py-2 px-3 text-xs font-medium text-gray-700">Product</th>
-                  <th className="text-center py-2 px-2 text-xs font-medium text-gray-700">Batch</th>
                   <th className="text-center py-2 px-2 text-xs font-medium text-gray-700">Expiry</th>
                   <th className="text-center py-2 px-2 text-xs font-medium text-gray-700">Qty</th>
                   <th className="text-center py-2 px-2 text-xs font-medium text-gray-700">Free</th>
@@ -777,7 +775,6 @@ const EnhancedPurchaseEntry = ({ onClose, prefilledData = null }) => {
                           )}
                         </div>
                       </td>
-                      <td className="text-center py-2 px-2 text-xs">{item.batch_number || item.batch_no || '-'}</td>
                       <td className="text-center py-2 px-2 text-xs">{expiryDisplay}</td>
                       <td className="text-center py-2 px-2 text-xs font-medium">{quantity}</td>
                       <td className="text-center py-2 px-2 text-xs">{freeQty > 0 ? freeQty : '-'}</td>
@@ -908,7 +905,6 @@ const EnhancedPurchaseEntry = ({ onClose, prefilledData = null }) => {
             <thead>
               <tr className="border-b-2 border-gray-200 bg-gray-50">
                 <th className="text-left py-2 px-2 text-xs font-medium text-gray-700">Item</th>
-                <th className="text-center py-2 px-2 text-xs font-medium text-gray-700">Batch</th>
                 <th className="text-center py-2 px-2 text-xs font-medium text-gray-700">Expiry</th>
                 <th className="text-center py-2 px-2 text-xs font-medium text-gray-700">Qty</th>
                 <th className="text-center py-2 px-2 text-xs font-medium text-gray-700">Free</th>
@@ -970,7 +966,6 @@ const EnhancedPurchaseEntry = ({ onClose, prefilledData = null }) => {
                         )}
                       </div>
                     </td>
-                    <td className="text-center py-2 px-2 text-xs text-gray-600">{item.batch_number || item.batch_no || item.batch || '-'}</td>
                     <td className="text-center py-2 px-2 text-xs text-gray-600">{expiryDisplay}</td>
                     <td className="text-center py-2 px-2 text-xs font-medium">{quantity}</td>
                     <td className="text-center py-2 px-2 text-xs text-gray-600">{freeQty > 0 ? freeQty : '-'}</td>
