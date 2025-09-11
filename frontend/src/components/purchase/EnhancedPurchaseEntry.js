@@ -717,17 +717,27 @@ const EnhancedPurchaseEntry = ({ onClose, prefilledData = null }) => {
             <span className="ml-auto text-sm text-gray-500">{purchase.items.length} items</span>
           </div>
           
-          {/* Using Global ItemsTable with custom actions */}
+          {/* Using Global ItemsTable with mapped fields for purchase */}
           <ItemsTable
-            items={purchase.items}
+            items={purchase.items.map(item => ({
+              ...item,
+              // Map purchase fields to what ItemsTable expects
+              rate: item.purchase_price || item.cost_price || 0,
+              sale_price: item.selling_price || 0,
+              discount: item.discount_percent || 0,
+              tax: item.tax_percent || 0,
+              gst_percent: item.tax_percent || 0,
+              free: item.free_quantity || 0
+            }))}
             onUpdateItem={handleUpdateItem}
             onRemoveItem={handleRemoveItem}
             readOnly={false}
             showActions={true}
-            columns={['product', 'expiry', 'quantity', 'free', 'cost', 'mrp', 'rate', 'discount', 'tax', 'total']}
+            columns={['product', 'expiry', 'quantity', 'free', 'cost', 'mrp', 'selling', 'discount', 'tax', 'total', 'actions']}
             customColumns={{
               expiry: {
-                header: 'Expiry',
+                label: 'Expiry',
+                align: 'center',
                 render: (item) => {
                   if (!item.expiry_date) return '-';
                   if (typeof item.expiry_date === 'string' && item.expiry_date.includes('/')) {
@@ -743,15 +753,18 @@ const EnhancedPurchaseEntry = ({ onClose, prefilledData = null }) => {
                 }
               },
               cost: {
-                header: 'Cost',
+                label: 'Cost',
+                align: 'right',
                 render: (item) => formatCurrency(parseFloat(item.purchase_price) || parseFloat(item.cost_price) || 0)
               },
-              rate: {
-                header: 'S.Price',
+              selling: {
+                label: 'S.Price',
+                align: 'right',
                 render: (item) => formatCurrency(parseFloat(item.selling_price) || 0)
               },
               actions: {
-                header: 'Actions',
+                label: 'Actions',
+                align: 'center',
                 render: (item, index) => (
                   <div className="flex items-center justify-center gap-1">
                     <button
