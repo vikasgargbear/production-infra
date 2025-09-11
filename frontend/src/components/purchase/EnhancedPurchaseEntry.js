@@ -734,7 +734,7 @@ const EnhancedPurchaseEntry = ({ onClose, prefilledData = null }) => {
   const reviewContent = (
     <>
       {/* Clean Purchase Preview - Matching Sales Order Style */}
-      <div id="purchase-print-area" className="bg-white rounded-lg shadow-sm border border-green-200 p-8">
+      <div id="purchase-print-area" className="bg-white rounded-lg shadow-sm border border-green-200 p-6">
         {/* Compact Header Section */}
         <div className="mb-4 pb-3 border-b-2 border-green-300">
           <div className="flex justify-between items-start">
@@ -760,8 +760,8 @@ const EnhancedPurchaseEntry = ({ onClose, prefilledData = null }) => {
           </div>
         </div>
 
-        {/* Split Payment Component - Moved to Top */}
-        <div className="mb-6">
+        {/* Payment Information - Properly Contained */}
+        <div className="mb-6 bg-gray-50 px-4 py-3 rounded-lg border border-gray-200">
           <SplitPayment
             totalAmount={purchase.final_amount || 0}
             payments={purchase.payment_methods?.length > 0 ? purchase.payment_methods : [{ id: '1', method: 'cash', amount: purchase.final_amount || 0 }]}
