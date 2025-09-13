@@ -755,15 +755,28 @@ const EnhancedPurchaseEntry = ({ onClose, prefilledData = null }) => {
                   // Format expiry date if exists
                   const expiryDisplay = (() => {
                     if (!item.expiry_date) return '-';
+                    
+                    // Handle YYYY-MM format from MonthYearPicker
+                    if (typeof item.expiry_date === 'string' && item.expiry_date.includes('-')) {
+                      const parts = item.expiry_date.split('-');
+                      if (parts.length === 2) {
+                        return `${parts[1]}/${parts[0]}`; // Convert YYYY-MM to MM/YYYY
+                      }
+                    }
+                    
+                    // Handle MM/YYYY format
                     if (typeof item.expiry_date === 'string' && item.expiry_date.includes('/')) {
                       return item.expiry_date;
                     }
+                    
+                    // Try to parse as date
                     try {
                       const date = new Date(item.expiry_date);
                       if (!isNaN(date.getTime())) {
                         return `${(date.getMonth() + 1).toString().padStart(2, '0')}/${date.getFullYear()}`;
                       }
                     } catch (e) {}
+                    
                     return item.expiry_date || '-';
                   })();
                   
@@ -1003,22 +1016,28 @@ const EnhancedPurchaseEntry = ({ onClose, prefilledData = null }) => {
                 const expiryDisplay = (() => {
                   if (!item.expiry_date) return '-';
                   
-                  // If it's already in MM/YYYY format, just return it
+                  // Handle YYYY-MM format from MonthYearPicker
+                  if (typeof item.expiry_date === 'string' && item.expiry_date.includes('-')) {
+                    const parts = item.expiry_date.split('-');
+                    if (parts.length === 2) {
+                      return `${parts[1]}/${parts[0]}`; // Convert YYYY-MM to MM/YYYY
+                    }
+                  }
+                  
+                  // Handle MM/YYYY format
                   if (typeof item.expiry_date === 'string' && item.expiry_date.includes('/')) {
                     return item.expiry_date;
                   }
                   
-                  // If it's a Date object or date string, format it
+                  // Try to parse as date
                   try {
                     const date = new Date(item.expiry_date);
                     if (!isNaN(date.getTime())) {
                       return `${(date.getMonth() + 1).toString().padStart(2, '0')}/${date.getFullYear()}`;
                     }
-                  } catch (e) {
-                    // Fall back to the raw value if parsing fails
-                  }
+                  } catch (e) {}
                   
-                  return item.expiry_date;
+                  return item.expiry_date || '-';
                 })();
                 
                 return (

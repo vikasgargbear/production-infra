@@ -166,8 +166,8 @@ const PurchaseItemEditModal = ({
                   Mfg Date
                 </label>
                 <MonthYearPicker
-                  selectedDate={editedItem.manufacturing_date}
-                  onDateChange={(date) => handleFieldChange('manufacturing_date', date)}
+                  value={editedItem.manufacturing_date}
+                  onChange={(date) => handleFieldChange('manufacturing_date', date)}
                   maxDate={new Date()}
                   className="w-full"
                   placeholder="MM/YYYY"
@@ -181,8 +181,8 @@ const PurchaseItemEditModal = ({
                   Expiry Date
                 </label>
                 <MonthYearPicker
-                  selectedDate={editedItem.expiry_date}
-                  onDateChange={(date) => handleFieldChange('expiry_date', date)}
+                  value={editedItem.expiry_date}
+                  onChange={(date) => handleFieldChange('expiry_date', date)}
                   minDate={new Date()}
                   className="w-full"
                   placeholder="MM/YYYY"
