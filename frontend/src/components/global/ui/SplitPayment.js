@@ -226,16 +226,16 @@ const SplitPayment = ({
           ) : (
             // Regular Payment - Consistent 35/35/30 layout for all methods
             <div className="space-y-3">
-              {/* All payments use 35/35/30 split layout */}
+              {/* Equal width layout for better spacing */}
               {selectedMethod !== 'credit' && (
-                <div className="grid grid-cols-12 gap-3">
-                  {/* Payment method - 35% (4 columns) */}
-                  <div className="col-span-4">
+                <div className="grid grid-cols-3 gap-3">
+                  {/* Payment method */}
+                  <div>
                     <select
                       value={selectedMethod}
                       onChange={handleMethodChange}
                       disabled={readOnly}
-                      className={selectClass}
+                      className={`${selectClass} w-full`}
                     >
                       {paymentMethods.map(method => (
                         <option key={method.value} value={method.value}>
@@ -245,8 +245,8 @@ const SplitPayment = ({
                     </select>
                   </div>
                   
-                  {/* Amount - 35% (4 columns) */}
-                  <div className="col-span-4 flex items-center gap-2">
+                  {/* Amount */}
+                  <div className="flex items-center gap-2">
                     <span className="text-gray-500 text-sm">₹</span>
                     <input
                       type="text"
@@ -268,14 +268,14 @@ const SplitPayment = ({
                     )}
                   </div>
                   
-                  {/* Reference - 30% (4 columns) */}
-                  <div className="col-span-4">
+                  {/* Reference */}
+                  <div>
                     <input
                       type="text"
                       value={reference}
                       onChange={(e) => setReference(e.target.value)}
                       disabled={readOnly}
-                      className={inputClass}
+                      className={`${inputClass} w-full`}
                       placeholder={`${getReferenceLabel(selectedMethod)}: ${getReferencePlaceholder(selectedMethod)}`}
                     />
                   </div>
@@ -322,15 +322,15 @@ const SplitPayment = ({
               <div key={payment.id} className="flex items-center gap-3">
                 <Icon className="w-4 h-4 text-gray-500 flex-shrink-0" />
                 
-                {/* Consistent 35/35/30 layout for all methods */}
-                <div className="grid grid-cols-12 gap-3 flex-1">
-                  {/* Payment method - 35% (4 columns) */}
-                  <div className="col-span-4">
+                {/* Equal width layout for split payments */}
+                <div className="grid grid-cols-3 gap-3 flex-1">
+                  {/* Payment method */}
+                  <div>
                     <select
                       value={payment.method}
                       onChange={(e) => updateSplitPayment(payment.id, 'method', e.target.value)}
                       disabled={readOnly}
-                      className={selectClass}
+                      className={`${selectClass} w-full`}
                     >
                       {paymentMethods.filter(m => m.value !== 'credit').map(method => (
                         <option key={method.value} value={method.value}>{method.label}</option>
@@ -338,8 +338,8 @@ const SplitPayment = ({
                     </select>
                   </div>
                   
-                  {/* Amount - 35% (4 columns) */}
-                  <div className="col-span-4 flex items-center gap-2">
+                  {/* Amount */}
+                  <div className="flex items-center gap-2">
                     <span className="text-gray-500 text-sm">₹</span>
                     <input
                       type="text"
@@ -352,15 +352,15 @@ const SplitPayment = ({
                     />
                   </div>
                   
-                  {/* Reference - 30% (4 columns) */}
-                  <div className="col-span-4">
+                  {/* Reference */}
+                  <div>
                     <input
                       type="text"
                       value={payment.reference}
                       onChange={(e) => updateSplitPayment(payment.id, 'reference', e.target.value)}
                       disabled={readOnly}
                       placeholder={`${getReferenceLabel(payment.method)}`}
-                      className={inputClass}
+                      className={`${inputClass} w-full`}
                     />
                   </div>
                 </div>
