@@ -393,6 +393,11 @@ const StockMovement = ({ open = true, onClose }) => {
       render: (value) => formatCurrency(value),
     },
     {
+      header: 'Description',
+      key: 'reason',
+      render: (value) => value || '-',
+    },
+    {
       header: 'Reference',
       key: 'reference_no',
       render: (value) => value || '-',
