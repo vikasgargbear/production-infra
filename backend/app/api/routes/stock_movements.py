@@ -56,7 +56,6 @@ def get_inventory_movements(
                 fl.location_name as from_location_name,
                 im.to_location_id,
                 tl.location_name as to_location_name,
-                im.narration,
                 im.created_at,
                 im.created_by,
                 u.username as created_by_name
@@ -168,7 +167,6 @@ def get_inventory_movements(
                 "from_location_name": movement.from_location_name,
                 "to_location_id": movement.to_location_id,
                 "to_location_name": movement.to_location_name,
-                "narration": movement.narration,
                 "created_at": movement.created_at.isoformat() if movement.created_at else None,
                 "created_by": movement.created_by,
                 "created_by_name": movement.created_by_name,
