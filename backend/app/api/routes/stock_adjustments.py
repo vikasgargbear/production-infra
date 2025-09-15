@@ -104,10 +104,11 @@ def create_stock_adjustment(adjustment_data: dict, db: Session = Depends(get_db)
     Create a stock adjustment using inventory movements
     """
     try:
-        # Validate batch exists
+        # Validate batch exists and get cost info
         batch = db.execute(
             text("""
-                SELECT b.*, p.product_name 
+                SELECT b.*, p.product_name,
+                    COALESCE(b.cost_per_unit, 0) as unit_cost
                 FROM inventory.batches b
                 JOIN inventory.products p ON b.product_id = p.product_id
                 WHERE b.batch_id = :batch_id
@@ -142,11 +143,13 @@ def create_stock_adjustment(adjustment_data: dict, db: Session = Depends(get_db)
                 INSERT INTO inventory.inventory_movements (
                     org_id, movement_date, movement_type, movement_direction,
                     product_id, batch_id, quantity, location_id,
+                    unit_cost, total_cost,
                     reference_type, reference_number,
                     reason, created_by
                 ) VALUES (
                     :org_id, :movement_date, :movement_type, :movement_direction,
                     :product_id, :batch_id, :quantity, :location_id,
+                    :unit_cost, :total_cost,
                     'adjustment', :reference_number,
                     :reason, :created_by
                 ) RETURNING movement_id
@@ -159,6 +162,8 @@ def create_stock_adjustment(adjustment_data: dict, db: Session = Depends(get_db)
                 "product_id": batch.product_id,
                 "batch_id": adjustment_data.get("batch_id"),
                 "quantity": abs(quantity_adjusted),
+                "unit_cost": float(batch.unit_cost) if batch.unit_cost else 0,
+                "total_cost": abs(quantity_adjusted) * float(batch.unit_cost) if batch.unit_cost else 0,
                 "location_id": adjustment_data.get("location_id") or get_default_branch_id(db, org_id),
                 "reference_number": adjustment_data.get("reference_number", f"ADJ-{datetime.now().strftime('%Y%m%d%H%M')}"),
                 "reason": adjustment_data.get("reason"),
