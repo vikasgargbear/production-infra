@@ -130,7 +130,7 @@ export const API_CONFIG = {
     // Stock Management
     STOCK: {
       BASE: '/inventory',
-      ADJUSTMENTS: '/stock-adjustments',
+      ADJUSTMENTS: '/stock-adjustments/',
       MOVEMENTS: '/stock-movements/',
       CURRENT: '/inventory/current',
       BATCHES: '/inventory/batches',
