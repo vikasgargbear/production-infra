@@ -44,9 +44,18 @@ const BatchTracking = ({ open = true, onClose }) => {
     
     try {
       const response = await batchesApi.getAll();
-      
-      if (response?.data && Array.isArray(response.data)) {
-        const batchesData = response.data;
+
+      // Handle both array and object with batches property
+      let batchesData = [];
+      if (response?.data) {
+        if (Array.isArray(response.data)) {
+          batchesData = response.data;
+        } else if (response.data.batches && Array.isArray(response.data.batches)) {
+          batchesData = response.data.batches;
+        }
+      }
+
+      if (batchesData.length > 0) {
         setBatches(batchesData);
         
         // Store data offline for future use
