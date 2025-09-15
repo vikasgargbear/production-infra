@@ -11,7 +11,7 @@ from datetime import date, datetime
 from decimal import Decimal
 
 from ...core.database import get_db
-from ...core.auth_utils import get_org_id_from_header, get_current_user_id
+from ...core.auth_utils import get_org_id_from_header, get_user_context_from_token
 from ...utils.branch_utils import get_default_branch_id
 
 logger = logging.getLogger(__name__)
@@ -98,7 +98,8 @@ def get_stock_adjustments(
 
 @router.post("/")
 def create_stock_adjustment(adjustment_data: dict, db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)):
+    org_id: str = Depends(get_org_id_from_header),
+    user_context: dict = Depends(get_user_context_from_token)):
     """
     Create a stock adjustment using inventory movements
     """
@@ -161,7 +162,7 @@ def create_stock_adjustment(adjustment_data: dict, db: Session = Depends(get_db)
                 "location_id": adjustment_data.get("location_id") or get_default_branch_id(db, org_id),
                 "reference_number": adjustment_data.get("reference_number", f"ADJ-{datetime.now().strftime('%Y%m%d%H%M')}"),
                 "reason": adjustment_data.get("reason"),
-                "created_by": get_current_user_id()
+                "created_by": user_context.get("user_id", 1)
             }
         ).scalar()
         
@@ -199,7 +200,8 @@ def create_stock_adjustment(adjustment_data: dict, db: Session = Depends(get_db)
 
 @router.post("/physical-count")
 def process_physical_count(count_data: dict, db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)):
+    org_id: str = Depends(get_org_id_from_header),
+    user_context: dict = Depends(get_user_context_from_token)):
     """
     Process physical inventory count
     Creates stock adjustments for differences
@@ -250,7 +252,7 @@ def process_physical_count(count_data: dict, db: Session = Depends(get_db),
                         "location_id": 1,  # Default location
                         "reference_number": count_data.get("count_reference", f"COUNT-{datetime.now().strftime('%Y%m%d')}"),
                         "reason": f"Physical count adjustment: System {system_quantity}, Counted {counted_quantity}",
-                        "created_by": 1  # Default user
+                        "created_by": user_context.get("user_id", 1)
                     }
                 ).scalar()
                 
@@ -290,7 +292,8 @@ def process_physical_count(count_data: dict, db: Session = Depends(get_db),
 
 @router.post("/expire-batches")
 def expire_batches(db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)):
+    org_id: str = Depends(get_org_id_from_header),
+    user_context: dict = Depends(get_user_context_from_token)):
     """
     Mark expired batches and create stock adjustments
     """
