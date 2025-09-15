@@ -92,8 +92,7 @@ def get_inventory_movements(
         if from_date:
             query += " AND im.movement_date >= :from_date::date"
             params["from_date"] = from_date
-        else:
-            query += " AND im.movement_date >= (CURRENT_DATE - INTERVAL '30 days')"
+        # Remove default 30-day filter to show all movements
 
         if to_date:
             query += " AND im.movement_date <= :to_date::date + INTERVAL '1 day'"
