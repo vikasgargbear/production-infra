@@ -131,7 +131,7 @@ export const API_CONFIG = {
     STOCK: {
       BASE: '/inventory',
       ADJUSTMENTS: '/stock-adjustments',
-      MOVEMENTS: '/stock-movements',
+      MOVEMENTS: '/stock-movements/',
       CURRENT: '/inventory/current',
       BATCHES: '/inventory/batches',
       EXPIRING: '/inventory/expiring',
