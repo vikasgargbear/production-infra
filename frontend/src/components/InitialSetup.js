@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Building, Mail, Lock, Phone, MapPin, FileText, Save, Loader2, CheckCircle } from 'lucide-react';
 import apiClient from '../services/api/apiClient';
-import authService from '../services/auth/authService';
+import simpleAuth from '../services/auth/simpleAuth';
 import { useToast } from './global/ui/feedback/Toast';
 
 const InitialSetup = ({ onSetupComplete }) => {
@@ -40,7 +40,9 @@ const InitialSetup = ({ onSetupComplete }) => {
       if (response.data.setup_complete) {
         // Store org_id if it exists
         if (response.data.organization?.org_id) {
-          authService.setOrgId(response.data.organization.org_id);
+          // Store org_id in localStorage
+          localStorage.setItem('pharma_org_id', response.data.organization.org_id);
+          localStorage.setItem('org_id', response.data.organization.org_id);
         }
         
         setSetupComplete(true);
@@ -71,7 +73,9 @@ const InitialSetup = ({ onSetupComplete }) => {
         // Store the organization ID for future API calls
         const orgId = response.data.organization?.org_id;
         if (orgId) {
-          authService.setOrgId(orgId);
+          // Store org_id in localStorage
+          localStorage.setItem('pharma_org_id', orgId);
+          localStorage.setItem('org_id', orgId);
         }
         
         toast.created('Organization setup complete!', 3000);

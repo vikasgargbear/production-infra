@@ -4,14 +4,11 @@
  */
 
 import apiClient from '../apiClient';
-import authService from '../../auth/authService';
 
-// Get org_id dynamically from auth service
+// Get org_id directly from localStorage
 const getOrgId = () => {
-  const orgId = authService.getOrgId();
-  if (!orgId) {
-  }
-  return orgId;
+  const orgId = localStorage.getItem('pharma_org_id') || localStorage.getItem('org_id');
+  return orgId || '8c89e4d1-0777-4a9a-9d29-dc5c654d8094'; // Fallback to test org
 };
 
 /**
