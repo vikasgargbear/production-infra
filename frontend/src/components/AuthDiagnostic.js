@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Shield, CheckCircle, XCircle, AlertCircle, RefreshCw } from 'lucide-react';
 import apiClient from '../services/api/apiClient';
-import authService from '../services/auth';
+import authService from '../services/auth/AuthService';
 
 const AuthDiagnostic = () => {
   const [diagnostics, setDiagnostics] = useState({

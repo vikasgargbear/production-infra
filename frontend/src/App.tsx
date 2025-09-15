@@ -27,7 +27,10 @@ import OfflineIndicator from './components/global/ui/OfflineIndicator';
 import * as serviceWorkerRegistration from './serviceWorkerRegistration';
 import { ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
-import simpleAuth from './services/auth/simpleAuth';
+// @ts-ignore - JavaScript module
+import authService from './services/auth/AuthService';
+// @ts-ignore - JavaScript module
+import './setupAuth';
 // import ReceivablesCollectionCenter from './components/receivables/ReceivablesCollectionCenter';
 
 // Lazy load components for better performance and code splitting
@@ -135,10 +138,9 @@ const CompliancePlaceholder = React.memo(() => (
 
 function App(): JSX.Element {
   const [activeTab, setActiveTab] = useState<TabName>('home');
-  // Simple auth bypass for testing
+  // Check authentication status
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {
-    simpleAuth.setupTestAuth(); // Always set up test auth
-    return true; // Always authenticated for testing
+    return authService.isAuthenticated();
   });
   const [setupComplete, setSetupComplete] = useState<boolean | null>(null);
   const [isCheckingSetup, setIsCheckingSetup] = useState<boolean>(true);
@@ -174,10 +176,18 @@ function App(): JSX.Element {
     }
   };
 
-  // Initialize OrgIdManager on app load
+  // Initialize Authentication on app load
   useEffect(() => {
+    // Auto-login if credentials are available
+    if (!isAuthenticated) {
+      authService.autoLogin().then(result => {
+        if (result.success) {
+          setIsAuthenticated(true);
+        }
+      });
+    }
+
     // OrgIdManager handles org_id initialization automatically
-    // Just log the current state for debugging
     import('./services/OrgIdManager').then(module => {
       const manager = module.default;
     });

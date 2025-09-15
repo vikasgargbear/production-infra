@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Building, Mail, Lock, Phone, MapPin, FileText, Save, Loader2, CheckCircle } from 'lucide-react';
 import apiClient from '../services/api/apiClient';
-import simpleAuth from '../services/auth/simpleAuth';
+import authService from '../services/auth/AuthService';
 import { useToast } from './global/ui/feedback/Toast';
 
 const InitialSetup = ({ onSetupComplete }) => {

@@ -101,7 +101,7 @@ const UserManagement = ({ open, onClose }) => {
         console.error('Token parsing error:', e);
       }
       
-      console.log('UserManagement - Making API call to /users/');
+      
       const response = await usersApi.getAll();
       
       // Handle different response formats

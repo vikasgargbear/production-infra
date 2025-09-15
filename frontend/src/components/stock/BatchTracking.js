@@ -562,9 +562,9 @@ const BatchTracking = ({ open = true, onClose }) => {
   if (!open) return null;
 
   return (
-    <div className="h-full bg-blue-50">
+    <div className="h-full bg-gray-50">
       <div className="h-full flex flex-col">
-        
+
         {/* Header - Using Global ModuleHeader */}
         <ModuleHeader
           title="Batch Tracking"
@@ -583,11 +583,6 @@ const BatchTracking = ({ open = true, onClose }) => {
             }
           ]}
         />
-
-        {/* Keyboard Shortcuts Help */}
-        <div className="bg-blue-50 px-4 py-2 text-xs text-blue-700 border-b border-blue-200">
-          Keyboard shortcuts: <strong>Ctrl+F</strong> - Search | <strong>Esc</strong> - Close
-        </div>
 
         {/* Content */}
         <div className="flex-1 overflow-y-auto">
@@ -611,51 +606,59 @@ const BatchTracking = ({ open = true, onClose }) => {
               </div>
             )}
 
-            {/* Stats Grid */}
+            {/* Stats Grid - Using consistent theme */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-              <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
-                <div className="flex items-center">
-                  <AlertTriangle className="h-8 w-8 text-orange-600 mr-3" />
-                  <div>
-                    <p className="text-sm font-medium text-blue-600">Expiring Soon</p>
-                    <p className="text-2xl font-bold text-blue-900">{stats.expiringSoon}</p>
+              <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm">
+                <div className="flex items-center justify-between">
+                  <div className="flex-1">
+                    <p className="text-xs font-medium text-gray-500 uppercase tracking-wider">Expiring Soon</p>
+                    <p className="text-2xl font-bold text-gray-900 mt-1">{stats.expiringSoon}</p>
+                  </div>
+                  <div className="bg-orange-100 p-2 rounded-lg">
+                    <AlertTriangle className="h-6 w-6 text-orange-600" />
                   </div>
                 </div>
               </div>
-              
-              <div className="bg-yellow-50 p-4 rounded-lg border border-yellow-200">
-                <div className="flex items-center">
-                  <Clock className="h-8 w-8 text-yellow-600 mr-3" />
-                  <div>
-                    <p className="text-sm font-medium text-yellow-600">Near Expiry</p>
-                    <p className="text-2xl font-bold text-yellow-900">{stats.nearExpiry}</p>
+
+              <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm">
+                <div className="flex items-center justify-between">
+                  <div className="flex-1">
+                    <p className="text-xs font-medium text-gray-500 uppercase tracking-wider">Near Expiry</p>
+                    <p className="text-2xl font-bold text-gray-900 mt-1">{stats.nearExpiry}</p>
+                  </div>
+                  <div className="bg-yellow-100 p-2 rounded-lg">
+                    <Clock className="h-6 w-6 text-yellow-600" />
                   </div>
                 </div>
               </div>
-              
-              <div className="bg-red-50 p-4 rounded-lg border border-red-200">
-                <div className="flex items-center">
-                  <XCircle className="h-8 w-8 text-red-600 mr-3" />
-                  <div>
-                    <p className="text-sm font-medium text-red-600">Expired</p>
-                    <p className="text-2xl font-bold text-red-900">{stats.expired}</p>
+
+              <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm">
+                <div className="flex items-center justify-between">
+                  <div className="flex-1">
+                    <p className="text-xs font-medium text-gray-500 uppercase tracking-wider">Expired</p>
+                    <p className="text-2xl font-bold text-gray-900 mt-1">{stats.expired}</p>
+                  </div>
+                  <div className="bg-red-100 p-2 rounded-lg">
+                    <XCircle className="h-6 w-6 text-red-600" />
                   </div>
                 </div>
               </div>
-              
-              <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
-                <div className="flex items-center">
-                  <Package className="h-8 w-8 text-gray-600 mr-3" />
-                  <div>
-                    <p className="text-sm font-medium text-gray-600">Total Batches</p>
-                    <p className="text-2xl font-bold text-gray-900">{stats.totalBatches}</p>
+
+              <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm">
+                <div className="flex items-center justify-between">
+                  <div className="flex-1">
+                    <p className="text-xs font-medium text-gray-500 uppercase tracking-wider">Total Batches</p>
+                    <p className="text-2xl font-bold text-gray-900 mt-1">{stats.totalBatches}</p>
+                  </div>
+                  <div className="bg-blue-100 p-2 rounded-lg">
+                    <Package className="h-6 w-6 text-blue-600" />
                   </div>
                 </div>
               </div>
             </div>
 
-            {/* Enhanced Filter Bar */}
-            <div className="mb-6 border border-gray-200 rounded-lg bg-gray-50 p-4">
+            {/* Enhanced Filter Bar - Using consistent theme */}
+            <div className="mb-6 bg-white border border-gray-200 rounded-xl shadow-sm p-4">
               <div className="flex items-center space-x-4">
                 {/* Select All */}
                 <label className="inline-flex items-center space-x-2">

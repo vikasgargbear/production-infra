@@ -11,14 +11,14 @@ import orgIdManager from '../OrgIdManager';
 // Always use HTTPS for production Railway deployments
 const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || 'https://pharma-backend-production-0c09.up.railway.app';
 
-// Migrate auth_token to authToken for consistency
+// Import auth service for token management
+// @ts-ignore - JavaScript module
+import authService from '../auth/AuthService';
+
+// Ensure auth is initialized
 (() => {
-  const oldToken = localStorage.getItem('auth_token');
-  const newToken = localStorage.getItem('authToken');
-  
-  if (oldToken && !newToken) {
-    // Migrate from auth_token to authToken
-    localStorage.setItem('authToken', oldToken);
+  if (!authService.isAuthenticated()) {
+    authService.autoLogin();
   }
 })();
 
@@ -52,8 +52,8 @@ apiClient.interceptors.request.use(
     
     // Only check validity, no logging needed
     
-    // THEN: Get auth token - check both keys for compatibility
-    const token = localStorage.getItem('authToken') || localStorage.getItem('auth_token');
+    // Get auth token from auth service
+    const token = authService.getToken();
     
     if (token) {
       try {

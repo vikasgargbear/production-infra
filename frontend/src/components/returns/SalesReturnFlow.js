@@ -11,7 +11,6 @@ import {
 import CustomerCreationB2B from '../global/ui/forms/CustomerCreationB2B';
 import { returnsApi, customersApi, customerAPI, settingsApi, metadataApi } from '../../services/api';
 import InvoiceApiService from '../../services/invoiceApiService';
-import ReturnSummary from './components/ReturnSummary';
 import CreditNotePreview from './components/CreditNotePreview';
 import offlineStorage from '../../services/offlineStorage';
 

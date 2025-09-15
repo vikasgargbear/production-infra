@@ -39,6 +39,7 @@ export { default as OutstandingInvoicesTable } from './display/OutstandingInvoic
 export { default as BillSummary } from './BillSummary';
 export { default as PaymentDetails } from './PaymentDetails';
 export { default as TransportDetails } from './TransportDetails';
+export { default as GlobalDocumentSummary } from './GlobalDocumentSummary';
 
 // Action Components
 export { default as ProceedToReviewComponent } from './components/ProceedToReviewComponent';

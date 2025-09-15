@@ -200,7 +200,7 @@ class OfflineAuthService {
     } catch (error) {
       // If online login fails, offer offline mode
       if (!window.navigator.onLine) {
-        console.log('No internet connection, switching to offline mode');
+        
         localStorage.setItem(this.OFFLINE_MODE_KEY, 'true');
         return this.login(credentials); // Retry in offline mode
       }

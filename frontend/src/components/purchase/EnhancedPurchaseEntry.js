@@ -233,8 +233,8 @@ const EnhancedPurchaseEntry = ({ onClose, prefilledData = null }) => {
 
   // Handle saving item from modal
   const handleSaveItemFromModal = (editedItem) => {
-    console.log('Item from modal:', editedItem); // Debug
-    console.log('Expiry date:', editedItem.expiry_date); // Debug expiry
+     // Debug
+     // Debug expiry
     setPurchase(prev => {
       const newItems = [...(prev.items || []), editedItem];
       return {

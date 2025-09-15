@@ -85,7 +85,7 @@ class NetworkMonitor {
 
   handleOnline() {
     this.isOnline = true;
-    console.log('[NetworkMonitor] Connection restored');
+    
     
     // Only show toast if we have pending items to sync
     syncEngine.startSync().then((result) => {
@@ -115,7 +115,7 @@ class NetworkMonitor {
 
   handleOffline() {
     this.isOnline = false;
-    console.log('[NetworkMonitor] Connection lost');
+    
     
     // Don't show toast notification - let the visual indicator handle it
     // Only show toast when user tries to perform an action while offline

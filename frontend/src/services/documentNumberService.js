@@ -148,6 +148,97 @@ class DocumentNumberService {
   }
 
   /**
+   * Generate Payment Number
+   */
+  async generatePaymentNumber() {
+    // Format: PAY-YY######## (year prefix + 8-digit number)
+    const now = new Date();
+    const year = now.getFullYear() % 100;
+    const yearPrefix = year.toString().padStart(2, '0');
+    const timestamp = Date.now();
+    const uniqueNum = 10000000 + (timestamp % 90000000);
+    return `PAY-${yearPrefix}${uniqueNum}`;
+  }
+
+  /**
+   * Generate Credit Note Number
+   */
+  async generateCreditNoteNumber() {
+    // Format: CN-YY######## (year prefix + 8-digit number)
+    const now = new Date();
+    const year = now.getFullYear() % 100;
+    const yearPrefix = year.toString().padStart(2, '0');
+    const timestamp = Date.now();
+    const uniqueNum = 10000000 + (timestamp % 90000000);
+    return `CN-${yearPrefix}${uniqueNum}`;
+  }
+
+  /**
+   * Generate Debit Note Number
+   */
+  async generateDebitNoteNumber() {
+    // Format: DN-YY######## (year prefix + 8-digit number)
+    const now = new Date();
+    const year = now.getFullYear() % 100;
+    const yearPrefix = year.toString().padStart(2, '0');
+    const timestamp = Date.now();
+    const uniqueNum = 10000000 + (timestamp % 90000000);
+    return `DN-${yearPrefix}${uniqueNum}`;
+  }
+
+  /**
+   * Generate Stock Adjustment Number
+   */
+  async generateAdjustmentNumber() {
+    // Format: ADJ-YY######## (year prefix + 8-digit number)
+    const now = new Date();
+    const year = now.getFullYear() % 100;
+    const yearPrefix = year.toString().padStart(2, '0');
+    const timestamp = Date.now();
+    const uniqueNum = 10000000 + (timestamp % 90000000);
+    return `ADJ-${yearPrefix}${uniqueNum}`;
+  }
+
+  /**
+   * Generate Stock Transfer Number
+   */
+  async generateTransferNumber() {
+    // Format: TRF-YY######## (year prefix + 8-digit number)
+    const now = new Date();
+    const year = now.getFullYear() % 100;
+    const yearPrefix = year.toString().padStart(2, '0');
+    const timestamp = Date.now();
+    const uniqueNum = 10000000 + (timestamp % 90000000);
+    return `TRF-${yearPrefix}${uniqueNum}`;
+  }
+
+  /**
+   * Generate Receipt Number
+   */
+  async generateReceiptNumber() {
+    // Format: RCT-YY######## (year prefix + 8-digit number)
+    const now = new Date();
+    const year = now.getFullYear() % 100;
+    const yearPrefix = year.toString().padStart(2, '0');
+    const timestamp = Date.now();
+    const uniqueNum = 10000000 + (timestamp % 90000000);
+    return `RCT-${yearPrefix}${uniqueNum}`;
+  }
+
+  /**
+   * Generate Purchase Return Number
+   */
+  async generatePurchaseReturnNumber() {
+    // Format: PRN-YY######## (year prefix + 8-digit number)
+    const now = new Date();
+    const year = now.getFullYear() % 100;
+    const yearPrefix = year.toString().padStart(2, '0');
+    const timestamp = Date.now();
+    const uniqueNum = 10000000 + (timestamp % 90000000);
+    return `PRN-${yearPrefix}${uniqueNum}`;
+  }
+
+  /**
    * Generic document number generator
    * @param {string} type - Document type (invoice, purchase, etc.)
    * @param {string} prefix - Prefix for the number (INV, PUR, etc.)
@@ -155,7 +246,7 @@ class DocumentNumberService {
   generateFallbackNumber(type, prefix) {
     const timestamp = Date.now();
     const year = new Date().getFullYear();
-    
+
     switch (type) {
       case 'invoice':
         return `${prefix}-${timestamp.toString().slice(-8)}`;

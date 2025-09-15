@@ -233,9 +233,6 @@ class OrgIdManager {
 // Create singleton instance
 const orgIdManager = new OrgIdManager();
 
-// Freeze the instance to prevent modifications
-Object.freeze(orgIdManager);
-
 // Export for use in other modules
 export default orgIdManager;
 

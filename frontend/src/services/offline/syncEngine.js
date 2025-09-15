@@ -58,17 +58,17 @@ class SyncEngine {
     };
 
     try {
-      console.log('[SyncEngine] Starting sync...');
+      
       
       // Get all pending items from sync queue
       const pendingItems = await offlineDB.getSyncQueue();
       
       if (pendingItems.length === 0) {
-        console.log('[SyncEngine] No items to sync');
+        
         return { ...results, message: 'No items to sync' };
       }
 
-      console.log(`[SyncEngine] Found ${pendingItems.length} items to sync`);
+      
 
       // Process each item
       for (const item of pendingItems) {
@@ -104,7 +104,7 @@ class SyncEngine {
         conflicts: results.conflicts
       });
 
-      console.log('[SyncEngine] Sync completed:', results);
+      
       
       // Show notification if items were synced
       if (results.synced > 0) {
@@ -269,7 +269,7 @@ class SyncEngine {
 
     this.retryTimeout = setTimeout(() => {
       if (navigator.onLine && !this.isSyncing) {
-        console.log('[SyncEngine] Retrying sync...');
+        
         this.startSync();
       }
     }, delay);
