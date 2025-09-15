@@ -9,7 +9,6 @@ import StockTransfer from '../stock/StockTransfer';
 import CurrentStock from '../stock/CurrentStock';
 import BatchTracking from '../stock/BatchTracking';
 import EnhancedStockAdjustmentFlow from '../stock/EnhancedStockAdjustmentFlow';
-import StockReport from '../stock/StockReport';
 
 interface StockHubProps {
   open?: boolean;
@@ -72,15 +71,6 @@ const StockHub: React.FC<StockHubProps> = ({ open = true, onClose }) => {
       icon: ArrowRightLeft,
       color: 'purple',
       component: StockTransfer
-    },
-    {
-      id: 'stock-report',
-      label: 'Report',
-      fullLabel: 'Stock Report',
-      description: 'Inventory analysis',
-      icon: BarChart3,
-      color: 'purple',
-      component: StockReport
     }
   ];
 
