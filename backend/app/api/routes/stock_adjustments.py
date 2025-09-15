@@ -11,7 +11,8 @@ from datetime import date, datetime
 from decimal import Decimal
 
 from ...core.database import get_db
-from ...core.auth_utils import get_org_id_from_header
+from ...core.auth_utils import get_org_id_from_header, get_current_user_id
+from ...utils.branch_utils import get_default_branch_id
 
 logger = logging.getLogger(__name__)
 
@@ -157,10 +158,10 @@ def create_stock_adjustment(adjustment_data: dict, db: Session = Depends(get_db)
                 "product_id": batch.product_id,
                 "batch_id": adjustment_data.get("batch_id"),
                 "quantity": abs(quantity_adjusted),
-                "location_id": 1,  # Default location
+                "location_id": adjustment_data.get("location_id") or get_default_branch_id(db, org_id),
                 "reference_number": adjustment_data.get("reference_number", f"ADJ-{datetime.now().strftime('%Y%m%d%H%M')}"),
                 "reason": adjustment_data.get("reason"),
-                "created_by": 1  # Default user
+                "created_by": get_current_user_id()
             }
         ).scalar()
         
