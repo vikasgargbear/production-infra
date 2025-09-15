@@ -27,6 +27,7 @@ import OfflineIndicator from './components/global/ui/OfflineIndicator';
 import * as serviceWorkerRegistration from './serviceWorkerRegistration';
 import { ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
+import offlineAuth from './services/auth/offlineAuth';
 // import ReceivablesCollectionCenter from './components/receivables/ReceivablesCollectionCenter';
 
 // Lazy load components for better performance and code splitting
@@ -134,7 +135,10 @@ const CompliancePlaceholder = React.memo(() => (
 
 function App(): JSX.Element {
   const [activeTab, setActiveTab] = useState<TabName>('home');
-  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false); // Require login for security
+  // Use enterprise auth service that handles both online and offline modes
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {
+    return offlineAuth.isAuthenticated();
+  });
   const [setupComplete, setSetupComplete] = useState<boolean | null>(null);
   const [isCheckingSetup, setIsCheckingSetup] = useState<boolean>(true);
 
@@ -160,10 +164,10 @@ function App(): JSX.Element {
       const response = await apiClient.get('/setup/check');
       setSetupComplete(response.data.setup_complete);
     } catch (error) {
-      // If backend is unreachable but we have an org_id, assume setup is complete
-      const existingOrgId = localStorage.getItem('pharma_org_id') || 
-                           sessionStorage.getItem('pharma_org_id');
-      setSetupComplete(!!existingOrgId);
+      // If backend is unreachable, assume setup is complete to allow login
+      // This prevents getting stuck on loading screen
+      console.log('Setup check failed, assuming setup complete:', error);
+      setSetupComplete(true);
     } finally {
       setIsCheckingSetup(false);
     }
@@ -284,7 +288,14 @@ function App(): JSX.Element {
     return (
       <ErrorBoundary>
         <Suspense fallback={<LoadingSpinner />}>
-          <EnhancedLogin onLogin={() => setIsAuthenticated(true)} />
+          <EnhancedLogin onLogin={async (credentials) => {
+            const result = await offlineAuth.login(credentials);
+            if (result.success) {
+              setIsAuthenticated(true);
+              return true;
+            }
+            return false;
+          }} />
         </Suspense>
       </ErrorBoundary>
     );

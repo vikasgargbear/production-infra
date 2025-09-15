@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { X, Save, Package, Calendar, DollarSign, Percent, Hash, Gift, AlertCircle } from 'lucide-react';
 import { MonthYearPicker } from '../../global';
+import { toast } from 'react-toastify';
 
 /**
  * Modal for editing purchase item details - especially batch-specific information
@@ -80,8 +81,32 @@ const PurchaseItemEditModal = ({
   };
 
   const handleSave = () => {
-    // Remove expiry date requirement - some products don't expire
-    // User can still set it if needed
+    // Validate required fields
+    const errors = [];
+    
+    if (!editedItem.expiry_date) {
+      errors.push('Expiry date');
+    }
+    if (!editedItem.quantity || editedItem.quantity <= 0) {
+      errors.push('Quantity');
+    }
+    if (!editedItem.mrp || editedItem.mrp <= 0) {
+      errors.push('MRP');
+    }
+    if (!editedItem.purchase_price || editedItem.purchase_price <= 0) {
+      errors.push('Purchase Price/Cost');
+    }
+    if (!editedItem.selling_price || editedItem.selling_price <= 0) {
+      errors.push('Selling Price');
+    }
+    if (editedItem.tax_percent === undefined || editedItem.tax_percent === null || editedItem.tax_percent === '') {
+      errors.push('GST %');
+    }
+    
+    if (errors.length > 0) {
+      toast.error(`Required fields missing: ${errors.join(', ')}`);
+      return;
+    }
     
     // Set default values for empty fields before saving
     const itemToSave = {
@@ -97,8 +122,8 @@ const PurchaseItemEditModal = ({
       selling_price: editedItem.selling_price || 0,
       discount_percent: editedItem.discount_percent || 0,
       scheme_discount: editedItem.scheme_discount || 0,
-      // Explicitly include expiry_date
-      expiry_date: editedItem.expiry_date || null,
+      // Expiry date is required
+      expiry_date: editedItem.expiry_date,
       tax_percent: editedItem.tax_percent || 0
     };
     
@@ -174,11 +199,11 @@ const PurchaseItemEditModal = ({
                 />
               </div>
 
-              {/* Expiry Date - Optional */}
+              {/* Expiry Date - REQUIRED */}
               <div>
                 <label className="flex items-center gap-1 text-sm font-medium text-gray-700 mb-2">
                   <Calendar className="w-4 h-4" />
-                  Expiry Date
+                  Expiry Date <span className="text-red-500">*</span>
                 </label>
                 <MonthYearPicker
                   value={editedItem.expiry_date}
@@ -249,7 +274,7 @@ const PurchaseItemEditModal = ({
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="text-sm font-medium text-gray-700 mb-2 block">
-                  Purchase Quantity
+                  Purchase Quantity <span className="text-red-500">*</span>
                 </label>
                 <input
                   type="text"
@@ -288,7 +313,7 @@ const PurchaseItemEditModal = ({
               {/* MRP */}
               <div>
                 <label className="text-sm font-medium text-gray-700 mb-2 block">
-                  MRP
+                  MRP <span className="text-red-500">*</span>
                 </label>
                 <div className="relative">
                   <span className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-500">₹</span>
@@ -306,7 +331,7 @@ const PurchaseItemEditModal = ({
               {/* Purchase Price */}
               <div>
                 <label className="text-sm font-medium text-gray-700 mb-2 block">
-                  Purchase Price
+                  Purchase Price <span className="text-red-500">*</span>
                 </label>
                 <div className="relative">
                   <span className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-500">₹</span>
@@ -324,7 +349,7 @@ const PurchaseItemEditModal = ({
               {/* Selling Price */}
               <div>
                 <label className="text-sm font-medium text-gray-700 mb-2 block">
-                  Selling Price
+                  Selling Price <span className="text-red-500">*</span>
                 </label>
                 <div className="relative">
                   <span className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-500">₹</span>
@@ -350,11 +375,11 @@ const PurchaseItemEditModal = ({
             <div className="grid grid-cols-3 gap-4">
               <div>
                 <label className="text-sm font-medium text-gray-700 mb-2 block">
-                  GST %
+                  GST % <span className="text-red-500">*</span>
                 </label>
                 <select
                   value={editedItem.tax_percent || 0}
-                  onChange={(e) => handleFieldChange('tax_percent', e.target.value)}
+                  onChange={(e) => handleFieldChange('tax_percent', parseFloat(e.target.value) || 0)}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
                 >
                   <option value="0">0%</option>

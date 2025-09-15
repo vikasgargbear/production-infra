@@ -186,22 +186,36 @@ const SplitPayment = ({
 
   return (
     <div className={`${className}`}>
-      {/* Header with Split Payment Toggle */}
+      {/* Header with Split Payment Toggle and Add Payment button */}
       <div className="flex items-center justify-between mb-3">
         <div className="text-sm font-medium text-gray-700">Payment Method</div>
-        <button
-          onClick={handleSplitToggle}
-          disabled={readOnly}
-          className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
-            isSplitMode 
-              ? 'bg-indigo-100 text-indigo-700 border border-indigo-300' 
-              : 'bg-gray-100 text-gray-600 border border-gray-300 hover:bg-gray-200'
-          }`}
-        >
-          <Coins className="w-4 h-4" />
-          <span>Split Payment</span>
-          {isSplitMode && <Check className="w-3.5 h-3.5 ml-1" />}
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={handleSplitToggle}
+            disabled={readOnly}
+            className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
+              isSplitMode 
+                ? 'bg-indigo-100 text-indigo-700 border border-indigo-300' 
+                : 'bg-gray-100 text-gray-600 border border-gray-300 hover:bg-gray-200'
+            }`}
+          >
+            <Coins className="w-4 h-4" />
+            <span>Split Payment</span>
+            {isSplitMode && <Check className="w-3.5 h-3.5 ml-1" />}
+          </button>
+          
+          {/* Add Payment button - only show in split mode */}
+          {isSplitMode && splitPayments.length < 5 && (
+            <button
+              onClick={addSplitPayment}
+              disabled={readOnly}
+              className="flex items-center gap-1 px-3 py-1.5 bg-indigo-600 text-white text-sm rounded-lg hover:bg-indigo-700 transition-colors"
+            >
+              <Plus className="w-4 h-4" />
+              <span>Add Payment</span>
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Main Payment Interface */}
@@ -314,19 +328,6 @@ const SplitPayment = ({
       ) : (
         // Split Payment Mode - Compact inline layout
         <div className="space-y-3">
-          {/* Add button at the top right */}
-          {splitPayments.length < 5 && (
-            <div className="flex justify-end">
-              <button
-                onClick={addSplitPayment}
-                disabled={readOnly}
-                className="flex items-center gap-1 px-3 py-1.5 bg-indigo-600 text-white text-sm rounded-lg hover:bg-indigo-700 transition-colors"
-              >
-                <Plus className="w-4 h-4" />
-                <span>Add Payment</span>
-              </button>
-            </div>
-          )}
           
           {/* Split payment rows */}
           {splitPayments.map((payment, index) => {

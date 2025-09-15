@@ -1339,8 +1339,13 @@ const EnhancedPurchaseEntry = ({ onClose, prefilledData = null }) => {
           item={currentEditItem || newProductToAdd}
           onSave={(updatedItem) => {
             if (currentEditItem && currentEditItem.index !== undefined) {
-              // Editing existing item
-              handleUpdateItem(currentEditItem.index, updatedItem);
+              // Editing existing item - replace the entire item
+              setPurchase(prev => ({
+                ...prev,
+                items: (prev.items || []).map((item, i) => 
+                  i === currentEditItem.index ? updatedItem : item
+                )
+              }));
               setCurrentEditItem(null);
             } else {
               // Adding new item

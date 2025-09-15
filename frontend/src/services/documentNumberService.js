@@ -48,12 +48,7 @@ class DocumentNumberService {
    * Generate Purchase Number (for direct purchase entry, not PO)
    */
   async generatePurchaseNumber() {
-    const response = await safeApiCall(() => apiClient.get('/purchases/generate-number'));
-    if (response?.data?.purchase_number) {
-      return response.data.purchase_number;
-    }
-    
-    // Fallback to client-side generation matching backend format
+    // Client-side generation matching backend format
     // Format: PUR-YY######## (year prefix + 8-digit number)
     const now = new Date();
     const year = now.getFullYear() % 100;
@@ -67,19 +62,7 @@ class DocumentNumberService {
    * Generate Purchase Order Number
    */
   async generatePurchaseOrderNumber() {
-    try {
-      // Fixed: Use correct endpoint path
-      const response = await apiClient.get('/purchases/generate-number');
-      if (response?.data?.po_number) {
-        return response.data.po_number;
-      }
-    } catch (error) {
-      // Only log non-404 errors once
-      if (error?.response?.status !== 404) {
-      }
-    }
-    
-    // Fallback to client-side generation matching backend format
+    // Client-side generation matching backend format
     // Format: PO-YY######## (year prefix + 8-digit number)
     const now = new Date();
     const year = now.getFullYear() % 100;
@@ -100,15 +83,7 @@ class DocumentNumberService {
    * Generate GRN Number
    */
   async generateGRNNumber() {
-    try {
-      const response = await apiClient.get('/grn/generate-number');
-      if (response?.data?.grn_number) {
-        return response.data.grn_number;
-      }
-    } catch (error) {
-    }
-    
-    // Fallback to client-side generation matching backend format
+    // Client-side generation matching backend format
     // Format: GRN-YY######## (year prefix + 8-digit number)
     const now = new Date();
     const year = now.getFullYear() % 100;
@@ -122,51 +97,33 @@ class DocumentNumberService {
    * Generate Return Number (for generic returns)
    */
   async generateReturnNumber() {
-    try {
-      const response = await apiClient.get('/sale-returns/generate-number');
-      if (response?.data?.return_number) {
-        return response.data.return_number;
-      }
-    } catch (error) {
-    }
-    
-    // Fallback to client-side generation
+    // Client-side generation
+    const now = new Date();
+    const year = now.getFullYear() % 100;
+    const yearPrefix = year.toString().padStart(2, '0');
     const timestamp = Date.now();
-    const year = new Date().getFullYear() % 100;
-    return `SRN-${year.toString().padStart(2, '0')}${timestamp.toString().slice(-6)}`;
+    const uniqueNum = 10000000 + (timestamp % 90000000);
+    return `SRN-${yearPrefix}${uniqueNum}`;
   }
 
   /**
    * Generate Sales Return Number
    */
   async generateSalesReturnNumber() {
-    try {
-      const response = await apiClient.get('/sale-returns/generate-number');
-      if (response?.data?.return_number) {
-        return response.data.return_number;
-      }
-    } catch (error) {
-    }
-    
-    // Fallback to client-side generation
+    // Client-side generation
+    const now = new Date();
+    const year = now.getFullYear() % 100;
+    const yearPrefix = year.toString().padStart(2, '0');
     const timestamp = Date.now();
-    const year = new Date().getFullYear() % 100;
-    return `SRN-${year.toString().padStart(2, '0')}${timestamp.toString().slice(-6)}`;
+    const uniqueNum = 10000000 + (timestamp % 90000000);
+    return `SRN-${yearPrefix}${uniqueNum}`;
   }
 
   /**
    * Generate Challan Number
    */
   async generateChallanNumber() {
-    try {
-      const response = await apiClient.get('/delivery-challan/generate-number');
-      if (response?.data?.challan_number) {
-        return response.data.challan_number;
-      }
-    } catch (error) {
-    }
-    
-    // Fallback to client-side generation matching backend format
+    // Client-side generation matching backend format
     // Format: DC-YY######## (year prefix + 8-digit number)
     const now = new Date();
     const year = now.getFullYear() % 100;
@@ -180,15 +137,7 @@ class DocumentNumberService {
    * Generate Sales Order Number
    */
   async generateSalesOrderNumber() {
-    try {
-      const response = await apiClient.get('/sales-orders/generate-number');
-      if (response?.data?.order_number) {
-        return response.data.order_number;
-      }
-    } catch (error) {
-    }
-    
-    // Fallback to client-side generation matching backend format
+    // Client-side generation matching backend format
     // Format: SO-YY######## (year prefix + 8-digit number)
     const now = new Date();
     const year = now.getFullYear() % 100;

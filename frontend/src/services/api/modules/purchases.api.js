@@ -25,12 +25,11 @@ export const purchasesApi = {
       throw new Error(validation.errors.join(', '));
     }
     
+    // Send to backend API
     const response = await apiHelpers.post(ENDPOINTS.ENHANCED + '/with-items', transformedData);
-    
     if (response.data) {
       response.data = purchaseDataTransformer.transformBackendToPurchase(response.data);
     }
-    
     return response;
   },
   
