@@ -356,7 +356,34 @@ export const stockApi = {
 
   // Stock adjustments
   createAdjustment: async (data) => {
-    return apiClient.post('stock/adjustments', data);
+    // Process each item as a separate adjustment since backend expects single batch
+    const results = [];
+    for (const item of (data.items || [])) {
+      // Need to get the batch_id for this product
+      // For now, we'll need to fetch batches first
+      const batchesResponse = await apiClient.get(`${ENDPOINTS.STOCK.BATCHES}`, {
+        params: { product_id: item.product_id, limit: 1 }
+      });
+
+      const batches = batchesResponse.data?.batches || batchesResponse.data || [];
+      if (batches.length === 0) {
+        console.error(`No batch found for product ${item.product_id}`);
+        continue;
+      }
+
+      const batch = batches[0];
+      const adjustmentPayload = {
+        batch_id: batch.batch_id,
+        quantity_adjusted: item.quantity,
+        adjustment_type: item.quantity > 0 ? 'other' : 'damage',
+        reason: data.reason || data.notes || 'Stock adjustment',
+        adjustment_date: data.adjustment_date || new Date().toISOString()
+      };
+
+      const result = await apiClient.post(ENDPOINTS.STOCK.ADJUSTMENTS, adjustmentPayload);
+      results.push(result);
+    }
+    return { data: results };
   },
 
   getAdjustments: async (params = {}) => {
