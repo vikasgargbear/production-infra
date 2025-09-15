@@ -192,10 +192,7 @@ class OfflineAuthService {
       if (response.ok) {
         const data = await response.json();
         localStorage.setItem('authToken', data.access_token);
-        // Store org_id from the organization object
-        const orgId = data.organization?.org_id || data.org_id || '1';
-        localStorage.setItem('pharma_org_id', orgId);
-        localStorage.setItem('org_id', orgId);
+        localStorage.setItem('pharma_org_id', data.org_id || '1');
         return { success: true, token: data.access_token };
       }
 

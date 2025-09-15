@@ -46,11 +46,9 @@ async def login(
     """Login with email and password (JSON payload)"""
     # Find user by email
     user = db.execute(text("""
-        SELECT u.user_id, u.first_name || ' ' || COALESCE(u.last_name, '') as full_name, 
-               u.email, u.password_hash, 
-               u.org_id, u.role_id as role, u.is_active, u.is_admin,
-               o.org_name, o.is_active as org_active,
-               u.permissions
+        SELECT u.user_id, u.full_name, u.email, u.password_hash, 
+               u.org_id, u.role, u.is_active,
+               o.org_name, o.is_active as org_active
         FROM master.org_users u
         JOIN master.organizations o ON u.org_id = o.org_id
         WHERE u.email = :email
@@ -102,10 +100,8 @@ async def login(
             "user_id": user.user_id,
             "email": user.email,
             "org_id": str(user.org_id),
-            "role_id": user.role,
-            "is_admin": user.is_admin,
-            "branch_id": branch_id,  # Include branch_id in JWT token
-            "permissions": user.permissions if user.permissions else {}
+            "role": user.role,
+            "branch_id": branch_id  # Include branch_id in JWT token
         },
         expires_delta=access_token_expires
     )
@@ -114,16 +110,10 @@ async def login(
         "access_token": access_token,
         "token_type": "bearer",
         "user": {
-            "id": user.user_id,
             "user_id": user.user_id,
-            "name": user.full_name,
             "full_name": user.full_name,
             "email": user.email,
-            "org_id": str(user.org_id),
-            "org_name": user.org_name,
-            "is_admin": user.is_admin,
-            "role_id": user.role,
-            "permissions": user.permissions if user.permissions else {}
+            "role": user.role
         },
         "organization": {
             "org_id": str(user.org_id),
