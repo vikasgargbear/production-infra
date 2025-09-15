@@ -27,7 +27,7 @@ import OfflineIndicator from './components/global/ui/OfflineIndicator';
 import * as serviceWorkerRegistration from './serviceWorkerRegistration';
 import { ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
-import offlineAuth from './services/auth/offlineAuth';
+import simpleAuth from './services/auth/simpleAuth';
 // import ReceivablesCollectionCenter from './components/receivables/ReceivablesCollectionCenter';
 
 // Lazy load components for better performance and code splitting
@@ -135,9 +135,10 @@ const CompliancePlaceholder = React.memo(() => (
 
 function App(): JSX.Element {
   const [activeTab, setActiveTab] = useState<TabName>('home');
-  // Use enterprise auth service that handles both online and offline modes
+  // Simple auth bypass for testing
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {
-    return offlineAuth.isAuthenticated();
+    simpleAuth.setupTestAuth(); // Always set up test auth
+    return true; // Always authenticated for testing
   });
   const [setupComplete, setSetupComplete] = useState<boolean | null>(null);
   const [isCheckingSetup, setIsCheckingSetup] = useState<boolean>(true);
@@ -284,22 +285,10 @@ function App(): JSX.Element {
     );
   }
 
-  if (!isAuthenticated) {
-    return (
-      <ErrorBoundary>
-        <Suspense fallback={<LoadingSpinner />}>
-          <EnhancedLogin onLogin={async (credentials) => {
-            const result = await offlineAuth.login(credentials);
-            if (result.success) {
-              setIsAuthenticated(true);
-              return true;
-            }
-            return false;
-          }} />
-        </Suspense>
-      </ErrorBoundary>
-    );
-  }
+  // Skip login - always authenticated with test token
+  // if (!isAuthenticated) {
+  //   return <LoadingSpinner />;
+  // }
 
   return (
     <QueryClientProvider client={queryClient}>
