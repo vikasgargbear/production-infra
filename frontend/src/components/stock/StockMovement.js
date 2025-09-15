@@ -39,7 +39,7 @@ const StockMovement = ({ open = true, onClose }) => {
 
       // Fetch stock movements with pagination
       const response = await stockApi.getMovements({
-        limit: 50,
+        limit: 100,
         skip: 0,
         sort: 'movement_date',
         order: 'desc'
