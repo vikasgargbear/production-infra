@@ -28,101 +28,172 @@ def get_inventory_movements(
     location_id: Optional[int] = Query(None, description="Location ID filter"),
     from_date: Optional[str] = Query(None, description="Start date (YYYY-MM-DD)"),
     to_date: Optional[str] = Query(None, description="End date (YYYY-MM-DD)"),
+    sort: Optional[str] = Query("movement_date", description="Sort field"),
+    order: Optional[str] = Query("desc", description="Sort order (asc/desc)"),
     db: Session = Depends(get_db),
     org_id: str = Depends(get_org_id_from_header)
 ):
     """
-    Get inventory movements using the database API function
+    Get inventory movements with direct database query
     """
     try:
-        # Prepare parameters for the database API function
-        api_params = []
-        
-        # Convert parameter format for PostgreSQL function call
-        if product_id is not None:
-            api_params.append(f"p_product_id => {product_id}")
-        else:
-            api_params.append("p_product_id => NULL")
-            
-        if batch_id is not None:
-            api_params.append(f"p_batch_id => {batch_id}")
-        else:
-            api_params.append("p_batch_id => NULL")
-            
-        if location_id is not None:
-            api_params.append(f"p_location_id => {location_id}")
-        else:
-            api_params.append("p_location_id => NULL")
-            
+        # Build the query
+        query = """
+            SELECT
+                im.movement_id,
+                im.movement_type,
+                im.movement_date,
+                im.movement_direction,
+                im.product_id,
+                p.product_name,
+                p.product_code,
+                im.batch_id,
+                b.batch_number,
+                im.quantity,
+                im.uom,
+                im.reference_type,
+                im.reference_number,
+                im.from_location_id,
+                fl.location_name as from_location_name,
+                im.to_location_id,
+                tl.location_name as to_location_name,
+                im.narration,
+                im.created_at,
+                im.created_by,
+                u.username as created_by_name
+            FROM inventory.inventory_movements im
+            LEFT JOIN inventory.products p ON im.product_id = p.product_id
+            LEFT JOIN inventory.batches b ON im.batch_id = b.batch_id
+            LEFT JOIN inventory.storage_locations fl ON im.from_location_id = fl.location_id
+            LEFT JOIN inventory.storage_locations tl ON im.to_location_id = tl.location_id
+            LEFT JOIN master.org_users u ON im.created_by = u.user_id
+            WHERE im.org_id = :org_id
+        """
+
+        # Add filters
+        params = {"org_id": org_id}
+
         if movement_type:
-            api_params.append(f"p_movement_type => '{movement_type}'")
-        else:
-            api_params.append("p_movement_type => NULL")
-            
+            query += " AND im.movement_type = :movement_type"
+            params["movement_type"] = movement_type
+
+        if product_id:
+            query += " AND im.product_id = :product_id"
+            params["product_id"] = product_id
+
+        if batch_id:
+            query += " AND im.batch_id = :batch_id"
+            params["batch_id"] = batch_id
+
+        if location_id:
+            query += " AND (im.from_location_id = :location_id OR im.to_location_id = :location_id)"
+            params["location_id"] = location_id
+
         if from_date:
-            api_params.append(f"p_from_date => '{from_date}'::date")
+            query += " AND im.movement_date >= :from_date::date"
+            params["from_date"] = from_date
         else:
-            api_params.append("p_from_date => (CURRENT_DATE - INTERVAL '30 days')::date")
-            
+            query += " AND im.movement_date >= (CURRENT_DATE - INTERVAL '30 days')"
+
         if to_date:
-            api_params.append(f"p_to_date => '{to_date}'::date")
+            query += " AND im.movement_date <= :to_date::date + INTERVAL '1 day'"
+            params["to_date"] = to_date
+
+        # Add sorting
+        sort_field = "im.movement_date" if sort == "movement_date" else "im.movement_id"
+        sort_order = "DESC" if order == "desc" else "ASC"
+        query += f" ORDER BY {sort_field} {sort_order}"
+
+        # Add pagination
+        query += " LIMIT :limit OFFSET :skip"
+        params["limit"] = limit
+        params["skip"] = skip
+
+        # Execute query
+        result = db.execute(text(query), params)
+        movements = result.fetchall()
+
+        # Count total records
+        count_query = """
+            SELECT COUNT(*) as total
+            FROM inventory.inventory_movements im
+            WHERE im.org_id = :org_id
+        """
+
+        # Add same filters for count
+        count_params = {"org_id": org_id}
+
+        if movement_type:
+            count_query += " AND im.movement_type = :movement_type"
+            count_params["movement_type"] = movement_type
+
+        if product_id:
+            count_query += " AND im.product_id = :product_id"
+            count_params["product_id"] = product_id
+
+        if batch_id:
+            count_query += " AND im.batch_id = :batch_id"
+            count_params["batch_id"] = batch_id
+
+        if from_date:
+            count_query += " AND im.movement_date >= :from_date::date"
+            count_params["from_date"] = from_date
         else:
-            api_params.append("p_to_date => CURRENT_DATE::date")
-            
-        api_params.append(f"p_limit => {limit}")
-        
-        # Call the database API function
-        query = f"SELECT api.get_inventory_movements({', '.join(api_params)})"
-        
-        result = db.execute(text(query)).scalar()
-        
-        if result is None:
-            return {
-                "success": True,
-                "data": {
-                    "movements": [],
-                    "total": 0
-                }
-            }
-        
-        # Extract movements from the JSON result
-        movements_data = result.get('movements', [])
-        
-        # Apply client-side pagination if needed
-        total_movements = len(movements_data)
-        paginated_movements = movements_data[skip:skip + limit] if skip > 0 else movements_data
-        
-        # Transform the data to match frontend expectations
-        transformed_movements = []
-        for movement in paginated_movements:
-            transformed_movement = {
-                "id": movement.get("movement_id", ""),
-                "movement_no": f"MOV-{movement.get('movement_id', '')}",
-                "product_name": movement.get("product_name", ""),
-                "movement_type": movement.get("movement_type", ""),
-                "quantity": movement.get("quantity", 0),
-                "reference_no": movement.get("reference_number", ""),
-                "movement_date": movement.get("movement_date", ""),
-                "reason": movement.get("narration", ""),
-                "batch_no": movement.get("batch_number", ""),
-                "location_from": "",
-                "location_to": movement.get("location_name", ""),
-                "created_by": movement.get("created_by", ""),
+            count_query += " AND im.movement_date >= (CURRENT_DATE - INTERVAL '30 days')"
+
+        if to_date:
+            count_query += " AND im.movement_date <= :to_date::date + INTERVAL '1 day'"
+            count_params["to_date"] = to_date
+
+        total_count = db.execute(text(count_query), count_params).scalar()
+
+        # Transform data for frontend
+        movements_list = []
+        for movement in movements:
+            movements_list.append({
+                "id": movement.movement_id,
+                "movement_id": movement.movement_id,
+                "movement_no": f"MOV-{movement.movement_id}",
+                "movement_type": movement.movement_type,
+                "movement_date": movement.movement_date.isoformat() if movement.movement_date else None,
+                "movement_direction": movement.movement_direction,
+                "product_id": movement.product_id,
+                "product_name": movement.product_name,
+                "product_code": movement.product_code,
+                "batch_id": movement.batch_id,
+                "batch_number": movement.batch_number,
+                "quantity": float(movement.quantity) if movement.quantity else 0,
+                "uom": movement.uom,
+                "reference_type": movement.reference_type,
+                "reference_number": movement.reference_number,
+                "from_location_id": movement.from_location_id,
+                "from_location_name": movement.from_location_name,
+                "to_location_id": movement.to_location_id,
+                "to_location_name": movement.to_location_name,
+                "narration": movement.narration,
+                "created_at": movement.created_at.isoformat() if movement.created_at else None,
+                "created_by": movement.created_by,
+                "created_by_name": movement.created_by_name,
                 "status": "completed"
-            }
-            transformed_movements.append(transformed_movement)
-        
+            })
+
         return {
             "success": True,
-            "data": {
-                "movements": transformed_movements,
-                "total": total_movements
-            }
+            "data": movements_list,
+            "total": total_count,
+            "movements": movements_list  # Also include as movements for compatibility
         }
-        
+
     except Exception as e:
         logger.error(f"Error fetching inventory movements: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to fetch inventory movements: {str(e)}")
+        # Return empty result instead of raising exception
+        return {
+            "success": False,
+            "data": [],
+            "movements": [],
+            "total": 0,
+            "error": str(e)
+        }
 
 @router.get("/reasons")
 def get_movement_reasons():
