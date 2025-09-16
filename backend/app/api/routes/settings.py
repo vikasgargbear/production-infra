@@ -320,35 +320,46 @@ def update_database_feature_flags(
         updated_features = {}
 
         for feature_name, is_enabled in features.items():
-            # Special handling for system_notifications
-            if feature_name == "system_notifications":
-                # Update the database feature flag
-                db.execute(text("""
-                    INSERT INTO system_config.feature_flags (feature_name, is_enabled, description)
-                    VALUES (:name, :enabled, :desc)
-                    ON CONFLICT (feature_name) DO UPDATE SET
-                        is_enabled = :enabled,
-                        updated_at = CURRENT_TIMESTAMP
-                """), {
-                    "name": "system_notifications",
-                    "enabled": is_enabled,
-                    "desc": "Controls whether system creates automatic notifications"
-                })
-                logger.info(f"System notifications {'enabled' if is_enabled else 'disabled'}")
+            # Use the existing feature_flags table structure
+            if feature_name in ["system_notifications", "auto_fifo_allocation", "inventory_tracking", "credit_limit_enforcement"]:
+                # Check if flag exists for NULL org_id (global flag)
+                existing = db.execute(text("""
+                    SELECT flag_id FROM system_config.feature_flags
+                    WHERE flag_key = :key AND org_id IS NULL
+                """), {"key": feature_name}).first()
 
-            # Handle other system-level features
-            elif feature_name in ["auto_fifo_allocation", "inventory_tracking", "credit_limit_enforcement"]:
-                db.execute(text("""
-                    INSERT INTO system_config.feature_flags (feature_name, is_enabled, description)
-                    VALUES (:name, :enabled, :desc)
-                    ON CONFLICT (feature_name) DO UPDATE SET
-                        is_enabled = :enabled,
-                        updated_at = CURRENT_TIMESTAMP
-                """), {
-                    "name": feature_name,
-                    "enabled": is_enabled,
-                    "desc": f"System feature: {feature_name}"
-                })
+                if existing:
+                    # Update existing flag
+                    db.execute(text("""
+                        UPDATE system_config.feature_flags
+                        SET is_active = :enabled,
+                            default_value = :value,
+                            updated_at = CURRENT_TIMESTAMP
+                        WHERE flag_key = :key AND org_id IS NULL
+                    """), {
+                        "key": feature_name,
+                        "enabled": is_enabled,
+                        "value": str(is_enabled).lower()
+                    })
+                else:
+                    # Insert new flag
+                    db.execute(text("""
+                        INSERT INTO system_config.feature_flags (
+                            flag_key, flag_name, description, flag_type,
+                            default_value, is_active
+                        ) VALUES (
+                            :key, :name, :desc, 'boolean',
+                            :value, :enabled
+                        )
+                    """), {
+                        "key": feature_name,
+                        "name": feature_name.replace('_', ' ').title(),
+                        "desc": f"System feature: {feature_name}",
+                        "value": str(is_enabled).lower(),
+                        "enabled": is_enabled
+                    })
+
+                logger.info(f"Feature {feature_name} set to {is_enabled}")
 
             updated_features[feature_name] = is_enabled
 
