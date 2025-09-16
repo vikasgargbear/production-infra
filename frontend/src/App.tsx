@@ -16,6 +16,7 @@ import { LedgerHub } from './components/ledger';
 import CreditDebitNoteFlow from './components/notes/CreditDebitNoteFlow';
 import GSTHub from './components/gst/GSTHub';
 import MasterHub from './components/master/MasterHub';
+import ReportsHub from './components/reports/ReportsHub';
 import AuthDiagnostic from './components/AuthDiagnostic';
 import { CompanyProvider } from './contexts/CompanyContext';
 import { EscapeKeyProvider } from './contexts/EscapeKeyContext';
@@ -237,7 +238,7 @@ function App(): JSX.Element {
       case 'analytics':
         return <AnalyticsPlaceholder key="analytics" />;
       case 'reports':
-        return <ReportsPlaceholder key="reports" />;
+        return <ReportsHub key="reports" open={true} onClose={() => setActiveTab('home')} />;
       case 'compliance':
         return <CompliancePlaceholder key="compliance" />;
       case 'settings':
