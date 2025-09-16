@@ -440,91 +440,107 @@ const CollectionCenter: React.FC<CollectionCenterProps> = ({
           
           <div className="flex-1 overflow-y-auto">
             <div className="max-w-7xl mx-auto px-6 py-6">
-              {/* Modern Stats Bar */}
-              <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 mb-6">
-                <div className="grid grid-cols-1 md:grid-cols-5 gap-6">
-                  {/* Total Outstanding */}
-                  <div className="flex items-center space-x-4">
-                    <div className="p-3 bg-blue-50 rounded-lg">
-                      <DollarSign className="w-6 h-6 text-blue-600" />
-                    </div>
-                    <div>
-                      <p className="text-xs text-gray-500 uppercase tracking-wider">Outstanding</p>
-                      <p className="text-xl font-semibold text-gray-900">
+              {/* Professional KPI Dashboard */}
+              <div className="bg-gradient-to-r from-gray-50 to-gray-100 rounded-xl shadow-lg border border-gray-300 p-8 mb-6">
+                <div className="grid grid-cols-1 md:grid-cols-5 gap-8">
+                  {/* Total Receivables */}
+                  <div className="relative">
+                    <div className="absolute -top-4 -left-2 w-2 h-16 bg-blue-500 rounded-full"></div>
+                    <div className="pl-4">
+                      <div className="flex items-center mb-2">
+                        <DollarSign className="w-5 h-5 text-gray-400 mr-2" />
+                        <p className="text-xs font-semibold text-gray-600 uppercase tracking-widest">Total Receivables</p>
+                      </div>
+                      <p className="text-2xl font-bold text-gray-900 mb-1">
                         ₹{(stats.total_outstanding || 0).toLocaleString('en-IN')}
                       </p>
-                      <p className="text-xs text-gray-500">{stats.customers_count} customers</p>
+                      <p className="text-xs text-gray-500 font-medium">
+                        {stats.customers_count} Active Accounts
+                      </p>
                     </div>
                   </div>
 
-                  {/* Today's Collection */}
-                  <div className="flex items-center space-x-4">
-                    <div className="p-3 bg-green-50 rounded-lg">
-                      <TrendingUp className="w-6 h-6 text-green-600" />
-                    </div>
-                    <div>
-                      <p className="text-xs text-gray-500 uppercase tracking-wider">Today</p>
-                      <div className="flex items-center space-x-2">
-                        <p className="text-xl font-semibold text-green-600">
+                  {/* Collection Performance */}
+                  <div className="relative">
+                    <div className="absolute -top-4 -left-2 w-2 h-16 bg-green-500 rounded-full"></div>
+                    <div className="pl-4">
+                      <div className="flex items-center mb-2">
+                        <TrendingUp className="w-5 h-5 text-gray-400 mr-2" />
+                        <p className="text-xs font-semibold text-gray-600 uppercase tracking-widest">Daily Revenue</p>
+                      </div>
+                      <div className="flex items-baseline gap-2">
+                        <p className="text-2xl font-bold text-gray-900">
                           ₹{(stats.collections_today || 0).toLocaleString('en-IN')}
                         </p>
                         {stats.collection_change && (
-                          <span className={`text-xs ${stats.collection_change > 0 ? 'text-green-500' : 'text-red-500'} flex items-center`}>
+                          <span className={`text-xs font-semibold ${stats.collection_change > 0 ? 'text-green-600' : 'text-red-600'} flex items-center`}>
                             {stats.collection_change > 0 ? <ArrowUp className="w-3 h-3" /> : <ArrowDown className="w-3 h-3" />}
                             {Math.abs(stats.collection_change)}%
                           </span>
                         )}
                       </div>
-                      <p className="text-xs text-gray-500">MTD: ₹{(stats.collections_mtd || 0).toLocaleString('en-IN')}</p>
+                      <p className="text-xs text-gray-500 font-medium">
+                        MTD Target: ₹{(stats.collections_mtd || 0).toLocaleString('en-IN')}
+                      </p>
                     </div>
                   </div>
 
-                  {/* Promise Amount */}
-                  <div className="flex items-center space-x-4">
-                    <div className="p-3 bg-purple-50 rounded-lg">
-                      <Clock className="w-6 h-6 text-purple-600" />
-                    </div>
-                    <div>
-                      <p className="text-xs text-gray-500 uppercase tracking-wider">Promised</p>
-                      <p className="text-xl font-semibold text-purple-600">
+                  {/* Committed Pipeline */}
+                  <div className="relative">
+                    <div className="absolute -top-4 -left-2 w-2 h-16 bg-purple-500 rounded-full"></div>
+                    <div className="pl-4">
+                      <div className="flex items-center mb-2">
+                        <Clock className="w-5 h-5 text-gray-400 mr-2" />
+                        <p className="text-xs font-semibold text-gray-600 uppercase tracking-widest">Pipeline Value</p>
+                      </div>
+                      <p className="text-2xl font-bold text-gray-900 mb-1">
                         ₹{(stats.promise_amount || 0).toLocaleString('en-IN')}
                       </p>
-                      <p className="text-xs text-gray-500">Pending</p>
+                      <p className="text-xs text-gray-500 font-medium">
+                        Committed Payments
+                      </p>
                     </div>
                   </div>
 
-                  {/* Critical Accounts */}
-                  <div className="flex items-center space-x-4">
-                    <div className="p-3 bg-orange-50 rounded-lg">
-                      <AlertCircle className="w-6 h-6 text-orange-600" />
-                    </div>
-                    <div>
-                      <p className="text-xs text-gray-500 uppercase tracking-wider">Critical</p>
-                      <p className="text-xl font-semibold text-orange-600">
+                  {/* Risk Exposure */}
+                  <div className="relative">
+                    <div className="absolute -top-4 -left-2 w-2 h-16 bg-orange-500 rounded-full"></div>
+                    <div className="pl-4">
+                      <div className="flex items-center mb-2">
+                        <AlertCircle className="w-5 h-5 text-gray-400 mr-2" />
+                        <p className="text-xs font-semibold text-gray-600 uppercase tracking-widest">Risk Exposure</p>
+                      </div>
+                      <p className="text-2xl font-bold text-gray-900 mb-1">
                         {stats.critical_accounts || 0}
                       </p>
-                      <p className="text-xs text-gray-500">Accounts</p>
+                      <p className="text-xs text-gray-500 font-medium">
+                        High Priority Accounts
+                      </p>
                     </div>
                   </div>
 
-                  {/* Success Rate */}
-                  <div className="flex items-center space-x-4">
-                    <div className="p-3 bg-indigo-50 rounded-lg">
-                      <Activity className="w-6 h-6 text-indigo-600" />
-                    </div>
-                    <div>
-                      <p className="text-xs text-gray-500 uppercase tracking-wider">Success Rate</p>
-                      <div className="flex items-center space-x-2">
-                        <p className="text-xl font-semibold text-indigo-600">
+                  {/* Efficiency Metrics */}
+                  <div className="relative">
+                    <div className="absolute -top-4 -left-2 w-2 h-16 bg-indigo-500 rounded-full"></div>
+                    <div className="pl-4">
+                      <div className="flex items-center mb-2">
+                        <Activity className="w-5 h-5 text-gray-400 mr-2" />
+                        <p className="text-xs font-semibold text-gray-600 uppercase tracking-widest">DSO Metrics</p>
+                      </div>
+                      <div className="flex items-baseline gap-3">
+                        <p className="text-2xl font-bold text-gray-900">
                           {stats.success_rate || 0}%
                         </p>
-                        <div className="w-16 h-2 bg-gray-200 rounded-full overflow-hidden">
-                          <div 
-                            className="h-full bg-indigo-600 rounded-full transition-all duration-300"
+                        <div className="w-20 h-2 bg-gray-200 rounded-full overflow-hidden">
+                          <div
+                            className="h-full bg-gradient-to-r from-indigo-400 to-indigo-600 rounded-full transition-all duration-300"
                             style={{ width: `${stats.success_rate || 0}%` }}
                           />
                         </div>
                       </div>
+                      <p className="text-xs text-gray-500 font-medium">
+                        Collection Efficiency
+                      </p>
                     </div>
                   </div>
                 </div>

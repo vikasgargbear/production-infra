@@ -216,14 +216,22 @@ const LedgerReports: React.FC<LedgerReportsProps> = ({ embedded = false, onClose
 
   const renderOverviewDashboard = () => {
     const data = reportData as any;
-    
+
+    // Ensure data exists with safe defaults
+    const monthlyData = data?.monthly_trend || [];
+    const outstandingByType = data?.outstanding_by_type || [
+      { name: 'Customers', value: 0 },
+      { name: 'Suppliers', value: 0 }
+    ];
+    const efficiencyTrend = data?.efficiency_trend || [];
+
     return (
       <div className="space-y-6">
         {/* Monthly Receivables vs Payables */}
         <div className="bg-white p-6 rounded-lg shadow">
           <h3 className="text-lg font-semibold mb-4">Monthly Receivables vs Payables</h3>
           <ResponsiveContainer width="100%" height={300}>
-            <BarChart data={data.monthly_data}>
+            <BarChart data={monthlyData}>
               <CartesianGrid strokeDasharray="3 3" />
               <XAxis dataKey="month" />
               <YAxis />
@@ -242,7 +250,7 @@ const LedgerReports: React.FC<LedgerReportsProps> = ({ embedded = false, onClose
             <ResponsiveContainer width="100%" height={250}>
               <RechartsPieChart>
                 <Pie
-                  data={data.outstanding_by_type}
+                  data={outstandingByType}
                   cx="50%"
                   cy="50%"
                   labelLine={false}
@@ -251,7 +259,7 @@ const LedgerReports: React.FC<LedgerReportsProps> = ({ embedded = false, onClose
                   fill="#8884d8"
                   dataKey="value"
                 >
-                  {data.outstanding_by_type.map((entry: any, index: number) => (
+                  {outstandingByType.map((entry: any, index: number) => (
                     <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                   ))}
                 </Pie>
@@ -263,22 +271,22 @@ const LedgerReports: React.FC<LedgerReportsProps> = ({ embedded = false, onClose
           <div className="bg-white p-6 rounded-lg shadow">
             <h3 className="text-lg font-semibold mb-4">Collection Efficiency Trend</h3>
             <ResponsiveContainer width="100%" height={250}>
-              <LineChart data={data.efficiency_trend}>
+              <LineChart data={efficiencyTrend}>
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis dataKey="month" />
                 <YAxis />
                 <Tooltip formatter={(value) => `${value}%`} />
-                <Line 
-                  type="monotone" 
-                  dataKey="collection_rate" 
-                  stroke="#10B981" 
+                <Line
+                  type="monotone"
+                  dataKey="collection_rate"
+                  stroke="#10B981"
                   name="Collection Rate"
                   strokeWidth={2}
                 />
-                <Line 
-                  type="monotone" 
-                  dataKey="payment_rate" 
-                  stroke="#F59E0B" 
+                <Line
+                  type="monotone"
+                  dataKey="payment_rate"
+                  stroke="#F59E0B"
                   name="Payment Rate"
                   strokeWidth={2}
                 />
