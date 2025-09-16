@@ -1,14 +1,13 @@
 import React, { useState, useEffect } from 'react';
-import { 
-  DollarSign, TrendingUp, 
-  AlertTriangle, BarChart3, FileText,
+import {
+  DollarSign, TrendingUp,
+  AlertTriangle, FileText,
   Archive, Loader2, RefreshCw, AlertCircle
 } from 'lucide-react';
 import { ModuleHub } from '../global';
 import PartyLedgerV3 from './PartyLedgerV3';
 import Outstanding from './Outstanding';
 import CollectionCenter from './CollectionCenter';
-import LedgerReports from './LedgerReports';
 
 interface LedgerHubProps {
   open?: boolean;
@@ -58,15 +57,6 @@ const LedgerHub: React.FC<LedgerHubProps> = ({ open = true, onClose }) => {
       icon: AlertTriangle,
       color: 'orange',
       component: CollectionCenter
-    },
-    {
-      id: 'ledger-reports',
-      label: 'Reports',
-      fullLabel: 'Ledger Reports',
-      description: 'Financial reports',
-      icon: BarChart3,
-      color: 'purple',
-      component: LedgerReports
     }
   ];
 

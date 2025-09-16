@@ -1,12 +1,11 @@
 import React from 'react';
 import {
-  CreditCard, FileText, TrendingUp, Calculator, Receipt,
+  CreditCard, FileText, Calculator, Receipt,
   RefreshCw
 } from 'lucide-react';
 import { ModuleHub } from '../global';
 import ModularPaymentEntry from './ModularPaymentEntry';
 import FinancialJournalFlow from './FinancialJournalFlow';
-import FinancialReportsSimple from './FinancialReportsSimple';
 import ExpenseClaimsFlow from './ExpenseClaimsFlow';
 import BankReconciliationFlow from './BankReconciliationFlow';
 
@@ -62,15 +61,6 @@ const FinancialHub: React.FC<FinancialHubProps> = ({ open = true, onClose }) => 
       icon: RefreshCw,
       color: 'teal',
       component: BankReconciliationFlow
-    },
-    {
-      id: 'financial-reports',
-      label: 'Reports',
-      fullLabel: 'Financial Reports',
-      description: 'View financial statements & reports',
-      icon: TrendingUp,
-      color: 'purple',
-      component: FinancialReportsSimple
     }
   ];
 
@@ -79,7 +69,7 @@ const FinancialHub: React.FC<FinancialHubProps> = ({ open = true, onClose }) => 
       open={open}
       onClose={onClose || (() => {})}
       title="Financial Hub"
-      subtitle="Payments, journals, and financial reports"
+      subtitle="Payments, journals, and expense management"
       icon={Calculator}
       modules={financialModules}
       defaultModule="payment-entry"
