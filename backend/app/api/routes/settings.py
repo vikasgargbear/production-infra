@@ -18,31 +18,37 @@ router = APIRouter(tags=["Settings"])
 
 # Default feature settings
 DEFAULT_FEATURES = {
+    # System Features
+    "system_notifications": False,  # Currently disabled to prevent errors
+    "auto_fifo_allocation": True,
+    "inventory_tracking": True,
+    "credit_limit_enforcement": False,
+
     # Inventory Features
     "allowNegativeStock": False,
     "expiryDateMandatory": True,
     "batchWiseTracking": True,
     "stockAdjustmentApproval": False,
     "lowStockAlerts": True,
-    
+
     # Sales Features
     "creditLimitForParties": True,
     "creditLimitThreshold": 100000,
     "salesReturnFlow": "with-credit-note",
     "salesApprovalRequired": False,
     "discountLimit": 20,
-    
+
     # Purchase Features
     "grnWorkflow": True,
     "purchaseApprovalLimit": 50000,
     "autoGeneratePurchaseOrder": False,
     "vendorRatingSystem": False,
-    
+
     # E-Way Bill
     "ewayBillEnabled": True,
     "ewayBillThreshold": 50000,
     "autoGenerateEwayBill": False,
-    
+
     # GST Features
     "gstRoundOff": True,
     "reverseChargeApplicable": False,
@@ -288,3 +294,73 @@ def update_general_settings(
         logger.error(f"Error updating general settings: {str(e)}")
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Failed to update general settings: {str(e)}")
+
+@router.post("/features/database-flags")
+def update_database_feature_flags(
+    features: Dict[str, bool],
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)
+):
+    """
+    Update database-level feature flags (like system_notifications)
+    This controls actual database behavior through feature_flags table
+    """
+    try:
+        # First ensure the feature_flags table exists
+        db.execute(text("""
+            CREATE TABLE IF NOT EXISTS system_config.feature_flags (
+                feature_name VARCHAR(100) PRIMARY KEY,
+                is_enabled BOOLEAN DEFAULT true,
+                description TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """))
+
+        updated_features = {}
+
+        for feature_name, is_enabled in features.items():
+            # Special handling for system_notifications
+            if feature_name == "system_notifications":
+                # Update the database feature flag
+                db.execute(text("""
+                    INSERT INTO system_config.feature_flags (feature_name, is_enabled, description)
+                    VALUES (:name, :enabled, :desc)
+                    ON CONFLICT (feature_name) DO UPDATE SET
+                        is_enabled = :enabled,
+                        updated_at = CURRENT_TIMESTAMP
+                """), {
+                    "name": "system_notifications",
+                    "enabled": is_enabled,
+                    "desc": "Controls whether system creates automatic notifications"
+                })
+                logger.info(f"System notifications {'enabled' if is_enabled else 'disabled'}")
+
+            # Handle other system-level features
+            elif feature_name in ["auto_fifo_allocation", "inventory_tracking", "credit_limit_enforcement"]:
+                db.execute(text("""
+                    INSERT INTO system_config.feature_flags (feature_name, is_enabled, description)
+                    VALUES (:name, :enabled, :desc)
+                    ON CONFLICT (feature_name) DO UPDATE SET
+                        is_enabled = :enabled,
+                        updated_at = CURRENT_TIMESTAMP
+                """), {
+                    "name": feature_name,
+                    "enabled": is_enabled,
+                    "desc": f"System feature: {feature_name}"
+                })
+
+            updated_features[feature_name] = is_enabled
+
+        db.commit()
+
+        return {
+            "success": True,
+            "message": "Database feature flags updated successfully",
+            "features": updated_features
+        }
+
+    except Exception as e:
+        logger.error(f"Error updating database feature flags: {str(e)}")
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Failed to update database feature flags: {str(e)}")
