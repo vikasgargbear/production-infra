@@ -17,6 +17,7 @@ from ..services.payment_service import PaymentService
 from ..services.document_number_service import DocumentNumberService
 
 logger = logging.getLogger(__name__)
+# Fixed notification trigger issues - Jan 15, 2025
 
 router = APIRouter(tags=["payments"])
 
