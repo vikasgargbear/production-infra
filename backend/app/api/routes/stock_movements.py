@@ -384,17 +384,26 @@ def create_stock_issue(
             }
         ).first()
         
+        # Import feature flags utility
+        from ...utils.feature_flags import check_negative_stock_allowed
+
         if not stock:
             raise HTTPException(
-                status_code=400, 
+                status_code=400,
                 detail=f"No stock found for product at this location"
             )
-            
-        if stock.quantity_available < issue_data["quantity"]:
+
+        # Check if negative stock is allowed from master settings
+        allow_negative = check_negative_stock_allowed(db, str(org_id))
+
+        if not allow_negative and stock.quantity_available < issue_data["quantity"]:
             raise HTTPException(
                 status_code=400,
-                detail=f"Insufficient stock. Available: {stock.quantity_available}"
+                detail=f"Insufficient stock. Available: {stock.quantity_available}. Enable 'Allow Negative Stock' in Master Settings to proceed."
             )
+        elif stock.quantity_available < issue_data["quantity"]:
+            # Negative stock is allowed, just log a warning
+            logger.warning(f"Stock going negative for product {issue_data['product_id']}. Current: {stock.quantity_available}, Issuing: {issue_data['quantity']}")
             
         # Skip creating movement record since inventory_movements table was deleted  
         # Just log the movement details

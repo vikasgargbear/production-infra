@@ -21,29 +21,122 @@ const MasterSettings = () => {
 
   // Feature definitions with descriptions
   const featureDefinitions = {
+    // Notification Settings
     system_notifications: {
       label: 'System Notifications',
-      description: 'Enable automatic notifications for overdue invoices, low stock, expiring products, etc.',
+      description: 'Enable automatic notifications for all system events',
       icon: Bell,
-      category: 'Alerts'
+      category: 'Notifications'
     },
-    auto_fifo_allocation: {
-      label: 'Auto FIFO Allocation',
-      description: 'Automatically allocate payments to oldest unpaid invoices first',
-      icon: Zap,
-      category: 'Finance'
+    low_stock_alerts: {
+      label: 'Low Stock Alerts',
+      description: 'Alert when inventory falls below minimum levels',
+      icon: Bell,
+      category: 'Notifications'
     },
-    inventory_tracking: {
-      label: 'Inventory Tracking',
-      description: 'Track stock movements and maintain inventory levels',
+    expiry_alerts: {
+      label: 'Expiry Alerts',
+      description: 'Alert for products nearing expiry date',
+      icon: Bell,
+      category: 'Notifications'
+    },
+    overdue_invoice_alerts: {
+      label: 'Overdue Invoice Alerts',
+      description: 'Alert when invoices become overdue',
+      icon: Bell,
+      category: 'Notifications'
+    },
+
+    // Inventory Settings
+    allow_negative_stock: {
+      label: 'Allow Negative Stock',
+      description: 'Allow inventory to go negative (useful for pre-orders)',
       icon: Database,
       category: 'Inventory'
+    },
+    batch_wise_tracking: {
+      label: 'Batch Wise Tracking',
+      description: 'Track inventory by batch numbers',
+      icon: Database,
+      category: 'Inventory'
+    },
+    expiry_date_mandatory: {
+      label: 'Expiry Date Mandatory',
+      description: 'Require expiry date when adding products',
+      icon: Database,
+      category: 'Inventory'
+    },
+    stock_adjustment_approval: {
+      label: 'Stock Adjustment Approval',
+      description: 'Require approval for stock adjustments',
+      icon: Shield,
+      category: 'Inventory'
+    },
+
+    // Financial Settings
+    auto_fifo_allocation: {
+      label: 'Auto FIFO Allocation',
+      description: 'Automatically allocate payments to oldest unpaid invoices',
+      icon: Zap,
+      category: 'Finance'
     },
     credit_limit_enforcement: {
       label: 'Credit Limit Enforcement',
       description: 'Enforce customer credit limits on new orders',
       icon: Shield,
       category: 'Finance'
+    },
+    partial_payments: {
+      label: 'Allow Partial Payments',
+      description: 'Allow customers to make partial invoice payments',
+      icon: Zap,
+      category: 'Finance'
+    },
+    auto_reconciliation: {
+      label: 'Auto Reconciliation',
+      description: 'Automatically reconcile payments with invoices',
+      icon: Zap,
+      category: 'Finance'
+    },
+
+    // Sales Settings
+    sales_approval_required: {
+      label: 'Sales Approval Required',
+      description: 'Require approval for sales orders above limit',
+      icon: Shield,
+      category: 'Sales'
+    },
+    discount_limit_check: {
+      label: 'Discount Limit Check',
+      description: 'Check if discounts exceed allowed limits',
+      icon: Shield,
+      category: 'Sales'
+    },
+    minimum_margin_check: {
+      label: 'Minimum Margin Check',
+      description: 'Ensure minimum profit margin on sales',
+      icon: Shield,
+      category: 'Sales'
+    },
+
+    // GST & Compliance
+    gst_round_off: {
+      label: 'GST Round Off',
+      description: 'Round off GST calculations to nearest rupee',
+      icon: Shield,
+      category: 'Compliance'
+    },
+    eway_bill_enabled: {
+      label: 'E-Way Bill Generation',
+      description: 'Enable E-Way bill generation for shipments',
+      icon: Shield,
+      category: 'Compliance'
+    },
+    tcs_applicable: {
+      label: 'TCS Applicable',
+      description: 'Apply Tax Collected at Source on sales',
+      icon: Shield,
+      category: 'Compliance'
     }
   };
 
@@ -100,12 +193,10 @@ const MasterSettings = () => {
       });
 
       // Also update database feature flags for system-level features
-      const systemFeatures = {
-        system_notifications: features.system_notifications || false,
-        auto_fifo_allocation: features.auto_fifo_allocation || false,
-        inventory_tracking: features.inventory_tracking || false,
-        credit_limit_enforcement: features.credit_limit_enforcement || false
-      };
+      const systemFeatures = {};
+      Object.keys(featureDefinitions).forEach(key => {
+        systemFeatures[key] = features[key] || false;
+      });
 
       const flagsResponse = await fetch('/api/settings/features/database-flags', {
         method: 'POST',
