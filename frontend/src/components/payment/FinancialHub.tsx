@@ -1,7 +1,7 @@
 import React from 'react';
-import { 
-  CreditCard, FileText, TrendingUp, Calculator, Receipt, 
-  Users, RefreshCw
+import {
+  CreditCard, FileText, TrendingUp, Calculator, Receipt,
+  RefreshCw
 } from 'lucide-react';
 import { ModuleHub } from '../global';
 import ModularPaymentEntry from './ModularPaymentEntry';
@@ -9,7 +9,6 @@ import FinancialJournalFlow from './FinancialJournalFlow';
 import FinancialReportsSimple from './FinancialReportsSimple';
 import ExpenseClaimsFlow from './ExpenseClaimsFlow';
 import BankReconciliationFlow from './BankReconciliationFlow';
-import OutstandingManagement from './OutstandingManagement';
 
 interface FinancialHubProps {
   open?: boolean;
@@ -63,15 +62,6 @@ const FinancialHub: React.FC<FinancialHubProps> = ({ open = true, onClose }) => 
       icon: RefreshCw,
       color: 'teal',
       component: BankReconciliationFlow
-    },
-    {
-      id: 'outstanding',
-      label: 'Outstanding',
-      fullLabel: 'Outstanding Management',
-      description: 'Customer & supplier balances',
-      icon: Users,
-      color: 'amber',
-      component: OutstandingManagement
     },
     {
       id: 'financial-reports',
