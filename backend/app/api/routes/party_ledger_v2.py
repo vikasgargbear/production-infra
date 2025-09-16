@@ -278,14 +278,17 @@ async def get_aging_analysis(
             result = db.execute(
                 text("""
                     WITH aging AS (
-                        SELECT 
+                        SELECT
                             c.customer_id,
                             c.customer_name,
+                            c.phone,
+                            c.email,
+                            c.address,
                             i.invoice_id,
                             i.invoice_number,
                             (i.final_amount - COALESCE(i.paid_amount, 0)) as outstanding,
                             CURRENT_DATE - i.invoice_date as days_old,
-                            CASE 
+                            CASE
                                 WHEN CURRENT_DATE - i.invoice_date <= 30 THEN 'current'
                                 WHEN CURRENT_DATE - i.invoice_date <= 60 THEN '31-60'
                                 WHEN CURRENT_DATE - i.invoice_date <= 90 THEN '61-90'
@@ -297,9 +300,12 @@ async def get_aging_analysis(
                         AND i.invoice_status != 'cancelled'
                         AND i.final_amount > COALESCE(i.paid_amount, 0)
                         AND i.org_id = :org_id                        AND c.org_id = :org_id                    )
-                    SELECT 
+                    SELECT
                         customer_id,
                         customer_name,
+                        MAX(phone) as phone,
+                        MAX(email) as email,
+                        MAX(address) as address,
                         COUNT(invoice_id) as invoice_count,
                         SUM(outstanding) as total_outstanding,
                         SUM(CASE WHEN bucket = 'current' THEN outstanding ELSE 0 END) as current,
