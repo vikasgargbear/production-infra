@@ -852,24 +852,6 @@ const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) =>
                           </div>
                         </div>
                       )}
-                      
-                      {/* Show allocated invoices preview for auto methods */}
-                      {!isLoading && payment.allocation_method !== 'manual' && payment.allocation_method !== 'advance' && payment.allocations && payment.allocations.length > 0 && (
-                        <div>
-                          <h5 className="text-sm font-medium text-gray-700 mb-3">Allocation Preview:</h5>
-                          <div className="space-y-2">
-                            {payment.allocations.slice(0, 3).map((alloc: any, index: number) => (
-                              <div key={index} className="flex justify-between items-center p-2 bg-gray-50 rounded">
-                                <span className="text-sm text-gray-700">{alloc.invoice_no}</span>
-                                <span className="text-sm font-medium text-green-600">₹{alloc.allocated_amount.toFixed(2)}</span>
-                              </div>
-                            ))}
-                            {payment.allocations.length > 3 && (
-                              <p className="text-xs text-gray-500 text-center">+{payment.allocations.length - 3} more invoices</p>
-                            )}
-                          </div>
-                        </div>
-                      )}
                     </Card>
                   </div>
                 )}
