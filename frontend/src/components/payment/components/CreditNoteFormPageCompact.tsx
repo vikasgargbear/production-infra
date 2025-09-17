@@ -477,17 +477,17 @@ const CreditNoteFormPageCompact: React.FC<CreditNoteFormPageCompactProps> = ({
                     <div className="space-y-1 text-sm">
                       <div className="flex justify-between">
                         <span className="text-gray-600">Subtotal:</span>
-                        <span className="font-medium">₹{totals.subtotal.toFixed(2)}</span>
+                        <span className="font-medium">₹{(totals?.subtotal || 0).toFixed(2)}</span>
                       </div>
                       {includeGST && (
                         <>
                           <div className="flex justify-between">
                             <span className="text-gray-600">GST:</span>
-                            <span className="font-medium">₹{totals.taxTotal.toFixed(2)}</span>
+                            <span className="font-medium">₹{(totals?.taxTotal || 0).toFixed(2)}</span>
                           </div>
                           <div className="flex justify-between text-base font-semibold pt-1 border-t">
                             <span>Total:</span>
-                            <span>₹{totals.grandTotal.toFixed(2)}</span>
+                            <span>₹{(totals?.grandTotal || 0).toFixed(2)}</span>
                           </div>
                         </>
                       )}
