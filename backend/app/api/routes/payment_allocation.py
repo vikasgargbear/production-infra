@@ -265,12 +265,12 @@ async def get_payment_allocations(
                     i.invoice_date,
                     i.final_amount as invoice_amount,
                     pa.allocated_amount,
-                    pa.allocation_date,
+                    pa.created_at as allocation_date,
                     pa.allocation_type
                 FROM financial.payment_allocations pa
                 JOIN sales.invoices i ON pa.invoice_id = i.invoice_id
                 WHERE pa.payment_id = :payment_id
-                ORDER BY pa.allocation_date DESC
+                ORDER BY pa.created_at DESC
             """),
             {"payment_id": payment_id}
         ).fetchall()
@@ -308,19 +308,19 @@ async def get_invoice_payments(
     try:
         payments = db.execute(
             text("""
-                SELECT 
+                SELECT
                     pa.allocation_id,
                     pa.payment_id,
                     p.payment_number,
                     p.payment_date,
                     p.payment_amount,
                     pa.allocated_amount,
-                    pa.allocation_date,
+                    pa.created_at as allocation_date,
                     pa.allocation_type
                 FROM financial.payment_allocations pa
                 JOIN financial.payments p ON pa.payment_id = p.payment_id
                 WHERE pa.invoice_id = :invoice_id
-                ORDER BY pa.allocation_date DESC
+                ORDER BY pa.created_at DESC
             """),
             {"invoice_id": invoice_id}
         ).fetchall()
