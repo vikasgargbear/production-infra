@@ -49,65 +49,58 @@ const TaxAnalytics: React.FC<TaxAnalyticsProps> = ({ embedded = false, onClose }
 
   const [selectedReport, setSelectedReport] = useState('overview');
 
-  // Fetch tax summary data
+  // Fetch tax summary data from real API
   const { data: taxSummary, isLoading, refetch } = useQuery(
     ['tax-summary', filters],
     async () => {
-      try {
-        const response = await apiClient.get('/gst/summary', {
-          params: {
-            date_from: filters.dateRange.from ? format(filters.dateRange.from, 'yyyy-MM-dd') : undefined,
-            date_to: filters.dateRange.to ? format(filters.dateRange.to, 'yyyy-MM-dd') : undefined,
-            tax_type: filters.taxType !== 'all' ? filters.taxType : undefined
-          }
-        });
-        return response.data;
-      } catch (error) {
-        // Return mock data for testing
-        return {
-          output_tax: 125000,
-          input_tax: 85000,
-          net_tax_liability: 40000,
-          cgst_collected: 62500,
-          sgst_collected: 62500,
-          igst_collected: 0,
-          cgst_paid: 42500,
-          sgst_paid: 42500,
-          igst_paid: 0,
-          pending_returns: 2,
-          compliance_score: 92
-        };
-      }
+      const response = await apiClient.get('/tax-entries/analytics/summary', {
+        params: {
+          date_from: filters.dateRange.from ? format(filters.dateRange.from, 'yyyy-MM-dd') : undefined,
+          date_to: filters.dateRange.to ? format(filters.dateRange.to, 'yyyy-MM-dd') : undefined
+        }
+      });
+
+      const data = response.data || {};
+
+      // Transform API response to match our component structure
+      return {
+        output_tax: data.total_output_tax || 0,
+        input_tax: data.total_input_tax || 0,
+        net_tax_liability: (data.total_output_tax || 0) - (data.total_input_tax || 0),
+        cgst_collected: data.cgst_collected || 0,
+        sgst_collected: data.sgst_collected || 0,
+        igst_collected: data.igst_collected || 0,
+        cgst_paid: data.cgst_paid || 0,
+        sgst_paid: data.sgst_paid || 0,
+        igst_paid: data.igst_paid || 0,
+        pending_returns: data.pending_returns || 0,
+        compliance_score: data.compliance_score || 100
+      };
     }
   );
 
-  // Fetch monthly tax trends
+  // Fetch monthly tax trends from real API
   const { data: taxTrends } = useQuery(
     ['tax-trends', filters],
     async () => {
-      try {
-        const response = await apiClient.get('/gst/trends', {
-          params: {
-            date_from: filters.dateRange.from ? format(filters.dateRange.from, 'yyyy-MM-dd') : undefined,
-            date_to: filters.dateRange.to ? format(filters.dateRange.to, 'yyyy-MM-dd') : undefined
-          }
-        });
-        return response.data;
-      } catch (error) {
-        // Return mock data
-        return {
-          monthly_data: [
-            { month: 'Jan', output: 95000, input: 65000, net: 30000 },
-            { month: 'Feb', output: 102000, input: 71000, net: 31000 },
-            { month: 'Mar', output: 125000, input: 85000, net: 40000 }
-          ],
-          tax_breakdown: [
-            { name: 'CGST', value: 62500 },
-            { name: 'SGST', value: 62500 },
-            { name: 'IGST', value: 0 }
-          ]
-        };
-      }
+      const response = await apiClient.get('/tax-entries/gstr1/summary', {
+        params: {
+          date_from: filters.dateRange.from ? format(filters.dateRange.from, 'yyyy-MM-dd') : undefined,
+          date_to: filters.dateRange.to ? format(filters.dateRange.to, 'yyyy-MM-dd') : undefined
+        }
+      });
+
+      const data = response.data || {};
+
+      // Transform the API response for charts
+      return {
+        monthly_data: data.monthly_summary || [],
+        tax_breakdown: [
+          { name: 'CGST', value: data.total_cgst || 0 },
+          { name: 'SGST', value: data.total_sgst || 0 },
+          { name: 'IGST', value: data.total_igst || 0 }
+        ]
+      };
     }
   );
 

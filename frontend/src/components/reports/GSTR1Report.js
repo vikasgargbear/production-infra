@@ -25,7 +25,15 @@ const GSTR1Report = ({ open, onClose }) => {
     b2b: [], // Business to Business
     b2c: [], // Business to Consumer
     hsn: [], // HSN Summary
-    docs: [] // Document Summary
+    docs: {  // Document Summary - should be an object, not array
+      invoices: 0,
+      cancelledInvoices: 0,
+      totalValue: 0,
+      totalTaxable: 0,
+      totalCGST: 0,
+      totalSGST: 0,
+      totalIGST: 0
+    }
   });
 
   useEffect(() => {

@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { DollarSign, TrendingUp, CreditCard, PiggyBank, Download, Calendar, AlertCircle, ArrowUpRight, ArrowDownRight, Wallet } from 'lucide-react';
 import { Line, Bar, Doughnut } from 'react-chartjs-2';
 import {
@@ -14,6 +14,8 @@ import {
   Legend,
   Filler
 } from 'chart.js';
+import apiClient from '../../services/api/apiClient';
+import { format, subDays, startOfWeek, startOfMonth, startOfQuarter, startOfYear } from 'date-fns';
 
 ChartJS.register(
   CategoryScale,
@@ -51,54 +53,168 @@ interface Transaction {
 const FinancialReport: React.FC = () => {
   const [period, setPeriod] = useState('month');
   const [view, setView] = useState<'overview' | 'cashflow' | 'receivables' | 'payables'>('overview');
+  const [loading, setLoading] = useState(true);
+  const [metrics, setMetrics] = useState<FinancialMetric[]>([]);
+  const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [chartData, setChartData] = useState<any>({});
 
-  const metrics: FinancialMetric[] = [
-    { label: 'Total Revenue', current: 2456780, previous: 2234500, change: 222280, changePercent: 9.95, trend: 'up' },
-    { label: 'Gross Profit', current: 645230, previous: 589000, change: 56230, changePercent: 9.54, trend: 'up' },
-    { label: 'Net Profit', current: 321450, previous: 298000, change: 23450, changePercent: 7.87, trend: 'up' },
-    { label: 'Operating Expenses', current: 423780, previous: 391000, change: 32780, changePercent: 8.38, trend: 'down' },
-    { label: 'Accounts Receivable', current: 321450, previous: 345000, change: -23550, changePercent: -6.83, trend: 'up' },
-    { label: 'Accounts Payable', current: 187650, previous: 201000, change: -13350, changePercent: -6.64, trend: 'up' },
-  ];
+  useEffect(() => {
+    loadFinancialData();
+  }, [period, view]);
 
-  const transactions: Transaction[] = [
-    { id: '1', date: '2024-01-30', type: 'Income', category: 'Sales', description: 'Invoice #INV-2024-0145', amount: 45670, status: 'Completed', reference: 'Apollo Pharmacy' },
-    { id: '2', date: '2024-01-29', type: 'Expense', category: 'Purchase', description: 'PO #PO-2024-0089', amount: 32100, status: 'Pending', reference: 'Cipla Ltd' },
-    { id: '3', date: '2024-01-29', type: 'Income', category: 'Sales', description: 'Invoice #INV-2024-0144', amount: 78900, status: 'Completed', reference: 'City Hospital' },
-    { id: '4', date: '2024-01-28', type: 'Expense', category: 'Operating', description: 'Rent Payment', amount: 50000, status: 'Completed', reference: 'Property Owner' },
-    { id: '5', date: '2024-01-28', type: 'Income', category: 'Sales', description: 'Invoice #INV-2024-0143', amount: 23450, status: 'Overdue', reference: 'MedPlus' },
-    { id: '6', date: '2024-01-27', type: 'Expense', category: 'Purchase', description: 'PO #PO-2024-0088', amount: 67890, status: 'Completed', reference: 'Sun Pharma' },
-  ];
+  const loadFinancialData = async () => {
+    setLoading(true);
+    try {
+      // Calculate date range based on period
+      const endDate = new Date();
+      let startDate = new Date();
+
+      switch (period) {
+        case 'week':
+          startDate = startOfWeek(endDate);
+          break;
+        case 'month':
+          startDate = startOfMonth(endDate);
+          break;
+        case 'quarter':
+          startDate = startOfQuarter(endDate);
+          break;
+        case 'year':
+          startDate = startOfYear(endDate);
+          break;
+      }
+
+      const dateParams = {
+        date_from: format(startDate, 'yyyy-MM-dd'),
+        date_to: format(endDate, 'yyyy-MM-dd')
+      };
+
+      // Fetch real data from API endpoints
+      const [financialSummary, cashFlow, recentTransactions, expenseAnalysis] = await Promise.all([
+        apiClient.get('/financial/summary', { params: dateParams }),
+        apiClient.get('/financial/cash-flow', { params: dateParams }),
+        apiClient.get('/financial/transactions', { params: { ...dateParams, limit: 10 } }),
+        apiClient.get('/financial/expense-breakdown', { params: dateParams })
+      ]);
+
+      // Process metrics
+      const summaryData = financialSummary.data || {};
+      const calculatedMetrics: FinancialMetric[] = [
+        {
+          label: 'Total Revenue',
+          current: summaryData.total_revenue || 0,
+          previous: summaryData.previous_revenue || 0,
+          change: summaryData.revenue_change || 0,
+          changePercent: summaryData.revenue_change_percent || 0,
+          trend: summaryData.revenue_change >= 0 ? 'up' : 'down'
+        },
+        {
+          label: 'Gross Profit',
+          current: summaryData.gross_profit || 0,
+          previous: summaryData.previous_gross_profit || 0,
+          change: summaryData.gross_profit_change || 0,
+          changePercent: summaryData.gross_profit_change_percent || 0,
+          trend: summaryData.gross_profit_change >= 0 ? 'up' : 'down'
+        },
+        {
+          label: 'Net Profit',
+          current: summaryData.net_profit || 0,
+          previous: summaryData.previous_net_profit || 0,
+          change: summaryData.net_profit_change || 0,
+          changePercent: summaryData.net_profit_change_percent || 0,
+          trend: summaryData.net_profit_change >= 0 ? 'up' : 'down'
+        },
+        {
+          label: 'Operating Expenses',
+          current: summaryData.operating_expenses || 0,
+          previous: summaryData.previous_operating_expenses || 0,
+          change: summaryData.operating_expenses_change || 0,
+          changePercent: summaryData.operating_expenses_change_percent || 0,
+          trend: summaryData.operating_expenses_change <= 0 ? 'up' : 'down'
+        },
+        {
+          label: 'Accounts Receivable',
+          current: summaryData.accounts_receivable || 0,
+          previous: summaryData.previous_accounts_receivable || 0,
+          change: summaryData.receivable_change || 0,
+          changePercent: summaryData.receivable_change_percent || 0,
+          trend: summaryData.receivable_change <= 0 ? 'up' : 'down'
+        },
+        {
+          label: 'Accounts Payable',
+          current: summaryData.accounts_payable || 0,
+          previous: summaryData.previous_accounts_payable || 0,
+          change: summaryData.payable_change || 0,
+          changePercent: summaryData.payable_change_percent || 0,
+          trend: summaryData.payable_change <= 0 ? 'up' : 'down'
+        }
+      ];
+      setMetrics(calculatedMetrics);
+
+      // Process transactions
+      const transactionData = recentTransactions.data || [];
+      const processedTransactions: Transaction[] = transactionData.map((item: any) => ({
+        id: item.id || item.transaction_id,
+        date: item.date || item.transaction_date,
+        type: item.type === 'income' ? 'Income' : 'Expense',
+        category: item.category || item.transaction_category || 'General',
+        description: item.description || item.remarks || '',
+        amount: item.amount || 0,
+        status: item.status === 'paid' ? 'Completed' : item.status === 'pending' ? 'Pending' : 'Overdue',
+        reference: item.reference || item.party_name || ''
+      }));
+      setTransactions(processedTransactions);
+
+      // Store chart data for later use
+      setChartData({
+        cashFlow: cashFlow.data,
+        expenseBreakdown: expenseAnalysis.data
+      });
+
+    } catch (error) {
+      console.error('Error loading financial data:', error);
+      // Set empty state on error
+      setMetrics([]);
+      setTransactions([]);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const cashFlowData = useMemo(() => {
-    const labels = ['Week 1', 'Week 2', 'Week 3', 'Week 4'];
+    if (!chartData.cashFlow || chartData.cashFlow.length === 0) {
+      return { labels: [], datasets: [] };
+    }
+
+    const labels = chartData.cashFlow.map((item: any) => item.period || item.week || '');
     return {
       labels,
       datasets: [
         {
           label: 'Cash Inflow',
-          data: [450000, 520000, 480000, 510000],
+          data: chartData.cashFlow.map((item: any) => item.inflow || 0),
           backgroundColor: 'rgba(34, 197, 94, 0.8)',
           borderWidth: 0
         },
         {
           label: 'Cash Outflow',
-          data: [380000, 420000, 390000, 410000],
+          data: chartData.cashFlow.map((item: any) => item.outflow || 0),
           backgroundColor: 'rgba(239, 68, 68, 0.8)',
           borderWidth: 0
         }
       ]
     };
-  }, []);
+  }, [chartData]);
 
   const revenueVsExpensesTrend = useMemo(() => {
-    const labels = ['Aug', 'Sep', 'Oct', 'Nov', 'Dec', 'Jan'];
+    // This will be populated from API data in loadFinancialData
+    // For now return empty structure that will be filled with real data
     return {
-      labels,
+      labels: [],
       datasets: [
         {
           label: 'Revenue',
-          data: [2100000, 2200000, 2280000, 2350000, 2400000, 2456780],
+          data: [],
           borderColor: 'rgb(59, 130, 246)',
           backgroundColor: 'rgba(59, 130, 246, 0.1)',
           tension: 0.3,
@@ -106,7 +222,7 @@ const FinancialReport: React.FC = () => {
         },
         {
           label: 'Expenses',
-          data: [1850000, 1920000, 1980000, 2020000, 2080000, 2135330],
+          data: [],
           borderColor: 'rgb(239, 68, 68)',
           backgroundColor: 'rgba(239, 68, 68, 0.1)',
           tension: 0.3,
@@ -114,7 +230,7 @@ const FinancialReport: React.FC = () => {
         },
         {
           label: 'Profit',
-          data: [250000, 280000, 300000, 330000, 320000, 321450],
+          data: [],
           borderColor: 'rgb(34, 197, 94)',
           backgroundColor: 'rgba(34, 197, 94, 0.1)',
           tension: 0.3,
@@ -125,10 +241,15 @@ const FinancialReport: React.FC = () => {
   }, []);
 
   const expenseBreakdown = useMemo(() => {
+    if (!chartData.expenseBreakdown) {
+      return { labels: [], datasets: [] };
+    }
+
+    const breakdown = chartData.expenseBreakdown;
     return {
-      labels: ['Purchases', 'Salaries', 'Rent', 'Utilities', 'Marketing', 'Others'],
+      labels: Object.keys(breakdown),
       datasets: [{
-        data: [1234560, 345670, 78900, 23450, 56780, 396970],
+        data: Object.values(breakdown),
         backgroundColor: [
           'rgba(59, 130, 246, 0.8)',
           'rgba(147, 51, 234, 0.8)',
@@ -140,7 +261,7 @@ const FinancialReport: React.FC = () => {
         borderWidth: 0
       }]
     };
-  }, []);
+  }, [chartData]);
 
   const formatCurrency = (amount: number) => {
     return `₹${Math.abs(amount).toLocaleString('en-IN')}`;
@@ -167,6 +288,17 @@ const FinancialReport: React.FC = () => {
       </span>
     );
   };
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
+          <p className="mt-4 text-gray-600">Loading financial data...</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="p-6 bg-gray-50 min-h-screen">
       <div className="bg-white rounded-lg shadow-sm border border-gray-200">

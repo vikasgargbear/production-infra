@@ -73,15 +73,17 @@ const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) =>
     }
   }, []);
   
-  // Auto-apply allocation when amount changes (if auto method is selected)
+  // Auto-apply allocation when amount changes ONLY if user explicitly selected an auto method
   React.useEffect(() => {
-    if (payment.amount && parseFloat(payment.amount) > 0 && 
-        outstandingInvoices && outstandingInvoices.length > 0 && 
+    // Only auto-allocate if user explicitly chose a method other than manual
+    if (payment.amount && parseFloat(payment.amount) > 0 &&
+        outstandingInvoices && outstandingInvoices.length > 0 &&
+        payment.allocation_method && payment.allocation_method !== 'manual' &&
         ['fifo', 'lifo', 'highest'].includes(payment.allocation_method)) {
       const timeoutId = setTimeout(() => {
         applyAllocationMethod(payment.allocation_method);
       }, 500); // Debounce for 500ms
-      
+
       return () => clearTimeout(timeoutId);
     }
   }, [payment.amount, outstandingInvoices, payment.allocation_method]);
@@ -421,43 +423,57 @@ const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) =>
         // The invoices are in response.data.invoices array
         const invoices = response.data.invoices || [];
         
+        // Fetch existing allocations for each invoice
+        const invoicesWithAllocations = await Promise.all(
+          invoices.map(async (inv: any) => {
+            try {
+              // Fetch existing payment allocations for this invoice
+              const allocResponse = await apiClient.get(`/payment-allocation/invoice/${inv.invoice_id}/payments`);
+              const existingAllocations = allocResponse.data?.allocations || [];
+              const totalAllocated = existingAllocations.reduce((sum: number, alloc: any) =>
+                sum + (alloc.allocated_amount || 0), 0);
+
+              return {
+                ...inv,
+                existing_allocations: existingAllocations,
+                total_allocated: totalAllocated,
+                remaining_due: (inv.credit_amount || inv.final_amount) - totalAllocated
+              };
+            } catch (error) {
+              // If allocation fetch fails, use invoice as-is
+              return {
+                ...inv,
+                existing_allocations: [],
+                total_allocated: 0,
+                remaining_due: inv.credit_amount || inv.final_amount
+              };
+            }
+          })
+        );
+
         // Filter and map outstanding invoices
-        const outstandingInvoices = invoices
+        const outstandingInvoices = invoicesWithAllocations
           .filter((inv: any) => {
-            // Log first invoice to see structure
-            if (invoices.indexOf(inv) === 0) {
-            }
-            
-            // credit_amount IS the outstanding amount (what's unpaid)
-            // If credit_amount exists, use it directly
-            if (inv.credit_amount !== undefined && inv.credit_amount !== null) {
-              return inv.credit_amount > 0.01;
-            }
-            
-            // Otherwise calculate: total - paid
-            const totalAmount = inv.final_amount || inv.total_amount || inv.grand_total || 0;
-            const paidAmount = inv.paid_amount || 0;
-            const outstanding = totalAmount - paidAmount;
-            
-            return outstanding > 0.01; // Only include if outstanding
+            // Use remaining_due which accounts for existing allocations
+            return inv.remaining_due > 0.01;
           })
           .map((inv: any) => {
-            // credit_amount IS the outstanding/due amount
             const totalAmount = inv.final_amount || inv.total_amount || inv.grand_total || 0;
             const paidAmount = inv.paid_amount || 0;
-            const creditAmount = inv.credit_amount;
-            
-            // Use credit_amount as the amount due if it exists
-            const amountDue = creditAmount !== undefined && creditAmount !== null 
-              ? creditAmount 
-              : totalAmount - paidAmount;
-            
+
+            // Use remaining_due which already accounts for existing allocations
+            const amountDue = inv.remaining_due;
+
             return {
               invoice_no: inv.invoice_number || inv.invoice_no || `INV-${inv.invoice_id}`,
               invoice_date: inv.invoice_date || inv.created_at,
               total_amount: totalAmount,
               paid_amount: paidAmount,
               amount_due: amountDue,
+              remaining_due: amountDue, // Same as amount_due since it's already calculated
+              // Show existing allocations info
+              total_allocated: inv.total_allocated || 0,
+              existing_allocations: inv.existing_allocations || 0, // Changed to number for display
               status: inv.payment_status || 'pending',
               invoice_id: inv.invoice_id || inv.id,
               customer_id: customerId
@@ -782,8 +798,10 @@ const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) =>
                                   </th>
                                   <th className="text-left py-2 px-2">Invoice No</th>
                                   <th className="text-left py-2 px-2">Date</th>
+                                  <th className="text-right py-2 px-2">Total</th>
+                                  <th className="text-right py-2 px-2">Already Paid</th>
                                   <th className="text-right py-2 px-2">Outstanding</th>
-                                  <th className="text-right py-2 px-2">Allocated</th>
+                                  <th className="text-right py-2 px-2">Allocate Now</th>
                                 </tr>
                               </thead>
                               <tbody>
@@ -810,9 +828,18 @@ const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) =>
                                       </td>
                                       <td className="py-2 px-2 font-medium">{invoice.invoice_no}</td>
                                       <td className="py-2 px-2 text-gray-600">{new Date(invoice.invoice_date).toLocaleDateString()}</td>
+                                      <td className="text-right py-2 px-2">₹{(invoice.total_amount || 0).toFixed(2)}</td>
+                                      <td className="text-right py-2 px-2 text-gray-600">
+                                        ₹{((invoice.total_amount || 0) - (invoice.amount_due || 0)).toFixed(2)}
+                                        {invoice.total_allocated > 0 && (
+                                          <span className="block text-xs text-blue-600">
+                                            (incl. ₹{invoice.total_allocated.toFixed(2)} recent)
+                                          </span>
+                                        )}
+                                      </td>
                                       <td className="text-right py-2 px-2 font-medium text-red-600">₹{invoice.amount_due.toFixed(2)}</td>
                                       <td className="text-right py-2 px-2 font-medium text-green-600">
-                                        {payment.allocation_method === 'manual' 
+                                        {payment.allocation_method === 'manual'
                                           ? (isSelected ? `₹${(manualAllocations[invoiceId] || 0).toFixed(2)}` : '-')
                                           : (autoAllocation ? `₹${(autoAllocation.allocated_amount || 0).toFixed(2)}` : '-')
                                         }

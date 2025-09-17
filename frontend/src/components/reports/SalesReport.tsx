@@ -6,7 +6,8 @@ import {
 } from 'lucide-react';
 import { Line, Bar } from 'react-chartjs-2';
 import { format, subDays, startOfMonth, endOfMonth } from 'date-fns';
-import { invoicesApi, customersApi } from '../../services/api';
+import apiClient from '../../services/api/apiClient';
+import { formatCurrency } from '../../utils/formatters';
 import { DatePicker, Select, DataTable } from '../global';
 
 interface SalesMetric {
@@ -50,72 +51,127 @@ const SalesReport: React.FC = () => {
   const loadSalesData = async () => {
     setLoading(true);
     try {
-      // Mock data - replace with actual API calls
-      const mockMetrics: SalesMetric[] = [
+      // Fetch real sales data from multiple endpoints
+      const [salesSummary, salesTrend, salesByDate] = await Promise.all([
+        // Get sales summary metrics
+        apiClient.get('/sales/analytics/summary', {
+          params: {
+            date_from: dateRange.start,
+            date_to: dateRange.end,
+            report_type: reportType,
+            group_by: groupBy
+          }
+        }),
+        // Get sales trend data for chart
+        apiClient.get('/sales/analytics/trend', {
+          params: {
+            date_from: dateRange.start,
+            date_to: dateRange.end,
+            group_by: groupBy
+          }
+        }),
+        // Get detailed sales data for table
+        apiClient.get('/sales/analytics/by-date', {
+          params: {
+            date_from: dateRange.start,
+            date_to: dateRange.end,
+            customer: filters.customer || undefined,
+            product: filters.product || undefined,
+            category: filters.category || undefined,
+            payment_status: filters.paymentStatus !== 'all' ? filters.paymentStatus : undefined
+          }
+        })
+      ]);
+
+      // Process metrics from API response
+      const summaryData = salesSummary.data || {};
+      const calculatedMetrics: SalesMetric[] = [
         {
           label: 'Total Sales',
-          value: '₹15,67,890',
-          trend: 12.5,
+          value: formatCurrency(summaryData.total_sales || 0),
+          trend: summaryData.sales_growth || 0,
           comparison: 'vs last period'
         },
         {
           label: 'Total Orders',
-          value: '1,456',
-          trend: 8.3,
+          value: String(summaryData.total_orders || 0),
+          trend: summaryData.orders_growth || 0,
           comparison: 'vs last period'
         },
         {
           label: 'Average Order Value',
-          value: '₹1,076',
-          trend: 4.2,
+          value: formatCurrency(summaryData.avg_order_value || 0),
+          trend: summaryData.aov_growth || 0,
           comparison: 'vs last period'
         },
         {
-          label: 'Conversion Rate',
-          value: '68.5%',
-          trend: -2.1,
+          label: 'Unique Customers',
+          value: String(summaryData.unique_customers || 0),
+          trend: summaryData.customers_growth || 0,
           comparison: 'vs last period'
         }
       ];
-      setMetrics(mockMetrics);
+      setMetrics(calculatedMetrics);
 
-      // Generate chart data based on groupBy
-      const labels = generateDateLabels();
-      setChartData({
-        labels,
-        datasets: [
-          {
-            label: 'Sales Amount',
-            data: generateRandomData(labels.length, 10000, 50000),
-            borderColor: 'rgb(59, 130, 246)',
-            backgroundColor: 'rgba(59, 130, 246, 0.1)',
-            yAxisID: 'y',
-            tension: 0.3,
-            fill: true
-          },
-          {
-            label: 'Order Count',
-            data: generateRandomData(labels.length, 20, 100),
-            borderColor: 'rgb(156, 163, 175)',
-            backgroundColor: 'rgba(156, 163, 175, 0.1)',
-            yAxisID: 'y1',
-            tension: 0.3,
-            fill: false
+      // Process chart data from API response
+      const trendData = salesTrend.data || [];
+      if (trendData.length > 0) {
+        const labels = trendData.map((item: any) => {
+          if (groupBy === 'day') {
+            return format(new Date(item.date || item.period), 'MMM dd');
+          } else if (groupBy === 'week') {
+            return `Week ${item.week || item.period}`;
+          } else {
+            return item.month || item.period;
           }
-        ]
-      });
+        });
 
-      // Generate table data
-      const mockTableData = [
-        { date: '2024-01-15', orders: 45, sales: '₹45,678', customers: 38, avgOrder: '₹1,015' },
-        { date: '2024-01-14', orders: 52, sales: '₹52,340', customers: 44, avgOrder: '₹1,006' },
-        { date: '2024-01-13', orders: 38, sales: '₹38,900', customers: 32, avgOrder: '₹1,023' },
-        { date: '2024-01-12', orders: 61, sales: '₹61,234', customers: 51, avgOrder: '₹1,003' },
-        { date: '2024-01-11', orders: 49, sales: '₹49,567', customers: 41, avgOrder: '₹1,011' }
-      ];
-      setTableData(mockTableData);
+        setChartData({
+          labels,
+          datasets: [
+            {
+              label: 'Sales Amount',
+              data: trendData.map((item: any) => item.total_sales || item.revenue || 0),
+              borderColor: 'rgb(59, 130, 246)',
+              backgroundColor: 'rgba(59, 130, 246, 0.1)',
+              yAxisID: 'y',
+              tension: 0.3,
+              fill: true
+            },
+            {
+              label: 'Order Count',
+              data: trendData.map((item: any) => item.order_count || item.orders || 0),
+              borderColor: 'rgb(156, 163, 175)',
+              backgroundColor: 'rgba(156, 163, 175, 0.1)',
+              yAxisID: 'y1',
+              tension: 0.3,
+              fill: false
+            }
+          ]
+        });
+      } else {
+        // If no data, show empty chart
+        setChartData(null);
+      }
+
+      // Process table data from API response
+      const detailedData = salesByDate.data || [];
+      const processedTableData = detailedData.map((item: any) => ({
+        date: item.date || item.invoice_date,
+        orders: item.order_count || item.invoice_count || 0,
+        sales: formatCurrency(item.total_sales || item.total_amount || 0),
+        customers: item.customer_count || item.unique_customers || 0,
+        avgOrder: formatCurrency(item.avg_order_value ||
+          ((item.total_sales || item.total_amount || 0) / (item.order_count || 1)))
+      }));
+      setTableData(processedTableData);
 
     } catch (error) {
+      console.error('Error loading sales data:', error);
+      // Set empty state on error
+      setMetrics([]);
+      setChartData(null);
+      setTableData([]);
     } finally {
       setLoading(false);
     }
@@ -136,9 +192,6 @@ const SalesReport: React.FC = () => {
     return [];
   };
 
-  const generateRandomData = (length: number, min: number, max: number) => {
-    return Array.from({ length }, () => Math.floor(Math.random() * (max - min + 1)) + min);
-  };
 
   const chartOptions = {
     responsive: true,

@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { Users, UserPlus, UserCheck, TrendingUp, Download, Search, Filter, MapPin, ShoppingBag, Calendar, Award } from 'lucide-react';
 import { Line, Bar, Doughnut, Scatter } from 'react-chartjs-2';
 import {
@@ -14,6 +14,9 @@ import {
   Legend,
   Filler
 } from 'chart.js';
+import apiClient from '../../services/api/apiClient';
+import { format, subMonths } from 'date-fns';
+import { formatCurrency } from '../../utils/formatters';
 
 ChartJS.register(
   CategoryScale,
@@ -49,18 +52,89 @@ const CustomerAnalytics: React.FC = () => {
   const [selectedType, setSelectedType] = useState('all');
   const [selectedStatus, setSelectedStatus] = useState('all');
   const [dateRange, setDateRange] = useState('6months');
+  const [loading, setLoading] = useState(true);
+  const [customers, setCustomers] = useState<Customer[]>([]);
+  const [analyticsData, setAnalyticsData] = useState<any>({});
 
-  // Mock customer data
-  const customers: Customer[] = [
-    { id: '1', name: 'Apollo Pharmacy - MG Road', type: 'Retail', location: 'Mumbai', joinDate: '2022-03-15', totalPurchases: 145000, lastPurchase: '2024-01-28', avgOrderValue: 12500, frequency: 8.5, lifetimeValue: 456000, status: 'Active', creditLimit: 100000, outstanding: 25000 },
-    { id: '2', name: 'City Hospital', type: 'Hospital', location: 'Delhi', joinDate: '2021-06-20', totalPurchases: 890000, lastPurchase: '2024-01-30', avgOrderValue: 45000, frequency: 12, lifetimeValue: 2340000, status: 'Active', creditLimit: 500000, outstanding: 120000 },
-    { id: '3', name: 'MedPlus Wholesale', type: 'Wholesale', location: 'Bangalore', joinDate: '2021-01-10', totalPurchases: 1250000, lastPurchase: '2024-01-29', avgOrderValue: 75000, frequency: 15, lifetimeValue: 3450000, status: 'Active', creditLimit: 750000, outstanding: 180000 },
-    { id: '4', name: 'Green Cross Clinic', type: 'Clinic', location: 'Chennai', joinDate: '2022-09-05', totalPurchases: 67000, lastPurchase: '2024-01-15', avgOrderValue: 8500, frequency: 6, lifetimeValue: 125000, status: 'Active', creditLimit: 50000, outstanding: 12000 },
-    { id: '5', name: 'Wellness Pharmacy', type: 'Retail', location: 'Pune', joinDate: '2023-02-12', totalPurchases: 89000, lastPurchase: '2023-12-20', avgOrderValue: 9800, frequency: 5, lifetimeValue: 98000, status: 'Inactive', creditLimit: 75000, outstanding: 5000 },
-    { id: '6', name: 'District Hospital', type: 'Hospital', location: 'Kolkata', joinDate: '2020-11-30', totalPurchases: 560000, lastPurchase: '2024-01-25', avgOrderValue: 38000, frequency: 10, lifetimeValue: 1890000, status: 'Active', creditLimit: 400000, outstanding: 95000 },
-    { id: '7', name: 'QuickMed Store', type: 'Retail', location: 'Hyderabad', joinDate: '2023-05-18', totalPurchases: 34000, lastPurchase: '2023-10-10', avgOrderValue: 6500, frequency: 3, lifetimeValue: 45000, status: 'Churned', creditLimit: 40000, outstanding: 0 },
-    { id: '8', name: 'Central Medical Supplies', type: 'Wholesale', location: 'Ahmedabad', joinDate: '2021-08-25', totalPurchases: 780000, lastPurchase: '2024-01-27', avgOrderValue: 62000, frequency: 11, lifetimeValue: 2100000, status: 'Active', creditLimit: 600000, outstanding: 145000 },
-  ];
+  useEffect(() => {
+    loadCustomerData();
+  }, [dateRange]);
+
+  const loadCustomerData = async () => {
+    setLoading(true);
+    try {
+      // Calculate date range
+      const endDate = new Date();
+      const startDate = dateRange === '6months' ? subMonths(endDate, 6) :
+                       dateRange === '12months' ? subMonths(endDate, 12) :
+                       subMonths(endDate, 3);
+
+      const dateParams = {
+        date_from: format(startDate, 'yyyy-MM-dd'),
+        date_to: format(endDate, 'yyyy-MM-dd')
+      };
+
+      // Fetch real customer data from API endpoints
+      const [customerList, customerAnalytics, segmentAnalysis, acquisitionData] = await Promise.all([
+        apiClient.get('/customers/analytics/list', { params: dateParams }),
+        apiClient.get('/customers/analytics/summary', { params: dateParams }),
+        apiClient.get('/customers/analytics/segments', { params: dateParams }),
+        apiClient.get('/customers/analytics/acquisition', { params: dateParams })
+      ]);
+
+      // Process customer list
+      const processedCustomers: Customer[] = (customerList.data || []).map((customer: any) => {
+        // Determine customer status based on last purchase
+        let status: Customer['status'] = 'Active';
+        if (customer.last_purchase_date) {
+          const daysSinceLastPurchase = Math.ceil(
+            (new Date().getTime() - new Date(customer.last_purchase_date).getTime()) / (1000 * 60 * 60 * 24)
+          );
+          if (daysSinceLastPurchase > 180) {
+            status = 'Churned';
+          } else if (daysSinceLastPurchase > 60) {
+            status = 'Inactive';
+          }
+        }
+
+        // Determine customer type
+        const type = customer.customer_type === 'hospital' ? 'Hospital' :
+                    customer.customer_type === 'clinic' ? 'Clinic' :
+                    customer.customer_type === 'wholesale' ? 'Wholesale' : 'Retail';
+
+        return {
+          id: customer.id || customer.customer_id,
+          name: customer.name || customer.customer_name,
+          type,
+          location: customer.city || customer.location || '',
+          joinDate: customer.created_at || customer.join_date || '',
+          totalPurchases: customer.total_purchases || customer.total_amount || 0,
+          lastPurchase: customer.last_purchase_date || '',
+          avgOrderValue: customer.avg_order_value || 0,
+          frequency: customer.purchase_frequency || 0,
+          lifetimeValue: customer.lifetime_value || customer.total_purchases || 0,
+          status,
+          creditLimit: customer.credit_limit || 0,
+          outstanding: customer.outstanding_amount || 0
+        };
+      });
+      setCustomers(processedCustomers);
+
+      // Store analytics data for charts
+      setAnalyticsData({
+        summary: customerAnalytics.data,
+        segments: segmentAnalysis.data,
+        acquisition: acquisitionData.data
+      });
+
+    } catch (error) {
+      console.error('Error loading customer data:', error);
+      setCustomers([]);
+      setAnalyticsData({});
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const filteredCustomers = useMemo(() => {
     let filtered = customers;
@@ -84,6 +158,23 @@ const CustomerAnalytics: React.FC = () => {
   }, [searchQuery, selectedType, selectedStatus]);
 
   const segmentationData = useMemo(() => {
+    // Use API data if available, otherwise calculate from customers
+    if (analyticsData.segments) {
+      return {
+        labels: Object.keys(analyticsData.segments),
+        datasets: [{
+          data: Object.values(analyticsData.segments),
+          backgroundColor: [
+            'rgba(59, 130, 246, 0.8)',
+            'rgba(34, 197, 94, 0.8)',
+            'rgba(251, 146, 60, 0.8)',
+            'rgba(147, 51, 234, 0.8)'
+          ],
+          borderWidth: 0
+        }]
+      };
+    }
+
     const segmentCounts = customers.reduce((acc, customer) => {
       acc[customer.type] = (acc[customer.type] || 0) + 1;
       return acc;
@@ -102,33 +193,37 @@ const CustomerAnalytics: React.FC = () => {
         borderWidth: 0
       }]
     };
-  }, []);
+  }, [customers, analyticsData]);
 
   const acquisitionTrend = useMemo(() => {
-    const labels = ['Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec', 'Jan'];
-    return {
-      labels,
-      datasets: [
-        {
-          label: 'New Customers',
-          data: [12, 15, 18, 22, 25, 28, 31],
-          borderColor: 'rgb(59, 130, 246)',
-          backgroundColor: 'rgba(59, 130, 246, 0.1)',
-          tension: 0.3,
-          fill: true
-        },
-        {
-          label: 'Active Customers',
-          data: [380, 395, 410, 425, 440, 455, 467],
-          borderColor: 'rgb(34, 197, 94)',
-          backgroundColor: 'rgba(34, 197, 94, 0.1)',
-          tension: 0.3,
-          fill: true,
-          yAxisID: 'y1'
-        }
-      ]
-    };
-  }, []);
+    if (analyticsData.acquisition && analyticsData.acquisition.length > 0) {
+      const data = analyticsData.acquisition;
+      const labels = data.map((item: any) => item.month || item.period);
+      return {
+        labels,
+        datasets: [
+          {
+            label: 'New Customers',
+            data: data.map((item: any) => item.new_customers || 0),
+            borderColor: 'rgb(59, 130, 246)',
+            backgroundColor: 'rgba(59, 130, 246, 0.1)',
+            tension: 0.3,
+            fill: true
+          },
+          {
+            label: 'Active Customers',
+            data: data.map((item: any) => item.active_customers || 0),
+            borderColor: 'rgb(34, 197, 94)',
+            backgroundColor: 'rgba(34, 197, 94, 0.1)',
+            tension: 0.3,
+            fill: true,
+            yAxisID: 'y1'
+          }
+        ]
+      };
+    }
+    return { labels: [], datasets: [] };
+  }, [analyticsData]);
 
   const revenueBySegment = useMemo(() => {
     const segmentRevenue = customers.reduce((acc, customer) => {
@@ -188,6 +283,17 @@ const CustomerAnalytics: React.FC = () => {
   const formatCurrency = (amount: number) => {
     return `₹${amount.toLocaleString('en-IN')}`;
   };
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
+          <p className="mt-4 text-gray-600">Loading customer analytics...</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="p-6 bg-gray-50 min-h-screen">
       <div className="bg-white rounded-lg shadow-sm border border-gray-200">

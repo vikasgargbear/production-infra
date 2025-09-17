@@ -14,6 +14,8 @@ interface Invoice {
   invoice_date: string;
   total_amount: number;
   amount_due: number;
+  remaining_due?: number; // Amount after existing allocations
+  existing_allocations?: number; // Total already allocated
 }
 
 interface Allocations {
@@ -30,8 +32,10 @@ const InvoiceSelectorV2: React.FC = () => {
   
   const [allocations, setAllocations] = useState<Allocations>({});
 
-  // Calculate totals
-  const totalOutstanding = outstandingInvoices.reduce((sum: number, inv: Invoice) => sum + inv.amount_due, 0);
+  // Calculate totals - use remaining_due if available (accounts for existing allocations)
+  const totalOutstanding = outstandingInvoices.reduce((sum: number, inv: Invoice) =>
+    sum + (inv.remaining_due !== undefined ? inv.remaining_due : inv.amount_due), 0
+  );
   const totalAllocated = Object.values(allocations).reduce((sum: number, amount: number) => sum + (parseFloat(amount.toString()) || 0), 0);
   const remainingPayment = parseFloat(payment.amount || '0') - totalAllocated;
 
@@ -39,9 +43,10 @@ const InvoiceSelectorV2: React.FC = () => {
   const handleAllocationChange = (invoiceId: string, value: string): void => {
     const amount = parseFloat(value) || 0;
     const invoice = outstandingInvoices.find((inv: Invoice) => inv.invoice_no === invoiceId);
-    
-    if (invoice && amount > invoice.amount_due) {
-      return; // Don't allow allocation more than due amount
+
+    const maxAllocation = invoice?.remaining_due !== undefined ? invoice.remaining_due : invoice?.amount_due || 0;
+    if (invoice && amount > maxAllocation) {
+      return; // Don't allow allocation more than remaining due amount
     }
 
     const newAllocations = { ...allocations };
@@ -76,10 +81,13 @@ const InvoiceSelectorV2: React.FC = () => {
     
     for (const invoice of sortedInvoices) {
       if (remainingAmount <= 0) break;
-      
-      const allocationAmount = Math.min(remainingAmount, invoice.amount_due);
-      newAllocations[invoice.invoice_no] = allocationAmount;
-      remainingAmount -= allocationAmount;
+
+      const dueAmount = invoice.remaining_due !== undefined ? invoice.remaining_due : invoice.amount_due;
+      const allocationAmount = Math.min(remainingAmount, dueAmount);
+      if (allocationAmount > 0) {
+        newAllocations[invoice.invoice_no] = allocationAmount;
+        remainingAmount -= allocationAmount;
+      }
     }
     
     setAllocations(newAllocations);
@@ -183,8 +191,9 @@ const InvoiceSelectorV2: React.FC = () => {
               <th className="text-left py-3 px-4 text-xs font-medium text-gray-600 uppercase">Invoice</th>
               <th className="text-center py-3 px-4 text-xs font-medium text-gray-600 uppercase">Date</th>
               <th className="text-right py-3 px-4 text-xs font-medium text-gray-600 uppercase">Total</th>
-              <th className="text-right py-3 px-4 text-xs font-medium text-gray-600 uppercase">Paid</th>
-              <th className="text-right py-3 px-4 text-xs font-medium text-gray-600 uppercase">Due</th>
+              <th className="text-right py-3 px-4 text-xs font-medium text-gray-600 uppercase">Previously Paid</th>
+              <th className="text-right py-3 px-4 text-xs font-medium text-gray-600 uppercase">Original Due</th>
+              <th className="text-right py-3 px-4 text-xs font-medium text-gray-600 uppercase">Remaining</th>
               <th className="text-center py-3 px-4 text-xs font-medium text-gray-600 uppercase">Status</th>
               <th className="text-right py-3 px-4 text-xs font-medium text-gray-600 uppercase">Allocate</th>
             </tr>
@@ -192,8 +201,11 @@ const InvoiceSelectorV2: React.FC = () => {
           <tbody className="divide-y divide-gray-200">
             {outstandingInvoices.map((invoice: Invoice) => {
               const allocated = allocations[invoice.invoice_no] || 0;
-              const isFullyAllocated = allocated >= invoice.amount_due;
-              
+              const remainingDue = invoice.remaining_due !== undefined ? invoice.remaining_due : invoice.amount_due;
+              const previouslyPaid = (invoice.total_amount || 0) - (invoice.amount_due || 0);
+              const existingAllocations = invoice.existing_allocations || 0;
+              const isFullyAllocated = allocated >= remainingDue;
+
               return (
                 <tr key={invoice.invoice_no} className="hover:bg-gray-50">
                   <td className="py-4 px-4">
@@ -209,21 +221,31 @@ const InvoiceSelectorV2: React.FC = () => {
                   </td>
                   <td className="py-4 px-4 text-right">
                     <p className="text-sm text-gray-600">
-                      ₹{((invoice.total_amount || 0) - (invoice.amount_due || 0)).toFixed(2)}
+                      ₹{(previouslyPaid + existingAllocations).toFixed(2)}
+                      {existingAllocations > 0 && (
+                        <span className="block text-xs text-blue-600">
+                          (incl. ₹{existingAllocations.toFixed(2)} recent)
+                        </span>
+                      )}
+                    </p>
+                  </td>
+                  <td className="py-4 px-4 text-right">
+                    <p className="text-sm text-gray-600">
+                      ₹{(invoice.amount_due || 0).toFixed(2)}
                     </p>
                   </td>
                   <td className="py-4 px-4 text-right">
                     <p className="text-sm font-medium text-red-600">
-                      ₹{(invoice.amount_due || 0).toFixed(2)}
+                      ₹{(remainingDue || 0).toFixed(2)}
                     </p>
                   </td>
                   <td className="py-4 px-4 text-center">
-                    <StatusBadge 
+                    <StatusBadge
                       status={
-                        isFullyAllocated ? 'paid' : 
-                        allocated > 0 ? 'partial' : 
+                        isFullyAllocated ? 'paid' :
+                        allocated > 0 ? 'partial' :
                         'unpaid'
-                      } 
+                      }
                     />
                   </td>
                   <td className="py-4 px-4">
@@ -234,8 +256,9 @@ const InvoiceSelectorV2: React.FC = () => {
                       placeholder="0.00"
                       className="w-24 px-2 py-1 text-sm text-right border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
                       min="0"
-                      max={invoice.amount_due || 0}
+                      max={remainingDue || 0}
                       step="0.01"
+                      disabled={remainingDue <= 0}
                     />
                   </td>
                 </tr>
@@ -245,7 +268,7 @@ const InvoiceSelectorV2: React.FC = () => {
           {totalAllocated > 0 && (
             <tfoot className="bg-gray-50 border-t-2 border-gray-200">
               <tr>
-                <td colSpan={6} className="py-3 px-4 text-right text-sm font-medium text-gray-700">
+                <td colSpan={7} className="py-3 px-4 text-right text-sm font-medium text-gray-700">
                   Total Allocated:
                 </td>
                 <td className="py-3 px-4 text-right">

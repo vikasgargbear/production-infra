@@ -194,19 +194,59 @@ export const ledgerApi = {
   // Get dashboard stats for reports
   getDashboardStats: async (params) => {
     try {
-      const response = await apiClient.get('/ledger/dashboard-stats', { params });
-      return response.data;
-    } catch (error) {
-      // Return mock stats to prevent UI errors
+      // Use aging analysis to calculate real dashboard stats
+      const [customerAging, supplierAging] = await Promise.all([
+        apiClient.get('/party-ledger-v2/aging-analysis', {
+          params: { ...params, party_type: 'customer' }
+        }),
+        apiClient.get('/party-ledger-v2/aging-analysis', {
+          params: { ...params, party_type: 'supplier' }
+        })
+      ]);
+
+      // Calculate totals from aging data
+      const customerData = customerAging.data?.aging_data || [];
+      const supplierData = supplierAging.data?.aging_data || [];
+
+      const totalReceivables = customerData.reduce((sum, c) => sum + (c.total_outstanding || 0), 0);
+      const totalPayables = supplierData.reduce((sum, s) => sum + (s.total_outstanding || 0), 0);
+
+      const overdueReceivables = customerData.reduce((sum, c) =>
+        sum + (c.days_31_60 || 0) + (c.days_61_90 || 0) + (c.over_90 || 0), 0);
+      const overduePayables = supplierData.reduce((sum, s) =>
+        sum + (s.days_31_60 || 0) + (s.days_61_90 || 0) + (s.over_90 || 0), 0);
+
+      // Calculate efficiency metrics
+      const collectionEfficiency = totalReceivables > 0
+        ? ((totalReceivables - overdueReceivables) / totalReceivables) * 100
+        : 0;
+      const paymentEfficiency = totalPayables > 0
+        ? ((totalPayables - overduePayables) / totalPayables) * 100
+        : 0;
+
       return {
-        total_receivables: 285000,
-        total_payables: 145000,
-        net_position: 140000,
-        overdue_receivables: 45000,
-        overdue_payables: 12000,
-        collection_efficiency: 78,
-        payment_efficiency: 92,
-        cash_flow_trend: 'positive'
+        total_receivables: totalReceivables,
+        total_payables: totalPayables,
+        net_position: totalReceivables - totalPayables,
+        overdue_receivables: overdueReceivables,
+        overdue_payables: overduePayables,
+        collection_efficiency: collectionEfficiency,
+        payment_efficiency: paymentEfficiency,
+        cash_flow_trend: totalReceivables > totalPayables ? 'positive' :
+                        totalReceivables < totalPayables ? 'negative' : 'neutral'
+      };
+    } catch (error) {
+      console.error('Error fetching dashboard stats:', error);
+      // Return empty data structure instead of mock data
+      return {
+        total_receivables: 0,
+        total_payables: 0,
+        net_position: 0,
+        overdue_receivables: 0,
+        overdue_payables: 0,
+        collection_efficiency: 0,
+        payment_efficiency: 0,
+        cash_flow_trend: 'neutral'
       };
     }
   },

@@ -193,7 +193,7 @@ const ReportsHub: React.FC<ReportsHubProps> = ({ open = true, onClose }) => {
   return (
     <ModuleHub
       open={open}
-      onClose={onClose || (() => {})}
+      onClose={onClose}
       title="Reports & Analytics Center"
       subtitle="Enterprise business intelligence & insights"
       icon={BarChart3}

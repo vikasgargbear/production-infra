@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { Package, AlertTriangle, TrendingDown, BarChart3, Download, Search, Filter, Calendar, Activity, Box, AlertCircle } from 'lucide-react';
 import { Line, Bar, Doughnut, Scatter } from 'react-chartjs-2';
 import {
@@ -14,6 +14,9 @@ import {
   Legend,
   Filler
 } from 'chart.js';
+import apiClient from '../../services/api/apiClient';
+import { format, subDays } from 'date-fns';
+import { formatCurrency } from '../../utils/formatters';
 
 ChartJS.register(
   CategoryScale,
@@ -56,19 +59,86 @@ const InventoryReport: React.FC = () => {
   const [selectedCategory, setSelectedCategory] = useState('all');
   const [stockFilter, setStockFilter] = useState('all');
   const [view, setView] = useState<'overview' | 'movements' | 'expiry' | 'valuation'>('overview');
+  const [loading, setLoading] = useState(true);
+  const [inventory, setInventory] = useState<InventoryItem[]>([]);
+  const [categories, setCategories] = useState<string[]>(['all']);
+  const [stockMovements, setStockMovements] = useState<any[]>([]);
 
-  const inventory: InventoryItem[] = [
-    { id: '1', name: 'Paracetamol 500mg', category: 'Analgesics', batch: 'B2024-001', currentStock: 5000, minStock: 1000, maxStock: 10000, value: 25000, expiryDate: '2025-06-15', lastRestocked: '2024-01-15', turnoverRate: 12.5, status: 'Optimal', supplier: 'Cipla Ltd' },
-    { id: '2', name: 'Amoxicillin 250mg', category: 'Antibiotics', batch: 'B2024-002', currentStock: 800, minStock: 1500, maxStock: 5000, value: 32000, expiryDate: '2024-12-20', lastRestocked: '2024-01-10', turnoverRate: 8.3, status: 'Low', supplier: 'Sun Pharma' },
-    { id: '3', name: 'Insulin Glargine', category: 'Diabetes', batch: 'B2024-003', currentStock: 200, minStock: 500, maxStock: 1500, value: 48000, expiryDate: '2024-03-10', lastRestocked: '2023-12-20', turnoverRate: 6.8, status: 'Critical', supplier: 'Biocon' },
-    { id: '4', name: 'Vitamin C 1000mg', category: 'Vitamins', batch: 'B2024-004', currentStock: 8000, minStock: 2000, maxStock: 6000, value: 16000, expiryDate: '2025-12-01', lastRestocked: '2024-01-25', turnoverRate: 22.3, status: 'Overstocked', supplier: 'Mankind Pharma' },
-    { id: '5', name: 'Omeprazole 20mg', category: 'Gastro', batch: 'B2024-005', currentStock: 3500, minStock: 1000, maxStock: 5000, value: 28000, expiryDate: '2024-02-28', lastRestocked: '2024-01-05', turnoverRate: 15.2, status: 'Expiring', supplier: 'Dr. Reddy\'s' },
-    { id: '6', name: 'Metformin 500mg', category: 'Diabetes', batch: 'B2024-006', currentStock: 4200, minStock: 2000, maxStock: 8000, value: 21000, expiryDate: '2024-09-15', lastRestocked: '2024-01-20', turnoverRate: 10.1, status: 'Optimal', supplier: 'Glenmark' },
-    { id: '7', name: 'Atorvastatin 10mg', category: 'Cardiac', batch: 'B2024-007', currentStock: 2500, minStock: 1000, maxStock: 4000, value: 37500, expiryDate: '2024-11-30', lastRestocked: '2024-01-12', turnoverRate: 9.2, status: 'Optimal', supplier: 'Torrent Pharma' },
-    { id: '8', name: 'Salbutamol Inhaler', category: 'Respiratory', batch: 'B2024-008', currentStock: 450, minStock: 800, maxStock: 2000, value: 22500, expiryDate: '2024-08-20', lastRestocked: '2023-12-15', turnoverRate: 11.4, status: 'Low', supplier: 'Lupin Ltd' },
-  ];
+  useEffect(() => {
+    loadInventoryData();
+  }, [view]);
 
-  const categories = ['all', 'Analgesics', 'Antibiotics', 'Diabetes', 'Vitamins', 'Gastro', 'Cardiac', 'Respiratory'];
+  const loadInventoryData = async () => {
+    setLoading(true);
+    try {
+      // Fetch real inventory data from multiple endpoints
+      const [inventoryList, stockStatus, movements, categoryData] = await Promise.all([
+        apiClient.get('/inventory/list', {
+          params: {
+            include_stock_levels: true,
+            include_expiry: true,
+            include_valuation: true
+          }
+        }),
+        apiClient.get('/inventory/stock-status'),
+        apiClient.get('/inventory/movements', {
+          params: {
+            date_from: format(subDays(new Date(), 7), 'yyyy-MM-dd'),
+            date_to: format(new Date(), 'yyyy-MM-dd')
+          }
+        }),
+        apiClient.get('/inventory/categories')
+      ]);
+
+      // Process inventory items
+      const items = (inventoryList.data || []).map((item: any) => {
+        // Determine stock status
+        let status: InventoryItem['status'] = 'Optimal';
+        if (item.current_stock <= item.min_stock_level) {
+          status = item.current_stock <= (item.min_stock_level * 0.5) ? 'Critical' : 'Low';
+        } else if (item.current_stock >= item.max_stock_level) {
+          status = 'Overstocked';
+        } else if (item.expiry_date) {
+          const daysToExpiry = Math.ceil((new Date(item.expiry_date).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24));
+          if (daysToExpiry <= 30) {
+            status = 'Expiring';
+          }
+        }
+
+        return {
+          id: item.id || item.product_id,
+          name: item.name || item.product_name,
+          category: item.category || 'General',
+          batch: item.batch_number || '',
+          currentStock: item.current_stock || item.quantity || 0,
+          minStock: item.min_stock_level || 0,
+          maxStock: item.max_stock_level || 0,
+          value: item.stock_value || (item.current_stock * (item.purchase_price || 0)),
+          expiryDate: item.expiry_date || '',
+          lastRestocked: item.last_restocked || item.last_purchase_date || '',
+          turnoverRate: item.turnover_rate || 0,
+          status,
+          supplier: item.supplier || item.vendor_name || ''
+        };
+      });
+      setInventory(items);
+
+      // Set categories from API
+      if (categoryData.data && Array.isArray(categoryData.data)) {
+        setCategories(['all', ...categoryData.data.map((cat: any) => cat.name || cat.category_name)]);
+      }
+
+      // Process stock movements
+      setStockMovements(movements.data || []);
+
+    } catch (error) {
+      console.error('Error loading inventory data:', error);
+      setInventory([]);
+      setStockMovements([]);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const filteredInventory = useMemo(() => {
     let filtered = inventory;
@@ -111,16 +181,34 @@ const InventoryReport: React.FC = () => {
         borderWidth: 0
       }]
     };
-  }, []);
+  }, [inventory]);
 
   const stockMovementTrend = useMemo(() => {
-    const labels = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+    if (stockMovements.length === 0) {
+      return { labels: [], datasets: [] };
+    }
+
+    // Group movements by day
+    const dailyMovements = stockMovements.reduce((acc: any, movement: any) => {
+      const date = format(new Date(movement.date || movement.movement_date), 'EEE');
+      if (!acc[date]) {
+        acc[date] = { in: 0, out: 0 };
+      }
+      if (movement.type === 'in' || movement.movement_type === 'purchase' || movement.movement_type === 'return') {
+        acc[date].in += movement.quantity || 0;
+      } else {
+        acc[date].out += Math.abs(movement.quantity || 0);
+      }
+      return acc;
+    }, {});
+
+    const labels = Object.keys(dailyMovements);
     return {
       labels,
       datasets: [
         {
           label: 'Stock In',
-          data: [12000, 15000, 8000, 18000, 22000, 10000, 5000],
+          data: labels.map(label => dailyMovements[label].in),
           borderColor: 'rgb(34, 197, 94)',
           backgroundColor: 'rgba(34, 197, 94, 0.1)',
           tension: 0.3,
@@ -128,7 +216,7 @@ const InventoryReport: React.FC = () => {
         },
         {
           label: 'Stock Out',
-          data: [10000, 12000, 11000, 14000, 18000, 8000, 4000],
+          data: labels.map(label => dailyMovements[label].out),
           borderColor: 'rgb(239, 68, 68)',
           backgroundColor: 'rgba(239, 68, 68, 0.1)',
           tension: 0.3,
@@ -136,7 +224,7 @@ const InventoryReport: React.FC = () => {
         }
       ]
     };
-  }, []);
+  }, [stockMovements]);
 
   const categoryValuation = useMemo(() => {
     const categoryValues = inventory.reduce((acc, item) => {
@@ -215,6 +303,17 @@ const InventoryReport: React.FC = () => {
     if (days < 90) return <span className="text-yellow-600">{days} days</span>;
     return <span className="text-gray-600">{days} days</span>;
   };
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
+          <p className="mt-4 text-gray-600">Loading inventory data...</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="p-6 bg-gray-50 min-h-screen">
       <div className="bg-white rounded-lg shadow-sm border border-gray-200">

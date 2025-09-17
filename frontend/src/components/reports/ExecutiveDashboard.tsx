@@ -1,54 +1,41 @@
 import React, { useState, useEffect } from 'react';
 import {
-  TrendingUp, TrendingDown, Users, Package, DollarSign,
-  ShoppingCart, Calendar, Download, Filter, RefreshCw,
-  ArrowUp, ArrowDown, Minus
+  DollarSign, ShoppingCart, Package, Users, TrendingUp,
+  AlertTriangle, Calendar, RefreshCw, Download
 } from 'lucide-react';
-import { Line, Bar, Doughnut } from 'react-chartjs-2';
+import { format, subDays, startOfMonth } from 'date-fns';
 import {
-  Chart as ChartJS,
-  CategoryScale,
-  LinearScale,
-  PointElement,
-  LineElement,
-  BarElement,
-  ArcElement,
-  Title,
-  Tooltip,
-  Legend,
-  Filler
-} from 'chart.js';
-import { format, subDays, startOfMonth, endOfMonth } from 'date-fns';
-import { dashboardApi } from '../../services/api';
+  LineChart, Line, BarChart, Bar, PieChart as RechartsPieChart,
+  Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip,
+  Legend, ResponsiveContainer, Area, AreaChart
+} from 'recharts';
+import { ModuleHeader } from '../global';
+import apiClient from '../../services/api/apiClient';
+import { formatCurrency } from '../../utils/formatters';
 
-// Register ChartJS components
-ChartJS.register(
-  CategoryScale,
-  LinearScale,
-  PointElement,
-  LineElement,
-  BarElement,
-  ArcElement,
-  Title,
-  Tooltip,
-  Legend,
-  Filler
-);
+interface ExecutiveDashboardProps {
+  embedded?: boolean;
+  onClose?: () => void;
+}
 
 interface MetricCard {
   title: string;
   value: string | number;
   change: number;
-  changeType: 'increase' | 'decrease' | 'neutral';
-  icon: React.ComponentType<{ className?: string }>;
-  subtitle?: string;
+  changeType: 'increase' | 'decrease';
+  icon: React.ComponentType<any>;
+  subtitle: string;
 }
 
-const ExecutiveDashboard: React.FC = () => {
-  const [loading, setLoading] = useState(true);
+const COLORS = ['#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#EC4899'];
+
+const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({ embedded = false, onClose }) => {
   const [dateRange, setDateRange] = useState('30days');
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [dashboardData, setDashboardData] = useState<any>({});
   const [metrics, setMetrics] = useState<MetricCard[]>([]);
-  const [salesData, setSalesData] = useState<any>(null);
+  const [salesData, setSalesData] = useState<any[]>([]);
   const [inventoryData, setInventoryData] = useState<any>(null);
   const [topProducts, setTopProducts] = useState<any[]>([]);
   const [topCustomers, setTopCustomers] = useState<any[]>([]);
@@ -63,7 +50,7 @@ const ExecutiveDashboard: React.FC = () => {
       // Calculate date range
       const endDate = new Date();
       let startDate = new Date();
-      
+
       switch (dateRange) {
         case '7days':
           startDate = subDays(endDate, 7);
@@ -81,312 +68,360 @@ const ExecutiveDashboard: React.FC = () => {
           startDate = subDays(endDate, 30);
       }
 
-      // Mock data for now - should be replaced with actual API calls
-      const mockMetrics: MetricCard[] = [
+      const dateParams = {
+        date_from: format(startDate, 'yyyy-MM-dd'),
+        date_to: format(endDate, 'yyyy-MM-dd')
+      };
+
+      // Fetch real data from multiple endpoints in parallel
+      const [
+        dashboardStats,
+        salesAnalytics,
+        inventorySummary,
+        financialSummary,
+        topProductsData,
+        topCustomersData
+      ] = await Promise.all([
+        apiClient.get('/dashboard/stats', { params: dateParams }),
+        apiClient.get('/dashboard/sales-analytics', { params: dateParams }),
+        apiClient.get('/dashboard/inventory-summary', { params: dateParams }),
+        apiClient.get('/dashboard/financial-summary', { params: dateParams }),
+        apiClient.get('/dashboard/top-products', { params: { ...dateParams, limit: 5 } }),
+        apiClient.get('/dashboard/top-customers', { params: { ...dateParams, limit: 5 } })
+      ]);
+
+      // Process dashboard stats for metric cards
+      const stats = dashboardStats.data || {};
+      const financial = financialSummary.data || {};
+      const inventory = inventorySummary.data || {};
+
+      const metricsData: MetricCard[] = [
         {
           title: 'Total Revenue',
-          value: '₹12,45,678',
-          change: 12.5,
-          changeType: 'increase',
+          value: formatCurrency(stats.total_revenue || financial.total_revenue || 0),
+          change: stats.revenue_change || 0,
+          changeType: stats.revenue_change >= 0 ? 'increase' : 'decrease',
           icon: DollarSign,
           subtitle: 'This period'
         },
         {
           title: 'Total Orders',
-          value: '1,234',
-          change: 8.3,
-          changeType: 'increase',
+          value: stats.total_orders || stats.total_invoices || 0,
+          change: stats.orders_change || 0,
+          changeType: stats.orders_change >= 0 ? 'increase' : 'decrease',
           icon: ShoppingCart,
-          subtitle: `${dateRange} orders`
+          subtitle: 'Orders placed'
         },
         {
-          title: 'Active Customers',
-          value: '456',
-          change: 5.2,
+          title: 'Active Products',
+          value: inventory.total_products || inventory.active_products || 0,
+          change: inventory.products_change || 0,
           changeType: 'increase',
-          icon: Users,
-          subtitle: 'Active this period'
+          icon: Package,
+          subtitle: 'In inventory'
         },
         {
-          title: 'Inventory Value',
-          value: '₹45,67,890',
-          change: -2.1,
-          changeType: 'decrease',
-          icon: Package,
-          subtitle: 'Current stock value'
+          title: 'Total Customers',
+          value: stats.total_customers || 0,
+          change: stats.customers_change || 0,
+          changeType: stats.customers_change >= 0 ? 'increase' : 'decrease',
+          icon: Users,
+          subtitle: 'Registered'
         }
       ];
 
-      setMetrics(mockMetrics);
+      setMetrics(metricsData);
+      setDashboardData(stats);
 
-      // Mock sales trend data
-      const labels = Array.from({ length: 30 }, (_, i) => 
-        format(subDays(new Date(), 29 - i), 'MMM dd')
-      );
-      
-      setSalesData({
-        labels: labels.filter((_, i) => i % 5 === 0), // Show every 5th label
-        datasets: [{
-          label: 'Sales',
-          data: Array.from({ length: 6 }, () => Math.floor(Math.random() * 50000) + 20000),
-          borderColor: 'rgb(59, 130, 246)',
-          backgroundColor: 'rgba(59, 130, 246, 0.1)',
-          tension: 0.3,
-          fill: true
-        }]
-      });
+      // Process sales analytics for charts
+      const salesChartData = (salesAnalytics.data || []).map((item: any) => ({
+        date: item.date || item.period,
+        revenue: item.revenue || item.total_sales || 0,
+        orders: item.orders || item.invoice_count || 0,
+        profit: item.profit || (item.revenue * 0.2) || 0
+      }));
+      setSalesData(salesChartData);
 
-      // Mock inventory distribution
-      setInventoryData({
-        labels: ['In Stock', 'Low Stock', 'Out of Stock', 'Expired'],
-        datasets: [{
-          data: [65, 20, 10, 5],
-          backgroundColor: [
-            'rgb(34, 197, 94)',
-            'rgb(251, 191, 36)',
-            'rgb(239, 68, 68)',
-            'rgb(156, 163, 175)'
-          ],
-          borderWidth: 0
-        }]
-      });
+      // Set inventory data
+      setInventoryData(inventory);
 
-      // Mock top products
-      setTopProducts([
-        { name: 'Paracetamol 500mg', sales: 2345, revenue: '₹45,678' },
-        { name: 'Amoxicillin 250mg', sales: 1890, revenue: '₹38,900' },
-        { name: 'Vitamin C Tablets', sales: 1567, revenue: '₹31,340' },
-        { name: 'Cough Syrup 100ml', sales: 1234, revenue: '₹24,680' },
-        { name: 'Aspirin 100mg', sales: 987, revenue: '₹19,740' }
-      ]);
-
-      // Mock top customers
-      setTopCustomers([
-        { name: 'Apollo Pharmacy', orders: 234, value: '₹2,34,567' },
-        { name: 'MedPlus', orders: 189, value: '₹1,89,000' },
-        { name: 'City Hospital', orders: 156, value: '₹1,56,789' },
-        { name: 'Wellness Clinic', orders: 134, value: '₹1,34,567' },
-        { name: 'HealthMart', orders: 98, value: '₹98,765' }
-      ]);
+      // Set top products and customers
+      setTopProducts(topProductsData.data || []);
+      setTopCustomers(topCustomersData.data || []);
 
     } catch (error) {
+      console.error('Error loading dashboard data:', error);
+      // Even if API fails, show empty state instead of mock data
+      setMetrics([]);
+      setSalesData([]);
+      setTopProducts([]);
+      setTopCustomers([]);
     } finally {
       setLoading(false);
     }
   };
 
-  const getChangeIcon = (changeType: string) => {
-    switch (changeType) {
-      case 'increase':
-        return <ArrowUp className="h-4 w-4" />;
-      case 'decrease':
-        return <ArrowDown className="h-4 w-4" />;
-      default:
-        return <Minus className="h-4 w-4" />;
-    }
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    await loadDashboardData();
+    setRefreshing(false);
   };
 
-  const chartOptions = {
-    responsive: true,
-    maintainAspectRatio: false,
-    plugins: {
-      legend: {
-        display: false
-      },
-      tooltip: {
-        backgroundColor: 'rgba(0, 0, 0, 0.8)',
-        padding: 12,
-        cornerRadius: 8,
-        titleFont: {
-          size: 14
-        },
-        bodyFont: {
-          size: 13
-        }
-      }
-    },
-    scales: {
-      x: {
-        grid: {
-          display: false
-        }
-      },
-      y: {
-        grid: {
-          color: 'rgba(0, 0, 0, 0.05)'
-        },
-        ticks: {
-          callback: function(value: any) {
-            return '₹' + value.toLocaleString('en-IN');
-          }
-        }
-      }
-    }
+  const handleExport = () => {
+    // TODO: Implement export functionality
+    console.log('Exporting dashboard data...');
   };
 
-  const doughnutOptions = {
-    responsive: true,
-    maintainAspectRatio: false,
-    plugins: {
-      legend: {
-        position: 'right' as const,
-        labels: {
-          padding: 15,
-          font: {
-            size: 12
-          }
-        }
-      }
-    }
-  };
-
-  return (
-    <div className="p-6 bg-gray-50 min-h-screen">
-      {/* Header */}
-      <div className="mb-6">
-        <div className="flex justify-between items-center">
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900">Executive Dashboard</h1>
-            <p className="text-gray-600 mt-1">Business overview and key metrics</p>
-          </div>
-          <div className="flex items-center gap-3">
-            {/* Date Range Selector */}
-            <select
-              value={dateRange}
-              onChange={(e) => setDateRange(e.target.value)}
-              className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-            >
-              <option value="7days">Last 7 Days</option>
-              <option value="30days">Last 30 Days</option>
-              <option value="month">This Month</option>
-              <option value="90days">Last 90 Days</option>
-            </select>
-            
-            {/* Action Buttons */}
-            <button
-              onClick={loadDashboardData}
-              className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-              title="Refresh"
-            >
-              <RefreshCw className="h-5 w-5 text-gray-600" />
-            </button>
-            <button
-              className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-              title="Export"
-            >
-              <Download className="h-5 w-5 text-gray-600" />
-            </button>
-          </div>
+  if (loading && !refreshing) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
+          <p className="mt-4 text-gray-600">Loading executive dashboard...</p>
         </div>
       </div>
+    );
+  }
 
-      {/* Metric Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-6">
-        {metrics.map((metric, index) => {
-          const Icon = metric.icon;
-          const changeColor = metric.changeType === 'increase' ? 'text-green-600' : 
-                             metric.changeType === 'decrease' ? 'text-red-600' : 
-                             'text-gray-600';
-          
-          return (
-            <div key={index} className="bg-white rounded-xl shadow-sm p-6 border border-gray-200">
-              <div className="flex items-start justify-between">
-                <div className="flex-1">
-                  <p className="text-sm font-medium text-gray-600">{metric.title}</p>
-                  <p className="text-2xl font-bold text-gray-900 mt-2">{metric.value}</p>
-                  <div className={`flex items-center mt-2 ${changeColor}`}>
-                    {getChangeIcon(metric.changeType)}
-                    <span className="text-sm font-medium ml-1">
-                      {Math.abs(metric.change)}%
+  return (
+    <div className={embedded ? 'p-6' : 'h-full bg-gray-50'}>
+      <div className={embedded ? '' : 'h-full flex flex-col'}>
+        {!embedded && (
+          <ModuleHeader
+            title="Executive Dashboard"
+            documentNumber=""
+            status=""
+            icon={TrendingUp}
+            iconColor="text-blue-600"
+            onClose={onClose}
+            historyType="report"
+            onSaveDraft={() => {}}
+            additionalActions={[
+              {
+                label: 'Refresh',
+                icon: RefreshCw,
+                onClick: handleRefresh,
+                variant: 'outline',
+                disabled: refreshing
+              },
+              {
+                label: 'Export',
+                icon: Download,
+                onClick: handleExport,
+                variant: 'secondary'
+              }
+            ] as any}
+          />
+        )}
+
+        <div className={embedded ? '' : 'flex-1 overflow-y-auto'}>
+          <div className="max-w-7xl mx-auto px-6 py-6">
+            {/* Date Range Selector */}
+            <div className="mb-6 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setDateRange('7days')}
+                  className={`px-4 py-2 rounded-lg text-sm font-medium ${
+                    dateRange === '7days'
+                      ? 'bg-blue-100 text-blue-700'
+                      : 'bg-white text-gray-600 hover:bg-gray-50'
+                  }`}
+                >
+                  7 Days
+                </button>
+                <button
+                  onClick={() => setDateRange('30days')}
+                  className={`px-4 py-2 rounded-lg text-sm font-medium ${
+                    dateRange === '30days'
+                      ? 'bg-blue-100 text-blue-700'
+                      : 'bg-white text-gray-600 hover:bg-gray-50'
+                  }`}
+                >
+                  30 Days
+                </button>
+                <button
+                  onClick={() => setDateRange('month')}
+                  className={`px-4 py-2 rounded-lg text-sm font-medium ${
+                    dateRange === 'month'
+                      ? 'bg-blue-100 text-blue-700'
+                      : 'bg-white text-gray-600 hover:bg-gray-50'
+                  }`}
+                >
+                  This Month
+                </button>
+                <button
+                  onClick={() => setDateRange('90days')}
+                  className={`px-4 py-2 rounded-lg text-sm font-medium ${
+                    dateRange === '90days'
+                      ? 'bg-blue-100 text-blue-700'
+                      : 'bg-white text-gray-600 hover:bg-gray-50'
+                  }`}
+                >
+                  90 Days
+                </button>
+              </div>
+              <div className="flex items-center gap-2 text-sm text-gray-500">
+                <Calendar className="w-4 h-4" />
+                <span>Last updated: {new Date().toLocaleString()}</span>
+              </div>
+            </div>
+
+            {/* Metric Cards */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-6">
+              {metrics.map((metric, index) => {
+                const Icon = metric.icon;
+                return (
+                  <div key={index} className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+                    <div className="flex items-center justify-between mb-4">
+                      <div className="p-2 bg-gray-50 rounded-lg">
+                        <Icon className="w-5 h-5 text-gray-600" />
+                      </div>
+                      <span
+                        className={`text-sm font-medium ${
+                          metric.changeType === 'increase' ? 'text-green-600' : 'text-red-600'
+                        }`}
+                      >
+                        {metric.changeType === 'increase' ? '↑' : '↓'} {Math.abs(metric.change)}%
+                      </span>
+                    </div>
+                    <p className="text-2xl font-bold text-gray-900">{metric.value}</p>
+                    <p className="text-sm text-gray-600 mt-1">{metric.title}</p>
+                    <p className="text-xs text-gray-400 mt-2">{metric.subtitle}</p>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Charts Row */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+              {/* Revenue Trend */}
+              <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+                <h3 className="text-lg font-semibold text-gray-900 mb-4">Revenue Trend</h3>
+                <ResponsiveContainer width="100%" height={300}>
+                  <AreaChart data={salesData}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="date" />
+                    <YAxis />
+                    <Tooltip formatter={(value) => formatCurrency(Number(value))} />
+                    <Area
+                      type="monotone"
+                      dataKey="revenue"
+                      stroke="#3B82F6"
+                      fill="#93C5FD"
+                      strokeWidth={2}
+                    />
+                  </AreaChart>
+                </ResponsiveContainer>
+              </div>
+
+              {/* Top Products */}
+              <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+                <h3 className="text-lg font-semibold text-gray-900 mb-4">Top Products</h3>
+                <ResponsiveContainer width="100%" height={300}>
+                  <BarChart data={topProducts.slice(0, 5)}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="product_name" angle={-45} textAnchor="end" height={100} />
+                    <YAxis />
+                    <Tooltip formatter={(value) => formatCurrency(Number(value))} />
+                    <Bar dataKey="revenue" fill="#3B82F6" />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+
+            {/* Bottom Row */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+              {/* Inventory Status */}
+              <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+                <h3 className="text-lg font-semibold text-gray-900 mb-4">Inventory Status</h3>
+                <div className="space-y-3">
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm text-gray-600">Total Stock Value</span>
+                    <span className="text-sm font-semibold">
+                      {formatCurrency(inventoryData?.total_stock_value || 0)}
                     </span>
-                    <span className="text-xs text-gray-500 ml-2">{metric.subtitle}</span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm text-gray-600">Low Stock Items</span>
+                    <span className="text-sm font-semibold text-amber-600">
+                      {inventoryData?.low_stock_count || 0}
+                    </span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm text-gray-600">Out of Stock</span>
+                    <span className="text-sm font-semibold text-red-600">
+                      {inventoryData?.out_of_stock_count || 0}
+                    </span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm text-gray-600">Expiring Soon</span>
+                    <span className="text-sm font-semibold text-orange-600">
+                      {inventoryData?.expiring_soon_count || 0}
+                    </span>
                   </div>
                 </div>
-                <div className="bg-gray-50 p-3 rounded-lg">
-                  <Icon className="h-6 w-6 text-gray-600" />
+              </div>
+
+              {/* Top Customers */}
+              <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+                <h3 className="text-lg font-semibold text-gray-900 mb-4">Top Customers</h3>
+                <div className="space-y-3">
+                  {topCustomers.slice(0, 5).map((customer, index) => (
+                    <div key={index} className="flex justify-between items-center">
+                      <span className="text-sm text-gray-600 truncate">
+                        {customer.customer_name || customer.name}
+                      </span>
+                      <span className="text-sm font-semibold">
+                        {formatCurrency(customer.total_revenue || customer.total_purchase || 0)}
+                      </span>
+                    </div>
+                  ))}
+                  {topCustomers.length === 0 && (
+                    <p className="text-sm text-gray-400 text-center py-4">No customer data available</p>
+                  )}
+                </div>
+              </div>
+
+              {/* Key Alerts */}
+              <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+                <h3 className="text-lg font-semibold text-gray-900 mb-4">Key Alerts</h3>
+                <div className="space-y-3">
+                  {inventoryData?.low_stock_count > 0 && (
+                    <div className="flex items-start gap-3">
+                      <AlertTriangle className="w-4 h-4 text-amber-500 mt-0.5" />
+                      <div>
+                        <p className="text-sm font-medium text-gray-900">Low Stock Alert</p>
+                        <p className="text-xs text-gray-500">
+                          {inventoryData.low_stock_count} items running low
+                        </p>
+                      </div>
+                    </div>
+                  )}
+                  {dashboardData.pending_payments > 0 && (
+                    <div className="flex items-start gap-3">
+                      <AlertTriangle className="w-4 h-4 text-orange-500 mt-0.5" />
+                      <div>
+                        <p className="text-sm font-medium text-gray-900">Pending Payments</p>
+                        <p className="text-xs text-gray-500">
+                          {formatCurrency(dashboardData.pending_payments_amount || 0)} outstanding
+                        </p>
+                      </div>
+                    </div>
+                  )}
+                  {inventoryData?.expiring_soon_count > 0 && (
+                    <div className="flex items-start gap-3">
+                      <AlertTriangle className="w-4 h-4 text-red-500 mt-0.5" />
+                      <div>
+                        <p className="text-sm font-medium text-gray-900">Expiry Warning</p>
+                        <p className="text-xs text-gray-500">
+                          {inventoryData.expiring_soon_count} items expiring soon
+                        </p>
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
-          );
-        })}
-      </div>
-
-      {/* Charts Row */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
-        {/* Sales Trend */}
-        <div className="lg:col-span-2 bg-white rounded-xl shadow-sm p-6 border border-gray-200">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">Sales Trend</h3>
-          <div style={{ height: '300px' }}>
-            {salesData && (
-              <Line data={salesData} options={chartOptions} />
-            )}
-          </div>
-        </div>
-
-        {/* Inventory Distribution */}
-        <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-200">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">Inventory Status</h3>
-          <div style={{ height: '300px' }}>
-            {inventoryData && (
-              <Doughnut data={inventoryData} options={doughnutOptions} />
-            )}
-          </div>
-        </div>
-      </div>
-
-      {/* Tables Row */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Top Products */}
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200">
-          <div className="p-6 border-b border-gray-200">
-            <h3 className="text-lg font-semibold text-gray-900">Top Products</h3>
-          </div>
-          <div className="p-6">
-            <table className="w-full">
-              <thead>
-                <tr className="text-left text-sm font-medium text-gray-500">
-                  <th className="pb-3">Product</th>
-                  <th className="pb-3 text-right">Sales</th>
-                  <th className="pb-3 text-right">Revenue</th>
-                </tr>
-              </thead>
-              <tbody className="text-sm">
-                {topProducts.map((product, index) => (
-                  <tr key={index} className="border-t border-gray-100">
-                    <td className="py-3 font-medium text-gray-900">{product.name}</td>
-                    <td className="py-3 text-right text-gray-600">{product.sales}</td>
-                    <td className="py-3 text-right font-medium text-gray-900">{product.revenue}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-
-        {/* Top Customers */}
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200">
-          <div className="p-6 border-b border-gray-200">
-            <h3 className="text-lg font-semibold text-gray-900">Top Customers</h3>
-          </div>
-          <div className="p-6">
-            <table className="w-full">
-              <thead>
-                <tr className="text-left text-sm font-medium text-gray-500">
-                  <th className="pb-3">Customer</th>
-                  <th className="pb-3 text-right">Orders</th>
-                  <th className="pb-3 text-right">Value</th>
-                </tr>
-              </thead>
-              <tbody className="text-sm">
-                {topCustomers.map((customer, index) => (
-                  <tr key={index} className="border-t border-gray-100">
-                    <td className="py-3 font-medium text-gray-900">{customer.name}</td>
-                    <td className="py-3 text-right text-gray-600">{customer.orders}</td>
-                    <td className="py-3 text-right font-medium text-gray-900">{customer.value}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
           </div>
         </div>
       </div>
