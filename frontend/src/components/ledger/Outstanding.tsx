@@ -590,7 +590,7 @@ const Outstanding: React.FC<OutstandingProps> = ({
       {!embedded && (
         <div className="h-full flex flex-col">
           <ModuleHeader
-            title="Outstanding & Advances"
+            title="Outstanding & Payments"
             documentNumber=""
             status=""
             icon={IndianRupee}
