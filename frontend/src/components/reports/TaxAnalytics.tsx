@@ -12,7 +12,7 @@ import {
   ChevronDown, ChevronRight, RefreshCw
 } from 'lucide-react';
 import { format, startOfMonth, endOfMonth } from 'date-fns';
-import apiClient from '../../services/apiClient';
+import apiClient from '../../services/api/apiClient';
 import { DatePicker, Select, ModuleHeader } from '../global';
 import { formatCurrency } from '../../utils/formatters';
 import {
