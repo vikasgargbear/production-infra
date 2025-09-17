@@ -119,7 +119,8 @@ const Outstanding: React.FC<OutstandingProps> = ({
               party_phone: invoice.customer_phone || '',
               party_email: invoice.customer_email || '',
               total_outstanding: 0,
-              total_advance: invoice.customer_advance || 0, // Add advance amount from API
+              total_advance: invoice.customer_advance || 0, // Unallocated amount
+              customer_net_position: invoice.customer_net_position || 0, // Net position from backend
               total_overdue: 0,
               invoice_count: 0,
               overdue_count: 0,
@@ -132,9 +133,12 @@ const Outstanding: React.FC<OutstandingProps> = ({
           const pendingAmount = parseFloat(invoice.pending_amount || 0);
           const daysOverdue = parseInt(invoice.days_overdue || 0);
 
-          // Update advance amount if it's provided for this invoice
+          // Update advance and net position if provided
           if (invoice.customer_advance && party.total_advance === 0) {
             party.total_advance = invoice.customer_advance;
+          }
+          if (invoice.customer_net_position !== undefined && party.customer_net_position === 0) {
+            party.customer_net_position = invoice.customer_net_position;
           }
 
           party.total_outstanding += pendingAmount;
@@ -294,10 +298,10 @@ const Outstanding: React.FC<OutstandingProps> = ({
     } else if (filters.status === 'current') {
       filtered = filtered.filter((party: any) => party.total_overdue === 0);
     } else if (filters.status === 'net-outstanding') {
-      // Only show customers who actually owe money (after considering advances)
+      // Only show customers who actually owe money (positive net position from backend)
       filtered = filtered.filter((party: any) => {
-        const netPosition = (party.total_advance || 0) - party.total_outstanding;
-        return netPosition < 0;
+        const netPosition = party.customer_net_position || ((party.total_advance || 0) - party.total_outstanding);
+        return netPosition > 0; // Positive means they owe money
       });
     }
 
@@ -416,9 +420,10 @@ const Outstanding: React.FC<OutstandingProps> = ({
       header: 'Net Position',
       align: 'right' as const,
       render: (_: any, party: any) => {
-        const netPosition = (party.total_advance || 0) - party.total_outstanding;
+        // Use backend-calculated net position (negative means advance, positive means owed)
+        const netPosition = party.customer_net_position || ((party.total_advance || 0) - party.total_outstanding);
         const hasAdvance = party.total_advance > 0;
-        const isCredit = netPosition >= 0;
+        const isCredit = netPosition <= 0; // Negative net position means customer has credit/advance
 
         return (
           <div className="text-right">
@@ -810,9 +815,10 @@ const Outstanding: React.FC<OutstandingProps> = ({
                               </td>
                               <td className="px-4 py-3 text-right">
                                 {(() => {
-                                  const netPosition = ((party as any).total_advance || 0) - party.total_outstanding;
+                                  // Use backend-calculated net position
+                                  const netPosition = (party as any).customer_net_position || ((party as any).total_advance || 0) - party.total_outstanding;
                                   const hasAdvance = (party as any).total_advance > 0;
-                                  const isCredit = netPosition >= 0;
+                                  const isCredit = netPosition <= 0; // Negative means advance
 
                                   return (
                                     <div>
