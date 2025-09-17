@@ -115,18 +115,26 @@ async def get_party_statement(
                 query = query.replace("SELECT * FROM transactions",
                                     f"SELECT * FROM transactions WHERE date <= '{to_date}'")
             
-            query += " ORDER BY date DESC, sort_order"
-            
+            query += " ORDER BY date ASC, sort_order"
+
             # Execute query
             result = db.execute(text(query), {"party_id": int(party_id), "org_id": org_id})
             transactions = []
             running_balance = 0
-            
+
             for row in result:
                 trans = dict(row._mapping)
-                running_balance += float(trans['debit']) - float(trans['credit'])
+                # For customer: Credit balance means customer has paid in advance
+                # Debit (invoice) reduces credit balance or increases debit balance
+                # Credit (payment/return) increases credit balance or reduces debit balance
+                running_balance = running_balance - float(trans['debit']) + float(trans['credit'])
                 trans['running_balance'] = running_balance
+                trans['balance_type'] = 'Cr' if running_balance >= 0 else 'Dr'
+                trans['display_balance'] = abs(running_balance)
                 transactions.append(trans)
+
+            # Reverse to show newest first while maintaining correct running balance
+            transactions.reverse()
             
             # Get customer details (we KNOW these columns exist)
             customer = db.execute(
@@ -149,7 +157,22 @@ async def get_party_statement(
                 """),
                 {"party_id": int(party_id), "org_id": org_id}
             ).scalar()
-            
+
+            # Get advance payments (unallocated amounts)
+            advance = db.execute(
+                text("""
+                    SELECT COALESCE(SUM(unallocated_amount), 0) as amount
+                    FROM financial.payments
+                    WHERE party_id = :party_id
+                    AND party_type = 'customer'
+                    AND org_id = :org_id                    AND payment_status != 'cancelled'
+                """),
+                {"party_id": int(party_id), "org_id": org_id}
+            ).scalar()
+
+            # Calculate net position
+            net_balance = float(advance or 0) - float(outstanding or 0)
+
             return {
                 "success": True,
                 "party": {
@@ -161,7 +184,11 @@ async def get_party_statement(
                 "statement": transactions,
                 "summary": {
                     "outstanding": float(outstanding) if outstanding else 0,
-                    "transaction_count": len(transactions)
+                    "advance": float(advance) if advance else 0,
+                    "net_balance": net_balance,
+                    "balance_type": "credit" if net_balance >= 0 else "debit",
+                    "transaction_count": len(transactions),
+                    "final_balance": running_balance if transactions else 0
                 }
             }
             
