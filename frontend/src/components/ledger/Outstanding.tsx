@@ -202,9 +202,19 @@ const Outstanding: React.FC<OutstandingProps> = ({
           }
         };
         
-        // Calculate totals
+        // Don't use local calculation - use backend values if available
+        // Backend calculates correctly at customer level
+        if (responseData.total_outstanding !== undefined) {
+          summary.total_receivable = responseData.total_outstanding;
+        } else {
+          // Fallback to local calculation
+          parties.forEach(party => {
+            summary.total_receivable += party.total_outstanding;
+          });
+        }
+
+        // Calculate other summaries
         parties.forEach(party => {
-          summary.total_receivable += party.total_outstanding;
           summary.total_overdue += party.total_overdue;
           if (party.overdue_count > 0) {
             summary.overdue_party_count++;
