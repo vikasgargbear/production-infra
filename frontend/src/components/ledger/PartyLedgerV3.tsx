@@ -318,10 +318,27 @@ const PartyLedgerV3: React.FC<PartyLedgerV3Props> = ({
       align: 'right' as const,
       render: (value: any, entry: any) => {
         if (!entry) return '-';
-        const balance = entry.running_balance ?? entry.balance ?? 0;
-        const balanceNum = parseFloat(String(balance));
-        const isReceivable = balanceNum > 0;
-        return `₹${Math.abs(balanceNum).toFixed(2)} ${isReceivable ? '(Dr)' : '(Cr)'}`;
+
+        // Use display_balance and balance_type from backend if available
+        const displayBalance = entry.display_balance ?? Math.abs(entry.running_balance ?? entry.balance ?? 0);
+        const balanceType = entry.balance_type;
+
+        // Determine if customer owes us (Dr) or has advance (Cr)
+        // Negative balance = customer owes us (Dr)
+        // Positive balance = customer has advance/credit (Cr)
+        const rawBalance = entry.running_balance ?? entry.balance ?? 0;
+        const isDebit = balanceType === 'Dr' || (!balanceType && rawBalance < 0);
+
+        return (
+          <div className="flex flex-col items-end">
+            <div className={`font-semibold ${isDebit ? 'text-red-600' : 'text-green-600'}`}>
+              ₹{parseFloat(String(displayBalance)).toFixed(2)}
+            </div>
+            <div className={`text-xs ${isDebit ? 'text-red-500' : 'text-green-500'}`}>
+              {isDebit ? '📈 To Receive' : '💰 Advance'}
+            </div>
+          </div>
+        );
       },
       width: '150px'
     }
