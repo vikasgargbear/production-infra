@@ -375,13 +375,63 @@ async def get_outstanding_sales(
     """
     Get outstanding sales/invoices with advance payment information
 
-    - Returns unpaid and partially paid invoices
-    - Includes advance payment information per customer
-    - Shows net position (outstanding - advances)
+    - Calculates at customer level: total invoices - total payments
+    - Returns all unpaid/partial invoices for display
+    - Shows true net position per customer
     """
     try:
-        # Get outstanding invoices
-        query = """
+        # First get customer-level totals (all customers with invoices OR payments)
+        customer_summary_query = """
+            WITH customer_invoices AS (
+                SELECT
+                    c.customer_id,
+                    c.customer_name,
+                    c.primary_phone as customer_phone,
+                    c.primary_email as customer_email,
+                    COALESCE(SUM(i.final_amount), 0) as total_invoice_amount
+                FROM parties.customers c
+                LEFT JOIN sales.invoices i ON c.customer_id = i.customer_id
+                    AND i.org_id = :org_id
+                    AND i.invoice_status != 'cancelled'
+                WHERE c.org_id = :org_id
+                GROUP BY c.customer_id, c.customer_name, c.primary_phone, c.primary_email
+            ),
+            customer_payments AS (
+                SELECT
+                    party_id as customer_id,
+                    COALESCE(SUM(payment_amount), 0) as total_payment_amount,
+                    COALESCE(SUM(unallocated_amount), 0) as total_unallocated
+                FROM financial.payments
+                WHERE party_type = 'customer'
+                    AND org_id = :org_id
+                    AND payment_status != 'cancelled'
+                GROUP BY party_id
+            )
+            SELECT
+                ci.customer_id,
+                ci.customer_name,
+                ci.customer_phone,
+                ci.customer_email,
+                ci.total_invoice_amount,
+                COALESCE(cp.total_payment_amount, 0) as total_payment_amount,
+                COALESCE(cp.total_unallocated, 0) as total_unallocated,
+                (ci.total_invoice_amount - COALESCE(cp.total_payment_amount, 0)) as net_position
+            FROM customer_invoices ci
+            LEFT JOIN customer_payments cp ON ci.customer_id = cp.customer_id
+            WHERE ci.total_invoice_amount > 0 OR cp.total_payment_amount > 0
+        """
+
+        params = {"org_id": org_id}
+
+        if customer_id:
+            customer_summary_query += " AND ci.customer_id = :customer_id"
+            params["customer_id"] = customer_id
+
+        customer_result = db.execute(text(customer_summary_query), params)
+        customer_summaries = {row.customer_id: dict(row._mapping) for row in customer_result}
+
+        # Now get the unpaid/partial invoices for display
+        invoice_query = """
             SELECT
                 i.invoice_id,
                 i.invoice_number,
@@ -407,67 +457,61 @@ async def get_outstanding_sales(
                 AND i.invoice_status != 'cancelled'
         """
 
-        params = {"org_id": org_id}
-
         if customer_id:
-            query += " AND c.customer_id = :customer_id"
-            params["customer_id"] = customer_id
+            invoice_query += " AND c.customer_id = :customer_id"
 
-        query += " ORDER BY i.due_date, i.invoice_date"
+        invoice_query += " ORDER BY i.due_date, i.invoice_date"
 
-        result = db.execute(text(query), params)
-        invoices = [dict(row._mapping) for row in result]
+        invoice_result = db.execute(text(invoice_query), params)
+        invoices = [dict(row._mapping) for row in invoice_result]
 
-        # Get advance payments for each customer
-        customer_advances = {}
-        if invoices:
-            customer_ids = list(set(inv["customer_id"] for inv in invoices))
-
-            advance_query = """
-                SELECT
-                    party_id as customer_id,
-                    SUM(COALESCE(unallocated_amount, 0)) as advance_amount
-                FROM financial.payments
-                WHERE party_id = ANY(:customer_ids)
-                    AND party_type = 'customer'
-                    AND org_id = :org_id
-                    AND payment_status != 'cancelled'
-                    AND unallocated_amount > 0
-                GROUP BY party_id
-            """
-
-            advance_result = db.execute(
-                text(advance_query),
-                {"customer_ids": customer_ids, "org_id": org_id}
-            )
-
-            for row in advance_result:
-                customer_advances[row.customer_id] = float(row.advance_amount)
-
-        # Add advance information to each invoice
+        # Add customer-level advance information to each invoice
         for inv in invoices:
             cust_id = inv["customer_id"]
-            inv["customer_advance"] = customer_advances.get(cust_id, 0)
+            if cust_id in customer_summaries:
+                summary = customer_summaries[cust_id]
+                # Customer's total unallocated amount (true advance)
+                inv["customer_advance"] = float(summary["total_unallocated"])
+                inv["customer_net_position"] = float(summary["net_position"])
 
-        # Calculate totals including net position
-        total_outstanding = float(sum(inv["pending_amount"] for inv in invoices))
-        total_advances = float(sum(customer_advances.values()) if customer_advances else 0)
+        # Calculate true totals from customer-level data
+        total_outstanding = 0  # Sum of customers who owe money (positive net position)
+        total_advances = 0     # Sum of customers with advances (negative net position)
+        total_unallocated = 0  # Total unallocated payments
+
+        for summary in customer_summaries.values():
+            # Convert Decimal to float for calculations
+            net_pos = float(summary["net_position"]) if summary["net_position"] is not None else 0
+            unallocated = float(summary["total_unallocated"]) if summary["total_unallocated"] is not None else 0
+
+            # Only count as outstanding if customer actually owes money (positive net position)
+            if net_pos > 0:
+                total_outstanding += net_pos
+
+            # Track total unallocated payments
+            total_unallocated += unallocated
+
+            # If customer has advance (negative net position), count it
+            if net_pos < 0:
+                total_advances += abs(net_pos)
 
         return {
             "invoices": invoices,
-            "total_outstanding": total_outstanding,
-            "total_advances": total_advances,
-            "net_position": total_advances - total_outstanding,
+            "total_outstanding": total_outstanding,  # True outstanding (customers who owe)
+            "total_advances": total_unallocated,     # Total unallocated payments
+            "net_position": total_advances - total_outstanding,  # Net position
             "count": len(invoices),
-            "customer_advances": customer_advances
+            "customer_summaries": customer_summaries
         }
-        
+
     except Exception as e:
         logger.error(f"Error getting outstanding invoices: {str(e)}")
         # Return empty result instead of error to allow payment flow to continue
         return {
             "invoices": [],
             "total_outstanding": 0,
+            "total_advances": 0,
+            "net_position": 0,
             "count": 0
         }
 
