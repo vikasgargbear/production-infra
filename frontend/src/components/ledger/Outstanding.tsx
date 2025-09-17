@@ -20,12 +20,14 @@ import {
   TrendingDown,
   Calendar,
   BarChart3,
-  Table
+  Table,
+  CreditCard
 } from 'lucide-react';
 import { format, parseISO, differenceInDays } from 'date-fns';
 import apiClient from '../../services/api/apiClient';
 import { DataTable, StatusBadge, Select, ModuleHeader } from '../global';
 import { formatCurrency } from '../../utils/formatters';
+import PaymentAllocationModal from '../modals/PaymentAllocationModal';
 
 interface OutstandingProps {
   partyType?: 'customer' | 'supplier';
@@ -87,6 +89,11 @@ const Outstanding: React.FC<OutstandingProps> = ({
     searchQuery: ''
   });
   const [viewMode, setViewMode] = useState<'summary' | 'aging'>('summary');
+  const [allocationModal, setAllocationModal] = useState<{ isOpen: boolean; customerId: number | null; customerName: string }>({
+    isOpen: false,
+    customerId: null,
+    customerName: ''
+  });
 
   // Fetch outstanding data using the sales API
   const { data, isLoading, refetch, error } = useQuery(
@@ -441,6 +448,24 @@ const Outstanding: React.FC<OutstandingProps> = ({
                 <div>Outstanding: {formatCurrency(party.total_outstanding)}</div>
                 <div>Advance: {formatCurrency(party.total_advance)}</div>
               </div>
+            )}
+
+            {/* Allocate Button */}
+            {party.total_advance > 0 && party.total_outstanding > 0 && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setAllocationModal({
+                    isOpen: true,
+                    customerId: parseInt(party.party_id),
+                    customerName: party.party_name
+                  });
+                }}
+                className="mt-2 px-2 py-1 text-xs bg-blue-100 text-blue-700 rounded hover:bg-blue-200 flex items-center"
+              >
+                <CreditCard className="w-3 h-3 mr-1" />
+                Allocate
+              </button>
             )}
 
             {/* Show overdue if any */}
@@ -1021,6 +1046,20 @@ const Outstanding: React.FC<OutstandingProps> = ({
             </div>
           </div>
         </div>
+      )}
+
+      {/* Payment Allocation Modal */}
+      {allocationModal.isOpen && allocationModal.customerId && (
+        <PaymentAllocationModal
+          isOpen={allocationModal.isOpen}
+          onClose={() => setAllocationModal({ isOpen: false, customerId: null, customerName: '' })}
+          customerId={allocationModal.customerId}
+          customerName={allocationModal.customerName}
+          onAllocationComplete={() => {
+            refetch(); // Refresh outstanding data after allocation
+            setAllocationModal({ isOpen: false, customerId: null, customerName: '' });
+          }}
+        />
       )}
     </div>
   );
