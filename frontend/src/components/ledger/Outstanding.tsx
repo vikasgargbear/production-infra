@@ -216,7 +216,6 @@ const Outstanding: React.FC<OutstandingProps> = ({
               }
             });
           });
-        }
 
         return { parties, summary };
       } catch (err) {
