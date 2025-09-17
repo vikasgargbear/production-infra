@@ -119,12 +119,13 @@ const Outstanding: React.FC<OutstandingProps> = ({
               party_phone: invoice.customer_phone || '',
               party_email: invoice.customer_email || '',
               total_outstanding: 0,
+              total_advance: invoice.customer_advance || 0, // Add advance amount from API
               total_overdue: 0,
               invoice_count: 0,
               overdue_count: 0,
               oldest_invoice_days: 0,
               invoices: []
-            });
+            } as any);
           }
 
           const party = partiesMap.get(partyId)!;
@@ -217,7 +218,14 @@ const Outstanding: React.FC<OutstandingProps> = ({
             });
           });
 
-        return { parties, summary };
+        // Include the API response data for use in summary
+        return {
+          parties,
+          summary,
+          total_advances: responseData.total_advances || 0,
+          net_position: responseData.net_position || 0,
+          customer_advances: responseData.customer_advances || {}
+        };
       } catch (err) {
         // Return empty data structure on error
         return {
@@ -394,19 +402,41 @@ const Outstanding: React.FC<OutstandingProps> = ({
     },
     {
       key: 'total_outstanding',
-      header: 'Total Outstanding',
+      header: 'Net Position',
       align: 'right' as const,
-      render: (_: any, party: PartyOutstanding) => (
-        <div className="text-right">
-          <div className="font-medium">{formatCurrency(party.total_outstanding)}</div>
-          {party.total_overdue > 0 && (
-            <div className="text-xs text-red-600">
-              Overdue: {formatCurrency(party.total_overdue)}
+      render: (_: any, party: any) => {
+        const netPosition = (party.total_advance || 0) - party.total_outstanding;
+        const hasAdvance = party.total_advance > 0;
+        const isCredit = netPosition >= 0;
+
+        return (
+          <div className="text-right">
+            {/* Show net position */}
+            <div className={`font-semibold ${isCredit ? 'text-green-600' : 'text-red-600'}`}>
+              {formatCurrency(Math.abs(netPosition))}
+              <span className="ml-1 text-xs">
+                {isCredit ? '(Advance)' : '(To Receive)'}
+              </span>
             </div>
-          )}
-        </div>
-      ),
-      width: '150px'
+
+            {/* Show breakdown if there's both outstanding and advance */}
+            {hasAdvance && party.total_outstanding > 0 && (
+              <div className="text-xs text-gray-500 mt-1">
+                <div>Outstanding: {formatCurrency(party.total_outstanding)}</div>
+                <div>Advance: {formatCurrency(party.total_advance)}</div>
+              </div>
+            )}
+
+            {/* Show overdue if any */}
+            {party.total_overdue > 0 && (
+              <div className="text-xs text-red-600 mt-1">
+                Overdue: {formatCurrency(party.total_overdue)}
+              </div>
+            )}
+          </div>
+        );
+      },
+      width: '200px'
     },
     {
       key: 'invoice_count',
@@ -582,13 +612,23 @@ const Outstanding: React.FC<OutstandingProps> = ({
                 <div className="flex items-center justify-between">
                   <div className="flex items-center space-x-8">
                     <div>
-                      <span className="text-xs text-gray-500 uppercase tracking-wider">Total Outstanding</span>
-                      <div className="text-xl font-semibold text-gray-900">{formatCurrency(summary.total_receivable)}</div>
+                      <span className="text-xs text-gray-500 uppercase tracking-wider">Net Position</span>
+                      <div className={`text-xl font-semibold ${(data?.net_position || 0) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                        {formatCurrency(Math.abs(data?.net_position || (data?.total_advances || 0) - summary.total_receivable))}
+                        <span className="text-xs ml-1">
+                          {(data?.net_position || 0) >= 0 ? '(Advance)' : '(To Receive)'}
+                        </span>
+                      </div>
                     </div>
                     <div className="h-10 w-px bg-gray-200"></div>
                     <div>
-                      <span className="text-xs text-gray-500 uppercase tracking-wider">Overdue Amount</span>
-                      <div className="text-xl font-semibold text-red-600">{formatCurrency(summary.total_overdue)}</div>
+                      <span className="text-xs text-gray-500 uppercase tracking-wider">Total Outstanding</span>
+                      <div className="text-xl font-semibold text-red-600">{formatCurrency(summary.total_receivable)}</div>
+                    </div>
+                    <div className="h-10 w-px bg-gray-200"></div>
+                    <div>
+                      <span className="text-xs text-gray-500 uppercase tracking-wider">Total Advances</span>
+                      <div className="text-xl font-semibold text-green-600">{formatCurrency(data?.total_advances || 0)}</div>
                     </div>
                     <div className="h-10 w-px bg-gray-200"></div>
                     <div>

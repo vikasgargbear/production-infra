@@ -373,15 +373,17 @@ async def get_outstanding_sales(
     org_id: str = Depends(get_org_id_from_header)
 ):
     """
-    Get outstanding sales/invoices for payments
-    
+    Get outstanding sales/invoices with advance payment information
+
     - Returns unpaid and partially paid invoices
-    - Used by payment module to show outstanding amounts
+    - Includes advance payment information per customer
+    - Shows net position (outstanding - advances)
     """
     try:
+        # Get outstanding invoices
         query = """
-            SELECT 
-                i.invoice_id, 
+            SELECT
+                i.invoice_id,
                 i.invoice_number,
                 i.invoice_date,
                 i.due_date,
@@ -391,32 +393,73 @@ async def get_outstanding_sales(
                 i.payment_status,
                 c.customer_id,
                 c.customer_name,
-                CASE 
-                    WHEN i.due_date < CURRENT_DATE THEN 
-                        CURRENT_DATE - i.due_date 
-                    ELSE 0 
+                c.primary_phone as customer_phone,
+                c.primary_email as customer_email,
+                CASE
+                    WHEN i.due_date < CURRENT_DATE THEN
+                        CURRENT_DATE - i.due_date
+                    ELSE 0
                 END as days_overdue
             FROM sales.invoices i
             JOIN parties.customers c ON i.customer_id = c.customer_id
             WHERE i.org_id = :org_id
                 AND i.payment_status IN ('unpaid', 'partial', 'pending')
+                AND i.invoice_status != 'cancelled'
         """
-        
+
         params = {"org_id": org_id}
-        
+
         if customer_id:
             query += " AND c.customer_id = :customer_id"
             params["customer_id"] = customer_id
-            
+
         query += " ORDER BY i.due_date, i.invoice_date"
-        
+
         result = db.execute(text(query), params)
         invoices = [dict(row._mapping) for row in result]
-        
+
+        # Get advance payments for each customer
+        customer_advances = {}
+        if invoices:
+            customer_ids = list(set(inv["customer_id"] for inv in invoices))
+
+            advance_query = """
+                SELECT
+                    party_id as customer_id,
+                    SUM(COALESCE(unallocated_amount, 0)) as advance_amount
+                FROM financial.payments
+                WHERE party_id = ANY(:customer_ids)
+                    AND party_type = 'customer'
+                    AND org_id = :org_id
+                    AND payment_status != 'cancelled'
+                    AND unallocated_amount > 0
+                GROUP BY party_id
+            """
+
+            advance_result = db.execute(
+                text(advance_query),
+                {"customer_ids": customer_ids, "org_id": org_id}
+            )
+
+            for row in advance_result:
+                customer_advances[row.customer_id] = float(row.advance_amount)
+
+        # Add advance information to each invoice
+        for inv in invoices:
+            cust_id = inv["customer_id"]
+            inv["customer_advance"] = customer_advances.get(cust_id, 0)
+
+        # Calculate totals including net position
+        total_outstanding = float(sum(inv["pending_amount"] for inv in invoices))
+        total_advances = float(sum(customer_advances.values()) if customer_advances else 0)
+
         return {
             "invoices": invoices,
-            "total_outstanding": sum(inv["pending_amount"] for inv in invoices),
-            "count": len(invoices)
+            "total_outstanding": total_outstanding,
+            "total_advances": total_advances,
+            "net_position": total_advances - total_outstanding,
+            "count": len(invoices),
+            "customer_advances": customer_advances
         }
         
     except Exception as e:
