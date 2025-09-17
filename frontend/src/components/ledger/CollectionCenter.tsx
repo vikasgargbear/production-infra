@@ -223,11 +223,20 @@ const CollectionCenter: React.FC<CollectionCenterProps> = ({
           filteredData = filteredData.filter(c => c.priority === filters.priority);
         }
         
-        // Calculate stats
-        const totalOutstanding = collections.reduce((sum, c) => sum + c.total_outstanding, 0);
+        // Calculate stats - use backend's correct total_outstanding if available
+        const backendTotalOutstanding = responseData.total_outstanding;
+        const totalOutstanding = backendTotalOutstanding !== undefined ?
+          backendTotalOutstanding :
+          collections.reduce((sum, c) => sum + c.total_outstanding, 0);
+
         const overdueAmount = collections.reduce((sum, c) => sum + c.overdue_amount, 0);
         const criticalCount = collections.filter(c => c.priority === 'critical').length;
-        
+
+        // Only count customers who actually owe money (positive net position)
+        const actualOwingCustomers = responseData.customer_summaries ?
+          Object.values(responseData.customer_summaries as any).filter((c: any) => c.net_position > 0).length :
+          collections.length;
+
         return {
           collections: filteredData,
           stats: {
@@ -236,7 +245,7 @@ const CollectionCenter: React.FC<CollectionCenterProps> = ({
             collections_today: Math.round(totalOutstanding * 0.05), // Mock 5% daily
             collections_mtd: Math.round(totalOutstanding * 0.35), // Mock 35% MTD
             promise_amount: Math.round(overdueAmount * 0.4), // Mock 40% promised
-            customers_count: collections.length,
+            customers_count: actualOwingCustomers,
             critical_accounts: criticalCount,
             success_rate: 72, // Mock success rate
             collection_change: 15 // Mock positive change
@@ -449,13 +458,13 @@ const CollectionCenter: React.FC<CollectionCenterProps> = ({
                     <div className="pl-4">
                       <div className="flex items-center mb-2">
                         <DollarSign className="w-5 h-5 text-gray-400 mr-2" />
-                        <p className="text-xs font-semibold text-gray-600 uppercase tracking-widest">Total Receivables</p>
+                        <p className="text-xs font-semibold text-gray-600 uppercase tracking-widest">Total Outstanding</p>
                       </div>
                       <p className="text-2xl font-bold text-gray-900 mb-1">
                         ₹{(stats.total_outstanding || 0).toLocaleString('en-IN')}
                       </p>
                       <p className="text-xs text-gray-500 font-medium">
-                        {stats.customers_count} Active Accounts
+                        {stats.customers_count} {stats.customers_count === 1 ? 'Customer Owes' : 'Customers Owe'}
                       </p>
                     </div>
                   </div>
