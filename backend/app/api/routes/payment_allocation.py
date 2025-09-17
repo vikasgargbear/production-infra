@@ -258,23 +258,21 @@ async def get_payment_allocations(
     try:
         allocations = db.execute(
             text("""
-                SELECT 
+                SELECT
                     pa.allocation_id,
-                    pa.invoice_id,
-                    i.invoice_number,
-                    i.invoice_date,
-                    i.final_amount as invoice_amount,
+                    pa.reference_id as invoice_id,
+                    pa.reference_number as invoice_number,
                     pa.allocated_amount,
-                    pa.created_at as allocation_date,
-                    pa.allocation_type
+                    pa.created_at as allocation_date
                 FROM financial.payment_allocations pa
-                JOIN sales.invoices i ON pa.invoice_id = i.invoice_id
                 WHERE pa.payment_id = :payment_id
+                AND pa.reference_type = 'invoice'
+                AND pa.allocation_status = 'active'
                 ORDER BY pa.created_at DESC
             """),
             {"payment_id": payment_id}
         ).fetchall()
-        
+
         return {
             "payment_id": payment_id,
             "allocations": [
@@ -282,11 +280,9 @@ async def get_payment_allocations(
                     "allocation_id": a.allocation_id,
                     "invoice_id": a.invoice_id,
                     "invoice_number": a.invoice_number,
-                    "invoice_date": a.invoice_date.isoformat() if a.invoice_date else None,
-                    "invoice_amount": float(a.invoice_amount),
                     "allocated_amount": float(a.allocated_amount),
                     "allocation_date": a.allocation_date.isoformat() if a.allocation_date else None,
-                    "allocation_type": a.allocation_type
+                    "allocation_type": "manual"
                 }
                 for a in allocations
             ]
@@ -315,11 +311,12 @@ async def get_invoice_payments(
                     p.payment_date,
                     p.payment_amount,
                     pa.allocated_amount,
-                    pa.created_at as allocation_date,
-                    pa.allocation_type
+                    pa.created_at as allocation_date
                 FROM financial.payment_allocations pa
                 JOIN financial.payments p ON pa.payment_id = p.payment_id
-                WHERE pa.invoice_id = :invoice_id
+                WHERE pa.reference_type = 'invoice'
+                AND pa.reference_id = :invoice_id
+                AND pa.allocation_status = 'active'
                 ORDER BY pa.created_at DESC
             """),
             {"invoice_id": invoice_id}
@@ -357,7 +354,7 @@ async def get_invoice_payments(
                     "payment_amount": float(p.payment_amount),
                     "allocated_amount": float(p.allocated_amount),
                     "allocation_date": p.allocation_date.isoformat() if p.allocation_date else None,
-                    "allocation_type": p.allocation_type
+                    "allocation_type": "manual"
                 }
                 for p in payments
             ]
