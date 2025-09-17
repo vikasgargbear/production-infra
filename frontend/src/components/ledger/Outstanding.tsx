@@ -88,51 +88,83 @@ const Outstanding: React.FC<OutstandingProps> = ({
   });
   const [viewMode, setViewMode] = useState<'summary' | 'aging'>('summary');
 
-  // Fetch outstanding data with net position (including advances)
+  // Fetch outstanding data using the sales API
   const { data, isLoading, refetch, error } = useQuery(
     ['outstanding-data', partyType, filters],
     async () => {
       try {
-        // Use the new customer-outstanding endpoint that includes advance payments
-        const response = await apiClient.get('/customer-outstanding/net-position', {
+        // Use the sales/outstanding endpoint which exists
+        const response = await apiClient.get('/sales/outstanding', {
           params: {
-            // No customer_id filter - get all customers with net position
+            // No customer_id filter - get all customers
           }
         });
         
-        // The API returns { customers: [], summary: {} } with net position info
+        // The API returns { invoices: [], total_outstanding: number, count: number }
         const responseData = response.data || {};
-        const customers = responseData.customers || [];
+        const invoices = Array.isArray(responseData.invoices) ? responseData.invoices :
+                         Array.isArray(responseData) ? responseData : [];
 
-        // Transform customers data to party format
+        // Group by customer for summary view
         const partiesMap = new Map<string, PartyOutstanding>();
         
-        // Process each customer with net position
-        customers.forEach((customer: any) => {
-          const partyId = String(customer.customer_id);
+        // Process invoices and group by customer
+        invoices.forEach((invoice: any) => {
+          const partyId = String(invoice.customer_id);
 
-          // Only show customers with actual outstanding (negative net balance)
-          // or those with advance payments that might need attention
-          const netBalance = customer.net_balance || 0;
-          const outstanding = customer.outstanding || 0;
-          const advance = customer.advance || 0;
+          if (!partiesMap.has(partyId)) {
+            partiesMap.set(partyId, {
+              party_id: partyId,
+              party_name: invoice.customer_name || 'Unknown Customer',
+              party_phone: invoice.customer_phone || '',
+              party_email: invoice.customer_email || '',
+              total_outstanding: 0,
+              total_overdue: 0,
+              invoice_count: 0,
+              overdue_count: 0,
+              oldest_invoice_days: 0,
+              invoices: []
+            });
+          }
 
-          // Create party entry with net position info
-          partiesMap.set(partyId, {
-            party_id: partyId,
-            party_name: customer.customer_name || 'Unknown Customer',
-            party_phone: customer.phone || '',
-            party_email: customer.email || '',
-            total_outstanding: outstanding, // Use actual outstanding, not net
-            total_advance: advance, // Add advance amount
-            net_balance: netBalance, // Add net position
-            net_type: customer.net_type || (netBalance >= 0 ? 'credit' : 'debit'),
-            total_overdue: 0, // Will be calculated if we fetch invoice details
-            invoice_count: customer.unpaid_invoices || 0,
-            overdue_count: 0,
-            oldest_invoice_days: 0,
-            invoices: []
-          } as any);
+          const party = partiesMap.get(partyId)!;
+          const pendingAmount = parseFloat(invoice.pending_amount || 0);
+          const daysOverdue = parseInt(invoice.days_overdue || 0);
+
+          party.total_outstanding += pendingAmount;
+          party.invoice_count++;
+
+          if (daysOverdue > 0) {
+            party.total_overdue += pendingAmount;
+            party.overdue_count++;
+            party.oldest_invoice_days = Math.max(party.oldest_invoice_days, daysOverdue);
+          }
+
+          // Determine aging bucket
+          let agingBucket: InvoiceDetail['aging_bucket'] = 'current';
+          if (daysOverdue > 90) agingBucket = 'over_90';
+          else if (daysOverdue > 60) agingBucket = '61-90';
+          else if (daysOverdue > 30) agingBucket = '31-60';
+          else if (daysOverdue > 0) agingBucket = '1-30';
+
+          // Determine status
+          let status: InvoiceDetail['status'] = 'pending';
+          if (invoice.payment_status === 'partial') status = 'partial';
+          else if (daysOverdue > 0) status = 'overdue';
+
+          // Add invoice details
+          party.invoices!.push({
+            invoice_id: String(invoice.invoice_id),
+            invoice_number: invoice.invoice_number || '',
+            invoice_date: invoice.invoice_date || '',
+            due_date: invoice.due_date || '',
+            original_amount: parseFloat(invoice.final_amount || 0),
+            paid_amount: parseFloat(invoice.paid_amount || 0),
+            outstanding_amount: pendingAmount,
+            days_overdue: daysOverdue,
+            aging_bucket: agingBucket,
+            status: status
+          });
         });
         
         const parties = Array.from(partiesMap.values());
@@ -153,20 +185,13 @@ const Outstanding: React.FC<OutstandingProps> = ({
           }
         };
         
-        // Use summary from API if available, otherwise calculate
-        if (responseData.summary) {
-          summary.total_receivable = responseData.summary.total_outstanding || 0;
-          summary.total_advance = responseData.summary.total_advance || 0;
-          summary.net_position = responseData.summary.net_position || 0;
-          summary.party_count = responseData.summary.customer_count || parties.length;
-        } else {
-          // Calculate totals
-          parties.forEach(party => {
-            summary.total_receivable += party.total_outstanding;
-            summary.total_overdue += party.total_overdue;
-            if (party.overdue_count > 0) {
-              summary.overdue_party_count++;
-            }
+        // Calculate totals
+        parties.forEach(party => {
+          summary.total_receivable += party.total_outstanding;
+          summary.total_overdue += party.total_overdue;
+          if (party.overdue_count > 0) {
+            summary.overdue_party_count++;
+          }
           
             // Update aging summary
             party.invoices?.forEach(invoice => {
@@ -369,29 +394,20 @@ const Outstanding: React.FC<OutstandingProps> = ({
       )
     },
     {
-      key: 'net_position',
-      header: 'Net Position',
+      key: 'total_outstanding',
+      header: 'Total Outstanding',
       align: 'right' as const,
-      render: (_: any, party: any) => (
+      render: (_: any, party: PartyOutstanding) => (
         <div className="text-right">
-          {/* Show net position with color coding */}
-          <div className={`font-semibold ${party.net_type === 'credit' ? 'text-green-600' : 'text-red-600'}`}>
-            {formatCurrency(Math.abs(party.net_balance || party.total_outstanding))}
-            <span className="ml-1 text-xs">
-              {party.net_type === 'credit' ? '(Advance)' : '(To Receive)'}
-            </span>
-          </div>
-          {/* Show breakdown if there's both outstanding and advance */}
-          {party.total_outstanding > 0 && party.total_advance > 0 && (
-            <div className="text-xs text-gray-500 mt-1">
-              <span>Outstanding: {formatCurrency(party.total_outstanding)}</span>
-              <span className="mx-1">|</span>
-              <span>Advance: {formatCurrency(party.total_advance)}</span>
+          <div className="font-medium">{formatCurrency(party.total_outstanding)}</div>
+          {party.total_overdue > 0 && (
+            <div className="text-xs text-red-600">
+              Overdue: {formatCurrency(party.total_overdue)}
             </div>
           )}
         </div>
       ),
-      width: '200px'
+      width: '150px'
     },
     {
       key: 'invoice_count',
@@ -567,28 +583,14 @@ const Outstanding: React.FC<OutstandingProps> = ({
                 <div className="flex items-center justify-between">
                   <div className="flex items-center space-x-8">
                     <div>
-                      <span className="text-xs text-gray-500 uppercase tracking-wider">Net Position</span>
-                      <div className={`text-xl font-semibold ${(summary as any).net_position >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                        {formatCurrency(Math.abs((summary as any).net_position || summary.total_receivable))}
-                        <span className="text-xs ml-1">
-                          {(summary as any).net_position >= 0 ? '(Advance)' : '(To Receive)'}
-                        </span>
-                      </div>
-                    </div>
-                    <div className="h-10 w-px bg-gray-200"></div>
-                    <div>
                       <span className="text-xs text-gray-500 uppercase tracking-wider">Total Outstanding</span>
                       <div className="text-xl font-semibold text-gray-900">{formatCurrency(summary.total_receivable)}</div>
                     </div>
-                    {(summary as any).total_advance > 0 && (
-                      <>
-                        <div className="h-10 w-px bg-gray-200"></div>
-                        <div>
-                          <span className="text-xs text-gray-500 uppercase tracking-wider">Total Advance</span>
-                          <div className="text-xl font-semibold text-green-600">{formatCurrency((summary as any).total_advance || 0)}</div>
-                        </div>
-                      </>
-                    )}
+                    <div className="h-10 w-px bg-gray-200"></div>
+                    <div>
+                      <span className="text-xs text-gray-500 uppercase tracking-wider">Overdue Amount</span>
+                      <div className="text-xl font-semibold text-red-600">{formatCurrency(summary.total_overdue)}</div>
+                    </div>
                     <div className="h-10 w-px bg-gray-200"></div>
                     <div>
                       <span className="text-xs text-gray-500 uppercase tracking-wider">Parties</span>
