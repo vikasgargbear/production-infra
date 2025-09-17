@@ -83,7 +83,7 @@ const Outstanding: React.FC<OutstandingProps> = ({
 }) => {
   const [expandedParties, setExpandedParties] = useState<Set<string>>(new Set());
   const [filters, setFilters] = useState({
-    status: 'all', // all, overdue, current
+    status: 'net-outstanding', // Show only those who actually owe money by default
     searchQuery: ''
   });
   const [viewMode, setViewMode] = useState<'summary' | 'aging'>('summary');
@@ -131,6 +131,11 @@ const Outstanding: React.FC<OutstandingProps> = ({
           const party = partiesMap.get(partyId)!;
           const pendingAmount = parseFloat(invoice.pending_amount || 0);
           const daysOverdue = parseInt(invoice.days_overdue || 0);
+
+          // Update advance amount if it's provided for this invoice
+          if (invoice.customer_advance && party.total_advance === 0) {
+            party.total_advance = invoice.customer_advance;
+          }
 
           party.total_outstanding += pendingAmount;
           party.invoice_count++;
@@ -273,23 +278,29 @@ const Outstanding: React.FC<OutstandingProps> = ({
   // Filter parties based on search and status
   const filteredParties = useMemo(() => {
     let filtered = parties;
-    
+
     // Apply search filter
     if (filters.searchQuery) {
       const query = filters.searchQuery.toLowerCase();
-      filtered = filtered.filter((party: PartyOutstanding) =>
+      filtered = filtered.filter((party: any) =>
         party.party_name.toLowerCase().includes(query) ||
         party.party_phone?.includes(query)
       );
     }
-    
+
     // Apply status filter
     if (filters.status === 'overdue') {
-      filtered = filtered.filter((party: PartyOutstanding) => party.total_overdue > 0);
+      filtered = filtered.filter((party: any) => party.total_overdue > 0);
     } else if (filters.status === 'current') {
-      filtered = filtered.filter((party: PartyOutstanding) => party.total_overdue === 0);
+      filtered = filtered.filter((party: any) => party.total_overdue === 0);
+    } else if (filters.status === 'net-outstanding') {
+      // Only show customers who actually owe money (after considering advances)
+      filtered = filtered.filter((party: any) => {
+        const netPosition = (party.total_advance || 0) - party.total_outstanding;
+        return netPosition < 0;
+      });
     }
-    
+
     return filtered;
   }, [parties, filters]);
 
@@ -579,7 +590,7 @@ const Outstanding: React.FC<OutstandingProps> = ({
       {!embedded && (
         <div className="h-full flex flex-col">
           <ModuleHeader
-            title="Outstanding"
+            title="Outstanding & Advances"
             documentNumber=""
             status=""
             icon={IndianRupee}
@@ -706,7 +717,8 @@ const Outstanding: React.FC<OutstandingProps> = ({
                       value={filters.status}
                       onChange={(value) => setFilters({ ...filters, status: value })}
                       options={[
-                        { value: 'all', label: 'All Status' },
+                        { value: 'net-outstanding', label: 'Net Outstanding (After Advances)' },
+                        { value: 'all', label: 'All Unpaid Invoices' },
                         { value: 'overdue', label: 'Overdue Only' },
                         { value: 'current', label: 'Current Only' }
                       ]}
