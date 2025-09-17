@@ -168,30 +168,31 @@ const Outstanding: React.FC<OutstandingProps> = ({
               summary.overdue_party_count++;
             }
           
-          // Update aging summary
-          party.invoices?.forEach(invoice => {
-            const bucket = invoice.aging_bucket;
-            const amount = invoice.outstanding_amount;
-            
-            if (bucket === 'current') {
-              summary.aging_summary.current.count++;
-              summary.aging_summary.current.amount += amount;
-            } else if (bucket === '1-30') {
-              summary.aging_summary['1-30'].count++;
-              summary.aging_summary['1-30'].amount += amount;
-            } else if (bucket === '31-60') {
-              summary.aging_summary['31-60'].count++;
-              summary.aging_summary['31-60'].amount += amount;
-            } else if (bucket === '61-90') {
-              summary.aging_summary['61-90'].count++;
-              summary.aging_summary['61-90'].amount += amount;
-            } else if (bucket === 'over_90') {
-              summary.aging_summary.over_90.count++;
-              summary.aging_summary.over_90.amount += amount;
-            }
+            // Update aging summary
+            party.invoices?.forEach(invoice => {
+              const bucket = invoice.aging_bucket;
+              const amount = invoice.outstanding_amount;
+
+              if (bucket === 'current') {
+                summary.aging_summary.current.count++;
+                summary.aging_summary.current.amount += amount;
+              } else if (bucket === '1-30') {
+                summary.aging_summary['1-30'].count++;
+                summary.aging_summary['1-30'].amount += amount;
+              } else if (bucket === '31-60') {
+                summary.aging_summary['31-60'].count++;
+                summary.aging_summary['31-60'].amount += amount;
+              } else if (bucket === '61-90') {
+                summary.aging_summary['61-90'].count++;
+                summary.aging_summary['61-90'].amount += amount;
+              } else if (bucket === 'over_90') {
+                summary.aging_summary.over_90.count++;
+                summary.aging_summary.over_90.amount += amount;
+              }
+            });
           });
-        });
-        
+        }
+
         return { parties, summary };
       } catch (err) {
         // Return empty data structure on error
