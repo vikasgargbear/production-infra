@@ -83,7 +83,7 @@ const Outstanding: React.FC<OutstandingProps> = ({
 }) => {
   const [expandedParties, setExpandedParties] = useState<Set<string>>(new Set());
   const [filters, setFilters] = useState({
-    status: 'net-outstanding', // Show only those who actually owe money by default
+    status: 'all', // Show all customers by default
     searchQuery: ''
   });
   const [viewMode, setViewMode] = useState<'summary' | 'aging'>('summary');
@@ -717,8 +717,8 @@ const Outstanding: React.FC<OutstandingProps> = ({
                       value={filters.status}
                       onChange={(value) => setFilters({ ...filters, status: value })}
                       options={[
-                        { value: 'net-outstanding', label: 'Net Outstanding (After Advances)' },
-                        { value: 'all', label: 'All Unpaid Invoices' },
+                        { value: 'all', label: 'All Customers' },
+                        { value: 'net-outstanding', label: 'Net Outstanding Only' },
                         { value: 'overdue', label: 'Overdue Only' },
                         { value: 'current', label: 'Current Only' }
                       ]}
@@ -771,7 +771,7 @@ const Outstanding: React.FC<OutstandingProps> = ({
                             {partyType === 'customer' ? 'Customer' : 'Supplier'}
                           </th>
                           <th className="text-right px-4 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">
-                            Total Outstanding
+                            Net Position
                           </th>
                           <th className="text-center px-4 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">
                             Bills
@@ -809,12 +809,38 @@ const Outstanding: React.FC<OutstandingProps> = ({
                                 </div>
                               </td>
                               <td className="px-4 py-3 text-right">
-                                <div className="font-medium">{formatCurrency(party.total_outstanding)}</div>
-                                {party.total_overdue > 0 && (
-                                  <div className="text-xs text-red-600">
-                                    Overdue: {formatCurrency(party.total_overdue)}
-                                  </div>
-                                )}
+                                {(() => {
+                                  const netPosition = ((party as any).total_advance || 0) - party.total_outstanding;
+                                  const hasAdvance = (party as any).total_advance > 0;
+                                  const isCredit = netPosition >= 0;
+
+                                  return (
+                                    <div>
+                                      {/* Show net position */}
+                                      <div className={`font-semibold ${isCredit ? 'text-green-600' : 'text-red-600'}`}>
+                                        {formatCurrency(Math.abs(netPosition))}
+                                        <span className="ml-1 text-xs">
+                                          {isCredit ? '(Advance)' : '(To Receive)'}
+                                        </span>
+                                      </div>
+
+                                      {/* Show breakdown if there's both outstanding and advance */}
+                                      {hasAdvance && party.total_outstanding > 0 && (
+                                        <div className="text-xs text-gray-500 mt-1">
+                                          <div>Outstanding: {formatCurrency(party.total_outstanding)}</div>
+                                          <div>Advance: {formatCurrency((party as any).total_advance)}</div>
+                                        </div>
+                                      )}
+
+                                      {/* Show overdue if any */}
+                                      {party.total_overdue > 0 && (
+                                        <div className="text-xs text-red-600 mt-1">
+                                          Overdue: {formatCurrency(party.total_overdue)}
+                                        </div>
+                                      )}
+                                    </div>
+                                  );
+                                })()}
                               </td>
                               <td className="px-4 py-3 text-center">
                                 <div>{party.invoice_count}</div>
