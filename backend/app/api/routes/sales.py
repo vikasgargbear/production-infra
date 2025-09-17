@@ -399,7 +399,7 @@ async def get_outstanding_sales(
             FROM sales.invoices i
             JOIN parties.customers c ON i.customer_id = c.customer_id
             WHERE i.org_id = :org_id
-                AND i.payment_status IN ('unpaid', 'partial')
+                AND i.payment_status IN ('unpaid', 'partial', 'pending')
         """
         
         params = {"org_id": org_id}
