@@ -664,10 +664,10 @@ const Outstanding: React.FC<OutstandingProps> = ({
                   <div className="flex items-center space-x-8">
                     <div>
                       <span className="text-xs text-gray-500 uppercase tracking-wider">Net Position</span>
-                      <div className={`text-xl font-semibold ${((data?.total_advances || 0) - summary.total_receivable) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                        {formatCurrency(Math.abs((data?.total_advances || 0) - summary.total_receivable))}
+                      <div className={`text-xl font-semibold ${(data?.net_position || 0) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                        {formatCurrency(Math.abs(data?.net_position || 0))}
                         <span className="text-xs ml-1">
-                          {((data?.total_advances || 0) - summary.total_receivable) >= 0 ? '(Advance)' : '(To Receive)'}
+                          {(data?.net_position || 0) >= 0 ? '(Advance)' : '(To Receive)'}
                         </span>
                       </div>
                     </div>
