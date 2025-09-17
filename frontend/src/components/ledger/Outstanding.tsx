@@ -624,10 +624,10 @@ const Outstanding: React.FC<OutstandingProps> = ({
                   <div className="flex items-center space-x-8">
                     <div>
                       <span className="text-xs text-gray-500 uppercase tracking-wider">Net Position</span>
-                      <div className={`text-xl font-semibold ${(data?.net_position || 0) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                        {formatCurrency(Math.abs(data?.net_position || (data?.total_advances || 0) - summary.total_receivable))}
+                      <div className={`text-xl font-semibold ${((data?.total_advances || 0) - summary.total_receivable) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                        {formatCurrency(Math.abs((data?.total_advances || 0) - summary.total_receivable))}
                         <span className="text-xs ml-1">
-                          {(data?.net_position || 0) >= 0 ? '(Advance)' : '(To Receive)'}
+                          {((data?.total_advances || 0) - summary.total_receivable) >= 0 ? '(Advance)' : '(To Receive)'}
                         </span>
                       </div>
                     </div>
@@ -638,7 +638,7 @@ const Outstanding: React.FC<OutstandingProps> = ({
                     </div>
                     <div className="h-10 w-px bg-gray-200"></div>
                     <div>
-                      <span className="text-xs text-gray-500 uppercase tracking-wider">Total Advances</span>
+                      <span className="text-xs text-gray-500 uppercase tracking-wider">Total Unallocated</span>
                       <div className="text-xl font-semibold text-green-600">{formatCurrency(data?.total_advances || 0)}</div>
                     </div>
                     <div className="h-10 w-px bg-gray-200"></div>
