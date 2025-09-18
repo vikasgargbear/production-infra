@@ -262,13 +262,13 @@ const CollectionCenter: React.FC<CollectionCenterProps> = ({
           stats: {
             total_outstanding: totalOutstanding,
             total_overdue: overdueAmount,
-            collections_today: realMetrics?.daily_revenue || Math.round(totalOutstanding * 0.05), // Use real daily revenue
-            collections_mtd: realMetrics?.mtd_collections || Math.round(totalOutstanding * 0.35), // Use real MTD collections
-            promise_amount: realMetrics?.pipeline_value || Math.round(overdueAmount * 0.4), // Use real pipeline value
+            collections_today: realMetrics?.daily_revenue || 0, // Real data or 0, NO MOCK
+            collections_mtd: realMetrics?.mtd_collections || 0, // Real data or 0, NO MOCK
+            promise_amount: realMetrics?.pipeline_value || 0, // Real data or 0, NO MOCK
             customers_count: actualOwingCustomers,
             critical_accounts: criticalCount,
-            success_rate: realMetrics?.collection_efficiency || 72, // Use real collection efficiency
-            collection_change: realMetrics?.collection_change || 15 // Use real trend
+            success_rate: realMetrics?.collection_efficiency || 0, // Real data or 0, NO MOCK
+            collection_change: realMetrics?.collection_change || 0 // Real data or 0, NO MOCK
           }
         };
       } catch (error) {
