@@ -214,8 +214,8 @@ async def get_collection_metrics(
                 # If it's not a valid UUID, use a default org_id
                 # This is for testing/development - in production you'd want proper org handling
                 logger.warning(f"Invalid org_id format: {org_id}, using default")
-                # Use a query to get the first org_id
-                org_result = db.execute(text("SELECT org_id FROM organizations.organizations LIMIT 1")).fetchone()
+                # Use a query to get the first org_id from master schema
+                org_result = db.execute(text("SELECT org_id FROM master.organizations LIMIT 1")).fetchone()
                 if org_result:
                     org_id = str(org_result.org_id)
                 else:
@@ -267,21 +267,26 @@ async def get_collection_metrics(
         ).fetchone()
 
         # 3. Calculate Pipeline Value (promised/scheduled payments)
-        pipeline_result = db.execute(
-            text("""
-                SELECT
-                    COALESCE(SUM(promise_amount), 0) as pipeline_value,
-                    COUNT(DISTINCT customer_id) as promised_customers
-                FROM sales.payment_promises
-                WHERE org_id = :org_id
-                AND promise_date >= :today
-                AND promise_status IN ('pending', 'confirmed')
-            """),
-            {"org_id": org_id, "today": today}
-        ).fetchone()
+        # Try payment_promises table first, but it might not exist
+        try:
+            pipeline_result = db.execute(
+                text("""
+                    SELECT
+                        COALESCE(SUM(promise_amount), 0) as pipeline_value,
+                        COUNT(DISTINCT customer_id) as promised_customers
+                    FROM sales.payment_promises
+                    WHERE org_id = :org_id
+                    AND promise_date >= :today
+                    AND promise_status IN ('pending', 'confirmed')
+                """),
+                {"org_id": org_id, "today": today}
+            ).fetchone()
+        except Exception as e:
+            logger.debug(f"payment_promises table might not exist: {e}")
+            pipeline_result = None
 
-        # If payment_promises table doesn't exist, use outstanding with follow-up dates
-        if pipeline_result is None or pipeline_result.pipeline_value == 0:
+        # If payment_promises table doesn't exist or no data, use outstanding with follow-up dates
+        if pipeline_result is None or (pipeline_result and pipeline_result.pipeline_value == 0):
             pipeline_result = db.execute(
                 text("""
                     SELECT
