@@ -21,3 +21,4 @@ PyJWT==2.8.0
 # bill_parser - uncomment if available
 # bill-parser==0.1.0
 python-multipart
+python-multipart

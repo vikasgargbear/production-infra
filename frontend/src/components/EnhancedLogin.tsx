@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Eye, EyeOff, Lock, User, Building2, Shield, AlertCircle, Loader2 } from 'lucide-react';
-import authService from '../services/auth';
+import authService from '../services/auth/AuthService';
 import { Button } from './global';
 
 interface Credentials {

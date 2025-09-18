@@ -223,32 +223,52 @@ const CollectionCenter: React.FC<CollectionCenterProps> = ({
           filteredData = filteredData.filter(c => c.priority === filters.priority);
         }
         
-        // Calculate stats - use backend's correct total_outstanding if available
-        const backendTotalOutstanding = responseData.total_outstanding;
+        // Fetch real metrics from backend
+        let realMetrics = null;
+        try {
+          console.log('Fetching real collection metrics...');
+          const metricsResponse = await apiClient.get('/customer-outstanding/collection-metrics');
+          console.log('Metrics API response:', metricsResponse.data);
+
+          if (metricsResponse.data?.success) {
+            realMetrics = metricsResponse.data.metrics;
+            console.log('Using real metrics:', realMetrics);
+          } else if (metricsResponse.data?.metrics) {
+            // Handle case where success flag might be missing
+            realMetrics = metricsResponse.data.metrics;
+            console.log('Using real metrics (no success flag):', realMetrics);
+          }
+        } catch (metricsError) {
+          console.error('Failed to fetch real metrics, using fallback:', metricsError.response?.data || metricsError.message);
+        }
+
+        // Calculate stats - use real metrics if available, otherwise use calculated values
+        const backendTotalOutstanding = realMetrics?.total_outstanding || response.data?.total_outstanding;
         const totalOutstanding = backendTotalOutstanding !== undefined ?
           backendTotalOutstanding :
           collections.reduce((sum, c) => sum + c.total_outstanding, 0);
 
-        const overdueAmount = collections.reduce((sum, c) => sum + c.overdue_amount, 0);
-        const criticalCount = collections.filter(c => c.priority === 'critical').length;
+        const overdueAmount = realMetrics?.total_overdue || collections.reduce((sum, c) => sum + c.overdue_amount, 0);
+        const criticalCount = realMetrics?.high_risk_accounts || collections.filter(c => c.priority === 'critical').length;
 
         // Only count customers who actually owe money (positive net position)
-        const actualOwingCustomers = responseData.customer_summaries ?
-          Object.values(responseData.customer_summaries as any).filter((c: any) => c.net_position > 0).length :
-          collections.length;
+        const actualOwingCustomers = realMetrics?.customers_with_outstanding ||
+          (response.data?.customer_summaries ?
+            Object.values(response.data.customer_summaries as any).filter((c: any) => c.net_position > 0).length :
+            collections.length);
 
         return {
           collections: filteredData,
           stats: {
             total_outstanding: totalOutstanding,
             total_overdue: overdueAmount,
-            collections_today: Math.round(totalOutstanding * 0.05), // Mock 5% daily
-            collections_mtd: Math.round(totalOutstanding * 0.35), // Mock 35% MTD
-            promise_amount: Math.round(overdueAmount * 0.4), // Mock 40% promised
+            collections_today: realMetrics?.daily_revenue || Math.round(totalOutstanding * 0.05), // Use real daily revenue
+            collections_mtd: realMetrics?.mtd_collections || Math.round(totalOutstanding * 0.35), // Use real MTD collections
+            promise_amount: realMetrics?.pipeline_value || Math.round(overdueAmount * 0.4), // Use real pipeline value
             customers_count: actualOwingCustomers,
             critical_accounts: criticalCount,
-            success_rate: 72, // Mock success rate
-            collection_change: 15 // Mock positive change
+            success_rate: realMetrics?.collection_efficiency || 72, // Use real collection efficiency
+            collection_change: realMetrics?.collection_change || 15 // Use real trend
           }
         };
       } catch (error) {
@@ -484,7 +504,7 @@ const CollectionCenter: React.FC<CollectionCenterProps> = ({
                         {stats.collection_change && (
                           <span className={`text-xs font-semibold ${stats.collection_change > 0 ? 'text-green-600' : 'text-red-600'} flex items-center`}>
                             {stats.collection_change > 0 ? <ArrowUp className="w-3 h-3" /> : <ArrowDown className="w-3 h-3" />}
-                            {Math.abs(stats.collection_change)}%
+                            {Math.abs(stats.collection_change || 0)}%
                           </span>
                         )}
                       </div>
@@ -538,7 +558,7 @@ const CollectionCenter: React.FC<CollectionCenterProps> = ({
                       </div>
                       <div className="flex items-baseline gap-3">
                         <p className="text-2xl font-bold text-gray-900">
-                          {stats.success_rate || 0}%
+                          {Math.round(stats.success_rate || 0)}%
                         </p>
                         <div className="w-20 h-2 bg-gray-200 rounded-full overflow-hidden">
                           <div

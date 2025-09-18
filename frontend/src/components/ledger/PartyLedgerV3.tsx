@@ -26,7 +26,10 @@ import {
   Edit,
   Trash2,
   Loader2,
-  RefreshCw
+  RefreshCw,
+  FileDown,
+  FileSpreadsheet,
+  Printer
 } from 'lucide-react';
 import { format, parseISO, subMonths, differenceInDays } from 'date-fns';
 import { partyLedgerAPI } from '../../services/api';
@@ -247,6 +250,10 @@ const PartyLedgerV3: React.FC<PartyLedgerV3Props> = ({
     }
   };
 
+  const handlePrint = () => {
+    window.print();
+  };
+
   // Simplify columns to debug - return plain strings/elements
   const columns = [
     {
@@ -371,8 +378,10 @@ const PartyLedgerV3: React.FC<PartyLedgerV3Props> = ({
           <div className="bg-blue-50 px-4 py-2 text-xs text-blue-700 border-b border-blue-200">
             Keyboard shortcuts: <strong>Ctrl+F</strong> - Search | <strong>Ctrl+E</strong> - Export | <strong>Esc</strong> - Close
           </div>
-          <div className="flex-1 overflow-y-auto">
-            <div className="max-w-6xl mx-auto px-6 py-6">
+          <div className="flex-1 flex">
+            {/* Main Content */}
+            <div className="flex-1 overflow-y-auto">
+              <div className="max-w-6xl mx-auto px-6 py-6">
 
               {/* Loading State */}
               {(loadingParty || loadingLedger) && (
@@ -401,28 +410,214 @@ const PartyLedgerV3: React.FC<PartyLedgerV3Props> = ({
                 </div>
               )}
 
-      {/* Party Selection */}
-      {!initialPartyId && (
-        partyType === 'customer' ? (
-          <CustomerSearch
-            value={selectedParty}
-            onChange={setSelectedParty}
-            placeholder="Search customer by name, phone or ID"
-            className="mb-6"
-          />
-        ) : (
-          <SupplierSearch
-            onChange={setSelectedParty}
-            placeholder="Search supplier by name or ID"
-            className="mb-6"
-          />
-        )
+              {/* Party Selection - Inline without wrapper */}
+              {!initialPartyId && (
+                <div className="mb-6">
+                  {partyType === 'customer' ? (
+                    <CustomerSearch
+                      value={selectedParty}
+                      onChange={setSelectedParty}
+                      placeholder="Search customer by name, phone or ID"
+                      displayMode="inline"
+                      clearable={true}
+                    />
+                  ) : (
+                    <SupplierSearch
+                      onChange={setSelectedParty}
+                      placeholder="Search supplier by name or ID"
+                      displayMode="inline"
+                      clearable={true}
+                    />
+                  )}
+                </div>
+              )}
+
+              {/* Content - Always show table structure */}
+              <div className="bg-white rounded-lg shadow">
+                {selectedTransactions.length > 0 && (
+                  <div className="p-4 border-b bg-gray-50 flex justify-between items-center">
+                    <span className="text-sm text-gray-600">
+                      {selectedTransactions.length} transactions selected
+                    </span>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => handleBulkAction('reconcile')}
+                        className="px-3 py-1 bg-green-600 text-white rounded-md hover:bg-green-700 text-sm"
+                      >
+                        Reconcile Selected
+                      </button>
+                      <button
+                        onClick={() => handleBulkAction('export')}
+                        className="px-3 py-1 bg-blue-600 text-white rounded-md hover:bg-blue-700 text-sm"
+                      >
+                        Export Selected
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {(() => {
+                  return null;
+                })()}
+
+                <DataTable
+                  columns={columns}
+                  data={filteredEntries}
+                  keyField="id"
+                  loading={loadingLedger}
+                  emptyMessage={selectedParty || initialPartyId ? "No transactions found" : "Please select a customer to view ledger"}
+                />
+                </div>
+              </div>
+            </div>
+
+            {/* Sidebar */}
+            {(selectedParty || initialPartyId) && (
+              <div className="w-80 border-l border-gray-200 bg-white overflow-y-auto">
+                <div className="p-4">
+                  {/* Party Summary */}
+                  <div className="mb-6">
+                    <h3 className="text-sm font-semibold text-gray-700 mb-3">Party Details</h3>
+                    <div className="bg-gray-50 rounded-lg p-3 space-y-2">
+                      <div>
+                        <span className="text-xs text-gray-500">Name</span>
+                        <p className="font-medium text-sm">
+                          {selectedParty?.name || selectedParty?.label || 'N/A'}
+                        </p>
+                      </div>
+                      {selectedParty?.phone && (
+                        <div>
+                          <span className="text-xs text-gray-500">Phone</span>
+                          <p className="font-medium text-sm">{selectedParty.phone}</p>
+                        </div>
+                      )}
+                      {selectedParty?.email && (
+                        <div>
+                          <span className="text-xs text-gray-500">Email</span>
+                          <p className="font-medium text-sm">{selectedParty.email}</p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Balance Overview */}
+                  <div className="mb-6">
+                    <h3 className="text-sm font-semibold text-gray-700 mb-3">Balance Overview</h3>
+                    <div className="space-y-3">
+                      <div className="flex justify-between items-center p-3 bg-blue-50 rounded-lg">
+                        <span className="text-sm text-gray-600">Total Debit</span>
+                        <span className="font-semibold text-blue-600">
+                          ₹{filteredEntries.reduce((sum, entry) => sum + (entry.debit || 0), 0).toFixed(2)}
+                        </span>
+                      </div>
+                      <div className="flex justify-between items-center p-3 bg-green-50 rounded-lg">
+                        <span className="text-sm text-gray-600">Total Credit</span>
+                        <span className="font-semibold text-green-600">
+                          ₹{filteredEntries.reduce((sum, entry) => sum + (entry.credit || 0), 0).toFixed(2)}
+                        </span>
+                      </div>
+                      <div className="flex justify-between items-center p-3 bg-gray-100 rounded-lg">
+                        <span className="text-sm text-gray-600">Current Balance</span>
+                        <span className={`font-bold ${
+                          filteredEntries.length > 0 && filteredEntries[filteredEntries.length - 1]?.balance >= 0
+                            ? 'text-green-600'
+                            : 'text-red-600'
+                        }`}>
+                          ₹{filteredEntries.length > 0 ? Math.abs(filteredEntries[filteredEntries.length - 1]?.balance || 0).toFixed(2) : '0.00'}
+                          {filteredEntries.length > 0 && filteredEntries[filteredEntries.length - 1]?.balance < 0 && ' (Dr)'}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Recent Transactions */}
+                  <div className="mb-6">
+                    <h3 className="text-sm font-semibold text-gray-700 mb-3">Recent Transactions</h3>
+                    <div className="space-y-2">
+                      {filteredEntries.slice(0, 5).map((entry, index) => (
+                        <div key={entry.id || index} className="border-b pb-2 last:border-0">
+                          <div className="flex justify-between items-start">
+                            <div className="flex-1">
+                              <p className="text-xs text-gray-500">{entry.date}</p>
+                              <p className="text-sm font-medium">{entry.type}</p>
+                            </div>
+                            <div className="text-right">
+                              {entry.debit > 0 && (
+                                <p className="text-sm font-medium text-blue-600">₹{entry.debit.toFixed(2)}</p>
+                              )}
+                              {entry.credit > 0 && (
+                                <p className="text-sm font-medium text-green-600">₹{entry.credit.toFixed(2)}</p>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                      {filteredEntries.length === 0 && (
+                        <p className="text-xs text-gray-500 text-center py-4">No transactions yet</p>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Quick Actions */}
+                  <div>
+                    <h3 className="text-sm font-semibold text-gray-700 mb-3">Quick Actions</h3>
+                    <div className="space-y-2">
+                      <button
+                        onClick={() => handleExport('pdf')}
+                        className="w-full px-3 py-2 bg-gray-100 text-gray-700 rounded-md hover:bg-gray-200 text-sm flex items-center justify-center gap-2"
+                      >
+                        <FileDown className="w-4 h-4" />
+                        Export as PDF
+                      </button>
+                      <button
+                        onClick={() => handleExport('excel')}
+                        className="w-full px-3 py-2 bg-gray-100 text-gray-700 rounded-md hover:bg-gray-200 text-sm flex items-center justify-center gap-2"
+                      >
+                        <FileSpreadsheet className="w-4 h-4" />
+                        Export as Excel
+                      </button>
+                      <button
+                        onClick={handlePrint}
+                        className="w-full px-3 py-2 bg-gray-100 text-gray-700 rounded-md hover:bg-gray-200 text-sm flex items-center justify-center gap-2"
+                      >
+                        <Printer className="w-4 h-4" />
+                        Print Ledger
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
       )}
 
-      {/* Content */}
-      {(selectedParty || initialPartyId) && (
+      {/* Embedded View */}
+      {embedded && (
         <>
-          {/* Ledger Table */}
+          {/* Party Selection for embedded view - Inline */}
+          {!initialPartyId && (
+            <div className="mb-6">
+              {partyType === 'customer' ? (
+                <CustomerSearch
+                  value={selectedParty}
+                  onChange={setSelectedParty}
+                  placeholder="Search customer by name, phone or ID"
+                  displayMode="inline"
+                  clearable={true}
+                />
+              ) : (
+                <SupplierSearch
+                  onChange={setSelectedParty}
+                  placeholder="Search supplier by name or ID"
+                  displayMode="inline"
+                  clearable={true}
+                />
+              )}
+            </div>
+          )}
+
+          {/* Content for embedded view */}
           <div className="bg-white rounded-lg shadow">
             {selectedTransactions.length > 0 && (
               <div className="p-4 border-b bg-gray-50 flex justify-between items-center">
@@ -445,25 +640,16 @@ const PartyLedgerV3: React.FC<PartyLedgerV3Props> = ({
                 </div>
               </div>
             )}
-            
-            {(() => {
-              return null;
-            })()}
-            
+
             <DataTable
               columns={columns}
               data={filteredEntries}
               keyField="id"
               loading={loadingLedger}
-              emptyMessage="No transactions found"
+              emptyMessage={selectedParty || initialPartyId ? "No transactions found" : "Please select a customer to view ledger"}
             />
           </div>
         </>
-      )}
-
-            </div>
-          </div>
-        </div>
       )}
     </div>
   );

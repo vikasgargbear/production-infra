@@ -161,7 +161,7 @@ const LedgerReports: React.FC<LedgerReportsProps> = ({ embedded = false, onClose
     overdue_payables: 0,
     collection_efficiency: 0,
     payment_efficiency: 0,
-    cash_flow_trend: 'neutral'
+    cash_flow_trend: 'neutral' as 'positive' | 'negative' | 'neutral'
   };
 
   const handleExport = async (exportFormat: 'pdf' | 'excel') => {

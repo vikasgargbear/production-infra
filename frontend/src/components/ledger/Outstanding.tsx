@@ -48,6 +48,8 @@ interface PartyOutstanding {
   credit_limit?: number;
   credit_utilization?: number;
   invoices?: InvoiceDetail[];
+  total_advance?: number;
+  customer_net_position?: number;
 }
 
 interface InvoiceDetail {
