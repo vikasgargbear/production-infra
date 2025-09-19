@@ -115,13 +115,37 @@ const CollectionCenter: React.FC<CollectionCenterProps> = ({
         
         // Get unique customer IDs to fetch their details
         const customerIds = [...new Set(invoices.map((inv: any) => inv.customer_id))];
-        
-        // Fetch customer details for phone/email (if we have an endpoint)
-        // For now, we'll work with what we have from invoices
+
+        // Fetch customer details for phone/email
         const customerDetailsMap = new Map();
-        
-        // Try to get customer details from a customer API if available
-        // This is where phone/email would come from in a real implementation
+
+        // Try to get customer details from customers API
+        try {
+          const customerPromises = customerIds.map(async (customerId) => {
+            try {
+              const customerResponse = await apiClient.get(`/customers/${customerId}`);
+              if (customerResponse.data) {
+                return customerResponse.data;
+              }
+            } catch (e) {
+              console.log(`Could not fetch customer ${customerId} details`);
+            }
+            return null;
+          });
+
+          const customerDetails = await Promise.all(customerPromises);
+          customerDetails.forEach((customer) => {
+            if (customer) {
+              customerDetailsMap.set(customer.customer_id, {
+                phone: customer.primary_phone || customer.phone || customer.mobile || '',
+                email: customer.email || '',
+                address: customer.address_line1 || ''
+              });
+            }
+          });
+        } catch (error) {
+          console.log('Could not fetch customer details:', error);
+        }
         
         // Group by customer for collection view
         const customerMap = new Map();
@@ -129,14 +153,15 @@ const CollectionCenter: React.FC<CollectionCenterProps> = ({
         invoices.forEach((invoice: any) => {
           const customerId = invoice.customer_id;
           const customerName = invoice.customer_name || `Customer ${customerId}`;
-          
+          const customerDetails = customerDetailsMap.get(customerId) || {};
+
           if (!customerMap.has(customerId)) {
             customerMap.set(customerId, {
               customer_id: String(customerId),
               customer_name: customerName,
-              customer_phone: '', // Would come from customer details API
-              customer_email: '', // Would come from customer details API
-              customer_address: '', // Would come from customer details API
+              customer_phone: customerDetails.phone || invoice.customer_phone || invoice.customer_mobile || '', // Prefer fetched details
+              customer_email: customerDetails.email || invoice.customer_email || '', // Prefer fetched details
+              customer_address: customerDetails.address || invoice.customer_address || invoice.billing_address || '', // Prefer fetched details
               total_outstanding: 0,
               overdue_amount: 0,
               days_overdue: 0,
