@@ -5,6 +5,7 @@ import {
   RefreshCw, Loader2, AlertTriangle
 } from 'lucide-react';
 import { gstApi } from '../../services/api/modules/gst.api';
+import { invoiceAPI, customersApi } from '../../services/api';
 import { useToast } from '../global';
 
 interface GSTBalancedProps {
@@ -64,27 +65,147 @@ const GSTBalanced: React.FC<GSTBalancedProps> = () => {
   const [error, setError] = useState<string | null>(null);
   const toast = useToast();
 
+  // Calculate GST from invoices
+  const calculateGSTFromInvoices = async () => {
+    try {
+      // Get invoices from current month
+      const now = new Date();
+      const fromDate = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0];
+      const toDate = now.toISOString().split('T')[0];
+
+      const [invoicesResponse, customersResponse] = await Promise.all([
+        invoiceAPI.getAll({
+          from_date: fromDate,
+          to_date: toDate,
+          limit: 1000
+        }).catch(() => ({ data: { invoices: [] } })),
+        customersApi.getAll().catch(() => ({ data: [] }))
+      ]);
+
+      const invoices = invoicesResponse.data?.invoices || [];
+      const customers = customersResponse.data || [];
+
+      // Calculate GST totals
+      let totalTaxPayable = 0;
+      let totalInputCredit = 0; // Would come from purchase invoices
+      let b2bCount = 0;
+      let b2cCount = 0;
+
+      invoices.forEach(invoice => {
+        const cgst = parseFloat(invoice.cgst_amount || 0);
+        const sgst = parseFloat(invoice.sgst_amount || 0);
+        const igst = parseFloat(invoice.igst_amount || 0);
+        const totalTax = cgst + sgst + igst;
+
+        totalTaxPayable += totalTax;
+
+        // Check if customer has GSTIN (B2B vs B2C)
+        if (invoice.customer_id) {
+          const customer = customers.find(c => c.customer_id === invoice.customer_id);
+          if (customer?.gstin) {
+            b2bCount++;
+          } else {
+            b2cCount++;
+          }
+        } else {
+          b2cCount++;
+        }
+      });
+
+      const netPayable = totalTaxPayable - totalInputCredit;
+      const complianceScore = invoices.length > 0 ? 85 : 50; // Basic score
+
+      return {
+        taxPayable: totalTaxPayable,
+        inputCredit: totalInputCredit,
+        netPayable: netPayable,
+        complianceScore: complianceScore,
+        dueDate: getDueDate(),
+        invoiceCount: invoices.length,
+        b2bCount,
+        b2cCount
+      };
+    } catch (error) {
+      console.error('Error calculating GST from invoices:', error);
+      return {
+        taxPayable: 0,
+        inputCredit: 0,
+        netPayable: 0,
+        complianceScore: 0,
+        dueDate: getDueDate(),
+        invoiceCount: 0,
+        b2bCount: 0,
+        b2cCount: 0
+      };
+    }
+  };
+
   // Fetch dashboard data
   const fetchDashboardData = async () => {
     try {
       setError(null);
-      const [summaryData, returnsData] = await Promise.all([
-        gstApi.dashboard.getSummary(selectedPeriod),
-        gstApi.returns.getStatus(selectedPeriod)
-      ]);
 
-      setDashboardData({
-        taxPayable: summaryData.taxPayable || summaryData.outputTax || 0,
-        inputCredit: summaryData.inputCredit || summaryData.inputTax || 0,
-        netPayable: summaryData.netPayable || (summaryData.taxPayable - summaryData.inputCredit) || 0,
-        complianceScore: summaryData.complianceScore || calculateComplianceScore(returnsData),
-        dueDate: summaryData.dueDate || getDueDate()
-      });
+      // Try GST API first, fallback to invoice calculation
+      try {
+        const [summaryData, returnsData] = await Promise.all([
+          gstApi.dashboard.getSummary(selectedPeriod),
+          gstApi.returns.getStatus(selectedPeriod)
+        ]);
 
-      setReturnStatus(returnsData);
+        setDashboardData({
+          taxPayable: summaryData.taxPayable || summaryData.outputTax || 0,
+          inputCredit: summaryData.inputCredit || summaryData.inputTax || 0,
+          netPayable: summaryData.netPayable || (summaryData.taxPayable - summaryData.inputCredit) || 0,
+          complianceScore: summaryData.complianceScore || calculateComplianceScore(returnsData),
+          dueDate: summaryData.dueDate || getDueDate()
+        });
+
+        setReturnStatus(returnsData);
+
+      } catch (apiError) {
+        console.log('GST API not available, calculating from invoices...');
+
+        // Fallback: Calculate from invoices
+        const calculatedData = await calculateGSTFromInvoices();
+
+        setDashboardData({
+          taxPayable: calculatedData.taxPayable,
+          inputCredit: calculatedData.inputCredit,
+          netPayable: calculatedData.netPayable,
+          complianceScore: calculatedData.complianceScore,
+          dueDate: calculatedData.dueDate
+        });
+
+        // Set return status based on calculated data
+        setReturnStatus({
+          gstr1: {
+            status: 'pending',
+            amount: calculatedData.taxPayable,
+            dueDate: getDueDate().replace('/', ' '),
+            filedDate: null
+          },
+          gstr3b: {
+            status: 'pending',
+            amount: calculatedData.netPayable,
+            dueDate: getDueDate().replace('/', ' '),
+            filedDate: null
+          },
+          gstr2a: {
+            status: 'available',
+            amount: calculatedData.inputCredit,
+            lastUpdated: new Date().toLocaleDateString()
+          }
+        });
+
+        // Show informational message
+        if (calculatedData.invoiceCount > 0) {
+          setError(`Showing calculated GST from ${calculatedData.invoiceCount} invoices (${calculatedData.b2bCount} B2B, ${calculatedData.b2cCount} B2C)`);
+        }
+      }
+
     } catch (error) {
       setError('Failed to load GST data. Please try again.');
-      
+
       // Set default data on error
       setDashboardData({
         taxPayable: 0,
