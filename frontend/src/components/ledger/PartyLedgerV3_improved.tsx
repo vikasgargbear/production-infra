@@ -30,11 +30,9 @@ import {
   FileDown,
   FileSpreadsheet,
   Printer,
-  ChevronDown,
-  User,
-  Building
+  ChevronDown
 } from 'lucide-react';
-import { format, parseISO, subMonths, subDays, differenceInDays, isWithinInterval } from 'date-fns';
+import { format, parseISO, subMonths, subDays, differenceInDays } from 'date-fns';
 import { partyLedgerAPI } from '../../services/api';
 import { CustomerSearch, SupplierSearch, DatePicker, Select, DataTable, StatusBadge, ModuleHeader } from '../global';
 import { formatCurrency } from '../../utils/formatters';
@@ -86,12 +84,11 @@ const PartyLedgerV3: React.FC<PartyLedgerV3Props> = ({
     to: new Date()
   });
   const [quickDateRange, setQuickDateRange] = useState('last3months');
+  const [searchTerm, setSearchTerm] = useState('');
   const [filterType, setFilterType] = useState('all');
   const [selectedTransactions, setSelectedTransactions] = useState<string[]>([]);
   const [refreshing, setRefreshing] = useState(false);
   const [orgDetails, setOrgDetails] = useState<any>(null);
-  const [currentPage, setCurrentPage] = useState(1);
-  const [itemsPerPage, setItemsPerPage] = useState(25);
 
   // Fetch organization details for branding
   useEffect(() => {
@@ -149,15 +146,12 @@ const PartyLedgerV3: React.FC<PartyLedgerV3Props> = ({
     }
   };
 
-  // Get party ID from selectedParty object
-  const partyId = initialPartyId || selectedParty?.customer_id || selectedParty?.supplier_id || selectedParty?.id;
-
   // Fetch party details
   const { data: partyDetails, isLoading: loadingParty, error: partyError } = useQuery(
-    ['party-details', partyId, partyType],
-    () => partyLedgerAPI.getBalance(partyId, partyType),
+    ['party-details', initialPartyId || selectedParty?.id, partyType],
+    () => partyLedgerAPI.getPartyDetails(initialPartyId || selectedParty?.id, partyType),
     {
-      enabled: !!partyId,
+      enabled: !!(initialPartyId || selectedParty?.id),
       retry: 1,
       onError: (error: any) => {
         console.error('Failed to fetch party details:', error);
@@ -167,82 +161,42 @@ const PartyLedgerV3: React.FC<PartyLedgerV3Props> = ({
 
   // Fetch ledger entries
   const { data: ledgerData, isLoading: loadingLedger, error: ledgerError, refetch } = useQuery(
-    ['party-ledger', partyId, partyType, dateRange],
-    async () => {
-      const response = await partyLedgerAPI.getStatement(
-        partyId,
-        partyType,
-        {
-          date_from: format(dateRange.from, 'yyyy-MM-dd'),
-          date_to: format(dateRange.to, 'yyyy-MM-dd')
-        }
-      );
-      return response;
-    },
+    ['party-ledger', initialPartyId || selectedParty?.id, partyType, dateRange],
+    () => partyLedgerAPI.getLedger(
+      initialPartyId || selectedParty?.id,
+      partyType,
+      {
+        date_from: format(dateRange.from, 'yyyy-MM-dd'),
+        date_to: format(dateRange.to, 'yyyy-MM-dd')
+      }
+    ),
     {
-      enabled: !!partyId,
+      enabled: !!(initialPartyId || selectedParty?.id),
       retry: 1
     }
   );
 
-  const filteredEntries = useMemo(() => {
-    // Handle both API response formats
-    const entries = ledgerData?.data?.statement || ledgerData?.data || ledgerData?.statement || [];
+  const ledgerEntries = useMemo(() => {
+    if (!ledgerData?.data) return [];
 
-    if (!Array.isArray(entries)) return [];
+    let entries = Array.isArray(ledgerData.data) ? ledgerData.data : [];
 
-    let filtered = [...entries];
-
-    // Apply date filter (client-side as fallback if backend doesn't filter)
-    filtered = filtered.filter(entry => {
-      if (!entry.date) return false;
-
-      try {
-        const entryDate = typeof entry.date === 'string' ? parseISO(entry.date) : new Date(entry.date);
-        const fromDate = new Date(dateRange.from);
-        const toDate = new Date(dateRange.to);
-
-        // Set time to start and end of day for proper comparison
-        fromDate.setHours(0, 0, 0, 0);
-        toDate.setHours(23, 59, 59, 999);
-
-        return entryDate >= fromDate && entryDate <= toDate;
-      } catch (error) {
-        console.error('Error parsing date:', entry.date, error);
-        return false;
-      }
-    });
+    // Apply search filter
+    if (searchTerm) {
+      entries = entries.filter(entry =>
+        entry.description?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        entry.reference_number?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        entry.reference?.toLowerCase().includes(searchTerm.toLowerCase())
+      );
+    }
 
     // Apply type filter
     if (filterType !== 'all') {
-      filtered = filtered.filter(entry => entry.transaction_type === filterType);
+      entries = entries.filter(entry => entry.transaction_type === filterType);
     }
 
-    return filtered;
-  }, [ledgerData, filterType, dateRange]);
-
-  // Paginated entries
-  const ledgerEntries = useMemo(() => {
-    const startIndex = (currentPage - 1) * itemsPerPage;
-    const endIndex = startIndex + itemsPerPage;
-    return filteredEntries.slice(startIndex, endIndex);
-  }, [filteredEntries, currentPage, itemsPerPage]);
-
-  const totalPages = Math.ceil(filteredEntries.length / itemsPerPage);
-
-  // Reset to page 1 when filters change
-  useEffect(() => {
-    setCurrentPage(1);
-  }, [filterType, dateRange, partyId]);
-
-  // Debug: Log date range changes
-  useEffect(() => {
-    console.log('Date range changed:', {
-      from: format(dateRange.from, 'yyyy-MM-dd'),
-      to: format(dateRange.to, 'yyyy-MM-dd'),
-      quickRange: quickDateRange
-    });
-  }, [dateRange, quickDateRange]);
+    return entries;
+  }, [ledgerData, searchTerm, filterType]);
 
   const errorMessage = partyError?.message || ledgerError?.message;
 
@@ -574,12 +528,13 @@ const PartyLedgerV3: React.FC<PartyLedgerV3Props> = ({
             icon={FileText}
             iconColor="text-blue-600"
             onClose={onClose}
+            historyType="ledger"
             onSaveDraft={() => {}}
             additionalActions={[
               {
                 label: refreshing ? "Refreshing..." : "Refresh",
                 onClick: handleRefresh,
-                variant: "primary",
+                variant: refreshing ? "secondary" : "primary",
                 icon: RefreshCw,
                 disabled: refreshing,
                 className: refreshing ? "animate-spin" : ""
@@ -589,120 +544,62 @@ const PartyLedgerV3: React.FC<PartyLedgerV3Props> = ({
 
           <div className="flex-1 overflow-y-auto">
             <div className="max-w-7xl mx-auto px-6 py-6">
-              {/* Party Selection - Embedded in page background like invoice */}
+              {/* Party Selection */}
               {!initialPartyId && (
-                <div className="mb-6">
-                  {/* Header with icon - matching invoice */}
-                  <div className="flex items-center gap-2 mb-3">
-                    {partyType === 'customer' ? (
-                      <>
-                        <User className="w-4 h-4 text-gray-500" />
-                        <span className="text-sm font-medium text-gray-700 uppercase tracking-wide">CUSTOMER</span>
-                      </>
-                    ) : (
-                      <>
-                        <Building className="w-4 h-4 text-gray-500" />
-                        <span className="text-sm font-medium text-gray-700 uppercase tracking-wide">SUPPLIER</span>
-                      </>
-                    )}
-                  </div>
-
-                  {/* Search field - no background, embedded in page */}
+                <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-6">
+                  <h3 className="text-lg font-semibold mb-4">Select Party</h3>
                   {partyType === 'customer' ? (
                     <CustomerSearch
                       value={selectedParty}
                       onChange={setSelectedParty}
-                      placeholder="Search customer by name, phone, or code..."
+                      placeholder="Search customer by name, phone or ID"
                       displayMode="inline"
                       clearable={true}
-                      showCreateButton={false}
                     />
                   ) : (
                     <SupplierSearch
                       onChange={setSelectedParty}
-                      placeholder="Search supplier by name or ID..."
+                      placeholder="Search supplier by name or ID"
                       displayMode="inline"
                       clearable={true}
-                      showCreateButton={false}
                     />
                   )}
                 </div>
               )}
 
-              {/* Summary and Filters - Show when party is selected */}
-              {partyId && (
+              {/* Summary and Filters */}
+              {(selectedParty || initialPartyId) && (
                 <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-6">
-                  {/* Show selected party info */}
-                  {selectedParty && (
-                    <div className="flex items-center justify-between mb-3 pb-3 border-b border-gray-200">
-                      <div>
-                        <h3 className="text-lg font-semibold text-gray-900">
-                          {selectedParty?.customer_name || selectedParty?.supplier_name || selectedParty?.name || 'Unknown Party'}
-                        </h3>
-                        {(selectedParty?.phone || selectedParty?.gst_number) && (
-                          <div className="flex items-center gap-4 mt-1">
-                            {selectedParty?.phone && (
-                              <span className="text-sm text-gray-600">
-                                📱 {selectedParty.phone}
-                              </span>
-                            )}
-                            {selectedParty?.gst_number && (
-                              <span className="text-sm text-gray-600">
-                                GST: {selectedParty.gst_number}
-                              </span>
-                            )}
-                          </div>
-                        )}
+                  {/* Summary Cards */}
+                  <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+                    <div className="bg-blue-50 rounded-lg p-4">
+                      <div className="text-xs text-gray-600 mb-1">Total Debit</div>
+                      <div className="text-xl font-bold text-blue-600">
+                        ₹{ledgerEntries.reduce((sum, entry) => sum + (entry.debit || 0), 0).toFixed(2)}
                       </div>
-                      {selectedParty?.phone && (
-                        <button
-                          onClick={() => {
-                            let phone = selectedParty.phone.replace(/\D/g, '');
-                            if (!phone.startsWith('91') && phone.length === 10) {
-                              phone = '91' + phone;
-                            }
-                            const message = encodeURIComponent(`Hello ${selectedParty?.customer_name || selectedParty?.supplier_name || selectedParty?.name || 'Customer'}, please find your ledger statement attached.`);
-                            window.open(`https://wa.me/${phone}?text=${message}`, '_blank');
-                          }}
-                          className="px-3 py-1 bg-green-600 text-white rounded-md hover:bg-green-700 text-sm flex items-center gap-1"
-                        >
-                          <WhatsAppIcon className="w-4 h-4" />
-                          WhatsApp
-                        </button>
-                      )}
                     </div>
-                  )}
-
-                  {/* Summary Cards - Compact */}
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
-                    <div className="bg-blue-50 rounded-md px-3 py-2 flex justify-between items-center">
-                      <span className="text-xs text-gray-600">Total Debit</span>
-                      <span className="text-sm font-bold text-blue-600">
-                        ₹{filteredEntries.reduce((sum, entry) => sum + (entry.debit || 0), 0).toFixed(2)}
-                      </span>
+                    <div className="bg-green-50 rounded-lg p-4">
+                      <div className="text-xs text-gray-600 mb-1">Total Credit</div>
+                      <div className="text-xl font-bold text-green-600">
+                        ₹{ledgerEntries.reduce((sum, entry) => sum + (entry.credit || 0), 0).toFixed(2)}
+                      </div>
                     </div>
-                    <div className="bg-green-50 rounded-md px-3 py-2 flex justify-between items-center">
-                      <span className="text-xs text-gray-600">Total Credit</span>
-                      <span className="text-sm font-bold text-green-600">
-                        ₹{filteredEntries.reduce((sum, entry) => sum + (entry.credit || 0), 0).toFixed(2)}
-                      </span>
-                    </div>
-                    <div className="bg-purple-50 rounded-md px-3 py-2 flex justify-between items-center">
-                      <span className="text-xs text-gray-600">Net Balance</span>
-                      <span className={`text-sm font-bold ${
-                        filteredEntries.length > 0 && filteredEntries[filteredEntries.length - 1]?.balance >= 0
+                    <div className="bg-purple-50 rounded-lg p-4">
+                      <div className="text-xs text-gray-600 mb-1">Net Balance</div>
+                      <div className={`text-xl font-bold ${
+                        ledgerEntries.length > 0 && ledgerEntries[ledgerEntries.length - 1]?.balance >= 0
                           ? 'text-green-600'
                           : 'text-red-600'
                       }`}>
-                        ₹{filteredEntries.length > 0 ? Math.abs(filteredEntries[filteredEntries.length - 1]?.balance || 0).toFixed(2) : '0.00'}
-                        {filteredEntries.length > 0 && filteredEntries[filteredEntries.length - 1]?.balance < 0 ? ' (Dr)' : ''}
-                      </span>
+                        ₹{ledgerEntries.length > 0 ? Math.abs(ledgerEntries[ledgerEntries.length - 1]?.balance || 0).toFixed(2) : '0.00'}
+                        {ledgerEntries.length > 0 && ledgerEntries[ledgerEntries.length - 1]?.balance < 0 && ' (Dr)'}
+                      </div>
                     </div>
-                    <div className="bg-orange-50 rounded-md px-3 py-2 flex justify-between items-center">
-                      <span className="text-xs text-gray-600">Transactions</span>
-                      <span className="text-sm font-bold text-orange-600">
-                        {filteredEntries.length}
-                      </span>
+                    <div className="bg-orange-50 rounded-lg p-4">
+                      <div className="text-xs text-gray-600 mb-1">Total Transactions</div>
+                      <div className="text-xl font-bold text-orange-600">
+                        {ledgerEntries.length}
+                      </div>
                     </div>
                   </div>
 
@@ -735,29 +632,40 @@ const PartyLedgerV3: React.FC<PartyLedgerV3Props> = ({
                       ))}
                     </div>
 
-                    {/* Date Range, Filter and Actions in one row */}
-                    <div className="flex items-center gap-3 flex-wrap">
+                    {/* Date Range and Search */}
+                    <div className="flex items-center gap-4">
                       <div className="flex items-center gap-2">
                         <Calendar className="w-4 h-4 text-gray-500" />
                         <input
                           type="date"
                           value={format(dateRange.from, 'yyyy-MM-dd')}
                           onChange={(e) => setDateRange(prev => ({ ...prev, from: new Date(e.target.value) }))}
-                          className="px-2 py-1 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          className="px-3 py-1.5 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                         />
-                        <span className="text-gray-500 text-sm">to</span>
+                        <span className="text-gray-500">to</span>
                         <input
                           type="date"
                           value={format(dateRange.to, 'yyyy-MM-dd')}
                           onChange={(e) => setDateRange(prev => ({ ...prev, to: new Date(e.target.value) }))}
-                          className="px-2 py-1 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          className="px-3 py-1.5 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        />
+                      </div>
+
+                      <div className="flex-1 relative">
+                        <Search className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                        <input
+                          type="text"
+                          placeholder="Search transactions..."
+                          value={searchTerm}
+                          onChange={(e) => setSearchTerm(e.target.value)}
+                          className="w-full pl-10 pr-3 py-1.5 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                         />
                       </div>
 
                       <select
                         value={filterType}
                         onChange={(e) => setFilterType(e.target.value)}
-                        className="px-2 py-1 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        className="px-3 py-1.5 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                       >
                         <option value="all">All Types</option>
                         <option value="invoice">Invoices</option>
@@ -765,31 +673,47 @@ const PartyLedgerV3: React.FC<PartyLedgerV3Props> = ({
                         <option value="credit_note">Credit Notes</option>
                         <option value="debit_note">Debit Notes</option>
                       </select>
+                    </div>
 
-                      <div className="flex-1"></div>
-
-                      {/* Action Buttons inline */}
+                    {/* Action Buttons */}
+                    <div className="flex justify-end gap-2 pt-2 border-t">
                       <button
                         onClick={() => handleExport('pdf')}
-                        className="px-3 py-1 bg-blue-600 text-white rounded-md hover:bg-blue-700 text-sm flex items-center gap-1"
+                        className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 text-sm flex items-center gap-2"
                       >
                         <FileDown className="w-4 h-4" />
-                        PDF
+                        Export PDF
                       </button>
                       <button
                         onClick={() => handleExport('excel')}
-                        className="px-3 py-1 bg-green-600 text-white rounded-md hover:bg-green-700 text-sm flex items-center gap-1"
+                        className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 text-sm flex items-center gap-2"
                       >
                         <FileSpreadsheet className="w-4 h-4" />
-                        Excel
+                        Export Excel
                       </button>
                       <button
                         onClick={handlePrint}
-                        className="px-3 py-1 bg-gray-600 text-white rounded-md hover:bg-gray-700 text-sm flex items-center gap-1"
+                        className="px-4 py-2 bg-gray-600 text-white rounded-md hover:bg-gray-700 text-sm flex items-center gap-2"
                       >
                         <Printer className="w-4 h-4" />
                         Print
                       </button>
+                      {selectedParty?.phone && (
+                        <button
+                          onClick={() => {
+                            let phone = selectedParty.phone.replace(/\D/g, '');
+                            if (!phone.startsWith('91') && phone.length === 10) {
+                              phone = '91' + phone;
+                            }
+                            const message = encodeURIComponent(`Hello ${selectedParty?.customer_name || selectedParty?.supplier_name || selectedParty?.name || 'Customer'}, please find your ledger statement attached.`);
+                            window.open(`https://wa.me/${phone}?text=${message}`, '_blank');
+                          }}
+                          className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 text-sm flex items-center gap-2"
+                        >
+                          <WhatsAppIcon className="w-4 h-4" />
+                          Share via WhatsApp
+                        </button>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -816,7 +740,7 @@ const PartyLedgerV3: React.FC<PartyLedgerV3Props> = ({
               )}
 
               {/* Ledger Table */}
-              {partyId && !loadingLedger && (
+              {(selectedParty || initialPartyId) && !loadingLedger && (
                 <div className="bg-white rounded-lg shadow-sm border border-gray-200">
                   <DataTable
                     columns={columns}
@@ -825,104 +749,6 @@ const PartyLedgerV3: React.FC<PartyLedgerV3Props> = ({
                     loading={loadingLedger}
                     emptyMessage="No transactions found for the selected period"
                   />
-
-                  {/* Pagination */}
-                  {filteredEntries.length > 0 && (
-                    <div className="border-t border-gray-200 px-4 py-3 flex items-center justify-between">
-                      <div className="flex items-center gap-4">
-                        <div className="flex items-center gap-2">
-                          <span className="text-sm text-gray-700">Show</span>
-                          <select
-                            value={itemsPerPage}
-                            onChange={(e) => {
-                              setItemsPerPage(Number(e.target.value));
-                              setCurrentPage(1);
-                            }}
-                            className="px-2 py-1 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                          >
-                            <option value={10}>10</option>
-                            <option value={25}>25</option>
-                            <option value={50}>50</option>
-                            <option value={100}>100</option>
-                          </select>
-                          <span className="text-sm text-gray-700">entries</span>
-                        </div>
-                        <div className="text-sm text-gray-600">
-                          Showing {((currentPage - 1) * itemsPerPage) + 1} to {Math.min(currentPage * itemsPerPage, filteredEntries.length)} of {filteredEntries.length} entries
-                        </div>
-                      </div>
-
-                      <div className="flex items-center gap-2">
-                        <button
-                          onClick={() => setCurrentPage(1)}
-                          disabled={currentPage === 1}
-                          className="px-2 py-1 text-gray-600 hover:bg-gray-100 rounded disabled:opacity-50 disabled:cursor-not-allowed"
-                        >
-                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 19l-7-7 7-7m8 14l-7-7 7-7" />
-                          </svg>
-                        </button>
-                        <button
-                          onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
-                          disabled={currentPage === 1}
-                          className="px-2 py-1 text-gray-600 hover:bg-gray-100 rounded disabled:opacity-50 disabled:cursor-not-allowed"
-                        >
-                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-                          </svg>
-                        </button>
-
-                        {/* Page Numbers */}
-                        <div className="flex items-center gap-1">
-                          {[...Array(Math.min(5, totalPages))].map((_, idx) => {
-                            let pageNum;
-                            if (totalPages <= 5) {
-                              pageNum = idx + 1;
-                            } else if (currentPage <= 3) {
-                              pageNum = idx + 1;
-                            } else if (currentPage >= totalPages - 2) {
-                              pageNum = totalPages - 4 + idx;
-                            } else {
-                              pageNum = currentPage - 2 + idx;
-                            }
-
-                            return (
-                              <button
-                                key={idx}
-                                onClick={() => setCurrentPage(pageNum)}
-                                className={`px-3 py-1 rounded text-sm ${
-                                  currentPage === pageNum
-                                    ? 'bg-blue-600 text-white'
-                                    : 'text-gray-700 hover:bg-gray-100'
-                                }`}
-                              >
-                                {pageNum}
-                              </button>
-                            );
-                          })}
-                        </div>
-
-                        <button
-                          onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
-                          disabled={currentPage === totalPages}
-                          className="px-2 py-1 text-gray-600 hover:bg-gray-100 rounded disabled:opacity-50 disabled:cursor-not-allowed"
-                        >
-                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                          </svg>
-                        </button>
-                        <button
-                          onClick={() => setCurrentPage(totalPages)}
-                          disabled={currentPage === totalPages}
-                          className="px-2 py-1 text-gray-600 hover:bg-gray-100 rounded disabled:opacity-50 disabled:cursor-not-allowed"
-                        >
-                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 5l7 7-7 7M5 5l7 7-7 7" />
-                          </svg>
-                        </button>
-                      </div>
-                    </div>
-                  )}
                 </div>
               )}
             </div>

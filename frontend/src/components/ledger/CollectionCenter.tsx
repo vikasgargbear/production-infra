@@ -41,6 +41,7 @@ import { format, parseISO, differenceInDays, addDays } from 'date-fns';
 import apiClient from '../../services/api/apiClient';
 import { DataTable, StatusBadge, Select, DatePicker, ModuleHeader } from '../global';
 import { formatCurrency } from '../../utils/formatters';
+import WhatsAppIcon from '../icons/WhatsAppIcon';
 
 interface CollectionCenterProps {
   embedded?: boolean;
@@ -359,7 +360,13 @@ const CollectionCenter: React.FC<CollectionCenterProps> = ({
       `Dear ${customer.customer_name},\n\nYour outstanding amount is ₹${customer.total_outstanding.toLocaleString('en-IN')}. Please make the payment at your earliest convenience.\n\nThank you!`
     );
     // Remove any non-numeric characters from phone number
-    const cleanPhone = customer.customer_phone.replace(/\D/g, '');
+    let cleanPhone = customer.customer_phone.replace(/\D/g, '');
+
+    // Add +91 if not already present (for Indian numbers)
+    if (!cleanPhone.startsWith('91') && cleanPhone.length === 10) {
+      cleanPhone = '91' + cleanPhone;
+    }
+
     window.open(`https://wa.me/${cleanPhone}?text=${message}`, '_blank');
   };
 
@@ -474,20 +481,19 @@ const CollectionCenter: React.FC<CollectionCenterProps> = ({
             icon={Target}
             iconColor="text-green-600"
             onClose={onClose}
-            historyType="ledger"
             onSaveDraft={() => {}}
             additionalActions={[
-              {
-                label: "Refresh",
-                icon: RefreshCw,
-                onClick: () => refetch(),
-                variant: "primary"
-              },
               {
                 label: "Export",
                 icon: Download,
                 onClick: handleExport,
                 variant: "default"
+              },
+              {
+                label: "Refresh",
+                icon: RefreshCw,
+                onClick: () => refetch(),
+                variant: "primary"
               }
             ] as any}
           />
@@ -778,7 +784,7 @@ const CollectionCenter: React.FC<CollectionCenterProps> = ({
                                   className="p-2 text-green-600 hover:bg-green-50 rounded-lg transition-colors"
                                   title="Send WhatsApp"
                                 >
-                                  <MessageCircle className="w-4 h-4" />
+                                  <WhatsAppIcon className="w-4 h-4" />
                                 </button>
                                 
                                 {/* Email */}

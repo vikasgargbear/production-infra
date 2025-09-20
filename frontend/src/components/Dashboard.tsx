@@ -13,7 +13,7 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContai
 import ModularChallanCreatorV5 from './challan/ModularChallanCreatorV5'; // New improved version
 // import { AddSalePage } from './Home';
 import BusinessSalesEntry from './BusinessSalesEntry';
-import { apiUtils, dashboardApi, ordersApi } from '../services/api';
+import { apiUtils, dashboardApi, ordersApi, invoiceAPI, salesApi, purchasesAPI, productsApi, customersApi } from '../services/api';
 import { Button, StatusBadge, DataTable, DatePicker, ModuleHeader } from './global';
 
 // Type definitions
@@ -354,73 +354,186 @@ const Dashboard: React.FC = () => {
       setLoading(true);
       setError(null);
 
-      // Fetch all dashboard data in parallel
+      // Fetch all dashboard data in parallel using existing APIs
       const [
         statsResponse,
+        invoicesResponse,
         recentOrdersResponse,
         revenueResponse,
         topProductsResponse,
         inventoryAlertsResponse,
         pendingPaymentsResponse,
-        expiringProductsResponse
+        productsResponse,
+        customersResponse
       ] = await Promise.all([
         dashboardApi.getStats(),
+        invoiceAPI.getAll({ limit: 10 }).catch(() => ({ data: [] })), // Get recent invoices
         dashboardApi.getRecentOrders(10),
         dashboardApi.getRevenueData('monthly'),
         dashboardApi.getTopProducts(10),
         dashboardApi.getInventoryAlerts(),
         dashboardApi.getPendingPayments(),
-        dashboardApi.getExpiringProducts(30)
+        productsApi.getAll().catch(() => ({ data: [] })), // Get all products
+        customersApi.getAll().catch(() => ({ data: [] })) // Get all customers
       ]);
 
-      // Update stats
-      if (statsResponse.data) {
-        setStats(statsResponse.data);
+      // Calculate stats from actual data
+      const backendStats = statsResponse.data || {};
+      const invoices = invoicesResponse.data || [];
+      const products = productsResponse.data || [];
+      const customers = customersResponse.data || [];
+
+      // Calculate total revenue from invoices
+      const totalRevenue = invoices.reduce((sum: number, invoice: any) =>
+        sum + (invoice.final_amount || 0), 0);
+
+      // Calculate today's sales from invoices
+      const today = new Date().toDateString();
+      const dailySales = invoices
+        .filter((invoice: any) => new Date(invoice.invoice_date).toDateString() === today)
+        .reduce((sum: number, invoice: any) => sum + (invoice.final_amount || 0), 0);
+
+      setStats({
+        totalRevenue: totalRevenue || backendStats.revenue_this_month || 0,
+        totalOrders: invoices.length || backendStats.orders_this_month || 0,
+        totalProducts: products.length || backendStats.total_products || 0,
+        totalCustomers: customers.length || backendStats.total_customers || 0,
+        expiringSoon: backendStats.expiring_soon || 0,
+        pendingPayments: pendingPaymentsResponse.data?.summary?.total_receivables || 0,
+        stockValue: 0, // Not available in current API
+        lowStockItems: backendStats.low_stock_products || 0,
+        dailySales: dailySales,
+        monthlyGrowth: 0, // Calculate if needed
+        customerRetention: 0, // Calculate if needed
+        averageOrderValue: invoices.length > 0 ? totalRevenue / invoices.length : 0,
+        profitMargin: 0, // Calculate if needed
+        inventoryTurnover: 0, // Calculate if needed
+        prescriptionCount: 0, // Calculate if needed
+        returnRate: 0 // Calculate if needed
+      });
+
+      // Update recent orders - use both orders and invoices
+      const allOrders = [];
+
+      // Add orders from dashboard API
+      if (recentOrdersResponse.data && Array.isArray(recentOrdersResponse.data)) {
+        const mappedOrders = recentOrdersResponse.data.map((order: any) => ({
+          id: order.order_id || order.id,
+          customer: order.customer_name || 'Unknown Customer',
+          amount: order.final_amount || 0,
+          status: order.order_status === 'confirmed' ? 'Completed' :
+                  order.order_status === 'pending' ? 'Pending' : 'Cancelled',
+          date: new Date(order.order_date).toLocaleDateString('en-IN'),
+          type: 'Order'
+        }));
+        allOrders.push(...mappedOrders);
       }
 
-      // Update recent orders
-      if (recentOrdersResponse.data?.orders) {
-        setRecentOrders(recentOrdersResponse.data.orders);
+      // Add recent invoices
+      if (invoices && Array.isArray(invoices)) {
+        const recentInvoices = invoices.slice(0, 10).map((invoice: any) => ({
+          id: invoice.invoice_number || invoice.invoice_id,
+          customer: invoice.customer_name || 'Unknown Customer',
+          amount: invoice.final_amount || 0,
+          status: invoice.payment_status === 'paid' ? 'Completed' :
+                  invoice.payment_status === 'partial' ? 'Pending' : 'Pending',
+          date: new Date(invoice.invoice_date || invoice.created_at).toLocaleDateString('en-IN'),
+          type: 'Invoice'
+        }));
+        allOrders.push(...recentInvoices);
       }
 
-      // Update sales data
-      if (revenueResponse.data?.data) {
-        setSalesData(revenueResponse.data.data);
+      // Sort by date and take most recent
+      allOrders.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+      setRecentOrders(allOrders.slice(0, 15));
+
+      // Update sales data - create from invoices if revenue API fails
+      let mappedSalesData = [];
+      if (revenueResponse.data && Array.isArray(revenueResponse.data)) {
+        mappedSalesData = revenueResponse.data.map((item: any) => ({
+          month: new Date(item.period).toLocaleDateString('en-IN', { month: 'short' }),
+          revenue: item.revenue || 0,
+          orders: item.order_count || 0
+        }));
+      } else if (invoices && Array.isArray(invoices)) {
+        // Group invoices by month for chart data
+        const monthlyData: { [key: string]: { revenue: number, orders: number } } = {};
+
+        invoices.forEach((invoice: any) => {
+          const date = new Date(invoice.invoice_date || invoice.created_at);
+          const monthKey = date.toLocaleDateString('en-IN', { month: 'short', year: 'numeric' });
+
+          if (!monthlyData[monthKey]) {
+            monthlyData[monthKey] = { revenue: 0, orders: 0 };
+          }
+
+          monthlyData[monthKey].revenue += invoice.final_amount || 0;
+          monthlyData[monthKey].orders += 1;
+        });
+
+        mappedSalesData = Object.keys(monthlyData).map(month => ({
+          month: month.split(' ')[0], // Just month name
+          revenue: monthlyData[month].revenue,
+          orders: monthlyData[month].orders
+        }));
       }
+      setSalesData(mappedSalesData);
 
       // Update product categories from top products
-      if (topProductsResponse.data?.products) {
-        const categories = topProductsResponse.data.products.reduce((acc: any, product: any) => {
-          const category = product.category || 'Others';
+      if (topProductsResponse.data && Array.isArray(topProductsResponse.data)) {
+        const categories = topProductsResponse.data.reduce((acc: any, product: any) => {
+          const category = product.brand || 'Others';
           const existing = acc.find((c: any) => c.name === category);
           if (existing) {
-            existing.value += product.sold || 0;
+            existing.value += product.total_quantity_sold || 0;
           } else {
-            acc.push({ name: category, value: product.sold || 0, color: getRandomColor() });
+            acc.push({
+              name: category,
+              value: product.total_quantity_sold || 0,
+              color: getRandomColor()
+            });
           }
           return acc;
         }, []);
-        setProductCategories(categories);
+
+        // Convert to percentages
+        const total = categories.reduce((sum: number, cat: any) => sum + cat.value, 0);
+        const categoriesWithPercentages = categories.map((cat: any) => ({
+          ...cat,
+          value: total > 0 ? Math.round((cat.value / total) * 100) : 0
+        }));
+        setProductCategories(categoriesWithPercentages);
       }
 
-      // Update alerts from inventory alerts
-      if (inventoryAlertsResponse.data?.alerts) {
-        const inventoryAlerts = inventoryAlertsResponse.data.alerts.map((alert: any) => ({
-          id: alert.id,
-          type: alert.type,
-          message: alert.message,
-          severity: alert.severity,
-          timestamp: alert.timestamp,
-          read: alert.read || false
-        }));
-        setAlerts(inventoryAlerts);
+      // Create mock alerts based on real data
+      const newAlerts = [];
+      if (backendStats.low_stock_products > 0) {
+        newAlerts.push({
+          id: 1,
+          type: 'stock' as const,
+          message: `${backendStats.low_stock_products} products are running low on stock`,
+          severity: 'high' as const,
+          timestamp: new Date().toISOString(),
+          read: false
+        });
       }
+      if (backendStats.expiring_soon > 0) {
+        newAlerts.push({
+          id: 2,
+          type: 'expiry' as const,
+          message: `${backendStats.expiring_soon} products expiring within 30 days`,
+          severity: 'medium' as const,
+          timestamp: new Date().toISOString(),
+          read: false
+        });
+      }
+      setAlerts(newAlerts);
 
       // Update custom KPIs based on real data
-      updateCustomKPIs(statsResponse.data, pendingPaymentsResponse.data, expiringProductsResponse.data);
+      updateCustomKPIs(statsResponse.data, pendingPaymentsResponse.data, null);
 
       // Update chart data
-      updateChartData(revenueResponse.data?.data || []);
+      updateChartData(mappedSalesData || []);
 
     } catch (error) {
       setError('Failed to load dashboard data. Please try again.');

@@ -16,6 +16,14 @@ interface PaymentAllocationModalProps {
   customerId: number;
   customerName: string;
   onAllocationComplete?: () => void;
+  invoices?: Array<{
+    invoice_id: string;
+    invoice_number: string;
+    invoice_date: string;
+    original_amount: number;
+    paid_amount: number;
+    outstanding_amount: number;
+  }>;
 }
 
 interface UnallocatedPayment {
@@ -43,7 +51,8 @@ const PaymentAllocationModal: React.FC<PaymentAllocationModalProps> = ({
   onClose,
   customerId,
   customerName,
-  onAllocationComplete
+  onAllocationComplete,
+  invoices: propInvoices
 }) => {
   const [selectedPayment, setSelectedPayment] = useState<UnallocatedPayment | null>(null);
   const [invoiceAllocations, setInvoiceAllocations] = useState<Map<number, number>>(new Map());
@@ -61,10 +70,22 @@ const PaymentAllocationModal: React.FC<PaymentAllocationModalProps> = ({
     { enabled: isOpen }
   );
 
-  // Fetch unpaid invoices
+  // Use prop invoices if available, otherwise fetch from API
   const { data: invoicesData, isLoading: loadingInvoices } = useQuery(
     ['unpaid-invoices', customerId],
     async () => {
+      if (propInvoices && propInvoices.length > 0) {
+        // Convert prop invoices to the expected format
+        return propInvoices.map(invoice => ({
+          invoice_id: parseInt(invoice.invoice_id),
+          invoice_number: invoice.invoice_number,
+          invoice_date: invoice.invoice_date,
+          total_amount: invoice.original_amount,
+          allocated: invoice.paid_amount,
+          due: invoice.outstanding_amount // Use the correct outstanding amount from props
+        }));
+      }
+
       const response = await apiClient.get('/payment-allocation/unpaid-invoices', {
         params: { customer_id: customerId }
       });
@@ -103,13 +124,29 @@ const PaymentAllocationModal: React.FC<PaymentAllocationModalProps> = ({
   // Handle allocation amount change
   const handleAllocationChange = (invoiceId: number, amount: string) => {
     const numAmount = parseFloat(amount) || 0;
+
     if (numAmount === 0) {
       const newAllocations = new Map(invoiceAllocations);
       newAllocations.delete(invoiceId);
       setInvoiceAllocations(newAllocations);
-    } else {
-      setInvoiceAllocations(new Map(invoiceAllocations).set(invoiceId, numAmount));
+      return;
     }
+
+    // Find the invoice to get its due amount
+    const invoice = invoicesData?.find((inv: any) => inv.invoice_id === invoiceId);
+    if (!invoice) return;
+
+    // Enforce maximum allocation = due amount (no over-allocation allowed)
+    const maxAllowed = invoice.due;
+    const finalAmount = Math.min(numAmount, maxAllowed);
+
+    if (finalAmount !== numAmount) {
+      // Show warning if user tried to enter more than due
+      setError(`Cannot allocate more than due amount (₹${maxAllowed.toFixed(2)}) for invoice ${invoice.invoice_number}`);
+      setTimeout(() => setError(null), 3000); // Clear error after 3 seconds
+    }
+
+    setInvoiceAllocations(new Map(invoiceAllocations).set(invoiceId, finalAmount));
   };
 
   // Auto-allocate using FIFO

@@ -173,7 +173,7 @@ const ExpenseClaimsFlow: React.FC<ExpenseClaimsFlowProps> = ({ onClose }) => {
             {
               label: "Refresh",
               onClick: handleRefresh,
-              variant: "default",
+              variant: "primary",
               icon: refreshing ? Loader2 : RefreshCw,
               disabled: refreshing
             },

@@ -8,6 +8,7 @@ import { useQuery } from 'react-query';
 import {
   ChevronDown,
   ChevronRight,
+  ChevronLeft,
   IndianRupee,
   AlertCircle,
   Clock,
@@ -91,6 +92,8 @@ const Outstanding: React.FC<OutstandingProps> = ({
     searchQuery: ''
   });
   const [viewMode, setViewMode] = useState<'summary' | 'aging'>('summary');
+  const [selectedParty, setSelectedParty] = useState<PartyOutstanding | null>(null);
+  const [showDetailsView, setShowDetailsView] = useState(false);
   const [allocationModal, setAllocationModal] = useState<{ isOpen: boolean; customerId: number | null; customerName: string }>({
     isOpen: false,
     customerId: null,
@@ -337,6 +340,11 @@ const Outstanding: React.FC<OutstandingProps> = ({
     setExpandedParties(newExpanded);
   };
 
+  const handlePartyClick = (party: PartyOutstanding) => {
+    setSelectedParty(party);
+    setShowDetailsView(true);
+  };
+
   const handleExport = () => {
     try {
       // Export current view data as CSV
@@ -467,6 +475,7 @@ const Outstanding: React.FC<OutstandingProps> = ({
               <button
                 onClick={(e) => {
                   e.stopPropagation();
+                  setSelectedParty(party); // Set selected party so we have invoice data
                   setAllocationModal({
                     isOpen: true,
                     customerId: parseInt(party.party_id),
@@ -610,8 +619,7 @@ const Outstanding: React.FC<OutstandingProps> = ({
               icon={IndianRupee}
               iconColor="text-blue-600"
               onClose={onClose}
-              historyType="outstanding"
-              onSaveDraft={() => {}}
+                onSaveDraft={() => {}}
               additionalActions={[]}
             />
             <div className="flex-1 flex items-center justify-center">
@@ -622,6 +630,162 @@ const Outstanding: React.FC<OutstandingProps> = ({
               </div>
             </div>
           </div>
+        )}
+      </div>
+    );
+  }
+
+  // If showing customer details, render that view instead
+  if (showDetailsView && selectedParty) {
+    return (
+      <div className="h-full bg-blue-50">
+        <div className="h-full flex flex-col">
+          <ModuleHeader
+            title={`Customer Details - ${selectedParty.party_name}`}
+            documentNumber=""
+            status=""
+            icon={IndianRupee}
+            iconColor="text-blue-600"
+            onClose={() => setShowDetailsView(false)}
+            onSaveDraft={() => {}}
+            additionalActions={[
+              {
+                label: "Back to Outstanding",
+                onClick: () => setShowDetailsView(false),
+                variant: "secondary",
+                icon: ChevronLeft,
+                className: "font-medium"
+              }
+            ] as any}
+          />
+
+          <div className="flex-1 overflow-y-auto">
+            <div className="max-w-7xl mx-auto px-6 py-6">
+              {/* Customer Contact Info */}
+              <div className="bg-white rounded-lg shadow-sm p-6 mb-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h2 className="text-2xl font-bold text-gray-900">{selectedParty.party_name}</h2>
+                    <div className="flex items-center gap-6 mt-2 text-gray-600">
+                      {selectedParty.party_phone && (
+                        <div className="flex items-center gap-2">
+                          <span>📱</span>
+                          <span>{selectedParty.party_phone}</span>
+                        </div>
+                      )}
+                      {selectedParty.party_email && (
+                        <div className="flex items-center gap-2">
+                          <span>✉️</span>
+                          <span>{selectedParty.party_email}</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Summary Cards */}
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-6">
+                <div className="bg-white rounded-lg shadow-sm p-6">
+                  <div className="text-sm text-gray-600 mb-2">Total Outstanding</div>
+                  <div className="text-2xl font-bold text-gray-900">
+                    {formatCurrency(selectedParty.total_outstanding)}
+                  </div>
+                  <div className="text-sm text-gray-500 mt-1">
+                    {selectedParty.invoice_count} invoices
+                  </div>
+                </div>
+
+                <div className="bg-white rounded-lg shadow-sm p-6">
+                  <div className="text-sm text-gray-600 mb-2">Overdue Amount</div>
+                  <div className="text-2xl font-bold text-red-600">
+                    {formatCurrency(selectedParty.total_overdue)}
+                  </div>
+                  <div className="text-sm text-gray-500 mt-1">
+                    {selectedParty.overdue_count} overdue
+                  </div>
+                </div>
+
+                <div className="bg-white rounded-lg shadow-sm p-6">
+                  <div className="text-sm text-gray-600 mb-2">Unallocated Advance</div>
+                  <div className="text-2xl font-bold text-green-600">
+                    {formatCurrency((selectedParty as any).total_advance || 0)}
+                  </div>
+                </div>
+
+                <div className="bg-white rounded-lg shadow-sm p-6">
+                  <div className="text-sm text-gray-600 mb-2">Net Position</div>
+                  <div className="text-2xl font-bold">
+                    {(() => {
+                      const netPosition = (selectedParty as any).customer_net_position ||
+                                        ((selectedParty as any).total_advance || 0) - selectedParty.total_outstanding;
+                      const isCredit = netPosition <= 0;
+                      return (
+                        <span className={isCredit ? 'text-green-600' : 'text-blue-600'}>
+                          {formatCurrency(Math.abs(netPosition))}
+                          <div className="text-sm font-normal text-gray-500 mt-1">
+                            {isCredit ? 'Customer has advance' : 'Amount to receive'}
+                          </div>
+                        </span>
+                      );
+                    })()}
+                  </div>
+                </div>
+              </div>
+
+              {/* Outstanding Invoices Table */}
+              <div className="bg-white rounded-lg shadow-sm">
+                <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
+                  <h3 className="text-lg font-semibold">Outstanding Invoices</h3>
+                  <button
+                    onClick={() => {
+                      setAllocationModal({
+                        isOpen: true,
+                        customerId: parseInt(selectedParty.party_id),
+                        customerName: selectedParty.party_name
+                      });
+                    }}
+                    className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 flex items-center"
+                  >
+                    <CreditCard className="w-4 h-4 mr-2" />
+                    Allocate Payment
+                  </button>
+                </div>
+                <div className="p-6">
+                  {selectedParty.invoices && selectedParty.invoices.length > 0 ? (
+                    <DataTable
+                      columns={invoiceColumns}
+                      data={selectedParty.invoices}
+                      keyField="invoice_id"
+                      loading={false}
+                      emptyMessage="No invoices found"
+                    />
+                  ) : (
+                    <div className="text-center py-12 text-gray-500">
+                      <Clock className="w-12 h-12 mx-auto mb-4 text-gray-300" />
+                      <p className="text-lg">No outstanding invoices</p>
+                      <p className="text-sm">This customer has no pending payments</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Payment Allocation Modal for customer details view */}
+        {allocationModal.isOpen && allocationModal.customerId && (
+          <PaymentAllocationModal
+            isOpen={allocationModal.isOpen}
+            onClose={() => setAllocationModal({ isOpen: false, customerId: null, customerName: '' })}
+            customerId={allocationModal.customerId}
+            customerName={allocationModal.customerName}
+            invoices={selectedParty?.invoices || []}
+            onAllocationComplete={() => {
+              refetch(); // Refresh outstanding data after allocation
+              setAllocationModal({ isOpen: false, customerId: null, customerName: '' });
+            }}
+          />
         )}
       </div>
     );
@@ -638,7 +802,6 @@ const Outstanding: React.FC<OutstandingProps> = ({
             icon={IndianRupee}
             iconColor="text-blue-600"
             onClose={onClose}
-            historyType="outstanding"
             onSaveDraft={() => {}}
             additionalActions={[
               {
@@ -651,12 +814,12 @@ const Outstanding: React.FC<OutstandingProps> = ({
               {
                 label: "Refresh",
                 onClick: () => refetch(),
-                variant: "default",
+                variant: "primary",
                 icon: RefreshCw
               }
             ] as any}
           />
-          
+
           <div className="flex-1 overflow-y-auto">
             <div className="max-w-7xl mx-auto px-6 py-6">
               
@@ -690,49 +853,80 @@ const Outstanding: React.FC<OutstandingProps> = ({
                     </div>
                   </div>
                   
-                  {/* Aging Distribution Bar */}
-                  <div className="flex items-center space-x-4">
-                    <div className="text-xs text-gray-500 uppercase tracking-wider">Aging Distribution</div>
-                    <div className="flex items-center space-x-1">
-                      {summary.total_receivable > 0 && (
-                        <>
-                          {summary.aging_summary.current.amount > 0 && (
-                            <div 
-                              className="h-6 bg-green-500 rounded-l" 
-                              style={{width: `${(summary.aging_summary.current.amount / summary.total_receivable) * 100}px`}}
-                              title={`Current: ${formatCurrency(summary.aging_summary.current.amount)}`}
-                            />
-                          )}
-                          {summary.aging_summary['1-30'].amount > 0 && (
-                            <div 
-                              className="h-6 bg-yellow-500" 
-                              style={{width: `${(summary.aging_summary['1-30'].amount / summary.total_receivable) * 100}px`}}
-                              title={`1-30 days: ${formatCurrency(summary.aging_summary['1-30'].amount)}`}
-                            />
-                          )}
-                          {summary.aging_summary['31-60'].amount > 0 && (
-                            <div 
-                              className="h-6 bg-orange-500" 
-                              style={{width: `${(summary.aging_summary['31-60'].amount / summary.total_receivable) * 100}px`}}
-                              title={`31-60 days: ${formatCurrency(summary.aging_summary['31-60'].amount)}`}
-                            />
-                          )}
-                          {summary.aging_summary['61-90'].amount > 0 && (
-                            <div 
-                              className="h-6 bg-red-500" 
-                              style={{width: `${(summary.aging_summary['61-90'].amount / summary.total_receivable) * 100}px`}}
-                              title={`61-90 days: ${formatCurrency(summary.aging_summary['61-90'].amount)}`}
-                            />
-                          )}
-                          {summary.aging_summary.over_90.amount > 0 && (
-                            <div 
-                              className="h-6 bg-red-800 rounded-r" 
-                              style={{width: `${(summary.aging_summary.over_90.amount / summary.total_receivable) * 100}px`}}
-                              title={`90+ days: ${formatCurrency(summary.aging_summary.over_90.amount)}`}
-                            />
-                          )}
-                        </>
-                      )}
+                  {/* Aging Distribution */}
+                  <div className="border-t pt-4">
+                    <div className="text-xs text-gray-500 uppercase tracking-wider mb-2">Aging Distribution</div>
+                    <div className="bg-gray-100 rounded-lg p-2">
+                      <div className="flex h-8 rounded overflow-hidden">
+                        {summary.total_receivable > 0 && (
+                          <>
+                            {summary.aging_summary.current.amount > 0 && (
+                              <div
+                                className="bg-green-500 hover:bg-green-600 transition-colors"
+                                style={{width: `${(summary.aging_summary.current.amount / summary.total_receivable) * 100}%`}}
+                                title={`Current: ${formatCurrency(summary.aging_summary.current.amount)}`}
+                              />
+                            )}
+                            {summary.aging_summary['1-30'].amount > 0 && (
+                              <div
+                                className="bg-yellow-500 hover:bg-yellow-600 transition-colors"
+                                style={{width: `${(summary.aging_summary['1-30'].amount / summary.total_receivable) * 100}%`}}
+                                title={`1-30 days: ${formatCurrency(summary.aging_summary['1-30'].amount)}`}
+                              />
+                            )}
+                            {summary.aging_summary['31-60'].amount > 0 && (
+                              <div
+                                className="bg-orange-500 hover:bg-orange-600 transition-colors"
+                                style={{width: `${(summary.aging_summary['31-60'].amount / summary.total_receivable) * 100}%`}}
+                                title={`31-60 days: ${formatCurrency(summary.aging_summary['31-60'].amount)}`}
+                              />
+                            )}
+                            {summary.aging_summary['61-90'].amount > 0 && (
+                              <div
+                                className="bg-red-500 hover:bg-red-600 transition-colors"
+                                style={{width: `${(summary.aging_summary['61-90'].amount / summary.total_receivable) * 100}%`}}
+                                title={`61-90 days: ${formatCurrency(summary.aging_summary['61-90'].amount)}`}
+                              />
+                            )}
+                            {summary.aging_summary.over_90.amount > 0 && (
+                              <div
+                                className="bg-red-800 hover:bg-red-900 transition-colors"
+                                style={{width: `${(summary.aging_summary.over_90.amount / summary.total_receivable) * 100}%`}}
+                                title={`90+ days: ${formatCurrency(summary.aging_summary.over_90.amount)}`}
+                              />
+                            )}
+                          </>
+                        )}
+                        {summary.total_receivable === 0 && (
+                          <div className="w-full bg-gray-300 flex items-center justify-center text-gray-500 text-sm">
+                            No outstanding amounts
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Legend */}
+                      <div className="flex flex-wrap gap-3 mt-3 text-xs">
+                        <div className="flex items-center gap-1">
+                          <div className="w-3 h-3 bg-green-500 rounded"></div>
+                          <span className="text-gray-600">Current</span>
+                        </div>
+                        <div className="flex items-center gap-1">
+                          <div className="w-3 h-3 bg-yellow-500 rounded"></div>
+                          <span className="text-gray-600">1-30 days</span>
+                        </div>
+                        <div className="flex items-center gap-1">
+                          <div className="w-3 h-3 bg-orange-500 rounded"></div>
+                          <span className="text-gray-600">31-60 days</span>
+                        </div>
+                        <div className="flex items-center gap-1">
+                          <div className="w-3 h-3 bg-red-500 rounded"></div>
+                          <span className="text-gray-600">61-90 days</span>
+                        </div>
+                        <div className="flex items-center gap-1">
+                          <div className="w-3 h-3 bg-red-800 rounded"></div>
+                          <span className="text-gray-600">90+ days</span>
+                        </div>
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -804,128 +998,78 @@ const Outstanding: React.FC<OutstandingProps> = ({
                   </div>
                 ) : (
                   <div>
-                    {/* Custom table implementation for proper expand/collapse */}
+                    {/* Compact table - click for details */}
                     <table className="w-full">
                       <thead className="bg-gray-50 border-b">
                         <tr>
-                          <th className="w-10"></th>
-                          <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">
                             {partyType === 'customer' ? 'Customer' : 'Supplier'}
                           </th>
-                          <th className="text-right px-4 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          <th className="text-right px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">
                             Net Position
                           </th>
-                          <th className="text-center px-4 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">
-                            Bills
+                          <th className="text-center px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Status
                           </th>
-                          <th className="text-center px-4 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">
-                            Oldest Bill
+                          <th className="text-center px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Actions
                           </th>
                         </tr>
                       </thead>
                       <tbody className="bg-white divide-y divide-gray-200">
                         {filteredParties.map((party: PartyOutstanding) => (
                           <React.Fragment key={party.party_id}>
-                            {/* Party Row */}
-                            <tr className="hover:bg-gray-50">
-                              <td className="px-2 py-3">
-                                <button
-                                  onClick={() => togglePartyExpansion(party.party_id)}
-                                  className="p-1 hover:bg-gray-100 rounded"
-                                >
-                                  {expandedParties.has(party.party_id) ? 
-                                    <ChevronDown className="w-4 h-4" /> : 
-                                    <ChevronRight className="w-4 h-4" />
-                                  }
-                                </button>
+                            {/* Compact Party Row */}
+                            <tr
+                              className="hover:bg-gray-50 cursor-pointer"
+                              onClick={() => handlePartyClick(party)}
+                            >
+                              <td className="px-6 py-3">
+                                <div className="font-medium">{party.party_name}</div>
                               </td>
-                              <td className="px-4 py-3">
-                                <div>
-                                  <div className="font-medium">{party.party_name}</div>
-                                  {(party.party_phone || party.party_email) && (
-                                    <div className="text-xs text-gray-500">
-                                      {party.party_phone && <span className="mr-3">{party.party_phone}</span>}
-                                      {party.party_email && <span>{party.party_email}</span>}
-                                    </div>
-                                  )}
-                                </div>
-                              </td>
-                              <td className="px-4 py-3 text-right">
+                              <td className="px-6 py-3 text-right">
                                 {(() => {
-                                  // Use backend-calculated net position
                                   const netPosition = (party as any).customer_net_position || ((party as any).total_advance || 0) - party.total_outstanding;
-                                  const hasAdvance = (party as any).total_advance > 0;
-                                  const isCredit = netPosition <= 0; // Negative means advance
+                                  const isCredit = netPosition <= 0;
 
                                   return (
-                                    <div>
-                                      {/* Show net position */}
-                                      <div className={`font-semibold ${isCredit ? 'text-green-600' : 'text-red-600'}`}>
-                                        {formatCurrency(Math.abs(netPosition))}
-                                        <span className="ml-1 text-xs">
-                                          {isCredit ? '(Advance)' : '(To Receive)'}
-                                        </span>
-                                      </div>
-
-                                      {/* Show breakdown if there's both outstanding and advance */}
-                                      {hasAdvance && party.total_outstanding > 0 && (
-                                        <div className="text-xs text-gray-500 mt-1">
-                                          <div>Outstanding: {formatCurrency(party.total_outstanding)}</div>
-                                          <div>Advance: {formatCurrency((party as any).total_advance)}</div>
-                                        </div>
-                                      )}
-
-                                      {/* Show overdue if any */}
-                                      {party.total_overdue > 0 && (
-                                        <div className="text-xs text-red-600 mt-1">
-                                          Overdue: {formatCurrency(party.total_overdue)}
-                                        </div>
-                                      )}
+                                    <div className={`font-semibold ${isCredit ? 'text-green-600' : 'text-red-600'}`}>
+                                      {formatCurrency(Math.abs(netPosition))}
+                                      <span className="ml-1 text-xs">
+                                        {isCredit ? 'Adv' : 'Due'}
+                                      </span>
                                     </div>
                                   );
                                 })()}
                               </td>
-                              <td className="px-4 py-3 text-center">
-                                <div>{party.invoice_count}</div>
-                                {party.overdue_count > 0 && (
-                                  <div className="text-xs text-red-600">
-                                    {party.overdue_count} overdue
-                                  </div>
-                                )}
-                              </td>
-                              <td className="px-4 py-3 text-center">
-                                {party.oldest_invoice_days ? (
-                                  <span className={
-                                    party.oldest_invoice_days > 60 ? 'text-red-600' : 
-                                    party.oldest_invoice_days > 30 ? 'text-orange-600' : 'text-gray-600'
-                                  }>
-                                    {party.oldest_invoice_days} days
+                              <td className="px-6 py-3 text-center">
+                                {party.total_overdue > 0 ? (
+                                  <span className="px-2 py-1 text-xs rounded-full bg-red-100 text-red-700">
+                                    Overdue
                                   </span>
                                 ) : (
-                                  <span className="text-gray-400">-</span>
+                                  <span className="px-2 py-1 text-xs rounded-full bg-green-100 text-green-700">
+                                    Current
+                                  </span>
                                 )}
                               </td>
+                              <td className="px-6 py-3 text-center">
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setSelectedParty(party); // Set selected party so we have invoice data
+                                    setAllocationModal({
+                                      isOpen: true,
+                                      customerId: parseInt(party.party_id),
+                                      customerName: party.party_name
+                                    });
+                                  }}
+                                  className="px-3 py-1 text-xs bg-blue-600 text-white rounded hover:bg-blue-700"
+                                >
+                                  Allocate Payment
+                                </button>
+                              </td>
                             </tr>
-                            
-                            {/* Expanded Invoice Details - Immediately below the party row */}
-                            {expandedParties.has(party.party_id) && party.invoices && party.invoices.length > 0 && (
-                              <tr>
-                                <td colSpan={5} className="p-0">
-                                  <div className="bg-gray-50 px-12 py-4">
-                                    <h4 className="text-sm font-medium text-gray-700 mb-3">
-                                      Invoice Details for {party.party_name}
-                                    </h4>
-                                    <DataTable
-                                      columns={invoiceColumns}
-                                      data={party.invoices}
-                                      keyField="invoice_id"
-                                      loading={false}
-                                      emptyMessage="No invoices found"
-                                    />
-                                  </div>
-                                </td>
-                              </tr>
-                            )}
                           </React.Fragment>
                         ))}
                       </tbody>
@@ -1060,19 +1204,7 @@ const Outstanding: React.FC<OutstandingProps> = ({
         </div>
       )}
 
-      {/* Payment Allocation Modal */}
-      {allocationModal.isOpen && allocationModal.customerId && (
-        <PaymentAllocationModal
-          isOpen={allocationModal.isOpen}
-          onClose={() => setAllocationModal({ isOpen: false, customerId: null, customerName: '' })}
-          customerId={allocationModal.customerId}
-          customerName={allocationModal.customerName}
-          onAllocationComplete={() => {
-            refetch(); // Refresh outstanding data after allocation
-            setAllocationModal({ isOpen: false, customerId: null, customerName: '' });
-          }}
-        />
-      )}
+
     </div>
   );
 };

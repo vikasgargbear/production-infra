@@ -797,7 +797,7 @@ const InvoiceListV2: React.FC<InvoiceListProps> = ({ onClose }) => {
                     ? 'bg-gradient-to-r from-green-400 to-emerald-400 shadow-lg shadow-green-200/50' 
                     : refreshing
                       ? 'bg-gradient-to-r from-blue-400 to-indigo-400 shadow-lg shadow-blue-200/50'
-                      : 'bg-white hover:bg-gradient-to-r hover:from-gray-50 hover:to-gray-100 border border-gray-200 hover:border-gray-300 hover:shadow-md'
+                      : 'bg-blue-600 hover:bg-blue-700 text-white shadow-lg hover:shadow-xl'
                   }
                   ${refreshing || loading ? 'cursor-not-allowed' : 'cursor-pointer'}
                   group transform hover:scale-105 active:scale-95
@@ -808,11 +808,14 @@ const InvoiceListV2: React.FC<InvoiceListProps> = ({ onClose }) => {
                   {refreshSuccess ? (
                     <CheckCircle className="w-5 h-5 text-white" />
                   ) : (
-                    <RefreshCw className={`w-5 h-5 transition-all duration-500 ${
-                      refreshing 
-                        ? 'animate-spin text-white' 
-                        : 'text-gray-600 group-hover:text-gray-800 group-hover:rotate-180'
-                    }`} />
+                    <>
+                      <RefreshCw className={`w-4 h-4 transition-all duration-500 ${
+                        refreshing
+                          ? 'animate-spin text-white'
+                          : 'text-white group-hover:rotate-180'
+                      }`} />
+                      <span className="ml-2 text-white">Refresh</span>
+                    </>
                   )}
                   
                   {/* Modern ripple effect */}

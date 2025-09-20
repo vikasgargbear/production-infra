@@ -1,0 +1,57 @@
+@media print {
+  /* Hide non-printable elements */
+  .no-print,
+  header,
+  nav,
+  button,
+  .sidebar,
+  .border-l,
+  .w-80,
+  .w-72,
+  [class*="hover:"],
+  [class*="cursor-pointer"] {
+    display: none !important;
+  }
+
+  /* Show only main content */
+  .print-content,
+  table,
+  .bg-white {
+    display: block !important;
+    width: 100% !important;
+    margin: 0 !important;
+    padding: 10px !important;
+  }
+
+  /* Reset colors for better printing */
+  * {
+    color: black !important;
+    background: white !important;
+  }
+
+  /* Table styles for printing */
+  table {
+    border-collapse: collapse !important;
+    width: 100% !important;
+  }
+
+  th, td {
+    border: 1px solid #ddd !important;
+    padding: 8px !important;
+    text-align: left !important;
+  }
+
+  th {
+    background-color: #f5f5f5 !important;
+    font-weight: bold !important;
+  }
+
+  /* Page break settings */
+  .page-break {
+    page-break-after: always;
+  }
+
+  .avoid-break {
+    page-break-inside: avoid;
+  }
+}

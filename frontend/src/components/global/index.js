@@ -117,6 +117,7 @@ export {
   // Display
   DataTable,
   StatusBadge,
+  Pagination,
   SummaryCard,
   InvoiceSummary,
   PaymentSummary,
@@ -124,7 +125,6 @@ export {
   ItemsTable,
   Card,
   CardSection,
-  Pagination,
   Badge,
   BadgeGroup,
   SimpleStatusBadge,

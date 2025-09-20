@@ -648,16 +648,8 @@ const LedgerReports: React.FC<LedgerReportsProps> = ({ embedded = false, onClose
             icon={BarChart3}
             iconColor="text-purple-600"
             onClose={onClose}
-            historyType="ledger"
             onSaveDraft={() => {}}
             additionalActions={[
-              {
-                label: "Refresh",
-                onClick: handleRefresh,
-                variant: "default",
-                icon: refreshing ? Loader2 : RefreshCw,
-                disabled: refreshing
-              },
               {
                 label: "Export PDF",
                 icon: Download,
@@ -669,6 +661,13 @@ const LedgerReports: React.FC<LedgerReportsProps> = ({ embedded = false, onClose
                 icon: Download,
                 onClick: () => handleExport('excel'),
                 variant: "secondary"
+              },
+              {
+                label: "Refresh",
+                onClick: handleRefresh,
+                variant: "primary",
+                icon: refreshing ? Loader2 : RefreshCw,
+                disabled: refreshing
               }
             ] as any}
           />
