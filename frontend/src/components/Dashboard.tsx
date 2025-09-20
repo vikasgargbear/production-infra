@@ -412,8 +412,8 @@ const Dashboard: React.FC = () => {
         returnRate: 0 // Calculate if needed
       });
 
-      // Update recent orders - use both orders and invoices
-      const allOrders = [];
+          // Update recent orders - use both orders and invoices
+      const allOrders: Order[] = [];
 
       // Add orders from dashboard API
       if (recentOrdersResponse.data && Array.isArray(recentOrdersResponse.data)) {
@@ -423,8 +423,7 @@ const Dashboard: React.FC = () => {
           amount: order.final_amount || 0,
           status: order.order_status === 'confirmed' ? 'Completed' :
                   order.order_status === 'pending' ? 'Pending' : 'Cancelled',
-          date: new Date(order.order_date).toLocaleDateString('en-IN'),
-          type: 'Order'
+          date: new Date(order.order_date).toLocaleDateString('en-IN')
         }));
         allOrders.push(...mappedOrders);
       }
@@ -437,8 +436,7 @@ const Dashboard: React.FC = () => {
           amount: invoice.final_amount || 0,
           status: invoice.payment_status === 'paid' ? 'Completed' :
                   invoice.payment_status === 'partial' ? 'Pending' : 'Pending',
-          date: new Date(invoice.invoice_date || invoice.created_at).toLocaleDateString('en-IN'),
-          type: 'Invoice'
+          date: new Date(invoice.invoice_date || invoice.created_at).toLocaleDateString('en-IN')
         }));
         allOrders.push(...recentInvoices);
       }
@@ -448,7 +446,7 @@ const Dashboard: React.FC = () => {
       setRecentOrders(allOrders.slice(0, 15));
 
       // Update sales data - create from invoices if revenue API fails
-      let mappedSalesData = [];
+      let mappedSalesData: SalesDataPoint[] = [];
       if (revenueResponse.data && Array.isArray(revenueResponse.data)) {
         mappedSalesData = revenueResponse.data.map((item: any) => ({
           month: new Date(item.period).toLocaleDateString('en-IN', { month: 'short' }),
