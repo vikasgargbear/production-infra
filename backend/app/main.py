@@ -37,6 +37,8 @@ from .api.routes import org_users, org_users_secure, role_management
 from .api.routes import master_settings, schemes_discounts, loyalty_points, compliance, metadata, master_data_crud
 # Import comprehensive enterprise API
 from .api.routes import enterprise_api_complete
+# Import GST API
+from .api.routes import gst
 # Import enterprise calculation service
 from .api.routes import invoice_calculation, enterprise_calculations
 # Import simple company API (no database dependencies)
@@ -160,6 +162,7 @@ api.include_router(sales_orders.router, tags=["Sales Orders"])
 api.include_router(grn.router, prefix="/grn", tags=["Goods Receipt Notes"])
 api.include_router(journal_entries.router, prefix="/journal-entries", tags=["Journal Entries"])
 api.include_router(expense_claims.router, prefix="/expense-claims", tags=["Expense Claims"])
+api.include_router(gst.router, tags=["GST"])
 
 # Initial setup route (doesn't require auth)
 from .api.routes import initial_setup
