@@ -316,10 +316,18 @@ const GSTDashboard: React.FC<GSTDashboardProps> = () => {
     console.log(`[GST Dashboard] Manual refresh initiated for period: ${selectedPeriod}`);
 
     try {
-      // Clear both request cache and offline storage for fresh data
+      // Clear all request cache and offline storage for fresh data
       clearGSTCache();
-      await offlineStorage.clearSpecific(`gst_dashboard_${selectedPeriod}`);
-      console.log(`[GST Dashboard] All caches cleared for period: ${selectedPeriod}`);
+
+      // Clear all possible localStorage keys for GST dashboard
+      const periods = ['current', 'previous', 'quarter', 'year'];
+      periods.forEach(period => {
+        localStorage.removeItem(`gst_dashboard_${period}`);
+        localStorage.removeItem(`gst_returns_status_${period}`);
+        localStorage.removeItem(`gst_settings_config`);
+      });
+
+      console.log(`[GST Dashboard] All caches cleared for manual refresh on period: ${selectedPeriod}`);
 
       // Reload data
       await loadDashboardData();
@@ -345,18 +353,22 @@ const GSTDashboard: React.FC<GSTDashboardProps> = () => {
     const loadDataWithDebounce = async () => {
       console.log(`[GST Dashboard] Period changed to: ${selectedPeriod}`);
 
-      // Only clear cache for cache-busting, but allow some caching for performance
-      // Don't clear cache on every load unless it's stale
+      // Clear cache when period changes to ensure fresh data for new period
       try {
-        const cachedData = await offlineStorage.getOffline(`gst_dashboard_${selectedPeriod}`, { critical: true });
-        const isCacheStale = cachedData && offlineStorage.isDataStale(cachedData, 5); // 5 minutes max
+        // Clear all request cache for all periods
+        clearGSTCache();
 
-        if (isCacheStale) {
-          await offlineStorage.clearSpecific(`gst_dashboard_${selectedPeriod}`);
-          console.log(`[GST Dashboard] Cleared stale cache for period: ${selectedPeriod}`);
-        }
+        // Clear all possible localStorage keys for GST dashboard
+        const periods = ['current', 'previous', 'quarter', 'year'];
+        periods.forEach(period => {
+          localStorage.removeItem(`gst_dashboard_${period}`);
+          localStorage.removeItem(`gst_returns_status_${period}`);
+          localStorage.removeItem(`gst_settings_config`);
+        });
+
+        console.log(`[GST Dashboard] Cleared all cache for period change to: ${selectedPeriod}`);
       } catch (error) {
-        console.warn(`[GST Dashboard] Cache check failed:`, error);
+        console.warn(`[GST Dashboard] Cache clear failed:`, error);
       }
 
       await loadDashboardData();
@@ -444,46 +456,7 @@ const GSTDashboard: React.FC<GSTDashboardProps> = () => {
         </div>
       </div>
 
-      {/* Data Source Validation Status - Enterprise Grade */}
-      <div className="mx-6 mt-6 bg-green-50 border border-green-200 rounded-lg p-4">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center">
-            <CheckCircle className="h-5 w-5 text-green-600 mr-2" />
-            <div className="text-sm">
-              <span className="font-medium text-green-800">Real-time GST Data</span>
-              <span className="text-green-700 ml-2">
-                • {dashboardData.currentMonth.totalInvoices} invoices analyzed
-                • CGST: ₹{(dashboardData.currentMonth.salesTax * 0.5).toFixed(2)}
-                • SGST: ₹{(dashboardData.currentMonth.salesTax * 0.5).toFixed(2)}
-                • All calculations from live transaction data
-                • Cache cleared: {loading ? 'Loading...' : 'Fresh data'}
-              </span>
-            </div>
-          </div>
-          <div className="text-xs text-green-600">
-            Last updated: {new Date().toLocaleTimeString()}
-            {lastLoadDuration > 0 && (
-              <span className="ml-2">
-                • Load time: {lastLoadDuration}ms
-                {lastLoadDuration > 5000 && <span className="text-orange-600"> (slow)</span>}
-                {lastLoadDuration <= 2000 && <span className="text-green-600"> (fast)</span>}
-              </span>
-            )}
-          </div>
-        </div>
-      </div>
 
-      {/* Debug Information - Only show if data is not zero */}
-      {(dashboardData.currentMonth.salesTax > 0 || dashboardData.currentMonth.totalInvoices > 0) && (
-        <div className="mx-6 mt-4 bg-blue-50 border border-blue-200 rounded-lg p-4">
-          <div className="text-sm text-blue-800">
-            <strong>API Response Debug:</strong> Sales Tax: ₹{dashboardData.currentMonth.salesTax},
-            Purchase Tax: ₹{dashboardData.currentMonth.purchaseTax},
-            Net: ₹{dashboardData.currentMonth.payable},
-            Invoices: {dashboardData.currentMonth.totalInvoices}
-          </div>
-        </div>
-      )}
 
       {/* Error Display */}
       {error && (

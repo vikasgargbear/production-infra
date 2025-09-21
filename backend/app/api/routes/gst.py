@@ -57,23 +57,49 @@ async def get_gst_dashboard(
         # Parse period
         if period == "current":
             target_date = datetime.now()
+            year_filter = target_date.year
+            month_filter = target_date.month
+            date_condition = "AND EXTRACT(year FROM invoice_date) = :year AND EXTRACT(month FROM invoice_date) = :month"
         elif period == "previous":
             now = datetime.now()
             if now.month == 1:
                 target_date = datetime(now.year - 1, 12, 1)
             else:
                 target_date = datetime(now.year, now.month - 1, 1)
+            year_filter = target_date.year
+            month_filter = target_date.month
+            date_condition = "AND EXTRACT(year FROM invoice_date) = :year AND EXTRACT(month FROM invoice_date) = :month"
+        elif period == "quarter":
+            # Current quarter
+            now = datetime.now()
+            current_quarter = (now.month - 1) // 3 + 1
+            start_month = (current_quarter - 1) * 3 + 1
+            end_month = current_quarter * 3
+            year_filter = now.year
+            month_filter = None
+            date_condition = f"AND EXTRACT(year FROM invoice_date) = :year AND EXTRACT(month FROM invoice_date) BETWEEN {start_month} AND {end_month}"
+        elif period == "year":
+            # Current year
+            now = datetime.now()
+            year_filter = now.year
+            month_filter = None
+            date_condition = "AND EXTRACT(year FROM invoice_date) = :year"
         else:
             # Parse YYYY-MM format
             try:
                 year, month = map(int, period.split('-'))
                 target_date = datetime(year, month, 1)
+                year_filter = year
+                month_filter = month
+                date_condition = "AND EXTRACT(year FROM invoice_date) = :year AND EXTRACT(month FROM invoice_date) = :month"
             except:
                 target_date = datetime.now()
+                year_filter = target_date.year
+                month_filter = target_date.month
+                date_condition = "AND EXTRACT(year FROM invoice_date) = :year AND EXTRACT(month FROM invoice_date) = :month"
 
-        # OPTIMIZED QUERY: Get aggregated tax totals instead of all invoice details
-        # This reduces data transfer and processing time significantly
-        tax_totals_query = text("""
+        # OPTIMIZED QUERY: Get aggregated tax totals from sales invoices (output tax)
+        sales_query = text(f"""
             SELECT
                 COUNT(*) as total_invoices,
                 COALESCE(SUM(subtotal_amount - COALESCE(discount_amount, 0)), 0) as total_taxable,
@@ -85,27 +111,47 @@ async def get_gst_dashboard(
             FROM sales.invoices
             WHERE org_id = :org_id
                 AND branch_id = :branch_id
-                AND EXTRACT(year FROM invoice_date) = :year
-                AND EXTRACT(month FROM invoice_date) = :month
+                {date_condition}
         """)
 
-        # Execute optimized query
-        result = db.execute(tax_totals_query, {
+        # OPTIMIZED QUERY: Get aggregated tax totals from supplier invoices (input credit)
+        purchases_query = text(f"""
+            SELECT
+                COUNT(*) as total_supplier_invoices,
+                COALESCE(SUM(subtotal_amount - COALESCE(discount_amount, 0)), 0) as total_purchase_taxable,
+                COALESCE(SUM(cgst_amount), 0) as total_purchase_cgst,
+                COALESCE(SUM(sgst_amount), 0) as total_purchase_sgst,
+                COALESCE(SUM(igst_amount), 0) as total_purchase_igst,
+                COUNT(DISTINCT supplier_id) as total_suppliers
+            FROM procurement.supplier_invoices
+            WHERE org_id = :org_id
+                AND branch_id = :branch_id
+                {date_condition.replace('invoice_date', 'invoice_date')}
+        """)
+
+        # Prepare query parameters
+        query_params = {
             'org_id': org_id,
             'branch_id': branch_id,
-            'year': target_date.year,
-            'month': target_date.month
-        }).fetchone()
+            'year': year_filter
+        }
+        if month_filter:
+            query_params['month'] = month_filter
 
-        if result:
-            total_invoices = result.total_invoices
-            total_taxable = Decimal(str(result.total_taxable))
-            total_cgst = Decimal(str(result.total_cgst))
-            total_sgst = Decimal(str(result.total_sgst))
-            total_igst = Decimal(str(result.total_igst))
+        # Execute optimized queries
+        sales_result = db.execute(sales_query, query_params).fetchone()
+        purchases_result = db.execute(purchases_query, query_params).fetchone()
+
+        # Process sales data (output tax)
+        if sales_result:
+            total_invoices = sales_result.total_invoices
+            total_taxable = Decimal(str(sales_result.total_taxable))
+            total_cgst = Decimal(str(sales_result.total_cgst))
+            total_sgst = Decimal(str(sales_result.total_sgst))
+            total_igst = Decimal(str(sales_result.total_igst))
             total_output_tax = total_cgst + total_sgst + total_igst
-            b2b_count = result.b2b_count
-            b2c_count = result.b2c_count
+            b2b_count = sales_result.b2b_count
+            b2c_count = sales_result.b2c_count
         else:
             total_invoices = 0
             total_taxable = Decimal('0')
@@ -116,29 +162,25 @@ async def get_gst_dashboard(
             b2b_count = 0
             b2c_count = 0
 
-        # Get supplier count separately (lightweight query)
-        supplier_count_query = text("""
-            SELECT COUNT(DISTINCT supplier_id) as supplier_count
-            FROM procurement.supplier_invoices
-            WHERE org_id = :org_id
-                AND EXTRACT(year FROM invoice_date) = :year
-                AND EXTRACT(month FROM invoice_date) = :month
-        """)
+        # Process purchases data (input credit)
+        if purchases_result:
+            total_supplier_invoices = purchases_result.total_supplier_invoices
+            total_purchase_taxable = Decimal(str(purchases_result.total_purchase_taxable))
+            total_purchase_cgst = Decimal(str(purchases_result.total_purchase_cgst))
+            total_purchase_sgst = Decimal(str(purchases_result.total_purchase_sgst))
+            total_purchase_igst = Decimal(str(purchases_result.total_purchase_igst))
+            total_suppliers = purchases_result.total_suppliers
+            input_credit = total_purchase_cgst + total_purchase_sgst + total_purchase_igst
+        else:
+            total_supplier_invoices = 0
+            total_purchase_taxable = Decimal('0')
+            total_purchase_cgst = Decimal('0')
+            total_purchase_sgst = Decimal('0')
+            total_purchase_igst = Decimal('0')
+            total_suppliers = 0
+            input_credit = Decimal('0')
 
-        supplier_result = db.execute(supplier_count_query, {
-            'org_id': org_id,
-            'year': target_date.year,
-            'month': target_date.month
-        }).fetchone()
-
-        total_suppliers = supplier_result.supplier_count if supplier_result else 0
-
-        # No need for individual invoice processing - we have aggregated data!
-
-        # Input tax credit (from purchases) - simplified for now
-        input_credit = Decimal('0')  # TODO: Add purchase invoices calculation
-
-        # Net tax payable
+        # Calculate net tax payable
         net_payable = total_output_tax - input_credit
 
         # Compliance score based on filing status
@@ -155,13 +197,18 @@ async def get_gst_dashboard(
             "summary": {
                 "total_invoices": total_invoices,
                 "total_suppliers": total_suppliers,
+                "total_supplier_invoices": total_supplier_invoices if 'total_supplier_invoices' in locals() else 0,
                 "total_taxable": float(total_taxable),
+                "total_purchase_taxable": float(total_purchase_taxable) if 'total_purchase_taxable' in locals() else 0,
                 "b2b_transactions": b2b_count,
                 "b2c_transactions": b2c_count,
                 "export_transactions": 0,  # No exports for now
                 "cgst_amount": float(total_cgst),
                 "sgst_amount": float(total_sgst),
-                "igst_amount": float(total_igst)
+                "igst_amount": float(total_igst),
+                "purchase_cgst_amount": float(total_purchase_cgst) if 'total_purchase_cgst' in locals() else 0,
+                "purchase_sgst_amount": float(total_purchase_sgst) if 'total_purchase_sgst' in locals() else 0,
+                "purchase_igst_amount": float(total_purchase_igst) if 'total_purchase_igst' in locals() else 0
             }
         }
 

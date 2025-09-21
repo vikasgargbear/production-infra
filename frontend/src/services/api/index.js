@@ -46,7 +46,7 @@ import { bankAccountsAPI } from './bankAccounts.api';
 import { journalApi } from './modules/journal.api';
 import { expensesApi } from './modules/expenses.api';
 import { metadataApi } from './modules/metadata.api';
-import { gstApi } from './modules/gst.api';
+import { gstApi, clearGSTCache } from './modules/gst.api';
 
 // Re-export everything for easy access
 export {
@@ -92,6 +92,7 @@ export {
   expensesApi,
   metadataApi,
   gstApi,
+  clearGSTCache,
   
   // Aliases for backward compatibility
   customerAPI as customersApiOld,
