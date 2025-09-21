@@ -364,7 +364,7 @@ const TaxMaster = ({ open, onClose }) => {
       <div className="flex-1 overflow-y-auto p-6 min-h-0">
         {activeTab === 'rates' ? (
           // Tax Rates Content
-          <div>
+          <>
         {isLoading ? (
           <div className="flex items-center justify-center h-64">
             <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
@@ -495,6 +495,7 @@ const TaxMaster = ({ open, onClose }) => {
             </div>
           </div>
         )}
+          </>
         ) : (
           // GST Configuration Content
           <div className="space-y-6">
