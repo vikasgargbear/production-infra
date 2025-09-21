@@ -11,16 +11,7 @@ interface GSTSettingsProps {
 const GSTSettings: React.FC<GSTSettingsProps> = () => {
   const [loading, setLoading] = useState(false);
   const [settings, setSettings] = useState({
-    companyGSTIN: '27AABCU9603R1ZX',
-    companyName: 'Sample Company Pvt Ltd',
-    companyAddress: '123 Business Street, Mumbai, Maharashtra 400001',
     gstFilingFrequency: 'monthly',
-    defaultTaxRates: {
-      cgst: 9,
-      sgst: 9,
-      igst: 18
-    },
-    autoCalculateGST: true,
     enableEInvoicing: true,
     gstPortalCredentials: {
       username: '',
@@ -75,7 +66,12 @@ const GSTSettings: React.FC<GSTSettingsProps> = () => {
         <div className="flex items-center justify-between">
           <div>
             <h2 className="text-2xl font-bold text-gray-900">GST Settings</h2>
-            <p className="text-sm text-gray-600 mt-1">Configure your GST preferences and portal integration</p>
+            <p className="text-sm text-gray-600 mt-1">Configure GST portal integration and workflow preferences</p>
+            <div className="mt-2 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+              <p className="text-sm text-blue-800">
+                <span className="font-medium">Note:</span> Tax rates and company information are managed in <span className="font-medium">Master → Tax Master</span>
+              </p>
+            </div>
           </div>
           <div className="flex items-center space-x-3">
             {hasChanges && (
@@ -101,57 +97,11 @@ const GSTSettings: React.FC<GSTSettingsProps> = () => {
       </div>
 
       <div className="space-y-8">
-        {/* Company Information */}
-        <div className="bg-white rounded-lg border border-gray-200 p-6">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
-            <Building className="h-5 w-5 mr-2 text-blue-600" />
-            Company Information
-          </h3>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Company GSTIN
-              </label>
-              <input
-                type="text"
-                value={settings.companyGSTIN}
-                onChange={(e) => handleInputChange('', 'companyGSTIN', e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                placeholder="Enter your GSTIN"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Company Name
-              </label>
-              <input
-                type="text"
-                value={settings.companyName}
-                onChange={(e) => handleInputChange('', 'companyName', e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                placeholder="Enter company name"
-              />
-            </div>
-            <div className="md:col-span-2">
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Company Address
-              </label>
-              <textarea
-                value={settings.companyAddress}
-                onChange={(e) => handleInputChange('', 'companyAddress', e.target.value)}
-                rows={3}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                placeholder="Enter complete address"
-              />
-            </div>
-          </div>
-        </div>
-
-        {/* GST Configuration */}
+        {/* GST Workflow Configuration */}
         <div className="bg-white rounded-lg border border-gray-200 p-6">
           <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
             <Settings className="h-5 w-5 mr-2 text-green-600" />
-            GST Configuration
+            GST Workflow Configuration
           </h3>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div>
@@ -171,18 +121,6 @@ const GSTSettings: React.FC<GSTSettingsProps> = () => {
               <div className="flex items-center">
                 <input
                   type="checkbox"
-                  id="autoCalculateGST"
-                  checked={settings.autoCalculateGST}
-                  onChange={(e) => handleInputChange('', 'autoCalculateGST', e.target.checked)}
-                  className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
-                />
-                <label htmlFor="autoCalculateGST" className="ml-2 text-sm text-gray-700">
-                  Auto-calculate GST on invoices
-                </label>
-              </div>
-              <div className="flex items-center">
-                <input
-                  type="checkbox"
                   id="enableEInvoicing"
                   checked={settings.enableEInvoicing}
                   onChange={(e) => handleInputChange('', 'enableEInvoicing', e.target.checked)}
@@ -191,64 +129,6 @@ const GSTSettings: React.FC<GSTSettingsProps> = () => {
                 <label htmlFor="enableEInvoicing" className="ml-2 text-sm text-gray-700">
                   Enable E-Invoicing (for turnover > ₹20 crore)
                 </label>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Default Tax Rates */}
-        <div className="bg-white rounded-lg border border-gray-200 p-6">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">Default Tax Rates</h3>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                CGST Rate (%)
-              </label>
-              <input
-                type="number"
-                min="0"
-                max="28"
-                step="0.5"
-                value={settings.defaultTaxRates.cgst}
-                onChange={(e) => handleInputChange('defaultTaxRates', 'cgst', parseFloat(e.target.value) || 0)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                SGST Rate (%)
-              </label>
-              <input
-                type="number"
-                min="0"
-                max="28"
-                step="0.5"
-                value={settings.defaultTaxRates.sgst}
-                onChange={(e) => handleInputChange('defaultTaxRates', 'sgst', parseFloat(e.target.value) || 0)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                IGST Rate (%)
-              </label>
-              <input
-                type="number"
-                min="0"
-                max="28"
-                step="0.5"
-                value={settings.defaultTaxRates.igst}
-                onChange={(e) => handleInputChange('defaultTaxRates', 'igst', parseFloat(e.target.value) || 0)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
-            </div>
-          </div>
-          <div className="mt-4 bg-blue-50 border border-blue-200 rounded-lg p-4">
-            <div className="flex items-center">
-              <Info className="h-5 w-5 text-blue-600 mr-2" />
-              <div className="text-sm text-blue-800">
-                <p className="font-medium">Tax Rate Guidelines</p>
-                <p>CGST + SGST = IGST. For intra-state sales, use CGST + SGST. For inter-state sales, use IGST.</p>
               </div>
             </div>
           </div>

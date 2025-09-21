@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { 
-  Receipt, Search, Plus, Edit2, Trash2, 
+import {
+  Receipt, Search, Plus, Edit2, Trash2,
   Download, Upload, Loader2, AlertCircle, Check,
-  Percent, X, RefreshCw
+  Percent, X, RefreshCw, Building, Calculator, Info
 } from 'lucide-react';
 import { settingsApi } from '../../services/api/modules/settings.api';
 
@@ -17,7 +17,14 @@ const TaxMaster = ({ open, onClose }) => {
   const [error, setError] = useState(null);
   const [successMessage, setSuccessMessage] = useState('');
   const [refreshing, setRefreshing] = useState(false);
-  
+  const [activeTab, setActiveTab] = useState('rates'); // 'rates' or 'gst-config'
+  const [gstConfig, setGstConfig] = useState({
+    companyGSTIN: '',
+    defaultGSTRate: '',
+    autoCalculateGST: true,
+    gstCalculationMethod: 'exclusive' // 'exclusive' or 'inclusive'
+  });
+
   // Load taxes on component mount
   useEffect(() => {
     if (open) {
@@ -244,8 +251,31 @@ const TaxMaster = ({ open, onClose }) => {
             <h1 className="text-2xl font-bold text-gray-900">Tax Master</h1>
             <span className="text-sm text-gray-500">({taxes.length} tax rates)</span>
           </div>
-          <div className="flex items-center space-x-3">
-            <button
+          <div className="flex items-center space-x-2">
+            <div className="bg-gray-100 rounded-lg p-1 flex">
+              <button
+                onClick={() => setActiveTab('rates')}
+                className={`px-3 py-2 text-sm font-medium rounded-md transition-colors ${
+                  activeTab === 'rates'
+                    ? 'bg-white text-gray-900 shadow-sm'
+                    : 'text-gray-600 hover:text-gray-900'
+                }`}
+              >
+                Tax Rates
+              </button>
+              <button
+                onClick={() => setActiveTab('gst-config')}
+                className={`px-3 py-2 text-sm font-medium rounded-md transition-colors ${
+                  activeTab === 'gst-config'
+                    ? 'bg-white text-gray-900 shadow-sm'
+                    : 'text-gray-600 hover:text-gray-900'
+                }`}
+              >
+                GST Configuration
+              </button>
+            </div>
+            <div className="flex items-center space-x-3">
+              <button
               onClick={handleRefresh}
               disabled={refreshing}
               className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 flex items-center space-x-2 disabled:opacity-50"
@@ -330,8 +360,11 @@ const TaxMaster = ({ open, onClose }) => {
         </div>
       )}
 
-      {/* Taxes Table */}
+      {/* Main Content Area */}
       <div className="flex-1 overflow-y-auto p-6 min-h-0">
+        {activeTab === 'rates' ? (
+          // Tax Rates Content
+          <div>
         {isLoading ? (
           <div className="flex items-center justify-center h-64">
             <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
@@ -459,6 +492,121 @@ const TaxMaster = ({ open, onClose }) => {
                   ))}
                 </tbody>
               </table>
+            </div>
+          </div>
+        )}
+          </div>
+        ) : (
+          // GST Configuration Content
+          <div className="space-y-6">
+            {/* Company GST Information */}
+            <div className="bg-white rounded-lg border border-gray-200 p-6">
+              <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
+                <Building className="h-5 w-5 mr-2 text-blue-600" />
+                Company GST Information
+              </h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Company GSTIN
+                  </label>
+                  <input
+                    type="text"
+                    value={gstConfig.companyGSTIN}
+                    onChange={(e) => setGstConfig(prev => ({ ...prev, companyGSTIN: e.target.value }))}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                    placeholder="Enter your GSTIN (e.g., 27AABCU9603R1ZX)"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Default GST Rate
+                  </label>
+                  <select
+                    value={gstConfig.defaultGSTRate}
+                    onChange={(e) => setGstConfig(prev => ({ ...prev, defaultGSTRate: e.target.value }))}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="">Select Default Rate</option>
+                    {taxes.filter(tax => tax.type === 'GST' && tax.isActive).map(tax => (
+                      <option key={tax.id} value={tax.id}>
+                        {tax.name} - {tax.rate}%
+                      </option>
+                    ))}
+                  </select>
+                  <p className="text-xs text-gray-500 mt-1">
+                    Choose from Tax Rates defined above
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* GST Calculation Settings */}
+            <div className="bg-white rounded-lg border border-gray-200 p-6">
+              <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
+                <Calculator className="h-5 w-5 mr-2 text-green-600" />
+                GST Calculation Settings
+              </h3>
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <label className="text-sm font-medium text-gray-700">Auto-calculate GST on invoices</label>
+                    <p className="text-xs text-gray-500">Automatically apply GST based on product configuration</p>
+                  </div>
+                  <input
+                    type="checkbox"
+                    checked={gstConfig.autoCalculateGST}
+                    onChange={(e) => setGstConfig(prev => ({ ...prev, autoCalculateGST: e.target.checked }))}
+                    className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    GST Calculation Method
+                  </label>
+                  <select
+                    value={gstConfig.gstCalculationMethod}
+                    onChange={(e) => setGstConfig(prev => ({ ...prev, gstCalculationMethod: e.target.value }))}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="exclusive">Tax Exclusive (Price + GST)</option>
+                    <option value="inclusive">Tax Inclusive (Price includes GST)</option>
+                  </select>
+                  <p className="text-xs text-gray-500 mt-1">
+                    How GST should be calculated on product prices
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* Quick Actions */}
+            <div className="bg-white rounded-lg border border-gray-200 p-6">
+              <h3 className="text-lg font-semibold text-gray-900 mb-4">Quick Actions</h3>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <button className="p-4 border border-gray-300 rounded-lg hover:bg-gray-50 text-left">
+                  <div className="text-sm font-medium text-gray-900">Create Standard GST Rates</div>
+                  <div className="text-xs text-gray-500">Add 5%, 12%, 18%, 28% GST rates</div>
+                </button>
+                <button className="p-4 border border-gray-300 rounded-lg hover:bg-gray-50 text-left">
+                  <div className="text-sm font-medium text-gray-900">Import from GST Portal</div>
+                  <div className="text-xs text-gray-500">Sync tax rates from government portal</div>
+                </button>
+                <button className="p-4 border border-gray-300 rounded-lg hover:bg-gray-50 text-left">
+                  <div className="text-sm font-medium text-gray-900">Export Tax Configuration</div>
+                  <div className="text-xs text-gray-500">Download current tax setup</div>
+                </button>
+              </div>
+            </div>
+
+            {/* Information Panel */}
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+              <div className="flex items-start">
+                <Info className="h-5 w-5 text-blue-600 mr-2 flex-shrink-0 mt-0.5" />
+                <div className="text-sm text-blue-800">
+                  <p className="font-medium mb-1">Enterprise Tax Management</p>
+                  <p>All tax rates are managed centrally here. GST-specific workflows and reports will reference these master rates. Changes here will automatically reflect across all modules.</p>
+                </div>
+              </div>
             </div>
           </div>
         )}
