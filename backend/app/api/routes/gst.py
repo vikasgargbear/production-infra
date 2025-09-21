@@ -14,7 +14,6 @@ from ...core.database import get_db
 from ...utils.branch_utils import get_default_branch_id
 from ...core.auth_utils import get_org_id_from_header
 from ...api.services.gst_service import GSTService, GSTType
-from ...models import Invoice, InvoiceItem, Customer, Company
 
 router = APIRouter(tags=["GST"])
 
@@ -30,8 +29,12 @@ def get_current_period():
 def get_organization_gstin(db: Session, org_id: str) -> Optional[str]:
     """Get organization GSTIN from company settings"""
     try:
-        company = db.query(Company).filter(Company.org_id == org_id).first()
-        return company.gstin if company else None
+        company_query = text("""
+            SELECT gstin FROM master.organizations
+            WHERE org_id = :org_id
+        """)
+        result = db.execute(company_query, {'org_id': org_id}).fetchone()
+        return result.gstin if result else None
     except:
         return None
 
@@ -65,18 +68,25 @@ async def get_gst_dashboard(
             except:
                 target_date = datetime.now()
 
-        # Get invoices for the period
-        invoices_query = db.query(Invoice).filter(
-            and_(
-                Invoice.org_id == org_id,
-                Invoice.branch_id == branch_id,
-                extract('year', Invoice.invoice_date) == target_date.year,
-                extract('month', Invoice.invoice_date) == target_date.month,
-                Invoice.is_deleted == False
-            )
-        )
+        # Get invoices for the period using raw SQL
+        invoices_query = text("""
+            SELECT invoice_id, customer_id, subtotal, discount_amount,
+                   cgst_amount, sgst_amount, igst_amount, is_export,
+                   customer_name
+            FROM sales.invoices
+            WHERE org_id = :org_id
+                AND branch_id = :branch_id
+                AND EXTRACT(year FROM invoice_date) = :year
+                AND EXTRACT(month FROM invoice_date) = :month
+                AND (is_deleted = false OR is_deleted IS NULL)
+        """)
 
-        invoices = invoices_query.all()
+        invoices = db.execute(invoices_query, {
+            'org_id': org_id,
+            'branch_id': branch_id,
+            'year': target_date.year,
+            'month': target_date.month
+        }).fetchall()
 
         # Calculate GST totals
         total_taxable = Decimal('0')
@@ -90,11 +100,15 @@ async def get_gst_dashboard(
         export_count = 0
 
         for invoice in invoices:
-            # Get customer GSTIN
+            # Get customer GSTIN using raw SQL
             customer_gstin = None
             if invoice.customer_id:
-                customer = db.query(Customer).filter(Customer.customer_id == invoice.customer_id).first()
-                customer_gstin = customer.gstin if customer else None
+                customer_query = text("""
+                    SELECT gstin FROM parties.customers
+                    WHERE customer_id = :customer_id
+                """)
+                customer_result = db.execute(customer_query, {'customer_id': invoice.customer_id}).fetchone()
+                customer_gstin = customer_result.gstin if customer_result else None
 
             # Determine GST type
             gst_type = GSTService.determine_gst_type(
@@ -327,13 +341,15 @@ async def get_compliance_status(
             score -= 20
 
         # Check recent invoices for GST compliance
-        recent_invoices = db.query(Invoice).filter(
-            and_(
-                Invoice.org_id == org_id,
-                Invoice.invoice_date >= datetime.now().replace(day=1),
-                Invoice.is_deleted == False
-            )
-        ).limit(100).all()
+        recent_invoices_query = text("""
+            SELECT invoice_id, customer_id, final_amount
+            FROM sales.invoices
+            WHERE org_id = :org_id
+                AND invoice_date >= DATE_TRUNC('month', CURRENT_DATE)
+                AND (is_deleted = false OR is_deleted IS NULL)
+            LIMIT 100
+        """)
+        recent_invoices = db.execute(recent_invoices_query, {'org_id': org_id}).fetchall()
 
         if len(recent_invoices) == 0:
             issues.append("No recent invoices found")
@@ -344,8 +360,12 @@ async def get_compliance_status(
         for invoice in recent_invoices:
             if invoice.final_amount and float(invoice.final_amount) > 50000:  # B2B threshold
                 if invoice.customer_id:
-                    customer = db.query(Customer).filter(Customer.customer_id == invoice.customer_id).first()
-                    if not customer or not customer.gstin:
+                    customer_gstin_query = text("""
+                        SELECT gstin FROM parties.customers
+                        WHERE customer_id = :customer_id
+                    """)
+                    customer_result = db.execute(customer_gstin_query, {'customer_id': invoice.customer_id}).fetchone()
+                    if not customer_result or not customer_result.gstin:
                         b2b_without_gstin += 1
 
         if b2b_without_gstin > 0:
