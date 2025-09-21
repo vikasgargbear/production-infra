@@ -81,7 +81,6 @@ async def get_gst_dashboard(
                 AND branch_id = :branch_id
                 AND EXTRACT(year FROM invoice_date) = :year
                 AND EXTRACT(month FROM invoice_date) = :month
-                AND (is_deleted = false OR is_deleted IS NULL)
         """)
 
         invoices = db.execute(invoices_query, {
@@ -349,7 +348,6 @@ async def get_compliance_status(
             FROM sales.invoices
             WHERE org_id = :org_id
                 AND invoice_date >= DATE_TRUNC('month', CURRENT_DATE)
-                AND (is_deleted = false OR is_deleted IS NULL)
             LIMIT 100
         """)
         recent_invoices = db.execute(recent_invoices_query, {'org_id': org_id}).fetchall()
