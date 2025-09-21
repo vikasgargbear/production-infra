@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   Home, FileText, BarChart3, RefreshCw,
   Settings, Receipt
@@ -16,6 +16,13 @@ interface GSTHubProps {
 }
 
 const GSTHub: React.FC<GSTHubProps> = ({ open = true, onClose }) => {
+  const [activeModule, setActiveModule] = useState('gst-dashboard');
+
+  // Function to navigate to reports
+  const navigateToReports = () => {
+    setActiveModule('gst-reports');
+  };
+
   const gstModules = [
     {
       id: 'gst-dashboard',
@@ -24,7 +31,7 @@ const GSTHub: React.FC<GSTHubProps> = ({ open = true, onClose }) => {
       description: 'Tax summary & analytics',
       icon: Home,
       color: 'blue',
-      component: GSTDashboard
+      component: (props) => <GSTDashboard {...props} onNavigateToReports={navigateToReports} />
     },
     {
       id: 'gst-filing',

@@ -16,7 +16,7 @@ import { gstApi, clearGSTCache } from '../../services/api';
 import offlineStorage from '../../services/offlineStorage';
 
 interface GSTDashboardProps {
-  // Add any props if needed
+  onNavigateToReports?: () => void;
 }
 
 interface GSTSummaryData {
@@ -41,7 +41,7 @@ interface GSTSummaryData {
   }>;
 }
 
-const GSTDashboard: React.FC<GSTDashboardProps> = () => {
+const GSTDashboard: React.FC<GSTDashboardProps> = ({ onNavigateToReports }) => {
   const [selectedPeriod, setSelectedPeriod] = useState('current');
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -633,7 +633,10 @@ const GSTDashboard: React.FC<GSTDashboardProps> = () => {
                   <span>Total Output Tax</span>
                   <span>{formatCurrency(dashboardData.currentMonth.salesTax)}</span>
                 </div>
-                <button className="mt-2 text-xs text-blue-600 hover:text-blue-800 underline">
+                <button
+                  onClick={onNavigateToReports}
+                  className="mt-2 text-xs text-blue-600 hover:text-blue-800 underline"
+                >
                   View invoice-level details →
                 </button>
               </div>

@@ -5,7 +5,7 @@ import {
   Building, Package, Users, Printer, RefreshCw, Loader2, AlertCircle
 } from 'lucide-react';
 import { Button, DatePicker, Card, DataTable } from '../global';
-import { gstApi } from '../../services/api';
+import { gstApi, invoiceAPI, reportsApi } from '../../services/api';
 import offlineStorage from '../../services/offlineStorage';
 
 interface GSTReportsProps {
@@ -180,15 +180,15 @@ const GSTReports: React.FC<GSTReportsProps> = ({ onClose }) => {
 
   const loadGSTR1Data = async (): Promise<GSTR1Data> => {
     try {
-      const response = await reportsApi.tax.gstR1({
+      const response = await gstApi.reports.gstr1({
         from_date: dateRange.from,
         to_date: dateRange.to
       });
-      
-      if (response.data) {
-        return transformGSTR1Response(response.data);
+
+      if (response && response.b2b) {
+        return transformGSTR1Response(response);
       }
-      
+
       throw new Error('Invalid response format from GSTR-1 API');
     } catch (err) {
       return await loadGSTR1FromInvoices();
@@ -218,15 +218,15 @@ const GSTReports: React.FC<GSTReportsProps> = ({ onClose }) => {
 
   const loadGSTR3BData = async (): Promise<GSTR1Data> => {
     try {
-      const response = await reportsApi.tax.gstR3B({
+      const response = await gstApi.reports.gstr3b({
         from_date: dateRange.from,
         to_date: dateRange.to
       });
-      
-      if (response.data) {
-        return transformGSTR3BResponse(response.data);
+
+      if (response) {
+        return transformGSTR3BResponse(response);
       }
-      
+
       throw new Error('Invalid response format from GSTR-3B API');
     } catch (err) {
       throw new Error('Unable to load GSTR-3B data');
@@ -235,15 +235,15 @@ const GSTReports: React.FC<GSTReportsProps> = ({ onClose }) => {
 
   const loadGSTR2BData = async (): Promise<GSTR1Data> => {
     try {
-      const response = await reportsApi.tax.gstR2({
+      const response = await gstApi.reports.gstr2a({
         from_date: dateRange.from,
         to_date: dateRange.to
       });
-      
-      if (response.data) {
-        return transformGSTR2BResponse(response.data);
+
+      if (response) {
+        return transformGSTR2BResponse(response);
       }
-      
+
       throw new Error('Invalid response format from GSTR-2B API');
     } catch (err) {
       throw new Error('Unable to load GSTR-2B data');
@@ -252,15 +252,15 @@ const GSTReports: React.FC<GSTReportsProps> = ({ onClose }) => {
 
   const loadHSNSummaryData = async (): Promise<GSTR1Data> => {
     try {
-      const response = await reportsApi.tax.hsn({
+      const response = await gstApi.reports.hsnSummary({
         from_date: dateRange.from,
         to_date: dateRange.to
       });
-      
-      if (response.data) {
-        return transformHSNResponse(response.data);
+
+      if (response) {
+        return transformHSNResponse(response);
       }
-      
+
       throw new Error('Invalid response format from HSN API');
     } catch (err) {
       throw new Error('Unable to load HSN summary data');
