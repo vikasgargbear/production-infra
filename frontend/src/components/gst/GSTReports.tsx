@@ -5,13 +5,11 @@ import {
   Building, Package, Users, Printer, RefreshCw, Loader2, AlertCircle
 } from 'lucide-react';
 import { Button, DatePicker, Card, DataTable } from '../global';
-import { reportsApi } from '../../services/api/modules/reports.api';
-import { invoicesApi } from '../../services/api/modules/invoices.api';
+import { gstApi } from '../../services/api';
 import offlineStorage from '../../services/offlineStorage';
 
 interface GSTReportsProps {
-  open: boolean;
-  onClose: () => void;
+  onClose?: () => void;
 }
 
 interface DateRange {
@@ -63,7 +61,7 @@ interface ReportType {
   color: string;
 }
 
-const GSTReports: React.FC<GSTReportsProps> = ({ open, onClose }) => {
+const GSTReports: React.FC<GSTReportsProps> = ({ onClose }) => {
   const [selectedReport, setSelectedReport] = useState<string>('gstr-1');
   const [dateRange, setDateRange] = useState<DateRange>({
     from: new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split('T')[0],
@@ -120,10 +118,8 @@ const GSTReports: React.FC<GSTReportsProps> = ({ open, onClose }) => {
   ];
 
   useEffect(() => {
-    if (open) {
-      loadReportData();
-    }
-  }, [open, selectedReport, dateRange]);
+    loadReportData();
+  }, [selectedReport, dateRange]);
 
   const loadReportData = async (): Promise<void> => {
     setLoading(true);
@@ -201,14 +197,17 @@ const GSTReports: React.FC<GSTReportsProps> = ({ open, onClose }) => {
 
   const loadGSTR1FromInvoices = async (): Promise<GSTR1Data> => {
     try {
-      const response = await invoicesApi.getAll({
-        from_date: dateRange.from,
-        to_date: dateRange.to,
+      const response = await invoiceAPI.search('', {
+        dateFrom: dateRange.from,
+        dateTo: dateRange.to,
         limit: 1000
       });
 
-      if (response.data?.invoices) {
-        return transformInvoicesToGSTR1(response.data.invoices);
+      const invoices = Array.isArray(response) ? response :
+                       response?.invoices || response?.data?.invoices || [];
+
+      if (invoices.length > 0) {
+        return transformInvoicesToGSTR1(invoices);
       }
 
       throw new Error('No invoice data available');

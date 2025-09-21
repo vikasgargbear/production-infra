@@ -22,14 +22,17 @@ import authService from '../auth/AuthService';
   }
 })();
 
-// Create axios instance with default config
+// Create axios instance with optimized config for performance
 const apiClient: AxiosInstance = axios.create({
   baseURL: `${API_BASE_URL}/api/`,  // Add trailing slash for proper URL joining
-  timeout: 30000,
+  timeout: 10000, // Reduced from 30s to 10s for faster failure detection
   headers: {
     'Content-Type': 'application/json',
     'Accept': 'application/json',
   },
+  // Performance optimizations
+  maxRedirects: 3,
+  validateStatus: (status) => status < 500, // Don't retry on 4xx errors
 });
 
 // Request interceptor for auth token

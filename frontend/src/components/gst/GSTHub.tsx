@@ -1,54 +1,45 @@
 import React from 'react';
-import { 
-  Calculator, FileText, BarChart3, RefreshCw, 
-  Settings, AlertCircle, Receipt, Home
+import {
+  Home, FileText, BarChart3, RefreshCw,
+  Settings, Receipt
 } from 'lucide-react';
 import { ModuleHub } from '../global';
-import GSTBalanced from './GSTBalanced';
-import GSTFilingClean from './GSTFilingClean';
+import GSTDashboard from './GSTDashboard';
+import GSTFiling from './GSTFiling';
 import GSTReports from './GSTReports';
 import GSTReconciliation from './GSTReconciliation';
+import GSTSettings from './GSTSettings';
 
 interface GSTHubProps {
   open?: boolean;
   onClose?: () => void;
 }
 
-interface GSTModule {
-  id: string;
-  label: string;
-  fullLabel: string;
-  description: string;
-  icon: React.ComponentType<{ className?: string }>;
-  color: string;
-  component: React.ComponentType<any> | null;
-}
-
 const GSTHub: React.FC<GSTHubProps> = ({ open = true, onClose }) => {
-  const gstModules: GSTModule[] = [
+  const gstModules = [
     {
       id: 'gst-dashboard',
       label: 'Dashboard',
-      fullLabel: 'GST Overview',
-      description: 'Tax summary & compliance status',
+      fullLabel: 'GST Dashboard',
+      description: 'Tax summary & analytics',
       icon: Home,
       color: 'blue',
-      component: GSTBalanced
+      component: GSTDashboard
     },
     {
       id: 'gst-filing',
       label: 'Filing',
       fullLabel: 'GST Filing',
-      description: 'File returns easily',
+      description: 'File GSTR-1, GSTR-3B',
       icon: FileText,
       color: 'green',
-      component: GSTFilingClean
+      component: GSTFiling
     },
     {
       id: 'gst-reports',
       label: 'Reports',
       fullLabel: 'GST Reports',
-      description: 'GSTR-1, 3B, HSN Summary',
+      description: 'Tax reports & analysis',
       icon: BarChart3,
       color: 'purple',
       component: GSTReports
@@ -56,29 +47,20 @@ const GSTHub: React.FC<GSTHubProps> = ({ open = true, onClose }) => {
     {
       id: 'gst-reconciliation',
       label: 'Reconcile',
-      fullLabel: 'GST Reconciliation',
-      description: 'Match & reconcile GST',
+      fullLabel: 'Reconciliation',
+      description: 'Match & verify GST',
       icon: RefreshCw,
-      color: 'purple',
+      color: 'orange',
       component: GSTReconciliation
     },
     {
       id: 'gst-settings',
       label: 'Settings',
       fullLabel: 'GST Settings',
-      description: 'Configure GST rates',
+      description: 'Configure GST & rates',
       icon: Settings,
       color: 'gray',
-      component: null // Placeholder
-    },
-    {
-      id: 'gst-compliance',
-      label: 'Compliance',
-      fullLabel: 'Compliance Check',
-      description: 'Audit & compliance tools',
-      icon: AlertCircle,
-      color: 'red',
-      component: null // Placeholder
+      component: GSTSettings
     }
   ];
 

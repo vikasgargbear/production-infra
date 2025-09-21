@@ -10,7 +10,7 @@ import {
   Loader2,
   AlertCircle
 } from 'lucide-react';
-import { reportsApi, utilsApi } from '../../services/api';
+import { gstApi } from '../../services/api';
 import offlineStorage from '../../services/offlineStorage';
 
 interface ReconciliationItem {
@@ -58,46 +58,66 @@ const GSTReconciliation: React.FC = () => {
   const loadReconciliationData = async () => {
     setIsLoading(true);
     setError(null);
-    
+
     try {
-      // Load GST summary data for reconciliation
-      const [gstSummaryResponse, gstR2Response] = await Promise.all([
-        reportsApi.tax.gstSummary({ period: 'current' }),
-        reportsApi.tax.gstR2({ period: 'current' })
+      // Get current month data
+      const now = new Date();
+      const fromDate = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0];
+      const toDate = now.toISOString().split('T')[0];
+
+      // Load real invoice and purchase data
+      const [invoiceResponse, purchaseResponse] = await Promise.all([
+        invoiceAPI.search('', { dateFrom: fromDate, dateTo: toDate, limit: 1000 }),
+        purchasesAPI.getAll({ start_date: fromDate, end_date: toDate, limit: 1000 })
       ]);
-      
+
       // Transform the data into reconciliation format
-      // In a real implementation, this would compare our records with GST portal data
-      const purchaseData = gstR2Response.data || { invoices: [] };
-      const salesData = gstSummaryResponse.data || { invoices: [] };
-      
+      const invoices = Array.isArray(invoiceResponse) ? invoiceResponse :
+                       invoiceResponse?.invoices || invoiceResponse?.data?.invoices || [];
+      const purchases = Array.isArray(purchaseResponse?.data) ? purchaseResponse.data :
+                       purchaseResponse?.purchases || [];
+
       // Simulate reconciliation by analyzing the data
       // This is a placeholder - in production, you'd compare with actual GST portal data
-      const purchaseItems = (purchaseData.invoices || []).map((invoice: any, index: number) => ({
-        id: index + 1,
-        supplierGSTIN: invoice.supplier_gstin || 'N/A',
-        supplierName: invoice.supplier_name || 'Unknown',
-        invoiceNo: invoice.invoice_number || `INV-${index + 1}`,
-        invoiceDate: invoice.invoice_date || new Date().toISOString().split('T')[0],
-        ourAmount: invoice.total_amount || 0,
-        gstPortalAmount: invoice.portal_amount || invoice.total_amount || 0,
-        ourGST: invoice.gst_amount || 0,
-        portalGST: invoice.portal_gst || invoice.gst_amount || 0,
-        status: 'matched' as const // Default to matched for now
-      }));
-      
-      const salesItems = (salesData.invoices || []).map((invoice: any, index: number) => ({
-        id: index + 1,
-        supplierGSTIN: invoice.customer_gstin || 'N/A',
-        supplierName: invoice.customer_name || 'Unknown',
-        invoiceNo: invoice.invoice_number || `INV-${index + 1}`,
-        invoiceDate: invoice.invoice_date || new Date().toISOString().split('T')[0],
-        ourAmount: invoice.total_amount || 0,
-        gstPortalAmount: invoice.portal_amount || invoice.total_amount || 0,
-        ourGST: invoice.gst_amount || 0,
-        portalGST: invoice.portal_gst || invoice.gst_amount || 0,
-        status: 'matched' as const // Default to matched for now
-      }));
+      const purchaseItems = purchases.map((purchase: any, index: number) => {
+        const gstAmount = (purchase.cgst_amount || 0) + (purchase.sgst_amount || 0) + (purchase.igst_amount || 0);
+        const totalAmount = purchase.total_amount || purchase.amount || 0;
+        // Simple logic to determine status
+        const status = purchase.supplier_gstin && purchase.bill_number ? 'matched' : 'mismatched';
+
+        return {
+          id: index + 1,
+          supplierGSTIN: purchase.supplier_gstin || 'N/A',
+          supplierName: purchase.supplier_name || 'Unknown',
+          invoiceNo: purchase.bill_number || `BILL-${index + 1}`,
+          invoiceDate: purchase.bill_date || purchase.created_at?.split('T')[0] || new Date().toISOString().split('T')[0],
+          ourAmount: totalAmount,
+          gstPortalAmount: totalAmount, // In real scenario, this would come from GST portal
+          ourGST: gstAmount,
+          portalGST: gstAmount, // In real scenario, this would come from GST portal
+          status: status as const
+        };
+      });
+
+      const salesItems = invoices.map((invoice: any, index: number) => {
+        const gstAmount = (invoice.cgst_amount || 0) + (invoice.sgst_amount || 0) + (invoice.igst_amount || 0);
+        const totalAmount = invoice.final_amount || invoice.total_amount || invoice.amount || 0;
+        // Simple logic to determine status
+        const status = invoice.customer_gstin && invoice.invoice_number ? 'matched' : 'mismatched';
+
+        return {
+          id: index + 1,
+          supplierGSTIN: invoice.customer_gstin || 'N/A',
+          supplierName: invoice.customer_name || 'Unknown',
+          invoiceNo: invoice.invoice_number || `INV-${index + 1}`,
+          invoiceDate: invoice.invoice_date || invoice.created_at?.split('T')[0] || new Date().toISOString().split('T')[0],
+          ourAmount: totalAmount,
+          gstPortalAmount: totalAmount, // In real scenario, this would come from GST portal
+          ourGST: gstAmount,
+          portalGST: gstAmount, // In real scenario, this would come from GST portal
+          status: status as const
+        };
+      });
       
       const data: Record<ActiveTab, ReconciliationData> = {
         purchase: {

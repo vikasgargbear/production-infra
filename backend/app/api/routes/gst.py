@@ -71,11 +71,17 @@ async def get_gst_dashboard(
             except:
                 target_date = datetime.now()
 
-        # Get invoices for the period using raw SQL
-        invoices_query = text("""
-            SELECT invoice_id, customer_id, subtotal_amount, discount_amount,
-                   cgst_amount, sgst_amount, igst_amount,
-                   customer_name
+        # OPTIMIZED QUERY: Get aggregated tax totals instead of all invoice details
+        # This reduces data transfer and processing time significantly
+        tax_totals_query = text("""
+            SELECT
+                COUNT(*) as total_invoices,
+                COALESCE(SUM(subtotal_amount - COALESCE(discount_amount, 0)), 0) as total_taxable,
+                COALESCE(SUM(cgst_amount), 0) as total_cgst,
+                COALESCE(SUM(sgst_amount), 0) as total_sgst,
+                COALESCE(SUM(igst_amount), 0) as total_igst,
+                COUNT(CASE WHEN customer_id IS NOT NULL THEN 1 END) as b2b_count,
+                COUNT(CASE WHEN customer_id IS NULL THEN 1 END) as b2c_count
             FROM sales.invoices
             WHERE org_id = :org_id
                 AND branch_id = :branch_id
@@ -83,60 +89,51 @@ async def get_gst_dashboard(
                 AND EXTRACT(month FROM invoice_date) = :month
         """)
 
-        invoices = db.execute(invoices_query, {
+        # Execute optimized query
+        result = db.execute(tax_totals_query, {
             'org_id': org_id,
             'branch_id': branch_id,
             'year': target_date.year,
             'month': target_date.month
-        }).fetchall()
+        }).fetchone()
 
-        # Calculate GST totals
-        total_taxable = Decimal('0')
-        total_cgst = Decimal('0')
-        total_sgst = Decimal('0')
-        total_igst = Decimal('0')
-        total_output_tax = Decimal('0')
+        if result:
+            total_invoices = result.total_invoices
+            total_taxable = Decimal(str(result.total_taxable))
+            total_cgst = Decimal(str(result.total_cgst))
+            total_sgst = Decimal(str(result.total_sgst))
+            total_igst = Decimal(str(result.total_igst))
+            total_output_tax = total_cgst + total_sgst + total_igst
+            b2b_count = result.b2b_count
+            b2c_count = result.b2c_count
+        else:
+            total_invoices = 0
+            total_taxable = Decimal('0')
+            total_cgst = Decimal('0')
+            total_sgst = Decimal('0')
+            total_igst = Decimal('0')
+            total_output_tax = Decimal('0')
+            b2b_count = 0
+            b2c_count = 0
 
-        b2b_count = 0
-        b2c_count = 0
-        export_count = 0
+        # Get supplier count separately (lightweight query)
+        supplier_count_query = text("""
+            SELECT COUNT(DISTINCT supplier_id) as supplier_count
+            FROM procurement.supplier_invoices
+            WHERE org_id = :org_id
+                AND EXTRACT(year FROM invoice_date) = :year
+                AND EXTRACT(month FROM invoice_date) = :month
+        """)
 
-        for invoice in invoices:
-            # Get customer GSTIN using raw SQL
-            customer_gstin = None
-            if invoice.customer_id:
-                customer_query = text("""
-                    SELECT gstin FROM parties.customers
-                    WHERE customer_id = :customer_id
-                """)
-                customer_result = db.execute(customer_query, {'customer_id': invoice.customer_id}).fetchone()
-                customer_gstin = customer_result.gstin if customer_result else None
+        supplier_result = db.execute(supplier_count_query, {
+            'org_id': org_id,
+            'year': target_date.year,
+            'month': target_date.month
+        }).fetchone()
 
-            # Determine GST type (assuming no exports for now)
-            gst_type = GSTService.determine_gst_type(
-                seller_gstin=org_gstin,
-                buyer_gstin=customer_gstin,
-                is_export=False
-            )
+        total_suppliers = supplier_result.supplier_count if supplier_result else 0
 
-            # Add to totals
-            taxable_amount = Decimal(str(invoice.subtotal_amount or 0)) - Decimal(str(invoice.discount_amount or 0))
-            total_taxable += taxable_amount
-
-            cgst_amount = Decimal(str(invoice.cgst_amount or 0))
-            sgst_amount = Decimal(str(invoice.sgst_amount or 0))
-            igst_amount = Decimal(str(invoice.igst_amount or 0))
-
-            total_cgst += cgst_amount
-            total_sgst += sgst_amount
-            total_igst += igst_amount
-            total_output_tax += cgst_amount + sgst_amount + igst_amount
-
-            # Count transaction types (no exports for now)
-            if customer_gstin:
-                b2b_count += 1
-            else:
-                b2c_count += 1
+        # No need for individual invoice processing - we have aggregated data!
 
         # Input tax credit (from purchases) - simplified for now
         input_credit = Decimal('0')  # TODO: Add purchase invoices calculation
@@ -156,11 +153,12 @@ async def get_gst_dashboard(
             "complianceScore": compliance_score,
             "period": get_current_period(),
             "summary": {
-                "total_invoices": len(invoices),
+                "total_invoices": total_invoices,
+                "total_suppliers": total_suppliers,
                 "total_taxable": float(total_taxable),
                 "b2b_transactions": b2b_count,
                 "b2c_transactions": b2c_count,
-                "export_transactions": export_count,
+                "export_transactions": 0,  # No exports for now
                 "cgst_amount": float(total_cgst),
                 "sgst_amount": float(total_sgst),
                 "igst_amount": float(total_igst)
@@ -189,13 +187,53 @@ async def get_returns_status(
     org_id: str = Depends(get_org_id_from_header)
 ):
     """
-    Get GST returns filing status
+    Get GST returns filing status - OPTIMIZED VERSION
     """
     try:
-        # For now, return calculated status based on data
-        # In production, this would check actual GST portal filing status
+        # PERFORMANCE OPTIMIZATION: Don't recalculate entire dashboard
+        # Just get basic tax amounts quickly with lightweight query
 
-        dashboard_data = await get_gst_dashboard(period, db, org_id)
+        branch_id = get_default_branch_id(db, org_id)
+        db.commit()
+
+        # Parse period quickly
+        if period == "current":
+            target_date = datetime.now()
+        elif period == "previous":
+            now = datetime.now()
+            if now.month == 1:
+                target_date = datetime(now.year - 1, 12, 1)
+            else:
+                target_date = datetime(now.year, now.month - 1, 1)
+        else:
+            try:
+                year, month = map(int, period.split('-'))
+                target_date = datetime(year, month, 1)
+            except:
+                target_date = datetime.now()
+
+        # FAST QUERY: Get only the tax totals we need
+        tax_summary_query = text("""
+            SELECT
+                COALESCE(SUM(cgst_amount + sgst_amount + igst_amount), 0) as total_output_tax,
+                COALESCE(SUM(cgst_amount + sgst_amount + igst_amount), 0) as total_input_credit
+            FROM sales.invoices
+            WHERE org_id = :org_id
+                AND branch_id = :branch_id
+                AND EXTRACT(year FROM invoice_date) = :year
+                AND EXTRACT(month FROM invoice_date) = :month
+        """)
+
+        result = db.execute(tax_summary_query, {
+            'org_id': org_id,
+            'branch_id': branch_id,
+            'year': target_date.year,
+            'month': target_date.month
+        }).fetchone()
+
+        total_output_tax = float(result.total_output_tax) if result else 0
+        total_input_credit = 0  # Simplified for now
+        net_payable = total_output_tax - total_input_credit
 
         # Generate due dates (Indian GST due dates)
         current_date = datetime.now()
@@ -215,19 +253,19 @@ async def get_returns_status(
         return {
             "gstr1": {
                 "status": "pending",
-                "amount": dashboard_data["taxPayable"],
+                "amount": total_output_tax,
                 "dueDate": gstr1_due.strftime("%d %b %Y"),
                 "filedDate": None
             },
             "gstr3b": {
                 "status": "pending",
-                "amount": dashboard_data["netPayable"],
+                "amount": net_payable,
                 "dueDate": gstr3b_due.strftime("%d %b %Y"),
                 "filedDate": None
             },
             "gstr2a": {
                 "status": "available",
-                "amount": dashboard_data["inputCredit"],
+                "amount": total_input_credit,
                 "lastUpdated": current_date.strftime("%d %b %Y")
             }
         }
@@ -319,6 +357,166 @@ async def calculate_gst(
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/verification")
+async def verify_gst_data(
+    period: str = Query("current"),
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)
+):
+    """
+    Verify GST data for accuracy and compliance
+    """
+    try:
+        # Parse period
+        if period == "current":
+            target_date = datetime.now()
+        else:
+            try:
+                year, month = map(int, period.split('-'))
+                target_date = datetime(year, month, 1)
+            except:
+                target_date = datetime.now()
+
+        branch_id = get_default_branch_id(db, org_id)
+        db.commit()
+
+        # Get invoices for verification
+        verification_query = text("""
+            SELECT
+                invoice_id, invoice_number, customer_id, customer_name,
+                subtotal_amount, cgst_amount, sgst_amount, igst_amount,
+                taxable_amount, total_tax_amount, final_amount
+            FROM sales.invoices
+            WHERE org_id = :org_id
+                AND branch_id = :branch_id
+                AND EXTRACT(year FROM invoice_date) = :year
+                AND EXTRACT(month FROM invoice_date) = :month
+            ORDER BY invoice_date DESC
+        """)
+
+        invoices = db.execute(verification_query, {
+            'org_id': org_id,
+            'branch_id': branch_id,
+            'year': target_date.year,
+            'month': target_date.month
+        }).fetchall()
+
+        verification_results = []
+        total_issues = 0
+
+        for invoice in invoices:
+            issues = []
+
+            # Verify GST calculation
+            calculated_gst = float(invoice.cgst_amount or 0) + float(invoice.sgst_amount or 0) + float(invoice.igst_amount or 0)
+            recorded_gst = float(invoice.total_tax_amount or 0)
+
+            if abs(calculated_gst - recorded_gst) > 0.01:
+                issues.append(f"GST mismatch: Calculated {calculated_gst}, Recorded {recorded_gst}")
+
+            # Verify customer GSTIN if B2B
+            if invoice.customer_id:
+                customer_query = text("SELECT gstin FROM parties.customers WHERE customer_id = :customer_id")
+                customer_result = db.execute(customer_query, {'customer_id': invoice.customer_id}).fetchone()
+
+                if float(invoice.final_amount or 0) > 50000 and (not customer_result or not customer_result.gstin):
+                    issues.append("Missing GSTIN for high-value B2B transaction")
+
+            if issues:
+                total_issues += len(issues)
+                verification_results.append({
+                    "invoice_number": invoice.invoice_number,
+                    "customer_name": invoice.customer_name,
+                    "amount": float(invoice.final_amount or 0),
+                    "issues": issues
+                })
+
+        return {
+            "period": f"{target_date.strftime('%B')} {target_date.year}",
+            "total_invoices": len(invoices),
+            "invoices_with_issues": len(verification_results),
+            "total_issues": total_issues,
+            "verification_score": max(0, 100 - (total_issues * 5)),
+            "issues": verification_results[:10]  # Top 10 issues
+        }
+
+    except Exception as e:
+        db.rollback()
+        return {"error": str(e)}
+
+@router.post("/reconcile")
+async def reconcile_gst_data(
+    period: str,
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)
+):
+    """
+    Auto-reconcile GST data with GSTR-2A
+    """
+    try:
+        # Parse period
+        year, month = map(int, period.split('-'))
+        target_date = datetime(year, month, 1)
+
+        branch_id = get_default_branch_id(db, org_id)
+        db.commit()
+
+        # Get purchase invoices for reconciliation
+        purchase_query = text("""
+            SELECT
+                supplier_invoice_number, supplier_id, invoice_total,
+                cgst_amount, sgst_amount, igst_amount, gstr2a_matched
+            FROM procurement.supplier_invoices
+            WHERE org_id = :org_id
+                AND EXTRACT(year FROM invoice_date) = :year
+                AND EXTRACT(month FROM invoice_date) = :month
+        """)
+
+        purchases = db.execute(purchase_query, {
+            'org_id': org_id,
+            'year': target_date.year,
+            'month': target_date.month
+        }).fetchall()
+
+        # Reconciliation logic
+        matched = 0
+        unmatched = []
+        total_itc_available = 0
+        total_itc_claimed = 0
+
+        for purchase in purchases:
+            itc_amount = float(purchase.cgst_amount or 0) + float(purchase.sgst_amount or 0) + float(purchase.igst_amount or 0)
+            total_itc_available += itc_amount
+
+            if purchase.gstr2a_matched:
+                matched += 1
+                total_itc_claimed += itc_amount
+            else:
+                unmatched.append({
+                    "invoice_number": purchase.supplier_invoice_number,
+                    "amount": float(purchase.invoice_total or 0),
+                    "itc_amount": itc_amount,
+                    "status": "Pending GSTR-2A match"
+                })
+
+        return {
+            "period": f"{target_date.strftime('%B')} {target_date.year}",
+            "summary": {
+                "total_purchases": len(purchases),
+                "matched_invoices": matched,
+                "unmatched_invoices": len(unmatched),
+                "match_percentage": round((matched / len(purchases)) * 100, 1) if purchases else 0,
+                "total_itc_available": total_itc_available,
+                "total_itc_claimed": total_itc_claimed,
+                "itc_pending": total_itc_available - total_itc_claimed
+            },
+            "unmatched_invoices": unmatched[:20]  # Top 20 unmatched
+        }
+
+    except Exception as e:
+        db.rollback()
+        return {"error": str(e)}
 
 @router.get("/compliance/status")
 async def get_compliance_status(

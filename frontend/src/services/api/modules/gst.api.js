@@ -1,15 +1,65 @@
 import apiClient from '../apiClient';
 
+// Request cache for performance optimization
+const requestCache = new Map();
+const CACHE_TTL = 2 * 60 * 1000; // 2 minutes
+
+const getCachedResponse = (key) => {
+  const cached = requestCache.get(key);
+  if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
+    console.log(`[GST API] Using cached response for: ${key}`);
+    return cached.data;
+  }
+  return null;
+};
+
+const setCachedResponse = (key, data) => {
+  requestCache.set(key, {
+    data,
+    timestamp: Date.now()
+  });
+};
+
+// Cache management functions
+export const clearGSTCache = () => {
+  console.log('[GST API] Clearing all request cache');
+  requestCache.clear();
+};
+
 export const gstApi = {
   // GST Dashboard Data
   dashboard: {
     getSummary: async (period) => {
+      const cacheKey = `dashboard_${period}`;
+
+      // Check cache first
+      const cachedData = getCachedResponse(cacheKey);
+      if (cachedData) {
+        return cachedData;
+      }
+
       try {
+        console.log(`[GST API] Fetching fresh dashboard data for period: ${period}`);
+        const startTime = performance.now();
+
         const response = await apiClient.get('/gst/dashboard', {
-          params: { period }
+          params: { period },
+          timeout: 8000 // Specific timeout for dashboard
         });
+
+        const duration = Math.round(performance.now() - startTime);
+        console.log(`[GST API] Dashboard response received in ${duration}ms:`, response.data);
+
+        // Cache the response
+        setCachedResponse(cacheKey, response.data);
+
         return response.data;
       } catch (error) {
+        console.error(`[GST API] Dashboard request failed:`, {
+          error: error.message,
+          status: error.response?.status,
+          duration: error.code === 'ECONNABORTED' ? 'timeout' : 'unknown'
+        });
         // Return default data structure if API fails
         return {
           taxPayable: 0,
@@ -63,12 +113,36 @@ export const gstApi = {
     },
     
     getStatus: async (period) => {
+      const cacheKey = `returns_status_${period}`;
+
+      // Check cache first
+      const cachedData = getCachedResponse(cacheKey);
+      if (cachedData) {
+        return cachedData;
+      }
+
       try {
+        console.log(`[GST API] Fetching returns status for period: ${period}`);
+        const startTime = performance.now();
+
         const response = await apiClient.get('/gst/returns/status', {
-          params: { period }
+          params: { period },
+          timeout: 8000 // Match component timeout for returns status
         });
+
+        const duration = Math.round(performance.now() - startTime);
+        console.log(`[GST API] Returns status received in ${duration}ms:`, response.data);
+
+        // Cache the response
+        setCachedResponse(cacheKey, response.data);
+
         return response.data;
       } catch (error) {
+        console.error(`[GST API] Returns status request failed:`, {
+          error: error.message,
+          status: error.response?.status,
+          duration: error.code === 'ECONNABORTED' ? 'timeout' : 'unknown'
+        });
         return {
           gstr1: { status: 'pending', amount: 0, dueDate: null, filedDate: null },
           gstr3b: { status: 'pending', amount: 0, dueDate: null, filedDate: null },
@@ -171,13 +245,42 @@ export const gstApi = {
   // GST Settings
   settings: {
     getConfig: async () => {
+      const cacheKey = 'gst_settings_config';
+
+      // Check cache first (settings change rarely, so longer cache)
+      const cached = requestCache.get(cacheKey);
+      if (cached && Date.now() - cached.timestamp < 10 * 60 * 1000) { // 10 minutes for settings
+        console.log(`[GST API] Using cached settings config`);
+        return cached.data;
+      }
+
       try {
-        const response = await apiClient.get('/gst/settings');
+        console.log(`[GST API] Fetching fresh settings config`);
+        const startTime = performance.now();
+
+        const response = await apiClient.get('/gst/settings', {
+          timeout: 5000 // Match component timeout for settings
+        });
+
+        const duration = Math.round(performance.now() - startTime);
+        console.log(`[GST API] Settings received in ${duration}ms:`, response.data);
+
+        // Cache the response
+        requestCache.set(cacheKey, {
+          data: response.data,
+          timestamp: Date.now()
+        });
+
         return response.data;
       } catch (error) {
+        console.error(`[GST API] Settings request failed:`, {
+          error: error.message,
+          duration: error.code === 'ECONNABORTED' ? 'timeout' : 'unknown'
+        });
         return {
           gstin: '',
           state: '',
+          is_valid: false,
           taxRates: [],
           hsnCodes: []
         };
