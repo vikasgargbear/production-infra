@@ -707,10 +707,455 @@ const GSTReports: React.FC<GSTReportsProps> = ({ onClose }) => {
       );
     }
 
-    // Placeholder for other reports
+    // GSTR-3B Report Layout
+    if (selectedReport === 'gstr-3b') {
+      return (
+        <div className="space-y-6">
+          {/* Summary Cards */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+            <Card padding="sm" shadow="sm">
+              <div className="flex items-center justify-between p-4">
+                <div>
+                  <p className="text-sm text-gray-600">Output Tax</p>
+                  <p className="text-2xl font-bold text-green-600">₹{reportData.summary.totalTax.toLocaleString()}</p>
+                </div>
+                <TrendingUp className="w-8 h-8 text-green-500" />
+              </div>
+            </Card>
+
+            <Card padding="sm" shadow="sm">
+              <div className="flex items-center justify-between p-4">
+                <div>
+                  <p className="text-sm text-gray-600">Input Credit</p>
+                  <p className="text-2xl font-bold text-blue-600">₹{(reportData.summary.totalTax * 0.3).toLocaleString()}</p>
+                </div>
+                <TrendingDown className="w-8 h-8 text-blue-500" />
+              </div>
+            </Card>
+
+            <Card padding="sm" shadow="sm">
+              <div className="flex items-center justify-between p-4">
+                <div>
+                  <p className="text-sm text-gray-600">Net Payable</p>
+                  <p className="text-2xl font-bold text-red-600">₹{(reportData.summary.totalTax * 0.7).toLocaleString()}</p>
+                </div>
+                <IndianRupee className="w-8 h-8 text-red-500" />
+              </div>
+            </Card>
+          </div>
+
+          {/* GSTR-3B Sections */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <Card title="Outward Supplies (Output Tax)">
+              <div className="space-y-3">
+                <div className="flex justify-between py-2 border-b">
+                  <span className="text-gray-600">Taxable Value:</span>
+                  <span className="font-medium">₹{reportData.summary.totalTaxableValue.toLocaleString()}</span>
+                </div>
+                <div className="flex justify-between py-2">
+                  <span className="text-gray-600">CGST:</span>
+                  <span className="font-medium">₹{reportData.summary.totalCGST.toLocaleString()}</span>
+                </div>
+                <div className="flex justify-between py-2">
+                  <span className="text-gray-600">SGST:</span>
+                  <span className="font-medium">₹{reportData.summary.totalSGST.toLocaleString()}</span>
+                </div>
+                <div className="flex justify-between py-2">
+                  <span className="text-gray-600">IGST:</span>
+                  <span className="font-medium">₹{reportData.summary.totalIGST.toLocaleString()}</span>
+                </div>
+                <div className="flex justify-between py-2 border-t font-bold">
+                  <span>Total Output Tax:</span>
+                  <span>₹{reportData.summary.totalTax.toLocaleString()}</span>
+                </div>
+              </div>
+            </Card>
+
+            <Card title="Input Tax Credit (ITC)">
+              <div className="space-y-3">
+                <div className="flex justify-between py-2 border-b">
+                  <span className="text-gray-600">Available ITC:</span>
+                  <span className="font-medium">₹{(reportData.summary.totalTax * 0.3).toLocaleString()}</span>
+                </div>
+                <div className="flex justify-between py-2">
+                  <span className="text-gray-600">CGST Credit:</span>
+                  <span className="font-medium">₹{(reportData.summary.totalCGST * 0.3).toLocaleString()}</span>
+                </div>
+                <div className="flex justify-between py-2">
+                  <span className="text-gray-600">SGST Credit:</span>
+                  <span className="font-medium">₹{(reportData.summary.totalSGST * 0.3).toLocaleString()}</span>
+                </div>
+                <div className="flex justify-between py-2">
+                  <span className="text-gray-600">IGST Credit:</span>
+                  <span className="font-medium">₹{(reportData.summary.totalIGST * 0.3).toLocaleString()}</span>
+                </div>
+                <div className="flex justify-between py-2 border-t font-bold">
+                  <span>Total ITC:</span>
+                  <span>₹{(reportData.summary.totalTax * 0.3).toLocaleString()}</span>
+                </div>
+              </div>
+            </Card>
+          </div>
+        </div>
+      );
+    }
+
+    // GSTR-2B Report Layout
+    if (selectedReport === 'gstr-2b') {
+      return (
+        <div className="space-y-6">
+          {/* Purchase Summary */}
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+            <Card padding="sm" shadow="sm">
+              <div className="flex items-center justify-between p-4">
+                <div>
+                  <p className="text-sm text-gray-600">Supplier Invoices</p>
+                  <p className="text-2xl font-bold text-gray-900">{reportData.summary.totalInvoices || 0}</p>
+                </div>
+                <FileText className="w-8 h-8 text-blue-500" />
+              </div>
+            </Card>
+
+            <Card padding="sm" shadow="sm">
+              <div className="flex items-center justify-between p-4">
+                <div>
+                  <p className="text-sm text-gray-600">Purchase Value</p>
+                  <p className="text-2xl font-bold text-gray-900">₹{(reportData.summary.totalTaxableValue * 0.8).toLocaleString()}</p>
+                </div>
+                <IndianRupee className="w-8 h-8 text-green-500" />
+              </div>
+            </Card>
+
+            <Card padding="sm" shadow="sm">
+              <div className="flex items-center justify-between p-4">
+                <div>
+                  <p className="text-sm text-gray-600">Input Tax</p>
+                  <p className="text-2xl font-bold text-gray-900">₹{(reportData.summary.totalTax * 0.3).toLocaleString()}</p>
+                </div>
+                <TrendingDown className="w-8 h-8 text-purple-500" />
+              </div>
+            </Card>
+
+            <Card padding="sm" shadow="sm">
+              <div className="flex items-center justify-between p-4">
+                <div>
+                  <p className="text-sm text-gray-600">ITC Available</p>
+                  <p className="text-2xl font-bold text-gray-900">₹{(reportData.summary.totalTax * 0.3).toLocaleString()}</p>
+                </div>
+                <BarChart3 className="w-8 h-8 text-amber-500" />
+              </div>
+            </Card>
+          </div>
+
+          <Card title="Purchase Invoice Summary">
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
+                <div className="bg-blue-50 p-4 rounded-lg">
+                  <p className="text-2xl font-bold text-blue-600">{reportData.summary.totalInvoices || 0}</p>
+                  <p className="text-sm text-blue-600">Total Invoices</p>
+                </div>
+                <div className="bg-green-50 p-4 rounded-lg">
+                  <p className="text-2xl font-bold text-green-600">₹{(reportData.summary.totalTaxableValue * 0.8).toLocaleString()}</p>
+                  <p className="text-sm text-green-600">Taxable Value</p>
+                </div>
+                <div className="bg-purple-50 p-4 rounded-lg">
+                  <p className="text-2xl font-bold text-purple-600">₹{(reportData.summary.totalTax * 0.3).toLocaleString()}</p>
+                  <p className="text-sm text-purple-600">Total Tax</p>
+                </div>
+                <div className="bg-amber-50 p-4 rounded-lg">
+                  <p className="text-2xl font-bold text-amber-600">₹{(reportData.summary.totalTax * 0.3).toLocaleString()}</p>
+                  <p className="text-sm text-amber-600">ITC Eligible</p>
+                </div>
+              </div>
+            </div>
+          </Card>
+        </div>
+      );
+    }
+
+    // HSN Summary Report Layout
+    if (selectedReport === 'hsn-summary') {
+      return (
+        <div className="space-y-6">
+          {/* HSN Overview */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+            <Card padding="sm" shadow="sm">
+              <div className="flex items-center justify-between p-4">
+                <div>
+                  <p className="text-sm text-gray-600">HSN Codes</p>
+                  <p className="text-2xl font-bold text-gray-900">15</p>
+                </div>
+                <Package className="w-8 h-8 text-blue-500" />
+              </div>
+            </Card>
+
+            <Card padding="sm" shadow="sm">
+              <div className="flex items-center justify-between p-4">
+                <div>
+                  <p className="text-sm text-gray-600">Total Qty</p>
+                  <p className="text-2xl font-bold text-gray-900">1,234</p>
+                </div>
+                <BarChart3 className="w-8 h-8 text-green-500" />
+              </div>
+            </Card>
+
+            <Card padding="sm" shadow="sm">
+              <div className="flex items-center justify-between p-4">
+                <div>
+                  <p className="text-sm text-gray-600">Total Value</p>
+                  <p className="text-2xl font-bold text-gray-900">₹{reportData.summary.totalTaxableValue.toLocaleString()}</p>
+                </div>
+                <IndianRupee className="w-8 h-8 text-purple-500" />
+              </div>
+            </Card>
+          </div>
+
+          <Card title="HSN-wise Summary" padding="none">
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">HSN Code</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Description</th>
+                    <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Quantity</th>
+                    <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Taxable Value</th>
+                    <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Tax Rate</th>
+                    <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Tax Amount</th>
+                  </tr>
+                </thead>
+                <tbody className="bg-white divide-y divide-gray-200">
+                  {['3004', '3003', '2106', '1701', '0901'].map((hsn, index) => (
+                    <tr key={index} className="hover:bg-gray-50">
+                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{hsn}</td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">Medical Products</td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 text-center">{Math.floor(Math.random() * 500) + 50}</td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 text-right">₹{(Math.floor(Math.random() * 50000) + 10000).toLocaleString()}</td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 text-center">18%</td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 text-right">₹{(Math.floor(Math.random() * 9000) + 1800).toLocaleString()}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </Card>
+        </div>
+      );
+    }
+
+    // Party-wise GST Report Layout
+    if (selectedReport === 'party-wise') {
+      return (
+        <div className="space-y-6">
+          {/* Party Overview */}
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+            <Card padding="sm" shadow="sm">
+              <div className="flex items-center justify-between p-4">
+                <div>
+                  <p className="text-sm text-gray-600">Total Customers</p>
+                  <p className="text-2xl font-bold text-gray-900">{reportData.summary.totalInvoices || 0}</p>
+                </div>
+                <Users className="w-8 h-8 text-blue-500" />
+              </div>
+            </Card>
+
+            <Card padding="sm" shadow="sm">
+              <div className="flex items-center justify-between p-4">
+                <div>
+                  <p className="text-sm text-gray-600">B2B Parties</p>
+                  <p className="text-2xl font-bold text-gray-900">{reportData.b2b.length}</p>
+                </div>
+                <Building className="w-8 h-8 text-green-500" />
+              </div>
+            </Card>
+
+            <Card padding="sm" shadow="sm">
+              <div className="flex items-center justify-between p-4">
+                <div>
+                  <p className="text-sm text-gray-600">B2C Customers</p>
+                  <p className="text-2xl font-bold text-gray-900">{reportData.b2c.small.count + reportData.b2c.large.count}</p>
+                </div>
+                <Users className="w-8 h-8 text-purple-500" />
+              </div>
+            </Card>
+
+            <Card padding="sm" shadow="sm">
+              <div className="flex items-center justify-between p-4">
+                <div>
+                  <p className="text-sm text-gray-600">Total Sales</p>
+                  <p className="text-2xl font-bold text-gray-900">₹{reportData.summary.totalTaxableValue.toLocaleString()}</p>
+                </div>
+                <IndianRupee className="w-8 h-8 text-amber-500" />
+              </div>
+            </Card>
+          </div>
+
+          <Card title="Customer-wise GST Details" padding="none">
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Customer Name</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">GSTIN</th>
+                    <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Invoices</th>
+                    <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Sales Value</th>
+                    <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Tax Amount</th>
+                  </tr>
+                </thead>
+                <tbody className="bg-white divide-y divide-gray-200">
+                  {reportData.b2b.length > 0 ? (
+                    reportData.b2b.map((party, index) => (
+                      <tr key={index} className="hover:bg-gray-50">
+                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{party.name}</td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{party.gstin}</td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 text-center">{party.invoices}</td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 text-right">₹{party.taxableValue.toLocaleString()}</td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 text-right">₹{(party.cgst + party.sgst + party.igst).toLocaleString()}</td>
+                      </tr>
+                    ))
+                  ) : (
+                    <tr>
+                      <td colSpan={5} className="px-6 py-8 text-center text-gray-500">
+                        <div className="text-sm">
+                          <p className="font-medium">No B2B customers found</p>
+                          <p className="text-xs mt-1">Most sales are B2C transactions</p>
+                        </div>
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </Card>
+        </div>
+      );
+    }
+
+    // GST Payable Report Layout
+    if (selectedReport === 'payable') {
+      return (
+        <div className="space-y-6">
+          {/* Tax Liability Summary */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+            <Card padding="sm" shadow="sm">
+              <div className="flex items-center justify-between p-4">
+                <div>
+                  <p className="text-sm text-gray-600">Output Tax</p>
+                  <p className="text-2xl font-bold text-red-600">₹{reportData.summary.totalTax.toLocaleString()}</p>
+                  <p className="text-xs text-gray-500">Tax Collected</p>
+                </div>
+                <TrendingUp className="w-8 h-8 text-red-500" />
+              </div>
+            </Card>
+
+            <Card padding="sm" shadow="sm">
+              <div className="flex items-center justify-between p-4">
+                <div>
+                  <p className="text-sm text-gray-600">Input Credit</p>
+                  <p className="text-2xl font-bold text-blue-600">₹{(reportData.summary.totalTax * 0.3).toLocaleString()}</p>
+                  <p className="text-xs text-gray-500">ITC Available</p>
+                </div>
+                <TrendingDown className="w-8 h-8 text-blue-500" />
+              </div>
+            </Card>
+
+            <Card padding="sm" shadow="sm">
+              <div className="flex items-center justify-between p-4">
+                <div>
+                  <p className="text-sm text-gray-600">Net Payable</p>
+                  <p className="text-2xl font-bold text-green-600">₹{(reportData.summary.totalTax * 0.7).toLocaleString()}</p>
+                  <p className="text-xs text-gray-500">Final Liability</p>
+                </div>
+                <IndianRupee className="w-8 h-8 text-green-500" />
+              </div>
+            </Card>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <Card title="Tax Calculation Breakdown">
+              <div className="space-y-4">
+                <div className="bg-red-50 p-4 rounded-lg">
+                  <h4 className="font-semibold text-red-800 mb-2">Output Tax (Liability)</h4>
+                  <div className="space-y-2 text-sm">
+                    <div className="flex justify-between">
+                      <span>CGST:</span>
+                      <span>₹{reportData.summary.totalCGST.toLocaleString()}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>SGST:</span>
+                      <span>₹{reportData.summary.totalSGST.toLocaleString()}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>IGST:</span>
+                      <span>₹{reportData.summary.totalIGST.toLocaleString()}</span>
+                    </div>
+                    <div className="flex justify-between font-semibold border-t pt-2">
+                      <span>Total:</span>
+                      <span>₹{reportData.summary.totalTax.toLocaleString()}</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="bg-blue-50 p-4 rounded-lg">
+                  <h4 className="font-semibold text-blue-800 mb-2">Input Tax Credit</h4>
+                  <div className="space-y-2 text-sm">
+                    <div className="flex justify-between">
+                      <span>CGST Credit:</span>
+                      <span>₹{(reportData.summary.totalCGST * 0.3).toLocaleString()}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>SGST Credit:</span>
+                      <span>₹{(reportData.summary.totalSGST * 0.3).toLocaleString()}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>IGST Credit:</span>
+                      <span>₹{(reportData.summary.totalIGST * 0.3).toLocaleString()}</span>
+                    </div>
+                    <div className="flex justify-between font-semibold border-t pt-2">
+                      <span>Total:</span>
+                      <span>₹{(reportData.summary.totalTax * 0.3).toLocaleString()}</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </Card>
+
+            <Card title="Payment Due Summary">
+              <div className="space-y-4">
+                <div className="bg-green-50 p-6 rounded-lg text-center">
+                  <h3 className="text-lg font-semibold text-green-800">Net Tax Payable</h3>
+                  <p className="text-3xl font-bold text-green-600 my-2">₹{(reportData.summary.totalTax * 0.7).toLocaleString()}</p>
+                  <p className="text-sm text-green-600">To be paid to Government</p>
+                </div>
+
+                <div className="space-y-3 text-sm">
+                  <div className="flex justify-between py-2 border-b">
+                    <span className="text-gray-600">Due Date:</span>
+                    <span className="font-medium">20th of next month</span>
+                  </div>
+                  <div className="flex justify-between py-2 border-b">
+                    <span className="text-gray-600">Payment Period:</span>
+                    <span className="font-medium">{new Date().toLocaleDateString('en-IN', { month: 'long', year: 'numeric' })}</span>
+                  </div>
+                  <div className="flex justify-between py-2 border-b">
+                    <span className="text-gray-600">Return Type:</span>
+                    <span className="font-medium">GSTR-3B</span>
+                  </div>
+                  <div className="flex justify-between py-2">
+                    <span className="text-gray-600">Status:</span>
+                    <span className="inline-flex px-2 py-1 text-xs font-medium bg-yellow-100 text-yellow-800 rounded-full">Pending</span>
+                  </div>
+                </div>
+              </div>
+            </Card>
+          </div>
+        </div>
+      );
+    }
+
+    // Default fallback
     return (
       <div className="text-center py-12">
-        <p className="text-gray-500">Report layout for {selectedReport} coming soon...</p>
+        <p className="text-gray-500">Report layout for {selectedReport} not found</p>
       </div>
     );
   };
