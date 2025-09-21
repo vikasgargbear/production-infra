@@ -8,7 +8,7 @@ import GSTDashboard from './GSTDashboard';
 import GSTFiling from './GSTFiling';
 import GSTReports from './GSTReports';
 import GSTReconciliation from './GSTReconciliation';
-import GSTSettings from './GSTSettings';
+// GST Settings removed - now handled in Master → Tax Master
 
 interface GSTHubProps {
   open?: boolean;
@@ -64,10 +64,33 @@ const GSTHub: React.FC<GSTHubProps> = ({ open = true, onClose }) => {
       id: 'gst-settings',
       label: 'Settings',
       fullLabel: 'GST Settings',
-      description: 'Configure GST & rates',
+      description: 'Configure in Master → Tax',
       icon: Settings,
       color: 'gray',
-      component: GSTSettings
+      component: () => (
+        <div className="flex items-center justify-center h-64">
+          <div className="text-center">
+            <Settings className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+            <h3 className="text-lg font-semibold text-gray-900 mb-2">GST Settings Moved</h3>
+            <p className="text-gray-600 mb-4">
+              GST settings are now managed centrally in <span className="font-semibold">Master → Tax Master</span>
+            </p>
+            <button
+              onClick={() => {
+                // Navigate to Master module - this will be handled by parent component
+                if (onClose) onClose();
+                // The parent will need to handle navigation to Master
+                window.dispatchEvent(new CustomEvent('navigateToMaster', {
+                  detail: { module: 'tax-master', tab: 'gst-config' }
+                }));
+              }}
+              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+            >
+              Go to Tax Master
+            </button>
+          </div>
+        </div>
+      )
     }
   ];
 

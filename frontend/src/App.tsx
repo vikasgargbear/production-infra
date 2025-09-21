@@ -242,7 +242,8 @@ function App(): JSX.Element {
       case 'compliance':
         return <CompliancePlaceholder key="compliance" />;
       case 'settings':
-        return <CompanySettings key="settings" open={true} onClose={() => setActiveTab('home')} />;
+        // Settings now redirects to Master → Tax Master for GST configuration
+        return <MasterHub key="settings" open={true} onClose={() => setActiveTab('home')} />;
       case 'sale-return':
       case 'purchase-return':
       case 'returns':
