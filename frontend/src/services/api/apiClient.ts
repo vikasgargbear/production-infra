@@ -6,14 +6,14 @@
 import axios, { AxiosInstance, AxiosError } from 'axios';
 // @ts-ignore - JavaScript module
 import orgIdManager from '../OrgIdManager';
+// @ts-ignore - JavaScript module
+import authService from '../auth/AuthService';
 
 // Get API URL from environment or use default
 // Always use HTTPS for production Railway deployments
 const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || 'https://pharma-backend-production-0c09.up.railway.app';
 
-// Import auth service for token management
-// @ts-ignore - JavaScript module
-import authService from '../auth/AuthService';
+// Import auth service for token management is now at the top
 
 // Ensure auth is initialized
 (() => {
