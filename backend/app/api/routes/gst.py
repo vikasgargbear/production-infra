@@ -73,7 +73,7 @@ async def get_gst_dashboard(
 
         # Get invoices for the period using raw SQL
         invoices_query = text("""
-            SELECT invoice_id, customer_id, subtotal, discount_amount,
+            SELECT invoice_id, customer_id, subtotal_amount, discount_amount,
                    cgst_amount, sgst_amount, igst_amount, is_export,
                    customer_name
             FROM sales.invoices
@@ -121,7 +121,7 @@ async def get_gst_dashboard(
             )
 
             # Add to totals
-            taxable_amount = Decimal(str(invoice.subtotal or 0)) - Decimal(str(invoice.discount_amount or 0))
+            taxable_amount = Decimal(str(invoice.subtotal_amount or 0)) - Decimal(str(invoice.discount_amount or 0))
             total_taxable += taxable_amount
 
             cgst_amount = Decimal(str(invoice.cgst_amount or 0))
