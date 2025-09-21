@@ -103,7 +103,7 @@ export const gstApi = {
   returns: {
     getList: async (filters = {}) => {
       try {
-        const response = await apiClient.get('/api/v1/gst/returns', {
+        const response = await apiClient.get('/gst/returns', {
           params: filters
         });
         return response.data;
@@ -160,7 +160,7 @@ export const gstApi = {
   reports: {
     gstr1: async (filters) => {
       try {
-        const response = await apiClient.get('/api/v1/reports/tax/gstr1', {
+        const response = await apiClient.get('/reports/tax/gstr1', {
           params: filters
         });
         return response.data;
@@ -171,7 +171,7 @@ export const gstApi = {
     
     gstr3b: async (filters) => {
       try {
-        const response = await apiClient.get('/api/v1/reports/tax/gstr3b', {
+        const response = await apiClient.get('/reports/tax/gstr3b', {
           params: filters
         });
         return response.data;
@@ -187,7 +187,7 @@ export const gstApi = {
     
     gstr2a: async (filters) => {
       try {
-        const response = await apiClient.get('/api/v1/reports/tax/gstr2a', {
+        const response = await apiClient.get('/reports/tax/gstr2a', {
           params: filters
         });
         return response.data;
@@ -198,7 +198,7 @@ export const gstApi = {
     
     hsnSummary: async (filters) => {
       try {
-        const response = await apiClient.get('/api/v1/reports/tax/hsn', {
+        const response = await apiClient.get('/reports/tax/hsn', {
           params: filters
         });
         return response.data;
@@ -212,7 +212,7 @@ export const gstApi = {
   reconciliation: {
     getStatus: async (period) => {
       try {
-        const response = await apiClient.get('/api/v1/gst/reconciliation/status', {
+        const response = await apiClient.get('/gst/reconciliation/status', {
           params: { period }
         });
         return response.data;
@@ -228,7 +228,7 @@ export const gstApi = {
     
     getDetails: async (period) => {
       try {
-        const response = await apiClient.get('/api/v1/gst/reconciliation/details', {
+        const response = await apiClient.get('/gst/reconciliation/details', {
           params: { period }
         });
         return response.data;
@@ -238,7 +238,7 @@ export const gstApi = {
     },
     
     reconcile: async (data) => {
-      return apiClient.post('/api/v1/gst/reconciliation/reconcile', data);
+      return apiClient.post('/gst/reconciliation/reconcile', data);
     }
   },
 
@@ -293,7 +293,7 @@ export const gstApi = {
     
     getTaxRates: async () => {
       try {
-        const response = await apiClient.get('/api/v1/gst/tax-rates');
+        const response = await apiClient.get('/gst/tax-rates');
         return response.data;
       } catch (error) {
         return { rates: [] };
@@ -355,7 +355,7 @@ export const gstApi = {
     
     getDueDates: async () => {
       try {
-        const response = await apiClient.get('/api/v1/gst/compliance/due-dates');
+        const response = await apiClient.get('/gst/compliance/due-dates');
         return response.data;
       } catch (error) {
         return { dueDates: [] };
