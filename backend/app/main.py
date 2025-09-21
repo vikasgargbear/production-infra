@@ -162,7 +162,7 @@ api.include_router(sales_orders.router, tags=["Sales Orders"])
 api.include_router(grn.router, prefix="/grn", tags=["Goods Receipt Notes"])
 api.include_router(journal_entries.router, prefix="/journal-entries", tags=["Journal Entries"])
 api.include_router(expense_claims.router, prefix="/expense-claims", tags=["Expense Claims"])
-api.include_router(gst.router, tags=["GST"])
+api.include_router(gst.router, prefix="/gst", tags=["GST"])
 
 # Initial setup route (doesn't require auth)
 from .api.routes import initial_setup
