@@ -16,7 +16,7 @@ from ...utils.org_utils import get_org_id_from_header
 from ...api.services.gst_service import GSTService, GSTType
 from ...models import Invoice, InvoiceItem, Customer, Company
 
-router = APIRouter(prefix="/api/v1/gst", tags=["GST"])
+router = APIRouter(tags=["GST"])
 
 def get_current_period():
     """Get current GST period (month/year)"""
