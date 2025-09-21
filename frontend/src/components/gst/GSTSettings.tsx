@@ -127,7 +127,7 @@ const GSTSettings: React.FC<GSTSettingsProps> = () => {
                   className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
                 />
                 <label htmlFor="enableEInvoicing" className="ml-2 text-sm text-gray-700">
-                  Enable E-Invoicing (for turnover > ₹20 crore)
+                  Enable E-Invoicing (for turnover &gt; ₹20 crore)
                 </label>
               </div>
             </div>

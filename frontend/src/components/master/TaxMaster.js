@@ -276,10 +276,10 @@ const TaxMaster = ({ open, onClose }) => {
             </div>
             <div className="flex items-center space-x-3">
               <button
-              onClick={handleRefresh}
-              disabled={refreshing}
-              className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 flex items-center space-x-2 disabled:opacity-50"
-            >
+                onClick={handleRefresh}
+                disabled={refreshing}
+                className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 flex items-center space-x-2 disabled:opacity-50"
+              >
               {refreshing ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
               <span>{refreshing ? 'Refreshing...' : 'Refresh'}</span>
             </button>
@@ -304,6 +304,7 @@ const TaxMaster = ({ open, onClose }) => {
               <Plus className="w-4 h-4" />
               <span>Add Tax</span>
             </button>
+            </div>
           </div>
         </div>
       </div>
@@ -365,136 +366,136 @@ const TaxMaster = ({ open, onClose }) => {
         {activeTab === 'rates' ? (
           // Tax Rates Content
           <>
-        {isLoading ? (
-          <div className="flex items-center justify-center h-64">
-            <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
-            <span className="ml-2 text-gray-600">Loading tax rates...</span>
-          </div>
-        ) : filteredTaxes.length === 0 ? (
-          <div className="flex items-center justify-center h-64">
-            <div className="text-center">
-              <Receipt className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-              <p className="text-gray-600">No tax rates found</p>
-              {searchTerm && (
-                <p className="text-sm text-gray-500 mt-2">Try adjusting your search criteria</p>
-              )}
-            </div>
-          </div>
-        ) : (
-          <div className="bg-white rounded-lg border border-gray-200 h-full flex flex-col">
-            <div className="flex-1 overflow-auto">
-              <table className="w-full">
-                <thead className="bg-gray-50 sticky top-0 z-10">
-                  <tr>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      <input
-                        type="checkbox"
-                        className="rounded border-gray-300"
-                        onChange={(e) => {
-                          if (e.target.checked) {
-                            setSelectedTaxes(filteredTaxes.map(t => t.id));
-                          } else {
-                            setSelectedTaxes([]);
-                          }
-                        }}
-                      />
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Tax Details</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Type</th>
-                    <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Rate</th>
-                    <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Components</th>
-                    <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-                    <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
-                  </tr>
-                </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
-                  {filteredTaxes.map((tax) => (
-                    <tr key={tax.id} className="hover:bg-gray-50">
-                      <td className="px-6 py-4">
-                        <input
-                          type="checkbox"
-                          checked={selectedTaxes.includes(tax.id)}
-                          onChange={(e) => {
-                            if (e.target.checked) {
-                              setSelectedTaxes([...selectedTaxes, tax.id]);
-                            } else {
-                              setSelectedTaxes(selectedTaxes.filter(id => id !== tax.id));
-                            }
-                          }}
-                          className="rounded border-gray-300"
-                        />
-                      </td>
-                      <td className="px-6 py-4">
-                        <div>
-                          <p className="text-sm font-medium text-gray-900">{tax.name}</p>
-                          {tax.description && (
-                            <p className="text-xs text-gray-500">{tax.description}</p>
-                          )}
-                        </div>
-                      </td>
-                      <td className="px-6 py-4">
-                        <span className={`px-2 py-1 text-xs rounded-full bg-${getTaxTypeColor(tax.type)}-100 text-${getTaxTypeColor(tax.type)}-800`}>
-                          {tax.type}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4 text-center">
-                        <span className="text-lg font-semibold text-gray-900">{tax.rate}%</span>
-                      </td>
-                      <td className="px-6 py-4 text-center">
-                        {tax.type === 'GST' ? (
-                          <div className="text-xs space-y-1">
-                            <div className="flex justify-between">
-                              <span>CGST:</span>
-                              <span className="font-medium">{tax.cgst}%</span>
+            {isLoading ? (
+              <div className="flex items-center justify-center h-64">
+                <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
+                <span className="ml-2 text-gray-600">Loading tax rates...</span>
+              </div>
+            ) : filteredTaxes.length === 0 ? (
+              <div className="flex items-center justify-center h-64">
+                <div className="text-center">
+                  <Receipt className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+                  <p className="text-gray-600">No tax rates found</p>
+                  {searchTerm && (
+                    <p className="text-sm text-gray-500 mt-2">Try adjusting your search criteria</p>
+                  )}
+                </div>
+              </div>
+            ) : (
+              <div className="bg-white rounded-lg border border-gray-200 h-full flex flex-col">
+                <div className="flex-1 overflow-auto">
+                  <table className="w-full">
+                    <thead className="bg-gray-50 sticky top-0 z-10">
+                      <tr>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          <input
+                            type="checkbox"
+                            className="rounded border-gray-300"
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                setSelectedTaxes(filteredTaxes.map(t => t.id));
+                              } else {
+                                setSelectedTaxes([]);
+                              }
+                            }}
+                          />
+                        </th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Tax Details</th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Type</th>
+                        <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Rate</th>
+                        <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Components</th>
+                        <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                        <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className="bg-white divide-y divide-gray-200">
+                      {filteredTaxes.map((tax) => (
+                        <tr key={tax.id} className="hover:bg-gray-50">
+                          <td className="px-6 py-4">
+                            <input
+                              type="checkbox"
+                              checked={selectedTaxes.includes(tax.id)}
+                              onChange={(e) => {
+                                if (e.target.checked) {
+                                  setSelectedTaxes([...selectedTaxes, tax.id]);
+                                } else {
+                                  setSelectedTaxes(selectedTaxes.filter(id => id !== tax.id));
+                                }
+                              }}
+                              className="rounded border-gray-300"
+                            />
+                          </td>
+                          <td className="px-6 py-4">
+                            <div>
+                              <p className="text-sm font-medium text-gray-900">{tax.name}</p>
+                              {tax.description && (
+                                <p className="text-xs text-gray-500">{tax.description}</p>
+                              )}
                             </div>
-                            <div className="flex justify-between">
-                              <span>SGST:</span>
-                              <span className="font-medium">{tax.sgst}%</span>
+                          </td>
+                          <td className="px-6 py-4">
+                            <span className={`px-2 py-1 text-xs rounded-full bg-${getTaxTypeColor(tax.type)}-100 text-${getTaxTypeColor(tax.type)}-800`}>
+                              {tax.type}
+                            </span>
+                          </td>
+                          <td className="px-6 py-4 text-center">
+                            <span className="text-lg font-semibold text-gray-900">{tax.rate}%</span>
+                          </td>
+                          <td className="px-6 py-4 text-center">
+                            {tax.type === 'GST' ? (
+                              <div className="text-xs space-y-1">
+                                <div className="flex justify-between">
+                                  <span>CGST:</span>
+                                  <span className="font-medium">{tax.cgst}%</span>
+                                </div>
+                                <div className="flex justify-between">
+                                  <span>SGST:</span>
+                                  <span className="font-medium">{tax.sgst}%</span>
+                                </div>
+                                <div className="flex justify-between">
+                                  <span>IGST:</span>
+                                  <span className="font-medium">{tax.igst}%</span>
+                                </div>
+                              </div>
+                            ) : (
+                              <span className="text-gray-500">-</span>
+                            )}
+                          </td>
+                          <td className="px-6 py-4 text-center">
+                            <button
+                              onClick={() => handleToggleActive(tax.id)}
+                              className={`px-2 py-1 text-xs rounded-full ${
+                                tax.isActive
+                                  ? 'bg-green-100 text-green-800'
+                                  : 'bg-gray-100 text-gray-600'
+                              }`}
+                            >
+                              {tax.isActive ? 'Active' : 'Inactive'}
+                            </button>
+                          </td>
+                          <td className="px-6 py-4 text-center">
+                            <div className="flex items-center justify-center space-x-2">
+                              <button
+                                onClick={() => handleEdit(tax)}
+                                className="p-1 text-blue-600 hover:bg-blue-50 rounded"
+                              >
+                                <Edit2 className="w-4 h-4" />
+                              </button>
+                              <button
+                                onClick={() => handleDelete(tax.id)}
+                                className="p-1 text-red-600 hover:bg-red-50 rounded"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
                             </div>
-                            <div className="flex justify-between">
-                              <span>IGST:</span>
-                              <span className="font-medium">{tax.igst}%</span>
-                            </div>
-                          </div>
-                        ) : (
-                          <span className="text-gray-500">-</span>
-                        )}
-                      </td>
-                      <td className="px-6 py-4 text-center">
-                        <button
-                          onClick={() => handleToggleActive(tax.id)}
-                          className={`px-2 py-1 text-xs rounded-full ${
-                            tax.isActive 
-                              ? 'bg-green-100 text-green-800' 
-                              : 'bg-gray-100 text-gray-600'
-                          }`}
-                        >
-                          {tax.isActive ? 'Active' : 'Inactive'}
-                        </button>
-                      </td>
-                      <td className="px-6 py-4 text-center">
-                        <div className="flex items-center justify-center space-x-2">
-                          <button
-                            onClick={() => handleEdit(tax)}
-                            className="p-1 text-blue-600 hover:bg-blue-50 rounded"
-                          >
-                            <Edit2 className="w-4 h-4" />
-                          </button>
-                          <button
-                            onClick={() => handleDelete(tax.id)}
-                            className="p-1 text-red-600 hover:bg-red-50 rounded"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
           </>
         ) : (
           // GST Configuration Content
