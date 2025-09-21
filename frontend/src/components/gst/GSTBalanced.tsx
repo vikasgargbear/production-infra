@@ -5,7 +5,7 @@ import {
   RefreshCw, Loader2, AlertTriangle
 } from 'lucide-react';
 import { gstApi } from '../../services/api/modules/gst.api';
-import { invoiceAPI, customersApi } from '../../services/api';
+import { invoiceAPI, customersApi, purchasesAPI } from '../../services/api';
 import { useToast } from '../global';
 
 interface GSTBalancedProps {
@@ -73,21 +73,27 @@ const GSTBalanced: React.FC<GSTBalancedProps> = () => {
       const fromDate = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0];
       const toDate = now.toISOString().split('T')[0];
 
-      const [invoicesResponse, customersResponse] = await Promise.all([
+      const [invoicesResponse, customersResponse, purchasesResponse] = await Promise.all([
         invoiceAPI.getAll({
           from_date: fromDate,
           to_date: toDate,
           limit: 1000
         }).catch(() => ({ data: { invoices: [] } })),
-        customersApi.getAll().catch(() => ({ data: [] }))
+        customersApi.getAll().catch(() => ({ data: [] })),
+        purchasesAPI.getAll({
+          from_date: fromDate,
+          to_date: toDate,
+          limit: 1000
+        }).catch(() => ({ data: [] }))
       ]);
 
       const invoices = invoicesResponse.data?.invoices || [];
       const customers = customersResponse.data || [];
+      const purchases = purchasesResponse.data || [];
 
       // Calculate GST totals
       let totalTaxPayable = 0;
-      let totalInputCredit = 0; // Would come from purchase invoices
+      let totalInputCredit = 0;
       let b2bCount = 0;
       let b2cCount = 0;
 
@@ -112,6 +118,19 @@ const GSTBalanced: React.FC<GSTBalancedProps> = () => {
         }
       });
 
+      // Calculate input tax credit from purchase invoices
+      purchases.forEach(purchase => {
+        const cgst = parseFloat(purchase.cgst_amount || 0);
+        const sgst = parseFloat(purchase.sgst_amount || 0);
+        const igst = parseFloat(purchase.igst_amount || 0);
+        const inputTax = cgst + sgst + igst;
+
+        // Only add if ITC eligible (default true for supplier invoices)
+        if (purchase.itc_eligible !== false) {
+          totalInputCredit += inputTax;
+        }
+      });
+
       const netPayable = totalTaxPayable - totalInputCredit;
       const complianceScore = invoices.length > 0 ? 85 : 50; // Basic score
 
@@ -122,6 +141,7 @@ const GSTBalanced: React.FC<GSTBalancedProps> = () => {
         complianceScore: complianceScore,
         dueDate: getDueDate(),
         invoiceCount: invoices.length,
+        purchaseCount: purchases.length,
         b2bCount,
         b2cCount
       };
@@ -134,6 +154,7 @@ const GSTBalanced: React.FC<GSTBalancedProps> = () => {
         complianceScore: 0,
         dueDate: getDueDate(),
         invoiceCount: 0,
+        purchaseCount: 0,
         b2bCount: 0,
         b2cCount: 0
       };
