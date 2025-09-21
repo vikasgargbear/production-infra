@@ -495,7 +495,6 @@ const TaxMaster = ({ open, onClose }) => {
             </div>
           </div>
         )}
-          </div>
         ) : (
           // GST Configuration Content
           <div className="space-y-6">
