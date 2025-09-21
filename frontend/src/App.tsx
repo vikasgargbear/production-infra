@@ -241,9 +241,7 @@ function App(): JSX.Element {
         return <ReportsHub key="reports" open={true} onClose={() => setActiveTab('home')} />;
       case 'compliance':
         return <CompliancePlaceholder key="compliance" />;
-      case 'settings':
-        // Settings now redirects to Master → Tax Master for GST configuration
-        return <MasterHub key="settings" open={true} onClose={() => setActiveTab('home')} />;
+      // Settings removed from sidebar - handled by settings icon in header
       case 'sale-return':
       case 'purchase-return':
       case 'returns':

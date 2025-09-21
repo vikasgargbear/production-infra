@@ -110,7 +110,7 @@ const Sidebar: React.FC<SidebarProps> = ({ activeTab, onTabChange }) => {
 		{ id: 'reports', label: 'Reports', icon: FileText },
 		{ id: 'compliance', label: 'Compliance', icon: Shield },
 		{ id: 'profile', label: 'Company Profile', icon: User },
-		{ id: 'settings', label: 'Settings', icon: Settings },
+		// Settings removed - handled by settings icon in header
 		{ id: 'test-save', label: 'Test Save', icon: Package }
 	];
 
