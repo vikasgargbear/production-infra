@@ -51,6 +51,9 @@ async def get_gst_dashboard(
         branch_id = get_default_branch_id(db, org_id)
         org_gstin = get_organization_gstin(db, org_id)
 
+        # Commit any pending transactions to avoid abort state
+        db.commit()
+
         # Parse period
         if period == "current":
             target_date = datetime.now()
@@ -168,6 +171,8 @@ async def get_gst_dashboard(
         }
 
     except Exception as e:
+        # Rollback any failed transaction
+        db.rollback()
         # Return default structure with zeros on error
         return {
             "taxPayable": 0,

@@ -5,7 +5,7 @@ export const gstApi = {
   dashboard: {
     getSummary: async (period) => {
       try {
-        const response = await apiClient.get('/api/v1/gst/dashboard', {
+        const response = await apiClient.get('/gst/dashboard', {
           params: { period }
         });
         return response.data;
@@ -24,7 +24,7 @@ export const gstApi = {
     
     getMetrics: async (filters = {}) => {
       try {
-        const response = await apiClient.get('/api/v1/gst/metrics', {
+        const response = await apiClient.get('/gst/metrics', {
           params: filters
         });
         return response.data;
@@ -64,7 +64,7 @@ export const gstApi = {
     
     getStatus: async (period) => {
       try {
-        const response = await apiClient.get('/api/v1/gst/returns/status', {
+        const response = await apiClient.get('/gst/returns/status', {
           params: { period }
         });
         return response.data;
@@ -78,7 +78,7 @@ export const gstApi = {
     },
     
     fileReturn: async (returnType, data) => {
-      return apiClient.post(`/api/v1/gst/returns/${returnType}`, data);
+      return apiClient.post(`/gst/returns/${returnType}`, data);
     }
   },
 
@@ -172,7 +172,7 @@ export const gstApi = {
   settings: {
     getConfig: async () => {
       try {
-        const response = await apiClient.get('/api/v1/gst/settings');
+        const response = await apiClient.get('/gst/settings');
         return response.data;
       } catch (error) {
         return {
@@ -185,7 +185,7 @@ export const gstApi = {
     },
     
     updateConfig: async (config) => {
-      return apiClient.put('/api/v1/gst/settings', config);
+      return apiClient.put('/gst/settings', config);
     },
     
     getTaxRates: async () => {
@@ -202,7 +202,7 @@ export const gstApi = {
   calculate: {
     getTaxAmount: async (amount, hsnCode, isInterstate = false) => {
       try {
-        const response = await apiClient.post('/api/v1/gst/calculate', {
+        const response = await apiClient.post('/gst/calculate', {
           amount,
           hsnCode,
           isInterstate
@@ -239,7 +239,7 @@ export const gstApi = {
   compliance: {
     getStatus: async () => {
       try {
-        const response = await apiClient.get('/api/v1/gst/compliance/status');
+        const response = await apiClient.get('/gst/compliance/status');
         return response.data;
       } catch (error) {
         return {
