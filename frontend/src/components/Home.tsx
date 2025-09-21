@@ -258,7 +258,20 @@ const Home: React.FC<HomeProps> = ({ setActiveTab }) => {
     return (
       <button
         key={action.id}
-        onClick={() => setActiveTab(action.tab)}
+        onClick={() => {
+          if (action.id === 'master') {
+            // Navigate to Master with GST Configuration tab active
+            setActiveTab(action.tab);
+            // Send event to TaxMaster to show GST config tab
+            setTimeout(() => {
+              window.dispatchEvent(new CustomEvent('navigateToMaster', {
+                detail: { module: 'tax-master', tab: 'gst-config' }
+              }));
+            }, 100);
+          } else {
+            setActiveTab(action.tab);
+          }
+        }}
         className="group bg-white rounded-xl p-6 text-left transition-all duration-200 hover:shadow-xl border border-gray-100 hover:border-gray-200 min-h-[140px]"
       >
         {/* Icon with gradient */}

@@ -1015,13 +1015,15 @@ async def get_invoices(
     limit: int = 50,
     offset: int = 0,
     customer_id: Optional[int] = None,
+    date_from: Optional[date] = None,
+    date_to: Optional[date] = None,
     db: Session = Depends(get_db),
     org_id: str = Depends(get_org_id_from_token)
 ):
     """Get list of invoices with pagination"""
     try:
         query = """
-            SELECT 
+            SELECT
                 i.invoice_id,
                 i.invoice_number,
                 i.invoice_date,
@@ -1031,17 +1033,31 @@ async def get_invoices(
                 i.paid_amount,
                 GREATEST(0, i.final_amount - COALESCE(i.paid_amount, 0)) as credit_amount,
                 i.payment_status,
-                i.invoice_status
+                i.invoice_status,
+                i.cgst_amount,
+                i.sgst_amount,
+                i.igst_amount,
+                i.total_tax_amount,
+                i.taxable_amount,
+                i.subtotal_amount
             FROM sales.invoices i
             WHERE i.org_id = :org_id
         """
         
         params = {"org_id": org_id, "limit": limit, "offset": offset}
-        
+
         if customer_id:
             query += " AND i.customer_id = :customer_id"
             params["customer_id"] = customer_id
-            
+
+        if date_from:
+            query += " AND i.invoice_date >= :date_from"
+            params["date_from"] = date_from
+
+        if date_to:
+            query += " AND i.invoice_date <= :date_to"
+            params["date_to"] = date_to
+
         query += " ORDER BY i.invoice_date DESC, i.created_at DESC LIMIT :limit OFFSET :offset"
         
         result = db.execute(text(query), params)

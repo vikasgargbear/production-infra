@@ -299,15 +299,23 @@ export const productAPI = {
 // Define other commonly used APIs
 export const invoiceAPI = {
   search: async (query, options = {}) => {
-    const response = await apiClient.get('/invoices', {
-      params: {
-        q: query,
-        customer_id: options.customerId,
-        date_from: options.dateFrom,
-        date_to: options.dateTo,
-        limit: options.limit || 50,
-        offset: options.offset || 0,
-      },
+    // Build params, only include q if it has a value
+    const params = {
+      customer_id: options.customerId,
+      date_from: options.dateFrom,
+      date_to: options.dateTo,
+      limit: options.limit || 50,
+      offset: options.offset || 0,
+    };
+
+    // Only add q parameter if query has a value
+    if (query && query.trim()) {
+      params.q = query;
+    }
+
+    // Use /invoices/ with trailing slash (required by backend)
+    const response = await apiClient.get('/invoices/', {
+      params
     });
     return response.data;
   },

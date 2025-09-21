@@ -192,6 +192,16 @@ function App(): JSX.Element {
     import('./services/OrgIdManager').then(module => {
       const manager = module.default;
     });
+
+    // Listen for navigation events from Settings buttons
+    const handleNavigate = (event: CustomEvent) => {
+      if (event.detail?.tab) {
+        setActiveTab(event.detail.tab as TabName);
+      }
+    };
+
+    window.addEventListener('navigate', handleNavigate);
+    return () => window.removeEventListener('navigate', handleNavigate);
   }, []);
 
   // Component renderer - removed useCallback to reduce input lag

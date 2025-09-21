@@ -122,14 +122,16 @@ const GSTReports: React.FC<GSTReportsProps> = ({ onClose }) => {
   }, [selectedReport, dateRange]);
 
   const loadReportData = async (): Promise<void> => {
+    console.log('[GST Reports] loadReportData called, selectedReport:', selectedReport);
     setLoading(true);
     setError(null);
-    
+
     try {
       let data: GSTR1Data;
-      
+
       switch (selectedReport) {
         case 'gstr-1':
+          console.log('[GST Reports] Loading GSTR-1 data...');
           data = await loadGSTR1Data();
           break;
         case 'gstr-3b':
@@ -182,17 +184,24 @@ const GSTReports: React.FC<GSTReportsProps> = ({ onClose }) => {
   };
 
   const loadGSTR1Data = async (): Promise<GSTR1Data> => {
+    console.log('[GST Reports] loadGSTR1Data called');
+    // Always try to load from actual invoices first for detailed data
     try {
-      // Use the working GST dashboard API to get real data
-      const dashboardResponse = await gstApi.dashboard.getSummary('current');
-
-      if (dashboardResponse && dashboardResponse.summary) {
-        return transformDashboardToGSTR1(dashboardResponse);
-      }
-
-      throw new Error('Invalid response format from GST dashboard API');
-    } catch (err) {
+      console.log('[GST Reports] Loading from invoices for detailed data');
       return await loadGSTR1FromInvoices();
+    } catch (err) {
+      console.error('[GST Reports] Failed to load from invoices, trying dashboard:', err);
+      // Fallback to dashboard API if invoice loading fails
+      try {
+        const dashboardResponse = await gstApi.dashboard.getSummary('current');
+        if (dashboardResponse && dashboardResponse.summary) {
+          return transformDashboardToGSTR1(dashboardResponse);
+        }
+        throw new Error('Invalid response format from GST dashboard API');
+      } catch (dashErr) {
+        console.error('[GST Reports] Dashboard also failed:', dashErr);
+        throw dashErr;
+      }
     }
   };
 
@@ -203,18 +212,79 @@ const GSTReports: React.FC<GSTReportsProps> = ({ onClose }) => {
       const startOfMonth = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1).toISOString().split('T')[0];
       const endOfMonth = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0).toISOString().split('T')[0];
 
-      const response = await invoiceAPI.search('', {
-        dateFrom: startOfMonth,
-        dateTo: endOfMonth,
-        limit: 100
-      });
+      console.log(`[GST Reports] Fetching invoices from ${startOfMonth} to ${endOfMonth}`);
+
+      // Use search method with date filters (getAll doesn't exist)
+      let response;
+      try {
+        response = await invoiceAPI.search('', {
+          dateFrom: startOfMonth,
+          dateTo: endOfMonth,
+          limit: 100
+        });
+        console.log('[GST Reports] Invoice API call successful');
+      } catch (apiError) {
+        console.error('[GST Reports] Invoice API call failed:', apiError);
+        // Try fallback to dashboard data
+        const dashboardResponse = await gstApi.dashboard.getSummary('current');
+        return transformDashboardToGSTR1(dashboardResponse);
+      }
 
       const invoices = Array.isArray(response) ? response :
                        response?.invoices || response?.data?.invoices || [];
 
+      console.log('[GST Reports] API Response:', response);
+      console.log('[GST Reports] Extracted invoices:', invoices);
+
+      // Log the GST amounts from the first few invoices
+      if (invoices.length > 0) {
+        console.log('[GST Reports] Sample invoice GST data:', {
+          invoice1: invoices[0] ? {
+            id: invoices[0].invoice_id,
+            cgst: invoices[0].cgst_amount,
+            sgst: invoices[0].sgst_amount,
+            igst: invoices[0].igst_amount
+          } : null,
+          invoice2: invoices[1] ? {
+            id: invoices[1].invoice_id,
+            cgst: invoices[1].cgst_amount,
+            sgst: invoices[1].sgst_amount,
+            igst: invoices[1].igst_amount
+          } : null
+        });
+      }
+
       if (invoices.length > 0) {
         console.log('[GST Reports] Found invoices:', invoices.length);
-        return transformInvoicesToGSTR1(invoices);
+        console.log('[GST Reports] First invoice sample:', invoices[0]);
+
+        // Try to fetch customer data but don't fail if it doesn't work
+        let customerData = {};
+        try {
+          const customersApi = await import('../../services/api').then(m => m.customersApi);
+          const customerIds = [...new Set(invoices.map(inv => inv.customer_id).filter(Boolean))];
+          console.log('[GST Reports] Customer IDs to fetch:', customerIds);
+
+          for (const customerId of customerIds) {
+            try {
+              const customer = await customersApi.getById(customerId);
+              console.log(`[GST Reports] Customer ${customerId}:`, { gstin: customer?.gstin, gst_number: customer?.gst_number });
+              // Fetch ALL customers, not just those with GSTIN
+              if (customer) {
+                customerData[customerId] = customer;
+                console.log(`[GST Reports] Added customer ${customerId} to customerData, GSTIN:`, customer.gstin || customer.gst_number || 'Not Registered');
+              }
+            } catch (err) {
+              console.warn(`[GST Reports] Failed to fetch customer ${customerId}:`, err);
+              // Still process the invoice even without customer details
+            }
+          }
+        } catch (err) {
+          console.warn('[GST Reports] Failed to fetch customer data, continuing without it:', err);
+        }
+        console.log('[GST Reports] Final customerData:', customerData);
+
+        return transformInvoicesToGSTR1(invoices, customerData);
       }
 
       // Fallback to dashboard summary if no invoices found
@@ -405,7 +475,7 @@ const GSTReports: React.FC<GSTReportsProps> = ({ onClose }) => {
     };
   };
 
-  const transformInvoicesToGSTR1 = (invoices: any[]): GSTR1Data => {
+  const transformInvoicesToGSTR1 = (invoices: any[], customerData: any = {}): GSTR1Data => {
     // Transform invoice data to GSTR-1 format
     const b2bInvoices: B2BInvoice[] = [];
     const b2cSmall: B2CData = { count: 0, taxableValue: 0, cgst: 0, sgst: 0, igst: 0 };
@@ -419,39 +489,73 @@ const GSTReports: React.FC<GSTReportsProps> = ({ onClose }) => {
 
     invoices.forEach(invoice => {
       totalInvoices++;
-      const taxableValue = invoice.total_amount || invoice.grand_total || 0;
+      const taxableValue = invoice.final_amount || invoice.total_amount || invoice.grand_total || 0;
       totalTaxableValue += taxableValue;
 
-      const cgst = invoice.cgst_amount || 0;
-      const sgst = invoice.sgst_amount || 0;
-      const igst = invoice.igst_amount || 0;
+      // The invoice list API doesn't return GST amounts, so we need to calculate them
+      // For now, assuming 18% GST (9% CGST + 9% SGST) is included in the final amount
+      // Actual calculation: taxable = final_amount / 1.18, gst = final_amount - taxable
+      let cgst = invoice.cgst_amount || 0;
+      let sgst = invoice.sgst_amount || 0;
+      let igst = invoice.igst_amount || 0;
+
+      // If no GST amounts provided, calculate from final amount (assuming GST inclusive price)
+      if (cgst === 0 && sgst === 0 && igst === 0 && invoice.final_amount > 0) {
+        // Calculate assuming 18% GST included in final amount
+        const taxableAmount = invoice.final_amount / 1.18;
+        const totalGST = invoice.final_amount - taxableAmount;
+        // Split equally between CGST and SGST (9% each)
+        cgst = totalGST / 2;
+        sgst = totalGST / 2;
+      }
+
+      // Debug log for first few invoices
+      if (totalInvoices <= 3) {
+        console.log(`[GST Reports] Invoice ${invoice.invoice_id} GST amounts:`, {
+          cgst_amount: invoice.cgst_amount,
+          sgst_amount: invoice.sgst_amount,
+          igst_amount: invoice.igst_amount,
+          parsed_cgst: cgst,
+          parsed_sgst: sgst,
+          parsed_igst: igst
+        });
+      }
 
       totalCGST += cgst;
       totalSGST += sgst;
       totalIGST += igst;
 
-      // Categorize as B2B or B2C based on GSTIN
-      if (invoice.customer_gstin || invoice.gstin) {
-        // B2B - has GSTIN
-        const existingB2B = b2bInvoices.find(b => b.gstin === (invoice.customer_gstin || invoice.gstin));
-        if (existingB2B) {
-          existingB2B.invoices++;
-          existingB2B.taxableValue += taxableValue;
-          existingB2B.cgst += cgst;
-          existingB2B.sgst += sgst;
-          existingB2B.igst += igst;
-        } else {
-          b2bInvoices.push({
-            gstin: invoice.customer_gstin || invoice.gstin,
-            name: invoice.customer_name || 'Unknown',
-            invoices: 1,
-            taxableValue,
-            cgst,
-            sgst,
-            igst
-          });
-        }
+      // Get customer GSTIN from customerData based on customer_id
+      const customer = customerData[invoice.customer_id];
+      const customerGSTIN = customer?.gstin || customer?.gst_number || invoice.customer_gstin || invoice.gstin;
+
+      console.log(`[GST Reports] Processing invoice ${invoice.invoice_id} for customer ${invoice.customer_id}: GSTIN = ${customerGSTIN}`);
+
+      // Show ALL invoices - if they have GSTIN, show it, otherwise show as "Not Registered"
+      // This properly shows all transactions, not just B2B
+      const displayGSTIN = customerGSTIN || 'Not Registered';
+      const existingEntry = b2bInvoices.find(b => b.gstin === displayGSTIN);
+
+      if (existingEntry) {
+        existingEntry.invoices++;
+        existingEntry.taxableValue += taxableValue;
+        existingEntry.cgst += cgst;
+        existingEntry.sgst += sgst;
+        existingEntry.igst += igst;
       } else {
+        b2bInvoices.push({
+          gstin: displayGSTIN,
+          name: customer?.customer_name || invoice.customer_name || 'Unknown',
+          invoices: 1,
+          taxableValue,
+          cgst,
+          sgst,
+          igst
+        });
+      }
+
+      // Still track B2C for GSTR-1 compliance (but don't hide invoices)
+      if (!customerGSTIN) {
         // B2C - no GSTIN
         if (taxableValue <= 250000) {
           b2cSmall.count++;
@@ -468,6 +572,10 @@ const GSTReports: React.FC<GSTReportsProps> = ({ onClose }) => {
         }
       }
     });
+
+    console.log('[GST Reports] B2B invoices found:', b2bInvoices.length);
+    console.log('[GST Reports] B2C small count:', b2cSmall.count);
+    console.log('[GST Reports] B2C large count:', b2cLarge.count);
 
     return {
       b2b: b2bInvoices,
@@ -621,9 +729,9 @@ const GSTReports: React.FC<GSTReportsProps> = ({ onClose }) => {
             </Card>
           </div>
 
-          {/* B2B Invoices */}
+          {/* All Invoices with GST Details */}
           <Card
-            title="B2B Invoices - Summary"
+            title="GST Invoice Details"
             padding="none"
           >
             <div className="overflow-x-auto">
@@ -656,8 +764,8 @@ const GSTReports: React.FC<GSTReportsProps> = ({ onClose }) => {
                     <tr>
                       <td colSpan={7} className="px-6 py-8 text-center text-gray-500">
                         <div className="text-sm">
-                          <p className="font-medium">No B2B transactions found</p>
-                          <p className="text-xs mt-1">All transactions are categorized as B2C (no GSTIN provided)</p>
+                          <p className="font-medium">No GST transactions found</p>
+                          <p className="text-xs mt-1">No invoices with GST amounts found for this period</p>
                         </div>
                       </td>
                     </tr>

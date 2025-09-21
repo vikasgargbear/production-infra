@@ -31,6 +31,18 @@ const TaxMaster = ({ open, onClose }) => {
       loadTaxes();
     }
   }, [open]);
+
+  // Listen for navigation events to show GST config tab
+  useEffect(() => {
+    const handleNavigateToMaster = (event) => {
+      if (event.detail.tab === 'gst-config') {
+        setActiveTab('gst-config');
+      }
+    };
+
+    window.addEventListener('navigateToMaster', handleNavigateToMaster);
+    return () => window.removeEventListener('navigateToMaster', handleNavigateToMaster);
+  }, []);
   
   // Load taxes from backend
   const loadTaxes = async () => {

@@ -714,7 +714,21 @@ const Dashboard: React.FC = () => {
             }`}>
               {kpi.trend}
             </span>
-            <button className="text-gray-400 hover:text-gray-600">
+            <button
+              className="text-gray-400 hover:text-gray-600"
+              onClick={() => {
+                // Navigate to Master with GST Configuration tab active
+                window.dispatchEvent(new CustomEvent('navigateToMaster', {
+                  detail: { module: 'tax-master', tab: 'gst-config' }
+                }));
+                // Navigate to master tab
+                if (window.location.pathname === '/') {
+                  window.dispatchEvent(new CustomEvent('navigate', {
+                    detail: { tab: 'master' }
+                  }));
+                }
+              }}
+            >
               <Settings className="w-4 h-4" />
             </button>
           </div>
@@ -1161,11 +1175,22 @@ const Dashboard: React.FC = () => {
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-lg font-semibold text-gray-900">Key Performance Indicators</h2>
             <button
-              onClick={() => setIsCustomizingKPIs(true)}
+              onClick={() => {
+                // Navigate to Master with GST Configuration tab active
+                window.dispatchEvent(new CustomEvent('navigateToMaster', {
+                  detail: { module: 'tax-master', tab: 'gst-config' }
+                }));
+                // Navigate to master tab
+                if (window.location.pathname === '/') {
+                  window.dispatchEvent(new CustomEvent('navigate', {
+                    detail: { tab: 'master' }
+                  }));
+                }
+              }}
               className="text-sm text-blue-600 hover:text-blue-700 flex items-center"
             >
               <Settings className="w-4 h-4 mr-1" />
-              Customize KPIs
+              Tax Settings
             </button>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4">

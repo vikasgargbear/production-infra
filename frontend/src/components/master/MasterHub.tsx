@@ -40,6 +40,19 @@ interface MasterModule {
 const MasterHub: React.FC<MasterHubProps> = ({ open = true, onClose }) => {
   const [showValidationEngine, setShowValidationEngine] = useState(false);
   const [showBulkOperations, setShowBulkOperations] = useState(false);
+  const [defaultModule, setDefaultModule] = useState('company-profile');
+
+  // Listen for navigation events
+  React.useEffect(() => {
+    const handleNavigateToMaster = (event: CustomEvent) => {
+      if (event.detail.module === 'tax-master') {
+        setDefaultModule('tax-master');
+      }
+    };
+
+    window.addEventListener('navigateToMaster', handleNavigateToMaster);
+    return () => window.removeEventListener('navigateToMaster', handleNavigateToMaster);
+  }, []);
 
   const masterModules: MasterModule[] = [
     {
@@ -170,7 +183,7 @@ const MasterHub: React.FC<MasterHubProps> = ({ open = true, onClose }) => {
         subtitle="Configure your platform"
         icon={Settings}
         modules={masterModules}
-        defaultModule="company-profile"
+        defaultModule={defaultModule}
       />
       
       {/* Enterprise Components */}
