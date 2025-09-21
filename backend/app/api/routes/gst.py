@@ -74,7 +74,7 @@ async def get_gst_dashboard(
         # Get invoices for the period using raw SQL
         invoices_query = text("""
             SELECT invoice_id, customer_id, subtotal_amount, discount_amount,
-                   cgst_amount, sgst_amount, igst_amount, is_export,
+                   cgst_amount, sgst_amount, igst_amount,
                    customer_name
             FROM sales.invoices
             WHERE org_id = :org_id
@@ -113,11 +113,11 @@ async def get_gst_dashboard(
                 customer_result = db.execute(customer_query, {'customer_id': invoice.customer_id}).fetchone()
                 customer_gstin = customer_result.gstin if customer_result else None
 
-            # Determine GST type
+            # Determine GST type (assuming no exports for now)
             gst_type = GSTService.determine_gst_type(
                 seller_gstin=org_gstin,
                 buyer_gstin=customer_gstin,
-                is_export=invoice.is_export or False
+                is_export=False
             )
 
             # Add to totals
@@ -133,10 +133,8 @@ async def get_gst_dashboard(
             total_igst += igst_amount
             total_output_tax += cgst_amount + sgst_amount + igst_amount
 
-            # Count transaction types
-            if invoice.is_export:
-                export_count += 1
-            elif customer_gstin:
+            # Count transaction types (no exports for now)
+            if customer_gstin:
                 b2b_count += 1
             else:
                 b2c_count += 1
