@@ -504,7 +504,7 @@ const Dashboard: React.FC = () => {
       }
 
       // Create mock alerts based on real data
-      const newAlerts = [];
+      const newAlerts: Alert[] = [];
       if (backendStats.low_stock_products > 0) {
         newAlerts.push({
           id: 1,

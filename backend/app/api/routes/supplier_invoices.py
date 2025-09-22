@@ -17,6 +17,83 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["supplier-invoices"])
 
+@router.get("/")
+async def get_supplier_invoices(
+    from_date: Optional[str] = None,
+    to_date: Optional[str] = None,
+    supplier_id: Optional[int] = None,
+    skip: int = Query(0, ge=0),
+    limit: int = Query(100, ge=1, le=5000),
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)
+):
+    """
+    Get all supplier invoices with GST details for input credit calculation
+    """
+    try:
+        query = """
+            SELECT
+                si.supplier_invoice_id,
+                si.supplier_invoice_number,
+                si.invoice_date,
+                si.supplier_id,
+                s.supplier_name,
+                s.gst_number as supplier_gstin,
+                si.subtotal_amount,
+                si.discount_amount,
+                si.taxable_amount,
+                si.cgst_amount,
+                si.sgst_amount,
+                si.igst_amount,
+                si.cess_amount,
+                si.tax_amount,
+                si.invoice_total,
+                si.payment_status,
+                si.itc_eligible,
+                si.gstr2a_matched,
+                si.invoice_status
+            FROM procurement.supplier_invoices si
+            LEFT JOIN parties.suppliers s ON si.supplier_id = s.supplier_id
+            WHERE si.org_id = :org_id
+            AND si.invoice_status != 'cancelled'
+            AND si.itc_eligible = true
+        """
+
+        params = {"org_id": org_id, "skip": skip, "limit": limit}
+
+        if from_date:
+            query += " AND si.invoice_date >= :from_date"
+            params["from_date"] = from_date
+
+        if to_date:
+            query += " AND si.invoice_date <= :to_date"
+            params["to_date"] = to_date
+
+        if supplier_id:
+            query += " AND si.supplier_id = :supplier_id"
+            params["supplier_id"] = supplier_id
+
+        query += " ORDER BY si.invoice_date DESC LIMIT :limit OFFSET :skip"
+
+        invoices = db.execute(text(query), params).fetchall()
+
+        result = []
+        for invoice in invoices:
+            invoice_dict = dict(invoice._mapping)
+            # Convert Decimal to float for JSON serialization
+            for key in ['subtotal_amount', 'discount_amount', 'taxable_amount',
+                       'cgst_amount', 'sgst_amount', 'igst_amount', 'cess_amount',
+                       'tax_amount', 'invoice_total']:
+                if key in invoice_dict and invoice_dict[key] is not None:
+                    invoice_dict[key] = float(invoice_dict[key])
+            result.append(invoice_dict)
+
+        return result
+
+    except Exception as e:
+        logger.error(f"Error fetching supplier invoices: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 @router.get("/returnable/")
 async def get_returnable_invoices(
     supplier_id: Optional[int] = None,

@@ -41,6 +41,52 @@ interface GSTSummaryData {
   }>;
 }
 
+// TypeScript interfaces for API responses
+interface GSTDashboardData {
+  outputTax?: number;
+  inputCredit?: number;
+  netPayable?: number;
+  taxPayable?: number;
+  inputTax?: number;
+  complianceScore?: number;
+  pending_returns?: number;
+  total_invoices?: number;
+  total_suppliers?: number;
+  recent_activity?: any[];
+  summary?: {
+    total_invoices?: number;
+    total_suppliers?: number;
+  };
+  [key: string]: any;
+}
+
+interface GSTReturnsData {
+  gstr1?: {
+    status?: string;
+    dueDate?: string;
+    amount?: number;
+    filedDate?: string;
+  };
+  gstr3b?: {
+    status?: string;
+    dueDate?: string;
+    amount?: number;
+    filedDate?: string;
+  };
+  gstr2a?: {
+    status?: string;
+    lastUpdated?: string;
+    amount?: number;
+  };
+  [key: string]: any;
+}
+
+interface GSTSettingsData {
+  gstin?: string;
+  is_valid?: boolean;
+  [key: string]: any;
+}
+
 const GSTDashboard: React.FC<GSTDashboardProps> = ({ onNavigateToReports }) => {
   const [selectedPeriod, setSelectedPeriod] = useState('current');
   const [loading, setLoading] = useState(true);
@@ -120,9 +166,9 @@ const GSTDashboard: React.FC<GSTDashboardProps> = ({ onNavigateToReports }) => {
         ])
       ]);
 
-      let gstData = {};
-      let returnsData = {};
-      let settingsData = {};
+      let gstData: GSTDashboardData = {};
+      let returnsData: GSTReturnsData = {};
+      let settingsData: GSTSettingsData = {};
 
       // Handle GST dashboard response
       if (gstDashboardResponse.status === 'fulfilled') {
@@ -253,9 +299,10 @@ const GSTDashboard: React.FC<GSTDashboardProps> = ({ onNavigateToReports }) => {
 
     } catch (err) {
       // Enterprise-grade error handling with comprehensive logging
+      const error = err as Error;
       const errorDetails = {
-        error: err?.message || 'Unknown error',
-        stack: err?.stack,
+        error: error?.message || 'Unknown error',
+        stack: error?.stack,
         period: selectedPeriod,
         timestamp: new Date().toISOString(),
         userAgent: navigator.userAgent,
@@ -277,7 +324,7 @@ const GSTDashboard: React.FC<GSTDashboardProps> = ({ onNavigateToReports }) => {
         } else {
           // No valid offline data - use enterprise-grade zero state
           console.warn(`[GST Dashboard] No valid offline data available. Showing zero state.`);
-          setError(`Unable to load GST dashboard data. Error: ${err?.message || 'Connection failed'}. Please check your connection and try again.`);
+          setError(`Unable to load GST dashboard data. Error: ${(err as Error)?.message || 'Connection failed'}. Please check your connection and try again.`);
 
           setDashboardData({
             currentMonth: {
@@ -337,11 +384,11 @@ const GSTDashboard: React.FC<GSTDashboardProps> = ({ onNavigateToReports }) => {
 
     } catch (error) {
       console.error(`[GST Dashboard] Manual refresh failed:`, {
-        error: error?.message,
+        error: (error as Error)?.message,
         period: selectedPeriod,
         timestamp: new Date().toISOString()
       });
-      setError(`Failed to refresh data: ${error?.message || 'Unknown error'}. Please try again.`);
+      setError(`Failed to refresh data: ${(error as Error)?.message || 'Unknown error'}. Please try again.`);
     } finally {
       setRefreshing(false);
     }

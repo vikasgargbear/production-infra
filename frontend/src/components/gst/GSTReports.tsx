@@ -5,7 +5,7 @@ import {
   Building, Package, Users, Printer, RefreshCw, Loader2, AlertCircle
 } from 'lucide-react';
 import { Button, DatePicker, Card, DataTable } from '../global';
-import { gstApi, invoiceAPI, reportsApi } from '../../services/api';
+import { gstApi, invoiceAPI, purchasesAPI, reportsApi } from '../../services/api';
 import offlineStorage from '../../services/offlineStorage';
 
 interface GSTReportsProps {
@@ -63,6 +63,7 @@ interface ReportType {
 
 const GSTReports: React.FC<GSTReportsProps> = ({ onClose }) => {
   const [selectedReport, setSelectedReport] = useState<string>('gstr-1');
+  const [selectedPeriod, setSelectedPeriod] = useState<string>('current');
   const [dateRange, setDateRange] = useState<DateRange>({
     from: new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split('T')[0],
     to: new Date().toISOString().split('T')[0]
@@ -71,6 +72,17 @@ const GSTReports: React.FC<GSTReportsProps> = ({ onClose }) => {
   const [refreshing, setRefreshing] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   const [reportData, setReportData] = useState<GSTR1Data | null>(null);
+  const [isLoadingData, setIsLoadingData] = useState<boolean>(false);
+  const [purchaseData, setPurchaseData] = useState<any[]>([]);
+  const [inputCreditAmount, setInputCreditAmount] = useState<number>(0);
+  const [inputCreditBreakdown, setInputCreditBreakdown] = useState<{
+    cgst: number;
+    sgst: number;
+    igst: number;
+  }>({ cgst: 0, sgst: 0, igst: 0 });
+  const [hsnSummaryData, setHsnSummaryData] = useState<any[]>([]);
+  const [invoiceDataCache, setInvoiceDataCache] = useState<any[]>([]);
+  const [invoiceCacheKey, setInvoiceCacheKey] = useState<string>('');
 
   const reportTypes: ReportType[] = [
     {
@@ -117,17 +129,112 @@ const GSTReports: React.FC<GSTReportsProps> = ({ onClose }) => {
     }
   ];
 
+  // Calculate date range based on selected period (using Indian Financial Year: April 1 - March 31)
+  const calculateDateRange = (period: string): DateRange => {
+    const now = new Date();
+    let fromDate, toDate;
+
+    if (period === 'current') {
+      // Current month
+      fromDate = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0];
+      toDate = now.toISOString().split('T')[0];
+    } else if (period === 'previous') {
+      // Previous month
+      fromDate = new Date(now.getFullYear(), now.getMonth() - 1, 1).toISOString().split('T')[0];
+      toDate = new Date(now.getFullYear(), now.getMonth(), 0).toISOString().split('T')[0];
+    } else if (period === 'quarter') {
+      // Current financial quarter (based on Indian FY starting April 1)
+      const currentMonth = now.getMonth(); // 0-11
+      const currentYear = now.getFullYear();
+
+      // Determine financial year start
+      const fyStartYear = currentMonth >= 3 ? currentYear : currentYear - 1; // April = month 3
+
+      // Calculate quarter within financial year
+      const fyMonth = currentMonth >= 3 ? currentMonth - 3 : currentMonth + 9; // 0-11 within FY
+      const quarter = Math.floor(fyMonth / 3); // 0-3
+
+      const quarterStartMonth = quarter * 3 + 3; // Convert back to calendar month
+      const quarterStartYear = quarterStartMonth >= 12 ? fyStartYear + 1 : fyStartYear;
+      const adjustedQuarterMonth = quarterStartMonth >= 12 ? quarterStartMonth - 12 : quarterStartMonth;
+
+      fromDate = new Date(quarterStartYear, adjustedQuarterMonth, 1).toISOString().split('T')[0];
+      toDate = now.toISOString().split('T')[0];
+    } else if (period === 'year') {
+      // Current financial year (April 1 to March 31)
+      const currentMonth = now.getMonth(); // 0-11 (April = 3)
+      const currentYear = now.getFullYear();
+
+      if (currentMonth >= 3) {
+        // We're in Apr-Dec, so FY started in April of current year
+        fromDate = new Date(currentYear, 3, 1).toISOString().split('T')[0]; // April 1st current year
+      } else {
+        // We're in Jan-Mar, so FY started in April of previous year
+        fromDate = new Date(currentYear - 1, 3, 1).toISOString().split('T')[0]; // April 1st previous year
+      }
+      toDate = now.toISOString().split('T')[0];
+    } else {
+      // Default to current month
+      fromDate = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0];
+      toDate = now.toISOString().split('T')[0];
+    }
+
+    console.log(`[GST Reports] calculateDateRange for period '${period}' (Indian FY):`, { from: fromDate, to: toDate });
+    return { from: fromDate, to: toDate };
+  };
+
+  // Update date range when period changes and clear cache
   useEffect(() => {
-    loadReportData();
-  }, [selectedReport, dateRange]);
+    if (selectedPeriod !== 'custom') {
+      const newDateRange = calculateDateRange(selectedPeriod);
+      setDateRange(newDateRange);
+    }
+    // Clear cache when date range changes
+    setInvoiceDataCache([]);
+    setInvoiceCacheKey('');
+  }, [selectedPeriod]);
+
+  useEffect(() => {
+    const timeoutId = setTimeout(() => {
+      loadReportData();
+    }, 300); // Debounce to prevent rapid successive calls
+
+    return () => clearTimeout(timeoutId);
+  }, [selectedReport, dateRange.from, dateRange.to]); // Use specific date values instead of the entire dateRange object
 
   const loadReportData = async (): Promise<void> => {
     console.log('[GST Reports] loadReportData called, selectedReport:', selectedReport);
+
+    // Prevent multiple simultaneous loads
+    if (isLoadingData) {
+      console.log('[GST Reports] Already loading data, skipping...');
+      return;
+    }
+
     setLoading(true);
+    setIsLoadingData(true);
     setError(null);
 
     try {
       let data: GSTR1Data;
+
+      // Load additional data in parallel for better performance
+      const additionalDataPromises = [];
+
+      // Load purchase data for Input Credit calculation (for GSTR-3B and other reports that need it)
+      if (['gstr-3b', 'gstr-2b', 'payable'].includes(selectedReport)) {
+        additionalDataPromises.push(loadPurchaseInvoicesForInputCredit());
+      }
+
+      // Load HSN summary data for HSN report
+      if (selectedReport === 'hsn-summary') {
+        additionalDataPromises.push(loadAdditionalHSNData());
+      }
+
+      // Load all additional data in parallel
+      if (additionalDataPromises.length > 0) {
+        await Promise.all(additionalDataPromises);
+      }
 
       switch (selectedReport) {
         case 'gstr-1':
@@ -180,6 +287,7 @@ const GSTReports: React.FC<GSTReportsProps> = ({ onClose }) => {
       }
     } finally {
       setLoading(false);
+      setIsLoadingData(false);
     }
   };
 
@@ -205,84 +313,208 @@ const GSTReports: React.FC<GSTReportsProps> = ({ onClose }) => {
     }
   };
 
-  const loadGSTR1FromInvoices = async (): Promise<GSTR1Data> => {
+  const loadInvoiceDataOnce = async (): Promise<any[]> => {
+    const currentCacheKey = `${dateRange.from}_${dateRange.to}`;
+
+    // Return cached data if available and valid
+    if (invoiceCacheKey === currentCacheKey && invoiceDataCache.length > 0) {
+      console.log(`[GST Reports] Using cached invoice data: ${invoiceDataCache.length} invoices`);
+      return invoiceDataCache;
+    }
+
     try {
-      // Get current month invoice data using the search API
-      const currentDate = new Date();
-      const startOfMonth = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1).toISOString().split('T')[0];
-      const endOfMonth = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0).toISOString().split('T')[0];
-
-      console.log(`[GST Reports] Fetching invoices from ${startOfMonth} to ${endOfMonth}`);
-
-      // Use search method with date filters (getAll doesn't exist)
-      let response;
-      try {
-        response = await invoiceAPI.search('', {
-          dateFrom: startOfMonth,
-          dateTo: endOfMonth,
-          limit: 100
-        });
-        console.log('[GST Reports] Invoice API call successful');
-      } catch (apiError) {
-        console.error('[GST Reports] Invoice API call failed:', apiError);
-        // Try fallback to dashboard data
-        const dashboardResponse = await gstApi.dashboard.getSummary('current');
-        return transformDashboardToGSTR1(dashboardResponse);
-      }
+      console.log(`[GST Reports] Loading invoice data for period ${dateRange.from} to ${dateRange.to}`);
+      const response = await invoiceAPI.search('', {
+        dateFrom: dateRange.from,
+        dateTo: dateRange.to,
+        limit: 5000
+      });
 
       const invoices = Array.isArray(response) ? response :
                        response?.invoices || response?.data?.invoices || [];
 
-      console.log('[GST Reports] API Response:', response);
-      console.log('[GST Reports] Extracted invoices:', invoices);
+      console.log(`[GST Reports] Loaded ${invoices.length} invoices - caching for reuse`);
+      setInvoiceDataCache(invoices);
+      setInvoiceCacheKey(currentCacheKey);
+      return invoices;
+    } catch (err) {
+      console.error('[GST Reports] Failed to load invoice data:', err);
+      return [];
+    }
+  };
 
-      // Log the GST amounts from the first few invoices
-      if (invoices.length > 0) {
-        console.log('[GST Reports] Sample invoice GST data:', {
-          invoice1: invoices[0] ? {
-            id: invoices[0].invoice_id,
-            cgst: invoices[0].cgst_amount,
-            sgst: invoices[0].sgst_amount,
-            igst: invoices[0].igst_amount
-          } : null,
-          invoice2: invoices[1] ? {
-            id: invoices[1].invoice_id,
-            cgst: invoices[1].cgst_amount,
-            sgst: invoices[1].sgst_amount,
-            igst: invoices[1].igst_amount
-          } : null
+  const loadAdditionalHSNData = async (): Promise<void> => {
+    try {
+      console.log(`[GST Reports] Loading HSN summary data from cached invoices`);
+
+      // Use cached invoice data
+      const invoices = await loadInvoiceDataOnce();
+
+      // Group by HSN code and calculate totals
+      const hsnGroups: { [hsn: string]: any } = {};
+
+      invoices.forEach(invoice => {
+        const items = invoice.items || [];
+        items.forEach((item: any) => {
+          const hsn = item.hsn_code || item.hsn || item.product_hsn || 'N/A';
+          const quantity = item.quantity || 0;
+          const rate = item.rate || item.unit_price || item.price || 0;
+          const taxableValue = quantity * rate;
+          const taxRate = item.tax_percent || item.gst_percent || 18;
+          const taxAmount = (taxableValue * taxRate) / 100;
+
+          if (!hsnGroups[hsn]) {
+            hsnGroups[hsn] = {
+              hsn_code: hsn,
+              description: item.product_name || item.name || 'Product',
+              quantity: 0,
+              taxable_value: 0,
+              tax_rate: taxRate,
+              tax_amount: 0
+            };
+          }
+
+          hsnGroups[hsn].quantity += quantity;
+          hsnGroups[hsn].taxable_value += taxableValue;
+          hsnGroups[hsn].tax_amount += taxAmount;
         });
+      });
+
+      const hsnArray = Object.values(hsnGroups);
+      console.log(`[GST Reports] Calculated HSN summary for ${hsnArray.length} HSN codes`);
+      setHsnSummaryData(hsnArray);
+
+    } catch (err) {
+      console.error('[GST Reports] Failed to load HSN summary data:', err);
+      setHsnSummaryData([]);
+    }
+  };
+
+  const loadPurchaseInvoicesForInputCredit = async (): Promise<void> => {
+    try {
+      console.log(`[GST Reports] Fetching purchase invoices from ${dateRange.from} to ${dateRange.to} for Input Credit calculation`);
+
+      // Use purchasesAPI search with date filters
+      const response = await purchasesAPI.search('', {
+        dateFrom: dateRange.from,
+        dateTo: dateRange.to,
+        limit: 5000
+      });
+
+      const purchases = Array.isArray(response) ? response :
+                       response?.data?.purchases || response?.data || [];
+
+      console.log(`[GST Reports] Found ${purchases.length} purchase invoices for Input Credit calculation`);
+
+      // Calculate total Input Credit from purchase invoices
+      let totalInputCredit = 0;
+      let totalCGSTCredit = 0;
+      let totalSGSTCredit = 0;
+      let totalIGSTCredit = 0;
+
+      purchases.forEach(purchase => {
+        // Get GST amounts from purchase data
+        const cgst = purchase.cgst_amount || 0;
+        const sgst = purchase.sgst_amount || 0;
+        const igst = purchase.igst_amount || 0;
+
+        // Input Credit is the total GST paid on purchases
+        totalCGSTCredit += cgst;
+        totalSGSTCredit += sgst;
+        totalIGSTCredit += igst;
+        totalInputCredit += cgst + sgst + igst;
+      });
+
+      console.log(`[GST Reports] Calculated Input Credit: ₹${totalInputCredit.toLocaleString()} (CGST: ₹${totalCGSTCredit}, SGST: ₹${totalSGSTCredit}, IGST: ₹${totalIGSTCredit})`);
+
+      setPurchaseData(purchases);
+      setInputCreditAmount(totalInputCredit);
+      setInputCreditBreakdown({
+        cgst: totalCGSTCredit,
+        sgst: totalSGSTCredit,
+        igst: totalIGSTCredit
+      });
+
+    } catch (err) {
+      console.error('[GST Reports] Failed to load purchase invoices for Input Credit:', err);
+      // Set to 0 instead of using fallback calculation
+      setInputCreditAmount(0);
+      setPurchaseData([]);
+      setInputCreditBreakdown({ cgst: 0, sgst: 0, igst: 0 });
+    }
+  };
+
+  const loadGSTR1FromInvoices = async (): Promise<GSTR1Data> => {
+    try {
+      // Use cached invoice data to avoid duplicate API calls
+      console.log(`[GST Reports] Loading GSTR1 data from cached invoices`);
+
+      let invoices;
+      try {
+        invoices = await loadInvoiceDataOnce();
+        console.log('[GST Reports] Using cached invoice data for GSTR1');
+      } catch (apiError) {
+        console.error('[GST Reports] Failed to load invoice data:', apiError);
+        // Try fallback to dashboard data
+        const dashboardResponse = await gstApi.dashboard.getSummary(selectedPeriod);
+        return transformDashboardToGSTR1(dashboardResponse);
+      }
+
+      console.log(`[GST Reports] Found ${invoices.length} invoices for period ${dateRange.from} to ${dateRange.to}`);
+
+      // Debug: Show unique customers and their names
+      const uniqueCustomers = [...new Set(invoices.map(inv => inv.customer_id))];
+      const customerSample = uniqueCustomers.map(id => {
+        const sampleInv = invoices.find(inv => inv.customer_id === id);
+        return `${sampleInv?.customer_name} (ID: ${id})`;
+      });
+      console.log(`[GST Reports] Unique customers: ${uniqueCustomers.length}`);
+      console.log(`[GST Reports] Customer list: ${customerSample.join(', ')}`);
+
+      // Quick sample check for debugging
+      if (invoices.length > 0) {
+        console.log(`[GST Reports] Sample: Invoice ${invoices[0].invoice_id} - ${invoices[0].customer_name} (ID: ${invoices[0].customer_id})`);
       }
 
       if (invoices.length > 0) {
-        console.log('[GST Reports] Found invoices:', invoices.length);
-        console.log('[GST Reports] First invoice sample:', invoices[0]);
 
         // Try to fetch customer data but don't fail if it doesn't work
         let customerData = {};
         try {
           const customersApi = await import('../../services/api').then(m => m.customersApi);
           const customerIds = [...new Set(invoices.map(inv => inv.customer_id).filter(Boolean))];
-          console.log('[GST Reports] Customer IDs to fetch:', customerIds);
+          console.log(`[GST Reports] Fetching ${customerIds.length} customers: ${customerIds.join(', ')}`);
+
+          let customersWithGSTIN = 0;
+          let customersWithoutGSTIN = 0;
 
           for (const customerId of customerIds) {
             try {
               const customer = await customersApi.getById(customerId);
-              console.log(`[GST Reports] Customer ${customerId}:`, { gstin: customer?.gstin, gst_number: customer?.gst_number });
-              // Fetch ALL customers, not just those with GSTIN
-              if (customer) {
-                customerData[customerId] = customer;
-                console.log(`[GST Reports] Added customer ${customerId} to customerData, GSTIN:`, customer.gstin || customer.gst_number || 'Not Registered');
+              // Extract the actual customer data from the API response
+              const customerData_obj = customer?.data || customer;
+
+              if (customerData_obj) {
+                customerData[customerId] = customerData_obj;
+                const possibleGSTIN = customerData_obj.gstin || customerData_obj.gst_number || customerData_obj.gst_no || customerData_obj.gstin_number || customerData_obj.tax_number || customerData_obj.customer_gstin;
+
+                if (possibleGSTIN) {
+                  customersWithGSTIN++;
+                  console.log(`[GST Reports] ${customerData_obj.customer_name} (${customerId}): GSTIN: ${possibleGSTIN}`);
+                } else {
+                  customersWithoutGSTIN++;
+                  console.log(`[GST Reports] ${customerData_obj.customer_name} (${customerId}): NO GSTIN`);
+                }
               }
             } catch (err) {
               console.warn(`[GST Reports] Failed to fetch customer ${customerId}:`, err);
               // Still process the invoice even without customer details
             }
           }
+          console.log(`[GST Reports] Customer Summary: ${customersWithGSTIN} with GSTIN, ${customersWithoutGSTIN} without GSTIN`);
         } catch (err) {
           console.warn('[GST Reports] Failed to fetch customer data, continuing without it:', err);
         }
-        console.log('[GST Reports] Final customerData:', customerData);
 
         return transformInvoicesToGSTR1(invoices, customerData);
       }
@@ -314,17 +546,12 @@ const GSTReports: React.FC<GSTReportsProps> = ({ onClose }) => {
 
   const loadGSTR3BData = async (): Promise<GSTR1Data> => {
     try {
-      const response = await gstApi.reports.gstr3b({
-        from_date: dateRange.from,
-        to_date: dateRange.to
-      });
-
-      if (response) {
-        return transformGSTR3BResponse(response);
-      }
-
-      throw new Error('Invalid response format from GSTR-3B API');
+      // GSTR-3B uses the same invoice data as GSTR-1 but formatted differently
+      // For now, let's use the same data source as GSTR-1
+      console.log('[GST Reports] Loading GSTR-3B data from invoices...');
+      return await loadGSTR1FromInvoices();
     } catch (err) {
+      console.error('[GST Reports] GSTR-3B loading failed:', err);
       throw new Error('Unable to load GSTR-3B data');
     }
   };
@@ -365,17 +592,41 @@ const GSTReports: React.FC<GSTReportsProps> = ({ onClose }) => {
 
   const loadPartyWiseData = async (): Promise<GSTR1Data> => {
     try {
-      const response = await reportsApi.tax.gstSummary({
-        from_date: dateRange.from,
-        to_date: dateRange.to,
-        group_by: 'party'
+      // Use real invoice data for party-wise GST summary
+      const invoices = await loadInvoiceDataOnce();
+
+      // Group by party and calculate GST amounts
+      const partyGroups: { [key: string]: any } = {};
+      invoices.forEach(invoice => {
+        const partyName = invoice.customer_name || 'Unknown Party';
+        if (!partyGroups[partyName]) {
+          partyGroups[partyName] = {
+            party_name: partyName,
+            gstin: invoice.customer_gstin || '',
+            total_taxable_value: 0,
+            total_cgst: 0,
+            total_sgst: 0,
+            total_igst: 0,
+            total_tax: 0
+          };
+        }
+
+        const group = partyGroups[partyName];
+        group.total_taxable_value += invoice.subtotal_amount || 0;
+        group.total_cgst += invoice.cgst_amount || 0;
+        group.total_sgst += invoice.sgst_amount || 0;
+        group.total_igst += invoice.igst_amount || 0;
+        group.total_tax += (invoice.cgst_amount || 0) + (invoice.sgst_amount || 0) + (invoice.igst_amount || 0);
       });
-      
-      if (response.data) {
-        return transformPartyWiseResponse(response.data);
-      }
-      
-      throw new Error('Invalid response format from party-wise API');
+
+      const partyWiseData = Object.values(partyGroups);
+
+      return {
+        b2b: partyWiseData,
+        b2c: [],
+        hsn: [],
+        exempted: []
+      };
     } catch (err) {
       // Return empty data structure instead of mock data
       return {
@@ -398,17 +649,34 @@ const GSTReports: React.FC<GSTReportsProps> = ({ onClose }) => {
 
   const loadGSTPayableData = async (): Promise<GSTR1Data> => {
     try {
-      const response = await reportsApi.tax.gstSummary({
-        from_date: dateRange.from,
-        to_date: dateRange.to,
-        type: 'payable'
+      // Use real invoice data for GST payable calculation
+      const invoices = await loadInvoiceDataOnce();
+
+      // Calculate total payable GST
+      let totalTaxableValue = 0;
+      let totalCGST = 0;
+      let totalSGST = 0;
+      let totalIGST = 0;
+
+      invoices.forEach(invoice => {
+        totalTaxableValue += invoice.subtotal_amount || 0;
+        totalCGST += invoice.cgst_amount || 0;
+        totalSGST += invoice.sgst_amount || 0;
+        totalIGST += invoice.igst_amount || 0;
       });
-      
-      if (response.data) {
-        return transformGSTPayableResponse(response.data);
-      }
-      
-      throw new Error('Invalid response format from GST payable API');
+
+      return {
+        b2b: [{
+          total_taxable_value: totalTaxableValue,
+          total_cgst: totalCGST,
+          total_sgst: totalSGST,
+          total_igst: totalIGST,
+          total_tax: totalCGST + totalSGST + totalIGST
+        }],
+        b2c: [],
+        hsn: [],
+        exempted: []
+      };
     } catch (err) {
       // Return empty data structure instead of mock data
       return {
@@ -492,33 +760,14 @@ const GSTReports: React.FC<GSTReportsProps> = ({ onClose }) => {
       const taxableValue = invoice.final_amount || invoice.total_amount || invoice.grand_total || 0;
       totalTaxableValue += taxableValue;
 
-      // The invoice list API doesn't return GST amounts, so we need to calculate them
-      // For now, assuming 18% GST (9% CGST + 9% SGST) is included in the final amount
-      // Actual calculation: taxable = final_amount / 1.18, gst = final_amount - taxable
-      let cgst = invoice.cgst_amount || 0;
-      let sgst = invoice.sgst_amount || 0;
-      let igst = invoice.igst_amount || 0;
+      // Get GST amounts from invoice data (backend now provides these)
+      const cgst = invoice.cgst_amount || 0;
+      const sgst = invoice.sgst_amount || 0;
+      const igst = invoice.igst_amount || 0;
 
-      // If no GST amounts provided, calculate from final amount (assuming GST inclusive price)
-      if (cgst === 0 && sgst === 0 && igst === 0 && invoice.final_amount > 0) {
-        // Calculate assuming 18% GST included in final amount
-        const taxableAmount = invoice.final_amount / 1.18;
-        const totalGST = invoice.final_amount - taxableAmount;
-        // Split equally between CGST and SGST (9% each)
-        cgst = totalGST / 2;
-        sgst = totalGST / 2;
-      }
-
-      // Debug log for first few invoices
-      if (totalInvoices <= 3) {
-        console.log(`[GST Reports] Invoice ${invoice.invoice_id} GST amounts:`, {
-          cgst_amount: invoice.cgst_amount,
-          sgst_amount: invoice.sgst_amount,
-          igst_amount: invoice.igst_amount,
-          parsed_cgst: cgst,
-          parsed_sgst: sgst,
-          parsed_igst: igst
-        });
+      // Log GST amounts for debugging (first invoice only)
+      if (totalInvoices === 1) {
+        console.log(`[GST Reports] GST amounts sample - CGST: ₹${cgst}, SGST: ₹${sgst}, IGST: ₹${igst}`);
       }
 
       totalCGST += cgst;
@@ -527,14 +776,50 @@ const GSTReports: React.FC<GSTReportsProps> = ({ onClose }) => {
 
       // Get customer GSTIN from customerData based on customer_id
       const customer = customerData[invoice.customer_id];
-      const customerGSTIN = customer?.gstin || customer?.gst_number || invoice.customer_gstin || invoice.gstin;
+      const invoiceCustomerName = invoice.customer_name || 'Unknown';
+      const masterCustomerName = customer?.customer_name || 'Unknown';
 
-      console.log(`[GST Reports] Processing invoice ${invoice.invoice_id} for customer ${invoice.customer_id}: GSTIN = ${customerGSTIN}`);
+      // Only use the fetched customer GSTIN if the invoice customer name matches the master customer name
+      // This prevents applying wrong GSTIN to invoices with mismatched customer names
+      let customerGSTIN;
+      if (invoiceCustomerName === masterCustomerName) {
+        // Names match - use the customer's GSTIN
+        customerGSTIN = customer?.gstin ||
+                       customer?.gst_number ||
+                       customer?.gst_no ||
+                       customer?.gstin_number ||
+                       customer?.tax_number ||
+                       customer?.customer_gstin ||
+                       invoice.customer_gstin ||
+                       invoice.gstin;
+      } else {
+        // Names don't match - only use invoice-level GSTIN fields (usually null)
+        customerGSTIN = invoice.customer_gstin || invoice.gstin;
+        console.log(`[GST Reports] Name mismatch - Invoice: "${invoiceCustomerName}" vs Master: "${masterCustomerName}" - using invoice GSTIN only`);
+      }
 
-      // Show ALL invoices - if they have GSTIN, show it, otherwise show as "Not Registered"
-      // This properly shows all transactions, not just B2B
+      const customerName = invoiceCustomerName;
+
+      // Only log first few invoices and unique customers for debugging
+      if (totalInvoices <= 5) {
+        console.log(`[GST Reports] Invoice ${invoice.invoice_id}: ${customerName} (ID: ${invoice.customer_id}) - GSTIN: ${customerGSTIN || 'None'}`);
+      }
+
+      // Show ALL customers in the main table - both with and without GSTIN
       const displayGSTIN = customerGSTIN || 'Not Registered';
-      const existingEntry = b2bInvoices.find(b => b.gstin === displayGSTIN);
+
+      // Group by customer name AND GSTIN to handle data inconsistencies
+      // This ensures that even if the same customer_id has different names in different invoices,
+      // they appear as separate entries (which reflects the invoice-level data)
+      const existingEntry = b2bInvoices.find(b => {
+        if (customerGSTIN) {
+          // Customers with GSTIN: group by both GSTIN AND name to handle data inconsistencies
+          return b.gstin === displayGSTIN && b.name === customerName;
+        } else {
+          // Customers without GSTIN: group by name only
+          return b.gstin === displayGSTIN && b.name === customerName;
+        }
+      });
 
       if (existingEntry) {
         existingEntry.invoices++;
@@ -543,9 +828,10 @@ const GSTReports: React.FC<GSTReportsProps> = ({ onClose }) => {
         existingEntry.sgst += sgst;
         existingEntry.igst += igst;
       } else {
+        // Always add to the main B2B table (whether they have GSTIN or not)
         b2bInvoices.push({
           gstin: displayGSTIN,
-          name: customer?.customer_name || invoice.customer_name || 'Unknown',
+          name: customerName,
           invoices: 1,
           taxableValue,
           cgst,
@@ -573,9 +859,8 @@ const GSTReports: React.FC<GSTReportsProps> = ({ onClose }) => {
       }
     });
 
-    console.log('[GST Reports] B2B invoices found:', b2bInvoices.length);
-    console.log('[GST Reports] B2C small count:', b2cSmall.count);
-    console.log('[GST Reports] B2C large count:', b2cLarge.count);
+    console.log(`[GST Reports] Summary: ${b2bInvoices.length} B2B parties, ${b2cSmall.count + b2cLarge.count} B2C invoices`);
+    console.log(`[GST Reports] Final B2B parties:`, b2bInvoices.map(b => `${b.name} (GSTIN: ${b.gstin})`));
 
     return {
       b2b: b2bInvoices,
@@ -622,25 +907,59 @@ const GSTReports: React.FC<GSTReportsProps> = ({ onClose }) => {
     setRefreshing(false);
   };
 
+  const getCurrentReportData = async () => {
+    switch (selectedReport) {
+      case 'gstr-1':
+        return await loadGSTR1Data();
+      case 'gstr-3b':
+        return await loadGSTR3BData();
+      case 'gstr-2b':
+        return await loadGSTR2BData();
+      case 'party-wise':
+        return await loadPartyWiseData();
+      case 'gst-payable':
+        return await loadGSTPayableData();
+      default:
+        return null;
+    }
+  };
+
   const handleExport = async (format: 'excel' | 'pdf'): Promise<void> => {
     try {
       setLoading(true);
-      
-      const response = await reportsApi.export(selectedReport, {
-        from_date: dateRange.from,
-        to_date: dateRange.to
-      }, format);
-      
-      // Create download link
-      const url = window.URL.createObjectURL(new Blob([response.data]));
+
+      // Generate CSV export from current data
+      const data = await getCurrentReportData();
+      if (!data || (Array.isArray(data.b2b) && data.b2b.length === 0)) {
+        alert('No data available to export. Please ensure data is loaded first.');
+        return;
+      }
+
+      // Create CSV content
+      let csvContent = '';
+      if (selectedReport === 'gstr-1') {
+        csvContent = 'Customer Name,GSTIN,Invoice No,Invoice Date,Taxable Value,CGST,SGST,IGST,Total Tax\n';
+        data.b2b.forEach((item: any) => {
+          csvContent += `"${item.party_name || ''}","${item.gstin || ''}","${item.invoice_no || ''}","${item.invoice_date || ''}",${item.total_taxable_value || 0},${item.total_cgst || 0},${item.total_sgst || 0},${item.total_igst || 0},${item.total_tax || 0}\n`;
+        });
+      } else if (selectedReport === 'hsn-summary') {
+        csvContent = 'HSN Code,Description,UQC,Total Quantity,Total Value,Taxable Value,CGST,SGST,IGST,Total Tax\n';
+        currentHSNData.forEach((item: any) => {
+          csvContent += `"${item.hsn_code}","${item.description}","${item.uqc}",${item.total_quantity},${item.total_value},${item.taxable_value},${item.cgst_amount},${item.sgst_amount},${item.igst_amount},${item.total_tax}\n`;
+        });
+      }
+
+      // Create and download file
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const url = window.URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
-      link.setAttribute('download', `${selectedReport}-${dateRange.from}-${dateRange.to}.${format}`);
+      link.setAttribute('download', `${selectedReport}-${dateRange.from}-${dateRange.to}.csv`);
       document.body.appendChild(link);
       link.click();
       link.remove();
       window.URL.revokeObjectURL(url);
-      
+
     } catch (err) {
       alert(`Export failed: ${err instanceof Error ? err.message : 'Unknown error'}`);
     } finally {
@@ -835,7 +1154,7 @@ const GSTReports: React.FC<GSTReportsProps> = ({ onClose }) => {
               <div className="flex items-center justify-between p-4">
                 <div>
                   <p className="text-sm text-gray-600">Input Credit</p>
-                  <p className="text-2xl font-bold text-blue-600">₹{(reportData.summary.totalTax * 0.3).toLocaleString()}</p>
+                  <p className="text-2xl font-bold text-blue-600">₹{inputCreditAmount.toLocaleString()}</p>
                 </div>
                 <TrendingDown className="w-8 h-8 text-blue-500" />
               </div>
@@ -845,7 +1164,7 @@ const GSTReports: React.FC<GSTReportsProps> = ({ onClose }) => {
               <div className="flex items-center justify-between p-4">
                 <div>
                   <p className="text-sm text-gray-600">Net Payable</p>
-                  <p className="text-2xl font-bold text-red-600">₹{(reportData.summary.totalTax * 0.7).toLocaleString()}</p>
+                  <p className="text-2xl font-bold text-red-600">₹{Math.max(0, reportData.summary.totalTax - inputCreditAmount).toLocaleString()}</p>
                 </div>
                 <IndianRupee className="w-8 h-8 text-red-500" />
               </div>
@@ -883,23 +1202,23 @@ const GSTReports: React.FC<GSTReportsProps> = ({ onClose }) => {
               <div className="space-y-3">
                 <div className="flex justify-between py-2 border-b">
                   <span className="text-gray-600">Available ITC:</span>
-                  <span className="font-medium">₹{(reportData.summary.totalTax * 0.3).toLocaleString()}</span>
+                  <span className="font-medium">₹{inputCreditAmount.toLocaleString()}</span>
                 </div>
                 <div className="flex justify-between py-2">
                   <span className="text-gray-600">CGST Credit:</span>
-                  <span className="font-medium">₹{(reportData.summary.totalCGST * 0.3).toLocaleString()}</span>
+                  <span className="font-medium">₹{inputCreditBreakdown.cgst.toLocaleString()}</span>
                 </div>
                 <div className="flex justify-between py-2">
                   <span className="text-gray-600">SGST Credit:</span>
-                  <span className="font-medium">₹{(reportData.summary.totalSGST * 0.3).toLocaleString()}</span>
+                  <span className="font-medium">₹{inputCreditBreakdown.sgst.toLocaleString()}</span>
                 </div>
                 <div className="flex justify-between py-2">
                   <span className="text-gray-600">IGST Credit:</span>
-                  <span className="font-medium">₹{(reportData.summary.totalIGST * 0.3).toLocaleString()}</span>
+                  <span className="font-medium">₹{inputCreditBreakdown.igst.toLocaleString()}</span>
                 </div>
                 <div className="flex justify-between py-2 border-t font-bold">
                   <span>Total ITC:</span>
-                  <span>₹{(reportData.summary.totalTax * 0.3).toLocaleString()}</span>
+                  <span>₹{inputCreditAmount.toLocaleString()}</span>
                 </div>
               </div>
             </Card>
@@ -938,7 +1257,7 @@ const GSTReports: React.FC<GSTReportsProps> = ({ onClose }) => {
               <div className="flex items-center justify-between p-4">
                 <div>
                   <p className="text-sm text-gray-600">Input Tax</p>
-                  <p className="text-2xl font-bold text-gray-900">₹{(reportData.summary.totalTax * 0.3).toLocaleString()}</p>
+                  <p className="text-2xl font-bold text-gray-900">₹{inputCreditAmount.toLocaleString()}</p>
                 </div>
                 <TrendingDown className="w-8 h-8 text-purple-500" />
               </div>
@@ -948,7 +1267,7 @@ const GSTReports: React.FC<GSTReportsProps> = ({ onClose }) => {
               <div className="flex items-center justify-between p-4">
                 <div>
                   <p className="text-sm text-gray-600">ITC Available</p>
-                  <p className="text-2xl font-bold text-gray-900">₹{(reportData.summary.totalTax * 0.3).toLocaleString()}</p>
+                  <p className="text-2xl font-bold text-gray-900">₹{inputCreditAmount.toLocaleString()}</p>
                 </div>
                 <BarChart3 className="w-8 h-8 text-amber-500" />
               </div>
@@ -967,11 +1286,11 @@ const GSTReports: React.FC<GSTReportsProps> = ({ onClose }) => {
                   <p className="text-sm text-green-600">Taxable Value</p>
                 </div>
                 <div className="bg-purple-50 p-4 rounded-lg">
-                  <p className="text-2xl font-bold text-purple-600">₹{(reportData.summary.totalTax * 0.3).toLocaleString()}</p>
+                  <p className="text-2xl font-bold text-purple-600">₹{inputCreditAmount.toLocaleString()}</p>
                   <p className="text-sm text-purple-600">Total Tax</p>
                 </div>
                 <div className="bg-amber-50 p-4 rounded-lg">
-                  <p className="text-2xl font-bold text-amber-600">₹{(reportData.summary.totalTax * 0.3).toLocaleString()}</p>
+                  <p className="text-2xl font-bold text-amber-600">₹{inputCreditAmount.toLocaleString()}</p>
                   <p className="text-sm text-amber-600">ITC Eligible</p>
                 </div>
               </div>
@@ -991,7 +1310,7 @@ const GSTReports: React.FC<GSTReportsProps> = ({ onClose }) => {
               <div className="flex items-center justify-between p-4">
                 <div>
                   <p className="text-sm text-gray-600">HSN Codes</p>
-                  <p className="text-2xl font-bold text-gray-900">15</p>
+                  <p className="text-2xl font-bold text-gray-900">{hsnSummaryData.length}</p>
                 </div>
                 <Package className="w-8 h-8 text-blue-500" />
               </div>
@@ -1001,7 +1320,7 @@ const GSTReports: React.FC<GSTReportsProps> = ({ onClose }) => {
               <div className="flex items-center justify-between p-4">
                 <div>
                   <p className="text-sm text-gray-600">Total Qty</p>
-                  <p className="text-2xl font-bold text-gray-900">1,234</p>
+                  <p className="text-2xl font-bold text-gray-900">{hsnSummaryData.reduce((sum, hsn) => sum + hsn.quantity, 0).toLocaleString()}</p>
                 </div>
                 <BarChart3 className="w-8 h-8 text-green-500" />
               </div>
@@ -1011,7 +1330,7 @@ const GSTReports: React.FC<GSTReportsProps> = ({ onClose }) => {
               <div className="flex items-center justify-between p-4">
                 <div>
                   <p className="text-sm text-gray-600">Total Value</p>
-                  <p className="text-2xl font-bold text-gray-900">₹{reportData.summary.totalTaxableValue.toLocaleString()}</p>
+                  <p className="text-2xl font-bold text-gray-900">₹{hsnSummaryData.reduce((sum, hsn) => sum + hsn.taxable_value, 0).toLocaleString()}</p>
                 </div>
                 <IndianRupee className="w-8 h-8 text-purple-500" />
               </div>
@@ -1032,16 +1351,25 @@ const GSTReports: React.FC<GSTReportsProps> = ({ onClose }) => {
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
-                  {['3004', '3003', '2106', '1701', '0901'].map((hsn, index) => (
+                  {hsnSummaryData.length > 0 ? hsnSummaryData.map((hsn, index) => (
                     <tr key={index} className="hover:bg-gray-50">
-                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{hsn}</td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">Medical Products</td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 text-center">{Math.floor(Math.random() * 500) + 50}</td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 text-right">₹{(Math.floor(Math.random() * 50000) + 10000).toLocaleString()}</td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 text-center">18%</td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 text-right">₹{(Math.floor(Math.random() * 9000) + 1800).toLocaleString()}</td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{hsn.hsn_code}</td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{hsn.description}</td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 text-center">{hsn.quantity.toLocaleString()}</td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 text-right">₹{hsn.taxable_value.toLocaleString()}</td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 text-center">{hsn.tax_rate}%</td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 text-right">₹{hsn.tax_amount.toLocaleString()}</td>
                     </tr>
-                  ))}
+                  )) : (
+                    <tr>
+                      <td colSpan={6} className="px-6 py-8 text-center text-gray-500">
+                        <div className="text-sm">
+                          <p className="font-medium">No HSN data found</p>
+                          <p className="text-xs mt-1">No invoice items with HSN codes found for this period</p>
+                        </div>
+                      </td>
+                    </tr>
+                  )}
                 </tbody>
               </table>
             </div>
@@ -1159,7 +1487,7 @@ const GSTReports: React.FC<GSTReportsProps> = ({ onClose }) => {
               <div className="flex items-center justify-between p-4">
                 <div>
                   <p className="text-sm text-gray-600">Input Credit</p>
-                  <p className="text-2xl font-bold text-blue-600">₹{(reportData.summary.totalTax * 0.3).toLocaleString()}</p>
+                  <p className="text-2xl font-bold text-blue-600">₹{inputCreditAmount.toLocaleString()}</p>
                   <p className="text-xs text-gray-500">ITC Available</p>
                 </div>
                 <TrendingDown className="w-8 h-8 text-blue-500" />
@@ -1170,7 +1498,7 @@ const GSTReports: React.FC<GSTReportsProps> = ({ onClose }) => {
               <div className="flex items-center justify-between p-4">
                 <div>
                   <p className="text-sm text-gray-600">Net Payable</p>
-                  <p className="text-2xl font-bold text-green-600">₹{(reportData.summary.totalTax * 0.7).toLocaleString()}</p>
+                  <p className="text-2xl font-bold text-green-600">₹{Math.max(0, reportData.summary.totalTax - inputCreditAmount).toLocaleString()}</p>
                   <p className="text-xs text-gray-500">Final Liability</p>
                 </div>
                 <IndianRupee className="w-8 h-8 text-green-500" />
@@ -1208,19 +1536,19 @@ const GSTReports: React.FC<GSTReportsProps> = ({ onClose }) => {
                   <div className="space-y-2 text-sm">
                     <div className="flex justify-between">
                       <span>CGST Credit:</span>
-                      <span>₹{(reportData.summary.totalCGST * 0.3).toLocaleString()}</span>
+                      <span>₹{inputCreditBreakdown.cgst.toLocaleString()}</span>
                     </div>
                     <div className="flex justify-between">
                       <span>SGST Credit:</span>
-                      <span>₹{(reportData.summary.totalSGST * 0.3).toLocaleString()}</span>
+                      <span>₹{inputCreditBreakdown.sgst.toLocaleString()}</span>
                     </div>
                     <div className="flex justify-between">
                       <span>IGST Credit:</span>
-                      <span>₹{(reportData.summary.totalIGST * 0.3).toLocaleString()}</span>
+                      <span>₹{inputCreditBreakdown.igst.toLocaleString()}</span>
                     </div>
                     <div className="flex justify-between font-semibold border-t pt-2">
                       <span>Total:</span>
-                      <span>₹{(reportData.summary.totalTax * 0.3).toLocaleString()}</span>
+                      <span>₹{inputCreditAmount.toLocaleString()}</span>
                     </div>
                   </div>
                 </div>
@@ -1231,7 +1559,7 @@ const GSTReports: React.FC<GSTReportsProps> = ({ onClose }) => {
               <div className="space-y-4">
                 <div className="bg-green-50 p-6 rounded-lg text-center">
                   <h3 className="text-lg font-semibold text-green-800">Net Tax Payable</h3>
-                  <p className="text-3xl font-bold text-green-600 my-2">₹{(reportData.summary.totalTax * 0.7).toLocaleString()}</p>
+                  <p className="text-3xl font-bold text-green-600 my-2">₹{Math.max(0, reportData.summary.totalTax - inputCreditAmount).toLocaleString()}</p>
                   <p className="text-sm text-green-600">To be paid to Government</p>
                 </div>
 
@@ -1305,22 +1633,50 @@ const GSTReports: React.FC<GSTReportsProps> = ({ onClose }) => {
       {/* Filters */}
       <div className="bg-white border-b border-gray-200 px-6 py-4">
         <div className="flex items-center space-x-4">
+          <div className="flex items-center space-x-3">
+            <select
+              value={selectedPeriod}
+              onChange={(e) => {
+                setSelectedPeriod(e.target.value);
+                if (e.target.value === 'custom') {
+                  // Keep current date range for custom
+                } else {
+                  // Date range will be updated by useEffect
+                }
+              }}
+              className="px-4 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="current">Current Month</option>
+              <option value="previous">Previous Month</option>
+              <option value="quarter">Current Quarter (FY)</option>
+              <option value="year">Current Financial Year</option>
+              <option value="custom">Custom Range</option>
+            </select>
+          </div>
+
           <div className="flex items-center space-x-2">
             <Calendar className="w-5 h-5 text-gray-400" />
             <input
               type="date"
               value={dateRange.from}
-              onChange={(e) => setDateRange({ ...dateRange, from: e.target.value })}
+              onChange={(e) => {
+                setDateRange({ ...dateRange, from: e.target.value });
+                setSelectedPeriod('custom'); // Switch to custom when manually changing dates
+              }}
               className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
             />
             <span className="text-gray-500">to</span>
             <input
               type="date"
               value={dateRange.to}
-              onChange={(e) => setDateRange({ ...dateRange, to: e.target.value })}
+              onChange={(e) => {
+                setDateRange({ ...dateRange, to: e.target.value });
+                setSelectedPeriod('custom'); // Switch to custom when manually changing dates
+              }}
               className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
             />
           </div>
+
           <Button
             onClick={handleRefresh}
             variant="secondary"

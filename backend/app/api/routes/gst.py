@@ -692,5 +692,92 @@ async def get_gst_metrics(
         }
     }
 
+# GST Report Endpoints
+@router.get("/reports/tax/gstr2a")
+async def get_gstr2a_report(
+    from_date: str = Query(..., description="Start date (YYYY-MM-DD)"),
+    to_date: str = Query(..., description="End date (YYYY-MM-DD)"),
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)
+):
+    """
+    Get GSTR-2A report data - inward supplies and input credit
+    """
+    try:
+        # Get supplier invoices for the period
+        query = text("""
+            SELECT
+                si.supplier_invoice_id,
+                si.supplier_invoice_number,
+                si.invoice_date,
+                s.supplier_name,
+                s.gst_number as supplier_gstin,
+                si.taxable_amount,
+                si.cgst_amount,
+                si.sgst_amount,
+                si.igst_amount,
+                si.cess_amount,
+                si.tax_amount,
+                si.invoice_total,
+                si.itc_eligible,
+                si.gstr2a_matched
+            FROM procurement.supplier_invoices si
+            LEFT JOIN parties.suppliers s ON si.supplier_id = s.supplier_id
+            WHERE si.org_id = :org_id
+            AND si.invoice_date BETWEEN :from_date AND :to_date
+            AND si.invoice_status != 'cancelled'
+            ORDER BY si.invoice_date DESC
+        """)
+
+        invoices = db.execute(query, {
+            'org_id': org_id,
+            'from_date': from_date,
+            'to_date': to_date
+        }).fetchall()
+
+        # Calculate summary
+        total_taxable = 0
+        total_cgst = 0
+        total_sgst = 0
+        total_igst = 0
+        total_cess = 0
+        total_itc = 0
+
+        invoice_list = []
+        for inv in invoices:
+            inv_dict = dict(inv._mapping)
+
+            # Convert Decimal to float
+            for key in ['taxable_amount', 'cgst_amount', 'sgst_amount',
+                       'igst_amount', 'cess_amount', 'tax_amount', 'invoice_total']:
+                if key in inv_dict and inv_dict[key]:
+                    inv_dict[key] = float(inv_dict[key])
+
+            # Calculate totals
+            if inv_dict.get('itc_eligible'):
+                total_taxable += inv_dict.get('taxable_amount', 0)
+                total_cgst += inv_dict.get('cgst_amount', 0)
+                total_sgst += inv_dict.get('sgst_amount', 0)
+                total_igst += inv_dict.get('igst_amount', 0)
+                total_cess += inv_dict.get('cess_amount', 0)
+                total_itc += inv_dict.get('tax_amount', 0)
+
+            invoice_list.append(inv_dict)
+
+        return {
+            "invoices": invoice_list,
+            "summary": {
+                "totalInvoices": len(invoice_list),
+                "totalTaxableValue": total_taxable,
+                "totalCGST": total_cgst,
+                "totalSGST": total_sgst,
+                "totalIGST": total_igst,
+                "totalCESS": total_cess,
+                "totalITC": total_itc
+            }
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 # Export router
 __all__ = ["router"]

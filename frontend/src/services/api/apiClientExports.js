@@ -393,26 +393,28 @@ export const ordersAPI = {
 
 export const purchasesAPI = {
   search: async (query, options = {}) => {
-    const response = await apiClient.get('/purchases', {
+    // Use supplier-invoices endpoint which has the GST data we need
+    const response = await apiClient.get('/supplier-invoices/', {
       params: {
-        q: query,
+        from_date: options.dateFrom,
+        to_date: options.dateTo,
         supplier_id: options.supplierId,
         limit: options.limit || 50,
-        offset: options.offset || 0,
+        skip: options.offset || 0,
       },
     });
     return response.data;
   },
   
   getAll: async (params = {}) => {
-    const response = await apiClient.get('/purchases', {
+    // Use supplier-invoices endpoint which has the GST data we need
+    const response = await apiClient.get('/supplier-invoices/', {
       params: {
         limit: params.limit || 100,
         skip: params.skip || 0,
         supplier_id: params.supplier_id,
-        product_id: params.product_id,
-        start_date: params.start_date,
-        end_date: params.end_date,
+        from_date: params.start_date,
+        to_date: params.end_date,
         sort: params.sort,
         order: params.order,
       },
