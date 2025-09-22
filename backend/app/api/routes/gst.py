@@ -753,14 +753,14 @@ async def get_gstr2a_report(
                 if key in inv_dict and inv_dict[key]:
                     inv_dict[key] = float(inv_dict[key])
 
-            # Calculate totals
+            # Calculate totals (ensure all values are float)
             if inv_dict.get('itc_eligible'):
-                total_taxable += inv_dict.get('taxable_amount', 0)
-                total_cgst += inv_dict.get('cgst_amount', 0)
-                total_sgst += inv_dict.get('sgst_amount', 0)
-                total_igst += inv_dict.get('igst_amount', 0)
-                total_cess += inv_dict.get('cess_amount', 0)
-                total_itc += inv_dict.get('tax_amount', 0)
+                total_taxable += float(inv_dict.get('taxable_amount', 0) or 0)
+                total_cgst += float(inv_dict.get('cgst_amount', 0) or 0)
+                total_sgst += float(inv_dict.get('sgst_amount', 0) or 0)
+                total_igst += float(inv_dict.get('igst_amount', 0) or 0)
+                total_cess += float(inv_dict.get('cess_amount', 0) or 0)
+                total_itc += float(inv_dict.get('tax_amount', 0) or 0)
 
             invoice_list.append(inv_dict)
 
