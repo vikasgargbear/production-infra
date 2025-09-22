@@ -816,7 +816,7 @@ async def get_credit_debit_notes_report(
                     sr.return_reason as reason_code,
                     sr.return_reason as reason,
                     sr.approval_status as status
-                FROM sales.sale_returns sr
+                FROM sales.sales_returns sr
                 LEFT JOIN parties.customers c ON sr.customer_id = c.customer_id
                 WHERE sr.org_id = :org_id
                 AND sr.credit_note_date BETWEEN :from_date AND :to_date
@@ -846,7 +846,7 @@ async def get_credit_debit_notes_report(
                     pr.return_reason as reason_code,
                     pr.return_reason as reason,
                     pr.approval_status as status
-                FROM sales.purchase_returns pr
+                FROM procurement.purchase_returns pr
                 LEFT JOIN parties.suppliers s ON pr.supplier_id = s.supplier_id
                 WHERE pr.org_id = :org_id
                 AND pr.return_date BETWEEN :from_date AND :to_date
