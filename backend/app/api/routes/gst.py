@@ -819,9 +819,8 @@ async def get_credit_debit_notes_report(
                 FROM sales.sales_returns sr
                 LEFT JOIN parties.customers c ON sr.customer_id = c.customer_id
                 WHERE sr.org_id = :org_id
-                AND sr.credit_note_date BETWEEN :from_date AND :to_date
-                AND sr.approval_status = 'approved'
-                AND sr.credit_note_status = 'issued'
+                AND sr.return_date BETWEEN :from_date AND :to_date
+                AND sr.credit_note_number IS NOT NULL
             """)
             queries.append(credit_query)
 
@@ -850,8 +849,7 @@ async def get_credit_debit_notes_report(
                 LEFT JOIN parties.suppliers s ON pr.supplier_id = s.supplier_id
                 WHERE pr.org_id = :org_id
                 AND pr.return_date BETWEEN :from_date AND :to_date
-                AND pr.approval_status = 'approved'
-                AND pr.debit_note_status IN ('issued', 'pending')
+                AND pr.debit_note_number IS NOT NULL
             """)
             queries.append(debit_query)
 
