@@ -799,28 +799,29 @@ async def get_credit_debit_notes_report(
             credit_query = text("""
                 SELECT
                     'credit' as note_type,
-                    cn.credit_note_id as note_id,
-                    cn.credit_note_number as note_number,
-                    cn.credit_note_date as note_date,
-                    cn.customer_id,
+                    sr.return_id as note_id,
+                    sr.credit_note_number as note_number,
+                    sr.credit_note_date as note_date,
+                    sr.customer_id,
                     c.customer_name,
                     c.gstin as customer_gstin,
-                    cn.reference_type,
-                    cn.reference_number,
-                    cn.credit_amount as amount,
-                    cn.cgst_amount,
-                    cn.sgst_amount,
-                    cn.igst_amount,
-                    cn.tax_amount,
-                    cn.total_amount,
-                    cn.reason_code,
-                    cn.reason,
-                    cn.status
-                FROM sales.credit_notes cn
-                LEFT JOIN parties.customers c ON cn.customer_id = c.customer_id
-                WHERE cn.org_id = :org_id
-                AND cn.credit_note_date BETWEEN :from_date AND :to_date
-                AND cn.status = 'approved'
+                    'sales_return' as reference_type,
+                    sr.return_number as reference_number,
+                    sr.return_amount as amount,
+                    sr.cgst_amount,
+                    sr.sgst_amount,
+                    sr.igst_amount,
+                    sr.tax_amount,
+                    sr.total_amount,
+                    sr.return_reason as reason_code,
+                    sr.return_reason as reason,
+                    sr.approval_status as status
+                FROM sales.sale_returns sr
+                LEFT JOIN parties.customers c ON sr.customer_id = c.customer_id
+                WHERE sr.org_id = :org_id
+                AND sr.credit_note_date BETWEEN :from_date AND :to_date
+                AND sr.approval_status = 'approved'
+                AND sr.credit_note_status = 'issued'
             """)
             queries.append(credit_query)
 
@@ -828,28 +829,29 @@ async def get_credit_debit_notes_report(
             debit_query = text("""
                 SELECT
                     'debit' as note_type,
-                    dn.debit_note_id as note_id,
-                    dn.debit_note_number as note_number,
-                    dn.debit_note_date as note_date,
-                    dn.customer_id,
-                    c.customer_name,
-                    c.gstin as customer_gstin,
-                    dn.reference_type,
-                    dn.reference_number,
-                    dn.debit_amount as amount,
-                    dn.cgst_amount,
-                    dn.sgst_amount,
-                    dn.igst_amount,
-                    dn.tax_amount,
-                    dn.total_amount,
-                    dn.reason_code,
-                    dn.reason,
-                    dn.status
-                FROM sales.debit_notes dn
-                LEFT JOIN parties.customers c ON dn.customer_id = c.customer_id
-                WHERE dn.org_id = :org_id
-                AND dn.debit_note_date BETWEEN :from_date AND :to_date
-                AND dn.status = 'approved'
+                    pr.return_id as note_id,
+                    pr.debit_note_number as note_number,
+                    pr.debit_note_date as note_date,
+                    pr.supplier_id as customer_id,
+                    s.supplier_name as customer_name,
+                    s.gst_number as customer_gstin,
+                    'purchase_return' as reference_type,
+                    pr.return_number as reference_number,
+                    pr.return_amount as amount,
+                    pr.cgst_amount,
+                    pr.sgst_amount,
+                    pr.igst_amount,
+                    pr.tax_amount,
+                    pr.total_amount,
+                    pr.return_reason as reason_code,
+                    pr.return_reason as reason,
+                    pr.approval_status as status
+                FROM sales.purchase_returns pr
+                LEFT JOIN parties.suppliers s ON pr.supplier_id = s.supplier_id
+                WHERE pr.org_id = :org_id
+                AND pr.return_date BETWEEN :from_date AND :to_date
+                AND pr.approval_status = 'approved'
+                AND pr.debit_note_status IN ('issued', 'pending')
             """)
             queries.append(debit_query)
 
