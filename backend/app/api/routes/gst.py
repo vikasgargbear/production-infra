@@ -779,5 +779,117 @@ async def get_gstr2a_report(
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+# Credit/Debit Notes endpoints for GST reporting
+@router.get("/reports/credit-debit-notes")
+async def get_credit_debit_notes_report(
+    from_date: str = Query(..., description="Start date (YYYY-MM-DD)"),
+    to_date: str = Query(..., description="End date (YYYY-MM-DD)"),
+    note_type: str = Query("all", description="Type: credit, debit, or all"),
+    db: Session = Depends(get_db),
+    org_id: str = Depends(get_org_id_from_header)
+):
+    """
+    Get credit/debit notes for GST reporting
+    """
+    try:
+        # Build query based on note type
+        queries = []
+
+        if note_type in ['credit', 'all']:
+            credit_query = text("""
+                SELECT
+                    'credit' as note_type,
+                    cn.credit_note_id as note_id,
+                    cn.credit_note_number as note_number,
+                    cn.credit_note_date as note_date,
+                    cn.customer_id,
+                    c.customer_name,
+                    c.gstin as customer_gstin,
+                    cn.reference_type,
+                    cn.reference_number,
+                    cn.credit_amount as amount,
+                    cn.cgst_amount,
+                    cn.sgst_amount,
+                    cn.igst_amount,
+                    cn.tax_amount,
+                    cn.total_amount,
+                    cn.reason_code,
+                    cn.reason,
+                    cn.status
+                FROM sales.credit_notes cn
+                LEFT JOIN parties.customers c ON cn.customer_id = c.customer_id
+                WHERE cn.org_id = :org_id
+                AND cn.credit_note_date BETWEEN :from_date AND :to_date
+                AND cn.status = 'approved'
+            """)
+            queries.append(credit_query)
+
+        if note_type in ['debit', 'all']:
+            debit_query = text("""
+                SELECT
+                    'debit' as note_type,
+                    dn.debit_note_id as note_id,
+                    dn.debit_note_number as note_number,
+                    dn.debit_note_date as note_date,
+                    dn.customer_id,
+                    c.customer_name,
+                    c.gstin as customer_gstin,
+                    dn.reference_type,
+                    dn.reference_number,
+                    dn.debit_amount as amount,
+                    dn.cgst_amount,
+                    dn.sgst_amount,
+                    dn.igst_amount,
+                    dn.tax_amount,
+                    dn.total_amount,
+                    dn.reason_code,
+                    dn.reason,
+                    dn.status
+                FROM sales.debit_notes dn
+                LEFT JOIN parties.customers c ON dn.customer_id = c.customer_id
+                WHERE dn.org_id = :org_id
+                AND dn.debit_note_date BETWEEN :from_date AND :to_date
+                AND dn.status = 'approved'
+            """)
+            queries.append(debit_query)
+
+        all_notes = []
+        for query in queries:
+            notes = db.execute(query, {
+                'org_id': org_id,
+                'from_date': from_date,
+                'to_date': to_date
+            }).fetchall()
+
+            for note in notes:
+                note_dict = dict(note._mapping)
+                # Convert Decimal to float
+                for key in ['amount', 'cgst_amount', 'sgst_amount', 'igst_amount', 'tax_amount', 'total_amount']:
+                    if key in note_dict and note_dict[key]:
+                        note_dict[key] = float(note_dict[key])
+                all_notes.append(note_dict)
+
+        # Calculate summary
+        total_credit_amount = sum(note['amount'] for note in all_notes if note['note_type'] == 'credit')
+        total_debit_amount = sum(note['amount'] for note in all_notes if note['note_type'] == 'debit')
+        total_credit_tax = sum(note['tax_amount'] for note in all_notes if note['note_type'] == 'credit')
+        total_debit_tax = sum(note['tax_amount'] for note in all_notes if note['note_type'] == 'debit')
+
+        return {
+            "notes": all_notes,
+            "summary": {
+                "totalCreditNotes": len([n for n in all_notes if n['note_type'] == 'credit']),
+                "totalDebitNotes": len([n for n in all_notes if n['note_type'] == 'debit']),
+                "totalCreditAmount": total_credit_amount,
+                "totalDebitAmount": total_debit_amount,
+                "totalCreditTax": total_credit_tax,
+                "totalDebitTax": total_debit_tax,
+                "netAdjustment": total_debit_amount - total_credit_amount,
+                "netTaxAdjustment": total_debit_tax - total_credit_tax
+            }
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 # Export router
 __all__ = ["router"]

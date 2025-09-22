@@ -5,7 +5,7 @@ import {
   Building, Package, Users, Printer, RefreshCw, Loader2, AlertCircle
 } from 'lucide-react';
 import { Button, DatePicker, Card, DataTable } from '../global';
-import { gstApi, invoiceAPI, purchasesAPI, reportsApi } from '../../services/api';
+import { gstApi, invoiceAPI, purchasesAPI, reportsApi, apiClient } from '../../services/api';
 import offlineStorage from '../../services/offlineStorage';
 
 interface GSTReportsProps {
@@ -80,9 +80,32 @@ const GSTReports: React.FC<GSTReportsProps> = ({ onClose }) => {
     sgst: number;
     igst: number;
   }>({ cgst: 0, sgst: 0, igst: 0 });
+
+  // Pagination state for supplier invoices
+  const [currentPage, setCurrentPage] = useState<number>(1);
+  const [pageSize, setPageSize] = useState<number>(25);
+  const [totalInvoices, setTotalInvoices] = useState<number>(0);
   const [hsnSummaryData, setHsnSummaryData] = useState<any[]>([]);
   const [invoiceDataCache, setInvoiceDataCache] = useState<any[]>([]);
   const [invoiceCacheKey, setInvoiceCacheKey] = useState<string>('');
+
+  // Credit/Debit Notes state
+  const [creditDebitNotesData, setCreditDebitNotesData] = useState<any[]>([]);
+  const [creditDebitSummary, setCreditDebitSummary] = useState<{
+    totalCreditNotes: number;
+    totalDebitNotes: number;
+    totalCreditAmount: number;
+    totalDebitAmount: number;
+    netAdjustment: number;
+    netTaxAdjustment: number;
+  }>({
+    totalCreditNotes: 0,
+    totalDebitNotes: 0,
+    totalCreditAmount: 0,
+    totalDebitAmount: 0,
+    netAdjustment: 0,
+    netTaxAdjustment: 0
+  });
 
   const reportTypes: ReportType[] = [
     {
@@ -195,12 +218,27 @@ const GSTReports: React.FC<GSTReportsProps> = ({ onClose }) => {
   }, [selectedPeriod]);
 
   useEffect(() => {
+    setCurrentPage(1); // Reset pagination when report changes
     const timeoutId = setTimeout(() => {
       loadReportData();
     }, 300); // Debounce to prevent rapid successive calls
 
     return () => clearTimeout(timeoutId);
   }, [selectedReport, dateRange.from, dateRange.to]); // Use specific date values instead of the entire dateRange object
+
+  // Load paginated data for GSTR-2B when pagination state changes (but not on initial load)
+  useEffect(() => {
+    if (selectedReport === 'gstr-2b' && reportData && totalInvoices > 0 && currentPage > 1) {
+      loadPaginatedGSTR2BData(currentPage, pageSize);
+    }
+  }, [currentPage]);
+
+  // Handle page size changes
+  useEffect(() => {
+    if (selectedReport === 'gstr-2b' && reportData && totalInvoices > 0 && pageSize !== 25) {
+      loadPaginatedGSTR2BData(1, pageSize);
+    }
+  }, [pageSize]);
 
   const loadReportData = async (): Promise<void> => {
     console.log('[GST Reports] loadReportData called, selectedReport:', selectedReport);
@@ -224,6 +262,11 @@ const GSTReports: React.FC<GSTReportsProps> = ({ onClose }) => {
       // Load purchase data for Input Credit calculation (for GSTR-3B and other reports that need it)
       if (['gstr-3b', 'gstr-2b', 'payable'].includes(selectedReport)) {
         additionalDataPromises.push(loadPurchaseInvoicesForInputCredit());
+      }
+
+      // Load credit/debit notes for GST reports
+      if (['gstr-1', 'gstr-3b'].includes(selectedReport)) {
+        additionalDataPromises.push(loadCreditDebitNotes());
       }
 
       // Load HSN summary data for HSN report
@@ -444,6 +487,45 @@ const GSTReports: React.FC<GSTReportsProps> = ({ onClose }) => {
     }
   };
 
+  const loadCreditDebitNotes = async (): Promise<void> => {
+    try {
+      console.log(`[GST Reports] Loading credit/debit notes from ${dateRange.from} to ${dateRange.to}`);
+
+      const response = await gstApi.reports.creditDebitNotes({
+        from_date: dateRange.from,
+        to_date: dateRange.to,
+        note_type: 'all'
+      });
+
+      const notes = response.notes || [];
+      const summary = response.summary || {};
+
+      console.log(`[GST Reports] Found ${notes.length} credit/debit notes`);
+
+      setCreditDebitNotesData(notes);
+      setCreditDebitSummary({
+        totalCreditNotes: summary.totalCreditNotes || 0,
+        totalDebitNotes: summary.totalDebitNotes || 0,
+        totalCreditAmount: summary.totalCreditAmount || 0,
+        totalDebitAmount: summary.totalDebitAmount || 0,
+        netAdjustment: summary.netAdjustment || 0,
+        netTaxAdjustment: summary.netTaxAdjustment || 0
+      });
+
+    } catch (err) {
+      console.error('[GST Reports] Failed to load credit/debit notes:', err);
+      setCreditDebitNotesData([]);
+      setCreditDebitSummary({
+        totalCreditNotes: 0,
+        totalDebitNotes: 0,
+        totalCreditAmount: 0,
+        totalDebitAmount: 0,
+        netAdjustment: 0,
+        netTaxAdjustment: 0
+      });
+    }
+  };
+
   const loadGSTR1FromInvoices = async (): Promise<GSTR1Data> => {
     try {
       // Use cached invoice data to avoid duplicate API calls
@@ -558,18 +640,75 @@ const GSTReports: React.FC<GSTReportsProps> = ({ onClose }) => {
 
   const loadGSTR2BData = async (): Promise<GSTR1Data> => {
     try {
-      const response = await gstApi.reports.gstr2a({
+      // Get full data for summary and first page
+      const allResponse = await gstApi.reports.gstr2a({
         from_date: dateRange.from,
         to_date: dateRange.to
       });
 
-      if (response) {
-        return transformGSTR2BResponse(response);
+      if (allResponse) {
+        const totalCount = allResponse.summary?.totalInvoices || allResponse.invoices?.length || 0;
+        setTotalInvoices(totalCount);
+
+        // For initial load, show first page of data
+        const invoices = allResponse.invoices || [];
+        const firstPageInvoices = invoices.slice(0, pageSize);
+
+        const transformedData = transformGSTR2BResponse({
+          invoices: firstPageInvoices,
+          summary: allResponse.summary
+        });
+
+        return transformedData;
       }
 
       throw new Error('Invalid response format from GSTR-2B API');
     } catch (err) {
       throw new Error('Unable to load GSTR-2B data');
+    }
+  };
+
+  // Separate function to load paginated data for the table
+  const loadPaginatedGSTR2BData = async (page: number = currentPage, size: number = pageSize) => {
+    try {
+      setIsLoadingData(true);
+      const skip = (page - 1) * size;
+
+      // Use supplier-invoices endpoint directly for pagination
+      const response = await apiClient.get('/supplier-invoices/', {
+        params: {
+          from_date: dateRange.from,
+          to_date: dateRange.to,
+          limit: size,
+          skip: skip
+        }
+      });
+
+      const invoices = response.data || [];
+
+      // Transform for display
+      const paginatedData = transformGSTR2BResponse({
+        invoices: invoices,
+        summary: {
+          totalInvoices: totalInvoices,
+          totalTaxableValue: invoices.reduce((sum: number, inv: any) => sum + (inv.taxable_amount || 0), 0),
+          totalCGST: invoices.reduce((sum: number, inv: any) => sum + (inv.cgst_amount || 0), 0),
+          totalSGST: invoices.reduce((sum: number, inv: any) => sum + (inv.sgst_amount || 0), 0),
+          totalIGST: invoices.reduce((sum: number, inv: any) => sum + (inv.igst_amount || 0), 0),
+          totalITC: invoices.reduce((sum: number, inv: any) => sum + (inv.tax_amount || 0), 0)
+        }
+      });
+
+      setReportData(prevData => ({
+        ...prevData,
+        b2b: paginatedData.b2b,
+        summary: prevData?.summary || paginatedData.summary
+      }));
+
+      setIsLoadingData(false);
+    } catch (err) {
+      console.error('Error loading paginated GSTR-2B data:', err);
+      setIsLoadingData(false);
     }
   };
 
@@ -882,8 +1021,40 @@ const GSTReports: React.FC<GSTReportsProps> = ({ onClose }) => {
   };
 
   const transformGSTR2BResponse = (data: any): GSTR1Data => {
-    // Transform GSTR-2B response
-    return transformGSTR1Response(data);
+    // Transform GSTR-2B response (supplier invoices for input credit)
+    const invoices = data.invoices || [];
+    const summary = data.summary || {};
+
+    // Map supplier invoices to B2B structure for display
+    const b2bInvoices = invoices.map((inv: any) => ({
+      supplier_name: inv.supplier_name,
+      supplier_gstin: inv.supplier_gstin,
+      invoice_number: inv.supplier_invoice_number,
+      invoice_date: inv.invoice_date,
+      invoice_value: inv.invoice_total || 0,
+      taxable_value: inv.taxable_amount || 0,
+      cgst_amount: inv.cgst_amount || 0,
+      sgst_amount: inv.sgst_amount || 0,
+      igst_amount: inv.igst_amount || 0,
+      tax_amount: inv.tax_amount || 0,
+      itc_eligible: inv.itc_eligible
+    }));
+
+    return {
+      b2b: b2bInvoices,
+      b2c: {
+        small: { count: 0, taxableValue: 0, cgst: 0, sgst: 0, igst: 0 },
+        large: { count: 0, taxableValue: 0, cgst: 0, sgst: 0, igst: 0 }
+      },
+      summary: {
+        totalInvoices: summary.totalInvoices || invoices.length,
+        totalTaxableValue: summary.totalTaxableValue || 0,
+        totalCGST: summary.totalCGST || 0,
+        totalSGST: summary.totalSGST || 0,
+        totalIGST: summary.totalIGST || 0,
+        totalTax: summary.totalITC || summary.totalTax || 0
+      }
+    };
   };
 
   const transformHSNResponse = (data: any): GSTR1Data => {
@@ -1247,7 +1418,7 @@ const GSTReports: React.FC<GSTReportsProps> = ({ onClose }) => {
               <div className="flex items-center justify-between p-4">
                 <div>
                   <p className="text-sm text-gray-600">Purchase Value</p>
-                  <p className="text-2xl font-bold text-gray-900">₹{(reportData.summary.totalTaxableValue * 0.8).toLocaleString()}</p>
+                  <p className="text-2xl font-bold text-gray-900">₹{(reportData.summary.totalTaxableValue || 0).toLocaleString()}</p>
                 </div>
                 <IndianRupee className="w-8 h-8 text-green-500" />
               </div>
@@ -1274,26 +1445,171 @@ const GSTReports: React.FC<GSTReportsProps> = ({ onClose }) => {
             </Card>
           </div>
 
-          <Card title="Purchase Invoice Summary">
-            <div className="space-y-4">
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
-                <div className="bg-blue-50 p-4 rounded-lg">
-                  <p className="text-2xl font-bold text-blue-600">{reportData.summary.totalInvoices || 0}</p>
-                  <p className="text-sm text-blue-600">Total Invoices</p>
+          <Card title="Supplier Invoice Details">
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th className="px-4 py-3 text-left font-medium text-gray-700">Supplier</th>
+                    <th className="px-4 py-3 text-left font-medium text-gray-700">GSTIN</th>
+                    <th className="px-4 py-3 text-left font-medium text-gray-700">Invoice No</th>
+                    <th className="px-4 py-3 text-left font-medium text-gray-700">Date</th>
+                    <th className="px-4 py-3 text-right font-medium text-gray-700">Taxable Value</th>
+                    <th className="px-4 py-3 text-right font-medium text-gray-700">CGST</th>
+                    <th className="px-4 py-3 text-right font-medium text-gray-700">SGST</th>
+                    <th className="px-4 py-3 text-right font-medium text-gray-700">IGST</th>
+                    <th className="px-4 py-3 text-right font-medium text-gray-700">Total Tax</th>
+                    <th className="px-4 py-3 text-center font-medium text-gray-700">ITC</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-200">
+                  {reportData.b2b && reportData.b2b.length > 0 ? (
+                    reportData.b2b.map((invoice: any, index: number) => (
+                      <tr key={index} className="hover:bg-gray-50">
+                        <td className="px-4 py-3 text-gray-900">{invoice.supplier_name || 'N/A'}</td>
+                        <td className="px-4 py-3 text-gray-600">{invoice.supplier_gstin || 'N/A'}</td>
+                        <td className="px-4 py-3 text-gray-900">{invoice.invoice_number}</td>
+                        <td className="px-4 py-3 text-gray-600">
+                          {new Date(invoice.invoice_date).toLocaleDateString('en-IN')}
+                        </td>
+                        <td className="px-4 py-3 text-right text-gray-900">
+                          ₹{(invoice.taxable_value || 0).toLocaleString()}
+                        </td>
+                        <td className="px-4 py-3 text-right text-gray-600">
+                          ₹{(invoice.cgst_amount || 0).toLocaleString()}
+                        </td>
+                        <td className="px-4 py-3 text-right text-gray-600">
+                          ₹{(invoice.sgst_amount || 0).toLocaleString()}
+                        </td>
+                        <td className="px-4 py-3 text-right text-gray-600">
+                          ₹{(invoice.igst_amount || 0).toLocaleString()}
+                        </td>
+                        <td className="px-4 py-3 text-right font-medium text-gray-900">
+                          ₹{(invoice.tax_amount || 0).toLocaleString()}
+                        </td>
+                        <td className="px-4 py-3 text-center">
+                          {invoice.itc_eligible ? (
+                            <span className="inline-flex px-2 py-1 text-xs font-medium bg-green-100 text-green-800 rounded-full">
+                              Eligible
+                            </span>
+                          ) : (
+                            <span className="inline-flex px-2 py-1 text-xs font-medium bg-gray-100 text-gray-800 rounded-full">
+                              Not Eligible
+                            </span>
+                          )}
+                        </td>
+                      </tr>
+                    ))
+                  ) : (
+                    <tr>
+                      <td colSpan={10} className="px-4 py-8 text-center text-gray-500">
+                        No supplier invoices found for this period
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+                {reportData.b2b && reportData.b2b.length > 0 && (
+                  <tfoot className="bg-gray-50">
+                    <tr className="font-semibold">
+                      <td colSpan={4} className="px-4 py-3 text-right">Total</td>
+                      <td className="px-4 py-3 text-right">₹{(reportData.summary?.totalTaxableValue || 0).toLocaleString()}</td>
+                      <td className="px-4 py-3 text-right">₹{(reportData.summary?.totalCGST || 0).toLocaleString()}</td>
+                      <td className="px-4 py-3 text-right">₹{(reportData.summary?.totalSGST || 0).toLocaleString()}</td>
+                      <td className="px-4 py-3 text-right">₹{(reportData.summary?.totalIGST || 0).toLocaleString()}</td>
+                      <td className="px-4 py-3 text-right">₹{(reportData.summary?.totalTax || 0).toLocaleString()}</td>
+                      <td className="px-4 py-3"></td>
+                    </tr>
+                  </tfoot>
+                )}
+              </table>
+
+              {/* Pagination Controls */}
+              {totalInvoices > 0 && (
+                <div className="flex items-center justify-between px-4 py-3 bg-gray-50 border-t">
+                  <div className="flex items-center text-sm text-gray-700">
+                    <span>
+                      Showing {Math.min((currentPage - 1) * pageSize + 1, totalInvoices)} to{' '}
+                      {Math.min(currentPage * pageSize, totalInvoices)} of {totalInvoices} invoices
+                    </span>
+                    <select
+                      value={pageSize}
+                      onChange={(e) => {
+                        setPageSize(Number(e.target.value));
+                        setCurrentPage(1);
+                        loadPaginatedGSTR2BData(1, Number(e.target.value));
+                      }}
+                      className="ml-4 border border-gray-300 rounded px-2 py-1 text-sm"
+                    >
+                      <option value={25}>25 per page</option>
+                      <option value={50}>50 per page</option>
+                      <option value={100}>100 per page</option>
+                    </select>
+                  </div>
+
+                  {Math.ceil(totalInvoices / pageSize) > 1 && (
+                    <div className="flex items-center space-x-2">
+                      <Button
+                        onClick={() => {
+                          const newPage = currentPage - 1;
+                          setCurrentPage(newPage);
+                          loadPaginatedGSTR2BData(newPage, pageSize);
+                        }}
+                        disabled={currentPage === 1 || isLoadingData}
+                        variant="secondary"
+                        size="sm"
+                      >
+                        Previous
+                      </Button>
+
+                      <div className="flex items-center space-x-1">
+                        {Array.from({ length: Math.min(5, Math.ceil(totalInvoices / pageSize)) }, (_, i) => {
+                          const totalPages = Math.ceil(totalInvoices / pageSize);
+                          let pageNumber;
+
+                          if (totalPages <= 5) {
+                            pageNumber = i + 1;
+                          } else if (currentPage <= 3) {
+                            pageNumber = i + 1;
+                          } else if (currentPage >= totalPages - 2) {
+                            pageNumber = totalPages - 4 + i;
+                          } else {
+                            pageNumber = currentPage - 2 + i;
+                          }
+
+                          return (
+                            <Button
+                              key={pageNumber}
+                              onClick={() => {
+                                setCurrentPage(pageNumber);
+                                loadPaginatedGSTR2BData(pageNumber, pageSize);
+                              }}
+                              variant={currentPage === pageNumber ? "primary" : "secondary"}
+                              size="sm"
+                              className="w-8 h-8 p-0"
+                              disabled={isLoadingData}
+                            >
+                              {pageNumber}
+                            </Button>
+                          );
+                        })}
+                      </div>
+
+                      <Button
+                        onClick={() => {
+                          const newPage = currentPage + 1;
+                          setCurrentPage(newPage);
+                          loadPaginatedGSTR2BData(newPage, pageSize);
+                        }}
+                        disabled={currentPage >= Math.ceil(totalInvoices / pageSize) || isLoadingData}
+                        variant="secondary"
+                        size="sm"
+                      >
+                        Next
+                      </Button>
+                    </div>
+                  )}
                 </div>
-                <div className="bg-green-50 p-4 rounded-lg">
-                  <p className="text-2xl font-bold text-green-600">₹{(reportData.summary.totalTaxableValue * 0.8).toLocaleString()}</p>
-                  <p className="text-sm text-green-600">Taxable Value</p>
-                </div>
-                <div className="bg-purple-50 p-4 rounded-lg">
-                  <p className="text-2xl font-bold text-purple-600">₹{inputCreditAmount.toLocaleString()}</p>
-                  <p className="text-sm text-purple-600">Total Tax</p>
-                </div>
-                <div className="bg-amber-50 p-4 rounded-lg">
-                  <p className="text-2xl font-bold text-amber-600">₹{inputCreditAmount.toLocaleString()}</p>
-                  <p className="text-sm text-amber-600">ITC Eligible</p>
-                </div>
-              </div>
+              )}
             </div>
           </Card>
         </div>

@@ -187,7 +187,7 @@ export const gstApi = {
     
     gstr2a: async (filters) => {
       try {
-        const response = await apiClient.get('/reports/tax/gstr2a', {
+        const response = await apiClient.get('/gst/reports/tax/gstr2a', {
           params: filters
         });
         return response.data;
@@ -204,6 +204,17 @@ export const gstApi = {
         return response.data;
       } catch (error) {
         return { hsnData: [] };
+      }
+    },
+
+    creditDebitNotes: async (filters) => {
+      try {
+        const response = await apiClient.get('/gst/reports/credit-debit-notes', {
+          params: filters
+        });
+        return response.data;
+      } catch (error) {
+        return { notes: [], summary: {} };
       }
     }
   },
