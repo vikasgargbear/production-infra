@@ -497,10 +497,19 @@ const GSTReports: React.FC<GSTReportsProps> = ({ onClose }) => {
         note_type: 'all'
       });
 
+      console.log('[GST Reports] Credit/Debit Notes API Response:', response);
+
       const notes = response.notes || [];
       const summary = response.summary || {};
 
       console.log(`[GST Reports] Found ${notes.length} credit/debit notes`);
+
+      // Debug: Check the structure of the first note
+      if (notes.length > 0) {
+        console.log('[GST Reports] Sample note structure:', notes[0]);
+        console.log('[GST Reports] Credit notes count:', notes.filter(n => n.note_type === 'credit').length);
+        console.log('[GST Reports] Debit notes count:', notes.filter(n => n.note_type === 'debit').length);
+      }
 
       setCreditDebitNotesData(notes);
       setCreditDebitSummary({
@@ -896,7 +905,12 @@ const GSTReports: React.FC<GSTReportsProps> = ({ onClose }) => {
 
     invoices.forEach(invoice => {
       totalInvoices++;
-      const taxableValue = invoice.final_amount || invoice.total_amount || invoice.grand_total || 0;
+      // Use subtotal (before tax) for B2C classification, but final_amount for aggregated display
+      const subtotalAmount = invoice.subtotal_amount || invoice.taxable_amount || 0;
+      const finalAmount = invoice.final_amount || invoice.total_amount || invoice.grand_total || 0;
+
+      // For GSTR-1, we show final amounts but classify B2C based on taxable amounts
+      const taxableValue = finalAmount;
       totalTaxableValue += taxableValue;
 
       // Get GST amounts from invoice data (backend now provides these)
@@ -981,16 +995,16 @@ const GSTReports: React.FC<GSTReportsProps> = ({ onClose }) => {
 
       // Still track B2C for GSTR-1 compliance (but don't hide invoices)
       if (!customerGSTIN) {
-        // B2C - no GSTIN
-        if (taxableValue <= 250000) {
+        // B2C - no GSTIN, classify based on taxable amount (excluding tax)
+        if (subtotalAmount <= 250000) {
           b2cSmall.count++;
-          b2cSmall.taxableValue += taxableValue;
+          b2cSmall.taxableValue += subtotalAmount; // Use taxable amount for B2C
           b2cSmall.cgst += cgst;
           b2cSmall.sgst += sgst;
           b2cSmall.igst += igst;
         } else {
           b2cLarge.count++;
-          b2cLarge.taxableValue += taxableValue;
+          b2cLarge.taxableValue += subtotalAmount; // Use taxable amount for B2C
           b2cLarge.cgst += cgst;
           b2cLarge.sgst += sgst;
           b2cLarge.igst += igst;
@@ -1244,10 +1258,10 @@ const GSTReports: React.FC<GSTReportsProps> = ({ onClose }) => {
                         <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{party.gstin}</td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{party.name}</td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 text-center">{party.invoices}</td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 text-right">₹{party.taxableValue.toLocaleString()}</td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 text-right">₹{party.cgst.toLocaleString()}</td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 text-right">₹{party.sgst.toLocaleString()}</td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 text-right">₹{party.igst.toLocaleString()}</td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 text-right">₹{(party.taxableValue || 0).toLocaleString()}</td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 text-right">₹{(party.cgst || 0).toLocaleString()}</td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 text-right">₹{(party.sgst || 0).toLocaleString()}</td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 text-right">₹{(party.igst || 0).toLocaleString()}</td>
                       </tr>
                     ))
                   ) : (
@@ -1275,11 +1289,11 @@ const GSTReports: React.FC<GSTReportsProps> = ({ onClose }) => {
                 </div>
                 <div className="flex justify-between">
                   <span className="text-gray-600">Taxable Value:</span>
-                  <span className="font-medium">₹{reportData.b2c.small.taxableValue.toLocaleString()}</span>
+                  <span className="font-medium">₹{(reportData.b2c.small.taxableValue || 0).toLocaleString()}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-gray-600">Total Tax:</span>
-                  <span className="font-medium">₹{(reportData.b2c.small.cgst + reportData.b2c.small.sgst).toLocaleString()}</span>
+                  <span className="font-medium">₹{((reportData.b2c.small.cgst || 0) + (reportData.b2c.small.sgst || 0)).toLocaleString()}</span>
                 </div>
               </div>
             </Card>
@@ -1292,15 +1306,70 @@ const GSTReports: React.FC<GSTReportsProps> = ({ onClose }) => {
                 </div>
                 <div className="flex justify-between">
                   <span className="text-gray-600">Taxable Value:</span>
-                  <span className="font-medium">₹{reportData.b2c.large.taxableValue.toLocaleString()}</span>
+                  <span className="font-medium">₹{(reportData.b2c.large.taxableValue || 0).toLocaleString()}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-gray-600">Total Tax:</span>
-                  <span className="font-medium">₹{(reportData.b2c.large.cgst + reportData.b2c.large.sgst).toLocaleString()}</span>
+                  <span className="font-medium">₹{((reportData.b2c.large.cgst || 0) + (reportData.b2c.large.sgst || 0)).toLocaleString()}</span>
                 </div>
               </div>
             </Card>
           </div>
+
+          {/* Credit Notes Section */}
+          {creditDebitNotesData.filter(note => note.note_type === 'credit').length > 0 && (
+            <Card title="Credit Notes Issued" className="mt-6">
+              <div className="overflow-x-auto">
+                <table className="min-w-full divide-y divide-gray-200">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Credit Note No.</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Customer</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Reason</th>
+                      <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Amount</th>
+                      <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Tax Reduction</th>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white divide-y divide-gray-200">
+                    {creditDebitNotesData.filter(note => note.note_type === 'credit').map((note: any, index: number) => (
+                      <tr key={index} className="hover:bg-gray-50">
+                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                          {note.note_number || note.credit_note_number}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                          {note.note_date || note.credit_note_date || note.return_date}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                          {note.customer_name || 'N/A'}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                          {note.reason || note.return_reason || 'Adjustment'}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 text-right">
+                          ₹{(note.amount || note.return_amount || 0).toLocaleString()}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-red-600 text-right">
+                          -₹{(note.tax_amount || 0).toLocaleString()}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                <div className="bg-gray-50 px-6 py-3">
+                  <div className="flex justify-between text-sm font-medium">
+                    <span>Total Credit Notes: {creditDebitNotesData.filter(note => note.note_type === 'credit').length}</span>
+                    <span className="text-red-600">
+                      Tax Reduction: -₹{creditDebitNotesData
+                        .filter(note => note.note_type === 'credit')
+                        .reduce((sum, note) => sum + (note.tax_amount || 0), 0)
+                        .toLocaleString()}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </Card>
+          )}
         </div>
       );
     }
@@ -1612,6 +1681,61 @@ const GSTReports: React.FC<GSTReportsProps> = ({ onClose }) => {
               )}
             </div>
           </Card>
+
+          {/* Debit Notes Section */}
+          {creditDebitNotesData.filter(note => note.note_type === 'debit').length > 0 && (
+            <Card title="Debit Notes Issued" className="mt-6">
+              <div className="overflow-x-auto">
+                <table className="min-w-full divide-y divide-gray-200">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Debit Note No.</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Supplier</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Reason</th>
+                      <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Amount</th>
+                      <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">ITC Reduction</th>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white divide-y divide-gray-200">
+                    {creditDebitNotesData.filter(note => note.note_type === 'debit').map((note: any, index: number) => (
+                      <tr key={index} className="hover:bg-gray-50">
+                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                          {note.note_number || note.debit_note_number}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                          {note.note_date || note.debit_note_date || note.return_date}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                          {note.customer_name || 'N/A'}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                          {note.reason || note.return_reason || 'Adjustment'}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 text-right">
+                          ₹{(note.amount || note.return_amount || 0).toLocaleString()}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-red-600 text-right">
+                          -₹{(note.tax_amount || 0).toLocaleString()}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                <div className="bg-gray-50 px-6 py-3">
+                  <div className="flex justify-between text-sm font-medium">
+                    <span>Total Debit Notes: {creditDebitNotesData.filter(note => note.note_type === 'debit').length}</span>
+                    <span className="text-red-600">
+                      ITC Reduction: -₹{creditDebitNotesData
+                        .filter(note => note.note_type === 'debit')
+                        .reduce((sum, note) => sum + (note.tax_amount || 0), 0)
+                        .toLocaleString()}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </Card>
+          )}
         </div>
       );
     }
@@ -1904,6 +2028,7 @@ const GSTReports: React.FC<GSTReportsProps> = ({ onClose }) => {
       );
     }
 
+
     // Default fallback
     return (
       <div className="text-center py-12">
@@ -1913,9 +2038,9 @@ const GSTReports: React.FC<GSTReportsProps> = ({ onClose }) => {
   };
 
   return (
-    <div className="flex-1 flex flex-col bg-gray-50">
+    <div className="flex-1 flex flex-col bg-gray-50 h-screen overflow-hidden">
       {/* Header */}
-      <div className="bg-white border-b border-gray-200 px-6 py-4">
+      <div className="bg-white border-b border-gray-200 px-6 py-4 flex-shrink-0">
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-2xl font-bold text-gray-900">GST Reports</h1>
@@ -1947,7 +2072,7 @@ const GSTReports: React.FC<GSTReportsProps> = ({ onClose }) => {
       </div>
 
       {/* Filters */}
-      <div className="bg-white border-b border-gray-200 px-6 py-4">
+      <div className="bg-white border-b border-gray-200 px-6 py-4 flex-shrink-0">
         <div className="flex items-center space-x-4">
           <div className="flex items-center space-x-3">
             <select
@@ -2005,7 +2130,7 @@ const GSTReports: React.FC<GSTReportsProps> = ({ onClose }) => {
       </div>
 
       {/* Report Selection */}
-      <div className="bg-white border-b border-gray-200 px-6 py-3">
+      <div className="bg-white border-b border-gray-200 px-6 py-3 flex-shrink-0">
         <div className="flex space-x-2">
           {reportTypes.map((report) => {
             const Icon = report.icon;
