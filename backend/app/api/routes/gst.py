@@ -869,11 +869,11 @@ async def get_credit_debit_notes_report(
                         note_dict[key] = float(note_dict[key])
                 all_notes.append(note_dict)
 
-        # Calculate summary
-        total_credit_amount = sum(note['amount'] for note in all_notes if note['note_type'] == 'credit')
-        total_debit_amount = sum(note['amount'] for note in all_notes if note['note_type'] == 'debit')
-        total_credit_tax = sum(note['tax_amount'] for note in all_notes if note['note_type'] == 'credit')
-        total_debit_tax = sum(note['tax_amount'] for note in all_notes if note['note_type'] == 'debit')
+        # Calculate summary (handle None values)
+        total_credit_amount = sum(note.get('amount', 0) or 0 for note in all_notes if note.get('note_type') == 'credit')
+        total_debit_amount = sum(note.get('amount', 0) or 0 for note in all_notes if note.get('note_type') == 'debit')
+        total_credit_tax = sum(note.get('tax_amount', 0) or 0 for note in all_notes if note.get('note_type') == 'credit')
+        total_debit_tax = sum(note.get('tax_amount', 0) or 0 for note in all_notes if note.get('note_type') == 'debit')
 
         return {
             "notes": all_notes,
