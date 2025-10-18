@@ -48,7 +48,7 @@ async def login(
             user = db.execute(text("""
                 SELECT u.user_id, u.username, u.email, u.full_name,
                        u.org_id, u.is_active, u.password_hash,
-                       u.role_id, u.branch_id,
+                       u.role_id, u.branch_ids,
                        o.org_name, o.is_active as org_active
                 FROM master.org_users u
                 JOIN master.organizations o ON u.org_id = o.org_id
@@ -87,8 +87,8 @@ async def login(
                 detail="Account is not active"
             )
         
-        # Use user's branch_id or get default branch
-        branch_id = user.branch_id
+        # Use user's first branch_id or get default branch
+        branch_id = user.branch_ids[0] if user.branch_ids and len(user.branch_ids) > 0 else None
         if not branch_id:
             branch_result = db.execute(text("""
                 SELECT b.branch_id 
