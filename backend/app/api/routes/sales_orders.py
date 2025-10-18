@@ -946,8 +946,10 @@ async def validate_sales_order(
 
 @router.get("/dashboard/stats")
 @with_tenant_context
-async def get_sales_order_dashboard(db: Session = Depends(get_db),
-    context: OrgContext = Depends(get_org_context)  # SECURE: JWT-based):
+async def get_sales_order_dashboard(
+    context: OrgContext = Depends(get_org_context),
+    db: Session = Depends(get_db)
+):
     """Get sales order dashboard statistics"""
     try:
         # Get sales order specific stats

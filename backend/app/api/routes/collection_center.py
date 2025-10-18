@@ -11,12 +11,8 @@ from typing import List, Optional, Dict, Any
 import logging
 from decimal import Decimal
 
-from database.connection import get_db
+from ...core.database import get_db
 from ...core.auth_utils import get_org_id_from_header
-from models.organization import Organization
-from models.customer import Customer
-from models.order import Order, OrderItem
-from models.payment import Payment
 
 router = APIRouter(prefix="/collection", tags=["Collection Center"])
 logger = logging.getLogger(__name__)
@@ -306,7 +302,6 @@ async def send_sms_reminder(
 
 @router.get("/analytics/performance")
 async def get_collection_performance(
-    org_id: str,
     start_date: date = Query(...),
     end_date: date = Query(...),
     db: Session = Depends(get_db),
@@ -361,7 +356,6 @@ async def get_collection_performance(
 
 @router.get("/analytics/agent-performance")
 async def get_agent_performance(
-    org_id: str,
     start_date: date = Query(...),
     end_date: date = Query(...),
     db: Session = Depends(get_db),
@@ -409,7 +403,6 @@ async def get_agent_performance(
 @router.get("/customer/{customer_id}/outstanding")
 async def get_customer_outstanding(
     customer_id: int,
-    org_id: str,
     db: Session = Depends(get_db),
     org_id: str = Depends(get_org_id_from_header)
 ):
@@ -509,7 +502,6 @@ async def record_customer_payment(
 
 @router.get("/hub-stats")
 async def get_hub_statistics(
-    org_id: str,
     db: Session = Depends(get_db),
     org_id: str = Depends(get_org_id_from_header)
 ):
@@ -534,7 +526,6 @@ async def get_hub_statistics(
         agents_query = text("""
             SELECT COUNT(*) as agent_count
             FROM master.org_users
-            WHERE org_id = :org_id 
             WHERE org_id = :org_id AND is_active = true
                 AND role ILIKE '%agent%' OR role ILIKE '%collection%'
         """)
@@ -560,7 +551,6 @@ async def get_hub_statistics(
 
 @router.get("/notifications")
 async def get_hub_notifications(
-    org_id: str,
     limit: int = 10,
     db: Session = Depends(get_db),
     org_id: str = Depends(get_org_id_from_header)
@@ -624,7 +614,6 @@ async def get_hub_notifications(
 
 @router.get("/campaigns")
 async def get_collection_campaigns(
-    org_id: str,
     db: Session = Depends(get_db),
     org_id: str = Depends(get_org_id_from_header)
 ):

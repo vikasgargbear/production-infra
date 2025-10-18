@@ -13,7 +13,7 @@ from decimal import Decimal
 from ...core.database import get_db
 from ...utils.branch_utils import get_default_branch_id
 from ...core.auth_utils import get_org_id_from_header
-from ...api.services.gst_service import GSTService, GSTType
+from ...api.services.gst_service import GSTService
 
 router = APIRouter(tags=["GST"])
 
