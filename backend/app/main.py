@@ -62,7 +62,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="Pharma ERP API",
     description="Enterprise Pharma ERP System API",
-    version="2.2.1",  # Fixed customer database dependency issues
+    version="2.2.2",  # Fixed auth schema column names
     lifespan=lifespan
 )
 
