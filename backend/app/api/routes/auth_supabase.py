@@ -49,15 +49,13 @@ async def login(
                 SELECT u.user_id, u.username, u.email, u.full_name,
                        u.org_id, u.is_active, u.password_hash,
                        u.role_id, u.branch_id,
-                       o.org_name, o.is_active as org_active,
-                       r.permissions
+                       o.org_name, o.is_active as org_active
                 FROM master.org_users u
                 JOIN master.organizations o ON u.org_id = o.org_id
-                LEFT JOIN master.roles r ON u.role_id = r.role_id
                 WHERE u.email = :email
             """), {"email": request.email}).fetchone()
         except Exception as e:
-            logger.error(f"Database query failed: {str(e)}")
+            logger.error(f"Database query failed during login: {str(e)}")
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail=f"Database error: {str(e)}"
@@ -102,6 +100,19 @@ async def login(
             """), {"org_id": str(user.org_id)}).fetchone()
             branch_id = branch_result.branch_id if branch_result else None
         
+        # Get permissions from roles table if role_id exists
+        permissions = {}
+        if user.role_id:
+            try:
+                role_result = db.execute(text("""
+                    SELECT permissions FROM master.roles WHERE role_id = :role_id
+                """), {"role_id": user.role_id}).fetchone()
+                if role_result and role_result.permissions:
+                    permissions = role_result.permissions
+            except Exception:
+                # If roles table doesn't exist or query fails, continue without permissions
+                pass
+        
         # Create proper JWT token
         access_token_expires = timedelta(minutes=1440)  # 24 hours
         access_token = create_access_token(
@@ -111,18 +122,22 @@ async def login(
                 "org_id": str(user.org_id),
                 "role_id": user.role_id,
                 "branch_id": branch_id,
-                "permissions": user.permissions if user.permissions else {}
+                "permissions": permissions
             },
             expires_delta=access_token_expires
         )
         
         # Update last login
-        db.execute(text("""
-            UPDATE master.org_users 
-            SET last_login_at = CURRENT_TIMESTAMP
-            WHERE user_id = :user_id
-        """), {"user_id": user.user_id})
-        db.commit()
+        try:
+            db.execute(text("""
+                UPDATE master.org_users 
+                SET last_login_at = CURRENT_TIMESTAMP
+                WHERE user_id = :user_id
+            """), {"user_id": user.user_id})
+            db.commit()
+        except Exception:
+            # If last_login_at column doesn't exist, skip update
+            pass
         
         # Return proper token response
         return {
@@ -136,7 +151,7 @@ async def login(
                 "org_name": user.org_name,
                 "role_id": user.role_id,
                 "branch_id": branch_id,
-                "permissions": user.permissions if user.permissions else {}
+                "permissions": permissions
             }
         }
     
