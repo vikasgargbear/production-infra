@@ -12,8 +12,9 @@ from functools import lru_cache
 
 from ...core.database import get_db
 from ...core.auth_utils import get_org_id_from_header
-from ...core.tenant_service import get_tenant_aware_db, with_tenant_context, TenantAwareSession, TenantContext
-from ...core.org_context import get_org_context, OrgContext
+# Temporarily removed tenant service imports to fix dependency issues
+# from ...core.tenant_service import get_tenant_aware_db, with_tenant_context, TenantAwareSession, TenantContext  
+# from ...core.org_context import get_org_context, OrgContext
 from ..schemas.customer import (
     CustomerCreate, CustomerUpdate, CustomerResponse, CustomerListResponse,
     CustomerLedgerResponse, CustomerOutstandingResponse,
