@@ -10,7 +10,7 @@ from sqlalchemy import text
 import logging
 from functools import lru_cache
 
-from ...core.database import get_db
+from ...core.database import get_db, SessionLocal
 from ...core.auth_utils import get_org_id_from_header
 # Temporarily removed tenant service imports to fix dependency issues
 # from ...core.tenant_service import get_tenant_aware_db, with_tenant_context, TenantAwareSession, TenantContext  
@@ -209,8 +209,7 @@ async def list_customers(
     has_gstin: Optional[bool] = None,
     include_stats: bool = Query(False, description="Include business statistics (disabled by default for performance)"),
     fast_search: bool = Query(True, description="Use fast search mode (minimal data for quick response)"),
-    org_id: str = Depends(get_org_id_from_header),  # Use regular org_id dependency
-    db: Session = Depends(get_db)  # Use regular database session
+    org_id: str = Depends(get_org_id_from_header)  # Use regular org_id dependency
 ):
     """
     List customers with search, filter, and pagination
@@ -221,6 +220,8 @@ async def list_customers(
     - **has_gstin**: Filter customers with/without GST number
     - **include_stats**: Include business statistics (set to false for faster response)
     """
+    # Create database session manually to avoid dependency issues
+    db = SessionLocal()
     try:
         logger.info(f"Customer search request: search={search}, limit={limit}, skip={skip}, include_stats={include_stats}")
         
@@ -342,6 +343,8 @@ async def list_customers(
     except Exception as e:
         logger.error(f"Error listing customers: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to list customers: {str(e)}")
+    finally:
+        db.close()  # Ensure database session is closed
 
 @router.get("/{customer_id}", response_model=CustomerResponse)
 async def get_customer(
