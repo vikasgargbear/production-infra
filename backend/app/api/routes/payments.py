@@ -12,7 +12,9 @@ from pydantic import BaseModel, Field
 import logging
 
 from ...core.database import get_db
-from ...core.auth_utils import get_org_id_from_header
+# Removed: get_org_id_from_header - using tenant service instead
+from ...core.tenant_service import get_tenant_aware_db, with_tenant_context, TenantAwareSession
+from ...core.org_context import get_org_context, OrgContext
 from ..services.payment_service import PaymentService
 from ..services.document_number_service import DocumentNumberService
 
@@ -22,22 +24,23 @@ logger = logging.getLogger(__name__)
 router = APIRouter(tags=["payments"])
 
 @router.get("/")
+@with_tenant_context
 async def get_payments_overview(
-    db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    context: OrgContext = Depends(get_org_context),
+    db: TenantAwareSession = Depends(get_tenant_aware_db)
 ):
     """Get payments overview"""
     try:
         # Simple payments overview
         result = db.execute(text("""
-            SELECT 
+            SELECT
                 COUNT(*) as total_payments,
                 SUM(amount) as total_amount,
                 COUNT(CASE WHEN payment_type = 'receipt' THEN 1 END) as receipts_count,
                 COUNT(CASE WHEN payment_type = 'payment' THEN 1 END) as payments_count
-            FROM financial.payments 
+            FROM financial.payments
             WHERE payment_date >= CURRENT_DATE - INTERVAL '30 days'
-        """)).fetchone()
+        """), {}).fetchone()
         
         return {
             "total_payments": result.total_payments if result else 0,
@@ -55,10 +58,11 @@ async def get_payments_overview(
         }
 
 @router.get("/generate-receipt-number")
+@with_tenant_context
 async def generate_receipt_number(
     payment_type: str = Query("receipt", description="Type: receipt or payment"),
-    db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    context: OrgContext = Depends(get_org_context),
+    db: TenantAwareSession = Depends(get_tenant_aware_db)
 ):
     """
     Generate unique receipt/payment number
@@ -81,7 +85,7 @@ async def generate_receipt_number(
                 END
             ), 0) + 1 as next_number
             FROM financial.payments 
-            WHERE org_id = :org_id
+            WHERE 1=1
                 AND payment_date = :payment_date
                 AND payment_number LIKE :like_pattern
         """
@@ -91,7 +95,6 @@ async def generate_receipt_number(
         like_pattern = f"{prefix}-{date_part}-%"
         
         result = db.execute(text(seq_query), {
-            "org_id": org_id,
             "payment_date": current_date,
             "pattern": pattern,
             "extract_pattern": extract_pattern,
@@ -174,10 +177,11 @@ class PaymentSummaryResponse(BaseModel):
     pending: dict
 
 @router.post("/", response_model=dict)
+@with_tenant_context
 async def create_payment(
     payment: GeneralPaymentCreate,
-    db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    context: OrgContext = Depends(get_org_context),
+    db: TenantAwareSession = Depends(get_tenant_aware_db)
 ):
     """
     Create a general payment (advance payment, invoice payment, or adjustment)
@@ -187,10 +191,8 @@ async def create_payment(
     - Creates proper payment records in payments table
     """
     try:
-        # Convert org_id to UUID for database operations
-        from uuid import UUID
-        if isinstance(org_id, str):
-            org_id = UUID(org_id)
+        # Use org_id from context
+        org_id = context.org_id
         
         # Generate payment number if not provided
         if not payment.payment_number:
@@ -217,11 +219,11 @@ async def create_payment(
             user_result = db.execute(
                 text("""
                     SELECT user_id FROM master.org_users 
-                    WHERE org_id = :org_id AND is_active = true
+                    WHERE 1=1 AND is_active = true
                     ORDER BY user_id
                     LIMIT 1
                 """),
-                {"org_id": org_id}
+                {}
             ).first()
             
             if user_result:
@@ -239,7 +241,7 @@ async def create_payment(
                                 'System', 'API', ARRAY['api_user'], true
                             ) RETURNING user_id
                         """),
-                        {"org_id": org_id}
+                        {}
                     ).first()
                     payment.created_by = create_user.user_id if create_user else None
                 except:
@@ -252,10 +254,10 @@ async def create_payment(
             method_result = db.execute(
                 text("""
                     SELECT payment_method_id FROM financial.payment_methods 
-                    WHERE org_id = :org_id AND method_type = :method_type
+                    WHERE method_type = :method_type
                     LIMIT 1
                 """),
-                {"org_id": org_id, "method_type": payment.payment_mode}
+                {"method_type": payment.payment_mode}
             ).first()
             
             if method_result:
@@ -335,10 +337,11 @@ async def create_payment(
         raise HTTPException(status_code=500, detail=f"Failed to create payment: {str(e)}")
 
 @router.post("/record", response_model=PaymentResponse)
+@with_tenant_context
 async def record_payment(
     payment: PaymentCreate,
-    db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    context: OrgContext = Depends(get_org_context),
+    db: TenantAwareSession = Depends(get_tenant_aware_db)
 ):
     """
     Record a payment against an invoice
@@ -359,10 +362,11 @@ async def record_payment(
         raise HTTPException(status_code=500, detail=f"Failed to record payment: {str(e)}")
 
 @router.get("/invoice/{invoice_id}", response_model=PaymentListResponse)
+@with_tenant_context
 async def get_invoice_payments(
     invoice_id: int,
-    db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    context: OrgContext = Depends(get_org_context),
+    db: TenantAwareSession = Depends(get_tenant_aware_db)
 ):
     """Get all payments for a specific invoice"""
     try:
@@ -373,11 +377,12 @@ async def get_invoice_payments(
         raise HTTPException(status_code=500, detail="Failed to retrieve payments")
 
 @router.get("/summary", response_model=PaymentSummaryResponse)
+@with_tenant_context
 async def get_payment_summary(
     from_date: Optional[date] = Query(None),
     to_date: Optional[date] = Query(None),
-    db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    context: OrgContext = Depends(get_org_context),
+    db: TenantAwareSession = Depends(get_tenant_aware_db)
 ):
     """
     Get payment summary and analytics
@@ -388,7 +393,7 @@ async def get_payment_summary(
     """
     try:
         summary = PaymentService.get_payment_summary(
-            db, org_id, from_date, to_date
+            db, context.org_id, from_date, to_date
         )
         return PaymentSummaryResponse(**summary)
     except Exception as e:
@@ -396,11 +401,12 @@ async def get_payment_summary(
         raise HTTPException(status_code=500, detail="Failed to get payment summary")
 
 @router.put("/{payment_id}/cancel")
+@with_tenant_context
 async def cancel_payment(
     payment_id: int,
     reason: str = Query(..., description="Cancellation reason"),
-    db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    context: OrgContext = Depends(get_org_context),
+    db: TenantAwareSession = Depends(get_tenant_aware_db)
 ):
     """
     Cancel a payment
@@ -421,10 +427,11 @@ async def cancel_payment(
         raise HTTPException(status_code=500, detail="Failed to cancel payment")
 
 @router.post("/customer-receipt", response_model=dict)
+@with_tenant_context
 async def create_customer_receipt(
     receipt_data: dict,
-    db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    context: OrgContext = Depends(get_org_context),
+    db: TenantAwareSession = Depends(get_tenant_aware_db)
 ):
     """
     Create a customer payment receipt
@@ -432,10 +439,8 @@ async def create_customer_receipt(
     Simple endpoint for recording customer payments
     """
     try:
-        # Convert org_id to UUID for database operations
-        from uuid import UUID
-        if isinstance(org_id, str):
-            org_id = UUID(org_id)
+        # Use org_id from context
+        org_id = context.org_id
         
         # Generate receipt number
         receipt_number = f"RCP-{date.today().strftime('%Y%m%d')}-{int(datetime.now().timestamp())}"
@@ -501,11 +506,12 @@ async def create_customer_receipt(
         raise HTTPException(status_code=500, detail=f"Failed to create receipt: {str(e)}")
 
 @router.get("/outstanding")
+@with_tenant_context
 async def get_outstanding_invoices(
     customer_id: Optional[int] = None,
     overdue_only: bool = False,
-    db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    context: OrgContext = Depends(get_org_context),
+    db: TenantAwareSession = Depends(get_tenant_aware_db)
 ):
     """
     Get list of outstanding invoices
@@ -530,11 +536,10 @@ async def get_outstanding_invoices(
                 END as days_overdue
             FROM sales.invoices i
             JOIN parties.customers c ON i.customer_id = c.customer_id
-            WHERE i.org_id = :org_id
-                AND i.payment_status IN ('unpaid', 'partial')
+            WHERE i.payment_status IN ('unpaid', 'partial')
         """
         
-        params = {"org_id": org_id}
+        params = {}
         
         if customer_id:
             query += " AND c.customer_id = :customer_id"
@@ -567,10 +572,11 @@ async def get_outstanding_invoices(
         raise HTTPException(status_code=500, detail="Failed to get outstanding invoices")
 
 @router.post("/bank-reconciliation")
+@with_tenant_context
 async def create_bank_reconciliation(
     reconciliation_data: dict,
-    db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    context: OrgContext = Depends(get_org_context),
+    db: TenantAwareSession = Depends(get_tenant_aware_db)
 ):
     """
     Create bank reconciliation entry
@@ -599,7 +605,6 @@ async def create_bank_reconciliation(
         """
         
         result = db.execute(text(recon_query), {
-            "org_id": org_id,
             "bank_account": bank_account,
             "statement_date": statement_date,
             "opening_balance": opening_balance,
@@ -616,9 +621,9 @@ async def create_bank_reconciliation(
         for txn in transactions:
             # Try to match with existing payments
             match_query = """
-                SELECT payment_id FROM payments 
-                WHERE org_id = :org_id 
-                AND amount = :amount 
+                SELECT payment_id FROM financial.payments
+                WHERE 1=1
+                AND amount = :amount
                 AND payment_date = :date
                 AND payment_status != 'cancelled'
                 AND cleared_date IS NULL
@@ -636,7 +641,7 @@ async def create_bank_reconciliation(
             if payment_match:
                 # Update payment as cleared
                 update_query = """
-                    UPDATE payments 
+                    UPDATE financial.payments
                     SET cleared_date = :cleared_date,
                         reconciliation_id = :reconciliation_id
                     WHERE payment_id = :payment_id
@@ -644,7 +649,8 @@ async def create_bank_reconciliation(
                 db.execute(text(update_query), {
                     "cleared_date": txn.get("date"),
                     "reconciliation_id": reconciliation_id,
-                    "payment_id": payment_match.payment_id
+                    "payment_id": payment_match.payment_id,
+                    "org_id": org_id
                 })
                 matched += 1
             else:
@@ -682,10 +688,11 @@ async def create_bank_reconciliation(
         raise HTTPException(status_code=500, detail=f"Failed to create bank reconciliation: {str(e)}")
 
 @router.post("/payment-allocation")
+@with_tenant_context
 async def allocate_payment(
     allocation_data: dict,
-    db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    context: OrgContext = Depends(get_org_context),
+    db: TenantAwareSession = Depends(get_tenant_aware_db)
 ):
     """
     Allocate a payment to multiple invoices
@@ -701,7 +708,7 @@ async def allocate_payment(
         # Get payment details
         payment_query = """
             SELECT payment_id, amount, customer_id, payment_type
-            FROM payments
+            FROM financial.payments
             WHERE payment_id = :payment_id AND payment_status = 'completed'
         """
         payment_result = db.execute(text(payment_query), {"payment_id": payment_id})
@@ -723,7 +730,7 @@ async def allocate_payment(
             invoice_query = """
                 SELECT invoice_id, final_amount, paid_amount
                 FROM sales.invoices
-                WHERE invoice_id = :invoice_id
+                WHERE invoice_id = :invoice_id AND org_id = :org_id
             """
             invoice_result = db.execute(text(invoice_query), {"invoice_id": invoice_id})
             invoice = invoice_result.first()
@@ -758,7 +765,7 @@ async def allocate_payment(
                 update_invoice_query = """
                     UPDATE sales.invoices
                     SET paid_amount = COALESCE(paid_amount, 0) + :amount,
-                        payment_status = CASE 
+                        payment_status = CASE
                             WHEN COALESCE(paid_amount, 0) + :amount >= final_amount THEN 'paid'
                             ELSE 'partial'
                         END
@@ -773,7 +780,7 @@ async def allocate_payment(
         
         # Update payment with allocated amount
         update_payment_query = """
-            UPDATE payments
+            UPDATE financial.payments
             SET allocated_amount = :allocated_amount,
                 unallocated_amount = amount - :allocated_amount
             WHERE payment_id = :payment_id
@@ -800,11 +807,12 @@ async def allocate_payment(
         raise HTTPException(status_code=500, detail=f"Failed to allocate payment: {str(e)}")
 
 @router.get("/aging-report")
+@with_tenant_context
 async def get_aging_report(
     as_of_date: Optional[date] = Query(None, description="Aging as of date"),
     customer_id: Optional[int] = Query(None, description="Filter by customer"),
-    db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    context: OrgContext = Depends(get_org_context),
+    db: TenantAwareSession = Depends(get_tenant_aware_db)
 ):
     """
     Get detailed aging report for outstanding invoices
@@ -839,13 +847,11 @@ async def get_aging_report(
                     END as aging_bucket
                 FROM sales.invoices i
                 JOIN parties.customers c ON i.customer_id = c.customer_id
-                WHERE i.org_id = :org_id
-                    AND i.payment_status IN ('unpaid', 'partial')
+                WHERE i.payment_status IN ('unpaid', 'partial')
                     AND (i.final_amount - COALESCE(i.paid_amount, 0)) > 0
         """
         
         params = {
-            "org_id": org_id,
             "aging_date": aging_date
         }
         

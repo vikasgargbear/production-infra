@@ -50,10 +50,12 @@ async def search_products_for_purchase(
                     ELSE 60
                 END as match_score
             FROM inventory.products p
-            LEFT JOIN inventory.batches b ON b.product_id = p.product_id 
+            LEFT JOIN inventory.batches b ON b.product_id = p.product_id
+                AND b.org_id = p.org_id
                 AND b.batch_id = (
-                    SELECT batch_id FROM inventory.batches 
-                    WHERE product_id = p.product_id 
+                    SELECT batch_id FROM inventory.batches
+                    WHERE product_id = p.product_id
+                    AND org_id = p.org_id
                     ORDER BY created_at DESC LIMIT 1
                 )
             WHERE p.org_id = :org_id
@@ -133,7 +135,7 @@ async def validate_purchase_items(
                 "batch_number": item.get("batch_number"),
                 "expiry_date": item.get("expiry_date"),
                 "hsn_code": item.get("hsn_code"),
-                "tax_percent": item.get("tax_percent", 12)
+                "tax_percent": item.get("tax_percent", 0)  # Don't hardcode tax - let it be specified
             }
             
             if existing:
@@ -213,11 +215,11 @@ async def get_purchases(
                 p.created_at,
                 COUNT(poi.po_item_id) as items_count
             FROM procurement.purchase_orders p
-            LEFT JOIN procurement.purchase_order_items poi ON p.purchase_order_id = poi.purchase_order_id
-            WHERE 1=1
+            LEFT JOIN procurement.purchase_order_items poi ON p.purchase_order_id = poi.purchase_order_id AND p.org_id = poi.org_id
+            WHERE p.org_id = :org_id
         """
-        
-        params = {}
+
+        params = {"org_id": current_user['org_id']}
         
         # Add search filter
         if search:
@@ -267,7 +269,7 @@ async def get_purchases(
         count_query = """
             SELECT COUNT(DISTINCT p.purchase_order_id) as total
             FROM procurement.purchase_orders p
-            WHERE 1=1
+            WHERE p.org_id = :org_id
         """
         
         # Apply same filters to count query
@@ -468,7 +470,7 @@ async def create_direct_purchase_entry(purchase_data: dict, db: Session = Depend
                 "pack_type": item.get("pack_type", "STRIP"),  # Default to STRIP for pharma
                 "disc_percent": item.get("discount_percent", 0),
                 "disc_amount": item.get("discount_amount", 0),
-                "tax_percent": item.get("tax_percent", 12),
+                "tax_percent": item.get("tax_percent", 0),  # Don't hardcode tax - let it be specified
                 "tax_amount": item.get("tax_amount", 0),
                 "line_total": item.get("total_amount", 0)  # This is the final total with tax
             })
@@ -553,8 +555,8 @@ async def create_purchase_entry(purchase_data: dict, db: Session = Depends(get_d
         supplier_name = None
         if purchase_data.get("supplier_id"):
             supplier_result = db.execute(
-                text("SELECT supplier_name FROM parties.suppliers WHERE supplier_id = :id"),
-                {"id": purchase_data.get("supplier_id")}
+                text("SELECT supplier_name FROM parties.suppliers WHERE supplier_id = :id AND org_id = :org_id"),
+                {"id": purchase_data.get("supplier_id"), "org_id": current_user['org_id']}
             ).first()
             if supplier_result:
                 supplier_name = supplier_result.supplier_name
@@ -877,8 +879,8 @@ async def create_purchase_with_items(purchase_data: dict, db: Session = Depends(
         supplier_name = None
         if purchase_data.get("supplier_id"):
             supplier_result = db.execute(
-                text("SELECT supplier_name FROM parties.suppliers WHERE supplier_id = :id"),
-                {"id": purchase_data.get("supplier_id")}
+                text("SELECT supplier_name FROM parties.suppliers WHERE supplier_id = :id AND org_id = :org_id"),
+                {"id": purchase_data.get("supplier_id"), "org_id": current_user['org_id']}
             ).first()
             if supplier_result:
                 supplier_name = supplier_result.supplier_name
@@ -1213,11 +1215,11 @@ async def get_purchase_items(purchase_id: int, db: Session = Depends(get_db),
                     p.category_id,
                     p.brand_name
                 FROM procurement.purchase_order_items pi
-                LEFT JOIN inventory.products p ON pi.product_id = p.product_id
-                WHERE pi.po_id = :purchase_id
+                LEFT JOIN inventory.products p ON pi.product_id = p.product_id AND pi.org_id = p.org_id
+                WHERE pi.po_id = :purchase_id AND pi.org_id = :org_id
                 ORDER BY pi.po_item_id
             """),
-            {"purchase_id": purchase_id}
+            {"purchase_id": purchase_id, "org_id": current_user['org_id']}
         ).fetchall()
         
         return [dict(item._mapping) for item in items]
@@ -1239,12 +1241,13 @@ def update_purchase_item(
         # Verify item belongs to purchase
         check = db.execute(
             text("""
-                SELECT po_item_id 
-                FROM procurement.purchase_order_items 
-                WHERE po_item_id = :item_id 
+                SELECT po_item_id
+                FROM procurement.purchase_order_items
+                WHERE po_item_id = :item_id
                 AND po_id = :purchase_id
+                AND org_id = :org_id
             """),
-            {"item_id": item_id, "purchase_id": purchase_id}
+            {"item_id": item_id, "purchase_id": purchase_id, "org_id": org_id}
         ).first()
         
         if not check:
@@ -1268,11 +1271,11 @@ def update_purchase_item(
         if updates:
             db.execute(
                 text(f"""
-                    UPDATE procurement.purchase_order_items 
+                    UPDATE procurement.purchase_order_items
                     SET {', '.join(updates)}, updated_at = CURRENT_TIMESTAMP
-                    WHERE po_item_id = :item_id
+                    WHERE po_item_id = :item_id AND org_id = :org_id
                 """),
-                params
+                {**params, "org_id": org_id}
             )
             db.commit()
         
@@ -1300,8 +1303,8 @@ async def receive_purchase_items(
     try:
         # Get purchase details
         purchase = db.execute(
-            text("SELECT * FROM procurement.purchase_orders WHERE purchase_order_id = :id"),
-            {"id": purchase_id}
+            text("SELECT * FROM procurement.purchase_orders WHERE purchase_order_id = :id AND org_id = :org_id"),
+            {"id": purchase_id, "org_id": current_user['org_id']}
         ).first()
         
         if not purchase:
@@ -1323,13 +1326,14 @@ async def receive_purchase_items(
             # Get purchase item details
             pi = db.execute(
                 text("""
-                    SELECT * FROM procurement.purchase_order_items 
-                    WHERE po_item_id = :item_id 
+                    SELECT * FROM procurement.purchase_order_items
+                    WHERE po_item_id = :item_id
                     AND po_id = :purchase_id
+                    AND org_id = :org_id
                 """),
-                {"item_id": item_id, "purchase_id": purchase_id}
+                {"item_id": item_id, "purchase_id": purchase_id, "org_id": current_user['org_id']}
             ).first()
-            
+
             if not pi:
                 continue
             
@@ -1453,8 +1457,8 @@ async def receive_purchase_items_fixed(
     try:
         # Get purchase
         purchase = db.execute(
-            text("SELECT * FROM procurement.purchase_orders WHERE purchase_order_id = :id"),
-            {"id": purchase_id}
+            text("SELECT * FROM procurement.purchase_orders WHERE purchase_order_id = :id AND org_id = :org_id"),
+            {"id": purchase_id, "org_id": current_user['org_id']}
         ).first()
         
         if not purchase:
@@ -1516,8 +1520,8 @@ async def receive_purchase_items_fixed(
         
         # Count created batches
         batch_count = db.execute(
-            text("SELECT COUNT(*) FROM inventory.batches WHERE purchase_id = :id"),
-            {"id": purchase_id}
+            text("SELECT COUNT(*) FROM inventory.batches WHERE purchase_id = :id AND org_id = :org_id"),
+            {"id": purchase_id, "org_id": current_user['org_id']}
         ).scalar()
         
         return {
@@ -1551,9 +1555,10 @@ async def get_pending_receipts(
                 COUNT(pi.po_item_id) as total_items,
                 COUNT(CASE WHEN pi.received_quantity > 0 THEN 1 END) as received_items
             FROM procurement.purchase_orders p
-            JOIN parties.suppliers s ON p.supplier_id = s.supplier_id
-            LEFT JOIN procurement.purchase_order_items pi ON p.purchase_order_id = pi.purchase_order_id
-            WHERE p.po_status IN ('draft', 'approved', 'partial')
+            JOIN parties.suppliers s ON p.supplier_id = s.supplier_id AND p.org_id = s.org_id
+            LEFT JOIN procurement.purchase_order_items pi ON p.purchase_order_id = pi.purchase_order_id AND p.org_id = pi.org_id
+            WHERE p.org_id = :org_id
+            AND p.po_status IN ('draft', 'approved', 'partial')
         """
         params = {}
         

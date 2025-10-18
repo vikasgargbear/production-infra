@@ -10,7 +10,9 @@ from sqlalchemy import text
 import logging
 
 from ...core.database import get_db
-from ...core.auth_utils import get_org_id_from_header
+# Removed: get_org_id_from_header - using tenant service instead
+from ...core.tenant_service import get_tenant_aware_db, with_tenant_context, TenantAwareSession
+from ...core.org_context import get_org_context, OrgContext
 from ..schemas.inventory import (
     BatchCreate, BatchResponse, StockMovementCreate,
     StockMovementResponse, StockAdjustment,
@@ -24,21 +26,22 @@ logger = logging.getLogger(__name__)
 router = APIRouter(tags=["inventory"])
 
 @router.get("/")
+@with_tenant_context
 async def get_inventory_overview(
-    db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    context: OrgContext = Depends(get_org_context),
+    db: TenantAwareSession = Depends(get_tenant_aware_db)
 ):
     """Get inventory overview"""
     try:
         # Simple inventory overview
         result = db.execute(text("""
-            SELECT 
+            SELECT
                 COUNT(*) as total_products,
                 SUM(CASE WHEN quantity_available > 0 THEN 1 ELSE 0 END) as products_in_stock,
                 SUM(quantity_available) as total_quantity
-            FROM inventory.batches 
+            FROM inventory.batches
             WHERE batch_status = 'active'
-        """)).fetchone()
+        """), {}).fetchone()
         
         return {
             "total_products": result.total_products if result else 0,
@@ -54,10 +57,11 @@ async def get_inventory_overview(
         }
 
 @router.post("/batches", response_model=BatchResponse)
+@with_tenant_context
 async def create_batch(
     batch: BatchCreate,
-    db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    context: OrgContext = Depends(get_org_context),
+    db: TenantAwareSession = Depends(get_tenant_aware_db)
 ):
     """
     Create a new batch for a product
@@ -76,10 +80,11 @@ async def create_batch(
         raise HTTPException(status_code=500, detail=f"Failed to create batch: {str(e)}")
 
 @router.get("/batches/{batch_id}", response_model=BatchResponse)
+@with_tenant_context
 async def get_batch(
     batch_id: int,
-    db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    context: OrgContext = Depends(get_org_context),
+    db: TenantAwareSession = Depends(get_tenant_aware_db)
 ):
     """Get batch details with stock calculations"""
     try:
@@ -91,6 +96,7 @@ async def get_batch(
         raise HTTPException(status_code=500, detail=f"Failed to get batch: {str(e)}")
 
 @router.get("/batches")
+@with_tenant_context
 async def list_batches(
     product_id: Optional[int] = None,
     expiring_in_days: Optional[int] = None,
@@ -98,8 +104,8 @@ async def list_batches(
     include_expired: bool = False,
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=1000),
-    db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    context: OrgContext = Depends(get_org_context),
+    db: TenantAwareSession = Depends(get_tenant_aware_db)
 ):
     """
     List batches with filters
@@ -114,10 +120,10 @@ async def list_batches(
                    b.expiry_date - CURRENT_DATE as days_to_expiry,
                    b.quantity_available * b.cost_per_unit as stock_value
             FROM inventory.batches b
-            JOIN inventory.products p ON b.product_id = p.product_id
-            WHERE b.org_id = :org_id
+            JOIN inventory.products p ON b.product_id = p.product_id AND b.org_id = p.org_id
+            WHERE 1=1
         """
-        params = {"org_id": org_id}
+        params = {}
         
         if product_id:
             query += " AND b.product_id = :product_id"
@@ -161,10 +167,11 @@ async def list_batches(
         raise HTTPException(status_code=500, detail=f"Failed to list batches: {str(e)}")
 
 @router.get("/stock/current/{product_id}", response_model=CurrentStock)
+@with_tenant_context
 async def get_current_stock(
     product_id: int,
-    db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    context: OrgContext = Depends(get_org_context),
+    db: TenantAwareSession = Depends(get_tenant_aware_db)
 ):
     """Get current stock summary for a product"""
     try:
@@ -176,13 +183,14 @@ async def get_current_stock(
         raise HTTPException(status_code=500, detail=f"Failed to get stock: {str(e)}")
 
 @router.get("/stock/current")
+@with_tenant_context
 async def list_current_stock(
     category: Optional[str] = None,
     low_stock_only: bool = False,
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=1000),
-    db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    context: OrgContext = Depends(get_org_context),
+    db: TenantAwareSession = Depends(get_tenant_aware_db)
 ):
     """
     List current stock levels for all products
@@ -209,7 +217,7 @@ async def list_current_stock(
                 COALESCE(b.total_value, 0) as total_value,
                 COALESCE(b.average_cost, 0) as average_cost
             FROM inventory.products p
-            LEFT JOIN inventory.product_categories c ON p.category_id = c.category_id
+            LEFT JOIN inventory.product_categories c ON p.category_id = c.category_id AND p.org_id = c.org_id
             LEFT JOIN (
                 SELECT 
                     product_id,
@@ -222,12 +230,12 @@ async def list_current_stock(
                     COUNT(CASE WHEN expiry_date <= CURRENT_DATE THEN 1 END) as expired_batches,
                     COUNT(CASE WHEN expiry_date > CURRENT_DATE AND expiry_date <= CURRENT_DATE + INTERVAL '90 days' THEN 1 END) as near_expiry_batches
                 FROM inventory.batches
-                WHERE org_id = :org_id
+                WHERE 1=1
                 GROUP BY product_id
             ) b ON p.product_id = b.product_id
-            WHERE p.org_id = :org_id
+            WHERE 1=1
         """
-        params = {"org_id": org_id}
+        params = {}
         
         if category:
             query += " AND p.category_id = :category"
@@ -263,10 +271,11 @@ async def list_current_stock(
         raise HTTPException(status_code=500, detail=f"Failed to list stock: {str(e)}")
 
 @router.post("/movements", response_model=StockMovementResponse)
+@with_tenant_context
 async def record_stock_movement(
     movement: StockMovementCreate,
-    db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    context: OrgContext = Depends(get_org_context),
+    db: TenantAwareSession = Depends(get_tenant_aware_db)
 ):
     """
     Record a stock movement
@@ -284,6 +293,7 @@ async def record_stock_movement(
         raise HTTPException(status_code=500, detail=f"Failed to record movement: {str(e)}")
 
 @router.get("/movements")
+@with_tenant_context
 async def list_stock_movements(
     product_id: Optional[int] = None,
     movement_type: Optional[str] = None,
@@ -291,8 +301,8 @@ async def list_stock_movements(
     to_date: Optional[date] = None,
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=1000),
-    db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    context: OrgContext = Depends(get_org_context),
+    db: TenantAwareSession = Depends(get_tenant_aware_db)
 ):
     """List stock movements with filters"""
     try:
@@ -315,9 +325,9 @@ async def list_stock_movements(
                     b.batch_number
                 FROM sales.invoice_items ii
                 JOIN sales.invoices i ON ii.invoice_id = i.invoice_id
-                JOIN inventory.products p ON ii.product_id = p.product_id
-                LEFT JOIN inventory.batches b ON ii.batch_id = b.batch_id
-                WHERE i.org_id = :org_id
+                JOIN inventory.products p ON ii.product_id = p.product_id AND ii.org_id = p.org_id
+                LEFT JOIN inventory.batches b ON ii.batch_id = b.batch_id AND ii.org_id = b.org_id
+                WHERE 1=1
                 
                 UNION ALL
                 
@@ -336,13 +346,13 @@ async def list_stock_movements(
                     p.product_code,
                     gi.batch_number
                 FROM procurement.grn_items gi
-                JOIN procurement.goods_receipt_notes g ON gi.grn_id = g.grn_id
-                JOIN inventory.products p ON gi.product_id = p.product_id
-                WHERE g.org_id = :org_id
+                JOIN procurement.goods_receipt_notes g ON gi.grn_id = g.grn_id AND gi.org_id = g.org_id
+                JOIN inventory.products p ON gi.product_id = p.product_id AND gi.org_id = p.org_id
+                WHERE 1=1
             )
             SELECT * FROM movements WHERE 1=1
         """
-        params = {"org_id": org_id}
+        params = {}
         
         if product_id:
             query += " AND product_id = :product_id"
@@ -381,10 +391,11 @@ async def list_stock_movements(
         raise HTTPException(status_code=500, detail=f"Failed to list movements: {str(e)}")
 
 @router.post("/stock/adjustment", response_model=StockMovementResponse)
+@with_tenant_context
 async def adjust_stock(
     adjustment: StockAdjustment,
-    db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    context: OrgContext = Depends(get_org_context),
+    db: TenantAwareSession = Depends(get_tenant_aware_db)
 ):
     """
     Adjust stock for damage, expiry, counting, etc.
@@ -394,7 +405,7 @@ async def adjust_stock(
     - Maintains audit trail
     """
     try:
-        return InventoryService.process_stock_adjustment(db, adjustment, org_id)
+        return InventoryService.process_stock_adjustment(db, adjustment, context.org_id)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
@@ -402,11 +413,12 @@ async def adjust_stock(
         raise HTTPException(status_code=500, detail=f"Failed to adjust stock: {str(e)}")
 
 @router.get("/expiry/alerts", response_model=List[ExpiryAlert])
+@with_tenant_context
 async def get_expiry_alerts(
     days_ahead: int = Query(180, ge=1, le=365),
     alert_level: Optional[str] = None,
-    db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    context: OrgContext = Depends(get_org_context),
+    db: TenantAwareSession = Depends(get_tenant_aware_db)
 ):
     """
     Get expiry alerts for products
@@ -416,7 +428,7 @@ async def get_expiry_alerts(
     - Includes stock value at risk
     """
     try:
-        alerts = InventoryService.get_expiry_alerts(db, org_id, days_ahead)
+        alerts = InventoryService.get_expiry_alerts(db, context.org_id, days_ahead)
         
         if alert_level:
             alerts = [a for a in alerts if a.alert_level == alert_level]
@@ -428,10 +440,11 @@ async def get_expiry_alerts(
         raise HTTPException(status_code=500, detail=f"Failed to get expiry alerts: {str(e)}")
 
 @router.get("/valuation", response_model=StockValuation)
+@with_tenant_context
 async def get_stock_valuation(
     as_of_date: Optional[date] = None,
-    db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    context: OrgContext = Depends(get_org_context),
+    db: TenantAwareSession = Depends(get_tenant_aware_db)
 ):
     """
     Get stock valuation report
@@ -442,14 +455,17 @@ async def get_stock_valuation(
     - Category-wise breakdown
     """
     try:
-        return InventoryService.get_stock_valuation(db, org_id, as_of_date)
+        return InventoryService.get_stock_valuation(db, context.org_id, as_of_date)
     except Exception as e:
         logger.error(f"Error getting valuation: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to get valuation: {str(e)}")
 
 @router.get("/dashboard", response_model=InventoryDashboard)
-async def get_inventory_dashboard(db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)):
+@with_tenant_context
+async def get_inventory_dashboard(
+    context: OrgContext = Depends(get_org_context),
+    db: TenantAwareSession = Depends(get_tenant_aware_db)
+):
     """
     Get inventory dashboard summary
     
@@ -459,7 +475,7 @@ async def get_inventory_dashboard(db: Session = Depends(get_db),
     - Expiry alerts
     """
     try:
-        return InventoryService.get_inventory_dashboard(db, org_id)
+        return InventoryService.get_inventory_dashboard(db, context.org_id)
     except Exception as e:
         logger.error(f"Error getting dashboard: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to get dashboard: {str(e)}")

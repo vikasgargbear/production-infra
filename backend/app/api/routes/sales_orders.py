@@ -12,7 +12,9 @@ from sqlalchemy import text
 import logging
 
 from ...core.database import get_db
-from ...core.auth_utils import get_org_id_from_header
+from ...core.secure_auth import get_org_id_secure  # SECURE: Token-based auth
+from ...core.tenant_service import get_tenant_aware_db, with_tenant_context, TenantAwareSession
+from ...core.org_context import get_org_context, OrgContext
 from ..services.document_number_service import DocumentNumberService
 from ..schemas.order import (
     OrderCreate, OrderResponse, OrderListResponse, InvoiceRequest,
@@ -27,9 +29,10 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/sales-orders", tags=["sales-orders"])
 
 @router.get("/generate-number")
+@with_tenant_context
 async def generate_sales_order_number(
-    db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    db: TenantAwareSession = Depends(get_tenant_aware_db),
+    context: OrgContext = Depends(get_org_context)  # SECURE: JWT-based
 ):
     """Generate next sales order number using unified service"""
     try:
@@ -45,9 +48,10 @@ async def generate_sales_order_number(
         return {"order_number": fallback_number}
 
 @router.get("/employees")
+@with_tenant_context
 async def get_employees_for_created_by(
-    db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    db: TenantAwareSession = Depends(get_tenant_aware_db),
+    context: OrgContext = Depends(get_org_context)  # SECURE: JWT-based
 ):
     """Get list of employees for 'Created By' dropdown"""
     try:
@@ -70,10 +74,11 @@ async def get_employees_for_created_by(
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/", response_model=OrderResponse)
+@with_tenant_context
 async def create_sales_order(
     order: OrderCreate,
-    db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    db: TenantAwareSession = Depends(get_tenant_aware_db),
+    context: OrgContext = Depends(get_org_context)  # SECURE: JWT-based
 ):
     """
     Create a new sales order (no inventory reduction)
@@ -118,13 +123,12 @@ async def create_sales_order(
             delivery_address_id = shipping_address_id
         
         # Validate customer exists and get all details
-        # NOTE: Following invoice pattern - don't filter by org_id since we have dynamic org_id
-        # and customers might have been created with different org_id values
+        # SECURITY FIX: ALWAYS filter by org_id to prevent cross-org data access
         customer = db.execute(text("""
             SELECT customer_id, customer_name, primary_phone, gst_number
-            FROM parties.customers 
-            WHERE customer_id = :id
-        """), {"id": order.customer_id}).fetchone()
+            FROM parties.customers
+            WHERE customer_id = :id AND org_id = :org_id
+        """), {"id": order.customer_id, "org_id": org_id}).fetchone()
         
         if not customer:
             logger.error(f"Customer {order.customer_id} does not exist")
@@ -133,13 +137,13 @@ async def create_sales_order(
         customer_discount = Decimal("0")  # Default to no customer discount for now
         
         # Validate products exist (but don't check inventory yet)
-        # NOTE: Following invoice pattern - don't filter by org_id
+        # SECURITY FIX: ALWAYS filter by org_id
         items_dict = [item.dict() for item in order.items]
         for item in items_dict:
             product = db.execute(text("""
-                SELECT product_id, product_name FROM inventory.products 
-                WHERE product_id = :id
-            """), {"id": item["product_id"]}).fetchone()
+                SELECT product_id, product_name FROM inventory.products
+                WHERE product_id = :id AND org_id = :org_id
+            """), {"id": item["product_id"], "org_id": org_id}).fetchone()
             
             if not product:
                 raise HTTPException(
@@ -160,7 +164,7 @@ async def create_sales_order(
             base_quantity = Decimal(str(item.quantity))  # What customer pays for
             unit_price = Decimal(str(item.unit_price))
             discount_percent = Decimal(str(item.discount_percent or 0))
-            tax_percent = Decimal(str(item.tax_percent or 18))
+            tax_percent = Decimal(str(item.tax_percent or 0))  # No default - must come from product
             gst_type = getattr(item, 'gst_type', 'CGST/SGST')
             
             gross_amount = base_quantity * unit_price  # Calculate on what customer pays for
@@ -310,11 +314,11 @@ async def create_sales_order(
             item_data["order_id"] = order_id
             
             # Get product details including HSN code and product_code
-            # NOTE: Following invoice pattern - don't filter by org_id
+            # SECURITY FIX: ALWAYS filter by org_id
             product_details = db.execute(text("""
-                SELECT product_name, hsn_code, product_code FROM inventory.products 
-                WHERE product_id = :product_id
-            """), {"product_id": item_data["product_id"]}).fetchone()
+                SELECT product_name, hsn_code, product_code FROM inventory.products
+                WHERE product_id = :product_id AND org_id = :org_id
+            """), {"product_id": item_data["product_id"], "org_id": org_id}).fetchone()
             
             # CORRECTED calculation logic - matching invoice pattern
             base_quantity = Decimal(str(item_data["quantity"]))  # What customer PAYS for
@@ -323,7 +327,7 @@ async def create_sales_order(
             
             unit_price = Decimal(str(item_data["unit_price"]))
             discount_percent = Decimal(str(item_data.get("discount_percent", 0)))
-            tax_percent = Decimal(str(item_data.get("tax_percent", 18)))
+            tax_percent = Decimal(str(item_data.get("tax_percent", 0)))  # No default - must come from product
             
             # CORRECT: base_quantity is what customer PAYS for (2)
             # free_quantity is ADDITIONAL items (4)
@@ -437,7 +441,7 @@ async def create_sales_order(
         result = db.execute(text("""
             SELECT o.*, c.customer_name, c.customer_code, c.primary_phone as customer_phone
             FROM sales.orders o
-            JOIN parties.customers c ON o.customer_id = c.customer_id
+            JOIN parties.customers c ON o.customer_id = c.customer_id AND o.org_id = c.org_id
             WHERE o.order_id = :id AND o.org_id = :org_id AND o.order_type = 'sales'
         """), {"id": order_id, "org_id": org_id})
         
@@ -452,10 +456,10 @@ async def create_sales_order(
             SELECT oi.*, p.product_name, p.product_code,
                    b.batch_number, b.expiry_date
             FROM sales.order_items oi
-            JOIN inventory.products p ON oi.product_id = p.product_id
-            LEFT JOIN inventory.batches b ON oi.batch_id = b.batch_id
-            WHERE oi.order_id = :order_id
-        """), {"order_id": order_id})
+            JOIN inventory.products p ON oi.product_id = p.product_id AND oi.org_id = p.org_id
+            LEFT JOIN inventory.batches b ON oi.batch_id = b.batch_id AND oi.org_id = b.org_id
+            WHERE oi.order_id = :order_id AND oi.org_id = :org_id
+        """), {"order_id": order_id, "org_id": org_id})
         
         order_dict["items"] = [dict(item._mapping) for item in items_result]
         order_dict["total_amount"] = order_dict.get("final_amount", 0)
@@ -473,6 +477,7 @@ async def create_sales_order(
         raise HTTPException(status_code=500, detail=f"Failed to create sales order: {str(e)}")
 
 @router.get("/", response_model=OrderListResponse)
+@with_tenant_context
 async def list_sales_orders(
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=500),  # Reasonable limit for performance
@@ -480,8 +485,8 @@ async def list_sales_orders(
     status: Optional[str] = None,
     from_date: Optional[date] = None,
     to_date: Optional[date] = None,
-    db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    db: TenantAwareSession = Depends(get_tenant_aware_db),
+    context: OrgContext = Depends(get_org_context)  # SECURE: JWT-based
 ):
     """
     List sales orders with filters and pagination
@@ -491,7 +496,7 @@ async def list_sales_orders(
         query = """
             SELECT o.*, c.customer_name, c.customer_code, c.primary_phone as customer_phone
             FROM sales.orders o
-            JOIN parties.customers c ON o.customer_id = c.customer_id
+            JOIN parties.customers c ON o.customer_id = c.customer_id AND o.org_id = c.org_id
             WHERE o.org_id = :org_id AND o.order_type = 'regular'
         """
         count_query = """
@@ -539,10 +544,10 @@ async def list_sales_orders(
             items_result = db.execute(text("""
                 SELECT oi.*, p.product_name, p.product_code
                 FROM sales.order_items oi
-                JOIN inventory.products p ON oi.product_id = p.product_id
-                WHERE oi.order_id = ANY(:order_ids)
+                JOIN inventory.products p ON oi.product_id = p.product_id AND oi.org_id = p.org_id
+                WHERE oi.order_id = ANY(:order_ids) AND oi.org_id = :org_id
                 ORDER BY oi.order_id, oi.order_item_id
-            """), {"order_ids": order_ids})
+            """), {"order_ids": order_ids, "org_id": org_id})
             
             for item in items_result:
                 order_id = item.order_id
@@ -571,10 +576,11 @@ async def list_sales_orders(
         raise HTTPException(status_code=500, detail=f"Failed to list sales orders: {str(e)}")
 
 @router.get("/{order_id}", response_model=OrderResponse)
+@with_tenant_context
 async def get_sales_order(
     order_id: int,
-    db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    db: TenantAwareSession = Depends(get_tenant_aware_db),
+    context: OrgContext = Depends(get_org_context)  # SECURE: JWT-based
 ):
     """Get sales order details with items"""
     try:
@@ -586,7 +592,7 @@ async def get_sales_order(
         result = db.execute(text("""
             SELECT o.*, c.customer_name, c.customer_code, c.primary_phone as customer_phone
             FROM sales.orders o
-            JOIN parties.customers c ON o.customer_id = c.customer_id
+            JOIN parties.customers c ON o.customer_id = c.customer_id AND o.org_id = c.org_id
             WHERE o.order_id = :id AND o.org_id = :org_id AND o.order_type = 'sales'
         """), {"id": order_id, "org_id": org_id})
         
@@ -601,10 +607,10 @@ async def get_sales_order(
             SELECT oi.*, p.product_name, p.product_code,
                    b.batch_number, b.expiry_date
             FROM sales.order_items oi
-            JOIN inventory.products p ON oi.product_id = p.product_id
-            LEFT JOIN inventory.batches b ON oi.batch_id = b.batch_id
-            WHERE oi.order_id = :order_id
-        """), {"order_id": order_id})
+            JOIN inventory.products p ON oi.product_id = p.product_id AND oi.org_id = p.org_id
+            LEFT JOIN inventory.batches b ON oi.batch_id = b.batch_id AND oi.org_id = b.org_id
+            WHERE oi.order_id = :order_id AND oi.org_id = :org_id
+        """), {"order_id": order_id, "org_id": org_id})
         
         order_dict["items"] = [dict(item._mapping) for item in items_result]
         order_dict["total_amount"] = order_dict.get("final_amount", 0)
@@ -620,11 +626,12 @@ async def get_sales_order(
         raise HTTPException(status_code=500, detail=f"Failed to get sales order: {str(e)}")
 
 @router.put("/{order_id}", response_model=OrderResponse)
+@with_tenant_context
 async def update_sales_order(
     order_id: int,
     order_data: OrderUpdate,
-    db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    db: TenantAwareSession = Depends(get_tenant_aware_db),
+    context: OrgContext = Depends(get_org_context)  # SECURE: JWT-based
 ):
     """Update sales order details (only for pending orders)"""
     try:
@@ -673,7 +680,7 @@ async def update_sales_order(
         result = db.execute(text("""
             SELECT o.*, c.customer_name, c.customer_code, c.primary_phone as customer_phone
             FROM sales.orders o
-            JOIN parties.customers c ON o.customer_id = c.customer_id
+            JOIN parties.customers c ON o.customer_id = c.customer_id AND o.org_id = c.org_id
             WHERE o.order_id = :id AND o.org_id = :org_id AND o.order_type = 'sales'
         """), {"id": order_id, "org_id": org_id})
         
@@ -688,10 +695,10 @@ async def update_sales_order(
             SELECT oi.*, p.product_name, p.product_code,
                    b.batch_number, b.expiry_date
             FROM sales.order_items oi
-            JOIN inventory.products p ON oi.product_id = p.product_id
-            LEFT JOIN inventory.batches b ON oi.batch_id = b.batch_id
-            WHERE oi.order_id = :order_id
-        """), {"order_id": order_id})
+            JOIN inventory.products p ON oi.product_id = p.product_id AND oi.org_id = p.org_id
+            LEFT JOIN inventory.batches b ON oi.batch_id = b.batch_id AND oi.org_id = b.org_id
+            WHERE oi.order_id = :order_id AND oi.org_id = :org_id
+        """), {"order_id": order_id, "org_id": org_id})
         
         order_dict["items"] = [dict(item._mapping) for item in items_result]
         order_dict["total_amount"] = order_dict.get("final_amount", 0)
@@ -709,10 +716,11 @@ async def update_sales_order(
         raise HTTPException(status_code=500, detail=f"Failed to update sales order: {str(e)}")
 
 @router.post("/{order_id}/approve")
+@with_tenant_context
 async def approve_sales_order(
     order_id: int,
-    db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    db: TenantAwareSession = Depends(get_tenant_aware_db),
+    context: OrgContext = Depends(get_org_context)  # SECURE: JWT-based
 ):
     """
     Approve sales order and allocate inventory
@@ -739,7 +747,7 @@ async def approve_sales_order(
             SELECT product_id, batch_id, quantity, unit_price
             FROM sales.order_items 
             WHERE order_id = :order_id
-        """), {"order_id": order_id}).fetchall()
+        """), {"order_id": order_id, "org_id": org_id}).fetchall()
         
         items_dict = [dict(item._mapping) for item in items]
         
@@ -798,11 +806,12 @@ async def approve_sales_order(
         raise HTTPException(status_code=500, detail=f"Failed to approve sales order: {str(e)}")
 
 @router.post("/{order_id}/convert-to-invoice", response_model=InvoiceResponse)
+@with_tenant_context
 async def convert_to_invoice(
     order_id: int,
     invoice_request: InvoiceRequest,
-    db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    db: TenantAwareSession = Depends(get_tenant_aware_db),
+    context: OrgContext = Depends(get_org_context)  # SECURE: JWT-based
 ):
     """Convert approved sales order to invoice"""
     try:
@@ -850,11 +859,12 @@ async def convert_to_invoice(
         raise HTTPException(status_code=500, detail=f"Failed to convert to invoice: {str(e)}")
 
 @router.post("/{order_id}/convert-to-challan")
+@with_tenant_context
 async def convert_to_challan(
     order_id: int,
     challan_date: Optional[date] = None,
-    db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    db: TenantAwareSession = Depends(get_tenant_aware_db),
+    context: OrgContext = Depends(get_org_context)  # SECURE: JWT-based
 ):
     """Convert approved sales order to delivery challan"""
     try:
@@ -899,10 +909,11 @@ async def convert_to_challan(
         raise HTTPException(status_code=500, detail=f"Failed to convert to challan: {str(e)}")
 
 @router.post("/validate")
+@with_tenant_context
 async def validate_sales_order(
     order_data: OrderCreate,
-    db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    db: TenantAwareSession = Depends(get_tenant_aware_db),
+    context: OrgContext = Depends(get_org_context)  # SECURE: JWT-based
 ):
     """Validate sales order data without creating it"""
     try:
@@ -934,8 +945,9 @@ async def validate_sales_order(
         return {"valid": False, "message": f"Validation error: {str(e)}"}
 
 @router.get("/dashboard/stats")
+@with_tenant_context
 async def get_sales_order_dashboard(db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)):
+    context: OrgContext = Depends(get_org_context)  # SECURE: JWT-based):
     """Get sales order dashboard statistics"""
     try:
         # Get sales order specific stats
@@ -1008,7 +1020,7 @@ def _get_or_create_address(db: Session, org_id: str, customer_id: int,
                 CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
             ) RETURNING address_id
         """), {
-            "org_id": org_id,
+            "org_id": str(context.org_id),
             "customer_id": customer_id,
             "address_type": address_type,
             "line1": parts[0] if len(parts) > 0 else address_text,

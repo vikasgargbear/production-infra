@@ -5,12 +5,15 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from sqlalchemy import text
 from datetime import date, datetime
+from uuid import UUID
 import logging
 import time
 from typing import Optional
 
 from ...core.database import get_db
-from ...core.auth_utils import get_org_id_from_token
+from ...core.secure_auth import get_org_id_secure  # SECURE: Token-based auth
+from ...core.tenant_service import get_tenant_aware_db, with_tenant_context, TenantAwareSession
+from ...core.org_context import get_org_context, OrgContext
 from ..services.document_number_service import DocumentNumberService
 from ..services.document_number_service_v2 import DocumentNumberServiceV2
 
@@ -20,9 +23,10 @@ router = APIRouter(prefix="/invoices", tags=["Invoices"])
 # org_id should come from authentication, not hardcoded
 
 @router.get("/generate-number")
+@with_tenant_context
 async def generate_invoice_number(
-    db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_token)
+    db: TenantAwareSession = Depends(get_tenant_aware_db),
+    context: OrgContext = Depends(get_org_context)  # SECURE: Tenant-aware
 ):
     """Generate and reserve next invoice number atomically"""
     try:
@@ -38,10 +42,11 @@ async def generate_invoice_number(
         return {"invoice_number": fallback_number}
 
 @router.post("/simple")
+@with_tenant_context
 async def create_invoice_simple(
     invoice_data: dict,
-    db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_token)
+    db: TenantAwareSession = Depends(get_tenant_aware_db),
+    context: OrgContext = Depends(get_org_context)  # SECURE: Tenant-aware
 ):
     """
     Simple invoice creation that bypasses problematic triggers
@@ -92,10 +97,11 @@ async def create_invoice_simple(
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/")
+@with_tenant_context
 async def create_invoice(
     invoice_data: dict,
-    db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_token)
+    db: TenantAwareSession = Depends(get_tenant_aware_db),
+    context: OrgContext = Depends(get_org_context)  # SECURE: Tenant-aware
 ):
     """
     Create invoice using only columns that exist in the database
@@ -206,7 +212,7 @@ async def create_invoice(
                 :created_by, CURRENT_TIMESTAMP
             ) RETURNING order_id
         """), {
-            "org_id": org_id,
+            "org_id": context.org_id,
             "branch_id": branch_id,
             "order_number": order_number,
             "order_date": date.today(),
@@ -228,36 +234,38 @@ async def create_invoice(
         # Step 6: Get customer details for invoice
         cust_result = db.execute(text("""
             SELECT customer_name FROM parties.customers
-            WHERE customer_id = :customer_id
-        """), {"customer_id": customer_id})
+            WHERE customer_id = :customer_id AND org_id = :org_id
+        """), {"customer_id": customer_id, "org_id": str(org_id)})
         cust = cust_result.fetchone()
         customer_name = cust[0] if cust else f"Customer {customer_id}"
         
         # Get customer addresses from master.addresses table
         # Addresses are linked via entity_type='customer' and entity_id=customer_id
         billing_addr_result = db.execute(text("""
-            SELECT address_id 
+            SELECT address_id
             FROM master.addresses
-            WHERE entity_type = 'customer' 
+            WHERE entity_type = 'customer'
             AND entity_id = :customer_id
+            AND org_id = :org_id
             AND address_type = 'billing'
             AND is_active = true
             ORDER BY is_default DESC, created_at DESC
             LIMIT 1
-        """), {"customer_id": customer_id})
+        """), {"customer_id": customer_id, "org_id": str(org_id)})
         billing_addr = billing_addr_result.fetchone()
         billing_address_id = billing_addr[0] if billing_addr else None
         
         shipping_addr_result = db.execute(text("""
-            SELECT address_id 
+            SELECT address_id
             FROM master.addresses
-            WHERE entity_type = 'customer' 
+            WHERE entity_type = 'customer'
             AND entity_id = :customer_id
+            AND org_id = :org_id
             AND address_type = 'shipping'
             AND is_active = true
             ORDER BY is_default DESC, created_at DESC
             LIMIT 1
-        """), {"customer_id": customer_id})
+        """), {"customer_id": customer_id, "org_id": str(org_id)})
         shipping_addr = shipping_addr_result.fetchone()
         shipping_address_id = shipping_addr[0] if shipping_addr else None
         
@@ -300,7 +308,7 @@ async def create_invoice(
                 :created_by, CURRENT_TIMESTAMP
             ) RETURNING invoice_id
         """), {
-            "org_id": org_id,
+            "org_id": context.org_id,
             "branch_id": branch_id,
             "invoice_number": invoice_number,
             "invoice_date": date.today(),
@@ -368,11 +376,12 @@ async def create_invoice(
                     paid_amount = :paid_amount,
                     credit_amount = GREATEST(0, final_amount - :paid_amount),
                     updated_at = CURRENT_TIMESTAMP
-                WHERE invoice_id = :invoice_id
+                WHERE invoice_id = :invoice_id AND org_id = :org_id
             """), {
                 "payment_status": payment_status,
                 "paid_amount": total_paid,
-                "invoice_id": invoice_id
+                "invoice_id": invoice_id,
+                "org_id": str(org_id)
             })
         except Exception as e:
             logger.warning(f"Could not update payment status: {e}")
@@ -398,10 +407,10 @@ async def create_invoice(
             # Fetch product name if missing (products table doesn't have uom/pack_type)
             if not product_name:
                 prod_result = db.execute(text("""
-                    SELECT product_name 
+                    SELECT product_name
                     FROM inventory.products
-                    WHERE product_id = :product_id
-                """), {"product_id": product_id})
+                    WHERE product_id = :product_id AND org_id = :org_id
+                """), {"product_id": product_id, "org_id": str(org_id)})
                 prod = prod_result.fetchone()
                 product_name = prod[0] if prod else f"Product {product_id}"
             
@@ -445,10 +454,11 @@ async def create_invoice(
                     SELECT batch_id, batch_number, mrp_per_unit, manufacturing_date, expiry_date
                     FROM inventory.batches
                     WHERE product_id = :product_id
+                    AND org_id = :org_id
                     AND quantity_available > 0
                     ORDER BY expiry_date NULLS LAST, batch_id
                     LIMIT 1
-                """), {"product_id": product_id})
+                """), {"product_id": product_id, "org_id": str(org_id)})
                 batch = batch_result.fetchone()
                 if batch:
                     batch_id = batch[0]
@@ -462,8 +472,8 @@ async def create_invoice(
                     batch_result = db.execute(text("""
                         SELECT batch_number, mrp_per_unit, manufacturing_date, expiry_date
                         FROM inventory.batches
-                        WHERE batch_id = :batch_id
-                    """), {"batch_id": batch_id})
+                        WHERE batch_id = :batch_id AND org_id = :org_id
+                    """), {"batch_id": batch_id, "org_id": str(org_id)})
                     batch = batch_result.fetchone()
                     if batch:
                         batch_number = batch[0]
@@ -547,17 +557,19 @@ async def create_invoice(
             if batch_id:
                 try:
                     inventory_update = db.execute(text("""
-                        UPDATE inventory.batches 
-                        SET 
+                        UPDATE inventory.batches
+                        SET
                             quantity_available = quantity_available - :quantity,
                             last_movement_date = CURRENT_TIMESTAMP,
                             updated_at = CURRENT_TIMESTAMP
-                        WHERE batch_id = :batch_id 
+                        WHERE batch_id = :batch_id
+                        AND org_id = :org_id
                         AND quantity_available >= :quantity
                         RETURNING quantity_available
                     """), {
                         "quantity": quantity,  # Deduct full quantity (including free items)
-                        "batch_id": batch_id
+                        "batch_id": batch_id,
+                        "org_id": str(org_id)
                     })
                     
                     result = inventory_update.fetchone()
@@ -594,7 +606,7 @@ async def create_invoice(
                                     1, :created_by, CURRENT_TIMESTAMP
                                 )
                             """), {
-                                "org_id": org_id,
+                                "org_id": context.org_id,
                                 "product_id": product_id,
                                 "batch_id": int(batch_id) if batch_id and str(batch_id).isdigit() else None,
                                 "quantity": quantity,  # Full quantity moved
@@ -702,10 +714,10 @@ async def create_invoice(
         
         # Verify invoice was created successfully
         invoice_verify = db.execute(text("""
-            SELECT invoice_id, invoice_number, final_amount 
-            FROM sales.invoices 
-            WHERE invoice_id = :invoice_id
-        """), {"invoice_id": invoice_id})
+            SELECT invoice_id, invoice_number, final_amount
+            FROM sales.invoices
+            WHERE invoice_id = :invoice_id AND org_id = :org_id
+        """), {"invoice_id": invoice_id, "org_id": str(org_id)})
         inv_check = invoice_verify.fetchone()
         
         if not inv_check:
@@ -761,7 +773,7 @@ async def create_invoice(
                                 AND LOWER(method_code) = :method_code
                                 LIMIT 1
                             """), {
-                                "org_id": org_id,
+                                "org_id": context.org_id,
                                 "method_code": payment_method
                             })
                             method_row = method_result.fetchone()
@@ -777,7 +789,7 @@ async def create_invoice(
                                         :org_id, :method_code, :method_name, 'STANDARD', true
                                     ) RETURNING payment_method_id
                                 """), {
-                                    "org_id": org_id,
+                                    "org_id": context.org_id,
                                     "method_code": payment_method.upper(),
                                     "method_name": payment_method.capitalize()
                                 })
@@ -809,7 +821,7 @@ async def create_invoice(
                                         :invoice_number, :narration, :created_by
                                     ) RETURNING payment_id
                                 """), {
-                                    "org_id": org_id,
+                                    "org_id": context.org_id,
                                     "branch_id": branch_id,
                                     "payment_number": payment_number,
                                     "payment_date": invoice_date,
@@ -869,15 +881,15 @@ async def create_invoice(
         try:
             # Get the latest invoice data including payment status
             invoice_data_result = db.execute(text("""
-                SELECT 
+                SELECT
                     final_amount,
                     paid_amount,
                     credit_amount,
                     payment_status,
                     due_date
                 FROM sales.invoices
-                WHERE invoice_id = :invoice_id
-            """), {"invoice_id": verified_invoice_id})
+                WHERE invoice_id = :invoice_id AND org_id = :org_id
+            """), {"invoice_id": verified_invoice_id, "org_id": str(org_id)})
             inv_data = invoice_data_result.fetchone()
             
             if inv_data and inv_data[3] != 'paid':  # Only create outstanding if not fully paid
@@ -894,7 +906,7 @@ async def create_invoice(
                     AND document_type = 'INVOICE' 
                     AND document_id = :document_id
                 """), {
-                    "org_id": org_id,
+                    "org_id": context.org_id,
                     "document_id": verified_invoice_id
                 })
                 
@@ -922,7 +934,7 @@ async def create_invoice(
                             END
                         )
                     """), {
-                        "org_id": org_id,
+                        "org_id": context.org_id,
                         "customer_id": customer_id,
                         "invoice_id": verified_invoice_id,
                         "invoice_number": verified_invoice_number,
@@ -947,7 +959,7 @@ async def create_invoice(
                         AND document_type = 'INVOICE' 
                         AND document_id = :document_id
                     """), {
-                        "org_id": org_id,
+                        "org_id": context.org_id,
                         "document_id": verified_invoice_id,
                         "outstanding_amount": credit_amt,
                         "paid_amount": paid_amt,
@@ -963,14 +975,14 @@ async def create_invoice(
         
         # Get updated totals after triggers have run
         updated_result = db.execute(text("""
-            SELECT 
+            SELECT
                 final_amount,
                 subtotal_amount,
                 total_tax_amount as tax_amount,
                 discount_amount
             FROM sales.invoices
-            WHERE invoice_id = :invoice_id
-        """), {"invoice_id": invoice_id})
+            WHERE invoice_id = :invoice_id AND org_id = :org_id
+        """), {"invoice_id": invoice_id, "org_id": str(org_id)})
         updated = updated_result.fetchone()
         
         if updated:
@@ -1011,14 +1023,15 @@ async def create_invoice(
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/")
+@with_tenant_context
 async def get_invoices(
     limit: int = 50,
     offset: int = 0,
     customer_id: Optional[int] = None,
     date_from: Optional[date] = None,
     date_to: Optional[date] = None,
-    db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_token)
+    db: TenantAwareSession = Depends(get_tenant_aware_db),
+    context: OrgContext = Depends(get_org_context)  # SECURE: Tenant-aware
 ):
     """Get list of invoices with pagination"""
     try:
@@ -1082,21 +1095,22 @@ async def get_invoices(
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/{invoice_id}")
+@with_tenant_context
 async def get_invoice(
     invoice_id: int,
-    db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_token)
+    db: TenantAwareSession = Depends(get_tenant_aware_db),
+    context: OrgContext = Depends(get_org_context)  # SECURE: Tenant-aware
 ):
     """Get invoice by ID"""
     try:
         result = db.execute(text("""
-            SELECT 
+            SELECT
                 i.*,
                 o.order_number
             FROM sales.invoices i
-            LEFT JOIN sales.orders o ON i.order_id = o.order_id
-            WHERE i.invoice_id = :invoice_id
-        """), {"invoice_id": invoice_id})
+            LEFT JOIN sales.orders o ON i.order_id = o.order_id AND o.org_id = i.org_id
+            WHERE i.invoice_id = :invoice_id AND i.org_id = :org_id
+        """), {"invoice_id": invoice_id, "org_id": str(org_id)})
         
         invoice = result.fetchone()
         if not invoice:
@@ -1106,7 +1120,7 @@ async def get_invoice(
         
         # Get invoice items with pack information from batches
         items_result = db.execute(text("""
-            SELECT 
+            SELECT
                 ii.*,
                 b.pack_type,
                 b.pack_size,
@@ -1115,10 +1129,10 @@ async def get_invoice(
                 b.pack_uom,
                 b.base_uom
             FROM sales.invoice_items ii
-            LEFT JOIN inventory.batches b ON ii.batch_id = b.batch_id
+            LEFT JOIN inventory.batches b ON ii.batch_id = b.batch_id AND b.org_id = :org_id
             WHERE ii.invoice_id = :invoice_id
             ORDER BY ii.invoice_item_id
-        """), {"invoice_id": invoice_id})
+        """), {"invoice_id": invoice_id, "org_id": str(org_id)})
         
         invoice_dict["items"] = [dict(item._mapping) for item in items_result]
         
@@ -1131,11 +1145,12 @@ async def get_invoice(
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/list")
+@with_tenant_context
 async def list_invoices(
     limit: int = 100,
     skip: int = 0,
-    db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_token)
+    db: TenantAwareSession = Depends(get_tenant_aware_db),
+    context: OrgContext = Depends(get_org_context)  # SECURE: Tenant-aware
 ):
     """List invoices with pagination"""
     try:
@@ -1174,8 +1189,11 @@ async def list_invoices(
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/drop-problematic-triggers")
-async def drop_problematic_triggers(db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_token)):
+@with_tenant_context
+async def drop_problematic_triggers(
+    context: OrgContext = Depends(get_org_context),
+    db: Session = Depends(get_db)
+):
     """Drop all remaining problematic triggers on invoices table"""
     try:
         triggers_to_drop = [
@@ -1216,8 +1234,11 @@ async def drop_problematic_triggers(db: Session = Depends(get_db),
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/fix-invoice-trigger")
-async def fix_invoice_trigger(db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_token)):
+@with_tenant_context
+async def fix_invoice_trigger(
+    context: OrgContext = Depends(get_org_context),
+    db: Session = Depends(get_db)
+):
     """Fix the calculate_invoice_totals trigger to use correct column names"""
     try:
         # Drop the problematic trigger first

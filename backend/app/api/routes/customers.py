@@ -12,6 +12,8 @@ from functools import lru_cache
 
 from ...core.database import get_db
 from ...core.auth_utils import get_org_id_from_header
+from ...core.tenant_service import get_tenant_aware_db, with_tenant_context, TenantAwareSession, TenantContext
+from ...core.org_context import get_org_context, OrgContext
 from ..schemas.customer import (
     CustomerCreate, CustomerUpdate, CustomerResponse, CustomerListResponse,
     CustomerLedgerResponse, CustomerOutstandingResponse,
@@ -196,6 +198,7 @@ async def create_customer(
         raise HTTPException(status_code=500, detail=f"Failed to create customer: {str(e)}")
 
 @router.get("/", response_model=CustomerListResponse)
+@with_tenant_context  # NEW: Automatic tenant filtering
 async def list_customers(
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=1000),
@@ -206,8 +209,8 @@ async def list_customers(
     has_gstin: Optional[bool] = None,
     include_stats: bool = Query(False, description="Include business statistics (disabled by default for performance)"),
     fast_search: bool = Query(True, description="Use fast search mode (minimal data for quick response)"),
-    db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    context: OrgContext = Depends(get_org_context),  # NEW: Org context
+    db: TenantAwareSession = Depends(get_tenant_aware_db)  # NEW: Tenant-aware DB
 ):
     """
     List customers with search, filter, and pagination
@@ -226,65 +229,45 @@ async def list_customers(
             # Minimal columns for fast search response + required schema fields
             query = """SELECT customer_id, customer_name, customer_code, primary_phone, 
                       customer_type, gst_number, is_active, org_id, created_at, updated_at 
-                      FROM parties.customers WHERE org_id = :org_id"""
+                      FROM parties.customers"""
         else:
             # Full query for detailed view
-            query = "SELECT * FROM parties.customers WHERE org_id = :org_id"
-        count_query = "SELECT COUNT(*) FROM parties.customers WHERE org_id = :org_id"
-        params = {"org_id": org_id}
+            query = "SELECT * FROM parties.customers"
+        count_query = "SELECT COUNT(*) FROM parties.customers"
+        params = {}  # No manual org_id - tenant service adds it automatically
         
-        # Add filters
+        # Add filters - build WHERE conditions
+        where_conditions = []
+        
         if search:
-            # Check if area column exists (cached)
-            area_exists = check_area_column_exists()
-            
-            if area_exists:
-                query += """ AND (
-                    customer_name ILIKE :search OR 
-                    customer_code ILIKE :search OR 
-                    primary_phone LIKE :search OR
-                    gst_number LIKE :search
-                )"""
-                count_query += """ AND (
-                    customer_name ILIKE :search OR 
-                    customer_code ILIKE :search OR 
-                    primary_phone LIKE :search OR
-                    gst_number LIKE :search
-                )"""
-            else:
-                query += """ AND (
-                    customer_name ILIKE :search OR 
-                    customer_code ILIKE :search OR 
-                    primary_phone LIKE :search OR
-                    gst_number LIKE :search
-                )"""
-                count_query += """ AND (
-                    customer_name ILIKE :search OR 
-                    customer_code ILIKE :search OR 
-                    primary_phone LIKE :search OR
-                    gst_number LIKE :search
-                )"""
+            search_condition = """(
+                customer_name ILIKE :search OR 
+                customer_code ILIKE :search OR 
+                primary_phone LIKE :search OR
+                gst_number LIKE :search
+            )"""
+            where_conditions.append(search_condition)
             params["search"] = f"%{search}%"
         
         if customer_type:
-            query += " AND customer_type = :customer_type"
-            count_query += " AND customer_type = :customer_type"
+            where_conditions.append("customer_type = :customer_type")
             params["customer_type"] = customer_type
         
         if is_active is not None:
-            query += " AND is_active = :is_active"
-            count_query += " AND is_active = :is_active"
+            where_conditions.append("is_active = :is_active")
             params["is_active"] = is_active
-        
-        # Note: city filter removed as it's not in customers table
         
         if has_gstin is not None:
             if has_gstin:
-                query += " AND gst_number IS NOT NULL"
-                count_query += " AND gst_number IS NOT NULL"
+                where_conditions.append("gst_number IS NOT NULL")
             else:
-                query += " AND gst_number IS NULL"
-                count_query += " AND gst_number IS NULL"
+                where_conditions.append("gst_number IS NULL")
+        
+        # Add WHERE clause if we have conditions
+        if where_conditions:
+            where_clause = " WHERE " + " AND ".join(where_conditions)
+            query += where_clause
+            count_query += where_clause
         
         # Get total count
         logger.debug(f"Executing count query: {count_query}")

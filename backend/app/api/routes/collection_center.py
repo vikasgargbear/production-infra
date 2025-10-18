@@ -12,6 +12,7 @@ import logging
 from decimal import Decimal
 
 from database.connection import get_db
+from ...core.auth_utils import get_org_id_from_header
 from models.organization import Organization
 from models.customer import Customer
 from models.order import Order, OrderItem
@@ -26,7 +27,6 @@ logger = logging.getLogger(__name__)
 
 @router.get("/aging-data")
 async def get_aging_data(
-    org_id: str,
     db: Session = Depends(get_db),
     org_id: str = Depends(get_org_id_from_header)
 ):
@@ -67,6 +67,7 @@ async def get_aging_data(
                 FROM parties.customers c
                 LEFT JOIN bill_details bd ON c.customer_id = bd.ledger_id 
                     AND bd.status IN ('Outstanding', 'Partial')
+                    AND bd.org_id = c.org_id
                 WHERE c.org_id = :org_id 
                     AND c.is_active = true
                     AND COALESCE(SUM(bd.outstanding_amount), 0) > 0
@@ -532,7 +533,8 @@ async def get_hub_statistics(
         # Get field agents count (FROM master.org_users table)
         agents_query = text("""
             SELECT COUNT(*) as agent_count
-            FROM master.org_users 
+            FROM master.org_users
+            WHERE org_id = :org_id 
             WHERE org_id = :org_id AND is_active = true
                 AND role ILIKE '%agent%' OR role ILIKE '%collection%'
         """)

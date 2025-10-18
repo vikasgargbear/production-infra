@@ -15,6 +15,8 @@ import json
 from ...core.database import get_db
 from ...core.config import settings
 from ...core.auth_utils import get_org_id_from_header
+from ...core.tenant_service import get_tenant_aware_db, with_tenant_context, TenantAwareSession
+from ...core.org_context import get_org_context, OrgContext
 from ..schemas.product_schema import Product, ProductCreate, ProductUpdate, ProductResponse, ProductSearch
 
 logger = logging.getLogger(__name__)
@@ -34,14 +36,15 @@ def _format_composition(composition_value):
     return {}
 
 @router.get("/")
+@with_tenant_context  # NEW: Automatic tenant filtering
 async def get_products(
     limit: int = Query(10, ge=1, le=100, description="Number of products to return"),
     skip: int = Query(0, ge=0, description="Number of products to skip"),
     search: str = Query("", description="Search query"),
     product_type: str = Query("", description="Filter by product type"),
     manufacturer: str = Query("", description="Filter by manufacturer"),
-    db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    context: OrgContext = Depends(get_org_context),  # NEW: Org context
+    db: TenantAwareSession = Depends(get_tenant_aware_db)  # NEW: Tenant-aware DB
 ):
     """
     Get products with optional filtering and search
@@ -53,7 +56,7 @@ async def get_products(
         query = """
             WITH batch_aggregates AS (
                 -- First aggregate by product_id
-                SELECT 
+                SELECT
                     product_id,
                     SUM(quantity_available) as total_stock,
                     AVG(sale_price_per_unit) as avg_selling_price,
@@ -111,10 +114,9 @@ async def get_products(
             FROM inventory.products p
             LEFT JOIN batch_aggregates ba ON p.product_id = ba.product_id
             LEFT JOIN batch_details bd ON p.product_id = bd.product_id
-            LEFT JOIN inventory.product_categories pc ON p.category_id = pc.category_id
-            WHERE 1=1
+            LEFT JOIN inventory.product_categories pc ON p.category_id = pc.category_id AND p.org_id = pc.org_id
         """
-        
+
         params = {}
         
         # Add search filter
@@ -162,12 +164,13 @@ async def get_products(
         )
 
 @router.get("/search", response_model=List[Product])
+@with_tenant_context
 async def search_products(
     q: str = Query("", description="Search query"),
     limit: int = Query(10, ge=1, le=100),
     offset: int = Query(0, ge=0),
-    db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    db: TenantAwareSession = Depends(get_tenant_aware_db),
+    context: OrgContext = Depends(get_org_context)
 ):
     """
     Search products by name, brand, or HSN
@@ -191,11 +194,11 @@ async def search_products(
                     'PCS' as unit_of_measure,
                     COALESCE(p.category_id, 'General') as category
                 FROM inventory.products p
-                LEFT JOIN inventory.batches b ON p.product_id = b.product_id 
-                    AND b.batch_status = 'active' 
+                LEFT JOIN inventory.batches b ON p.product_id = b.product_id
+                    AND p.org_id = b.org_id
+                    AND b.batch_status = 'active'
                     AND b.quantity_available > 0
-                WHERE p.org_id = :org_id
-                    AND (p.product_name ILIKE :search 
+                        AND (p.product_name ILIKE :search 
                          OR p.brand ILIKE :search 
                          OR p.manufacturer ILIKE :search
                          OR p.hsn_code ILIKE :search)
@@ -205,8 +208,7 @@ async def search_products(
                 ORDER BY product_name
                 LIMIT :limit OFFSET :offset
             """), {
-                "org_id": org_id,
-                "search": f"%{q}%",
+                                "search": f"%{q}%",
                 "limit": limit,
                 "offset": offset
             })
@@ -227,13 +229,11 @@ async def search_products(
                     'PCS' as unit_of_measure,
                     'General' as category
                 FROM inventory.products
-                WHERE org_id = :org_id
                     AND is_active = true
                 ORDER BY product_name
                 LIMIT :limit OFFSET :offset
             """), {
-                "org_id": org_id,
-                "limit": limit,
+                                "limit": limit,
                 "offset": offset
             })
         
@@ -260,10 +260,11 @@ async def search_products(
         return []
 
 @router.post("/", status_code=status.HTTP_201_CREATED)
+@with_tenant_context
 async def create_product(
     product: dict,  # Accept dict to handle flexible fields
-    db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    db: TenantAwareSession = Depends(get_tenant_aware_db),
+    context: OrgContext = Depends(get_org_context)
 ):
     """
     Create a new product
@@ -285,8 +286,7 @@ async def create_product(
             generic_name_default = str(composition_value) if composition_value else ""
         
         product_data = {
-            "org_id": org_id,
-            "product_code": product.get("product_code") or f"PROD{random.randint(100000, 999999)}",
+                        "product_code": product.get("product_code") or f"PROD{random.randint(100000, 999999)}",
             "product_name": product.get("product_name"),
             "generic_name": product.get("generic_name") or generic_name_default,
             "brand": product.get("brand") or product.get("brand_name") or product.get("manufacturer"),
@@ -295,7 +295,7 @@ async def create_product(
             "category_id": product.get("category_id") if product.get("category_id") else None,
             "type_id": product.get("type_id") if product.get("type_id") else None,
             "hsn_code": product.get("hsn_code") or "3004",
-            "gst_percentage": product.get("gst_percentage") or product.get("gst_rate") or 12,
+            "gst_percentage": product.get("gst_percentage") or product.get("gst_rate") or 0,  # Let user specify GST, don't hardcode
             "base_uom_id": None,  # Let it be NULL if no UOMs exist
             "maintain_batch": True,
             "maintain_expiry": True,
@@ -305,15 +305,15 @@ async def create_product(
         # Check if product code already exists
         exists = db.execute(text("""
             SELECT 1 FROM inventory.products 
-            WHERE product_code = :product_code AND org_id = :org_id
-        """), {"product_code": product_data["product_code"], "org_id": org_id}).scalar()
+            WHERE product_code = :product_code
+        """), {"product_code": product_data["product_code"]}).scalar()
         
         if exists:
             # Return existing product instead of error
             result = db.execute(text("""
                 SELECT * FROM inventory.products
-                WHERE product_code = :product_code AND org_id = :org_id
-            """), {"product_code": product_data["product_code"], "org_id": org_id})
+                WHERE product_code = :product_code
+            """), {"product_code": product_data["product_code"]})
             
             existing = result.fetchone()
             return {
@@ -409,8 +409,7 @@ async def create_product(
                 packages_per_box = int(product.get("packages_per_box"))
             
             batch_data = {
-                "org_id": org_id,
-                "product_id": created.product_id,
+                                "product_id": created.product_id,
                 "batch_number": product.get("batch_number") or f"BATCH{random.randint(100000, 999999)}",
                 "manufacturing_date": product.get("manufacturing_date") or datetime.now().strftime("%Y-%m-%d"),
                 "expiry_date": expiry_date,
@@ -494,17 +493,18 @@ async def create_product(
         )
 
 @router.get("/{product_id}")
+@with_tenant_context
 async def get_product(
     product_id: int,
-    db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    db: TenantAwareSession = Depends(get_tenant_aware_db),
+    context: OrgContext = Depends(get_org_context)
 ):
     """Get product by ID"""
     try:
         result = db.execute(text("""
             SELECT * FROM inventory.products
-            WHERE product_id = :product_id AND org_id = :org_id
-        """), {"product_id": product_id, "org_id": org_id})
+            WHERE product_id = :product_id
+        """), {"product_id": product_id})
         
         product = result.fetchone()
         if not product:
@@ -525,17 +525,18 @@ async def get_product(
         )
 
 @router.put("/{product_id}")
+@with_tenant_context
 async def update_product(
     product_id: int,
     product: dict,
-    db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    db: TenantAwareSession = Depends(get_tenant_aware_db),
+    context: OrgContext = Depends(get_org_context)
 ):
     """Update product"""
     try:
         # Build update query dynamically
         update_fields = []
-        params = {"product_id": product_id, "org_id": org_id}
+        params = {"product_id": product_id}
         
         # Only include fields that actually exist in inventory.products table
         field_mapping = {
@@ -665,10 +666,10 @@ async def update_product(
                     SELECT category_id, category_name 
                     FROM inventory.product_categories 
                     WHERE LOWER(category_name) = LOWER(:category_name) 
-                      AND org_id = :org_id 
+ 
                       AND is_active = true
                     LIMIT 1
-                """), {"category_name": category_name, "org_id": org_id}).fetchone()
+                """), {"category_name": category_name}).fetchone()
                 
                 if category_lookup:
                     # Use proper category from master table
@@ -696,7 +697,7 @@ async def update_product(
             query = f"""
                 UPDATE inventory.products
                 SET {', '.join(update_fields)}
-                WHERE product_id = :product_id AND org_id = :org_id
+                WHERE product_id = :product_id
                 RETURNING product_id, product_code, product_name
             """
             
@@ -713,8 +714,8 @@ async def update_product(
             result = db.execute(text("""
                 SELECT product_id, product_code, product_name 
                 FROM inventory.products 
-                WHERE product_id = :product_id AND org_id = :org_id
-            """), {"product_id": product_id, "org_id": org_id})
+                WHERE product_id = :product_id
+            """), {"product_id": product_id})
             updated = result.fetchone()
             
             if not updated:
@@ -726,7 +727,7 @@ async def update_product(
         # Update active batches if we have batch-level changes
         if batch_fields:
             batch_update_fields = []
-            batch_params = {"product_id": product_id, "org_id": org_id}
+            batch_params = {"product_id": product_id}
             
             for batch_field, value in batch_fields.items():
                 batch_update_fields.append(f"{batch_field} = :{batch_field}")
@@ -735,9 +736,8 @@ async def update_product(
             batch_query = f"""
                 UPDATE inventory.batches
                 SET {', '.join(batch_update_fields)}, updated_at = CURRENT_TIMESTAMP
-                WHERE product_id = :product_id 
-                  AND org_id = :org_id 
-                  AND batch_status = 'active'
+                WHERE product_id = :product_id
+                        AND batch_status = 'active'
             """
             
             db.execute(text(batch_query), batch_params)
@@ -763,17 +763,18 @@ async def update_product(
         )
 
 @router.put("/batches/product/{product_id}")
+@with_tenant_context
 async def update_product_batches(
     product_id: int,
     batch_data: dict,
-    db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    db: TenantAwareSession = Depends(get_tenant_aware_db),
+    context: OrgContext = Depends(get_org_context)
 ):
     """Update batch-level properties for all active batches of a product"""
     try:
         # Build update query dynamically for batches
         update_fields = []
-        params = {"product_id": product_id, "org_id": org_id}
+        params = {"product_id": product_id}
         
         batch_field_mapping = {
             "category_name": "category_name",
@@ -805,7 +806,7 @@ async def update_product_batches(
         query = f"""
             UPDATE inventory.batches
             SET {', '.join(update_fields)}
-            WHERE product_id = :product_id 
+            WHERE product_id = :product_id
             AND batch_status = 'active'
             AND quality_status = 'approved'
             RETURNING batch_id, batch_number, category_name, pack_type, pack_size
@@ -840,9 +841,10 @@ async def update_product_batches(
         )
 
 @router.get("/master/categories")
+@with_tenant_context
 async def get_product_categories(
-    db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    db: TenantAwareSession = Depends(get_tenant_aware_db),
+    context: OrgContext = Depends(get_org_context)
 ):
     """Get all active product categories"""
     try:
@@ -851,9 +853,8 @@ async def get_product_categories(
             SELECT category_id, category_name, category_code, parent_category_id
             FROM inventory.product_categories
             WHERE is_active = true
-            AND (org_id = :org_id OR org_id IS NULL)
             ORDER BY category_name
-        """), {"org_id": org_id})
+        """), {})
         
         categories = [dict(row._mapping) for row in result]
         return {"success": True, "data": categories}
@@ -866,9 +867,10 @@ async def get_product_categories(
         )
 
 @router.get("/master/types")
+@with_tenant_context
 async def get_product_types(
-    db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    db: TenantAwareSession = Depends(get_tenant_aware_db),
+    context: OrgContext = Depends(get_org_context)
 ):
     """Get all active product types"""
     try:
@@ -890,10 +892,11 @@ async def get_product_types(
         )
 
 @router.post("/master/categories")
+@with_tenant_context
 async def create_product_category(
     category_data: dict,
-    db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    db: TenantAwareSession = Depends(get_tenant_aware_db),
+    context: OrgContext = Depends(get_org_context)
 ):
     """Create a new product category"""
     try:
@@ -915,10 +918,10 @@ async def create_product_category(
         # Check if category already exists
         existing = db.execute(text("""
             SELECT category_id FROM inventory.product_categories
-            WHERE LOWER(category_name) = LOWER(:category_name)
-            OR LOWER(category_code) = LOWER(:category_code)
+            AND (LOWER(category_name) = LOWER(:category_name)
+            OR LOWER(category_code) = LOWER(:category_code))
         """), {
-            "category_name": category_name,
+                        "category_name": category_name,
             "category_code": category_code
         }).fetchone()
         
@@ -936,8 +939,7 @@ async def create_product_category(
                 :org_id, :category_name, :category_code, true, CURRENT_TIMESTAMP
             ) RETURNING category_id, category_name, category_code
         """), {
-            "org_id": org_id,
-            "category_name": category_name,
+                        "category_name": category_name,
             "category_code": category_code
         })
         
@@ -965,10 +967,11 @@ async def create_product_category(
         )
 
 @router.post("/master/types")
+@with_tenant_context
 async def create_product_type(
     type_data: dict,
-    db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    db: TenantAwareSession = Depends(get_tenant_aware_db),
+    context: OrgContext = Depends(get_org_context)
 ):
     """Create a new product type"""
     try:
@@ -1042,9 +1045,10 @@ async def create_product_type(
         )
 
 @router.get("/master/classes")
+@with_tenant_context
 async def get_product_classes(
-    db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    db: TenantAwareSession = Depends(get_tenant_aware_db),
+    context: OrgContext = Depends(get_org_context)
 ):
     """Get all distinct product classes"""
     try:
@@ -1052,10 +1056,10 @@ async def get_product_classes(
         result = db.execute(text("""
             SELECT DISTINCT product_class
             FROM inventory.products
-            WHERE product_class IS NOT NULL
+            AND product_class IS NOT NULL
             AND product_class != ''
             ORDER BY product_class
-        """))
+        """), {})
         
         classes = [{"class_name": row.product_class} for row in result if row.product_class]
         return {"success": True, "data": classes}
@@ -1066,10 +1070,11 @@ async def get_product_classes(
         return {"success": True, "data": []}
 
 @router.post("/master/classes")
+@with_tenant_context
 async def create_product_class(
     class_data: dict,
-    db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    db: TenantAwareSession = Depends(get_tenant_aware_db),
+    context: OrgContext = Depends(get_org_context)
 ):
     """Create a new product class (adds to first product with this class)"""
     try:

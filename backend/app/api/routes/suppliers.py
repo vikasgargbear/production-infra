@@ -37,18 +37,20 @@ def search_suppliers(
     """
     try:
         query = """
-            SELECT s.supplier_id, s.supplier_name, s.supplier_code, s.gst_number, 
+            SELECT s.supplier_id, s.supplier_name, s.supplier_code, s.gst_number,
                    s.primary_phone, s.primary_email, s.supplier_type, s.is_active,
                    a.city, a.state_name as state, a.address_line1 as address, a.pincode
             FROM parties.suppliers s
             LEFT JOIN master.addresses a ON (
-                a.entity_type = 'supplier' 
-                AND a.entity_id = s.supplier_id 
+                a.entity_type = 'supplier'
+                AND a.entity_id = s.supplier_id
+                AND a.org_id = s.org_id
                 AND a.is_default = true
             )
             WHERE s.is_active = true
+            AND s.org_id = :org_id
         """
-        params = {}
+        params = {"org_id": org_id}
         
         if search_term:
             # Clean the search term
@@ -111,16 +113,16 @@ def get_suppliers(
     """Get suppliers with optional search"""
     try:
         query = """
-            SELECT s.*, 
-                   a.city, 
+            SELECT s.*,
+                   a.city,
                    a.state_name as state,
                    a.address_line1 as address,
                    a.pincode
             FROM parties.suppliers s
-            LEFT JOIN master.addresses a ON (a.entity_type = 'supplier' AND a.entity_id = s.supplier_id AND a.is_default = true)
-            WHERE 1=1
+            LEFT JOIN master.addresses a ON (a.entity_type = 'supplier' AND a.entity_id = s.supplier_id AND a.org_id = s.org_id AND a.is_default = true)
+            WHERE s.org_id = :org_id
         """
-        params = {}
+        params = {"org_id": org_id}
         
         if search:
             query += " AND LOWER(s.supplier_name) LIKE LOWER(:search)"
@@ -168,15 +170,15 @@ def get_supplier(supplier_id: int, db: Session = Depends(get_db),
     """Get a single supplier by ID"""
     try:
         result = db.execute(text("""
-            SELECT s.*, 
-                   a.city, 
+            SELECT s.*,
+                   a.city,
                    a.state_name as state,
                    a.address_line1 as address,
                    a.pincode
             FROM parties.suppliers s
-            LEFT JOIN master.addresses a ON (a.entity_type = 'supplier' AND a.entity_id = s.supplier_id AND a.is_default = true)
-            WHERE s.supplier_id = :supplier_id
-        """), {"supplier_id": supplier_id})
+            LEFT JOIN master.addresses a ON (a.entity_type = 'supplier' AND a.entity_id = s.supplier_id AND a.org_id = s.org_id AND a.is_default = true)
+            WHERE s.supplier_id = :supplier_id AND s.org_id = :org_id
+        """), {"supplier_id": supplier_id, "org_id": org_id})
         
         supplier = result.fetchone()
         if not supplier:
@@ -362,9 +364,9 @@ def update_supplier(supplier_id: int, supplier_data: SupplierUpdate, db: Session
     try:
         # Check if supplier exists
         exists = db.execute(text("""
-            SELECT 1 FROM parties.suppliers 
-            WHERE supplier_id = :supplier_id
-        """), {"supplier_id": supplier_id}).scalar()
+            SELECT 1 FROM parties.suppliers
+            WHERE supplier_id = :supplier_id AND org_id = :org_id
+        """), {"supplier_id": supplier_id, "org_id": org_id}).scalar()
         
         if not exists:
             raise HTTPException(status_code=404, detail="Supplier not found")
@@ -395,12 +397,13 @@ def update_supplier(supplier_id: int, supplier_data: SupplierUpdate, db: Session
         
         if update_fields:
             update_fields.append("updated_at = CURRENT_TIMESTAMP")
+            params["org_id"] = org_id
             query = f"""
-                UPDATE parties.suppliers 
+                UPDATE parties.suppliers
                 SET {', '.join(update_fields)}
-                WHERE supplier_id = :supplier_id
+                WHERE supplier_id = :supplier_id AND org_id = :org_id
             """
-            
+
             db.execute(text(query), params)
             db.commit()
         
@@ -420,18 +423,18 @@ def delete_supplier(supplier_id: int, db: Session = Depends(get_db),
     try:
         # Check if supplier exists
         exists = db.execute(text("""
-            SELECT 1 FROM parties.suppliers 
-            WHERE supplier_id = :supplier_id
-        """), {"supplier_id": supplier_id}).scalar()
-        
+            SELECT 1 FROM parties.suppliers
+            WHERE supplier_id = :supplier_id AND org_id = :org_id
+        """), {"supplier_id": supplier_id, "org_id": org_id}).scalar()
+
         if not exists:
             raise HTTPException(status_code=404, detail="Supplier not found")
-        
+
         # Delete supplier
         db.execute(text("""
-            DELETE FROM parties.suppliers 
-            WHERE supplier_id = :supplier_id
-        """), {"supplier_id": supplier_id})
+            DELETE FROM parties.suppliers
+            WHERE supplier_id = :supplier_id AND org_id = :org_id
+        """), {"supplier_id": supplier_id, "org_id": org_id})
         
         db.commit()
         return {"message": "Supplier deleted successfully"}
@@ -449,13 +452,14 @@ def get_supplier_products(supplier_id: int, db: Session = Depends(get_db),
     try:
         result = db.execute(
             text("""
-                SELECT p.* FROM inventory.products p 
-                JOIN purchases pur ON p.product_id = pur.product_id
+                SELECT p.* FROM inventory.products p
+                JOIN purchases pur ON p.product_id = pur.product_id AND p.org_id = pur.org_id
                 WHERE pur.supplier_id = :supplier_id
+                AND p.org_id = :org_id
                 GROUP BY p.product_id
                 ORDER BY p.product_name
             """),
-            {"supplier_id": supplier_id}
+            {"supplier_id": supplier_id, "org_id": org_id}
         )
         products = [dict(row._mapping) for row in result]
         return products
@@ -470,12 +474,13 @@ def get_supplier_purchases(supplier_id: int, skip: int = 0, limit: int = 100, db
     try:
         result = db.execute(
             text("""
-                SELECT * FROM purchases 
+                SELECT * FROM purchases
                 WHERE supplier_id = :supplier_id
+                AND org_id = :org_id
                 ORDER BY purchase_date DESC
                 LIMIT :limit OFFSET :skip
             """),
-            {"supplier_id": supplier_id, "limit": limit, "skip": skip}
+            {"supplier_id": supplier_id, "org_id": org_id, "limit": limit, "skip": skip}
         )
         purchases = [dict(row._mapping) for row in result]
         return purchases

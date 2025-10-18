@@ -41,6 +41,16 @@ def get_db() -> Generator:
     finally:
         db.close()
 
+
+# Simple RLS function - call this manually in endpoints where needed
+def set_org_context(db, org_id: str):
+    """
+    Set org_id context for RLS in database session
+    Call this after getting org_id in your route handler
+    """
+    db.execute(f"SELECT set_config('app.current_org_id', '{org_id}', true)")
+    return db
+
 # Test connection
 def test_db_connection():
     """Test database connection"""

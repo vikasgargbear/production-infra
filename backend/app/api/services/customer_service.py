@@ -188,16 +188,19 @@ class CustomerService:
         
         # Get customer details
         customer = db.execute(text("""
-            SELECT customer_id, customer_name FROM parties.customers WHERE customer_id = :id
+            SELECT customer_id, customer_name, org_id FROM parties.customers WHERE customer_id = :id
         """), {"id": customer_id}).fetchone()
         
         if not customer:
             raise ValueError(f"Customer {customer_id} not found")
         
+        # Get org_id from customer
+        org_id = customer.org_id
+
         # Get opening balance (before from_date)
         opening_result = db.execute(text("""
-            SELECT 
-                COALESCE(SUM(CASE 
+            SELECT
+                COALESCE(SUM(CASE
                     WHEN t.type = 'invoice' THEN t.amount
                     WHEN t.type = 'payment' THEN -t.amount
                     WHEN t.type = 'credit_note' THEN -t.amount
@@ -205,28 +208,31 @@ class CustomerService:
                 END), 0) as opening_balance
             FROM (
                 -- Invoices
-                SELECT 
+                SELECT
                     'invoice' as type,
                     order_date as date,
                     final_amount as amount
                 FROM sales.orders
                 WHERE customer_id = :customer_id
+                    AND org_id = :org_id
                     AND order_date < :from_date
                     AND order_status NOT IN ('cancelled', 'draft')
-                
+
                 UNION ALL
-                
+
                 -- Payments
-                SELECT 
+                SELECT
                     'payment' as type,
                     payment_date as date,
                     payment_amount as amount
                 FROM financial.payments
                 WHERE party_type = 'customer' AND party_id = :customer_id
+                    AND org_id = :org_id
                     AND payment_date < :from_date
             ) t
         """), {
             "customer_id": customer_id,
+            "org_id": str(org_id),
             "from_date": from_date
         })
         
@@ -236,7 +242,7 @@ class CustomerService:
         transactions_result = db.execute(text("""
             SELECT * FROM (
                 -- Invoices
-                SELECT 
+                SELECT
                     'invoice' as transaction_type,
                     order_date as transaction_date,
                     order_number as reference_number,
@@ -245,13 +251,14 @@ class CustomerService:
                     0 as credit_amount
                 FROM sales.orders
                 WHERE customer_id = :customer_id
+                    AND org_id = :org_id
                     AND order_date BETWEEN :from_date AND :to_date
                     AND order_status NOT IN ('cancelled', 'draft')
-                
+
                 UNION ALL
-                
+
                 -- Payments
-                SELECT 
+                SELECT
                     'payment' as transaction_type,
                     payment_date as transaction_date,
                     payment_reference as reference_number,
@@ -260,11 +267,13 @@ class CustomerService:
                     payment_amount as credit_amount
                 FROM financial.payments
                 WHERE party_type = 'customer' AND party_id = :customer_id
+                    AND org_id = :org_id
                     AND payment_date BETWEEN :from_date AND :to_date
             ) t
             ORDER BY transaction_date, transaction_type
         """), {
             "customer_id": customer_id,
+            "org_id": str(org_id),
             "from_date": from_date,
             "to_date": to_date
         })
@@ -307,11 +316,12 @@ class CustomerService:
         """Get all outstanding invoices for a customer"""
         # Get customer details
         customer_result = db.execute(text("""
-            SELECT 
+            SELECT
                 customer_id,
                 customer_name,
                 credit_limit,
-                credit_days
+                credit_days,
+                org_id
             FROM parties.customers
             WHERE customer_id = :customer_id
         """), {"customer_id": customer_id})
@@ -319,10 +329,12 @@ class CustomerService:
         customer = customer_result.fetchone()
         if not customer:
             raise ValueError(f"Customer {customer_id} not found")
-        
+
+        org_id = customer.org_id
+
         # Get outstanding invoices
         invoices_result = db.execute(text("""
-            SELECT 
+            SELECT
                 order_id,
                 order_number,
                 order_date,
@@ -332,10 +344,11 @@ class CustomerService:
                 CURRENT_DATE - order_date as days_since_invoice
             FROM sales.orders
             WHERE customer_id = :customer_id
+                AND org_id = :org_id
                 AND order_status NOT IN ('cancelled', 'draft')
                 AND final_amount > 0
             ORDER BY order_date
-        """), {"customer_id": customer_id})
+        """), {"customer_id": customer_id, "org_id": str(org_id)})
         
         invoices = []
         total_outstanding = Decimal("0.00")
@@ -414,12 +427,15 @@ class CustomerService:
             "notes": payment_data.notes
         })
         
-        # Get the created payment ID from financial.payments
-        payment_id = db.execute(text("""
-            SELECT payment_id FROM financial.payments 
+        # Get the created payment ID and org_id from financial.payments
+        payment_result = db.execute(text("""
+            SELECT payment_id, org_id FROM financial.payments
             WHERE payment_number = :ref
             ORDER BY created_at DESC LIMIT 1
-        """), {"ref": payment_data.reference_number}).scalar()
+        """), {"ref": payment_data.reference_number}).fetchone()
+
+        payment_id = payment_result.payment_id
+        org_id = payment_result.org_id
         
         # Check if specific allocations are provided
         has_allocations = hasattr(payment_data, 'allocate_to_invoices') and payment_data.allocate_to_invoices and len(payment_data.allocate_to_invoices) > 0
@@ -434,11 +450,12 @@ class CustomerService:
                     
                 # Get invoice outstanding amount
                 invoice_result = db.execute(text("""
-                    SELECT outstanding_amount, document_number 
-                    FROM financial.customer_outstanding 
-                    WHERE document_type = 'INVOICE' 
+                    SELECT outstanding_amount, document_number
+                    FROM financial.customer_outstanding
+                    WHERE document_type = 'INVOICE'
                     AND document_id = :invoice_id
-                """), {"invoice_id": invoice_id}).first()
+                    AND org_id = :org_id
+                """), {"invoice_id": invoice_id, "org_id": str(org_id)}).first()
                 
                 if invoice_result and invoice_result.outstanding_amount > 0:
                     # Allocate min of remaining payment or invoice outstanding
@@ -471,11 +488,12 @@ class CustomerService:
                 SELECT document_id, document_number, outstanding_amount
                 FROM financial.customer_outstanding
                 WHERE customer_id = :customer_id
+                AND org_id = :org_id
                 AND document_type = 'INVOICE'
                 AND status IN ('open', 'partial')
                 AND outstanding_amount > 0
                 ORDER BY document_date, document_id
-            """), {"customer_id": payment_data.customer_id})
+            """), {"customer_id": payment_data.customer_id, "org_id": str(org_id)})
             
             remaining_amount = payment_data.amount
             
@@ -517,17 +535,19 @@ class CustomerService:
         # Update payment with final allocation status
         if total_allocated > 0:
             db.execute(text("""
-                UPDATE financial.payments 
-                SET allocation_status = CASE 
+                UPDATE financial.payments
+                SET allocation_status = CASE
                     WHEN :allocated >= payment_amount THEN 'allocated'
                     WHEN :allocated > 0 THEN 'partial'
                     ELSE 'unallocated'
                 END,
                 allocated_amount = :allocated
                 WHERE payment_id = :payment_id
+                AND org_id = :org_id
             """), {
                 "allocated": total_allocated,
-                "payment_id": payment_id
+                "payment_id": payment_id,
+                "org_id": str(org_id)
             })
         
         allocated_amount = total_allocated

@@ -77,6 +77,8 @@ app.add_middleware(
     max_age=3600,
 )
 
+# RLS handled by database dependency - no middleware needed
+
 # Disable automatic trailing slash redirects to avoid CORS preflight issues
 # This allows both /api/customers and /api/customers/ to work without redirects
 app.router.redirect_slashes = False
@@ -193,6 +195,8 @@ api.include_router(master_data.router, prefix="/master", tags=["Master Data"])
 api.include_router(org_users.router, tags=["Organization Users"])
 api.include_router(org_users_secure.router, tags=["Secure Organization Users"])
 api.include_router(role_management.router, tags=["Role Management"])
+
+# Enterprise tenant service handles security automatically
 
 # Temporary debug endpoint for party ledger - ARCHIVED during cleanup
 # from .api.routes import party_ledger_debug

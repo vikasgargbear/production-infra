@@ -12,6 +12,7 @@ from datetime import date, datetime
 from ...core.database import get_db
 from ...core.auth_utils import get_org_id_from_header
 from ..services.document_number_service import DocumentNumberService
+from ...utils.branch_utils import get_default_branch_id
 
 logger = logging.getLogger(__name__)
 
@@ -25,7 +26,7 @@ def generate_delivery_challan_number(
     """Generate next delivery challan number using unified service"""
     try:
         # Use unified document number service
-        new_number = DocumentNumberService.generate_number(db, "delivery_challan")
+        new_number = DocumentNumberService.generate_number(db, "delivery_challan", org_id)
         return {"challan_number": new_number}
     except Exception as e:
         logger.error(f"Failed to generate challan number: {e}")
@@ -62,10 +63,10 @@ def get_delivery_challans(
                 dc.vehicle_number,
                 dc.transporter_name
             FROM sales.delivery_challans dc
-            LEFT JOIN parties.customers c ON dc.customer_id = c.customer_id
-            WHERE 1=1
+            LEFT JOIN parties.customers c ON dc.customer_id = c.customer_id AND c.org_id = :org_id
+            WHERE dc.org_id = :org_id
         """
-        params = {}
+        params = {"org_id": org_id}
         
         if customer_id:
             query += " AND dc.customer_id = :customer_id"
@@ -116,11 +117,12 @@ def get_delivery_challan(challan_id: int, db: Session = Depends(get_db),
                     o.notes,
                     'challan' as document_type
                 FROM sales.orders o
-                LEFT JOIN parties.customers c ON o.customer_id = c.customer_id
+                LEFT JOIN parties.customers c ON o.customer_id = c.customer_id AND c.org_id = :org_id
                 WHERE o.order_id = :challan_id
+                AND o.org_id = :org_id
                 AND o.order_status IN ('confirmed', 'delivered', 'shipped')
             """),
-            {"challan_id": challan_id}
+            {"challan_id": challan_id, "org_id": org_id}
         )
         challan = result.first()
         if not challan:
@@ -137,10 +139,10 @@ def get_delivery_challan(challan_id: int, db: Session = Depends(get_db),
                     oi.price,
                     (oi.quantity * oi.price) as total_amount
                 FROM sales.order_items oi
-                JOIN inventory.products p ON oi.product_id = p.product_id
+                JOIN inventory.products p ON oi.product_id = p.product_id AND p.org_id = :org_id
                 WHERE oi.order_id = :challan_id
             """),
-            {"challan_id": challan_id}
+            {"challan_id": challan_id, "org_id": org_id}
         )
         items = [dict(row._mapping) for row in items_result]
         
@@ -174,8 +176,8 @@ def create_delivery_challan(challan_data: dict, db: Session = Depends(get_db),
         
         # For now, this creates an order with delivery status
         order_data = {
-            "org_id": "ad808530-1ddb-4377-ab20-67bef145d80d",
-            "branch_id": 1,  # Default branch
+            "org_id": org_id,
+            "branch_id": get_default_branch_id(db, org_id),
             "order_number": order_number,
             "customer_id": challan_data.get("customer_id"),
             "order_date": challan_data.get("order_date", datetime.utcnow()),
@@ -210,8 +212,8 @@ def update_delivery_challan(challan_id: int, challan_data: dict, db: Session = D
     try:
         # Check if order exists
         check_result = db.execute(
-            text("SELECT order_id FROM sales.orders WHERE order_id = :order_id"),
-            {"order_id": challan_id}
+            text("SELECT order_id FROM sales.orders WHERE order_id = :order_id AND org_id = :org_id"),
+            {"order_id": challan_id, "org_id": org_id}
         )
         if not check_result.first():
             raise HTTPException(status_code=404, detail="Delivery challan not found")
@@ -237,7 +239,8 @@ def update_delivery_challan(challan_id: int, challan_data: dict, db: Session = D
             params["notes"] = challan_data["notes"]
         
         if update_fields:
-            query = f"UPDATE sales.orders SET {', '.join(update_fields)} WHERE order_id = :order_id"
+            params["org_id"] = org_id
+            query = f"UPDATE sales.orders SET {', '.join(update_fields)} WHERE order_id = :order_id AND org_id = :org_id"
             db.execute(text(query), params)
             db.commit()
         
@@ -255,8 +258,8 @@ def delete_delivery_challan(challan_id: int, db: Session = Depends(get_db),
     """Delete a delivery challan"""
     try:
         result = db.execute(
-            text("DELETE FROM sales.orders WHERE order_id = :order_id RETURNING order_id"),
-            {"order_id": challan_id}
+            text("DELETE FROM sales.orders WHERE order_id = :order_id AND org_id = :org_id RETURNING order_id"),
+            {"order_id": challan_id, "org_id": org_id}
         )
         deleted_id = result.scalar()
         if not deleted_id:
@@ -278,12 +281,12 @@ def mark_challan_delivered(challan_id: int, db: Session = Depends(get_db),
     try:
         result = db.execute(
             text("""
-                UPDATE sales.orders 
-                SET delivery_status = 'delivered', delivery_date = :delivery_date 
-                WHERE order_id = :order_id 
+                UPDATE sales.orders
+                SET delivery_status = 'delivered', delivery_date = :delivery_date
+                WHERE order_id = :order_id AND org_id = :org_id
                 RETURNING order_id
             """),
-            {"order_id": challan_id, "delivery_date": datetime.utcnow()}
+            {"order_id": challan_id, "org_id": org_id, "delivery_date": datetime.utcnow()}
         )
         updated_id = result.scalar()
         if not updated_id:
@@ -314,10 +317,11 @@ def get_delivery_analytics(
                 COUNT(CASE WHEN delivery_status = 'pending' THEN 1 END) as pending_count,
                 COUNT(CASE WHEN delivery_status = 'shipped' THEN 1 END) as shipped_count,
                 AVG(total_amount) as avg_challan_amount
-            FROM sales.orders 
+            FROM sales.orders
             WHERE order_status IN ('confirmed', 'delivered', 'shipped')
+            AND org_id = :org_id
         """
-        params = {}
+        params = {"org_id": org_id}
         
         if start_date:
             query += " AND order_date >= :start_date"
@@ -353,12 +357,12 @@ def generate_eway_bill(
     try:
         # Verify challan exists
         challan_check = db.execute(
-            text("SELECT order_id FROM sales.orders WHERE order_id = :order_id"),
-            {"order_id": challan_id}
+            text("SELECT order_id FROM sales.orders WHERE order_id = :order_id AND org_id = :org_id"),
+            {"order_id": challan_id, "org_id": org_id}
         )
         if not challan_check.first():
             raise HTTPException(status_code=404, detail="Delivery challan not found")
-        
+
         # Extract e-way bill data
         eway_bill_data = {
             "challan_id": challan_id,
@@ -452,13 +456,13 @@ def record_proof_of_delivery(
     try:
         # Verify challan exists
         challan_check = db.execute(
-            text("SELECT order_id, customer_id FROM sales.orders WHERE order_id = :order_id"),
-            {"order_id": challan_id}
+            text("SELECT order_id, customer_id FROM sales.orders WHERE order_id = :order_id AND org_id = :org_id"),
+            {"order_id": challan_id, "org_id": org_id}
         )
         challan = challan_check.first()
         if not challan:
             raise HTTPException(status_code=404, detail="Delivery challan not found")
-        
+
         # Create POD record
         pod_insert = """
             INSERT INTO sales.proof_of_delivery (
@@ -551,12 +555,13 @@ def get_delivery_tracking(challan_id: int, db: Session = Depends(get_db),
                 ewb.transporter_name,
                 ewb.valid_until
             FROM sales.orders o
-            LEFT JOIN parties.customers c ON o.customer_id = c.customer_id
+            LEFT JOIN parties.customers c ON o.customer_id = c.customer_id AND c.org_id = :org_id
             LEFT JOIN sales.eway_bills ewb ON ewb.challan_id = o.order_id
             WHERE o.order_id = :challan_id
+            AND o.org_id = :org_id
         """
-        
-        result = db.execute(text(challan_query), {"challan_id": challan_id})
+
+        result = db.execute(text(challan_query), {"challan_id": challan_id, "org_id": org_id})
         challan = result.first()
         
         if not challan:
@@ -657,14 +662,16 @@ def update_delivery_tracking(
         # Update challan delivery status if changed
         if tracking_data.get("update_challan_status", False):
             update_query = """
-                UPDATE sales.orders 
+                UPDATE sales.orders
                 SET delivery_status = :status,
                     last_tracking_update = CURRENT_TIMESTAMP
                 WHERE order_id = :order_id
+                AND org_id = :org_id
             """
             db.execute(text(update_query), {
                 "status": tracking_data.get("status"),
-                "order_id": challan_id
+                "order_id": challan_id,
+                "org_id": org_id
             })
         
         db.commit()
@@ -714,13 +721,14 @@ def get_pending_deliveries(
                 ewb.vehicle_number,
                 ewb.transporter_name
             FROM sales.orders o
-            LEFT JOIN parties.customers c ON o.customer_id = c.customer_id
+            LEFT JOIN parties.customers c ON o.customer_id = c.customer_id AND c.org_id = :org_id
             LEFT JOIN sales.eway_bills ewb ON ewb.challan_id = o.order_id
             WHERE o.delivery_status IN ('pending', 'shipped')
             AND o.order_status != 'cancelled'
+            AND o.org_id = :org_id
         """
-        
-        params = {}
+
+        params = {"org_id": org_id}
         
         if date_filter:
             query += " AND DATE(o.expected_delivery_date) = :date_filter"
