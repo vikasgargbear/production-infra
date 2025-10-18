@@ -245,11 +245,8 @@ class TenantAwareSession:
         return self.session.close()
 
 
-# Import at module level to avoid circular imports
-from ..core.database import get_db
-
 # FastAPI Dependency
-def get_tenant_aware_db(session: Session = Depends(get_db)):
+def get_tenant_aware_db():
     """
     FastAPI dependency that provides tenant-aware database session
     
@@ -266,7 +263,14 @@ def get_tenant_aware_db(session: Session = Depends(get_db)):
         result = db.execute("SELECT * FROM customers")
         return result.fetchall()
     """
-    return TenantAwareSession(session)
+    from ..core.database import get_db
+    
+    # Import inside function to avoid circular imports
+    for session in get_db():
+        try:
+            yield TenantAwareSession(session)
+        finally:
+            pass  # Session cleanup handled by get_db
 
 
 # Decorator for automatic tenant context
