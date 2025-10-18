@@ -1054,10 +1054,10 @@ async def get_invoices(
                 i.taxable_amount,
                 i.subtotal_amount
             FROM sales.invoices i
-            WHERE i.org_id = :org_id
+            WHERE 1=1
         """
         
-        params = {"org_id": org_id, "limit": limit, "offset": offset}
+        params = {"limit": limit, "offset": offset}
 
         if customer_id:
             query += " AND i.customer_id = :customer_id"
@@ -1077,11 +1077,22 @@ async def get_invoices(
         invoices = [dict(row._mapping) for row in result]
         
         # Get total count
-        count_query = "SELECT COUNT(*) FROM sales.invoices WHERE org_id = :org_id"
+        count_query = "SELECT COUNT(*) FROM sales.invoices WHERE 1=1"
+        count_params = {}
+        
         if customer_id:
             count_query += " AND customer_id = :customer_id"
+            count_params["customer_id"] = customer_id
         
-        total = db.execute(text(count_query), {"org_id": org_id, "customer_id": customer_id} if customer_id else {"org_id": org_id}).scalar()
+        if date_from:
+            count_query += " AND invoice_date >= :date_from"
+            count_params["date_from"] = date_from
+
+        if date_to:
+            count_query += " AND invoice_date <= :date_to"
+            count_params["date_to"] = date_to
+        
+        total = db.execute(text(count_query), count_params).scalar()
         
         return {
             "invoices": invoices,
@@ -1144,49 +1155,7 @@ async def get_invoice(
         logger.error(f"Error getting invoice: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
-@router.get("/list")
-@with_tenant_context
-async def list_invoices(
-    limit: int = 100,
-    skip: int = 0,
-    db: TenantAwareSession = Depends(get_tenant_aware_db),
-    context: OrgContext = Depends(get_org_context)  # SECURE: Tenant-aware
-):
-    """List invoices with pagination"""
-    try:
-        query = text("""
-            SELECT 
-                i.invoice_id, i.invoice_number, i.invoice_date,
-                i.customer_id, i.customer_name,
-                i.final_amount, i.payment_status,
-                o.order_number, o.order_date,
-                i.final_amount as balance_amount
-            FROM sales.invoices i
-            LEFT JOIN sales.orders o ON i.order_id = o.order_id
-            WHERE i.org_id = :org_id
-            ORDER BY i.invoice_date DESC
-            LIMIT :limit OFFSET :skip
-        """)
-        
-        result = db.execute(query, {"org_id": org_id, "limit": limit, "skip": skip})
-        invoices = [dict(row._mapping) for row in result]
-        
-        # Get total
-        total = db.execute(
-            text("SELECT COUNT(*) FROM sales.invoices WHERE org_id = :org_id"),
-            {"org_id": org_id}
-        ).scalar()
-        
-        return {
-            "total": total,
-            "page": skip // limit + 1,
-            "per_page": limit,
-            "invoices": invoices
-        }
-        
-    except Exception as e:
-        logger.error(f"Error listing invoices: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+# Removed duplicate /list endpoint - use GET / instead
 
 @router.post("/drop-problematic-triggers")
 @with_tenant_context

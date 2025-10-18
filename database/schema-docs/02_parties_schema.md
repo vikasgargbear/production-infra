@@ -1,335 +1,440 @@
 # Parties Schema Documentation
 
-## Overview
-The `parties` schema manages customers, suppliers, and business relationships. This is critical for sales, procurement, and business partner management.
+**Schema:** `parties`
+**Purpose:** Customer and supplier master data management
+**Last Updated:** 2025-10-16
+**Tables:** 8
 
 ---
 
-## Tables
+## Overview
+
+The `parties` schema manages all external party relationships including customers, suppliers, their contacts, grouping mechanisms, and geographic/route planning for sales operations.
+
+---
+
+## Tables Summary
+
+| # | Table | Purpose | Primary Key | Key Features |
+|---|-------|---------|-------------|--------------|
+| 1 | customers | Customer master data | customer_id | 59 columns, full CRM, loyalty, KYC |
+| 2 | suppliers | Supplier master data | supplier_id | 53 columns, vendor management, ratings |
+| 3 | customer_contacts | Customer contact persons | contact_id | Multi-contact per customer |
+| 4 | supplier_contacts | Supplier contact persons | contact_id | Authority levels, negotiation rights |
+| 5 | customer_groups | Customer grouping/segmentation | group_id | Discounts, pricing, credit rules |
+| 6 | customer_group_members | Group membership mapping | member_id | Individual overrides |
+| 7 | territories | Territory/region management | territory_id | Hierarchy, targets, achievement |
+| 8 | routes | Delivery route planning | route_id | Visit scheduling, sequencing |
+
+---
+
+## Detailed Table Structures
 
 ### 1. customers
+**Comprehensive customer master with CRM features**
 
-### customers
-**Purpose**: [Business purpose description]
-**API Endpoint**: `api.get_customers()`, `api.create_customer()`
+**Core Information:**
+- `customer_id` (serial, PK) - Unique identifier
+- `org_id` (uuid, FK) - Organization
+- `customer_code` (text, UNIQUE) - Customer code
+- `customer_name` (text) - Display name
+- `customer_type` (text) - retail/wholesale/hospital/clinic
+- `business_type` (text) - Default: 'retail_pharmacy'
 
-| Field | Type | Required | Description | Frontend Usage |
-|-------|------|----------|-------------|----------------|
-| `customer_id` | SERIAL | ✓ | Primary key identifier | Primary key |
-| `org_id` | UUID | ✓ | Organization ID | Organization filtering |
-| `customer_code` | TEXT | ✓ | Description needed | Standard field usage |
-| `customer_name` | TEXT | ✓ | Description needed | Standard field usage |
-| `customer_type` | TEXT | ✓ | Description needed | Standard field usage |
-| `primary_phone` | TEXT | ✓ | Description needed | Standard field usage |
-| `primary_email` | TEXT | - | Description needed | Standard field usage |
-| `secondary_phone` | TEXT | - | Description needed | Standard field usage |
-| `whatsapp_number` | TEXT | - | Description needed | Standard field usage |
-| `contact_person_name` | TEXT | - | Description needed | Standard field usage |
-| `contact_person_phone` | TEXT | - | Description needed | Standard field usage |
-| `contact_person_email` | TEXT | - | Description needed | Standard field usage |
-| `gst_number` | TEXT | - | Description needed | Standard field usage |
-| `pan_number` | TEXT | - | Description needed | Standard field usage |
-| `drug_license_number` | TEXT | - | Description needed | Standard field usage |
-| `drug_license_validity` | DATE | - | Description needed | Standard field usage |
-| `fssai_number` | TEXT | - | Description needed | Standard field usage |
-| `establishment_year` | INTEGER | - | Description needed | Standard field usage |
-| `business_type` | TEXT | - | Description needed | Standard field usage |
-| `credit_limit` | NUMERIC(15 | - | Description needed | Standard field usage |
-| `current_outstanding` | NUMERIC(15 | - | Description needed | Standard field usage |
-| `credit_days` | INTEGER | - | Description needed | Standard field usage |
-| `credit_rating` | TEXT | - | Description needed | Standard field usage |
-| `payment_terms` | TEXT | - | Description needed | Standard field usage |
-| `security_deposit` | NUMERIC(15 | - | Description needed | Standard field usage |
-| `overdue_interest_rate` | NUMERIC(5 | - | Description needed | Standard field usage |
-| `customer_category` | TEXT | - | Description needed | Standard field usage |
-| `customer_grade` | TEXT | - | Description needed | Standard field usage |
-| `territory_id` | INTEGER | - | Reference to related entity | Association/lookup |
-| `route_id` | INTEGER | - | Reference to related entity | Association/lookup |
-| `area_code` | TEXT | - | Description needed | Standard field usage |
-| `assigned_salesperson_id` | INTEGER | - | Reference to related entity | Association/lookup |
-| `price_list_id` | INTEGER | - | Reference to related entity | Association/lookup |
-| `discount_group_id` | INTEGER | - | Reference to related entity | Association/lookup |
-| `kyc_status` | TEXT | - | Description needed | Standard field usage |
-| `kyc_verified_date` | DATE | - | Description needed | Standard field usage |
-| `kyc_documents` | JSONB | - | Description needed | Standard field usage |
-| `preferred_payment_mode` | TEXT | - | Description needed | Standard field usage |
-| `preferred_delivery_time` | TEXT | - | Description needed | Standard field usage |
-| `prefer_sms` | BOOLEAN | - | Description needed | Standard field usage |
-| `prefer_email` | BOOLEAN | - | Description needed | Standard field usage |
-| `prefer_whatsapp` | BOOLEAN | - | Description needed | Standard field usage |
-| `first_transaction_date` | DATE | - | Description needed | Standard field usage |
-| `last_transaction_date` | DATE | - | Description needed | Standard field usage |
-| `total_business_amount` | NUMERIC(15 | - | Description needed | Standard field usage |
-| `total_transactions` | INTEGER | - | Description needed | Standard field usage |
-| `average_order_value` | NUMERIC(15 | - | Description needed | Standard field usage |
-| `is_active` | BOOLEAN | - | Active status flag | Standard field usage |
-| `blacklisted` | BOOLEAN | - | Description needed | Standard field usage |
-| `blacklist_reason` | TEXT | - | Description needed | Standard field usage |
-| `blacklist_date` | DATE | - | Description needed | Standard field usage |
-| `loyalty_points` | NUMERIC(15 | - | Description needed | Standard field usage |
-| `loyalty_tier` | TEXT | - | Description needed | Standard field usage |
-| `internal_notes` | TEXT | - | Description needed | Standard field usage |
-| `created_at` | TIMESTAMP | - | Timestamp field | Standard field usage |
-| `updated_at` | TIMESTAMP | - | Timestamp field | Standard field usage |
-| `created_by` | INTEGER | - | Creation audit field | Standard field usage |
-| `gst_number` | IS | - | Description needed | Standard field usage |
+**Contact Details:**
+- `primary_phone`, `secondary_phone` (text)
+- `primary_email` (text)
+- `whatsapp_number` (text)
+- `contact_person_name`, `contact_person_phone`, `contact_person_email` (text)
 
-**Foreign Key Relationships**:
-- `org_id` → `master.organizations.org_id`
-- `assigned_salesperson_id` → `master.org_users.user_id`
-- `created_by` → `master.org_users.user_id`
+**Compliance:**
+- `gst_number`, `gstin` (text) - GST registration (validated)
+- `pan_number` (text) - PAN card
+- `drug_license_number` (text) - Pharma license
+- `drug_license_validity` (date)
+- `fssai_number` (text)
+
+**Credit Management:**
+- `credit_limit` (numeric) - Maximum credit allowed
+- `current_outstanding` (numeric) - Current dues
+- `credit_days` (int) - Payment terms in days
+- `credit_rating` (text) - Default: 'C'
+- `payment_terms` (text) - Default: 'Cash'
+- `security_deposit` (numeric)
+- `overdue_interest_rate` (numeric)
+
+**Sales Assignment:**
+- `territory_id` (int, FK) - Geographic territory
+- `route_id` (int, FK) - Delivery route
+- `assigned_salesperson_id` (int, FK) - Sales rep
+- `price_list_id` (int) - Special pricing
+- `discount_group_id` (int) - Discount group
+
+**KYC & Verification:**
+- `kyc_status` (text) - pending/verified/rejected
+- `kyc_verified_date` (date)
+- `kyc_documents` (jsonb) - Document storage
+
+**Communication Preferences:**
+- `prefer_sms`, `prefer_email`, `prefer_whatsapp` (boolean)
+- `preferred_payment_mode` (text)
+- `preferred_delivery_time` (text)
+
+**Analytics:**
+- `first_transaction_date`, `last_transaction_date` (date)
+- `total_business_amount` (numeric)
+- `total_transactions` (int)
+- `average_order_value` (numeric)
+
+**Loyalty:**
+- `loyalty_points` (numeric)
+- `loyalty_tier` (text) - bronze/silver/gold/platinum
+
+**Status:**
+- `is_active` (boolean) - Active customer
+- `blacklisted` (boolean) - Blacklist flag
+- `blacklist_reason`, `blacklist_date` (text, date)
+
+**Indexes:**
+- Full-text search on name and code
+- Phone number lookup
+- GST number lookup
+- Category/grade filtering
+- Credit utilization tracking
+
+**Constraints:**
+- GST format validation
+- Unique: org_id + customer_code
+
+**RLS Policy:** ✅ Enabled (`org_id = get_current_org_id()`)
 
 ---
 
 ### 2. suppliers
+**Supplier/vendor master with performance tracking**
 
-### suppliers
-**Purpose**: [Business purpose description]
-**API Endpoint**: `api.get_suppliers()`, `api.create_supplier()`
+**Core Information:**
+- `supplier_id` (serial, PK)
+- `org_id` (uuid, FK)
+- `supplier_code` (text, UNIQUE)
+- `supplier_name` (text)
+- `supplier_type` (text) - manufacturer/distributor/importer
+- `website` (text)
 
-| Field | Type | Required | Description | Frontend Usage |
-|-------|------|----------|-------------|----------------|
-| `supplier_id` | SERIAL | ✓ | Primary key identifier | Primary key |
-| `org_id` | UUID | ✓ | Organization ID | Organization filtering |
-| `supplier_code` | TEXT | ✓ | Description needed | Standard field usage |
-| `supplier_name` | TEXT | ✓ | Description needed | Standard field usage |
-| `supplier_type` | TEXT | ✓ | Description needed | Standard field usage |
-| `primary_phone` | TEXT | ✓ | Description needed | Standard field usage |
-| `primary_email` | TEXT | - | Description needed | Standard field usage |
-| `secondary_phone` | TEXT | - | Description needed | Standard field usage |
-| `contact_person_name` | TEXT | - | Description needed | Standard field usage |
-| `contact_person_phone` | TEXT | - | Description needed | Standard field usage |
-| `gst_number` | TEXT | - | Description needed | Standard field usage |
-| `pan_number` | TEXT | - | Description needed | Standard field usage |
-| `drug_license_number` | TEXT | - | Description needed | Standard field usage |
-| `drug_license_validity` | DATE | - | Description needed | Standard field usage |
-| `establishment_year` | INTEGER | - | Description needed | Standard field usage |
-| `payment_days` | INTEGER | - | Description needed | Standard field usage |
-| `preferred_payment_mode` | TEXT | - | Description needed | Standard field usage |
-| `early_payment_discount` | NUMERIC(5 | - | Description needed | Standard field usage |
-| `late_payment_penalty` | NUMERIC(5 | - | Description needed | Standard field usage |
-| `supplier_category` | TEXT | - | Description needed | Standard field usage |
-| `supplier_grade` | TEXT | - | Description needed | Standard field usage |
-| `product_categories` | TEXT[] | - | Description needed | Standard field usage |
-| `brand_authorizations` | TEXT[] | - | Description needed | Standard field usage |
-| `compliance_rating` | TEXT | - | Description needed | Standard field usage |
-| `quality_rating` | NUMERIC(3 | - | Description needed | Standard field usage |
-| `delivery_rating` | NUMERIC(3 | - | Description needed | Standard field usage |
-| `vendor_documents` | JSONB | - | Description needed | Standard field usage |
-| `bank_name` | TEXT | - | Description needed | Standard field usage |
-| `account_number` | TEXT | - | Description needed | Standard field usage |
-| `ifsc_code` | TEXT | - | Description needed | Standard field usage |
-| `account_type` | TEXT | - | Description needed | Standard field usage |
-| `account_holder_name` | TEXT | - | Description needed | Standard field usage |
-| `credit_limit_given` | NUMERIC(15 | - | Description needed | Standard field usage |
-| `current_outstanding` | NUMERIC(15 | - | Description needed | Standard field usage |
-| `first_purchase_date` | DATE | - | Description needed | Standard field usage |
-| `last_purchase_date` | DATE | - | Description needed | Standard field usage |
-| `total_purchase_amount` | NUMERIC(15 | - | Description needed | Standard field usage |
-| `total_purchases` | INTEGER | - | Description needed | Standard field usage |
-| `average_order_value` | NUMERIC(15 | - | Description needed | Standard field usage |
-| `return_rate_percentage` | NUMERIC(5 | - | Description needed | Standard field usage |
-| `quality_issue_count` | INTEGER | - | Description needed | Standard field usage |
-| `is_active` | BOOLEAN | - | Active status flag | Standard field usage |
-| `is_approved` | BOOLEAN | - | Description needed | Standard field usage |
-| `approved_date` | DATE | - | Description needed | Standard field usage |
-| `approved_by` | INTEGER | - | Description needed | Standard field usage |
-| `blacklisted` | BOOLEAN | - | Description needed | Standard field usage |
-| `blacklist_reason` | TEXT | - | Description needed | Standard field usage |
-| `blacklist_date` | DATE | - | Description needed | Standard field usage |
-| `internal_notes` | TEXT | - | Description needed | Standard field usage |
-| `created_at` | TIMESTAMP | - | Timestamp field | Standard field usage |
-| `updated_at` | TIMESTAMP | - | Timestamp field | Standard field usage |
-| `created_by` | INTEGER | - | Creation audit field | Standard field usage |
+**Contact:**
+- `primary_phone`, `secondary_phone` (text)
+- `primary_email` (text)
+- `contact_person_name`, `contact_person_phone` (text)
 
-**Foreign Key Relationships**:
-- `org_id` → `master.organizations.org_id`
-- `approved_by` → `master.org_users.user_id`
-- `created_by` → `master.org_users.user_id`
+**Compliance:**
+- `gst_number`, `pan_number` (text)
+- `drug_license_number` (text)
+- `drug_license_validity` (date)
+
+**Payment Terms:**
+- `payment_days` (int) - Default: 30
+- `preferred_payment_mode` (text) - Default: 'bank_transfer'
+- `early_payment_discount` (numeric) - Discount %
+- `late_payment_penalty` (numeric) - Penalty %
+
+**Bank Details:**
+- `bank_name` (text)
+- `account_number` (text)
+- `ifsc_code` (text)
+- `account_type` (text) - Default: 'current'
+- `account_holder_name` (text)
+
+**Categorization:**
+- `supplier_category`, `supplier_grade` (text)
+- `product_categories` (text[]) - Products supplied
+- `brand_authorizations` (text[]) - Authorized brands
+
+**Performance Ratings:**
+- `compliance_rating` (text) - Default: 'good'
+- `quality_rating` (numeric 0-5)
+- `delivery_rating` (numeric 0-5)
+- `return_rate_percentage` (numeric)
+- `quality_issue_count` (int)
+
+**Financial:**
+- `credit_limit_given` (numeric) - Credit we extend to them
+- `current_outstanding` (numeric) - Our dues to supplier
+
+**Analytics:**
+- `first_purchase_date`, `last_purchase_date` (date)
+- `total_purchase_amount` (numeric)
+- `total_purchases` (int)
+- `average_order_value` (numeric)
+
+**Approval & Status:**
+- `is_active` (boolean)
+- `is_approved` (boolean) - Vendor approval
+- `approved_date`, `approved_by` (date, int)
+- `blacklisted` (boolean)
+- `blacklist_reason`, `blacklist_date` (text, date)
+
+**Documents:**
+- `vendor_documents` (jsonb) - Licenses, certificates
+
+**Indexes:**
+- Full-text search on name
+- GST lookup
+- Category filtering
+- Active suppliers index
+
+**RLS Policy:** ✅ Enabled (`org_id = get_current_org_id()`)
 
 ---
 
 ### 3. customer_contacts
+**Multiple contact persons per customer**
 
-### customer_contacts
-**Purpose**: [Business purpose description]
-**API Endpoint**: `api.get_customer_contacts()`, `api.create_customer_contact()`
+**Key Columns:**
+- `contact_id` (serial, PK)
+- `customer_id` (int, FK) - Parent customer
+- `contact_name` (text) - Contact person name
+- `designation`, `department` (text)
+- `mobile_number`, `phone_number`, `email` (text)
+- `is_primary_contact` (boolean) - Main contact flag
+- `contact_for` (text[]) - Areas: sales/accounts/orders
+- `preferred_contact_time` (text)
+- `preferred_language` (text) - Default: 'English'
+- `date_of_birth`, `anniversary_date` (date) - For greetings
+- `notes` (text)
+- `is_active` (boolean)
 
-| Field | Type | Required | Description | Frontend Usage |
-|-------|------|----------|-------------|----------------|
-| `contact_id` | SERIAL | ✓ | Primary key identifier | Primary key |
-| `customer_id` | INTEGER | ✓ | Reference to related entity | Association/lookup |
-| `contact_name` | TEXT | ✓ | Description needed | Standard field usage |
-| `designation` | TEXT | - | Description needed | Standard field usage |
-| `department` | TEXT | - | Description needed | Standard field usage |
-| `mobile_number` | TEXT | - | Description needed | Standard field usage |
-| `phone_number` | TEXT | - | Description needed | Standard field usage |
-| `email` | TEXT | - | Description needed | Standard field usage |
-| `is_primary_contact` | BOOLEAN | - | Description needed | Standard field usage |
-| `contact_for` | TEXT[] | - | Description needed | Standard field usage |
-| `preferred_contact_time` | TEXT | - | Description needed | Standard field usage |
-| `preferred_language` | TEXT | - | Description needed | Standard field usage |
-| `date_of_birth` | DATE | - | Description needed | Standard field usage |
-| `anniversary_date` | DATE | - | Description needed | Standard field usage |
-| `notes` | TEXT | - | Description needed | Standard field usage |
-| `is_active` | BOOLEAN | - | Active status flag | Standard field usage |
-| `created_at` | TIMESTAMP | - | Timestamp field | Standard field usage |
-| `updated_at` | TIMESTAMP | - | Timestamp field | Standard field usage |
+**Use Cases:**
+- Different contacts for different purposes
+- Birthday/anniversary reminders
+- Personalized communication
 
-**Foreign Key Relationships**:
-- `customer_id` → `parties.customers.customer_id`
+**Cascade:** ON DELETE CASCADE (with customer)
 
 ---
 
 ### 4. supplier_contacts
+**Supplier contact persons with authority levels**
 
-### supplier_contacts
-**Purpose**: [Business purpose description]
-**API Endpoint**: `api.get_supplier_contacts()`, `api.create_supplier_contact()`
+**Key Columns:**
+- `contact_id` (serial, PK)
+- `supplier_id` (int, FK)
+- `contact_name` (text)
+- `designation`, `department` (text)
+- `mobile_number`, `phone_number`, `email` (text)
+- `is_primary_contact` (boolean)
+- `contact_for` (text[]) - Purchase/returns/technical
 
-| Field | Type | Required | Description | Frontend Usage |
-|-------|------|----------|-------------|----------------|
-| `contact_id` | SERIAL | ✓ | Primary key identifier | Primary key |
-| `supplier_id` | INTEGER | ✓ | Reference to related entity | Association/lookup |
-| `contact_name` | TEXT | ✓ | Description needed | Standard field usage |
-| `designation` | TEXT | - | Description needed | Standard field usage |
-| `department` | TEXT | - | Description needed | Standard field usage |
-| `mobile_number` | TEXT | - | Description needed | Standard field usage |
-| `phone_number` | TEXT | - | Description needed | Standard field usage |
-| `email` | TEXT | - | Description needed | Standard field usage |
-| `is_primary_contact` | BOOLEAN | - | Description needed | Standard field usage |
-| `contact_for` | TEXT[] | - | Description needed | Standard field usage |
-| `can_negotiate_prices` | BOOLEAN | - | Description needed | Standard field usage |
-| `can_approve_returns` | BOOLEAN | - | Description needed | Standard field usage |
-| `max_discount_authority` | NUMERIC(5 | - | Description needed | Standard field usage |
-| `notes` | TEXT | - | Description needed | Standard field usage |
-| `is_active` | BOOLEAN | - | Active status flag | Standard field usage |
-| `created_at` | TIMESTAMP | - | Timestamp field | Standard field usage |
-| `updated_at` | TIMESTAMP | - | Timestamp field | Standard field usage |
+**Authority Levels:**
+- `can_negotiate_prices` (boolean)
+- `can_approve_returns` (boolean)
+- `max_discount_authority` (numeric) - Max discount %
 
-**Foreign Key Relationships**:
-- `supplier_id` → `parties.suppliers.supplier_id`
+**Use Cases:**
+- Price negotiations
+- Return approvals
+- Technical support
+
+**Cascade:** ON DELETE CASCADE (with supplier)
 
 ---
 
 ### 5. customer_groups
+**Customer segmentation and group-based rules**
 
-### customer_groups
-**Purpose**: [Business purpose description]
-**API Endpoint**: `api.get_customer_groups()`, `api.create_customer_group()`
+**Key Columns:**
+- `group_id` (serial, PK)
+- `org_id` (uuid, FK)
+- `group_code` (text, UNIQUE per org)
+- `group_name` (text)
+- `group_type` (text) - discount/pricing/loyalty/region
+- `parent_group_id` (int) - Hierarchical groups
 
-| Field | Type | Required | Description | Frontend Usage |
-|-------|------|----------|-------------|----------------|
-| `group_id` | SERIAL | ✓ | Primary key identifier | Primary key |
-| `org_id` | UUID | ✓ | Organization ID | Organization filtering |
-| `group_code` | TEXT | ✓ | Description needed | Standard field usage |
-| `group_name` | TEXT | ✓ | Description needed | Standard field usage |
-| `group_type` | TEXT | ✓ | Description needed | Standard field usage |
-| `parent_group_id` | INTEGER | - | Reference to related entity | Association/lookup |
-| `discount_percentage` | NUMERIC(5 | - | Description needed | Standard field usage |
-| `price_list_id` | INTEGER | - | Reference to related entity | Association/lookup |
-| `payment_terms_days` | INTEGER | - | Description needed | Standard field usage |
-| `credit_limit_multiplier` | NUMERIC(3 | - | Description needed | Standard field usage |
-| `eligibility_criteria` | JSONB | - | Description needed | Standard field usage |
-| `is_active` | BOOLEAN | - | Active status flag | Standard field usage |
-| `created_at` | TIMESTAMP | - | Timestamp field | Standard field usage |
-| `updated_at` | TIMESTAMP | - | Timestamp field | Standard field usage |
+**Rules:**
+- `discount_percentage` (numeric) - Group discount
+- `price_list_id` (int) - Special price list
+- `payment_terms_days` (int) - Payment terms
+- `credit_limit_multiplier` (numeric) - Credit multiplier
+- `eligibility_criteria` (jsonb) - Auto-enrollment rules
 
-**Foreign Key Relationships**:
-- `org_id` → `master.organizations.org_id`
-- `parent_group_id` → `parties.customer_groups.group_id`
+**Use Cases:**
+- VIP customers
+- Volume-based discounts
+- Regional pricing
+- Loyalty tiers
+
+**Hierarchy:** Supports parent-child group structure
 
 ---
 
 ### 6. customer_group_members
+**Group membership with individual overrides**
 
-### customer_group_members
-**Purpose**: [Business purpose description]
-**API Endpoint**: `api.get_customer_group_members()`, `api.create_customer_group_member()`
+**Key Columns:**
+- `member_id` (serial, PK)
+- `group_id` (int, FK)
+- `customer_id` (int, FK)
+- `joined_date` (date) - Default: CURRENT_DATE
+- `expiry_date` (date) - Optional membership end
 
-| Field | Type | Required | Description | Frontend Usage |
-|-------|------|----------|-------------|----------------|
-| `member_id` | SERIAL | ✓ | Primary key identifier | Primary key |
-| `group_id` | INTEGER | ✓ | Reference to related entity | Association/lookup |
-| `customer_id` | INTEGER | ✓ | Reference to related entity | Association/lookup |
-| `joined_date` | DATE | - | Description needed | Standard field usage |
-| `expiry_date` | DATE | - | Description needed | Standard field usage |
-| `override_discount` | NUMERIC(5 | - | Description needed | Standard field usage |
-| `override_credit_limit` | NUMERIC(15 | - | Description needed | Standard field usage |
-| `is_active` | BOOLEAN | - | Active status flag | Standard field usage |
-| `created_at` | TIMESTAMP | - | Timestamp field | Standard field usage |
-| `created_by` | INTEGER | - | Creation audit field | Standard field usage |
+**Overrides:**
+- `override_discount` (numeric) - Individual discount
+- `override_credit_limit` (numeric) - Individual credit
 
-**Foreign Key Relationships**:
-- `group_id` → `parties.customer_groups.group_id`
-- `customer_id` → `parties.customers.customer_id`
-- `created_by` → `master.org_users.user_id`
+**Use Cases:**
+- Promotional group memberships
+- Time-limited special pricing
+- Individual exceptions within groups
+
+**Constraint:** UNIQUE (group_id, customer_id)
 
 ---
 
 ### 7. territories
+**Geographic territory management with targets**
 
-### territories
-**Purpose**: [Business purpose description]
-**API Endpoint**: `api.get_territories()`, `api.create_territorie()`
+**Key Columns:**
+- `territory_id` (serial, PK)
+- `org_id` (uuid, FK)
+- `territory_code` (text, UNIQUE per org)
+- `territory_name` (text)
+- `territory_type` (text) - state/region/city/zone
 
-| Field | Type | Required | Description | Frontend Usage |
-|-------|------|----------|-------------|----------------|
-| `territory_id` | SERIAL | ✓ | Primary key identifier | Primary key |
-| `org_id` | UUID | ✓ | Organization ID | Organization filtering |
-| `territory_code` | TEXT | ✓ | Description needed | Standard field usage |
-| `territory_name` | TEXT | ✓ | Description needed | Standard field usage |
-| `territory_type` | TEXT | ✓ | Description needed | Standard field usage |
-| `parent_territory_id` | INTEGER | - | Reference to related entity | Association/lookup |
-| `territory_path` | TEXT | - | Description needed | Standard field usage |
-| `geographic_data` | JSONB | - | Description needed | Standard field usage |
-| `territory_manager_id` | INTEGER | - | Reference to related entity | Association/lookup |
-| `sales_team_ids` | INTEGER[] | - | Description needed | Standard field usage |
-| `monthly_target` | NUMERIC(15 | - | Description needed | Standard field usage |
-| `quarterly_target` | NUMERIC(15 | - | Description needed | Standard field usage |
-| `annual_target` | NUMERIC(15 | - | Description needed | Standard field usage |
-| `current_month_achievement` | NUMERIC(15 | - | Description needed | Standard field usage |
-| `current_quarter_achievement` | NUMERIC(15 | - | Description needed | Standard field usage |
-| `is_active` | BOOLEAN | - | Active status flag | Standard field usage |
-| `created_at` | TIMESTAMP | - | Timestamp field | Standard field usage |
-| `updated_at` | TIMESTAMP | - | Timestamp field | Standard field usage |
+**Hierarchy:**
+- `parent_territory_id` (int) - Nested territories
+- `territory_path` (text) - Breadcrumb path
+- `geographic_data` (jsonb) - Coordinates, boundaries
 
-**Foreign Key Relationships**:
-- `org_id` → `master.organizations.org_id`
-- `parent_territory_id` → `parties.territories.territory_id`
-- `territory_manager_id` → `master.org_users.user_id`
+**Management:**
+- `territory_manager_id` (int, FK) - Manager
+- `sales_team_ids` (int[]) - Sales team members
+
+**Targets:**
+- `monthly_target` (numeric)
+- `quarterly_target` (numeric)
+- `annual_target` (numeric)
+- `current_month_achievement` (numeric)
+- `current_quarter_achievement` (numeric)
+
+**Use Cases:**
+- Sales territory allocation
+- Performance tracking
+- Commission calculation
+- Regional analysis
+
+**Hierarchy Example:**
+```
+India (Country)
+ └─ Maharashtra (State)
+     └─ Pune (City)
+         ├─ Zone A
+         └─ Zone B
+```
 
 ---
 
 ### 8. routes
+**Delivery route planning and scheduling**
 
-### routes
-**Purpose**: [Business purpose description]
-**API Endpoint**: `api.get_routes()`, `api.create_route()`
+**Key Columns:**
+- `route_id` (serial, PK)
+- `org_id` (uuid, FK)
+- `territory_id` (int, FK) - Parent territory
+- `route_code` (text, UNIQUE per org)
+- `route_name` (text)
+- `route_type` (text) - delivery/sales/service
 
-| Field | Type | Required | Description | Frontend Usage |
-|-------|------|----------|-------------|----------------|
-| `route_id` | SERIAL | ✓ | Primary key identifier | Primary key |
-| `org_id` | UUID | ✓ | Organization ID | Organization filtering |
-| `territory_id` | INTEGER | - | Reference to related entity | Association/lookup |
-| `route_code` | TEXT | ✓ | Description needed | Standard field usage |
-| `route_name` | TEXT | ✓ | Description needed | Standard field usage |
-| `route_type` | TEXT | ✓ | Description needed | Standard field usage |
-| `visit_days` | TEXT[] | - | Description needed | Standard field usage |
-| `visit_frequency` | TEXT | - | Description needed | Standard field usage |
-| `assigned_to_id` | INTEGER | - | Reference to related entity | Association/lookup |
-| `vehicle_required` | BOOLEAN | - | Description needed | Standard field usage |
-| `total_distance_km` | NUMERIC(10 | - | Description needed | Standard field usage |
-| `average_time_hours` | NUMERIC(5 | - | Description needed | Standard field usage |
-| `customer_count` | INTEGER | - | Description needed | Standard field usage |
-| `customer_sequence` | JSONB | - | Description needed | Standard field usage |
-| `is_active` | BOOLEAN | - | Active status flag | Standard field usage |
-| `created_at` | TIMESTAMP | - | Timestamp field | Standard field usage |
-| `updated_at` | TIMESTAMP | - | Timestamp field | Standard field usage |
+**Schedule:**
+- `visit_days` (text[]) - ['Monday', 'Wednesday']
+- `visit_frequency` (text) - daily/weekly/biweekly/monthly
+- `assigned_to_id` (int, FK) - Assigned salesperson/driver
 
-**Foreign Key Relationships**:
-- `org_id` → `master.organizations.org_id`
-- `territory_id` → `parties.territories.territory_id`
-- `assigned_to_id` → `master.org_users.user_id`
+**Logistics:**
+- `vehicle_required` (boolean)
+- `total_distance_km` (numeric)
+- `average_time_hours` (numeric)
+- `customer_count` (int)
+- `customer_sequence` (jsonb) - Visit order
+
+**Use Cases:**
+- Delivery planning
+- Sales visit scheduling
+- Route optimization
+- Time estimation
+
+**Example:**
+```json
+customer_sequence: [
+  {"sequence": 1, "customer_id": 101, "estimated_time": "09:00"},
+  {"sequence": 2, "customer_id": 105, "estimated_time": "10:30"},
+  {"sequence": 3, "customer_id": 112, "estimated_time": "12:00"}
+]
+```
 
 ---
+
+## Relationships
+
+### Customer Hierarchy:
+```
+organizations
+ └─ customers (many)
+     ├─ customer_contacts (many)
+     └─ customer_group_members (many)
+         └─ customer_groups (many-to-many)
+```
+
+### Territory Hierarchy:
+```
+organizations
+ └─ territories (many, self-referential)
+     └─ routes (many)
+         └─ customers (assigned via route_id)
+```
+
+### Supplier Hierarchy:
+```
+organizations
+ └─ suppliers (many)
+     └─ supplier_contacts (many)
+```
+
+---
+
+## Multi-Tenant Security
+
+### RLS Policies:
+- **customers:** ✅ Enabled
+- **suppliers:** ✅ Enabled
+- **customer_groups, territories, routes:** Filtered by org_id FK
+
+### Authentication:
+All queries filtered by `org_id` from JWT token via `get_org_id_secure()`
+
+---
+
+## Performance Optimizations
+
+### Full-Text Search:
+- **customers:** Name + code search (GIN index)
+- **suppliers:** Name + code search (GIN index)
+
+### Common Queries:
+- Active customers by territory
+- Outstanding credit customers
+- Supplier performance ratings
+- Route-wise customer lists
+
+---
+
+## Related Documentation
+
+- [MASTER_SCHEMA_INDEX.md](./MASTER_SCHEMA_INDEX.md) - All schemas
+- [04_sales_schema.md](./04_sales_schema.md) - Sales transactions
+- [06_financial_schema.md](./06_financial_schema.md) - Receivables/payables
+
+---
+
+**Documentation Status:** ✅ Updated 2025-10-16
+**Schema Version:** Production (Railway)
+**Total Tables:** 8 (verified - no changes from previous docs)
+**Key Features:** CRM, Loyalty, KYC, Territory Management, Route Planning

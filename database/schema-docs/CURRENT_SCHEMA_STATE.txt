@@ -1,0 +1,232 @@
+Generating schema documentation from live Railway database...
+Date: Thu Oct 16 15:49:30 IST 2025
+
+=== SCHEMA TABLE COUNTS ===
+master:     14 tables
+parties:      8 tables
+inventory:     17 tables
+sales:     30 tables
+procurement:     16 tables
+financial:     16 tables
+gst:     15 tables
+compliance:     28 tables
+system_config:     22 tables
+analytics:     13 tables
+crm:      0 tables
+
+=== TABLE LISTS BY SCHEMA ===
+
+## master schema
+ addresses
+ branches
+ currencies
+ departments
+ doctors
+ employees
+ exchange_rates
+ number_series
+ org_bank_accounts
+ org_branches
+ org_users
+ organizations
+ roles
+ system_settings
+
+
+## parties schema
+ customer_contacts
+ customer_group_members
+ customer_groups
+ customers
+ routes
+ supplier_contacts
+ suppliers
+ territories
+
+
+## inventory schema
+ batches
+ competitor_pricing
+ inventory_movements
+ location_wise_stock
+ movement_summary
+ price_alerts
+ price_change_log
+ price_history
+ product_categories
+ product_types
+ products
+ reorder_suggestions
+ stock_reservations
+ stock_transfer_items
+ stock_transfers
+ storage_locations
+ units_of_measure
+
+
+## sales schema
+ credit_note_applications
+ credit_notes
+ customer_visits
+ debit_notes
+ delivery_challan_items
+ delivery_challans
+ delivery_tracking
+ eway_bills
+ invoice_items
+ invoice_return_status
+ invoices
+ loyalty_programs
+ loyalty_tiers
+ loyalty_transactions
+ order_items
+ orders
+ price_list_items
+ price_lists
+ promotional_schemes
+ proof_of_delivery
+ sales_return_items
+ sales_returns
+ sales_schemes
+ sales_targets
+ scheme_customers
+ scheme_products
+ scheme_usage
+ scheme_volume_slabs
+ v_invoice_calculation_debug
+ v_invoice_items_with_quantities
+
+
+## procurement schema
+ branch_budgets
+ goods_receipt_notes
+ grn_items
+ grn_return_status
+ purchase_order_items
+ purchase_orders
+ purchase_requisition_items
+ purchase_requisitions
+ purchase_return_items
+ purchase_returns
+ supplier_invoice_items
+ supplier_invoice_return_status
+ supplier_invoices
+ supplier_quotation_items
+ supplier_quotations
+ vendor_performance
+
+
+## financial schema
+ bank_reconciliation_items
+ bank_reconciliations
+ cash_flow_forecast
+ chart_of_accounts
+ customer_outstanding
+ expense_categories
+ expense_claim_items
+ expense_claims
+ journal_entries
+ journal_entry_lines
+ payment_allocations
+ payment_methods
+ payments
+ pdc_management
+ supplier_outstanding
+ unmatched_transactions
+
+
+## gst schema
+ advance_receipts
+ compliance_calendar
+ eway_bills
+ gst_audit_trail
+ gst_credit_ledger
+ gst_liability
+ gst_rates
+ gst_reconciliation
+ gstr1_data
+ gstr2a_data
+ gstr2b_data
+ gstr3b_data
+ hsn_sac_codes
+ purchase_reconciliation
+ return_filing_status
+
+
+## compliance schema
+ compliance_alerts
+ compliance_audits
+ compliance_documents
+ compliance_violations
+ corrective_action_plans
+ corrective_actions
+ destruction_approvals
+ drug_licenses
+ environmental_breaches
+ environmental_compliance
+ expired_destructions
+ inspection_schedule
+ inspector_visits
+ license_renewal_history
+ license_types
+ narcotic_discrepancies
+ narcotic_register
+ org_compliance_status
+ org_licenses
+ pharmacist_registrations
+ product_recalls
+ quality_control_tests
+ quality_deviations
+ regulatory_authorities
+ regulatory_inspections
+ required_licenses
+ temperature_logs
+ temperature_zones
+
+
+## system_config schema
+ api_logs
+ api_usage_log
+ api_usage_log_2024_01
+ api_usage_log_2024_02
+ audit_logs
+ backup_history
+ configuration_history
+ email_templates
+ error_logs
+ feature_flags
+ integration_logs
+ job_execution_history
+ scheduled_jobs
+ scheduled_notifications
+ setting_definitions
+ system_health_metrics
+ system_integrations
+ system_notifications
+ system_settings
+ user_notifications
+ workflow_definitions
+ workflow_instances
+
+
+## analytics schema
+ alert_definitions
+ alert_history
+ dashboard_cache
+ dashboard_widgets
+ dashboards
+ data_quality_metrics
+ kpi_definitions
+ kpi_values
+ product_consumption_stats
+ report_execution_history
+ report_schedules
+ report_templates
+ user_activity_analytics
+
+
+## crm schema
+
+
+Documentation generation complete!
+Review output and update schema-docs/*.md files accordingly

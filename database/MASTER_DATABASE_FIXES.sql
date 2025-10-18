@@ -4303,3 +4303,827 @@ WHERE tgname LIKE '%purchase%';
 
 RAISE NOTICE '✅ SECTION 26: PURCHASE ENTRY TRIGGERS COMPLETE';
 
+
+-- =============================================
+-- SECTION 27: ROW-LEVEL SECURITY (RLS) FOR MULTI-TENANT ISOLATION
+-- =============================================
+-- Date: 2025-10-06
+-- Priority: CRITICAL SECURITY FIX
+-- Purpose: Enforce multi-tenant data isolation at PostgreSQL level
+-- Even if application code forgets org_id filter, RLS blocks cross-org access
+-- =============================================
+
+-- Enable RLS on all critical tables
+-- Parties Schema
+ALTER TABLE parties.customers ENABLE ROW LEVEL SECURITY;
+ALTER TABLE parties.suppliers ENABLE ROW LEVEL SECURITY;
+
+-- Inventory Schema
+ALTER TABLE inventory.products ENABLE ROW LEVEL SECURITY;
+ALTER TABLE inventory.batches ENABLE ROW LEVEL SECURITY;
+ALTER TABLE inventory.inventory_movements ENABLE ROW LEVEL SECURITY;
+ALTER TABLE inventory.stock_transfers ENABLE ROW LEVEL SECURITY;
+ALTER TABLE inventory.stock_transfer_items ENABLE ROW LEVEL SECURITY;
+ALTER TABLE inventory.location_wise_stock ENABLE ROW LEVEL SECURITY;
+ALTER TABLE inventory.stock_reservations ENABLE ROW LEVEL SECURITY;
+
+-- Sales Schema
+ALTER TABLE sales.orders ENABLE ROW LEVEL SECURITY;
+ALTER TABLE sales.order_items ENABLE ROW LEVEL SECURITY;
+ALTER TABLE sales.invoices ENABLE ROW LEVEL SECURITY;
+ALTER TABLE sales.invoice_items ENABLE ROW LEVEL SECURITY;
+ALTER TABLE sales.delivery_challans ENABLE ROW LEVEL SECURITY;
+ALTER TABLE sales.delivery_challan_items ENABLE ROW LEVEL SECURITY;
+ALTER TABLE sales.sales_returns ENABLE ROW LEVEL SECURITY;
+ALTER TABLE sales.sales_return_items ENABLE ROW LEVEL SECURITY;
+
+-- Procurement Schema
+ALTER TABLE procurement.purchase_orders ENABLE ROW LEVEL SECURITY;
+ALTER TABLE procurement.purchase_order_items ENABLE ROW LEVEL SECURITY;
+ALTER TABLE procurement.goods_receipt_notes ENABLE ROW LEVEL SECURITY;
+ALTER TABLE procurement.grn_items ENABLE ROW LEVEL SECURITY;
+ALTER TABLE procurement.supplier_invoices ENABLE ROW LEVEL SECURITY;
+ALTER TABLE procurement.purchase_returns ENABLE ROW LEVEL SECURITY;
+ALTER TABLE procurement.purchase_return_items ENABLE ROW LEVEL SECURITY;
+
+-- Financial Schema
+ALTER TABLE financial.payment_methods ENABLE ROW LEVEL SECURITY;
+ALTER TABLE financial.payments ENABLE ROW LEVEL SECURITY;
+ALTER TABLE financial.payment_allocations ENABLE ROW LEVEL SECURITY;
+ALTER TABLE financial.customer_outstanding ENABLE ROW LEVEL SECURITY;
+ALTER TABLE financial.supplier_outstanding ENABLE ROW LEVEL SECURITY;
+ALTER TABLE financial.journal_entries ENABLE ROW LEVEL SECURITY;
+ALTER TABLE financial.journal_entry_lines ENABLE ROW LEVEL SECURITY;
+ALTER TABLE financial.expense_claims ENABLE ROW LEVEL SECURITY;
+ALTER TABLE financial.expense_claim_items ENABLE ROW LEVEL SECURITY;
+
+-- Create helper function for RLS policies
+CREATE OR REPLACE FUNCTION get_current_org_id()
+RETURNS UUID AS $$
+BEGIN
+    RETURN current_setting('app.current_org_id', TRUE)::UUID;
+EXCEPTION
+    WHEN OTHERS THEN
+        RETURN NULL; -- If setting not found, block all access
+END;
+$$ LANGUAGE plpgsql STABLE;
+
+-- Create RLS Policies for all tables
+-- Parties
+DROP POLICY IF EXISTS customers_isolation ON parties.customers;
+CREATE POLICY customers_isolation ON parties.customers USING (org_id = get_current_org_id());
+
+DROP POLICY IF EXISTS suppliers_isolation ON parties.suppliers;
+CREATE POLICY suppliers_isolation ON parties.suppliers USING (org_id = get_current_org_id());
+
+-- Inventory
+DROP POLICY IF EXISTS products_isolation ON inventory.products;
+CREATE POLICY products_isolation ON inventory.products USING (org_id = get_current_org_id());
+
+DROP POLICY IF EXISTS batches_isolation ON inventory.batches;
+CREATE POLICY batches_isolation ON inventory.batches USING (org_id = get_current_org_id());
+
+DROP POLICY IF EXISTS inventory_movements_isolation ON inventory.inventory_movements;
+CREATE POLICY inventory_movements_isolation ON inventory.inventory_movements USING (org_id = get_current_org_id());
+
+DROP POLICY IF EXISTS stock_transfers_isolation ON inventory.stock_transfers;
+CREATE POLICY stock_transfers_isolation ON inventory.stock_transfers USING (org_id = get_current_org_id());
+
+DROP POLICY IF EXISTS stock_transfer_items_isolation ON inventory.stock_transfer_items;
+CREATE POLICY stock_transfer_items_isolation ON inventory.stock_transfer_items 
+    USING (transfer_id IN (SELECT transfer_id FROM inventory.stock_transfers WHERE org_id = get_current_org_id()));
+
+DROP POLICY IF EXISTS location_wise_stock_isolation ON inventory.location_wise_stock;
+CREATE POLICY location_wise_stock_isolation ON inventory.location_wise_stock USING (org_id = get_current_org_id());
+
+DROP POLICY IF EXISTS stock_reservations_isolation ON inventory.stock_reservations;
+CREATE POLICY stock_reservations_isolation ON inventory.stock_reservations USING (org_id = get_current_org_id());
+
+-- Sales
+DROP POLICY IF EXISTS orders_isolation ON sales.orders;
+CREATE POLICY orders_isolation ON sales.orders USING (org_id = get_current_org_id());
+
+DROP POLICY IF EXISTS order_items_isolation ON sales.order_items;
+CREATE POLICY order_items_isolation ON sales.order_items 
+    USING (order_id IN (SELECT order_id FROM sales.orders WHERE org_id = get_current_org_id()));
+
+DROP POLICY IF EXISTS invoices_isolation ON sales.invoices;
+CREATE POLICY invoices_isolation ON sales.invoices USING (org_id = get_current_org_id());
+
+DROP POLICY IF EXISTS invoice_items_isolation ON sales.invoice_items;
+CREATE POLICY invoice_items_isolation ON sales.invoice_items 
+    USING (invoice_id IN (SELECT invoice_id FROM sales.invoices WHERE org_id = get_current_org_id()));
+
+DROP POLICY IF EXISTS delivery_challans_isolation ON sales.delivery_challans;
+CREATE POLICY delivery_challans_isolation ON sales.delivery_challans USING (org_id = get_current_org_id());
+
+DROP POLICY IF EXISTS delivery_challan_items_isolation ON sales.delivery_challan_items;
+CREATE POLICY delivery_challan_items_isolation ON sales.delivery_challan_items 
+    USING (challan_id IN (SELECT challan_id FROM sales.delivery_challans WHERE org_id = get_current_org_id()));
+
+DROP POLICY IF EXISTS sales_returns_isolation ON sales.sales_returns;
+CREATE POLICY sales_returns_isolation ON sales.sales_returns USING (org_id = get_current_org_id());
+
+DROP POLICY IF EXISTS sales_return_items_isolation ON sales.sales_return_items;
+CREATE POLICY sales_return_items_isolation ON sales.sales_return_items 
+    USING (return_id IN (SELECT return_id FROM sales.sales_returns WHERE org_id = get_current_org_id()));
+
+-- Procurement
+DROP POLICY IF EXISTS purchase_orders_isolation ON procurement.purchase_orders;
+CREATE POLICY purchase_orders_isolation ON procurement.purchase_orders USING (org_id = get_current_org_id());
+
+DROP POLICY IF EXISTS purchase_order_items_isolation ON procurement.purchase_order_items;
+CREATE POLICY purchase_order_items_isolation ON procurement.purchase_order_items 
+    USING (purchase_order_id IN (SELECT purchase_order_id FROM procurement.purchase_orders WHERE org_id = get_current_org_id()));
+
+DROP POLICY IF EXISTS grn_isolation ON procurement.goods_receipt_notes;
+CREATE POLICY grn_isolation ON procurement.goods_receipt_notes USING (org_id = get_current_org_id());
+
+DROP POLICY IF EXISTS grn_items_isolation ON procurement.grn_items;
+CREATE POLICY grn_items_isolation ON procurement.grn_items 
+    USING (grn_id IN (SELECT grn_id FROM procurement.goods_receipt_notes WHERE org_id = get_current_org_id()));
+
+DROP POLICY IF EXISTS supplier_invoices_isolation ON procurement.supplier_invoices;
+CREATE POLICY supplier_invoices_isolation ON procurement.supplier_invoices USING (org_id = get_current_org_id());
+
+DROP POLICY IF EXISTS purchase_returns_isolation ON procurement.purchase_returns;
+CREATE POLICY purchase_returns_isolation ON procurement.purchase_returns USING (org_id = get_current_org_id());
+
+DROP POLICY IF EXISTS purchase_return_items_isolation ON procurement.purchase_return_items;
+CREATE POLICY purchase_return_items_isolation ON procurement.purchase_return_items 
+    USING (return_id IN (SELECT return_id FROM procurement.purchase_returns WHERE org_id = get_current_org_id()));
+
+-- Financial
+DROP POLICY IF EXISTS payment_methods_isolation ON financial.payment_methods;
+CREATE POLICY payment_methods_isolation ON financial.payment_methods USING (org_id = get_current_org_id());
+
+DROP POLICY IF EXISTS payments_isolation ON financial.payments;
+CREATE POLICY payments_isolation ON financial.payments USING (org_id = get_current_org_id());
+
+DROP POLICY IF EXISTS payment_allocations_isolation ON financial.payment_allocations;
+CREATE POLICY payment_allocations_isolation ON financial.payment_allocations 
+    USING (payment_id IN (SELECT payment_id FROM financial.payments WHERE org_id = get_current_org_id()));
+
+DROP POLICY IF EXISTS customer_outstanding_isolation ON financial.customer_outstanding;
+CREATE POLICY customer_outstanding_isolation ON financial.customer_outstanding USING (org_id = get_current_org_id());
+
+DROP POLICY IF EXISTS supplier_outstanding_isolation ON financial.supplier_outstanding;
+CREATE POLICY supplier_outstanding_isolation ON financial.supplier_outstanding USING (org_id = get_current_org_id());
+
+DROP POLICY IF EXISTS journal_entries_isolation ON financial.journal_entries;
+CREATE POLICY journal_entries_isolation ON financial.journal_entries USING (org_id = get_current_org_id());
+
+DROP POLICY IF EXISTS journal_entry_lines_isolation ON financial.journal_entry_lines;
+CREATE POLICY journal_entry_lines_isolation ON financial.journal_entry_lines 
+    USING (line_id IN (SELECT line_id FROM financial.journal_entries WHERE org_id = get_current_org_id()));
+
+DROP POLICY IF EXISTS expense_claims_isolation ON financial.expense_claims;
+CREATE POLICY expense_claims_isolation ON financial.expense_claims USING (org_id = get_current_org_id());
+
+DROP POLICY IF EXISTS expense_claim_items_isolation ON financial.expense_claim_items;
+CREATE POLICY expense_claim_items_isolation ON financial.expense_claim_items 
+    USING (claim_id IN (SELECT claim_id FROM financial.expense_claims WHERE org_id = get_current_org_id()));
+
+RAISE NOTICE '✅ SECTION 27: ROW-LEVEL SECURITY (RLS) COMPLETE - 35 tables protected';
+
+-- =============================================
+-- SECTION 28: TRIGGER FIXES - NOTIFICATION SYSTEM
+-- =============================================
+-- Fixes notification triggers that were breaking payment operations
+-- Date: Consolidated from multiple notification fix files
+
+-- 28.1 Fix aging buckets trigger (no-op version)
+-- Consolidated from: disable_aging_trigger.sql, fix_bucket_trigger_properly.sql
+CREATE OR REPLACE FUNCTION public.update_outstanding_aging_buckets()
+RETURNS TRIGGER AS $$
+BEGIN
+    -- DISABLED - The bucket columns don't exist on customer_outstanding table
+    -- Just return NEW without any modifications
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+COMMENT ON FUNCTION public.update_outstanding_aging_buckets IS
+'DISABLED - Bucket columns do not exist on customer_outstanding table';
+
+-- Recreate the trigger if it was dropped
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.triggers
+        WHERE trigger_name = 'trigger_update_aging_buckets'
+        AND event_object_table = 'customer_outstanding'
+    ) THEN
+        CREATE TRIGGER trigger_update_aging_buckets
+        BEFORE INSERT OR UPDATE ON financial.customer_outstanding
+        FOR EACH ROW
+        EXECUTE FUNCTION public.update_outstanding_aging_buckets();
+    END IF;
+    
+    RAISE NOTICE '✅ SECTION 28.1: Aging buckets trigger disabled';
+END $$;
+
+-- 28.2 Disable all notification functions
+-- Consolidated from: disable_notifications.sql
+CREATE OR REPLACE FUNCTION public.update_outstanding_aging()
+RETURNS TRIGGER AS $$
+BEGIN
+    -- Update aging buckets only if columns exist
+    -- NOTIFICATIONS DISABLED
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE OR REPLACE FUNCTION financial.create_overdue_notification()
+RETURNS TRIGGER AS $$
+BEGIN
+    -- NOTIFICATIONS DISABLED - Function does nothing
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE OR REPLACE FUNCTION public.no_op_notification()
+RETURNS TRIGGER AS $$
+BEGIN
+    -- NOTIFICATIONS DISABLED - Function does nothing
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+COMMENT ON FUNCTION public.update_outstanding_aging IS
+'NOTIFICATIONS DISABLED - Only updates aging buckets, no notification creation';
+
+COMMENT ON FUNCTION financial.create_overdue_notification IS
+'NOTIFICATIONS DISABLED - No-op function to prevent notification errors';
+
+DO $$
+BEGIN
+    RAISE NOTICE '✅ SECTION 28.2: All notification functions disabled';
+END $$;
+
+-- 28.3 Fix notification triggers with proper target_audience
+-- Consolidated from: fix_notification_trigger.sql, fix_all_notification_functions.sql
+ALTER TABLE system_config.system_notifications
+ALTER COLUMN target_audience SET DEFAULT 'all';
+
+UPDATE system_config.system_notifications
+SET target_audience = 'all'
+WHERE target_audience IS NULL;
+
+CREATE OR REPLACE FUNCTION public.create_safe_notification(
+    p_org_id UUID,
+    p_type VARCHAR(50),
+    p_category VARCHAR(100),
+    p_title TEXT,
+    p_message TEXT,
+    p_priority VARCHAR(20) DEFAULT 'medium',
+    p_target_audience VARCHAR(100) DEFAULT 'all',
+    p_data JSONB DEFAULT '{}'::JSONB
+) RETURNS VOID AS $$
+BEGIN
+    INSERT INTO system_config.system_notifications (
+        org_id,
+        notification_type,
+        notification_category,
+        title,
+        message,
+        priority,
+        target_audience,
+        notification_data,
+        created_at
+    ) VALUES (
+        p_org_id,
+        p_type,
+        p_category,
+        p_title,
+        p_message,
+        p_priority,
+        COALESCE(p_target_audience, 'all'),
+        p_data,
+        NOW()
+    );
+EXCEPTION
+    WHEN OTHERS THEN
+        RAISE WARNING 'Failed to create notification: %', SQLERRM;
+END;
+$$ LANGUAGE plpgsql;
+
+GRANT EXECUTE ON FUNCTION public.create_safe_notification TO PUBLIC;
+
+COMMENT ON FUNCTION public.create_safe_notification IS
+'Safe notification creation function that ensures all required fields are provided';
+
+DO $$
+BEGIN
+    RAISE NOTICE '✅ SECTION 28.3: Notification functions fixed with target_audience';
+END $$;
+
+-- =============================================
+-- SECTION 29: NOTIFICATION CONFIGURATION & FEATURE FLAGS
+-- =============================================
+-- Feature flags to control system notifications
+-- Date: Consolidated from notification_config.sql, update_all_notifications_to_check_flags.sql
+
+-- 29.1 Create feature flags table
+CREATE TABLE IF NOT EXISTS system_config.feature_flags (
+    feature_name VARCHAR(100) PRIMARY KEY,
+    is_enabled BOOLEAN DEFAULT true,
+    description TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+INSERT INTO system_config.feature_flags (feature_name, is_enabled, description)
+VALUES ('system_notifications', false, 'Controls whether system notifications are created')
+ON CONFLICT (feature_name) DO UPDATE SET
+    is_enabled = false,
+    updated_at = CURRENT_TIMESTAMP;
+
+-- 29.2 Create helper functions to check feature flags
+CREATE OR REPLACE FUNCTION system_config.is_feature_enabled(feature_name TEXT)
+RETURNS BOOLEAN AS $$
+DECLARE
+    enabled BOOLEAN;
+BEGIN
+    SELECT is_enabled INTO enabled
+    FROM system_config.feature_flags
+    WHERE feature_flags.feature_name = is_feature_enabled.feature_name;
+    
+    RETURN COALESCE(enabled, false);
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE OR REPLACE FUNCTION public.create_notification_if_enabled(
+    p_org_id UUID,
+    p_type VARCHAR(50),
+    p_category VARCHAR(100),
+    p_title TEXT,
+    p_message TEXT,
+    p_priority VARCHAR(20) DEFAULT 'medium',
+    p_target_audience VARCHAR(100) DEFAULT 'all',
+    p_data JSONB DEFAULT '{}'::JSONB
+) RETURNS VOID AS $$
+BEGIN
+    IF system_config.is_feature_enabled('system_notifications') THEN
+        INSERT INTO system_config.system_notifications (
+            org_id, notification_type, notification_category,
+            title, message, priority, target_audience,
+            notification_data, created_at
+        ) VALUES (
+            p_org_id, p_type, p_category,
+            p_title, p_message, p_priority,
+            COALESCE(p_target_audience, 'all'),
+            p_data, NOW()
+        );
+    END IF;
+END;
+$$ LANGUAGE plpgsql;
+
+GRANT EXECUTE ON FUNCTION system_config.is_feature_enabled TO PUBLIC;
+GRANT EXECUTE ON FUNCTION public.create_notification_if_enabled TO PUBLIC;
+
+COMMENT ON FUNCTION public.create_notification_if_enabled IS
+'Creates notifications only if system_notifications feature flag is enabled';
+
+DO $$
+BEGIN
+    RAISE NOTICE '✅ SECTION 29: Feature flags configuration complete';
+    RAISE NOTICE 'To enable notifications: UPDATE system_config.feature_flags SET is_enabled = true WHERE feature_name = ''system_notifications'';';
+END $$;
+
+-- =============================================
+-- SECTION 30: AUTO-FIFO ALLOCATION FIX
+-- =============================================
+-- Fixes FIFO to prevent re-allocating to same invoice
+-- Date: Consolidated from fix_auto_fifo_allocation.sql
+
+CREATE OR REPLACE FUNCTION financial.auto_allocate_payment(
+    p_payment_id INTEGER,
+    p_allocation_type TEXT DEFAULT 'fifo'
+) RETURNS TABLE (
+    invoice_id INTEGER,
+    allocated_amount NUMERIC(15,2)
+) AS $$
+DECLARE
+    v_payment RECORD;
+    v_invoice RECORD;
+    v_remaining_amount NUMERIC(15,2);
+    v_to_allocate NUMERIC(15,2);
+    v_already_allocated NUMERIC(15,2);
+BEGIN
+    SELECT * INTO v_payment
+    FROM financial.payments
+    WHERE payment_id = p_payment_id;
+
+    IF NOT FOUND THEN
+        RAISE EXCEPTION 'Payment not found: %', p_payment_id;
+    END IF;
+
+    SELECT COALESCE(SUM(pa.allocated_amount), 0) INTO v_already_allocated
+    FROM financial.payment_allocations pa
+    WHERE pa.payment_id = p_payment_id;
+
+    v_remaining_amount := v_payment.payment_amount - v_already_allocated;
+
+    IF v_remaining_amount <= 0 THEN
+        RETURN;
+    END IF;
+
+    FOR v_invoice IN
+        SELECT
+            i.invoice_id,
+            i.final_amount,
+            COALESCE(i.allocated_amount, 0) as total_allocated,
+            COALESCE(existing_alloc.amount_from_this_payment, 0) as already_from_this_payment
+        FROM sales.invoices i
+        LEFT JOIN (
+            SELECT
+                pa.invoice_id,
+                SUM(pa.allocated_amount) as amount_from_this_payment
+            FROM financial.payment_allocations pa
+            WHERE pa.payment_id = p_payment_id
+            GROUP BY pa.invoice_id
+        ) existing_alloc ON existing_alloc.invoice_id = i.invoice_id
+        WHERE i.customer_id = v_payment.party_id
+        AND i.payment_status != 'paid'
+        AND i.invoice_status != 'cancelled'
+        AND COALESCE(existing_alloc.amount_from_this_payment, 0) = 0
+        ORDER BY
+            CASE WHEN p_allocation_type = 'fifo' THEN i.invoice_date END ASC,
+            CASE WHEN p_allocation_type = 'lifo' THEN i.invoice_date END DESC,
+            i.invoice_id
+    LOOP
+        v_to_allocate := LEAST(
+            v_remaining_amount,
+            v_invoice.final_amount - v_invoice.total_allocated
+        );
+
+        IF v_to_allocate > 0 THEN
+            INSERT INTO financial.payment_allocations (
+                org_id, payment_id, invoice_id, allocated_amount, allocation_type, created_by
+            )
+            SELECT
+                v_payment.org_id,
+                p_payment_id,
+                v_invoice.invoice_id,
+                v_to_allocate,
+                p_allocation_type,
+                1
+            WHERE NOT EXISTS (
+                SELECT 1 FROM financial.payment_allocations
+                WHERE payment_id = p_payment_id
+                AND invoice_id = v_invoice.invoice_id
+            );
+
+            invoice_id := v_invoice.invoice_id;
+            allocated_amount := v_to_allocate;
+            RETURN NEXT;
+
+            v_remaining_amount := v_remaining_amount - v_to_allocate;
+            EXIT WHEN v_remaining_amount <= 0;
+        END IF;
+    END LOOP;
+
+    RETURN;
+END;
+$$ LANGUAGE plpgsql;
+
+COMMENT ON FUNCTION financial.auto_allocate_payment IS
+'Automatically allocates a payment to outstanding invoices using FIFO or LIFO method. Fixed to prevent re-allocating to the same invoice.';
+
+DO $$
+BEGIN
+    RAISE NOTICE '✅ SECTION 30: Auto-FIFO allocation fixed';
+END $$;
+
+-- =============================================
+-- SECTION 31: PARAMETERIZED SEED DATA FUNCTIONS
+-- =============================================
+-- Generic functions to seed data for any organization
+-- Date: Consolidated from seed files
+
+-- 31.1 Seed Payment Methods (Generic - works for all orgs)
+-- Consolidated from: seed_payment_methods.sql
+DO $$
+BEGIN
+    INSERT INTO financial.payment_methods 
+    (org_id, method_code, method_name, method_type, requires_reference, requires_approval, processing_days, transaction_charge_percent, transaction_charge_fixed, is_active)
+    SELECT 
+        o.org_id,
+        pm.method_code,
+        pm.method_name,
+        pm.method_type,
+        pm.requires_reference,
+        pm.requires_approval,
+        pm.processing_days,
+        pm.transaction_charge_percent,
+        pm.transaction_charge_fixed,
+        true as is_active
+    FROM master.organizations o
+    CROSS JOIN (
+        VALUES 
+            ('CASH', 'Cash', 'instant', false, false, 0, 0.00, 0.00),
+            ('UPI', 'UPI Payment', 'digital', true, false, 0, 0.00, 0.00),
+            ('BANK', 'Bank Transfer', 'bank', true, false, 1, 0.00, 0.00),
+            ('CHECK', 'Cheque', 'bank', true, true, 3, 0.00, 0.00),
+            ('CARD', 'Credit/Debit Card', 'digital', true, false, 0, 2.00, 0.00),
+            ('CREDIT', 'Credit Sale', 'credit', false, false, 0, 0.00, 0.00)
+    ) AS pm(method_code, method_name, method_type, requires_reference, requires_approval, processing_days, transaction_charge_percent, transaction_charge_fixed)
+    ON CONFLICT (org_id, method_code) DO UPDATE SET
+        method_name = EXCLUDED.method_name,
+        method_type = EXCLUDED.method_type,
+        updated_at = CURRENT_TIMESTAMP;
+    
+    RAISE NOTICE '✅ SECTION 31.1: Payment methods seeded for all organizations';
+END $$;
+
+-- 31.2 Create parameterized function to seed product categories
+-- Consolidated from: seed_product_categories_simple.sql
+CREATE OR REPLACE FUNCTION seed_product_categories_simple_for_org(p_org_id UUID)
+RETURNS void AS $$
+BEGIN
+    INSERT INTO inventory.product_categories (
+        org_id, category_code, category_name,
+        parent_category_id, category_level, default_hsn_code, 
+        default_gst_rate, is_active, created_at, updated_at
+    ) VALUES
+    (p_org_id, 'TAB', 'Tablets', NULL, 1, '3004', 12.00, true, NOW(), NOW()),
+    (p_org_id, 'CAP', 'Capsules', NULL, 1, '3004', 12.00, true, NOW(), NOW()),
+    (p_org_id, 'INJ', 'Injections', NULL, 1, '3004', 12.00, true, NOW(), NOW()),
+    (p_org_id, 'SYR', 'Syrups', NULL, 1, '3004', 12.00, true, NOW(), NOW()),
+    (p_org_id, 'SUSP', 'Suspensions', NULL, 1, '3004', 12.00, true, NOW(), NOW()),
+    (p_org_id, 'DROP', 'Drops', NULL, 1, '3004', 12.00, true, NOW(), NOW()),
+    (p_org_id, 'OINT', 'Ointments', NULL, 1, '3004', 12.00, true, NOW(), NOW()),
+    (p_org_id, 'CRM', 'Creams', NULL, 1, '3004', 12.00, true, NOW(), NOW()),
+    (p_org_id, 'GEL', 'Gels', NULL, 1, '3004', 12.00, true, NOW(), NOW()),
+    (p_org_id, 'LOT', 'Lotions', NULL, 1, '3004', 12.00, true, NOW(), NOW()),
+    (p_org_id, 'POW', 'Powders', NULL, 1, '3004', 12.00, true, NOW(), NOW()),
+    (p_org_id, 'SACH', 'Sachets', NULL, 1, '3004', 12.00, true, NOW(), NOW()),
+    (p_org_id, 'INH', 'Inhalers', NULL, 1, '3004', 12.00, true, NOW(), NOW()),
+    (p_org_id, 'SPRAY', 'Sprays', NULL, 1, '3004', 12.00, true, NOW(), NOW()),
+    (p_org_id, 'PATCH', 'Patches', NULL, 1, '3004', 12.00, true, NOW(), NOW()),
+    (p_org_id, 'SUPP', 'Suppositories', NULL, 1, '3004', 12.00, true, NOW(), NOW()),
+    (p_org_id, 'IV', 'IV Fluids', NULL, 1, '3004', 5.00, true, NOW(), NOW()),
+    (p_org_id, 'VACC', 'Vaccines', NULL, 1, '3002', 5.00, true, NOW(), NOW()),
+    (p_org_id, 'SURG', 'Surgical Items', NULL, 1, '9018', 12.00, true, NOW(), NOW()),
+    (p_org_id, 'MED', 'Medical Devices', NULL, 1, '9018', 12.00, true, NOW(), NOW()),
+    (p_org_id, 'CONS', 'Consumables', NULL, 1, '3005', 12.00, true, NOW(), NOW()),
+    (p_org_id, 'NUTR', 'Nutritionals', NULL, 1, '2106', 18.00, true, NOW(), NOW()),
+    (p_org_id, 'AYUR', 'Ayurvedic', NULL, 1, '3004', 12.00, true, NOW(), NOW()),
+    (p_org_id, 'HOMEO', 'Homeopathic', NULL, 1, '3004', 12.00, true, NOW(), NOW()),
+    (p_org_id, 'OTC', 'OTC Products', NULL, 1, '3004', 18.00, true, NOW(), NOW())
+    ON CONFLICT (org_id, category_code) DO UPDATE
+    SET category_name = EXCLUDED.category_name,
+        default_hsn_code = EXCLUDED.default_hsn_code,
+        default_gst_rate = EXCLUDED.default_gst_rate,
+        updated_at = NOW();
+END;
+$$ LANGUAGE plpgsql;
+
+COMMENT ON FUNCTION seed_product_categories_simple_for_org IS
+'Seeds product categories for a specific organization. Call during org setup: SELECT seed_product_categories_simple_for_org(''org_id_here''::uuid);';
+
+DO $$
+BEGIN
+    RAISE NOTICE '✅ SECTION 31.2: Product category seed function created (call per org during setup)';
+END $$;
+
+-- =============================================
+-- SECTION 32: PERFORMANCE INDEXES
+-- =============================================
+-- Performance indexes for common queries
+-- Date: Consolidated from performance_indexes.sql
+
+CREATE INDEX IF NOT EXISTS idx_sales_returns_invoice_id 
+ON sales.sales_returns(invoice_id) 
+WHERE invoice_id IS NOT NULL;
+
+CREATE INDEX IF NOT EXISTS idx_sales_return_items_return_id 
+ON sales.sales_return_items(return_id);
+
+CREATE INDEX IF NOT EXISTS idx_invoices_customer_status 
+ON sales.invoices(customer_id, invoice_status) 
+WHERE invoice_status = 'generated';
+
+CREATE INDEX IF NOT EXISTS idx_invoice_items_invoice_id 
+ON sales.invoice_items(invoice_id);
+
+CREATE INDEX IF NOT EXISTS idx_batches_product_batch 
+ON inventory.batches(product_id, batch_number);
+
+CREATE INDEX IF NOT EXISTS idx_products_org_id 
+ON inventory.products(org_id);
+
+CREATE INDEX IF NOT EXISTS idx_invoices_date_status 
+ON sales.invoices(invoice_date DESC, invoice_status) 
+WHERE invoice_status = 'generated';
+
+ANALYZE sales.sales_returns;
+ANALYZE sales.sales_return_items;
+ANALYZE sales.invoices;
+ANALYZE sales.invoice_items;
+ANALYZE inventory.batches;
+ANALYZE inventory.products;
+
+DO $$
+BEGIN
+    RAISE NOTICE '✅ SECTION 32: Performance indexes created';
+END $$;
+
+-- =============================================
+-- SECTION 33: CRM - CONTACT HISTORY TRACKING
+-- =============================================
+-- Contact history for collection management
+-- Date: Consolidated from add_contact_history_tracking.sql
+
+CREATE TABLE IF NOT EXISTS crm.contact_history (
+    contact_id BIGSERIAL PRIMARY KEY,
+    org_id VARCHAR(50) NOT NULL,
+    customer_id INTEGER NOT NULL,
+    contact_date TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    contact_type VARCHAR(50) NOT NULL,
+    contact_method VARCHAR(50),
+    contact_purpose VARCHAR(100),
+    contacted_by INTEGER,
+    contact_duration INTEGER,
+    contact_notes TEXT,
+    next_followup_date DATE,
+    promise_to_pay_date DATE,
+    promise_amount DECIMAL(15,2),
+    collection_status VARCHAR(50),
+    is_successful BOOLEAN DEFAULT FALSE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT fk_contact_customer
+        FOREIGN KEY (customer_id)
+        REFERENCES parties.customers(customer_id),
+    CONSTRAINT fk_contact_user
+        FOREIGN KEY (contacted_by)
+        REFERENCES auth.users(id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_contact_history_customer ON crm.contact_history(customer_id);
+CREATE INDEX IF NOT EXISTS idx_contact_history_org ON crm.contact_history(org_id);
+CREATE INDEX IF NOT EXISTS idx_contact_history_date ON crm.contact_history(contact_date DESC);
+CREATE INDEX IF NOT EXISTS idx_contact_history_next_followup ON crm.contact_history(next_followup_date);
+
+ALTER TABLE parties.customers
+ADD COLUMN IF NOT EXISTS last_contact_date TIMESTAMP,
+ADD COLUMN IF NOT EXISTS last_contact_type VARCHAR(50),
+ADD COLUMN IF NOT EXISTS last_contact_notes TEXT,
+ADD COLUMN IF NOT EXISTS next_followup_date DATE,
+ADD COLUMN IF NOT EXISTS collection_priority VARCHAR(20);
+
+CREATE OR REPLACE FUNCTION update_customer_last_contact()
+RETURNS TRIGGER AS $$
+BEGIN
+    UPDATE parties.customers
+    SET
+        last_contact_date = NEW.contact_date,
+        last_contact_type = NEW.contact_type,
+        last_contact_notes = NEW.contact_notes,
+        next_followup_date = NEW.next_followup_date,
+        updated_at = CURRENT_TIMESTAMP
+    WHERE customer_id = NEW.customer_id;
+
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS trigger_update_customer_contact ON crm.contact_history;
+CREATE TRIGGER trigger_update_customer_contact
+    AFTER INSERT ON crm.contact_history
+    FOR EACH ROW
+    EXECUTE FUNCTION update_customer_last_contact();
+
+CREATE TABLE IF NOT EXISTS crm.contact_type_master (
+    type_id SERIAL PRIMARY KEY,
+    contact_type VARCHAR(50) UNIQUE NOT NULL,
+    description TEXT,
+    is_active BOOLEAN DEFAULT TRUE
+);
+
+INSERT INTO crm.contact_type_master (contact_type, description) VALUES
+    ('phone', 'Phone call to customer'),
+    ('email', 'Email communication'),
+    ('whatsapp', 'WhatsApp message'),
+    ('sms', 'SMS text message'),
+    ('visit', 'In-person visit'),
+    ('letter', 'Physical letter sent')
+ON CONFLICT (contact_type) DO NOTHING;
+
+CREATE TABLE IF NOT EXISTS crm.collection_status_master (
+    status_id SERIAL PRIMARY KEY,
+    status_code VARCHAR(50) UNIQUE NOT NULL,
+    status_name VARCHAR(100),
+    description TEXT,
+    is_active BOOLEAN DEFAULT TRUE
+);
+
+INSERT INTO crm.collection_status_master (status_code, status_name, description) VALUES
+    ('promised', 'Promised to Pay', 'Customer has promised to make payment'),
+    ('disputed', 'Disputed', 'Customer disputes the amount or invoice'),
+    ('will_pay', 'Will Pay Soon', 'Customer acknowledges and will pay'),
+    ('not_responding', 'Not Responding', 'Customer not answering calls/messages'),
+    ('partial_paid', 'Partially Paid', 'Customer made partial payment'),
+    ('paid', 'Fully Paid', 'Customer has paid in full'),
+    ('legal_action', 'Legal Action', 'Moved to legal proceedings'),
+    ('write_off', 'Written Off', 'Amount written off')
+ON CONFLICT (status_code) DO NOTHING;
+
+GRANT ALL ON SCHEMA crm TO webapp_user;
+GRANT ALL ON ALL TABLES IN SCHEMA crm TO webapp_user;
+GRANT ALL ON ALL SEQUENCES IN SCHEMA crm TO webapp_user;
+
+COMMENT ON TABLE crm.contact_history IS 'Tracks all customer contact interactions for collection management';
+
+DO $$
+BEGIN
+    RAISE NOTICE '✅ SECTION 33: CRM contact history tracking complete';
+END $$;
+
+-- =============================================
+-- END OF CONSOLIDATED FIXES
+-- =============================================
+-- All generic, reusable database fixes are now consolidated.
+-- For org-specific setup, use the template files in database/setup/
+-- =============================================
+
+
+-- =============================================
+-- SECTION 34: INVENTORY MOVEMENTS TABLE
+-- =============================================
+-- Recreates inventory_movements table for audit trails
+-- Date: Consolidated from ADD_INVENTORY_MOVEMENTS_TABLE.sql
+
+CREATE TABLE IF NOT EXISTS inventory.inventory_movements (
+    movement_id SERIAL PRIMARY KEY,
+    org_id UUID NOT NULL,
+    movement_type TEXT NOT NULL,
+    movement_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    movement_direction TEXT NOT NULL,
+    product_id INTEGER NOT NULL,
+    batch_id INTEGER,
+    quantity NUMERIC(15,3) NOT NULL,
+    pack_type TEXT,
+    base_quantity NUMERIC(15,3),
+    location_id INTEGER NOT NULL DEFAULT 1,
+    from_location_id INTEGER,
+    to_location_id INTEGER,
+    unit_cost NUMERIC(15,4),
+    total_cost NUMERIC(15,2),
+    reference_type TEXT,
+    reference_id INTEGER,
+    reference_number TEXT,
+    transfer_type TEXT,
+    transfer_pair_id INTEGER,
+    reason TEXT,
+    notes TEXT,
+    pack_display_data JSONB,
+    cost_details JSONB,
+    created_by INTEGER NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    approved_by INTEGER,
+    approved_at TIMESTAMP,
+    
+    CONSTRAINT fk_inventory_movements_org 
+        FOREIGN KEY (org_id) REFERENCES master.organizations(org_id) ON DELETE CASCADE,
+    CONSTRAINT fk_inventory_movements_product 
+        FOREIGN KEY (product_id) REFERENCES inventory.products(product_id),
+    CONSTRAINT fk_inventory_movements_batch 
+        FOREIGN KEY (batch_id) REFERENCES inventory.batches(batch_id),
+    CONSTRAINT fk_inventory_movements_created_by 
+        FOREIGN KEY (created_by) REFERENCES master.org_users(user_id),
+    CONSTRAINT fk_inventory_movements_approved_by 
+        FOREIGN KEY (approved_by) REFERENCES master.org_users(user_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_inventory_movements_org_date 
+    ON inventory.inventory_movements(org_id, movement_date DESC);
+
+CREATE INDEX IF NOT EXISTS idx_inventory_movements_product 
+    ON inventory.inventory_movements(product_id, movement_date DESC);
+
+CREATE INDEX IF NOT EXISTS idx_inventory_movements_batch 
+    ON inventory.inventory_movements(batch_id, movement_date DESC);
+
+CREATE INDEX IF NOT EXISTS idx_inventory_movements_reference 
+    ON inventory.inventory_movements(reference_type, reference_id);
+
+CREATE INDEX IF NOT EXISTS idx_inventory_movements_type_direction 
+    ON inventory.inventory_movements(movement_type, movement_direction);
+
+COMMENT ON TABLE inventory.inventory_movements IS 'Tracks all inventory movements for audit trail and reporting';
+COMMENT ON COLUMN inventory.inventory_movements.movement_type IS 'Type: sale, purchase, transfer, adjustment, return';
+COMMENT ON COLUMN inventory.inventory_movements.movement_direction IS 'Direction: in, out, transfer';
+COMMENT ON COLUMN inventory.inventory_movements.reference_type IS 'Reference: invoice, order, challan, return, adjustment';
+
+GRANT SELECT, INSERT, UPDATE ON inventory.inventory_movements TO webapp_user;
+GRANT USAGE, SELECT ON SEQUENCE inventory.inventory_movements_movement_id_seq TO webapp_user;
+
+DO $$
+BEGIN
+    RAISE NOTICE '✅ SECTION 34: Inventory movements table created';
+END $$;
+

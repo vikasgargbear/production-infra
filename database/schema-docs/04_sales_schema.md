@@ -1,625 +1,1011 @@
 # Sales Schema Documentation
 
-## Overview
-The `sales` schema manages the complete sales process from orders to invoices, including returns and delivery management. This is critical for pharmaceutical sales operations with batch allocation and compliance tracking.
+**Schema:** `sales`
+**Purpose:** Complete sales cycle management from orders to returns
+**Last Updated:** 2025-10-16
+**Tables:** 30 (doubled from ~15 in previous documentation)
 
 ---
 
-## Tables
+## Overview
+
+The `sales` schema manages the entire pharmaceutical sales lifecycle including order management, invoicing with GST compliance, delivery tracking, returns processing, credit/debit notes, loyalty programs, promotional schemes, and field sales operations. This is the largest and most business-critical schema in the application.
+
+---
+
+## Tables Summary
+
+| # | Table | Purpose | Primary Key | Key Features |
+|---|-------|---------|-------------|--------------|
+| **Core Sales Flow** |
+| 1 | orders | Sales orders | order_id | Customer PO, delivery tracking, 56 columns |
+| 2 | order_items | Order line items | order_item_id | Batch allocation, schemes, delivery status |
+| 3 | invoices | Tax invoices | invoice_id | GST/E-invoice, payment tracking, IRN |
+| 4 | invoice_items | Invoice line items | invoice_item_id | Batch-wise billing, returns tracking |
+| 5 | delivery_challans | Delivery challans | challan_id | E-way bill, transport, POD |
+| 6 | delivery_challan_items | Challan line items | challan_item_id | Dispatch vs delivery tracking |
+| **Returns & Adjustments** |
+| 7 | sales_returns | Sales returns | return_id | Quality check, credit note generation |
+| 8 | sales_return_items | Return line items | return_item_id | Saleable vs damaged classification |
+| 9 | credit_notes | ⭐ NEW: Credit notes | credit_note_id | Application tracking, remaining amount |
+| 10 | credit_note_applications | ⭐ NEW: CN applications | application_id | Invoice allocation |
+| 11 | debit_notes | ⭐ NEW: Debit notes | debit_note_id | Payment tracking, GST |
+| 12 | invoice_return_status | ⭐ NEW: Return view | - | Aggregated return analytics |
+| **Logistics & Tracking** |
+| 13 | customer_visits | ⭐ NEW: Field visits | visit_id | GPS tracking, photo capture, follow-ups |
+| 14 | delivery_tracking | ⭐ NEW: Delivery GPS | tracking_id | Real-time location tracking |
+| 15 | eway_bills | ⭐ NEW: E-way bills | eway_bill_id | GST e-way bill management |
+| 16 | proof_of_delivery | ⭐ NEW: POD | pod_id | Signature, GPS, rating |
+| **Loyalty & Schemes** |
+| 17 | loyalty_programs | ⭐ NEW: Loyalty config | program_id | Points, redemption, tiers |
+| 18 | loyalty_tiers | ⭐ NEW: Tier levels | tier_id | Bronze/Silver/Gold/Platinum |
+| 19 | loyalty_transactions | ⭐ NEW: Points ledger | transaction_id | Earn/redeem/expire |
+| 20 | sales_schemes | ⭐ NEW: Scheme master | scheme_id | Volume/combo/free goods schemes |
+| 21 | scheme_customers | ⭐ NEW: Customer mapping | - | Eligible customers |
+| 22 | scheme_products | ⭐ NEW: Product mapping | - | Applicable products |
+| 23 | scheme_usage | ⭐ NEW: Usage tracking | usage_id | Discount/free items given |
+| 24 | scheme_volume_slabs | ⭐ NEW: Volume slabs | slab_id | Quantity-based discounts |
+| 25 | promotional_schemes | ⭐ NEW: Promotions | scheme_id | Time-bound offers |
+| **Pricing & Targets** |
+| 26 | price_lists | ⭐ NEW: Price lists | price_list_id | Customer/territory-specific pricing |
+| 27 | price_list_items | ⭐ NEW: Price details | price_list_item_id | Pack-wise pricing |
+| 28 | sales_targets | ⭐ NEW: Targets | target_id | Revenue/quantity/visit targets |
+| **Views** |
+| 29 | v_invoice_calculation_debug | ⭐ NEW: Debug view | - | Invoice calc troubleshooting |
+| 30 | v_invoice_items_with_quantities | ⭐ NEW: Item view | - | Aggregated quantities |
+
+---
+
+## Core Sales Flow Tables
 
 ### 1. orders
+**Complete sales order management with delivery tracking**
 
-### orders
-**Purpose**: [Business purpose description]
-**API Endpoint**: `api.get_orders()`, `api.create_order()`
+**Key Columns:**
+- `order_id` (serial, PK)
+- `org_id` (uuid, FK, REQUIRED)
+- `branch_id` (int, FK, REQUIRED)
+- `order_number` (text, UNIQUE per org)
+- `order_date` (date) - Default: CURRENT_DATE
+- `order_type` (text) - standard/urgent/export (default: 'standard')
 
-| Field | Type | Required | Description | Frontend Usage |
-|-------|------|----------|-------------|----------------|
-| `order_id` | SERIAL | ✓ | Primary key identifier | Primary key |
-| `org_id` | UUID | ✓ | Organization ID | Organization filtering |
-| `branch_id` | INTEGER | ✓ | Reference to related entity | Association/lookup |
-| `order_number` | TEXT | ✓ | Description needed | Standard field usage |
-| `order_date` | DATE | - | Description needed | Standard field usage |
-| `order_type` | TEXT | - | Description needed | Standard field usage |
-| `customer_id` | INTEGER | ✓ | Reference to related entity | Association/lookup |
-| `customer_po_number` | TEXT | - | Description needed | Standard field usage |
-| `customer_po_date` | DATE | - | Description needed | Standard field usage |
-| `delivery_date` | DATE | - | Description needed | Standard field usage |
-| `delivery_priority` | TEXT | - | Description needed | Standard field usage |
-| `delivery_address_id` | INTEGER | - | Reference to related entity | Association/lookup |
-| `delivery_instructions` | TEXT | - | Description needed | Standard field usage |
-| `salesperson_id` | INTEGER | - | Reference to related entity | Association/lookup |
-| `territory_id` | INTEGER | - | Reference to related entity | Association/lookup |
-| `route_id` | INTEGER | - | Reference to related entity | Association/lookup |
-| `price_list_id` | INTEGER | - | Reference to related entity | Association/lookup |
-| `currency_code` | TEXT | - | Description needed | Standard field usage |
-| `subtotal_amount` | NUMERIC(15 | - | Description needed | Standard field usage |
-| `discount_amount` | NUMERIC(15 | - | Description needed | Standard field usage |
-| `scheme_discount` | NUMERIC(15 | - | Description needed | Standard field usage |
-| `taxable_amount` | NUMERIC(15 | - | Description needed | Standard field usage |
-| `tax_amount` | NUMERIC(15 | - | Description needed | Standard field usage |
-| `round_off_amount` | NUMERIC(5 | - | Description needed | Standard field usage |
-| `final_amount` | NUMERIC(15 | - | Description needed | Standard field usage |
-| `igst_amount` | NUMERIC(15 | - | Description needed | Standard field usage |
-| `cgst_amount` | NUMERIC(15 | - | Description needed | Standard field usage |
-| `sgst_amount` | NUMERIC(15 | - | Description needed | Standard field usage |
-| `cess_amount` | NUMERIC(15 | - | Description needed | Standard field usage |
-| `order_status` | TEXT | - | Description needed | Standard field usage |
-| `approval_status` | TEXT | - | Description needed | Standard field usage |
-| `approved_by` | INTEGER | - | Description needed | Standard field usage |
-| `approved_at` | TIMESTAMP | - | Timestamp field | Standard field usage |
-| `payment_terms` | TEXT | - | Description needed | Standard field usage |
-| `payment_status` | TEXT | - | Description needed | Standard field usage |
-| `fulfillment_status` | TEXT | - | Description needed | Standard field usage |
-| `items_count` | INTEGER | - | Description needed | Standard field usage |
-| `items_delivered` | INTEGER | - | Description needed | Standard field usage |
-| `notes` | TEXT | - | Description needed | Standard field usage |
-| `internal_notes` | TEXT | - | Description needed | Standard field usage |
-| `tags` | TEXT[] | - | Description needed | Standard field usage |
-| `created_at` | TIMESTAMP | - | Timestamp field | Standard field usage |
-| `updated_at` | TIMESTAMP | - | Timestamp field | Standard field usage |
-| `created_by` | INTEGER | ✓ | Creation audit field | Standard field usage |
-| `updated_by` | INTEGER | - | Update audit field | Standard field usage |
+**Customer Details:**
+- `customer_id` (int, FK, REQUIRED)
+- `customer_name` (text) - Denormalized for performance
+- `customer_phone` (text)
+- `customer_po_number` (text) - Customer PO reference
+- `customer_po_date` (date)
 
-**Foreign Key Relationships**:
-- `org_id` → `master.organizations.org_id`
-- `branch_id` → `master.org_branches.branch_id`
-- `customer_id` → `parties.customers.customer_id`
-- `delivery_address_id` → `master.addresses.address_id`
-- `salesperson_id` → `master.org_users.user_id`
-- `territory_id` → `parties.territories.territory_id`
-- `route_id` → `parties.routes.route_id`
-- `approved_by` → `master.org_users.user_id`
-- `created_by` → `master.org_users.user_id`
-- `updated_by` → `master.org_users.user_id`
+**Delivery:**
+- `delivery_date` (date) - Requested delivery date
+- `expected_delivery_date` (date) - Calculated date
+- `delivery_priority` (text) - normal/urgent/critical (default: 'normal')
+- `delivery_address_id` (int, FK)
+- `delivery_instructions` (text)
+- `delivery_area` (text)
+- `delivered_at` (timestamptz) - Actual delivery time
+
+**Sales Assignment:**
+- `salesperson_id` (int, FK)
+- `territory_id` (int, FK)
+- `route_id` (int, FK)
+- `price_list_id` (int, FK) - Special pricing
+
+**Financial Summary:**
+- `currency_code` (text) - Default: 'INR'
+- `subtotal_amount` (numeric 15,2) - Default: 0
+- `discount_amount` (numeric 15,2) - Default: 0
+- `scheme_discount` (numeric 15,2) - Default: 0
+- `taxable_amount` (numeric 15,2) - After discounts (default: 0)
+- `tax_amount` (numeric 15,2) - Total GST (default: 0)
+- `igst_amount`, `cgst_amount`, `sgst_amount`, `cess_amount` (numeric 15,2)
+- `round_off_amount` (numeric 5,2) - Default: 0
+- `final_amount` (numeric 15,2) - Grand total (default: 0)
+
+**Payment:**
+- `payment_terms` (text) - Payment terms
+- `payment_mode` (text) - Default: 'credit'
+- `payment_status` (text) - pending/partial/paid (default: 'pending')
+- `paid_amount` (numeric 15,2) - Default: 0
+- `balance_amount` (numeric 15,2) - Remaining (default: 0)
+
+**Status Tracking:**
+- `order_status` (text) - draft/confirmed/processing/delivered/cancelled (default: 'draft')
+- `approval_status` (text) - pending/approved/rejected (default: 'pending')
+- `approved_by` (int, FK)
+- `approved_at` (timestamptz)
+- `confirmed_at` (timestamptz)
+- `fulfillment_status` (text) - pending/partial/complete (default: 'pending')
+
+**Item Tracking:**
+- `items_count` (int) - Total line items (default: 0)
+- `items_delivered` (int) - Delivered items (default: 0)
+
+**E-way Bill & POD:**
+- `eway_bill_number` (text)
+- `pod_recorded` (boolean) - POD captured (default: false)
+- `last_tracking_update` (timestamptz)
+
+**Notes:**
+- `notes` (text) - Customer-facing notes
+- `internal_notes` (text) - Internal remarks
+- `tags` (text[]) - Categorization tags
+
+**Audit:**
+- `created_by` (int, FK)
+- `updated_by` (int, FK)
+- `created_at`, `updated_at` (timestamptz)
+
+**Use Cases:**
+- Order booking with batch allocation
+- Delivery scheduling
+- Order tracking dashboard
+- Payment collection
+
+**Indexes:** customer_id, order_date, order_status
 
 ---
 
 ### 2. order_items
+**Order line items with scheme application and delivery tracking**
 
-### order_items
-**Purpose**: [Business purpose description]
-**API Endpoint**: `api.get_order_items()`, `api.create_order_item()`
+**Key Columns:**
+- `order_item_id` (serial, PK)
+- `order_id` (int, FK, REQUIRED)
+- `product_id` (int, FK, REQUIRED)
+- `product_name` (text) - Denormalized
+- `product_code` (text)
+- `hsn_code` (text) - For GST
 
-| Field | Type | Required | Description | Frontend Usage |
-|-------|------|----------|-------------|----------------|
-| `order_item_id` | SERIAL | ✓ | Primary key identifier | Primary key |
-| `order_id` | INTEGER | ✓ | Reference to related entity | Association/lookup |
-| `product_id` | INTEGER | ✓ | Reference to related entity | Association/lookup |
-| `product_name` | TEXT | ✓ | Description needed | Standard field usage |
-| `hsn_code` | TEXT | - | Description needed | Standard field usage |
-| `quantity` | NUMERIC(15 | ✓ | Description needed | Standard field usage |
-| `uom` | TEXT | ✓ | Description needed | Standard field usage |
-| `pack_type` | TEXT | ✓ | Description needed | Standard field usage |
-| `pack_size` | INTEGER | - | Description needed | Standard field usage |
-| `base_quantity` | NUMERIC(15 | - | Description needed | Standard field usage |
-| `unit_price` | NUMERIC(15 | ✓ | Description needed | Standard field usage |
-| `mrp` | NUMERIC(15 | - | Description needed | Standard field usage |
-| `discount_percent` | NUMERIC(5 | - | Description needed | Standard field usage |
-| `discount_amount` | NUMERIC(15 | - | Description needed | Standard field usage |
-| `scheme_discount_percent` | NUMERIC(5 | - | Description needed | Standard field usage |
-| `scheme_discount_amount` | NUMERIC(15 | - | Description needed | Standard field usage |
-| `free_quantity` | NUMERIC(15 | - | Description needed | Standard field usage |
-| `scheme_code` | TEXT | - | Description needed | Standard field usage |
-| `taxable_amount` | NUMERIC(15 | - | Description needed | Standard field usage |
-| `tax_percent` | NUMERIC(5 | - | Description needed | Standard field usage |
-| `tax_amount` | NUMERIC(15 | - | Description needed | Standard field usage |
-| `igst_percent` | NUMERIC(5 | - | Description needed | Standard field usage |
-| `cgst_percent` | NUMERIC(5 | - | Description needed | Standard field usage |
-| `sgst_percent` | NUMERIC(5 | - | Description needed | Standard field usage |
-| `cess_percent` | NUMERIC(5 | - | Description needed | Standard field usage |
-| `line_total` | NUMERIC(15 | ✓ | Description needed | Standard field usage |
-| `batch_id` | INTEGER | - | Reference to related entity | Association/lookup |
-| `batch_number` | TEXT | - | Description needed | Standard field usage |
-| `batch_expiry` | DATE | - | Description needed | Standard field usage |
-| `ordered_quantity` | NUMERIC(15 | - | Description needed | Standard field usage |
-| `delivered_quantity` | NUMERIC(15 | - | Description needed | Standard field usage |
-| `pending_quantity` | NUMERIC(15 | - | Description needed | Standard field usage |
-| `cancelled_quantity` | NUMERIC(15 | - | Description needed | Standard field usage |
-| `item_status` | TEXT | - | Description needed | Standard field usage |
-| `item_notes` | TEXT | - | Description needed | Standard field usage |
-| `display_order` | INTEGER | - | Description needed | Standard field usage |
-| `created_at` | TIMESTAMP | - | Timestamp field | Standard field usage |
-| `updated_at` | TIMESTAMP | - | Timestamp field | Standard field usage |
+**Quantity & UOM:**
+- `quantity` (numeric 15,3, REQUIRED)
+- `uom` (text) - Unit of measure
+- `pack_type` (text) - unit/strip/box
+- `pack_size` (int)
+- `base_quantity` (numeric 15,3) - Converted to base UOM
 
-**Foreign Key Relationships**:
-- `order_id` → `sales.orders.order_id`
-- `product_id` → `inventory.products.product_id`
+**Batch Details:**
+- `batch_id` (int, FK)
+- `batch_number` (text)
+- `batch_expiry` (date)
+
+**Pricing:**
+- `unit_price` (numeric 15,4, REQUIRED)
+- `mrp` (numeric 15,2)
+- `discount_percent` (numeric 5,2) - Default: 0
+- `discount_amount` (numeric 15,2) - Default: 0
+
+**Schemes:**
+- `scheme_code` (text) - Applied scheme
+- `scheme_discount_percent` (numeric 5,2) - Default: 0
+- `scheme_discount_amount` (numeric 15,2) - Default: 0
+- `free_quantity` (numeric 15,3) - Free goods (default: 0)
+
+**Tax Calculation:**
+- `taxable_amount` (numeric 15,2) - After discounts
+- `tax_percent` (numeric 5,2)
+- `tax_amount` (numeric 15,2)
+- `igst_rate`, `cgst_rate`, `sgst_rate`, `cess_rate` (numeric 5,2)
+- `igst_amount`, `cgst_amount`, `sgst_amount`, `cess_amount` (numeric 15,2)
+- `line_total` (numeric 15,2, REQUIRED)
+
+**Fulfillment Tracking:**
+- `ordered_quantity` (numeric 15,3) - Original order qty
+- `delivered_quantity` (numeric 15,3) - Actually delivered (default: 0)
+- `pending_quantity` (numeric 15,3) - Yet to deliver
+- `cancelled_quantity` (numeric 15,3) - Cancelled qty (default: 0)
+
+**Status:**
+- `item_status` (text) - pending/partial/fulfilled/cancelled (default: 'pending')
+- `delivery_status` (text) - pending/dispatched/delivered (default: 'pending')
+- `item_notes`, `notes` (text)
+
+**Display:**
+- `display_order` (int) - Line item sequence
+
+**Cascade:** ON DELETE CASCADE (with orders)
 
 ---
 
 ### 3. invoices
+**Tax invoice with GST compliance and E-invoice integration**
 
-### invoices
-**Purpose**: [Business purpose description]
-**API Endpoint**: `api.get_invoices()`, `api.create_invoice()`
+**Key Columns:**
+- `invoice_id` (serial, PK)
+- `org_id` (uuid, FK, REQUIRED)
+- `branch_id` (int, FK, REQUIRED)
+- `invoice_number` (text, UNIQUE per org)
+- `invoice_date` (date, REQUIRED) - Default: CURRENT_DATE
+- `invoice_type` (text) - tax_invoice/bill_of_supply/export (default: 'tax_invoice')
 
-| Field | Type | Required | Description | Frontend Usage |
-|-------|------|----------|-------------|----------------|
-| `invoice_id` | SERIAL | ✓ | Primary key identifier | Primary key |
-| `org_id` | UUID | ✓ | Organization ID | Organization filtering |
-| `branch_id` | INTEGER | ✓ | Reference to related entity | Association/lookup |
-| `invoice_number` | TEXT | ✓ | Description needed | Standard field usage |
-| `invoice_date` | DATE | - | Description needed | Standard field usage |
-| `invoice_type` | TEXT | - | Description needed | Standard field usage |
-| `order_id` | INTEGER | - | Reference to related entity | Association/lookup |
-| `challan_ids` | INTEGER[] | - | Description needed | Standard field usage |
-| `customer_id` | INTEGER | ✓ | Reference to related entity | Association/lookup |
-| `customer_name` | TEXT | ✓ | Description needed | Standard field usage |
-| `billing_address_id` | INTEGER | - | Reference to related entity | Association/lookup |
-| `shipping_address_id` | INTEGER | - | Reference to related entity | Association/lookup |
-| `place_of_supply` | TEXT | - | Description needed | Standard field usage |
-| `reverse_charge` | BOOLEAN | - | Description needed | Standard field usage |
-| `subtotal_amount` | NUMERIC(15 | - | Description needed | Standard field usage |
-| `discount_amount` | NUMERIC(15 | - | Description needed | Standard field usage |
-| `scheme_discount` | NUMERIC(15 | - | Description needed | Standard field usage |
-| `taxable_amount` | NUMERIC(15 | - | Description needed | Standard field usage |
-| `igst_amount` | NUMERIC(15 | - | Description needed | Standard field usage |
-| `cgst_amount` | NUMERIC(15 | - | Description needed | Standard field usage |
-| `sgst_amount` | NUMERIC(15 | - | Description needed | Standard field usage |
-| `cess_amount` | NUMERIC(15 | - | Description needed | Standard field usage |
-| `total_tax_amount` | NUMERIC(15 | - | Description needed | Standard field usage |
-| `freight_charges` | NUMERIC(15 | - | Description needed | Standard field usage |
-| `insurance_charges` | NUMERIC(15 | - | Description needed | Standard field usage |
-| `other_charges` | NUMERIC(15 | - | Description needed | Standard field usage |
-| `round_off_amount` | NUMERIC(5 | - | Description needed | Standard field usage |
-| `final_amount` | NUMERIC(15 | - | Description needed | Standard field usage |
-| `amount_in_words` | TEXT | - | Description needed | Standard field usage |
-| `payment_terms` | TEXT | - | Description needed | Standard field usage |
-| `due_date` | DATE | - | Description needed | Standard field usage |
-| `payment_status` | TEXT | - | Description needed | Standard field usage |
-| `paid_amount` | NUMERIC(15 | - | Description needed | Standard field usage |
-| `einvoice_required` | BOOLEAN | - | Description needed | Standard field usage |
-| `irn` | TEXT | - | Description needed | Standard field usage |
-| `irn_generated_date` | TIMESTAMP | - | Description needed | Standard field usage |
-| `qr_code` | TEXT | - | Description needed | Standard field usage |
-| `ack_number` | TEXT | - | Description needed | Standard field usage |
-| `ack_date` | TIMESTAMP | - | Description needed | Standard field usage |
-| `invoice_status` | TEXT | - | Description needed | Standard field usage |
-| `cancellation_reason` | TEXT | - | Description needed | Standard field usage |
-| `cancelled_date` | DATE | - | Description needed | Standard field usage |
-| `notes` | TEXT | - | Description needed | Standard field usage |
-| `internal_notes` | TEXT | - | Description needed | Standard field usage |
-| `terms_and_conditions` | TEXT | - | Description needed | Standard field usage |
-| `bank_account_id` | INTEGER | - | Reference to related entity | Association/lookup |
-| `created_at` | TIMESTAMP | - | Timestamp field | Standard field usage |
-| `updated_at` | TIMESTAMP | - | Timestamp field | Standard field usage |
-| `created_by` | INTEGER | ✓ | Creation audit field | Standard field usage |
-| `posted_by` | INTEGER | - | Description needed | Standard field usage |
-| `posted_at` | TIMESTAMP | - | Timestamp field | Standard field usage |
+**References:**
+- `order_id` (int, FK) - Source order
+- `challan_ids` (int[]) - Linked challans
+- `customer_id` (int, FK, REQUIRED)
+- `customer_name` (text, REQUIRED)
 
-**Foreign Key Relationships**:
-- `org_id` → `master.organizations.org_id`
-- `branch_id` → `master.org_branches.branch_id`
-- `order_id` → `sales.orders.order_id`
-- `customer_id` → `parties.customers.customer_id`
-- `billing_address_id` → `master.addresses.address_id`
-- `shipping_address_id` → `master.addresses.address_id`
-- `bank_account_id` → `master.org_bank_accounts.bank_account_id`
-- `created_by` → `master.org_users.user_id`
-- `posted_by` → `master.org_users.user_id`
+**Addresses:**
+- `billing_address_id` (int, FK)
+- `shipping_address_id` (int, FK)
+- `place_of_supply` (text) - For GST type determination
+
+**GST Compliance:**
+- `reverse_charge` (boolean) - RCM flag (default: false)
+- `igst_amount`, `cgst_amount`, `sgst_amount`, `cess_amount` (numeric 15,2)
+- `total_tax_amount` (numeric 15,2) - Default: 0
+
+**Financial Summary:**
+- `subtotal_amount` (numeric 15,2) - Before discount (default: 0)
+- `discount_amount` (numeric 15,2) - Line discounts (default: 0)
+- `scheme_discount` (numeric 15,2) - Scheme discounts (default: 0)
+- `taxable_amount` (numeric 15,2) - After discounts (default: 0)
+- `freight_charges`, `insurance_charges`, `other_charges` (numeric 15,2)
+- `round_off_amount` (numeric 5,2) - Default: 0
+- `final_amount` (numeric 15,2) - Grand total (default: 0)
+- `amount_in_words` (text) - For printing
+
+**Payment:**
+- `payment_terms` (text)
+- `due_date` (date)
+- `payment_status` (text) - pending/partial/paid (default: 'pending')
+- `paid_amount` (numeric 15,2) - Default: 0
+- `credit_amount` (numeric 15,2) - Unpaid balance (default: 0)
+
+**Allocation Tracking:**
+- `allocated_amount` (numeric 15,2) - Allocated to CN (default: 0)
+- `unallocated_amount` (numeric 15,2) - GENERATED: final_amount - allocated_amount
+
+**E-Invoice (GST):**
+- `einvoice_required` (boolean) - E-invoice flag (default: false)
+- `irn` (text) - Invoice Reference Number
+- `irn_generated_date` (timestamptz)
+- `qr_code` (text) - QR code data
+- `ack_number` (text) - Acknowledgement number
+- `ack_date` (timestamptz)
+
+**Loyalty:**
+- `loyalty_points_used` (int)
+- `loyalty_discount` (numeric 15,2)
+
+**Status:**
+- `invoice_status` (text) - draft/posted/cancelled (default: 'draft')
+- `cancellation_reason` (text)
+- `cancelled_date` (date)
+
+**Items Summary:**
+- `items_count` (int) - Total line items (default: 0)
+- `total_quantity` (numeric 15,3) - Total qty (default: 0)
+
+**Documents:**
+- `notes` (text) - Customer-facing
+- `internal_notes` (text) - Internal
+- `terms_and_conditions` (text)
+- `bank_account_id` (int, FK) - For payment details
+
+**Audit:**
+- `created_by` (int, FK)
+- `posted_by` (int, FK)
+- `posted_at` (timestamptz)
+- `created_at`, `updated_at` (timestamptz)
+
+**Use Cases:**
+- GST-compliant invoicing
+- E-invoice generation
+- Payment tracking
+- Credit note processing
+
+**RLS Policy:** ✅ Enabled (`org_id = get_current_org_id()`)
 
 ---
 
 ### 4. invoice_items
+**Invoice line items with batch tracking and returns**
 
-### invoice_items
-**Purpose**: [Business purpose description]
-**API Endpoint**: `api.get_invoice_items()`, `api.create_invoice_item()`
+**Key Columns:**
+- `invoice_item_id` (serial, PK)
+- `item_id` (serial) - Alternative ID
+- `invoice_id` (int, FK, REQUIRED)
+- `order_item_id` (int, FK) - Source order item
 
-| Field | Type | Required | Description | Frontend Usage |
-|-------|------|----------|-------------|----------------|
-| `invoice_item_id` | SERIAL | ✓ | Primary key identifier | Primary key |
-| `invoice_id` | INTEGER | ✓ | Reference to related entity | Association/lookup |
-| `order_item_id` | INTEGER | - | Reference to related entity | Association/lookup |
-| `product_id` | INTEGER | ✓ | Reference to related entity | Association/lookup |
-| `product_name` | TEXT | ✓ | Description needed | Standard field usage |
-| `product_description` | TEXT | - | Description needed | Standard field usage |
-| `hsn_code` | TEXT | - | Description needed | Standard field usage |
-| `batch_number` | TEXT | - | Description needed | Standard field usage |
-| `manufacturing_date` | DATE | - | Description needed | Standard field usage |
-| `expiry_date` | DATE | - | Description needed | Standard field usage |
-| `quantity` | NUMERIC(15 | ✓ | Description needed | Standard field usage |
-| `uom` | TEXT | ✓ | Description needed | Standard field usage |
-| `pack_type` | TEXT | ✓ | Description needed | Standard field usage |
-| `pack_size` | INTEGER | - | Description needed | Standard field usage |
-| `base_quantity` | NUMERIC(15 | - | Description needed | Standard field usage |
-| `mrp` | NUMERIC(15 | - | Description needed | Standard field usage |
-| `unit_price` | NUMERIC(15 | ✓ | Description needed | Standard field usage |
-| `discount_percent` | NUMERIC(5 | - | Description needed | Standard field usage |
-| `discount_amount` | NUMERIC(15 | - | Description needed | Standard field usage |
-| `taxable_amount` | NUMERIC(15 | - | Description needed | Standard field usage |
-| `igst_rate` | NUMERIC(5 | - | Description needed | Standard field usage |
-| `igst_amount` | NUMERIC(15 | - | Description needed | Standard field usage |
-| `cgst_rate` | NUMERIC(5 | - | Description needed | Standard field usage |
-| `cgst_amount` | NUMERIC(15 | - | Description needed | Standard field usage |
-| `sgst_rate` | NUMERIC(5 | - | Description needed | Standard field usage |
-| `sgst_amount` | NUMERIC(15 | - | Description needed | Standard field usage |
-| `cess_rate` | NUMERIC(5 | - | Description needed | Standard field usage |
-| `cess_amount` | NUMERIC(15 | - | Description needed | Standard field usage |
-| `total_tax_amount` | NUMERIC(15 | - | Description needed | Standard field usage |
-| `line_total` | NUMERIC(15 | ✓ | Description needed | Standard field usage |
-| `is_free_item` | BOOLEAN | - | Description needed | Standard field usage |
-| `display_order` | INTEGER | - | Description needed | Standard field usage |
-| `created_at` | TIMESTAMP | - | Timestamp field | Standard field usage |
+**Product Details:**
+- `product_id` (int, FK, REQUIRED)
+- `product_name` (text, REQUIRED)
+- `product_description` (text)
+- `hsn_code` (text)
 
-**Foreign Key Relationships**:
-- `invoice_id` → `sales.invoices.invoice_id`
-- `order_item_id` → `sales.order_items.order_item_id`
-- `product_id` → `inventory.products.product_id`
+**Batch:**
+- `batch_id` (int, FK)
+- `batch_number` (text)
+- `manufacturing_date`, `expiry_date` (date)
+
+**Quantity:**
+- `quantity` (numeric 15,3, REQUIRED)
+- `free_quantity` (numeric 15,3) - Free goods (default: 0)
+- `quantity_returned` (numeric 18,3) - Returned qty (default: 0)
+- `uom` (text, REQUIRED)
+- `pack_type` (text, REQUIRED) - unit/strip/box
+- `pack_size` (int)
+- `base_quantity` (numeric 15,3) - Base UOM qty
+
+**Pricing:**
+- `mrp` (numeric 15,2)
+- `unit_price` (numeric 15,4, REQUIRED)
+- `discount_percent` (numeric 5,2) - Default: 0
+- `discount_amount` (numeric 15,2) - Default: 0
+- `taxable_amount` (numeric 15,2)
+
+**Tax:**
+- `igst_rate`, `cgst_rate`, `sgst_rate`, `cess_rate` (numeric 5,2) - Default: 0
+- `igst_amount`, `cgst_amount`, `sgst_amount`, `cess_amount` (numeric 15,2) - Default: 0
+- `total_tax_amount` (numeric 15,2) - Default: 0
+- `line_total` (numeric 15,2, REQUIRED)
+
+**Flags:**
+- `is_free_item` (boolean) - Free goods flag (default: false)
+- `display_order` (int) - Sequence
+
+**Cascade:** ON DELETE CASCADE (with invoices)
 
 ---
+
+## Returns & Adjustments Tables
+
+### 9. credit_notes ⭐ NEW
+**Credit notes for returns and adjustments**
+
+**Key Columns:**
+- `credit_note_id` (serial, PK)
+- `org_id` (uuid, FK, REQUIRED)
+- `branch_id` (int, FK, REQUIRED)
+- `credit_note_number` (text, UNIQUE per org)
+- `credit_note_date` (date, REQUIRED) - Default: CURRENT_DATE
+- `customer_id` (int, FK, REQUIRED)
+
+**Reference:**
+- `reference_type` (text) - return/adjustment/discount
+- `reference_id` (int) - sales_return_id or other
+- `reference_number` (text)
+
+**Amounts:**
+- `credit_amount` (numeric 15,2, REQUIRED)
+- `tax_amount` (numeric 15,2) - Default: 0
+- `total_amount` (numeric 15,2, REQUIRED)
+- `applied_amount` (numeric 15,2) - Already applied (default: 0)
+- `remaining_amount` (numeric 15,2) - GENERATED: total_amount - applied_amount
+
+**GST:**
+- `is_gst_applicable` (boolean) - Default: true
+- `cgst_amount`, `sgst_amount`, `igst_amount` (numeric 15,2) - Default: 0
+
+**Details:**
+- `reason_code` (text, REQUIRED) - return/damaged/shortage/pricing_error
+- `reason` (text, REQUIRED)
+- `notes` (text)
+- `items_detail` (jsonb) - Item-wise details
+
+**Approval:**
+- `status` (text) - draft/approved/applied/cancelled (default: 'draft')
+- `approved_by` (int, FK)
+- `approved_date` (timestamptz)
+
+**Audit:**
+- `created_by` (int, FK, REQUIRED)
+- `created_at`, `updated_at` (timestamptz)
+
+**Use Cases:**
+- Return processing
+- Price adjustments
+- Shortage claims
+- Invoice allocation
+
+---
+
+### 10. credit_note_applications ⭐ NEW
+**Tracking of credit note applications to invoices**
+
+**Key Columns:**
+- `application_id` (serial, PK)
+- `credit_note_id` (int, FK, REQUIRED)
+- `invoice_id` (int, FK, REQUIRED)
+- `applied_amount` (numeric 15,2, REQUIRED)
+- `application_date` (date, REQUIRED) - Default: CURRENT_DATE
+- `created_by` (int, FK, REQUIRED)
+- `created_at` (timestamptz)
+
+**Use Cases:**
+- CN-to-invoice allocation
+- Outstanding balance adjustment
+- Payment reconciliation
+
+**Cascade:** ON DELETE CASCADE (with credit_notes)
+
+---
+
+### 11. debit_notes ⭐ NEW
+**Debit notes for additional charges**
+
+**Key Columns:**
+- `debit_note_id` (serial, PK)
+- `org_id` (uuid, FK, REQUIRED)
+- `branch_id` (int, FK, REQUIRED)
+- `debit_note_number` (text, UNIQUE per org)
+- `debit_note_date` (date, REQUIRED) - Default: CURRENT_DATE
+- `customer_id` (int, FK, REQUIRED)
+
+**Reference:**
+- `reference_type` (text) - freight/penalty/shortage
+- `reference_id` (int)
+- `reference_number` (text)
+
+**Amounts:**
+- `debit_amount` (numeric 15,2, REQUIRED)
+- `tax_amount` (numeric 15,2) - Default: 0
+- `total_amount` (numeric 15,2, REQUIRED)
+- `paid_amount` (numeric 15,2) - Default: 0
+- `payment_status` (text) - GENERATED: paid/partial/pending
+
+**GST:**
+- `is_gst_applicable` (boolean) - Default: true
+- `cgst_amount`, `sgst_amount`, `igst_amount` (numeric 15,2) - Default: 0
+
+**Details:**
+- `reason_code` (text, REQUIRED) - freight/late_payment/shortage
+- `reason` (text, REQUIRED)
+- `notes` (text)
+- `items_detail` (jsonb)
+
+**Approval:**
+- `status` (text) - draft/approved/paid/cancelled (default: 'draft')
+- `approved_by` (int, FK)
+- `approved_date` (timestamptz)
+
+**Audit:**
+- `created_by` (int, FK, REQUIRED)
+- `created_at`, `updated_at` (timestamptz)
+
+**Use Cases:**
+- Freight recovery
+- Late payment charges
+- Shortage recovery
+
+---
+
+### 12. invoice_return_status ⭐ NEW (VIEW)
+**Aggregated invoice return analytics**
+
+**Columns:**
+- `invoice_id` (int)
+- `invoice_number` (text)
+- `invoice_amount` (numeric 15,2)
+- `return_count` (bigint) - Number of returns
+- `total_returned_amount` (numeric) - Total returned
+- `return_status` (text) - Calculated status
+
+**Use Cases:**
+- Return rate analysis
+- Invoice return dashboard
+- Customer return patterns
+
+---
+
+## Logistics & Tracking Tables
+
+### 13. customer_visits ⭐ NEW
+**Field sales visit tracking with GPS**
+
+**Key Columns:**
+- `visit_id` (serial, PK)
+- `org_id` (uuid, FK, REQUIRED)
+- `visit_date` (date, REQUIRED)
+- `visit_time` (time)
+- `customer_id` (int, FK, REQUIRED)
+- `visited_by` (int, FK, REQUIRED) - Salesperson
+- `route_id` (int, FK)
+
+**Visit Details:**
+- `visit_purpose` (text, REQUIRED) - order_booking/collection/relationship/complaint
+- `visit_outcome` (text) - success/rescheduled/cancelled
+- `order_id` (int, FK) - Order created during visit
+- `collection_amount` (numeric 15,2) - Payment collected
+
+**Time Tracking:**
+- `check_in_time`, `check_out_time` (timestamptz)
+- `visit_location` (jsonb) - GPS coordinates
+
+**Follow-up:**
+- `visit_notes` (text)
+- `follow_up_required` (boolean) - Default: false
+- `follow_up_date` (date)
+- `follow_up_notes` (text)
+
+**Media:**
+- `visit_photos` (jsonb) - Photo URLs (default: [])
+
+**Status:**
+- `visit_status` (text) - completed/pending/cancelled (default: 'completed')
+
+**Audit:**
+- `created_at`, `updated_at` (timestamptz)
+
+**Use Cases:**
+- Field sales tracking
+- Route compliance
+- Visit productivity analysis
+- GPS-based attendance
+
+---
+
+### 14. delivery_tracking ⭐ NEW
+**Real-time delivery status tracking**
+
+**Key Columns:**
+- `tracking_id` (serial, PK)
+- `challan_id` (int, FK, REQUIRED)
+- `status` (text, REQUIRED) - dispatched/in_transit/out_for_delivery/delivered/failed
+- `location` (text)
+- `timestamp` (timestamptz, REQUIRED)
+
+**GPS:**
+- `gps_latitude`, `gps_longitude` (numeric 10,7)
+
+**Details:**
+- `notes` (text)
+- `updated_by` (text) - Transporter/driver name
+
+**Use Cases:**
+- Real-time tracking
+- Delivery ETAs
+- Route optimization
+- Customer notifications
+
+---
+
+### 15. eway_bills ⭐ NEW
+**E-way bill management (GST requirement)**
+
+**Key Columns:**
+- `eway_bill_id` (serial, PK)
+- `challan_id` (int, FK)
+- `eway_bill_number` (text, UNIQUE)
+- `supply_type` (text, REQUIRED) - outward/inward
+- `sub_type` (text, REQUIRED) - supply/export/job_work
+- `document_type` (text, REQUIRED) - tax_invoice/bill_of_supply/challan
+- `document_number` (text, REQUIRED)
+- `document_date` (date, REQUIRED)
+
+**GSTIN:**
+- `from_gstin`, `to_gstin` (text)
+
+**Transport:**
+- `transport_mode` (text, REQUIRED) - road/rail/air/ship
+- `transport_distance` (int) - In km
+- `transporter_name` (text)
+- `transporter_id` (text) - GST transporter ID
+- `vehicle_number` (text)
+
+**Validity:**
+- `valid_until` (timestamptz, REQUIRED) - Auto-calculated
+- `status` (text, REQUIRED) - active/expired/cancelled (default: 'active')
+- `generated_date` (timestamptz) - Default: CURRENT_TIMESTAMP
+
+**Use Cases:**
+- GST e-way bill compliance
+- Inter-state movement tracking
+- Expiry alerts
+
+---
+
+### 16. proof_of_delivery ⭐ NEW
+**Digital POD with signature and GPS**
+
+**Key Columns:**
+- `pod_id` (serial, PK)
+- `challan_id` (int, FK, REQUIRED)
+- `customer_id` (int, FK)
+- `delivered_date` (date, REQUIRED)
+- `delivered_time` (time)
+
+**Receiver Details:**
+- `received_by_name` (text, REQUIRED)
+- `received_by_designation` (text)
+- `received_by_phone` (text)
+- `delivery_location` (text)
+
+**Verification:**
+- `signature_image` (text) - Base64 or URL
+- `delivery_photo` (text) - Photo URL
+- `gps_latitude`, `gps_longitude` (numeric 10,7)
+
+**Feedback:**
+- `delivery_notes` (text)
+- `delivery_rating` (int) - 1-5 rating
+
+**Audit:**
+- `created_date` (timestamptz) - Default: CURRENT_TIMESTAMP
+
+**Use Cases:**
+- Digital signature capture
+- GPS-verified delivery
+- Delivery quality tracking
+- Dispute resolution
+
+---
+
+## Loyalty & Schemes Tables
+
+### 17. loyalty_programs ⭐ NEW
+**Loyalty program configuration**
+
+**Key Columns:**
+- `program_id` (serial, PK)
+- `org_id` (uuid, FK, REQUIRED)
+- `program_name` (text, REQUIRED)
+- `description` (text)
+
+**Rules:**
+- `points_per_rupee` (numeric 5,2) - Earning rate (default: 1.0)
+- `redemption_ratio` (numeric 5,2) - ₹ value per point (default: 0.25)
+- `min_purchase_amount` (numeric 15,2) - Minimum to earn
+- `min_redemption_points` (int) - Min points to redeem (default: 100)
+- `max_redemption_percentage` (numeric 5,2) - Max % of bill (default: 50)
+- `points_validity_days` (int) - Expiry days
+
+**Features:**
+- `tier_based` (boolean) - Enable tiers (default: false)
+- `is_active` (boolean) - Default: true
+
+**Audit:**
+- `created_by` (int, FK)
+- `created_at`, `updated_at` (timestamptz)
+
+**Use Cases:**
+- Customer retention
+- Repeat purchase incentives
+- Tier-based benefits
+
+---
+
+### 20. sales_schemes ⭐ NEW
+**Promotional scheme master**
+
+**Key Columns:**
+- `scheme_id` (serial, PK)
+- `org_id` (uuid, FK, REQUIRED)
+- `scheme_code` (text, UNIQUE per org)
+- `scheme_name` (text, REQUIRED)
+- `scheme_type` (text, REQUIRED) - volume/combo/free_goods/percentage
+- `start_date`, `end_date` (date, REQUIRED)
+
+**Applicability:**
+- `applicable_branches` (int[])
+- `applicable_territories` (int[])
+- `applicable_customers` (int[])
+- `applicable_customer_types` (text[])
+- `applicable_products` (int[])
+- `applicable_categories` (int[])
+
+**Rules:**
+- `scheme_rules` (jsonb, REQUIRED) - Complex rules in JSON
+
+**Budget:**
+- `scheme_budget` (numeric 15,2) - Max spend
+- `utilized_budget` (numeric 15,2) - Used so far (default: 0)
+- `max_benefit_per_order` (numeric 15,2) - Per-order cap
+
+**Approval:**
+- `approval_status` (text) - draft/approved/active (default: 'draft')
+- `approved_by` (int, FK)
+- `approved_date` (date)
+
+**Status:**
+- `is_active` (boolean) - Default: true
+- `can_combine` (boolean) - Stackable with other schemes (default: false)
+
+**Analytics:**
+- `total_orders` (int) - Orders using scheme (default: 0)
+- `total_discount_given` (numeric 15,2) - Total benefit (default: 0)
+
+**Audit:**
+- `created_by` (int, FK, REQUIRED)
+- `created_at`, `updated_at` (timestamptz)
+
+**Use Cases:**
+- Volume-based discounts
+- Buy X Get Y offers
+- Combo schemes
+- Category promotions
+
+---
+
+### 26. price_lists ⭐ NEW
+**Customer/territory-specific pricing**
+
+**Key Columns:**
+- `price_list_id` (serial, PK)
+- `org_id` (uuid, FK, REQUIRED)
+- `price_list_name` (text, REQUIRED)
+- `price_list_type` (text, REQUIRED) - standard/customer/territory/seasonal
+- `currency_code` (text) - Default: 'INR'
+
+**Validity:**
+- `effective_from` (date, REQUIRED)
+- `effective_until` (date)
+
+**Applicability:**
+- `applicable_branches` (int[])
+- `applicable_territories` (int[])
+- `applicable_customer_groups` (int[])
+
+**Pricing Logic:**
+- `parent_price_list_id` (int) - Inherit from parent
+- `adjustment_type` (text) - percentage/fixed
+- `adjustment_value` (numeric 15,4)
+
+**Approval:**
+- `requires_approval` (boolean) - Default: false
+- `approval_status` (text) - approved/pending (default: 'approved')
+- `approved_by` (int, FK)
+- `approved_date` (date)
+
+**Status:**
+- `is_active` (boolean) - Default: true
+- `is_default` (boolean) - Default price list (default: false)
+- `description` (text)
+
+**Audit:**
+- `created_by` (int, FK, REQUIRED)
+- `created_at`, `updated_at` (timestamptz)
+
+**Use Cases:**
+- Volume-based pricing
+- Regional pricing
+- Customer-specific rates
+- Seasonal pricing
+
+---
+
+### 28. sales_targets ⭐ NEW
+**Sales target tracking and incentives**
+
+**Key Columns:**
+- `target_id` (serial, PK)
+- `org_id` (uuid, FK, REQUIRED)
+- `target_year`, `target_month`, `target_quarter` (int)
+- `period_type` (text, REQUIRED) - monthly/quarterly/annual
+- `target_type` (text, REQUIRED) - salesperson/territory/branch/product
+- `target_entity_id` (int, REQUIRED) - ID of entity
+
+**Targets:**
+- `revenue_target` (numeric 15,2)
+- `quantity_target` (numeric 15,3)
+- `new_customer_target` (int)
+- `visit_target` (int)
+
+**Achievement:**
+- `revenue_achieved` (numeric 15,2) - Default: 0
+- `quantity_achieved` (numeric 15,3) - Default: 0
+- `new_customers_achieved` (int) - Default: 0
+- `visits_achieved` (int) - Default: 0
+- `revenue_achievement_percent` (numeric 5,2) - Default: 0
+- `overall_achievement_percent` (numeric 5,2) - Default: 0
+
+**Incentives:**
+- `incentive_percentage` (numeric 5,2) - Incentive % on achievement
+- `calculated_incentive` (numeric 15,2)
+
+**Status:**
+- `status` (text) - active/completed/cancelled (default: 'active')
+- `notes` (text)
+
+**Audit:**
+- `created_by` (int, FK, REQUIRED)
+- `created_at`, `updated_at` (timestamptz)
+
+**Use Cases:**
+- Sales performance tracking
+- Incentive calculation
+- Team leaderboards
+- Territory analysis
+
+---
+
+## Delivery Tables
 
 ### 5. delivery_challans
+**Delivery challan/dispatch note**
 
-### delivery_challans
-**Purpose**: [Business purpose description]
-**API Endpoint**: `api.get_delivery_challans()`, `api.create_delivery_challan()`
+**Key Columns:**
+- `challan_id` (serial, PK)
+- `org_id` (uuid, FK, REQUIRED)
+- `branch_id` (int, FK, REQUIRED)
+- `challan_number` (text, UNIQUE per org)
+- `challan_date` (date, REQUIRED) - Default: CURRENT_DATE
+- `challan_type` (text) - delivery/sample/returnable (default: 'delivery')
 
-| Field | Type | Required | Description | Frontend Usage |
-|-------|------|----------|-------------|----------------|
-| `challan_id` | SERIAL | ✓ | Primary key identifier | Primary key |
-| `org_id` | UUID | ✓ | Organization ID | Organization filtering |
-| `branch_id` | INTEGER | ✓ | Reference to related entity | Association/lookup |
-| `challan_number` | TEXT | ✓ | Description needed | Standard field usage |
-| `challan_date` | DATE | - | Description needed | Standard field usage |
-| `challan_type` | TEXT | - | Description needed | Standard field usage |
-| `order_id` | INTEGER | - | Reference to related entity | Association/lookup |
-| `invoice_id` | INTEGER | - | Reference to related entity | Association/lookup |
-| `customer_id` | INTEGER | ✓ | Reference to related entity | Association/lookup |
-| `delivery_address_id` | INTEGER | - | Reference to related entity | Association/lookup |
-| `dispatch_date` | DATE | - | Description needed | Standard field usage |
-| `dispatch_time` | TIME | - | Description needed | Standard field usage |
-| `dispatch_address_id` | INTEGER | - | Reference to related entity | Association/lookup |
-| `transport_mode` | TEXT | - | Description needed | Standard field usage |
-| `transporter_name` | TEXT | - | Description needed | Standard field usage |
-| `vehicle_number` | TEXT | - | Description needed | Standard field usage |
-| `lr_number` | TEXT | - | Description needed | Standard field usage |
-| `lr_date` | DATE | - | Description needed | Standard field usage |
-| `freight_charges` | NUMERIC(15 | - | Description needed | Standard field usage |
-| `eway_bill_required` | BOOLEAN | - | Description needed | Standard field usage |
-| `eway_bill_number` | TEXT | - | Description needed | Standard field usage |
-| `eway_bill_date` | DATE | - | Description needed | Standard field usage |
-| `eway_bill_validity_days` | INTEGER | - | Description needed | Standard field usage |
-| `eway_bill_data` | JSONB | - | Description needed | Standard field usage |
-| `total_quantity` | NUMERIC(15 | - | Description needed | Standard field usage |
-| `total_amount` | NUMERIC(15 | - | Description needed | Standard field usage |
-| `challan_status` | TEXT | - | Description needed | Standard field usage |
-| `delivery_status` | TEXT | - | Description needed | Standard field usage |
-| `delivered_date` | DATE | - | Description needed | Standard field usage |
-| `delivered_time` | TIME | - | Description needed | Standard field usage |
-| `received_by` | TEXT | - | Description needed | Standard field usage |
-| `delivery_notes` | TEXT | - | Description needed | Standard field usage |
-| `pod_document` | TEXT | - | Description needed | Standard field usage |
-| `is_returnable` | BOOLEAN | - | Description needed | Standard field usage |
-| `return_by_date` | DATE | - | Description needed | Standard field usage |
-| `return_status` | TEXT | - | Description needed | Standard field usage |
-| `notes` | TEXT | - | Description needed | Standard field usage |
-| `internal_notes` | TEXT | - | Description needed | Standard field usage |
-| `created_at` | TIMESTAMP | - | Timestamp field | Standard field usage |
-| `updated_at` | TIMESTAMP | - | Timestamp field | Standard field usage |
-| `created_by` | INTEGER | ✓ | Creation audit field | Standard field usage |
+**References:**
+- `order_id` (int, FK)
+- `invoice_id` (int, FK)
+- `customer_id` (int, FK, REQUIRED)
+- `delivery_address_id` (int, FK)
 
-**Foreign Key Relationships**:
-- `org_id` → `master.organizations.org_id`
-- `branch_id` → `master.org_branches.branch_id`
-- `order_id` → `sales.orders.order_id`
-- `invoice_id` → `sales.invoices.invoice_id`
-- `customer_id` → `parties.customers.customer_id`
-- `delivery_address_id` → `master.addresses.address_id`
-- `dispatch_address_id` → `master.addresses.address_id`
-- `created_by` → `master.org_users.user_id`
+**Dispatch:**
+- `dispatch_date` (date)
+- `dispatch_time` (time)
+- `dispatch_address_id` (int, FK)
 
----
+**Transport:**
+- `transport_mode` (text) - road/rail/air/courier
+- `transporter_name` (text)
+- `vehicle_number` (text)
+- `lr_number` (text) - Lorry receipt
+- `lr_date` (date)
+- `freight_charges` (numeric 15,2)
 
-### 6. delivery_challan_items
+**E-way Bill:**
+- `eway_bill_required` (boolean) - Default: false
+- `eway_bill_number` (text)
+- `eway_bill_date` (date)
+- `eway_bill_validity_days` (int)
+- `eway_bill_data` (jsonb)
 
-### delivery_challan_items
-**Purpose**: [Business purpose description]
-**API Endpoint**: `api.get_delivery_challan_items()`, `api.create_delivery_challan_item()`
+**Summary:**
+- `total_quantity` (numeric 15,3)
+- `total_amount` (numeric 15,2)
+- `taxable_amount`, `gst_amount` (numeric 15,2) - Default: 0
 
-| Field | Type | Required | Description | Frontend Usage |
-|-------|------|----------|-------------|----------------|
-| `challan_item_id` | SERIAL | ✓ | Primary key identifier | Primary key |
-| `challan_id` | INTEGER | ✓ | Reference to related entity | Association/lookup |
-| `order_item_id` | INTEGER | - | Reference to related entity | Association/lookup |
-| `product_id` | INTEGER | ✓ | Reference to related entity | Association/lookup |
-| `ordered_quantity` | NUMERIC(15 | - | Description needed | Standard field usage |
-| `dispatched_quantity` | NUMERIC(15 | ✓ | Description needed | Standard field usage |
-| `delivered_quantity` | NUMERIC(15 | - | Description needed | Standard field usage |
-| `returned_quantity` | NUMERIC(15 | - | Description needed | Standard field usage |
-| `damaged_quantity` | NUMERIC(15 | - | Description needed | Standard field usage |
-| `uom` | TEXT | ✓ | Description needed | Standard field usage |
-| `pack_type` | TEXT | ✓ | Description needed | Standard field usage |
-| `item_status` | TEXT | - | Description needed | Standard field usage |
-| `item_notes` | TEXT | - | Description needed | Standard field usage |
-| `display_order` | INTEGER | - | Description needed | Standard field usage |
-| `created_at` | TIMESTAMP | - | Timestamp field | Standard field usage |
+**Status:**
+- `challan_status` (text) - draft/confirmed/dispatched/cancelled (default: 'draft')
+- `delivery_status` (text) - pending/in_transit/delivered/failed (default: 'pending')
 
-**Foreign Key Relationships**:
-- `challan_id` → `sales.delivery_challans.challan_id`
-- `order_item_id` → `sales.order_items.order_item_id`
-- `product_id` → `inventory.products.product_id`
+**Delivery:**
+- `delivered_date`, `delivered_time` (date, time)
+- `received_by` (text) - Receiver name
+- `delivery_notes` (text)
+- `pod_document` (text) - POD attachment
+
+**Returns:**
+- `is_returnable` (boolean) - Default: false
+- `return_by_date` (date)
+- `return_status` (text)
+
+**Notes:**
+- `notes` (text)
+- `internal_notes` (text)
+
+**Audit:**
+- `created_by` (int, FK, REQUIRED)
+- `created_at`, `updated_at` (timestamptz)
+
+**Use Cases:**
+- Dispatch management
+- Delivery tracking
+- POD capture
+- E-way bill integration
 
 ---
 
 ### 7. sales_returns
+**Sales return header with approval workflow**
 
-### sales_returns
-**Purpose**: [Business purpose description]
-**API Endpoint**: `api.get_sales_returns()`, `api.create_sales_return()`
+**Key Columns:**
+- `return_id` (serial, PK)
+- `org_id` (uuid, FK, REQUIRED)
+- `branch_id` (int, FK, REQUIRED)
+- `return_number` (text, UNIQUE per org)
+- `return_date` (date, REQUIRED) - Default: CURRENT_DATE
+- `return_type` (text, REQUIRED) - full_return/partial_return/exchange/damage
+- `invoice_id` (int, FK)
+- `challan_id` (int, FK)
+- `customer_id` (int, FK, REQUIRED)
 
-| Field | Type | Required | Description | Frontend Usage |
-|-------|------|----------|-------------|----------------|
-| `return_id` | SERIAL | ✓ | Primary key identifier | Primary key |
-| `org_id` | UUID | ✓ | Organization ID | Organization filtering |
-| `branch_id` | INTEGER | ✓ | Reference to related entity | Association/lookup |
-| `return_number` | TEXT | ✓ | Description needed | Standard field usage |
-| `return_date` | DATE | - | Description needed | Standard field usage |
-| `return_type` | TEXT | ✓ | Description needed | Standard field usage |
-| `invoice_id` | INTEGER | - | Reference to related entity | Association/lookup |
-| `challan_id` | INTEGER | - | Reference to related entity | Association/lookup |
-| `customer_id` | INTEGER | ✓ | Reference to related entity | Association/lookup |
-| `return_reason` | TEXT | ✓ | Description needed | Standard field usage |
-| `return_category` | TEXT | - | Description needed | Standard field usage |
-| `approval_required` | BOOLEAN | - | Description needed | Standard field usage |
-| `approval_status` | TEXT | - | Description needed | Standard field usage |
-| `approved_by` | INTEGER | - | Description needed | Standard field usage |
-| `approved_at` | TIMESTAMP | - | Timestamp field | Standard field usage |
-| `return_amount` | NUMERIC(15 | - | Description needed | Standard field usage |
-| `tax_amount` | NUMERIC(15 | - | Description needed | Standard field usage |
-| `total_amount` | NUMERIC(15 | - | Description needed | Standard field usage |
-| `credit_note_number` | TEXT | - | Description needed | Standard field usage |
-| `credit_note_date` | DATE | - | Description needed | Standard field usage |
-| `credit_note_status` | TEXT | - | Description needed | Standard field usage |
-| `igst_amount` | NUMERIC(15 | - | Description needed | Standard field usage |
-| `cgst_amount` | NUMERIC(15 | - | Description needed | Standard field usage |
-| `sgst_amount` | NUMERIC(15 | - | Description needed | Standard field usage |
-| `adjustment_type` | TEXT | - | Description needed | Standard field usage |
-| `adjusted_amount` | NUMERIC(15 | - | Description needed | Standard field usage |
-| `pending_amount` | NUMERIC(15 | - | Description needed | Standard field usage |
-| `goods_received_date` | DATE | - | Description needed | Standard field usage |
-| `goods_received_by` | INTEGER | - | Description needed | Standard field usage |
-| `quality_check_status` | TEXT | - | Description needed | Standard field usage |
-| `notes` | TEXT | - | Description needed | Standard field usage |
-| `internal_notes` | TEXT | - | Description needed | Standard field usage |
-| `created_at` | TIMESTAMP | - | Timestamp field | Standard field usage |
-| `updated_at` | TIMESTAMP | - | Timestamp field | Standard field usage |
-| `created_by` | INTEGER | ✓ | Creation audit field | Standard field usage |
+**Reason:**
+- `return_reason` (text, REQUIRED) - damaged/expired/quality/wrong_product
+- `return_category` (text) - quality/commercial/operational
 
-**Foreign Key Relationships**:
-- `org_id` → `master.organizations.org_id`
-- `branch_id` → `master.org_branches.branch_id`
-- `invoice_id` → `sales.invoices.invoice_id`
-- `challan_id` → `sales.delivery_challans.challan_id`
-- `customer_id` → `parties.customers.customer_id`
-- `approved_by` → `master.org_users.user_id`
-- `goods_received_by` → `master.org_users.user_id`
-- `created_by` → `master.org_users.user_id`
+**Approval:**
+- `approval_required` (boolean) - Default: true
+- `approval_status` (text) - pending/approved/rejected (default: 'pending')
+- `approved_by` (int, FK)
+- `approved_at` (timestamptz)
 
----
+**Financial:**
+- `return_amount` (numeric 15,2)
+- `tax_amount` (numeric 15,2)
+- `total_amount` (numeric 15,2)
+- `igst_amount`, `cgst_amount`, `sgst_amount` (numeric 15,2) - Default: 0
 
-### 8. sales_return_items
+**Credit Note:**
+- `credit_note_number` (text)
+- `credit_note_date` (date)
+- `credit_note_status` (text) - pending/generated/applied (default: 'pending')
 
-### sales_return_items
-**Purpose**: [Business purpose description]
-**API Endpoint**: `api.get_sales_return_items()`, `api.create_sales_return_item()`
+**Adjustment:**
+- `adjustment_type` (text) - credit_note/replacement/refund
+- `adjusted_amount` (numeric 15,2) - Default: 0
+- `pending_amount` (numeric 15,2)
 
-| Field | Type | Required | Description | Frontend Usage |
-|-------|------|----------|-------------|----------------|
-| `return_item_id` | SERIAL | ✓ | Primary key identifier | Primary key |
-| `return_id` | INTEGER | ✓ | Reference to related entity | Association/lookup |
-| `invoice_item_id` | INTEGER | - | Reference to related entity | Association/lookup |
-| `product_id` | INTEGER | ✓ | Reference to related entity | Association/lookup |
-| `batch_number` | TEXT | - | Description needed | Standard field usage |
-| `return_quantity` | NUMERIC(15 | ✓ | Description needed | Standard field usage |
-| `uom` | TEXT | ✓ | Description needed | Standard field usage |
-| `damaged_quantity` | NUMERIC(15 | - | Description needed | Standard field usage |
-| `saleable_quantity` | NUMERIC(15 | - | Description needed | Standard field usage |
-| `unit_price` | NUMERIC(15 | - | Description needed | Standard field usage |
-| `return_value` | NUMERIC(15 | - | Description needed | Standard field usage |
-| `tax_amount` | NUMERIC(15 | - | Description needed | Standard field usage |
-| `item_return_reason` | TEXT | - | Description needed | Standard field usage |
-| `disposition` | TEXT | - | Description needed | Standard field usage |
-| `created_at` | TIMESTAMP | - | Timestamp field | Standard field usage |
+**Goods Receipt:**
+- `goods_received_date` (date)
+- `goods_received_by` (int, FK)
+- `quality_check_status` (text) - pending/approved/rejected
 
-**Foreign Key Relationships**:
-- `return_id` → `sales.sales_returns.return_id`
-- `invoice_item_id` → `sales.invoice_items.invoice_item_id`
-- `product_id` → `inventory.products.product_id`
+**Notes:**
+- `notes` (text)
+- `internal_notes` (text)
+
+**Audit:**
+- `created_by` (int, FK, REQUIRED)
+- `created_at`, `updated_at` (timestamptz)
+
+**Use Cases:**
+- Return authorization
+- Quality inspection
+- Credit note generation
+- Stock adjustment
 
 ---
 
-### 9. price_lists
+## Relationships
 
-### price_lists
-**Purpose**: [Business purpose description]
-**API Endpoint**: `api.get_price_lists()`, `api.create_price_list()`
+### Order Flow:
+```
+orders
+ └─ order_items (many)
+     └─ delivery_challans
+         └─ delivery_challan_items
+             └─ invoices
+                 └─ invoice_items
+```
 
-| Field | Type | Required | Description | Frontend Usage |
-|-------|------|----------|-------------|----------------|
-| `price_list_id` | SERIAL | ✓ | Primary key identifier | Primary key |
-| `org_id` | UUID | ✓ | Organization ID | Organization filtering |
-| `price_list_name` | TEXT | ✓ | Description needed | Standard field usage |
-| `price_list_type` | TEXT | ✓ | Description needed | Standard field usage |
-| `currency_code` | TEXT | - | Description needed | Standard field usage |
-| `effective_from` | DATE | ✓ | Description needed | Standard field usage |
-| `effective_until` | DATE | - | Description needed | Standard field usage |
-| `applicable_branches` | INTEGER[] | - | Description needed | Standard field usage |
-| `applicable_territories` | INTEGER[] | - | Description needed | Standard field usage |
-| `applicable_customer_groups` | INTEGER[] | - | Description needed | Standard field usage |
-| `parent_price_list_id` | INTEGER | - | Reference to related entity | Association/lookup |
-| `adjustment_type` | TEXT | - | Description needed | Standard field usage |
-| `adjustment_value` | NUMERIC(15 | - | Description needed | Standard field usage |
-| `requires_approval` | BOOLEAN | - | Description needed | Standard field usage |
-| `approval_status` | TEXT | - | Description needed | Standard field usage |
-| `approved_by` | INTEGER | - | Description needed | Standard field usage |
-| `approved_date` | DATE | - | Description needed | Standard field usage |
-| `is_active` | BOOLEAN | - | Active status flag | Standard field usage |
-| `is_default` | BOOLEAN | - | Description needed | Standard field usage |
-| `description` | TEXT | - | Description needed | Standard field usage |
-| `created_at` | TIMESTAMP | - | Timestamp field | Standard field usage |
-| `updated_at` | TIMESTAMP | - | Timestamp field | Standard field usage |
-| `created_by` | INTEGER | ✓ | Creation audit field | Standard field usage |
+### Returns Flow:
+```
+invoices
+ └─ sales_returns
+     ├─ sales_return_items
+     └─ credit_notes
+         └─ credit_note_applications → back to invoices
+```
 
-**Foreign Key Relationships**:
-- `org_id` → `master.organizations.org_id`
-- `parent_price_list_id` → `sales.price_lists.price_list_id`
-- `approved_by` → `master.org_users.user_id`
-- `created_by` → `master.org_users.user_id`
+### Schemes:
+```
+sales_schemes
+ ├─ scheme_customers (many-to-many)
+ ├─ scheme_products (many-to-many)
+ ├─ scheme_volume_slabs (one-to-many)
+ └─ scheme_usage (tracking)
+```
 
 ---
 
-### 10. price_list_items
+## Multi-Tenant Security
 
-### price_list_items
-**Purpose**: [Business purpose description]
-**API Endpoint**: `api.get_price_list_items()`, `api.create_price_list_item()`
-
-| Field | Type | Required | Description | Frontend Usage |
-|-------|------|----------|-------------|----------------|
-| `price_list_item_id` | SERIAL | ✓ | Primary key identifier | Primary key |
-| `price_list_id` | INTEGER | ✓ | Reference to related entity | Association/lookup |
-| `product_id` | INTEGER | ✓ | Reference to related entity | Association/lookup |
-| `base_unit_price` | NUMERIC(15 | - | Description needed | Standard field usage |
-| `pack_unit_price` | NUMERIC(15 | - | Description needed | Standard field usage |
-| `box_unit_price` | NUMERIC(15 | - | Description needed | Standard field usage |
-| `case_unit_price` | NUMERIC(15 | - | Description needed | Standard field usage |
-| `mrp` | NUMERIC(15 | - | Description needed | Standard field usage |
-| `ptr_margin_percent` | NUMERIC(5 | - | Description needed | Standard field usage |
-| `pts_margin_percent` | NUMERIC(5 | - | Description needed | Standard field usage |
-| `min_order_quantity` | NUMERIC(15 | - | Description needed | Standard field usage |
-| `min_order_pack_type` | TEXT | - | Description needed | Standard field usage |
-| `max_discount_percent` | NUMERIC(5 | - | Description needed | Standard field usage |
-| `is_active` | BOOLEAN | - | Active status flag | Standard field usage |
-| `created_at` | TIMESTAMP | - | Timestamp field | Standard field usage |
-| `updated_at` | TIMESTAMP | - | Timestamp field | Standard field usage |
-
-**Foreign Key Relationships**:
-- `price_list_id` → `sales.price_lists.price_list_id`
-- `product_id` → `inventory.products.product_id`
+### RLS Policies:
+- **orders, invoices, challans, returns:** ✅ Enabled
+- **All sales tables:** Filtered by org_id
 
 ---
 
-### 11. sales_schemes
+## Performance Optimizations
 
-### sales_schemes
-**Purpose**: [Business purpose description]
-**API Endpoint**: `api.get_sales_schemes()`, `api.create_sales_scheme()`
-
-| Field | Type | Required | Description | Frontend Usage |
-|-------|------|----------|-------------|----------------|
-| `scheme_id` | SERIAL | ✓ | Primary key identifier | Primary key |
-| `org_id` | UUID | ✓ | Organization ID | Organization filtering |
-| `scheme_code` | TEXT | ✓ | Description needed | Standard field usage |
-| `scheme_name` | TEXT | ✓ | Description needed | Standard field usage |
-| `scheme_type` | TEXT | ✓ | Description needed | Standard field usage |
-| `start_date` | DATE | ✓ | Description needed | Standard field usage |
-| `end_date` | DATE | ✓ | Description needed | Standard field usage |
-| `applicable_branches` | INTEGER[] | - | Description needed | Standard field usage |
-| `applicable_territories` | INTEGER[] | - | Description needed | Standard field usage |
-| `applicable_customers` | INTEGER[] | - | Description needed | Standard field usage |
-| `applicable_customer_types` | TEXT[] | - | Description needed | Standard field usage |
-| `scheme_rules` | JSONB | ✓ | Description needed | Standard field usage |
-| `applicable_products` | INTEGER[] | - | Description needed | Standard field usage |
-| `applicable_categories` | INTEGER[] | - | Description needed | Standard field usage |
-| `scheme_budget` | NUMERIC(15 | - | Description needed | Standard field usage |
-| `utilized_budget` | NUMERIC(15 | - | Description needed | Standard field usage |
-| `max_benefit_per_order` | NUMERIC(15 | - | Description needed | Standard field usage |
-| `approval_status` | TEXT | - | Description needed | Standard field usage |
-| `approved_by` | INTEGER | - | Description needed | Standard field usage |
-| `approved_date` | DATE | - | Description needed | Standard field usage |
-| `is_active` | BOOLEAN | - | Active status flag | Standard field usage |
-| `can_combine` | BOOLEAN | - | Description needed | Standard field usage |
-| `total_orders` | INTEGER | - | Description needed | Standard field usage |
-| `total_discount_given` | NUMERIC(15 | - | Description needed | Standard field usage |
-| `created_at` | TIMESTAMP | - | Timestamp field | Standard field usage |
-| `updated_at` | TIMESTAMP | - | Timestamp field | Standard field usage |
-| `created_by` | INTEGER | ✓ | Creation audit field | Standard field usage |
-
-**Foreign Key Relationships**:
-- `org_id` → `master.organizations.org_id`
-- `approved_by` → `master.org_users.user_id`
-- `created_by` → `master.org_users.user_id`
+### Critical Indexes:
+- **invoices:** (org_id, invoice_date), (customer_id), (invoice_status)
+- **invoice_items:** (invoice_id, product_id), (batch_id)
+- **orders:** (org_id, order_date), (customer_id), (order_status)
+- **credit_notes:** (customer_id, status), (remaining_amount > 0)
 
 ---
 
-### 12. sales_targets
+## Related Documentation
 
-### sales_targets
-**Purpose**: [Business purpose description]
-**API Endpoint**: `api.get_sales_targets()`, `api.create_sales_target()`
-
-| Field | Type | Required | Description | Frontend Usage |
-|-------|------|----------|-------------|----------------|
-| `target_id` | SERIAL | ✓ | Primary key identifier | Primary key |
-| `org_id` | UUID | ✓ | Organization ID | Organization filtering |
-| `target_year` | INTEGER | ✓ | Description needed | Standard field usage |
-| `target_month` | INTEGER | - | Description needed | Standard field usage |
-| `target_quarter` | INTEGER | - | Description needed | Standard field usage |
-| `period_type` | TEXT | ✓ | Description needed | Standard field usage |
-| `target_type` | TEXT | ✓ | Description needed | Standard field usage |
-| `target_entity_id` | INTEGER | ✓ | Reference to related entity | Association/lookup |
-| `revenue_target` | NUMERIC(15 | - | Description needed | Standard field usage |
-| `quantity_target` | NUMERIC(15 | - | Description needed | Standard field usage |
-| `new_customer_target` | INTEGER | - | Description needed | Standard field usage |
-| `visit_target` | INTEGER | - | Description needed | Standard field usage |
-| `revenue_achieved` | NUMERIC(15 | - | Description needed | Standard field usage |
-| `quantity_achieved` | NUMERIC(15 | - | Description needed | Standard field usage |
-| `new_customers_achieved` | INTEGER | - | Description needed | Standard field usage |
-| `visits_achieved` | INTEGER | - | Description needed | Standard field usage |
-| `revenue_achievement_percent` | NUMERIC(5 | - | Description needed | Standard field usage |
-| `overall_achievement_percent` | NUMERIC(5 | - | Description needed | Standard field usage |
-| `incentive_percentage` | NUMERIC(5 | - | Description needed | Standard field usage |
-| `calculated_incentive` | NUMERIC(15 | - | Description needed | Standard field usage |
-| `status` | TEXT | - | Description needed | Standard field usage |
-| `notes` | TEXT | - | Description needed | Standard field usage |
-| `created_at` | TIMESTAMP | - | Timestamp field | Standard field usage |
-| `updated_at` | TIMESTAMP | - | Timestamp field | Standard field usage |
-| `created_by` | INTEGER | ✓ | Creation audit field | Standard field usage |
-
-**Foreign Key Relationships**:
-- `org_id` → `master.organizations.org_id`
-- `created_by` → `master.org_users.user_id`
+- [MASTER_SCHEMA_INDEX.md](./MASTER_SCHEMA_INDEX.md) - All schemas
+- [03_inventory_schema.md](./03_inventory_schema.md) - Batch allocation
+- [06_financial_schema.md](./06_financial_schema.md) - Payments & receivables
+- [07_gst_schema.md](./07_gst_schema.md) - GST compliance
 
 ---
 
-### 13. customer_visits
-
-### customer_visits
-**Purpose**: [Business purpose description]
-**API Endpoint**: `api.get_customer_visits()`, `api.create_customer_visit()`
-
-| Field | Type | Required | Description | Frontend Usage |
-|-------|------|----------|-------------|----------------|
-| `visit_id` | SERIAL | ✓ | Primary key identifier | Primary key |
-| `org_id` | UUID | ✓ | Organization ID | Organization filtering |
-| `visit_date` | DATE | ✓ | Description needed | Standard field usage |
-| `visit_time` | TIME | - | Description needed | Standard field usage |
-| `customer_id` | INTEGER | ✓ | Reference to related entity | Association/lookup |
-| `visited_by` | INTEGER | ✓ | Description needed | Standard field usage |
-| `route_id` | INTEGER | - | Reference to related entity | Association/lookup |
-| `visit_purpose` | TEXT | ✓ | Description needed | Standard field usage |
-| `visit_outcome` | TEXT | - | Description needed | Standard field usage |
-| `order_id` | INTEGER | - | Reference to related entity | Association/lookup |
-| `collection_amount` | NUMERIC(15 | - | Description needed | Standard field usage |
-| `check_in_time` | TIMESTAMP | - | Description needed | Standard field usage |
-| `check_out_time` | TIMESTAMP | - | Description needed | Standard field usage |
-| `visit_location` | JSONB | - | Description needed | Standard field usage |
-| `visit_notes` | TEXT | - | Description needed | Standard field usage |
-| `follow_up_required` | BOOLEAN | - | Description needed | Standard field usage |
-| `follow_up_date` | DATE | - | Description needed | Standard field usage |
-| `follow_up_notes` | TEXT | - | Description needed | Standard field usage |
-| `visit_photos` | JSONB | - | Description needed | Standard field usage |
-| `visit_status` | TEXT | - | Description needed | Standard field usage |
-| `created_at` | TIMESTAMP | - | Timestamp field | Standard field usage |
-| `updated_at` | TIMESTAMP | - | Timestamp field | Standard field usage |
-
-**Foreign Key Relationships**:
-- `org_id` → `master.organizations.org_id`
-- `customer_id` → `parties.customers.customer_id`
-- `visited_by` → `master.org_users.user_id`
-- `route_id` → `parties.routes.route_id`
-- `order_id` → `sales.orders.order_id`
-
----
+**Documentation Status:** ✅ Updated 2025-10-16
+**Schema Version:** Production (Railway)
+**Total Tables:** 30 (+15 new tables from previous documentation)
+**Key Features:** Complete Order-to-Cash, Credit/Debit Notes, E-invoice, E-way Bills, Loyalty, Schemes, Field Sales, GPS Tracking
+**Major Additions:** Returns processing, Loyalty programs, Field sales visits, Delivery tracking, Pricing lists, Sales targets

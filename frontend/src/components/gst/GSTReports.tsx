@@ -42,6 +42,9 @@ interface GSTSummary {
   totalSGST: number;
   totalIGST: number;
   totalTax: number;
+  creditAdjustment?: number;
+  debitAdjustment?: number;
+  netAdjustment?: number;
 }
 
 interface GSTR1Data {
@@ -106,6 +109,10 @@ const GSTReports: React.FC<GSTReportsProps> = ({ onClose }) => {
     netAdjustment: 0,
     netTaxAdjustment: 0
   });
+
+  // Credit Notes pagination state
+  const [creditNotesCurrentPage, setCreditNotesCurrentPage] = useState<number>(1);
+  const [creditNotesPageSize, setCreditNotesPageSize] = useState<number>(25);
 
   const reportTypes: ReportType[] = [
     {
@@ -239,6 +246,18 @@ const GSTReports: React.FC<GSTReportsProps> = ({ onClose }) => {
       loadPaginatedGSTR2BData(1, pageSize);
     }
   }, [pageSize]);
+
+  // Reapply credit/debit note adjustments when notes data changes
+  useEffect(() => {
+    if (reportData && creditDebitNotesData.length > 0) {
+      console.log('[GST Reports] Reapplying adjustments due to notes data change');
+      const adjustedSummary = applyNoteAdjustments(reportData.summary, creditDebitNotesData);
+      setReportData(prev => prev ? {
+        ...prev,
+        summary: adjustedSummary
+      } : null);
+    }
+  }, [creditDebitNotesData]);
 
   const loadReportData = async (): Promise<void> => {
     console.log('[GST Reports] loadReportData called, selectedReport:', selectedReport);
@@ -607,7 +626,13 @@ const GSTReports: React.FC<GSTReportsProps> = ({ onClose }) => {
           console.warn('[GST Reports] Failed to fetch customer data, continuing without it:', err);
         }
 
-        return transformInvoicesToGSTR1(invoices, customerData);
+        const baseData = transformInvoicesToGSTR1(invoices, customerData);
+        // Apply credit/debit note adjustments
+        const adjustedSummary = applyNoteAdjustments(baseData.summary, creditDebitNotesData);
+        return {
+          ...baseData,
+          summary: adjustedSummary
+        };
       }
 
       // Fallback to dashboard summary if no invoices found
@@ -869,6 +894,64 @@ const GSTReports: React.FC<GSTReportsProps> = ({ onClose }) => {
         totalIGST: summary.igst_amount || 0,
         totalTax: (summary.cgst_amount || 0) + (summary.sgst_amount || 0) + (summary.igst_amount || 0)
       }
+    };
+  };
+
+  // Function to apply credit/debit note adjustments to GST summary
+  const applyNoteAdjustments = (summary: GSTSummary, notes: any[]): GSTSummary => {
+    console.log('[GST Reports] Applying adjustments:', { notesCount: notes?.length, summary });
+
+    if (!notes || notes.length === 0) {
+      console.log('[GST Reports] No notes to apply adjustments');
+      return summary;
+    }
+
+    const creditNotes = notes.filter(note => note.note_type === 'credit');
+    const debitNotes = notes.filter(note => note.note_type === 'debit');
+
+    console.log('[GST Reports] Credit notes:', creditNotes.length, 'Debit notes:', debitNotes.length);
+
+    // Calculate credit note reductions (reduce output tax)
+    const creditReduction = creditNotes.reduce((total, note) => {
+      // Try different field names for tax amount
+      const taxAmount = note.tax_amount ||
+                       (note.cgst_amount || 0) + (note.sgst_amount || 0) + (note.igst_amount || 0) ||
+                       note.total_gst || note.gst_amount || 0;
+      console.log('[GST Reports] Credit note tax amount:', taxAmount, 'from note:', note);
+      return total + taxAmount;
+    }, 0);
+
+    // Calculate debit note additions (add to output tax)
+    const debitAddition = debitNotes.reduce((total, note) => {
+      // Try different field names for tax amount
+      const taxAmount = note.tax_amount ||
+                       (note.cgst_amount || 0) + (note.sgst_amount || 0) + (note.igst_amount || 0) ||
+                       note.total_gst || note.gst_amount || 0;
+      console.log('[GST Reports] Debit note tax amount:', taxAmount, 'from note:', note);
+      return total + taxAmount;
+    }, 0);
+
+    console.log('[GST Reports] Calculated adjustments:', { creditReduction, debitAddition });
+
+    // Calculate net taxable value adjustments
+    const creditTaxableReduction = creditNotes.reduce((total, note) => {
+      return total + (note.taxable_amount || 0);
+    }, 0);
+
+    const debitTaxableAddition = debitNotes.reduce((total, note) => {
+      return total + (note.taxable_amount || 0);
+    }, 0);
+
+    return {
+      ...summary,
+      totalTaxableValue: summary.totalTaxableValue - creditTaxableReduction + debitTaxableAddition,
+      totalTax: summary.totalTax - creditReduction + debitAddition,
+      totalCGST: summary.totalCGST - (creditReduction / 2) + (debitAddition / 2), // Assuming CGST/SGST split
+      totalSGST: summary.totalSGST - (creditReduction / 2) + (debitAddition / 2),
+      // Store adjustments for display
+      creditAdjustment: creditReduction,
+      debitAdjustment: debitAddition,
+      netAdjustment: debitAddition - creditReduction
     };
   };
 
@@ -1191,44 +1274,46 @@ const GSTReports: React.FC<GSTReportsProps> = ({ onClose }) => {
       return (
         <div className="space-y-6">
           {/* Summary Cards */}
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4 mb-6">
             <Card padding="sm" shadow="sm">
-              <div className="flex items-center justify-between p-4">
-                <div>
-                  <p className="text-sm text-gray-600">Total Invoices</p>
-                  <p className="text-2xl font-bold text-gray-900">{reportData.summary.totalInvoices}</p>
-                </div>
-                <FileText className="w-8 h-8 text-blue-500" />
+              <div className="p-3 text-center">
+                <p className="text-xs text-gray-600">Invoices</p>
+                <p className="text-lg font-bold text-gray-900">{reportData.summary?.totalInvoices || 0}</p>
               </div>
             </Card>
-            
+
             <Card padding="sm" shadow="sm">
-              <div className="flex items-center justify-between p-4">
-                <div>
-                  <p className="text-sm text-gray-600">Taxable Value</p>
-                  <p className="text-2xl font-bold text-gray-900">₹{reportData.summary.totalTaxableValue.toLocaleString()}</p>
-                </div>
-                <IndianRupee className="w-8 h-8 text-green-500" />
+              <div className="p-3 text-center">
+                <p className="text-xs text-gray-600">Taxable Value</p>
+                <p className="text-lg font-bold text-gray-900">₹{(reportData.summary?.totalTaxableValue || 0).toLocaleString()}</p>
               </div>
             </Card>
-            
+
             <Card padding="sm" shadow="sm">
-              <div className="flex items-center justify-between p-4">
-                <div>
-                  <p className="text-sm text-gray-600">Total GST</p>
-                  <p className="text-2xl font-bold text-gray-900">₹{reportData.summary.totalTax.toLocaleString()}</p>
-                </div>
-                <BarChart3 className="w-8 h-8 text-purple-500" />
+              <div className="p-3 text-center">
+                <p className="text-xs text-gray-600">Original GST</p>
+                <p className="text-lg font-bold text-gray-900">₹{((reportData.summary?.totalTax || 0) + (reportData.summary?.creditAdjustment || 0) - (reportData.summary?.debitAdjustment || 0)).toLocaleString()}</p>
               </div>
             </Card>
-            
+
             <Card padding="sm" shadow="sm">
-              <div className="flex items-center justify-between p-4">
-                <div>
-                  <p className="text-sm text-gray-600">IGST Amount</p>
-                  <p className="text-2xl font-bold text-gray-900">₹{reportData.summary.totalIGST.toLocaleString()}</p>
-                </div>
-                <TrendingUp className="w-8 h-8 text-amber-500" />
+              <div className="p-3 text-center">
+                <p className="text-xs text-green-600">Credit Reduction</p>
+                <p className="text-lg font-bold text-green-600">-₹{(reportData.summary?.creditAdjustment || 0).toLocaleString()}</p>
+              </div>
+            </Card>
+
+            <Card padding="sm" shadow="sm">
+              <div className="p-3 text-center">
+                <p className="text-xs text-red-600">Debit Addition</p>
+                <p className="text-lg font-bold text-red-600">+₹{(reportData.summary?.debitAdjustment || 0).toLocaleString()}</p>
+              </div>
+            </Card>
+
+            <Card padding="sm" shadow="sm">
+              <div className="p-3 text-center">
+                <p className="text-xs text-purple-600">Net GST</p>
+                <p className="text-lg font-bold text-purple-600">₹{(reportData.summary?.totalTax || 0).toLocaleString()}</p>
               </div>
             </Card>
           </div>
@@ -1279,6 +1364,154 @@ const GSTReports: React.FC<GSTReportsProps> = ({ onClose }) => {
             </div>
           </Card>
 
+          {/* Credit Notes Section */}
+          {creditDebitNotesData.filter(note => note.note_type === 'credit').length > 0 && (
+            <Card title="Credit Notes Issued" className="mt-6">
+              <div className="overflow-x-auto">
+                <table className="min-w-full divide-y divide-gray-200">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Credit Note No.</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Customer</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Reason</th>
+                      <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Amount</th>
+                      <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Tax Reduction</th>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white divide-y divide-gray-200">
+                    {(() => {
+                      const creditNotes = creditDebitNotesData.filter(note => note.note_type === 'credit');
+                      const startIndex = (creditNotesCurrentPage - 1) * creditNotesPageSize;
+                      const endIndex = startIndex + creditNotesPageSize;
+                      const paginatedNotes = creditNotes.slice(startIndex, endIndex);
+
+                      return paginatedNotes.map((note: any, index: number) => (
+                        <tr key={index} className="hover:bg-gray-50">
+                          <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                            {note.note_number || note.credit_note_number}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                            {note.note_date || note.credit_note_date || note.return_date}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                            {note.customer_name || 'N/A'}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                            {note.reason || note.return_reason || 'Adjustment'}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 text-right">
+                            ₹{(note.amount || note.return_amount || 0).toLocaleString()}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-red-600 text-right">
+                            -₹{(note.tax_amount || 0).toLocaleString()}
+                          </td>
+                        </tr>
+                      ));
+                    })()}
+                  </tbody>
+                </table>
+                <div className="bg-gray-50 px-6 py-3">
+                  <div className="flex justify-between text-sm font-medium">
+                    <span>Total Credit Notes: {creditDebitNotesData.filter(note => note.note_type === 'credit').length}</span>
+                    <span className="text-red-600">
+                      Tax Reduction: -₹{creditDebitNotesData
+                        .filter(note => note.note_type === 'credit')
+                        .reduce((sum, note) => sum + (note.tax_amount || 0), 0)
+                        .toLocaleString()}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Credit Notes Pagination */}
+                {(() => {
+                  const creditNotes = creditDebitNotesData.filter(note => note.note_type === 'credit');
+                  const totalCreditNotes = creditNotes.length;
+
+                  if (totalCreditNotes > creditNotesPageSize) {
+                    return (
+                      <div className="bg-white px-6 py-3 flex items-center justify-between border-t border-gray-200">
+                        <div className="flex items-center space-x-2">
+                          <span className="text-sm text-gray-700">
+                            Showing {Math.min((creditNotesCurrentPage - 1) * creditNotesPageSize + 1, totalCreditNotes)} to{' '}
+                            {Math.min(creditNotesCurrentPage * creditNotesPageSize, totalCreditNotes)} of {totalCreditNotes} credit notes
+                          </span>
+                          <select
+                            value={creditNotesPageSize}
+                            onChange={(e) => {
+                              setCreditNotesPageSize(Number(e.target.value));
+                              setCreditNotesCurrentPage(1);
+                            }}
+                            className="border rounded px-2 py-1 text-sm"
+                          >
+                            <option value={25}>25 per page</option>
+                            <option value={50}>50 per page</option>
+                            <option value={100}>100 per page</option>
+                          </select>
+                        </div>
+
+                        <div className="flex items-center space-x-2">
+                          <button
+                            onClick={() => setCreditNotesCurrentPage(prev => Math.max(1, prev - 1))}
+                            disabled={creditNotesCurrentPage <= 1}
+                            className="px-3 py-1 text-sm border rounded disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
+                          >
+                            Previous
+                          </button>
+
+                          {/* Page numbers */}
+                          {Math.ceil(totalCreditNotes / creditNotesPageSize) > 1 && (
+                            <div className="flex space-x-1">
+                              {Array.from({ length: Math.min(5, Math.ceil(totalCreditNotes / creditNotesPageSize)) }, (_, i) => {
+                                const totalPages = Math.ceil(totalCreditNotes / creditNotesPageSize);
+                                let pageNum;
+
+                                if (totalPages <= 5) {
+                                  pageNum = i + 1;
+                                } else if (creditNotesCurrentPage <= 3) {
+                                  pageNum = i + 1;
+                                } else if (creditNotesCurrentPage >= totalPages - 2) {
+                                  pageNum = totalPages - 4 + i;
+                                } else {
+                                  pageNum = creditNotesCurrentPage - 2 + i;
+                                }
+
+                                return (
+                                  <button
+                                    key={pageNum}
+                                    onClick={() => setCreditNotesCurrentPage(pageNum)}
+                                    className={`px-3 py-1 text-sm border rounded ${
+                                      creditNotesCurrentPage === pageNum
+                                        ? 'bg-blue-500 text-white border-blue-500'
+                                        : 'hover:bg-gray-50'
+                                    }`}
+                                  >
+                                    {pageNum}
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          )}
+
+                          <button
+                            onClick={() => setCreditNotesCurrentPage(prev =>
+                              Math.min(Math.ceil(totalCreditNotes / creditNotesPageSize), prev + 1)
+                            )}
+                            disabled={creditNotesCurrentPage >= Math.ceil(totalCreditNotes / creditNotesPageSize)}
+                            className="px-3 py-1 text-sm border rounded disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
+                          >
+                            Next
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  }
+                  return null;
+                })()}
+              </div>
+            </Card>
+          )}
+
           {/* B2C Summary */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <Card title="B2C Small (Below ₹2.5L)">
@@ -1315,61 +1548,6 @@ const GSTReports: React.FC<GSTReportsProps> = ({ onClose }) => {
               </div>
             </Card>
           </div>
-
-          {/* Credit Notes Section */}
-          {creditDebitNotesData.filter(note => note.note_type === 'credit').length > 0 && (
-            <Card title="Credit Notes Issued" className="mt-6">
-              <div className="overflow-x-auto">
-                <table className="min-w-full divide-y divide-gray-200">
-                  <thead className="bg-gray-50">
-                    <tr>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Credit Note No.</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Customer</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Reason</th>
-                      <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Amount</th>
-                      <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Tax Reduction</th>
-                    </tr>
-                  </thead>
-                  <tbody className="bg-white divide-y divide-gray-200">
-                    {creditDebitNotesData.filter(note => note.note_type === 'credit').map((note: any, index: number) => (
-                      <tr key={index} className="hover:bg-gray-50">
-                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                          {note.note_number || note.credit_note_number}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                          {note.note_date || note.credit_note_date || note.return_date}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                          {note.customer_name || 'N/A'}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                          {note.reason || note.return_reason || 'Adjustment'}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 text-right">
-                          ₹{(note.amount || note.return_amount || 0).toLocaleString()}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-red-600 text-right">
-                          -₹{(note.tax_amount || 0).toLocaleString()}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-                <div className="bg-gray-50 px-6 py-3">
-                  <div className="flex justify-between text-sm font-medium">
-                    <span>Total Credit Notes: {creditDebitNotesData.filter(note => note.note_type === 'credit').length}</span>
-                    <span className="text-red-600">
-                      Tax Reduction: -₹{creditDebitNotesData
-                        .filter(note => note.note_type === 'credit')
-                        .reduce((sum, note) => sum + (note.tax_amount || 0), 0)
-                        .toLocaleString()}
-                    </span>
-                  </div>
-                </div>
-              </div>
-            </Card>
-          )}
         </div>
       );
     }
@@ -1858,7 +2036,7 @@ const GSTReports: React.FC<GSTReportsProps> = ({ onClose }) => {
               <div className="flex items-center justify-between p-4">
                 <div>
                   <p className="text-sm text-gray-600">Total Sales</p>
-                  <p className="text-2xl font-bold text-gray-900">₹{reportData.summary.totalTaxableValue.toLocaleString()}</p>
+                  <p className="text-2xl font-bold text-gray-900">₹{(reportData.summary?.totalTaxableValue || 0).toLocaleString()}</p>
                 </div>
                 <IndianRupee className="w-8 h-8 text-amber-500" />
               </div>

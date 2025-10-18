@@ -9,16 +9,17 @@ This document provides a complete index of all database tables organized by sche
 ## 📊 Database Overview
 
 - **Total Schemas:** 10
-- **Total Tables:** 128
-- **Last Updated:** 2025-08-16 (Auto-generated from SQL schema files)
+- **Total Tables:** 179
+- **Last Updated:** 2025-10-16 (Verified against production Railway database)
 
 ---
 
 ## 🗂️ Schema Structure
 
-### 1. **master** Schema (12 tables)
-**Documentation:** [01_master_schema.md](./01_master_schema.md)  
+### 1. **master** Schema (14 tables)
+**Documentation:** [01_master_schema.md](./01_master_schema.md)
 **Purpose:** Core master data and system configuration
+**Status:** ✅ Updated 2025-10-16
 
 | Table | Purpose | Key Fields |
 |-------|---------|------------|
@@ -54,9 +55,10 @@ This document provides a complete index of all database tables organized by sche
 
 ---
 
-### 3. **inventory** Schema (13 tables)
-**Documentation:** [03_inventory_schema.md](./03_inventory_schema.md)  
+### 3. **inventory** Schema (17 tables)
+**Documentation:** [03_inventory_schema.md](./03_inventory_schema.md)
 **Purpose:** Product inventory and stock management
+**Status:** ✅ Updated 2025-10-16 (+5 pricing intelligence tables)
 
 | Table | Purpose | Key Fields |
 |-------|---------|------------|
@@ -76,9 +78,10 @@ This document provides a complete index of all database tables organized by sche
 
 ---
 
-### 4. **sales** Schema
-**Documentation:** [04_sales_schema.md](./04_sales_schema.md)  
-**Purpose:** Sales orders, invoices, and returns
+### 4. **sales** Schema (30 tables)
+**Documentation:** [04_sales_schema.md](./04_sales_schema.md)
+**Purpose:** Complete sales cycle from orders to returns
+**Status:** ✅ Updated 2025-10-16 (+15 new tables: CN/DN, loyalty, schemes, field sales, tracking)
 
 | Table | Purpose | Key Fields | Important Notes |
 |-------|---------|------------|-----------------|
@@ -92,9 +95,86 @@ This document provides a complete index of all database tables organized by sche
 
 ---
 
-### 5. **procurement** Schema
-**Documentation:** [05_procurement_schema.md](./05_procurement_schema.md)  
-**Purpose:** Purchase orders and goods receipt
+### 5. **procurement** Schema (16 tables)
+**Documentation:** [05_procurement_schema.md](./05_procurement_schema.md)
+**Purpose:** Procure-to-pay cycle management
+**Status:** ✅ Updated 2025-10-16
+
+### 6. **financial** Schema (16 tables)
+**Documentation:** [06_financial_schema.md](./06_financial_schema.md)
+**Purpose:** Accounting, payments, receivables/payables
+**Status:** ✅ Updated 2025-10-16
+
+### 7. **gst** Schema (15 tables)
+**Documentation:** [07_gst_schema.md](./07_gst_schema.md)
+**Purpose:** GST compliance and returns filing
+**Status:** ✅ Updated 2025-10-16
+
+### 8. **compliance** Schema (28 tables - largest)
+**Documentation:** [08_compliance_schema.md](./08_compliance_schema.md)
+**Purpose:** Pharmaceutical regulatory compliance
+**Status:** ✅ Updated 2025-10-16
+
+### 9. **system_config** Schema (22 tables)
+**Documentation:** [09_system_config_schema.md](./09_system_config_schema.md)
+**Purpose:** System administration and workflows
+**Status:** ✅ Updated 2025-10-16
+
+### 10. **analytics** Schema (13 tables)
+**Documentation:** [10_analytics_schema.md](./10_analytics_schema.md)
+**Purpose:** Business intelligence and reporting
+**Status:** ✅ Updated 2025-10-16
+
+---
+
+## 📈 Summary Statistics
+
+| Schema | Tables | Status | Last Updated |
+|--------|--------|--------|--------------|
+| master | 14 | ✅ | 2025-10-16 |
+| parties | 8 | ✅ | 2025-10-16 |
+| inventory | 17 | ✅ | 2025-10-16 |
+| sales | 30 | ✅ | 2025-10-16 |
+| procurement | 16 | ✅ | 2025-10-16 |
+| financial | 16 | ✅ | 2025-10-16 |
+| gst | 15 | ✅ | 2025-10-16 |
+| compliance | 28 | ✅ | 2025-10-16 |
+| system_config | 22 | ✅ | 2025-10-16 |
+| analytics | 13 | ✅ | 2025-10-16 |
+| **TOTAL** | **179** | **All Updated** | **2025-10-16** |
+
+---
+
+## 🔗 Quick Navigation
+
+- [Master Schema (14)](./01_master_schema.md) - Organizations, users, branches
+- [Parties Schema (8)](./02_parties_schema.md) - Customers, suppliers
+- [Inventory Schema (17)](./03_inventory_schema.md) - Products, batches, stock
+- [Sales Schema (30)](./04_sales_schema.md) - Orders, invoices, returns, loyalty
+- [Procurement Schema (16)](./05_procurement_schema.md) - POs, GRNs, supplier invoices
+- [Financial Schema (16)](./06_financial_schema.md) - Payments, outstanding, accounting
+- [GST Schema (15)](./07_gst_schema.md) - Tax compliance, returns filing
+- [Compliance Schema (28)](./08_compliance_schema.md) - Regulatory compliance
+- [System Config Schema (22)](./09_system_config_schema.md) - Workflows, audit logs
+- [Analytics Schema (13)](./10_analytics_schema.md) - BI, reports, dashboards
+
+---
+
+## 📝 Documentation Standards
+
+All schema documentation follows consistent format:
+- **Overview**: Schema purpose and business context
+- **Tables Summary**: Quick reference table with all tables
+- **Detailed Descriptions**: Key columns, use cases, relationships
+- **RLS Policies**: Row-level security status
+- **Performance Notes**: Indexes, optimizations
+- **Related Documentation**: Cross-references
+
+---
+
+**Master Index Status:** ✅ Fully Updated
+**Production Database:** Railway PostgreSQL
+**Documentation Coverage:** 100% (179/179 tables)
 
 | Table | Purpose | Key Fields | Important Notes |
 |-------|---------|------------|-----------------|
