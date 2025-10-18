@@ -131,12 +131,13 @@ async def login(
         try:
             db.execute(text("""
                 UPDATE master.org_users 
-                SET last_login_at = CURRENT_TIMESTAMP
+                SET last_login = CURRENT_TIMESTAMP,
+                    login_count = COALESCE(login_count, 0) + 1
                 WHERE user_id = :user_id
             """), {"user_id": user.user_id})
             db.commit()
         except Exception:
-            # If last_login_at column doesn't exist, skip update
+            # If update fails, continue without updating login time
             pass
         
         # Return proper token response
@@ -208,7 +209,8 @@ async def login(
             # Update last login
             db.execute(text("""
                 UPDATE master.org_users 
-                SET last_login_at = CURRENT_TIMESTAMP
+                SET last_login = CURRENT_TIMESTAMP,
+                    login_count = COALESCE(login_count, 0) + 1
                 WHERE user_id = :user_id
             """), {"user_id": user.user_id})
             db.commit()
