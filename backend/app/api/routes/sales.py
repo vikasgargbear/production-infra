@@ -14,7 +14,7 @@ from pydantic import BaseModel, Field
 
 from ...core.database import get_db
 from ...core.auth_utils import get_org_id_from_header
-from ..services.gst_service import GSTService, GSTType
+from ..services.gst_service import GSTService
 
 logger = logging.getLogger(__name__)
 

@@ -34,8 +34,8 @@ class GSTService:
         Automatically determine GST type based on company and party locations
 
         GST Rules:
-        - Same state: Intra-state ’ CGST/SGST (each 50% of rate)
-        - Different state: Inter-state ’ IGST (full rate)
+        - Same state: Intra-state - CGST/SGST (each 50% of rate)
+        - Different state: Inter-state - IGST (full rate)
         - SEZ/Export: Special handling (future enhancement)
 
         Args:
@@ -123,10 +123,10 @@ class GSTService:
             party_state_clean = party_state.strip().upper()
 
             if company_state_clean == party_state_clean:
-                logger.debug(f"Intra-state: {company_state} ’ CGST/SGST")
+                logger.debug(f"Intra-state: {company_state} - CGST/SGST")
                 return "CGST/SGST"
             else:
-                logger.debug(f"Inter-state: {company_state} ’ {party_state} ’ IGST")
+                logger.debug(f"Inter-state: {company_state} - {party_state} - IGST")
                 return "IGST"
 
         except Exception as e:
@@ -244,8 +244,8 @@ class GSTService:
         Complete calculation for a line item (one product in invoice/order)
 
         Calculation flow:
-        1. Gross amount = base_quantity × unit_price
-        2. Discount amount = gross_amount × discount_percent / 100
+        1. Gross amount = base_quantity * unit_price
+        2. Discount amount = gross_amount * discount_percent / 100
         3. Taxable amount = gross_amount - discount_amount
         4. Tax components = based on gst_type (CGST/SGST or IGST)
         5. Line total = taxable_amount + tax_amount
