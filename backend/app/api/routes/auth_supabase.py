@@ -44,15 +44,22 @@ async def login(
         from ...core.jwt_auth import verify_password, create_access_token
         from datetime import timedelta
         
-        user = db.execute(text("""
-            SELECT u.user_id, u.username, u.email, u.first_name, u.last_name,
-                   u.org_id, u.is_admin, u.is_active, u.auth_user_id, u.password_hash,
-                   u.role_id, u.permissions,
-                   o.org_name, o.is_active as org_active
-            FROM master.org_users u
-            JOIN master.organizations o ON u.org_id = o.org_id
-            WHERE u.email = :email
-        """), {"email": request.email}).fetchone()
+        try:
+            user = db.execute(text("""
+                SELECT u.user_id, u.username, u.email, u.first_name, u.last_name,
+                       u.org_id, u.is_admin, u.is_active, u.auth_user_id, u.password_hash,
+                       u.role_id, u.permissions,
+                       o.org_name, o.is_active as org_active
+                FROM master.org_users u
+                JOIN master.organizations o ON u.org_id = o.org_id
+                WHERE u.email = :email
+            """), {"email": request.email}).fetchone()
+        except Exception as e:
+            logger.error(f"Database query failed: {str(e)}")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Database error: {str(e)}"
+            )
         
         if not user:
             raise HTTPException(
