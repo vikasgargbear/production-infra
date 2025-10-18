@@ -265,12 +265,18 @@ def get_tenant_aware_db():
     """
     from ..core.database import get_db
     
-    # Import inside function to avoid circular imports
-    for session in get_db():
+    # Get the generator from get_db and extract the session
+    db_generator = get_db()
+    session = next(db_generator)
+    
+    try:
+        yield TenantAwareSession(session)
+    finally:
+        # Properly close the session
         try:
-            yield TenantAwareSession(session)
-        finally:
-            pass  # Session cleanup handled by get_db
+            next(db_generator)  # This should trigger the cleanup in get_db
+        except StopIteration:
+            pass  # Expected when generator is exhausted
 
 
 # Decorator for automatic tenant context

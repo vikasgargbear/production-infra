@@ -12,9 +12,9 @@ from functools import lru_cache
 
 from ...core.database import get_db, SessionLocal
 from ...core.auth_utils import get_org_id_from_header
-# Temporarily removed tenant service imports to fix dependency issues
-# from ...core.tenant_service import get_tenant_aware_db, with_tenant_context, TenantAwareSession, TenantContext  
-# from ...core.org_context import get_org_context, OrgContext
+# FIXED: Restored tenant service imports with corrected dependency
+from ...core.tenant_service import get_tenant_aware_db, with_tenant_context, TenantAwareSession, TenantContext  
+from ...core.org_context import get_org_context, OrgContext
 from ..schemas.customer import (
     CustomerCreate, CustomerUpdate, CustomerResponse, CustomerListResponse,
     CustomerLedgerResponse, CustomerOutstandingResponse,
@@ -199,6 +199,7 @@ async def create_customer(
         raise HTTPException(status_code=500, detail=f"Failed to create customer: {str(e)}")
 
 @router.get("/", response_model=CustomerListResponse)
+@with_tenant_context  # FIXED: Automatic tenant filtering
 async def list_customers(
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=1000),
@@ -209,7 +210,8 @@ async def list_customers(
     has_gstin: Optional[bool] = None,
     include_stats: bool = Query(False, description="Include business statistics (disabled by default for performance)"),
     fast_search: bool = Query(True, description="Use fast search mode (minimal data for quick response)"),
-    org_id: str = Depends(get_org_id_from_header)  # Use regular org_id dependency
+    context: OrgContext = Depends(get_org_context),  # FIXED: Tenant context
+    db: TenantAwareSession = Depends(get_tenant_aware_db)  # FIXED: Tenant-aware DB
 ):
     """
     List customers with search, filter, and pagination
@@ -220,8 +222,6 @@ async def list_customers(
     - **has_gstin**: Filter customers with/without GST number
     - **include_stats**: Include business statistics (set to false for faster response)
     """
-    # Create database session manually to avoid dependency issues
-    db = SessionLocal()
     try:
         logger.info(f"Customer search request: search={search}, limit={limit}, skip={skip}, include_stats={include_stats}")
         
@@ -235,10 +235,10 @@ async def list_customers(
             # Full query for detailed view
             query = "SELECT * FROM parties.customers"
         count_query = "SELECT COUNT(*) FROM parties.customers"
-        params = {"org_id": org_id}  # Add org_id filtering manually
+        params = {}  # FIXED: No manual org_id needed - handled by tenant service
         
         # Add filters - build WHERE conditions
-        where_conditions = ["org_id = :org_id"]  # Add org_id filtering
+        where_conditions = []  # FIXED: No manual org_id filtering - automatic via tenant service
         
         if search:
             search_condition = """(
@@ -342,8 +342,7 @@ async def list_customers(
     except Exception as e:
         logger.error(f"Error listing customers: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to list customers: {str(e)}")
-    finally:
-        db.close()  # Ensure database session is closed
+    # FIXED: No manual session closing needed - handled by tenant service dependency
 
 @router.get("/{customer_id}", response_model=CustomerResponse)
 async def get_customer(
