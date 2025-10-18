@@ -46,12 +46,14 @@ async def login(
         
         try:
             user = db.execute(text("""
-                SELECT u.user_id, u.username, u.email, u.first_name, u.last_name,
-                       u.org_id, u.is_admin, u.is_active, u.auth_user_id, u.password_hash,
-                       u.role_id, u.permissions,
-                       o.org_name, o.is_active as org_active
+                SELECT u.user_id, u.username, u.email, u.full_name,
+                       u.org_id, u.is_active, u.password_hash,
+                       u.role_id, u.branch_id,
+                       o.org_name, o.is_active as org_active,
+                       r.permissions
                 FROM master.org_users u
                 JOIN master.organizations o ON u.org_id = o.org_id
+                LEFT JOIN master.roles r ON u.role_id = r.role_id
                 WHERE u.email = :email
             """), {"email": request.email}).fetchone()
         except Exception as e:
@@ -87,17 +89,18 @@ async def login(
                 detail="Account is not active"
             )
         
-        # Get user's branch_id
-        branch_result = db.execute(text("""
-            SELECT b.branch_id 
-            FROM master.org_branches b
-            WHERE b.org_id = :org_id 
-            AND b.is_active = true
-            ORDER BY b.is_default_location DESC, b.branch_id
-            LIMIT 1
-        """), {"org_id": str(user.org_id)}).fetchone()
-        
-        branch_id = branch_result.branch_id if branch_result else None
+        # Use user's branch_id or get default branch
+        branch_id = user.branch_id
+        if not branch_id:
+            branch_result = db.execute(text("""
+                SELECT b.branch_id 
+                FROM master.org_branches b
+                WHERE b.org_id = :org_id 
+                AND b.is_active = true
+                ORDER BY b.branch_id
+                LIMIT 1
+            """), {"org_id": str(user.org_id)}).fetchone()
+            branch_id = branch_result.branch_id if branch_result else None
         
         # Create proper JWT token
         access_token_expires = timedelta(minutes=1440)  # 24 hours
@@ -107,7 +110,6 @@ async def login(
                 "email": user.email,
                 "org_id": str(user.org_id),
                 "role_id": user.role_id,
-                "is_admin": user.is_admin,
                 "branch_id": branch_id,
                 "permissions": user.permissions if user.permissions else {}
             },
@@ -117,7 +119,7 @@ async def login(
         # Update last login
         db.execute(text("""
             UPDATE master.org_users 
-            SET last_login = CURRENT_TIMESTAMP
+            SET last_login_at = CURRENT_TIMESTAMP
             WHERE user_id = :user_id
         """), {"user_id": user.user_id})
         db.commit()
@@ -129,11 +131,11 @@ async def login(
             "user": {
                 "id": user.user_id,
                 "email": user.email,
-                "name": f"{user.first_name} {user.last_name or ''}".strip(),
+                "name": user.full_name or user.username,
                 "org_id": str(user.org_id),
                 "org_name": user.org_name,
-                "is_admin": user.is_admin,
                 "role_id": user.role_id,
+                "branch_id": branch_id,
                 "permissions": user.permissions if user.permissions else {}
             }
         }
@@ -162,18 +164,17 @@ async def login(
             
             auth_data = response.json()
             
-            # Get user details from our database using auth_user_id
+            # Get user details from our database using email
             supabase_user_id = auth_data.get("user", {}).get("id")
             
             user = db.execute(text("""
-                SELECT u.user_id, u.username, u.email, u.first_name, u.last_name,
-                       u.org_id, u.is_admin, u.is_active,
+                SELECT u.user_id, u.username, u.email, u.full_name,
+                       u.org_id, u.is_active,
                        o.org_name, o.is_active as org_active
                 FROM master.org_users u
                 JOIN master.organizations o ON u.org_id = o.org_id
-                WHERE u.auth_user_id = :auth_user_id OR u.email = :email
+                WHERE u.email = :email
             """), {
-                "auth_user_id": supabase_user_id,
                 "email": request.email
             }).fetchone()
             
@@ -192,8 +193,7 @@ async def login(
             # Update last login
             db.execute(text("""
                 UPDATE master.org_users 
-                SET last_login = CURRENT_TIMESTAMP,
-                    login_count = COALESCE(login_count, 0) + 1
+                SET last_login_at = CURRENT_TIMESTAMP
                 WHERE user_id = :user_id
             """), {"user_id": user.user_id})
             db.commit()
@@ -207,10 +207,9 @@ async def login(
                 "user": {
                     "id": user.user_id,
                     "email": user.email,
-                    "name": f"{user.first_name} {user.last_name or ''}".strip(),
+                    "name": user.full_name or user.username,
                     "org_id": str(user.org_id),
-                    "org_name": user.org_name,
-                    "is_admin": user.is_admin
+                    "org_name": user.org_name
                 }
             }
             
@@ -286,8 +285,8 @@ async def get_profile(
     if token.startswith("local_token_"):
         user_id = int(token.replace("local_token_", ""))
         user = db.execute(text("""
-            SELECT u.user_id, u.username, u.email, u.first_name, u.last_name,
-                   u.org_id, u.is_admin, u.is_active,
+            SELECT u.user_id, u.username, u.email, u.full_name,
+                   u.org_id, u.is_active,
                    o.org_name
             FROM master.org_users u
             JOIN master.organizations o ON u.org_id = o.org_id
@@ -303,10 +302,9 @@ async def get_profile(
         return {
             "id": user.user_id,
             "email": user.email,
-            "name": f"{user.first_name} {user.last_name or ''}".strip(),
+            "name": user.full_name or user.username,
             "org_id": str(user.org_id),
-            "org_name": user.org_name,
-            "is_admin": user.is_admin
+            "org_name": user.org_name
         }
     
     # For Supabase tokens, validate with Supabase
@@ -339,14 +337,13 @@ async def get_profile(
             
             # Get our user data
             user = db.execute(text("""
-                SELECT u.user_id, u.username, u.email, u.first_name, u.last_name,
-                       u.org_id, u.is_admin, u.is_active,
+                SELECT u.user_id, u.username, u.email, u.full_name,
+                       u.org_id, u.is_active,
                        o.org_name
                 FROM master.org_users u
                 JOIN master.organizations o ON u.org_id = o.org_id
-                WHERE u.auth_user_id = :auth_user_id OR u.email = :email
+                WHERE u.email = :email
             """), {
-                "auth_user_id": supabase_user.get("id"),
                 "email": supabase_user.get("email")
             }).fetchone()
             
@@ -359,10 +356,9 @@ async def get_profile(
             return {
                 "id": user.user_id,
                 "email": user.email,
-                "name": f"{user.first_name} {user.last_name or ''}".strip(),
+                "name": user.full_name or user.username,
                 "org_id": str(user.org_id),
-                "org_name": user.org_name,
-                "is_admin": user.is_admin
+                "org_name": user.org_name
             }
             
     except httpx.RequestError as e:
