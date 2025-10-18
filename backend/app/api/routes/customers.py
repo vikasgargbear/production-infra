@@ -198,7 +198,6 @@ async def create_customer(
         raise HTTPException(status_code=500, detail=f"Failed to create customer: {str(e)}")
 
 @router.get("/", response_model=CustomerListResponse)
-@with_tenant_context  # NEW: Automatic tenant filtering
 async def list_customers(
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=1000),
@@ -209,8 +208,8 @@ async def list_customers(
     has_gstin: Optional[bool] = None,
     include_stats: bool = Query(False, description="Include business statistics (disabled by default for performance)"),
     fast_search: bool = Query(True, description="Use fast search mode (minimal data for quick response)"),
-    context: OrgContext = Depends(get_org_context),  # NEW: Org context
-    db: TenantAwareSession = Depends(get_tenant_aware_db)  # NEW: Tenant-aware DB
+    org_id: str = Depends(get_org_id_from_header),  # Use regular org_id dependency
+    db: Session = Depends(get_db)  # Use regular database session
 ):
     """
     List customers with search, filter, and pagination
@@ -234,10 +233,10 @@ async def list_customers(
             # Full query for detailed view
             query = "SELECT * FROM parties.customers"
         count_query = "SELECT COUNT(*) FROM parties.customers"
-        params = {}  # No manual org_id - tenant service adds it automatically
+        params = {"org_id": org_id}  # Add org_id filtering manually
         
         # Add filters - build WHERE conditions
-        where_conditions = []
+        where_conditions = ["org_id = :org_id"]  # Add org_id filtering
         
         if search:
             search_condition = """(
