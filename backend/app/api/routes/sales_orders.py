@@ -962,8 +962,8 @@ async def get_sales_order_dashboard(
                 COALESCE(SUM(final_amount), 0) as total_value,
                 COALESCE(SUM(final_amount) FILTER (WHERE order_date = CURRENT_DATE), 0) as today_value
             FROM sales.orders 
-            WHERE org_id = :org_id AND order_type = 'sales'
-        """), {"org_id": org_id}).fetchone()
+            WHERE order_type = 'sales'
+        """), {}).fetchone()
         
         return {
             "total_orders": stats.total_orders,
