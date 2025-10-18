@@ -11,6 +11,7 @@ from uuid import UUID
 import logging
 import re
 from functools import wraps
+from fastapi import Depends
 
 logger = logging.getLogger(__name__)
 
@@ -244,8 +245,11 @@ class TenantAwareSession:
         return self.session.close()
 
 
+# Import at module level to avoid circular imports
+from ..core.database import get_db
+
 # FastAPI Dependency
-def get_tenant_aware_db():
+def get_tenant_aware_db(session: Session = Depends(get_db)):
     """
     FastAPI dependency that provides tenant-aware database session
     
@@ -262,13 +266,7 @@ def get_tenant_aware_db():
         result = db.execute("SELECT * FROM customers")
         return result.fetchall()
     """
-    from .database import get_db
-    from fastapi import Depends
-    
-    def _tenant_db_dependency(session: Session = Depends(get_db)):
-        return TenantAwareSession(session)
-    
-    return _tenant_db_dependency
+    return TenantAwareSession(session)
 
 
 # Decorator for automatic tenant context
