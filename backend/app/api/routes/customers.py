@@ -272,7 +272,6 @@ async def list_customers(
         
         # Get total count
         logger.debug(f"Executing count query: {count_query}")
-        logger.error(f"DEBUG: db type is: {type(db)}, db value is: {db}")  # Debug logging
         total = db.execute(text(count_query), params).scalar()
         logger.info(f"Total customers found: {total}")
         
