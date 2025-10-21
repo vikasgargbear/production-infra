@@ -143,6 +143,7 @@ function App(): JSX.Element {
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {
     return authService.isAuthenticated();
   });
+  const [isAuthLoading, setIsAuthLoading] = useState<boolean>(!authService.isAuthenticated());
   const [setupComplete, setSetupComplete] = useState<boolean | null>(null);
   const [isCheckingSetup, setIsCheckingSetup] = useState<boolean>(true);
 
@@ -179,14 +180,24 @@ function App(): JSX.Element {
 
   // Initialize Authentication on app load
   useEffect(() => {
-    // Auto-login if credentials are available
-    if (!isAuthenticated) {
-      authService.autoLogin().then(result => {
-        if (result.success) {
-          setIsAuthenticated(true);
+    const initAuth = async () => {
+      // Auto-login if credentials are available
+      if (!isAuthenticated) {
+        setIsAuthLoading(true);
+        try {
+          const result = await authService.autoLogin();
+          if (result.success) {
+            setIsAuthenticated(true);
+          }
+        } catch (error) {
+          console.error('Auto-login failed:', error);
+        } finally {
+          setIsAuthLoading(false);
         }
-      });
-    }
+      }
+    };
+
+    initAuth();
 
     // OrgIdManager handles org_id initialization automatically
     import('./services/OrgIdManager').then(module => {
@@ -286,8 +297,8 @@ function App(): JSX.Element {
     );
   }
 
-  // Show loading while checking setup status
-  if (isCheckingSetup) {
+  // Show loading while checking setup status or initializing auth
+  if (isCheckingSetup || isAuthLoading) {
     return <LoadingSpinner />;
   }
 
