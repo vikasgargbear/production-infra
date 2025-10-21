@@ -236,10 +236,8 @@ async def create_product(
     Create a new product
     """
     try:
-        # Convert org_id to UUID for database operations
-        from uuid import UUID
-        if isinstance(org_id, str):
-            org_id = UUID(org_id)
+        # Get org_id from context
+        org_id = context.org_id
         
         logger.info(f"Creating product with data: {product}")
         # Map frontend fields to database fields (matching actual table columns)
