@@ -6,6 +6,7 @@ import MonthYearPicker from '../MonthYearPicker';
 import DataTransformer from '../../../services/dataTransformer';
 import { APP_CONFIG } from '../../../config/app.config';
 import { useToast } from '../ui/feedback/Toast';
+import { SlideInPanel } from '../ui/FullScreenModal';
 
 const ProductCreationModal = ({ 
   show, 
@@ -377,15 +378,46 @@ const ProductCreationModal = ({
     }
   };
 
-  if (!show) return null;
-
   return (
-    <div className="fixed inset-0 bg-black/30 backdrop-blur-sm flex items-center justify-center z-50 animate-fade-in">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-5xl mx-4 max-h-[90vh] overflow-hidden transform transition-all animate-slide-up">
-        {/* Header */}
-        <div className="bg-gradient-to-r from-gray-50 to-white px-8 py-6 border-b border-gray-100">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-3">
+    <SlideInPanel
+      isOpen={show}
+      onClose={onClose}
+      title="Add New Product"
+      subtitle="Create a new product with batch - Use Tab/Enter to navigate"
+      width="2xl"
+      footer={
+        <div className="flex justify-between items-center">
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={saving}
+            className="px-6 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50"
+          >
+            Cancel (Esc)
+          </button>
+          <button
+            onClick={saveProduct}
+            disabled={saving}
+            className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 flex items-center gap-2"
+          >
+            {saving && <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />}
+            {saving ? 'Saving...' : 'Save Product'}
+          </button>
+        </div>
+      }
+    >
+      <div className="space-y-6">
+        {/* Icon Header */}
+        <div className="flex items-center space-x-3 pb-4 border-b border-gray-200">
+          <div className="w-10 h-10 bg-green-100 rounded-xl flex items-center justify-center">
+            <Package className="w-5 h-5 text-green-600" />
+          </div>
+          <div className="text-sm text-gray-600">
+            Fill in product details below. Press <kbd className="px-2 py-1 bg-gray-100 border border-gray-300 rounded text-xs font-mono">Tab</kbd> or <kbd className="px-2 py-1 bg-gray-100 border border-gray-300 rounded text-xs font-mono">Enter</kbd> to navigate fields.
+          </div>
+        </div>
+
+        <div className="flex items-center justify-between">
               <div className="w-10 h-10 bg-green-100 rounded-xl flex items-center justify-center">
                 <Package className="w-5 h-5 text-green-600" />
               </div>

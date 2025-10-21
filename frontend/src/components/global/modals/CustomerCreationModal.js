@@ -3,6 +3,7 @@ import { X, User, Phone, Mail, MapPin, Building, FileText, Shield, Calendar, Cre
 import { customerAPI } from '../../../services/api';
 import DataTransformer from '../../../services/dataTransformer';
 import { APP_CONFIG } from '../../../config/app.config';
+import { SlideInPanel } from '../ui/FullScreenModal';
 
 const CustomerCreationModal = ({ show, onClose, onCustomerCreated }) => {
   const [isBusinessCustomer, setIsBusinessCustomer] = useState(true); // Toggle for Business vs Individual
@@ -108,34 +109,44 @@ const CustomerCreationModal = ({ show, onClose, onCustomerCreated }) => {
     }
   };
 
-  if (!show) return null;
-
   return (
-    <div className="fixed inset-0 bg-black/30 backdrop-blur-sm flex items-center justify-center z-50 animate-fade-in">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl mx-4 max-h-[90vh] overflow-hidden transform transition-all animate-slide-up">
-        {/* Header */}
-        <div className="bg-gradient-to-r from-gray-50 to-white px-8 py-6 border-b border-gray-100">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-3">
-              <div className="w-10 h-10 bg-blue-100 rounded-xl flex items-center justify-center">
-                <User className="w-5 h-5 text-blue-600" />
-              </div>
-              <div>
-                <h3 className="text-2xl font-semibold text-gray-900">Add New Customer</h3>
-                <p className="text-sm text-gray-500 mt-1">Create a new customer profile</p>
-              </div>
-            </div>
-            <button
-              onClick={onClose}
-              className="p-2 hover:bg-gray-100 rounded-xl transition-all duration-200 group"
-            >
-              <X className="w-5 h-5 text-gray-400 group-hover:text-gray-600" />
-            </button>
+    <SlideInPanel
+      isOpen={show}
+      onClose={onClose}
+      title="Add New Customer"
+      subtitle="Create a new customer profile - Use Tab/Enter to navigate"
+      width="xl"
+      footer={
+        <div className="flex justify-between items-center">
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={saving}
+            className="px-6 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50"
+          >
+            Cancel (Esc)
+          </button>
+          <button
+            onClick={saveCustomer}
+            disabled={saving}
+            className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 flex items-center gap-2"
+          >
+            {saving && <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />}
+            {saving ? 'Saving...' : 'Save Customer'}
+          </button>
+        </div>
+      }
+    >
+      <div className="space-y-6">
+        {/* Icon Header */}
+        <div className="flex items-center space-x-3 pb-4 border-b border-gray-200">
+          <div className="w-10 h-10 bg-blue-100 rounded-xl flex items-center justify-center">
+            <User className="w-5 h-5 text-blue-600" />
+          </div>
+          <div className="text-sm text-gray-600">
+            Fill in customer details below. Press <kbd className="px-2 py-1 bg-gray-100 border border-gray-300 rounded text-xs font-mono">Tab</kbd> or <kbd className="px-2 py-1 bg-gray-100 border border-gray-300 rounded text-xs font-mono">Enter</kbd> to navigate.
           </div>
         </div>
-        
-        {/* Content */}
-        <div className="p-8 overflow-y-auto max-h-[calc(90vh-200px)]">
           <div className="space-y-6">
             {/* Customer Type Toggle */}
             <div className="flex items-center justify-center space-x-1 bg-gray-100 rounded-xl p-1">
@@ -527,31 +538,8 @@ const CustomerCreationModal = ({ show, onClose, onCustomerCreated }) => {
           </div>
         </div>
         
-        {/* Footer */}
-        <div className="px-8 py-6 bg-gray-50 border-t border-gray-100 flex justify-end space-x-3">
-          <button
-            onClick={onClose}
-            className="px-6 py-3 border border-gray-200 text-gray-700 rounded-xl hover:bg-gray-100 transition-all duration-200 font-medium"
-          >
-            Cancel
-          </button>
-          <button
-            onClick={saveCustomer}
-            disabled={saving || !newCustomer.customer_name || !newCustomer.primary_phone || !newCustomer.address.address_line1 || !newCustomer.address.city || !newCustomer.address.state || !newCustomer.address.pincode || (isBusinessCustomer && !newCustomer.customer_type)}
-            className="px-6 py-3 bg-blue-600 text-white rounded-xl hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 font-medium flex items-center space-x-2"
-          >
-            {saving ? (
-              <>
-                <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                <span>Saving...</span>
-              </>
-            ) : (
-              <span>Save Customer</span>
-            )}
-          </button>
-        </div>
       </div>
-    </div>
+    </SlideInPanel>
   );
 };
 
