@@ -5,6 +5,7 @@ import { searchCache } from '../../../utils/searchCache';
 import { useToast } from '../ui';
 import DataTransformer from '../../../services/dataTransformer';
 import { APP_CONFIG } from '../../../config/app.config';
+import { FullScreenModal } from '../ui/FullScreenModal';
 
 // Indian states for dropdown
 const INDIAN_STATES = [
@@ -221,31 +222,35 @@ const SupplierCreationModal = ({
     }
   };
 
-  if (!isOpen) return null;
-
-  // Simplified sections - not using tabs anymore
-
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[100] p-4">
-      <div className="bg-white rounded-xl w-full max-w-5xl max-h-[95vh] overflow-hidden shadow-2xl">
-        {/* Compact Header */}
-        <div className="px-4 py-3 border-b bg-gradient-to-r from-blue-50 to-indigo-50">
-          <div className="flex items-center justify-between">
-            <h2 className="text-lg font-semibold text-gray-800 flex items-center gap-2">
-              <Building2 className="w-5 h-5 text-blue-600" />
-              {title}
-            </h2>
-            <button 
-              onClick={onClose}
-              className="p-1.5 hover:bg-white hover:shadow-md rounded-lg transition-all"
-            >
-              <X className="w-4 h-4 text-gray-500" />
-            </button>
-          </div>
+    <FullScreenModal
+      isOpen={isOpen}
+      onClose={onClose}
+      title={title}
+      subtitle="Create a new supplier profile - Use Tab/Enter to navigate"
+      size="large"
+      footer={
+        <div className="flex justify-between items-center">
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={saving}
+            className="px-6 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50"
+          >
+            Cancel (Esc)
+          </button>
+          <button
+            onClick={handleSubmit}
+            disabled={saving}
+            className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 flex items-center gap-2"
+          >
+            {saving && <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />}
+            {saving ? 'Saving...' : 'Save Supplier'}
+          </button>
         </div>
-
-        {/* Compact Content */}
-        <div className="p-4 overflow-y-auto max-h-[calc(95vh-8rem)]">
+      }
+    >
+      <div className="space-y-6">
           {/* Basic Information Section */}
           <div className="mb-4">
             <h3 className="text-sm font-semibold text-gray-800 mb-3 flex items-center gap-2">
