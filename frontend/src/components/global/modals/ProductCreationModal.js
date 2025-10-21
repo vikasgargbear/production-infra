@@ -406,18 +406,17 @@ const ProductCreationModal = ({
         </div>
       }
     >
-      <div className="space-y-6">
-        {/* Icon Header */}
-        <div className="flex items-center space-x-3 pb-4 border-b border-gray-200">
-          <div className="w-10 h-10 bg-green-100 rounded-xl flex items-center justify-center">
-            <Package className="w-5 h-5 text-green-600" />
-          </div>
-          <div className="text-sm text-gray-600">
-            Fill in product details below. Press <kbd className="px-2 py-1 bg-gray-100 border border-gray-300 rounded text-xs font-mono">Tab</kbd> or <kbd className="px-2 py-1 bg-gray-100 border border-gray-300 rounded text-xs font-mono">Enter</kbd> to navigate fields.
-          </div>
+      {/* Icon Header */}
+      <div className="flex items-center space-x-3 pb-4 border-b border-gray-200 mb-6">
+        <div className="w-10 h-10 bg-green-100 rounded-xl flex items-center justify-center">
+          <Package className="w-5 h-5 text-green-600" />
         </div>
+        <div className="text-sm text-gray-600">
+          Fill in product details below. Press <kbd className="px-2 py-1 bg-gray-100 border border-gray-300 rounded text-xs font-mono">Tab</kbd> or <kbd className="px-2 py-1 bg-gray-100 border border-gray-300 rounded text-xs font-mono">Enter</kbd> to navigate fields.
+        </div>
+      </div>
 
-        <div className="space-y-6">
+      <div className="space-y-6">
             {/* Product Details */}
             <div className="space-y-4">
               <h4 className="text-sm font-semibold text-gray-900 uppercase tracking-wider">Product Information</h4>
@@ -885,7 +884,6 @@ const ProductCreationModal = ({
                 </div>
               </div>
             )}
-          </div>
         </div>
       </div>
     </SlideInPanel>
