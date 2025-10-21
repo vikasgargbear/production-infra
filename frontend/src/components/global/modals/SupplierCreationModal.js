@@ -607,7 +607,6 @@ const SupplierCreationModal = ({
             </div>
           </details>
         </div>
-      </div>
     </FullScreenModal>
   );
 };
