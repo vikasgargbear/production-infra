@@ -607,41 +607,8 @@ const SupplierCreationModal = ({
             </div>
           </details>
         </div>
-
-        {/* Compact Footer */}
-        <div className="px-4 py-3 border-t bg-gray-50 flex justify-between items-center">
-          <div className="text-xs text-gray-600">
-            * Required fields
-          </div>
-          <div className="flex gap-2">
-            <button
-              type="button"
-              onClick={onClose}
-              className="px-4 py-1.5 text-sm text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
-            >
-              Cancel
-            </button>
-            <button
-              onClick={handleSubmit}
-              disabled={saving}
-              className="px-4 py-1.5 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors flex items-center gap-2"
-            >
-              {saving ? (
-                <>
-                  <div className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                  Creating...
-                </>
-              ) : (
-                <>
-                  <Save className="w-3 h-3" />
-                  Create Supplier
-                </>
-              )}
-            </button>
-          </div>
-        </div>
       </div>
-    </div>
+    </FullScreenModal>
   );
 };
 
