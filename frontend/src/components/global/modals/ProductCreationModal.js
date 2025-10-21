@@ -884,7 +884,6 @@ const ProductCreationModal = ({
                 </div>
               </div>
             )}
-        </div>
       </div>
     </SlideInPanel>
   );
