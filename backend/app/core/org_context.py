@@ -16,9 +16,9 @@ security = HTTPBearer(auto_error=False)
 
 class OrgContext:
     """Simple organization context"""
-    def __init__(self, org_id: UUID, user_id: Optional[UUID] = None):
+    def __init__(self, org_id: UUID, user_id: Optional[any] = None):
         self.org_id = org_id
-        self.user_id = user_id
+        self.user_id = user_id  # Can be int, UUID, or str depending on system
         self.permissions = []
     
     def has_permission(self, permission: str) -> bool:
@@ -37,11 +37,20 @@ async def get_org_context(
             token = credentials.credentials
             payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
             org_id_str = payload.get("org_id")
-            user_id_str = payload.get("user_id")
+            user_id_value = payload.get("user_id")
             
             if org_id_str:
                 org_id = UUID(org_id_str) if isinstance(org_id_str, str) else org_id_str
-                user_id = UUID(user_id_str) if user_id_str else None
+                # user_id can be int or string, convert appropriately
+                user_id = None
+                if user_id_value:
+                    if isinstance(user_id_value, int):
+                        user_id = user_id_value  # Keep as int, don't convert to UUID
+                    elif isinstance(user_id_value, str):
+                        try:
+                            user_id = UUID(user_id_value)
+                        except ValueError:
+                            user_id = user_id_value  # Keep as string if not valid UUID
                 return OrgContext(org_id, user_id)
         except (JWTError, ValueError) as e:
             logger.warning(f"JWT token invalid: {e}")
