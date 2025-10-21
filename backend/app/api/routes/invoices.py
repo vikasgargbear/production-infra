@@ -30,6 +30,8 @@ async def generate_invoice_number(
 ):
     """Generate and reserve next invoice number atomically"""
     try:
+        # Get org_id from context
+        org_id = str(context.org_id)
         # Use V2 service for atomic number generation
         new_number = DocumentNumberServiceV2.generate_and_reserve_number(db, "invoice", org_id)
         return {"invoice_number": new_number}
@@ -63,6 +65,9 @@ async def create_invoice(
     - discount_amount: decimal (defaults to 0)
     """
     try:
+        # Get org_id from context
+        org_id = str(context.org_id)
+        
         # Start fresh - clear any failed transaction state
         db.rollback()  # Clear any failed transaction state
         
@@ -74,7 +79,7 @@ async def create_invoice(
                 content={"detail": "Customer ID is required"}
             )
         
-        logger.info(f"Creating invoice for customer {customer_id}")
+        logger.info(f"Creating invoice for customer {customer_id} in org {org_id}")
         
         # Step 1: Get valid branch_id and created_by
         branch_result = db.execute(text("""
