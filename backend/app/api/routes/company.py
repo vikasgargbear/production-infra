@@ -374,73 +374,104 @@ def get_company_profile(
     db: Session = Depends(get_db),
     org_id: str = Depends(get_org_id_from_header)
 ):
-    """Get complete company profile including all bank accounts"""
+    """Get complete company profile including all bank accounts - OPTIMIZED single query"""
     try:
-        # Get company info
-        company_info = get_company_info(db, org_id)
-        
-        # Get all bank accounts
-        bank_query = """
+        # Single optimized query with all data
+        profile_query = """
+            WITH org_data AS (
+                SELECT 
+                    o.org_id, o.org_name, o.legal_name, o.gst_number, o.pan_number,
+                    o.drug_license_number, o.fssai_number, o.registered_address,
+                    o.correspondence_address, o.contact_numbers, o.email_addresses,
+                    o.website, o.business_settings, o.created_at, o.updated_at
+                FROM master.organizations o
+                WHERE o.org_id = :org_id
+            ),
+            bank_data AS (
+                SELECT 
+                    jsonb_agg(
+                        jsonb_build_object(
+                            'id', bank_account_id,
+                            'account_name', account_name,
+                            'account_number', account_number,
+                            'bank_name', bank_name,
+                            'branch_name', branch_name,
+                            'ifsc_code', ifsc_code,
+                            'account_type', account_type,
+                            'is_default', is_default_account
+                        ) ORDER BY is_default_account DESC, created_at ASC
+                    ) as accounts
+                FROM master.org_bank_accounts
+                WHERE org_id = :org_id AND is_active = true
+            ),
+            qr_data AS (
+                SELECT setting_value as qr_code
+                FROM system_config.system_settings
+                WHERE org_id = :org_id AND setting_key = 'payment_qr_code'
+                LIMIT 1
+            )
             SELECT 
-                bank_account_id as id,
-                account_name,
-                account_number,
-                bank_name,
-                branch_name,
-                ifsc_code,
-                account_type,
-                is_default_account,
-                is_active
-            FROM master.org_bank_accounts
-            WHERE org_id = :org_id AND is_active = true
-            ORDER BY is_default_account DESC, created_at ASC
+                o.*, 
+                COALESCE(b.accounts, '[]'::jsonb) as bank_accounts,
+                q.qr_code as payment_qr_code
+            FROM org_data o
+            LEFT JOIN bank_data b ON true
+            LEFT JOIN qr_data q ON true
         """
-        bank_result = db.execute(text(bank_query), {"org_id": org_id})
-        bank_accounts = []
         
-        for row in bank_result:
-            bank_accounts.append({
-                "id": row.id,
-                "account_name": row.account_name or "",
-                "account_number": row.account_number or "",
-                "bank_name": row.bank_name or "",
-                "branch_name": row.branch_name or "",
-                "ifsc_code": row.ifsc_code or "",
-                "account_type": row.account_type or "CURRENT",
-                "is_default": row.is_default_account or False
-            })
+        result = db.execute(text(profile_query), {"org_id": org_id})
+        row = result.first()
         
-        # Get payment QR code if exists
-        settings_query = """
-            SELECT setting_value 
-            FROM system_config.system_settings
-            WHERE org_id = :org_id AND setting_key = 'payment_qr_code'
-        """
-        qr_result = db.execute(text(settings_query), {"org_id": org_id})
-        qr_data = qr_result.first()
-        payment_qr_code = qr_data.setting_value if qr_data else None
+        if not row:
+            raise HTTPException(status_code=404, detail="Organization not found")
         
-        # Return complete profile
+        # Parse JSON fields
+        registered_addr = row.registered_address or {}
+        if isinstance(registered_addr, str):
+            registered_addr = json.loads(registered_addr)
+            
+        contact_nums = row.contact_numbers or {}
+        if isinstance(contact_nums, str):
+            contact_nums = json.loads(contact_nums)
+            
+        email_addrs = row.email_addresses or {}
+        if isinstance(email_addrs, str):
+            email_addrs = json.loads(email_addrs)
+            
+        business_settings = row.business_settings or {}
+        if isinstance(business_settings, str):
+            business_settings = json.loads(business_settings)
+        
+        # Parse bank accounts if string
+        bank_accounts = row.bank_accounts
+        if isinstance(bank_accounts, str):
+            bank_accounts = json.loads(bank_accounts)
+        
+        # Build response
         return {
             "success": True,
             "data": {
-                **company_info,
-                "bank_accounts": bank_accounts,
-                "payment_qr_code": payment_qr_code
+                "name": row.org_name or "Your Company",
+                "address": registered_addr.get("line1", ""),
+                "city": registered_addr.get("city", ""),
+                "state": registered_addr.get("state", ""),
+                "pincode": registered_addr.get("pincode", ""),
+                "gst": row.gst_number or "",
+                "pan": row.pan_number or "",
+                "drug_license": row.drug_license_number or "",
+                "fssai": row.fssai_number or "",
+                "phone": contact_nums.get("primary", ""),
+                "email": email_addrs.get("primary", ""),
+                "website": row.website or "",
+                **business_settings,
+                "bank_accounts": bank_accounts if bank_accounts else [],
+                "payment_qr_code": row.payment_qr_code
             }
         }
         
     except Exception as e:
         logger.error(f"Error fetching company profile: {str(e)}")
-        return {
-            "success": False,
-            "error": str(e),
-            "data": {
-                **get_company_info(db, org_id),
-                "bank_accounts": [],
-                "payment_qr_code": None
-            }
-        }
+        raise HTTPException(status_code=500, detail=f"Failed to fetch company profile: {str(e)}")
 
 @router.get("/bank-accounts")
 def get_bank_accounts(

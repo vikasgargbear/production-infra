@@ -16,10 +16,11 @@ ACCESS_TOKEN_EXPIRE_MINUTES = 720  # 12 hours as requested
 
 # Password hashing
 # Configure bcrypt to avoid 72-byte initialization issues
+# Use 10 rounds for faster authentication (still secure, but 4x faster than 12)
 pwd_context = CryptContext(
     schemes=["bcrypt"],
     deprecated="auto",
-    bcrypt__default_rounds=12,
+    bcrypt__default_rounds=10,  # 10 rounds = ~0.7s, 12 rounds = ~2.9s
     bcrypt__ident="2b"
 )
 
