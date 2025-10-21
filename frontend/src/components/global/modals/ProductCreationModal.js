@@ -6,7 +6,7 @@ import MonthYearPicker from '../MonthYearPicker';
 import DataTransformer from '../../../services/dataTransformer';
 import { APP_CONFIG } from '../../../config/app.config';
 import { useToast } from '../ui/feedback/Toast';
-import { SlideInPanel } from '../ui/FullScreenModal';
+import { FullScreenModal } from '../ui/FullScreenModal';
 
 const ProductCreationModal = ({ 
   show, 
@@ -379,12 +379,12 @@ const ProductCreationModal = ({
   };
 
   return (
-    <SlideInPanel
+    <FullScreenModal
       isOpen={show}
       onClose={onClose}
       title="Add New Product"
       subtitle="Create a new product with batch - Use Tab/Enter to navigate"
-      width="2xl"
+      size="large"
       footer={
         <div className="flex justify-between items-center">
           <button
@@ -885,7 +885,7 @@ const ProductCreationModal = ({
               </div>
             )}
       </div>
-    </SlideInPanel>
+    </FullScreenModal>
   );
 };
 

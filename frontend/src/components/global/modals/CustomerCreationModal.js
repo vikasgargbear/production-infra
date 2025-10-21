@@ -3,7 +3,7 @@ import { X, User, Phone, Mail, MapPin, Building, FileText, Shield, Calendar, Cre
 import { customerAPI } from '../../../services/api';
 import DataTransformer from '../../../services/dataTransformer';
 import { APP_CONFIG } from '../../../config/app.config';
-import { SlideInPanel } from '../ui/FullScreenModal';
+import { FullScreenModal } from '../ui/FullScreenModal';
 
 const CustomerCreationModal = ({ show, onClose, onCustomerCreated }) => {
   const [isBusinessCustomer, setIsBusinessCustomer] = useState(true); // Toggle for Business vs Individual
@@ -110,12 +110,12 @@ const CustomerCreationModal = ({ show, onClose, onCustomerCreated }) => {
   };
 
   return (
-    <SlideInPanel
+    <FullScreenModal
       isOpen={show}
       onClose={onClose}
       title="Add New Customer"
       subtitle="Create a new customer profile - Use Tab/Enter to navigate"
-      width="xl"
+      size="large"
       footer={
         <div className="flex justify-between items-center">
           <button
@@ -539,7 +539,7 @@ const CustomerCreationModal = ({ show, onClose, onCustomerCreated }) => {
         </div>
         
       </div>
-    </SlideInPanel>
+    </FullScreenModal>
   );
 };
 
