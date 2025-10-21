@@ -12,11 +12,13 @@ interface PaginationProps {
   totalItems: number;
   itemsPerPage: number;
   onPageChange: (page: number) => void;
-  onItemsPerPageChange: (items: number) => void;
+  onItemsPerPageChange?: (items: number) => void;
   itemsPerPageOptions?: number[];
   className?: string;
   showItemsPerPage?: boolean;
   showPageInfo?: boolean;
+  loading?: boolean;
+  itemName?: string;
   compact?: boolean;
 }
 

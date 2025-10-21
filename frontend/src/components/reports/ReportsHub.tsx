@@ -30,8 +30,8 @@ import GSTR1Report from './GSTR1Report';
 import GSTR3BReport from './GSTR3BReport';
 
 interface ReportsHubProps {
-  open?: boolean;
-  onClose?: () => void;
+  open: boolean;
+  onClose: () => void;
 }
 
 interface ReportModule {
