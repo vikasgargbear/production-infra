@@ -51,8 +51,10 @@ export const CustomerSearch = forwardRef<CustomerSearchRef, CustomerSearchProps>
   const [showSearch, setShowSearch] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [showDropdown, setShowDropdown] = useState(false);
+  const [highlightedIndex, setHighlightedIndex] = useState(-1);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const resultRefs = useRef<(HTMLDivElement | null)[]>([]);
 
   // Use the typed React Query hook
   const { data, isLoading, error } = useCustomerSearch(searchQuery, {
@@ -91,7 +93,49 @@ export const CustomerSearch = forwardRef<CustomerSearchRef, CustomerSearchProps>
     setShowSearch(false);
     setShowDropdown(false);
     setSearchQuery('');
+    setHighlightedIndex(-1);
   };
+
+  // Handle keyboard navigation
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      setHighlightedIndex(prev =>
+        prev < searchResults.length - 1 ? prev + 1 : 0
+      );
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      setHighlightedIndex(prev =>
+        prev > 0 ? prev - 1 : searchResults.length - 1
+      );
+    } else if (e.key === 'Enter') {
+      e.preventDefault();
+      if (highlightedIndex >= 0 && highlightedIndex < searchResults.length) {
+        handleCustomerSelect(searchResults[highlightedIndex]);
+      }
+    } else if (e.key === 'Escape') {
+      e.stopPropagation();
+      setSearchQuery('');
+      setShowSearch(false);
+      setShowDropdown(false);
+      setHighlightedIndex(-1);
+    }
+  };
+
+  // Auto-scroll to highlighted item
+  useEffect(() => {
+    if (highlightedIndex >= 0 && resultRefs.current[highlightedIndex]) {
+      resultRefs.current[highlightedIndex]?.scrollIntoView({
+        behavior: 'smooth',
+        block: 'nearest'
+      });
+    }
+  }, [highlightedIndex]);
+
+  // Reset highlight when results change
+  useEffect(() => {
+    setHighlightedIndex(-1);
+  }, [searchResults]);
 
   // Handle remove customer
   const handleRemoveCustomer = (e?: React.MouseEvent) => {
@@ -205,11 +249,16 @@ export const CustomerSearch = forwardRef<CustomerSearchRef, CustomerSearchProps>
         </div>
       ) : searchResults.length > 0 ? (
         <div className="space-y-2">
-          {searchResults.map((customer) => (
+          {searchResults.map((customer, index) => (
             <div
               key={customer.customer_id}
+              ref={(el) => (resultRefs.current[index] = el)}
               onClick={() => handleCustomerSelect(customer)}
-              className="p-3 border border-gray-200 rounded-lg hover:bg-gray-50 cursor-pointer transition-colors"
+              className={`p-3 border rounded-lg cursor-pointer transition-colors ${
+                index === highlightedIndex
+                  ? 'bg-blue-50 border-blue-500 border-2'
+                  : 'border-gray-200 hover:bg-gray-50'
+              }`}
             >
               <div className="flex justify-between items-start">
                 <div className="flex-1">
@@ -300,13 +349,7 @@ export const CustomerSearch = forwardRef<CustomerSearchRef, CustomerSearchProps>
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Escape') {
-                    e.stopPropagation(); // Stop ESC from bubbling up to parent
-                    setSearchQuery('');
-                    setShowDropdown(false);
-                  }
-                }}
+                onKeyDown={handleKeyDown}
                 placeholder={placeholder}
                 className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 disabled={disabled}
