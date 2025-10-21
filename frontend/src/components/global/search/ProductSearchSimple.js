@@ -14,8 +14,10 @@ const ProductSearchSimple = forwardRef(({ onAddItem, onCreateProduct, showBatchS
   const [showDropdown, setShowDropdown] = useState(false);
   const [showBatchModal, setShowBatchModal] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState(null);
+  const [highlightedIndex, setHighlightedIndex] = useState(-1);
   const searchInputRef = useRef(null);
   const dropdownRef = useRef(null);
+  const resultRefs = useRef([]);
 
   // Expose focus method to parent
   useImperativeHandle(ref, () => ({
@@ -103,7 +105,18 @@ const ProductSearchSimple = forwardRef(({ onAddItem, onCreateProduct, showBatchS
 
   useEffect(() => {
     searchProducts(searchQuery);
+    setHighlightedIndex(-1); // Reset highlight on new search
   }, [searchQuery, searchProducts]);
+
+  // Auto-scroll to highlighted item
+  useEffect(() => {
+    if (highlightedIndex >= 0 && resultRefs.current[highlightedIndex]) {
+      resultRefs.current[highlightedIndex].scrollIntoView({
+        behavior: 'smooth',
+        block: 'nearest'
+      });
+    }
+  }, [highlightedIndex]);
 
   // Handle click outside
   useEffect(() => {
@@ -146,8 +159,28 @@ const ProductSearchSimple = forwardRef(({ onAddItem, onCreateProduct, showBatchS
 
   const handleKeyDown = (e) => {
     if (e.key === 'Escape') {
-      e.stopPropagation(); // Stop ESC from bubbling up to parent
+      e.stopPropagation();
       setShowDropdown(false);
+      setHighlightedIndex(-1);
+    } else if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      setHighlightedIndex(prev => 
+        prev < searchResults.length - 1 ? prev + 1 : 0
+      );
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      setHighlightedIndex(prev => 
+        prev > 0 ? prev - 1 : searchResults.length - 1
+      );
+    } else if (e.key === 'Enter') {
+      e.preventDefault();
+      if (highlightedIndex >= 0 && highlightedIndex < searchResults.length) {
+        handleProductSelect(searchResults[highlightedIndex]);
+      }
+    } else if (e.key === 'Tab') {
+      // Let Tab work naturally for focus management
+      setShowDropdown(false);
+      setHighlightedIndex(-1);
       setSearchQuery(''); // Clear search term
     }
   };
@@ -183,11 +216,16 @@ const ProductSearchSimple = forwardRef(({ onAddItem, onCreateProduct, showBatchS
                   </div>
                 ) : searchResults.length > 0 ? (
                   <>
-                    {searchResults.map((product) => (
+                    {searchResults.map((product, index) => (
                       <div
                         key={product.product_id || product.id}
+                        ref={(el) => (resultRefs.current[index] = el)}
                         onClick={() => handleProductSelect(product)}
-                        className="px-4 py-3 hover:bg-gray-50 cursor-pointer border-b border-gray-100"
+                        className={`px-4 py-3 cursor-pointer border-b border-gray-100 ${
+                          index === highlightedIndex
+                            ? 'bg-blue-50 border-l-4 border-l-blue-500'
+                            : 'hover:bg-gray-50'
+                        }`}
                       >
                         <div className="flex justify-between items-start">
                           <div>
