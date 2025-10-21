@@ -75,6 +75,21 @@ async def get_products(
                        AND b.quality_status = 'approved'
                      LIMIT 1), 0
                 ) as current_stock,
+                -- Get latest pricing from most recent batch
+                (SELECT mrp_per_unit 
+                 FROM inventory.batches b 
+                 WHERE b.product_id = p.product_id 
+                   AND b.mrp_per_unit IS NOT NULL
+                   AND b.batch_status = 'active'
+                 ORDER BY b.created_at DESC 
+                 LIMIT 1) as mrp,
+                (SELECT sale_price_per_unit 
+                 FROM inventory.batches b 
+                 WHERE b.product_id = p.product_id 
+                   AND b.sale_price_per_unit IS NOT NULL
+                   AND b.batch_status = 'active'
+                 ORDER BY b.created_at DESC 
+                 LIMIT 1) as sale_price,
                 -- Category name  
                 pc.category_name
             FROM inventory.products p
