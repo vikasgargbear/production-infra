@@ -1,9 +1,11 @@
+import { getApiBaseUrl } from './apiBase';
+
 /**
  * API Configuration
  * Central configuration for all API endpoints
  */
 
-const API_BASE_URL = process.env.REACT_APP_API_URL || 'https://pharma-backend-production-0c09.up.railway.app/api';
+const API_BASE_URL = `${getApiBaseUrl()}/api`;
 
 export const API_CONFIG = {
   BASE_URL: API_BASE_URL,

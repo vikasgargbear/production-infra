@@ -1,3 +1,5 @@
+import { getApiBaseUrl } from './apiBase';
+
 /**
  * Application-wide constants
  * Never hardcode these values directly in components
@@ -5,7 +7,7 @@
 
 // API Configuration
 export const API_CONFIG = {
-  BASE_URL: process.env.REACT_APP_API_URL || 'https://pharma-backend-production-0c09.up.railway.app',
+  BASE_URL: getApiBaseUrl(),
   TIMEOUT: 30000,
   RETRY_ATTEMPTS: 3
 };

@@ -1,3 +1,6 @@
+import { getApiBaseUrl } from './config/apiBase';
+import orgIdManager from './services/OrgIdManager';
+
 /**
  * Setup Authentication
  * Run this to ensure proper authentication is set up
@@ -6,15 +9,29 @@
 async function setupAuth() {
   try {
     // Login with correct credentials
-    const response = await fetch('https://pharma-backend-production-0c09.up.railway.app/api/auth/login', {
+    const loginUrl = `${getApiBaseUrl()}/api/auth/login`;
+    const headers = {
+      'Content-Type': 'application/json'
+    };
+
+    const orgIdHeader = orgIdManager.getOrgId();
+    if (orgIdHeader) {
+      headers['X-Org-Id'] = orgIdHeader;
+    }
+
+    const email = process.env.REACT_APP_SETUP_AUTH_EMAIL ||
+                  process.env.REACT_APP_AUTO_LOGIN_EMAIL ||
+                  'admin@pharma.com';
+    const password = process.env.REACT_APP_SETUP_AUTH_PASSWORD ||
+                     process.env.REACT_APP_AUTO_LOGIN_PASSWORD ||
+                     'admin123';
+
+    const response = await fetch(loginUrl, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-Org-Id': 'e78d6777-35f6-4b19-994f-caaede2f021a'
-      },
+      headers,
       body: JSON.stringify({
-        email: 'admin@pharma.com',
-        password: 'admin123'
+        email,
+        password
       })
     });
 
@@ -32,13 +49,10 @@ async function setupAuth() {
           localStorage.setItem('pharma_user', JSON.stringify(data.user));
 
           // Store org_id in all locations
-          const orgId = data.user.org_id || 'e78d6777-35f6-4b19-994f-caaede2f021a';
-          localStorage.setItem('pharma_org_id', orgId);
-          localStorage.setItem('org_id', orgId);
-          localStorage.setItem('orgId', orgId);
-          sessionStorage.setItem('pharma_org_id', orgId);
-          sessionStorage.setItem('org_id', orgId);
-          sessionStorage.setItem('orgId', orgId);
+          const orgId = data.user.org_id || orgIdManager.getOrgId();
+          if (orgId) {
+            orgIdManager.setOrgId(orgId);
+          }
 
           // Store branch_id if available
           if (data.user.branch_id) {

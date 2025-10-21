@@ -13,6 +13,9 @@ import { returnsApi, customersApi, customerAPI, settingsApi, metadataApi } from 
 import InvoiceApiService from '../../services/invoiceApiService';
 import CreditNotePreview from './components/CreditNotePreview';
 import offlineStorage from '../../services/offlineStorage';
+import { getApiBaseUrl } from '../../config/apiBase';
+
+const API_BASE_URL = getApiBaseUrl();
 
 const SalesReturnFlow = ({ onClose }) => {
   const [currentStep, setCurrentStep] = useState(1);
@@ -363,7 +366,7 @@ const SalesReturnFlow = ({ onClose }) => {
   const fetchBatchesForProduct = async (productId) => {
     try {
       const response = await fetch(
-        `https://pharma-backend-production-0c09.up.railway.app/api/inventory/batches/product/${productId}`,
+        `${API_BASE_URL}/api/inventory/batches/product/${productId}`,
         {
           headers: {
             'X-Org-Id': localStorage.getItem('pharma_org_id') || sessionStorage.getItem('pharma_org_id')

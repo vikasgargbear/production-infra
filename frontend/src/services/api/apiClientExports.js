@@ -5,11 +5,12 @@
 
 // Use dynamic import to avoid initialization order issues
 import axios from 'axios';
+import { getApiBaseUrl } from '../../config/apiBase';
 import orgIdManager from '../OrgIdManager';
 
 // Create our own apiClient instance to avoid circular dependency
 // Use HTTPS for Railway production deployment
-const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || 'https://pharma-backend-production-0c09.up.railway.app';
+const API_BASE_URL = getApiBaseUrl();
 const apiClient = axios.create({
   baseURL: `${API_BASE_URL}/api`,  // Consolidated API - no version numbers
   timeout: 30000,

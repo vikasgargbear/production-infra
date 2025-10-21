@@ -1,3 +1,6 @@
+import { getApiBaseUrl } from '../../config/apiBase';
+import orgIdManager from '../OrgIdManager';
+
 /**
  * Enterprise Authentication Service
  * Production-ready authentication with offline support
@@ -5,7 +8,7 @@
 
 class AuthService {
   constructor() {
-    this.API_BASE = 'https://pharma-backend-production-0c09.up.railway.app/api';
+    this.API_BASE = `${getApiBaseUrl()}/api`;
     this.TOKEN_KEY = 'authToken';
     this.USER_KEY = 'pharma_user';
     this.ORG_KEY = 'pharma_org_id';
@@ -35,12 +38,18 @@ class AuthService {
     // Try online login first
     if (this.isOnline) {
       try {
+        const headers = {
+          'Content-Type': 'application/json'
+        };
+
+        const orgId = this.getOrgId();
+        if (orgId) {
+          headers['X-Org-Id'] = orgId;
+        }
+
         const response = await fetch(`${this.API_BASE}/auth/login`, {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'X-Org-Id': this.getOrgId() || 'e78d6777-35f6-4b19-994f-caaede2f021a'
-          },
+          headers,
           body: JSON.stringify({ email, password })
         });
 
@@ -128,7 +137,7 @@ class AuthService {
       localStorage.setItem(this.USER_KEY, JSON.stringify(data.user));
 
       // Ensure org_id is set everywhere
-      const orgId = data.user.org_id || 'e78d6777-35f6-4b19-994f-caaede2f021a';
+      const orgId = data.user.org_id || this.getOrgId();
       this.ensureOrgId(orgId);
 
       // Store branch_id if provided
@@ -143,16 +152,19 @@ class AuthService {
    */
   storeOfflineCredentials(email, password) {
     const user = this.getCurrentUser();
+    if (!user || !user.org_id) {
+      return;
+    }
+
+    const storedBranchId = localStorage.getItem('pharma_branch_id');
+    const branchId = user.branch_id || (storedBranchId ? Number(storedBranchId) : undefined);
+
     const offlineCreds = {
       email: email,
       passwordHash: this.hashPassword(password),
-      user: user || {
-        id: 8,
-        user_id: 8,
-        email: email,
-        name: 'Admin User',
-        org_id: 'e78d6777-35f6-4b19-994f-caaede2f021a',
-        branch_id: 5
+      user: {
+        ...user,
+        branch_id: branchId ?? undefined
       }
     };
 
@@ -192,15 +204,24 @@ class AuthService {
    * Generate offline JWT-like token
    */
   generateOfflineToken(credentials) {
-    const header = btoa(JSON.stringify({ alg: 'HS256', typ: 'JWT' }));
-    const payload = btoa(JSON.stringify({
+    const orgId = credentials.user.org_id || this.getOrgId();
+    const storedBranchId = credentials.user.branch_id ?? localStorage.getItem('pharma_branch_id');
+    const branchId = storedBranchId != null ? Number(storedBranchId) : undefined;
+
+    const payloadData = {
       user_id: credentials.user.id || credentials.user.user_id,
       email: credentials.email,
-      org_id: credentials.user.org_id,
-      branch_id: credentials.user.branch_id || 5,
+      org_id: orgId,
       offline: true,
-      exp: Math.floor(Date.now() / 1000) + (30 * 24 * 60 * 60) // 30 days
-    }));
+      exp: Math.floor(Date.now() / 1000) + (30 * 24 * 60 * 60)
+    };
+
+    if (!Number.isNaN(branchId) && branchId !== undefined && branchId !== null) {
+      payloadData.branch_id = branchId;
+    }
+
+    const header = btoa(JSON.stringify({ alg: 'HS256', typ: 'JWT' }));
+    const payload = btoa(JSON.stringify(payloadData));
     const signature = btoa('offline_' + Date.now());
 
     return `${header}.${payload}.${signature}`;
@@ -210,22 +231,17 @@ class AuthService {
    * Ensure org_id is set in all required locations
    */
   ensureOrgId(orgId) {
-    const id = orgId || 'e78d6777-35f6-4b19-994f-caaede2f021a';
-    localStorage.setItem('pharma_org_id', id);
-    localStorage.setItem('org_id', id);
-    localStorage.setItem('orgId', id);
-    sessionStorage.setItem('pharma_org_id', id);
-    sessionStorage.setItem('org_id', id);
-    sessionStorage.setItem('orgId', id);
+    const id = orgId || this.getOrgId();
+    if (id) {
+      orgIdManager.setOrgId(id);
+    }
   }
 
   /**
    * Get current org_id
    */
   getOrgId() {
-    return localStorage.getItem('pharma_org_id') ||
-           localStorage.getItem('org_id') ||
-           'e78d6777-35f6-4b19-994f-caaede2f021a';
+    return orgIdManager.getOrgId();
   }
 
   /**
@@ -349,6 +365,8 @@ class AuthService {
     // Keep offline credentials for future offline login
     // localStorage.removeItem(this.OFFLINE_CREDS_KEY);
 
+    orgIdManager.clearOrgId();
+
     // Clear session storage
     sessionStorage.clear();
 
@@ -366,7 +384,9 @@ class AuthService {
     }
 
     // Try to login with default credentials
-    return await this.login('admin@pharma.com', 'admin123');
+    const email = process.env.REACT_APP_AUTO_LOGIN_EMAIL || 'admin@pharma.com';
+    const password = process.env.REACT_APP_AUTO_LOGIN_PASSWORD || 'admin123';
+    return await this.login(email, password);
   }
 }
 

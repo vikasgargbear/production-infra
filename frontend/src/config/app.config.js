@@ -1,3 +1,5 @@
+import { getApiBaseUrl } from './apiBase';
+
 /**
  * Global Application Configuration
  * Centralized configuration for application-wide settings
@@ -11,7 +13,7 @@ export const APP_CONFIG = {
   
   // API Configuration
   API: {
-    BASE_URL: process.env.REACT_APP_API_BASE_URL || 'https://pharma-backend-production-0c09.up.railway.app',
+    BASE_URL: getApiBaseUrl(),
     VERSION: 'v1',
     TIMEOUT: 30000, // 30 seconds
     HEADERS: {

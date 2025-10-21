@@ -1,3 +1,5 @@
+import { getApiBaseUrl } from './apiBase';
+
 // API Configuration
 // Centralized configuration for all API endpoints and settings
 
@@ -21,7 +23,7 @@ export interface APIConfig {
 
 export const API_CONFIG: APIConfig = {
   // Base URL configuration - use HTTPS for secure production Railway deployments
-  BASE_URL: process.env.REACT_APP_API_BASE_URL || 'https://pharma-backend-production-0c09.up.railway.app',
+  BASE_URL: getApiBaseUrl(),
   
   // API Version - consolidated, no version numbers
   API_VERSION: '/api',
