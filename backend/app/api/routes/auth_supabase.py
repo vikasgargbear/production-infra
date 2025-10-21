@@ -45,14 +45,23 @@ async def login(
         from datetime import timedelta
         
         try:
-            user = db.execute(text("""
-                SELECT u.user_id, u.username, u.email, u.full_name,
-                       u.org_id, u.is_active, u.password_hash,
-                       u.role_id, u.branch_ids,
-                       o.org_name, o.is_active as org_active
+            # Single optimized query with LEFT JOIN for better performance
+            user_data = db.execute(text("""
+                SELECT 
+                    u.user_id, u.username, u.email, u.full_name,
+                    u.org_id, u.is_active, u.password_hash,
+                    u.role_id, u.branch_ids,
+                    o.org_name, o.is_active as org_active,
+                    b.branch_id as default_branch_id,
+                    r.permissions
                 FROM master.org_users u
                 JOIN master.organizations o ON u.org_id = o.org_id
+                LEFT JOIN master.org_branches b ON b.org_id = u.org_id 
+                    AND b.is_active = true
+                LEFT JOIN master.roles r ON r.role_id = u.role_id
                 WHERE u.email = :email
+                ORDER BY b.branch_id
+                LIMIT 1
             """), {"email": request.email}).fetchone()
         except Exception as e:
             logger.error(f"Database query failed during login: {str(e)}")
@@ -61,15 +70,15 @@ async def login(
                 detail=f"Database error: {str(e)}"
             )
         
-        if not user:
+        if not user_data:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Invalid credentials"
             )
         
         # Check password if password_hash exists
-        if user.password_hash:
-            if not verify_password(request.password, user.password_hash):
+        if user_data.password_hash:
+            if not verify_password(request.password, user_data.password_hash):
                 raise HTTPException(
                     status_code=status.HTTP_401_UNAUTHORIZED,
                     detail="Invalid credentials"
@@ -81,60 +90,40 @@ async def login(
                 detail="Password not configured for this account"
             )
         
-        if not user.is_active or not user.org_active:
+        if not user_data.is_active or not user_data.org_active:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Account is not active"
             )
         
-        # Use user's first branch_id or get default branch
-        branch_id = user.branch_ids[0] if user.branch_ids and len(user.branch_ids) > 0 else None
-        if not branch_id:
-            branch_result = db.execute(text("""
-                SELECT b.branch_id 
-                FROM master.org_branches b
-                WHERE b.org_id = :org_id 
-                AND b.is_active = true
-                ORDER BY b.branch_id
-                LIMIT 1
-            """), {"org_id": str(user.org_id)}).fetchone()
-            branch_id = branch_result.branch_id if branch_result else None
+        # Use user's first branch_id or the default from query
+        branch_id = user_data.branch_ids[0] if user_data.branch_ids and len(user_data.branch_ids) > 0 else user_data.default_branch_id
         
-        # Get permissions from roles table if role_id exists
-        permissions = {}
-        if user.role_id:
-            try:
-                role_result = db.execute(text("""
-                    SELECT permissions FROM master.roles WHERE role_id = :role_id
-                """), {"role_id": user.role_id}).fetchone()
-                if role_result and role_result.permissions:
-                    permissions = role_result.permissions
-            except Exception:
-                # If roles table doesn't exist or query fails, continue without permissions
-                pass
+        # Get permissions from joined query result
+        permissions = user_data.permissions if user_data.permissions else {}
         
         # Create proper JWT token
         access_token_expires = timedelta(minutes=1440)  # 24 hours
         access_token = create_access_token(
             data={
-                "user_id": user.user_id,
-                "email": user.email,
-                "org_id": str(user.org_id),
-                "role_id": user.role_id,
+                "user_id": user_data.user_id,
+                "email": user_data.email,
+                "org_id": str(user_data.org_id),
+                "role_id": user_data.role_id,
                 "branch_id": branch_id,
                 "permissions": permissions
             },
             expires_delta=access_token_expires
         )
         
-        # Update last login
+        # Update last login (fire and forget, don't wait)
         try:
             db.execute(text("""
                 UPDATE master.org_users 
                 SET last_login = CURRENT_TIMESTAMP,
                     login_count = COALESCE(login_count, 0) + 1
                 WHERE user_id = :user_id
-            """), {"user_id": user.user_id})
+            """), {"user_id": user_data.user_id})
             db.commit()
         except Exception:
             # If update fails, continue without updating login time
@@ -145,12 +134,12 @@ async def login(
             "access_token": access_token,
             "token_type": "bearer",
             "user": {
-                "id": user.user_id,
-                "email": user.email,
-                "name": user.full_name or user.username,
-                "org_id": str(user.org_id),
-                "org_name": user.org_name,
-                "role_id": user.role_id,
+                "id": user_data.user_id,
+                "email": user_data.email,
+                "name": user_data.full_name or user_data.username,
+                "org_id": str(user_data.org_id),
+                "org_name": user_data.org_name,
+                "role_id": user_data.role_id,
                 "branch_id": branch_id,
                 "permissions": permissions
             }
