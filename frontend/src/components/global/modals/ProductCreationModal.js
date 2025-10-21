@@ -907,32 +907,8 @@ const ProductCreationModal = ({
             )}
           </div>
         </div>
-
-        {/* Footer */}
-        <div className="px-8 py-6 bg-gray-50 border-t border-gray-100 flex justify-end space-x-3">
-          <button
-            onClick={onClose}
-            className="px-6 py-3 border border-gray-200 text-gray-700 rounded-xl hover:bg-gray-100 transition-all duration-200 font-medium"
-          >
-            Cancel
-          </button>
-          <button
-            onClick={saveProduct}
-            disabled={saving || !newProduct.product_name || !newProduct.manufacturer || !newProduct.hsn_code || !newProduct.mrp || !newProduct.sale_price}
-            className="px-6 py-3 bg-green-600 text-white rounded-xl hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 font-medium flex items-center space-x-2"
-          >
-            {saving ? (
-              <>
-                <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                <span>Saving...</span>
-              </>
-            ) : (
-              <span>Save Product</span>
-            )}
-          </button>
-        </div>
       </div>
-    </div>
+    </SlideInPanel>
   );
 };
 
