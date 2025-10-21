@@ -417,27 +417,7 @@ const ProductCreationModal = ({
           </div>
         </div>
 
-        <div className="flex items-center justify-between">
-              <div className="w-10 h-10 bg-green-100 rounded-xl flex items-center justify-center">
-                <Package className="w-5 h-5 text-green-600" />
-              </div>
-              <div>
-                <h3 className="text-2xl font-semibold text-gray-900">Add New Product</h3>
-                <p className="text-sm text-gray-500 mt-1">Create a new product with optional batch</p>
-              </div>
-            </div>
-            <button
-              onClick={onClose}
-              className="p-2 hover:bg-gray-100 rounded-xl transition-all duration-200 group"
-            >
-              <X className="w-5 h-5 text-gray-400 group-hover:text-gray-600" />
-            </button>
-          </div>
-        </div>
-
-        {/* Content */}
-        <div className="p-8 overflow-y-auto max-h-[calc(90vh-200px)]">
-          <div className="space-y-6">
+        <div className="space-y-6">
             {/* Product Details */}
             <div className="space-y-4">
               <h4 className="text-sm font-semibold text-gray-900 uppercase tracking-wider">Product Information</h4>
