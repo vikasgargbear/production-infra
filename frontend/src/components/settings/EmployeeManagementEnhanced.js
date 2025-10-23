@@ -222,6 +222,11 @@ const EmployeeManagementEnhanced = () => {
       return;
     }
     
+    if (!formData.designation || !formData.designation.trim()) {
+      toast.error('Designation is required');
+      return;
+    }
+    
     if (!formData.mobile || formData.mobile.length !== 10) {
       toast.error('Valid 10-digit mobile number is required');
       return;
@@ -655,7 +660,7 @@ const EmployeeManagementEnhanced = () => {
                   <div className="grid grid-cols-2 gap-4">
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Designation
+                        Designation <span className="text-red-500">*</span>
                       </label>
                       <input
                         type="text"
