@@ -5,6 +5,7 @@ import {
 } from 'lucide-react';
 import { ModuleHeader, CustomerSearch, ProductSearchSimple, ItemsTable, DocumentFooter, ProductCreationModal, NotesSection, AddressForm, StandardDatePicker, GenericSuccessModal } from '../global';
 import CustomerCreationB2B from '../global/ui/forms/CustomerCreationB2B';
+import KeyboardShortcuts, { SHORTCUT_SETS } from '../global/ui/KeyboardShortcuts';
 // NotesSection is now imported from global
 import ChallanPreview from './components/ChallanPreview';
 import ImportFromInvoiceModal from './components/ImportFromInvoiceModal';
@@ -61,6 +62,10 @@ const ModularChallanCreatorV5 = ({ open = true, onClose }) => {
   const [employees, setEmployees] = useState([]);
   const [selectedMR, setSelectedMR] = useState(null);
 
+  // Refs for keyboard navigation
+  const customerSearchRef = useRef(null);
+  const productSearchRef = useRef(null);
+
   // Keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (e) => {
@@ -71,6 +76,8 @@ const ModularChallanCreatorV5 = ({ open = true, onClose }) => {
             e.preventDefault();
             if (currentStep === 2) {
               saveChallan();
+            } else if (challan.customer_id && challan.items.length > 0) {
+              setCurrentStep(2);
             }
             break;
           case 'p':
@@ -90,8 +97,12 @@ const ModularChallanCreatorV5 = ({ open = true, onClose }) => {
           case 'f':
             e.preventDefault();
             // Focus on product search
-            const productSearchInput = document.querySelector('input[placeholder*="Search product"]');
-            if (productSearchInput) productSearchInput.focus();
+            if (productSearchRef.current) {
+              productSearchRef.current.focus();
+            } else {
+              const productSearchInput = document.querySelector('input[placeholder*="Search product"]');
+              if (productSearchInput) productSearchInput.focus();
+            }
             break;
         }
       }
@@ -108,7 +119,7 @@ const ModularChallanCreatorV5 = ({ open = true, onClose }) => {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [currentStep, showCreateCustomer, showCreateProduct, showImportModal]);
+  }, [currentStep, showCreateCustomer, showCreateProduct, showImportModal, challan.customer_id, challan.items]);
 
   // Load employees for M.R. dropdown
   const loadEmployees = async () => {
@@ -728,9 +739,13 @@ Expected Delivery: ${challan.expected_delivery_date}
           />
 
           {/* Keyboard Shortcuts Help */}
-          <div className="bg-blue-50 px-4 py-2 text-xs text-blue-700 border-b border-blue-200">
-            Keyboard shortcuts: <strong>Ctrl+N</strong> - Add Customer | <strong>Ctrl+I</strong> - Import | <strong>Ctrl+F</strong> - Search Products | <strong>Ctrl+S</strong> - Save | <strong>Esc</strong> - Close
-          </div>
+          <KeyboardShortcuts shortcuts={[
+            { key: 'Ctrl+N', action: 'Add Customer' },
+            { key: 'Ctrl+F', action: 'Search Products' },
+            { key: 'Ctrl+I', action: 'Import from Invoice' },
+            { key: 'Ctrl+S', action: 'Proceed' },
+            { key: 'Esc', action: 'Close' }
+          ]} />
 
           {/* Content - Single Page */}
           <div className="flex-1 overflow-y-auto bg-blue-50">
@@ -946,9 +961,7 @@ Expected Delivery: ${challan.expected_delivery_date}
         />
 
         {/* Keyboard Shortcuts Help */}
-        <div className="bg-blue-50 px-4 py-2 text-xs text-blue-700 border-b border-blue-200">
-          Keyboard shortcuts: <strong>Ctrl+S</strong> - Save Challan | <strong>Ctrl+P</strong> - Print | <strong>Esc</strong> - Back
-        </div>
+        <KeyboardShortcuts shortcuts={SHORTCUT_SETS.REVIEW} />
 
         {/* Content */}
         <div className="flex-1 overflow-y-auto bg-blue-50">
