@@ -8,6 +8,7 @@ from sqlalchemy import text
 from typing import List, Optional, Dict, Any
 from datetime import datetime, date
 import logging
+import json
 
 from ...core.database import get_db
 from ...core.auth_utils import get_org_id_from_header
@@ -227,17 +228,17 @@ async def create_employee(
             "designation": employee_data.get("designation"),
             "department_id": employee_data.get("department_id"),
             "branch_id": employee_data.get("branch_id"),
-            "joining_date": employee_data.get("date_of_joining"),
+            "joining_date": employee_data.get("date_of_joining") or None,
             "personal_mobile": personal_details.get("mobile") or employee_data.get("mobile"),
-            "personal_email": personal_details.get("email") or employee_data.get("email"),
-            "date_of_birth": personal_details.get("date_of_birth"),
-            "gender": personal_details.get("gender"),
-            "pan_number": personal_details.get("pan_number"),
-            "aadhar_number": personal_details.get("aadhar_number"),
-            "current_address": current_address,
-            "permanent_address": current_address,  # Same as current for now
-            "emergency_contact": employee_data.get("emergency_contact"),
-            "bank_account_details": employee_data.get("bank_account_details"),
+            "personal_email": personal_details.get("email") or employee_data.get("email") or None,
+            "date_of_birth": personal_details.get("date_of_birth") or None,
+            "gender": personal_details.get("gender") or None,
+            "pan_number": personal_details.get("pan_number") or None,
+            "aadhar_number": personal_details.get("aadhar_number") or None,
+            "current_address": json.dumps(current_address) if current_address else None,
+            "permanent_address": json.dumps(current_address) if current_address else None,
+            "emergency_contact": json.dumps(employee_data.get("emergency_contact")) if employee_data.get("emergency_contact") else None,
+            "bank_account_details": json.dumps(employee_data.get("bank_account_details")) if employee_data.get("bank_account_details") else None,
             "employment_status": 'active' if employee_data.get("is_active", True) else 'inactive'
         })
         
@@ -339,16 +340,16 @@ async def update_employee(
                 "pincode": personal_details.get("pincode")
             }
             update_fields.append("current_address = :current_address")
-            params["current_address"] = current_address
+            params["current_address"] = json.dumps(current_address)
             
         # JSONB fields
         if "emergency_contact" in employee_data:
             update_fields.append("emergency_contact = :emergency_contact")
-            params["emergency_contact"] = employee_data["emergency_contact"]
+            params["emergency_contact"] = json.dumps(employee_data["emergency_contact"])
             
         if "bank_account_details" in employee_data:
             update_fields.append("bank_account_details = :bank_account_details")
-            params["bank_account_details"] = employee_data["bank_account_details"]
+            params["bank_account_details"] = json.dumps(employee_data["bank_account_details"])
         
         # Employment status
         if "is_active" in employee_data:

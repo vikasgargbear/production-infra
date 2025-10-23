@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import text
 from typing import List, Optional, Dict, Any
 import logging
+import json
 
 from ...core.database import get_db
 from ...core.auth_utils import get_org_id_from_header
@@ -182,7 +183,7 @@ async def create_branch(
             "branch_code": branch_code,
             "branch_name": branch_data.get("branch_name"),
             "branch_type": branch_data.get("branch_type", "office"),
-            "address": address_jsonb,
+            "address": json.dumps(address_jsonb),
             "branch_phone": branch_data.get("phone") or branch_data.get("branch_phone"),
             "branch_email": branch_data.get("email") or branch_data.get("branch_email"),
             "branch_gst_number": branch_data.get("gstin") or branch_data.get("branch_gst_number"),
@@ -229,15 +230,15 @@ async def update_branch(
             address_data = branch_data["address"]
             if isinstance(address_data, str):
                 update_fields.append("address = :address")
-                params["address"] = {
+                params["address"] = json.dumps({
                     "street": address_data,
                     "city": branch_data.get("city", ""),
                     "state": branch_data.get("state", ""),
                     "pincode": branch_data.get("pincode", "")
-                }
+                })
             elif isinstance(address_data, dict):
                 update_fields.append("address = :address")
-                params["address"] = address_data
+                params["address"] = json.dumps(address_data)
         
         field_mapping = {
             "branch_name": "branch_name",
