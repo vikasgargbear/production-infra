@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Edit, Trash2, Search, X, Save, Upload, FileText, User } from 'lucide-react';
+import { Plus, Edit, Trash2, Search, X, Save, Upload, FileText, User, Filter } from 'lucide-react';
 import { toast } from 'react-toastify';
 import { employeesAPI, apiClient } from '../../services/api';
+import { PHARMA_DESIGNATIONS, PHARMA_DEPARTMENTS, getDesignationsByCategory } from '../../constants/pharmaEmployeeOptions';
 
 const EmployeeManagementEnhanced = () => {
   const [employees, setEmployees] = useState([]);
@@ -9,6 +10,7 @@ const EmployeeManagementEnhanced = () => {
   const [branches, setBranches] = useState([]);
   const [loading, setLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
+  const [designationFilter, setDesignationFilter] = useState('');
   const [showModal, setShowModal] = useState(false);
   const [editingEmployee, setEditingEmployee] = useState(null);
   const [formData, setFormData] = useState({
@@ -366,11 +368,16 @@ const EmployeeManagementEnhanced = () => {
     }
   };
 
-  const filteredEmployees = employees.filter(employee =>
-    employee.employee_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    employee.employee_code?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    employee.designation?.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const filteredEmployees = employees.filter(employee => {
+    const matchesSearch = employee.employee_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      employee.employee_code?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      employee.designation?.toLowerCase().includes(searchTerm.toLowerCase());
+    
+    const matchesDesignation = !designationFilter || 
+      employee.designation?.toLowerCase().includes(designationFilter.toLowerCase());
+    
+    return matchesSearch && matchesDesignation;
+  });
 
   return (
     <div className="p-6">
@@ -386,16 +393,34 @@ const EmployeeManagementEnhanced = () => {
           </button>
         </div>
 
-        {/* Search */}
-        <div className="relative">
-          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
-          <input
-            type="text"
-            placeholder="Search employees by name, code, or designation..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-          />
+        {/* Search and Filters */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="md:col-span-2 relative">
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
+            <input
+              type="text"
+              placeholder="Search employees by name, code, or designation..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+            />
+          </div>
+          <div className="relative">
+            <Filter className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
+            <select
+              value={designationFilter}
+              onChange={(e) => setDesignationFilter(e.target.value)}
+              className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+            >
+              <option value="">All Designations</option>
+              <option value="medical representative">Medical Representatives</option>
+              <option value="sales">Sales Team</option>
+              <option value="manager">Managers</option>
+              <option value="pharmacist">Pharmacists</option>
+              <option value="warehouse">Warehouse Staff</option>
+              <option value="accounts">Accounts Team</option>
+            </select>
+          </div>
         </div>
       </div>
 
@@ -662,13 +687,22 @@ const EmployeeManagementEnhanced = () => {
                       <label className="block text-sm font-medium text-gray-700 mb-1">
                         Designation <span className="text-red-500">*</span>
                       </label>
-                      <input
-                        type="text"
+                      <select
                         value={formData.designation}
                         onChange={(e) => setFormData({ ...formData, designation: e.target.value })}
                         className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                        placeholder="e.g., Medical Representative, Sales Manager"
-                      />
+                      >
+                        <option value="">Select Designation</option>
+                        {Object.entries(getDesignationsByCategory()).map(([category, designations]) => (
+                          <optgroup key={category} label={category}>
+                            {designations.map((des) => (
+                              <option key={des.value} value={des.value}>
+                                {des.label}
+                              </option>
+                            ))}
+                          </optgroup>
+                        ))}
+                      </select>
                     </div>
 
                     <div>
