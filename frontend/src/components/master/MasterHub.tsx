@@ -3,7 +3,7 @@ import {
   Building, Package, Users, 
   Calculator, UserCheck, Bell, Cog,
   Plug, Database, Receipt, Settings,
-  Ruler, Warehouse, Package2, Truck
+  Ruler, Warehouse, Package2, Truck, UsersRound
 } from 'lucide-react';
 import { ModuleHub } from '../global';
 import CompanyProfile from './CompanyProfile';
@@ -21,6 +21,7 @@ import WarehouseMaster from './WarehouseMaster';
 import BatchMaster from './BatchMaster';
 import DataValidationEngine from './DataValidationEngine';
 import BulkOperations from './BulkOperations';
+import EmployeeManagement from '../settings/EmployeeManagement';
 
 interface MasterHubProps {
   open?: boolean;
@@ -117,6 +118,15 @@ const MasterHub: React.FC<MasterHubProps> = ({ open = true, onClose }) => {
       icon: UserCheck,
       color: 'red',
       component: UserManagement
+    },
+    {
+      id: 'employee-management',
+      label: 'Employees',
+      fullLabel: 'Employee Management',
+      description: 'Manage employee records',
+      icon: UsersRound,
+      color: 'teal',
+      component: EmployeeManagement
     },
     {
       id: 'notifications',

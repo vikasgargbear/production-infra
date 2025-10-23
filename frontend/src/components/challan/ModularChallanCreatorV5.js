@@ -9,7 +9,7 @@ import CustomerCreationB2B from '../global/ui/forms/CustomerCreationB2B';
 import ChallanPreview from './components/ChallanPreview';
 import ImportFromInvoiceModal from './components/ImportFromInvoiceModal';
 import { challansApi } from '../../services/api/modules/challans.api';
-import { apiClient } from '../../services/api';
+import { apiClient, employeesAPI } from '../../services/api';
 
 const ModularChallanCreatorV5 = ({ open = true, onClose }) => {
   const [challan, setChallan] = useState({
@@ -58,6 +58,8 @@ const ModularChallanCreatorV5 = ({ open = true, onClose }) => {
   const [fetchingAddress, setFetchingAddress] = useState(false);
   const [message, setMessage] = useState('');
   const [messageType, setMessageType] = useState('');
+  const [employees, setEmployees] = useState([]);
+  const [selectedMR, setSelectedMR] = useState(null);
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -108,9 +110,22 @@ const ModularChallanCreatorV5 = ({ open = true, onClose }) => {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [currentStep, showCreateCustomer, showCreateProduct, showImportModal]);
 
-  // Generate challan number on mount
+  // Load employees for M.R. dropdown
+  const loadEmployees = async () => {
+    try {
+      const response = await employeesAPI.getAll({ is_active: true, limit: 100 });
+      if (response.success) {
+        setEmployees(response.data || []);
+      }
+    } catch (error) {
+      console.error('Failed to load employees:', error);
+    }
+  };
+
+  // Generate challan number and load employees on mount
   useEffect(() => {
     generateChallanNumber();
+    loadEmployees();
   }, []);
 
   // Function to fetch customer addresses separately if not in view
@@ -750,6 +765,30 @@ Expected Delivery: ${challan.expected_delivery_date}
                     <span>Import from Invoice</span>
                   </button>
                 </div>
+              </div>
+
+              {/* M.R. Selection */}
+              <div className="mb-6">
+                <label className="block text-sm font-medium text-gray-600 mb-2">
+                  M.R. (Medical Representative)
+                </label>
+                <select
+                  value={selectedMR?.employee_id || ''}
+                  onChange={(e) => {
+                    const employeeId = parseInt(e.target.value);
+                    const employee = employees.find(emp => emp.employee_id === employeeId);
+                    setSelectedMR(employee || null);
+                    setChallan(prev => ({ ...prev, sales_person_id: employeeId || null }));
+                  }}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                >
+                  <option value="">Select M.R.</option>
+                  {employees.map((employee) => (
+                    <option key={employee.employee_id} value={employee.employee_id}>
+                      {employee.employee_name} {employee.designation ? `(${employee.designation})` : ''}
+                    </option>
+                  ))}
+                </select>
               </div>
 
               {/* Customer Section */}
