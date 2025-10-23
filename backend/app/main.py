@@ -24,8 +24,11 @@ from .api.routes import (
     collection_center_router
 )
 
-# Import bank accounts directly
+# Import bank accounts, employees, departments, and branches directly
 from .api.routes.bank_accounts import router as bank_accounts_router
+from .api.routes.employees import router as employees_router
+from .api.routes.departments import router as departments_router
+from .api.routes.branches import router as branches_router
 
 # Import additional routers not in __init__.py
 from .api.routes import stock_receive, enterprise_delivery_challan, inventory_batches, create_user, delivery_challan, stock_dashboard, sales_orders, grn, journal_entries, expense_claims, settings
@@ -132,6 +135,9 @@ api.include_router(billing.router, prefix="/billing", tags=["Billing"])
 api.include_router(company.router, prefix="/company", tags=["Company"])
 api.include_router(settings.router, prefix="/settings", tags=["Settings"])
 api.include_router(bank_accounts_router, prefix="/bank-accounts", tags=["Bank Accounts"])
+api.include_router(employees_router, prefix="/employees", tags=["Employees"])
+api.include_router(departments_router, prefix="/departments", tags=["Departments"])
+api.include_router(branches_router, prefix="/branches", tags=["Branches"])
 # Register additional routes from __init__.py
 api.include_router(orders_router, tags=["Orders"])
 api.include_router(invoices_router, tags=["Invoices"])

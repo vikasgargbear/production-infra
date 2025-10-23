@@ -244,7 +244,7 @@ const EmployeeManagementEnhanced = () => {
 
     setLoading(true);
     try {
-      // Prepare data - store additional fields in JSONB columns
+      // Prepare data for backend - matching database schema
       const employeeData = {
         employee_name: formData.employee_name,
         employee_code: formData.employee_code || undefined, // Let backend auto-generate
@@ -253,6 +253,9 @@ const EmployeeManagementEnhanced = () => {
         branch_id: formData.branch_id,
         date_of_joining: formData.date_of_joining,
         is_active: formData.is_active,
+        
+        // Mobile at top level (required field in database)
+        mobile: formData.mobile,
         
         // Store in emergency_contact JSONB
         emergency_contact: {
@@ -268,8 +271,7 @@ const EmployeeManagementEnhanced = () => {
           ifsc_code: formData.bank_ifsc_code
         },
         
-        // We'll need to add a personal_details JSONB column or use emergency_contact for now
-        // For now, storing in emergency_contact (backend can be updated to have personal_details)
+        // Personal details for backend to store properly
         personal_details: {
           gender: formData.gender,
           date_of_birth: formData.date_of_birth,

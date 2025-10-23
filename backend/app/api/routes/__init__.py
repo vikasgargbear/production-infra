@@ -25,6 +25,9 @@ from .credit_debit_notes import router as credit_debit_notes_router
 from .sales import router as sales_router
 from .collection_center import router as collection_center_router
 from .bank_accounts import router as bank_accounts_router
+from .employees import router as employees_router
+from .departments import router as departments_router
+from .branches import router as branches_router
 
 __all__ = [
     "customers_router", 
@@ -50,5 +53,8 @@ __all__ = [
     "credit_debit_notes_router",
     "sales_router",
     "collection_center_router",
-    "bank_accounts_router"
+    "bank_accounts_router",
+    "employees_router",
+    "departments_router",
+    "branches_router"
 ]
