@@ -31,9 +31,11 @@ async def list_departments(
                 department_id,
                 department_code,
                 department_name,
+                department_type,
                 parent_department_id,
-                manager_id,
-                cost_center,
+                department_head_id,
+                cost_center_code,
+                budget_allocated,
                 is_active,
                 created_at
             FROM master.departments
@@ -146,11 +148,11 @@ async def create_department(
         
         query = text("""
             INSERT INTO master.departments (
-                org_id, department_code, department_name,
-                parent_department_id, manager_id, cost_center, is_active
+                org_id, department_code, department_name, department_type,
+                parent_department_id, department_head_id, cost_center_code, is_active
             ) VALUES (
-                :org_id, :department_code, :department_name,
-                :parent_department_id, :manager_id, :cost_center, :is_active
+                :org_id, :department_code, :department_name, :department_type,
+                :parent_department_id, :department_head_id, :cost_center_code, :is_active
             ) RETURNING department_id, department_name, department_code
         """)
         
@@ -158,9 +160,10 @@ async def create_department(
             "org_id": org_id,
             "department_code": department_code,
             "department_name": department_data.get("department_name"),
+            "department_type": department_data.get("department_type"),
             "parent_department_id": department_data.get("parent_department_id"),
-            "manager_id": department_data.get("manager_id"),
-            "cost_center": department_data.get("cost_center"),
+            "department_head_id": department_data.get("department_head_id"),
+            "cost_center_code": department_data.get("cost_center_code"),
             "is_active": department_data.get("is_active", True)
         })
         
@@ -201,9 +204,10 @@ async def update_department(
         field_mapping = {
             "department_name": "department_name",
             "department_code": "department_code",
+            "department_type": "department_type",
             "parent_department_id": "parent_department_id",
-            "manager_id": "manager_id",
-            "cost_center": "cost_center",
+            "department_head_id": "department_head_id",
+            "cost_center_code": "cost_center_code",
             "is_active": "is_active"
         }
         

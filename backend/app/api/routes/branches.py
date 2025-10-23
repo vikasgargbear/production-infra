@@ -33,13 +33,13 @@ async def list_branches(
                 branch_name,
                 branch_type,
                 address,
-                city,
-                state,
-                pincode,
-                phone,
-                email,
-                gstin,
-                manager_id,
+                branch_phone,
+                branch_email,
+                branch_gst_number,
+                branch_manager_id,
+                is_billing_location,
+                is_shipping_location,
+                is_default_location,
                 is_active,
                 created_at
             FROM master.org_branches
@@ -150,15 +150,30 @@ async def create_branch(
             count = count_result.scalar() + 1
             branch_code = f"BR{count:03d}"
         
+        # Build address JSONB
+        address_data = branch_data.get("address", {})
+        if isinstance(address_data, str):
+            # If address is a string, convert to JSONB
+            address_jsonb = {
+                "street": address_data,
+                "city": branch_data.get("city", ""),
+                "state": branch_data.get("state", ""),
+                "pincode": branch_data.get("pincode", "")
+            }
+        elif isinstance(address_data, dict):
+            address_jsonb = address_data
+        else:
+            address_jsonb = {}
+        
         query = text("""
             INSERT INTO master.org_branches (
                 org_id, branch_code, branch_name, branch_type,
-                address, city, state, pincode,
-                phone, email, gstin, manager_id, is_active
+                address, branch_phone, branch_email, branch_gst_number,
+                branch_manager_id, is_active
             ) VALUES (
                 :org_id, :branch_code, :branch_name, :branch_type,
-                :address, :city, :state, :pincode,
-                :phone, :email, :gstin, :manager_id, :is_active
+                :address, :branch_phone, :branch_email, :branch_gst_number,
+                :branch_manager_id, :is_active
             ) RETURNING branch_id, branch_name, branch_code
         """)
         
@@ -167,14 +182,11 @@ async def create_branch(
             "branch_code": branch_code,
             "branch_name": branch_data.get("branch_name"),
             "branch_type": branch_data.get("branch_type", "office"),
-            "address": branch_data.get("address"),
-            "city": branch_data.get("city"),
-            "state": branch_data.get("state"),
-            "pincode": branch_data.get("pincode"),
-            "phone": branch_data.get("phone"),
-            "email": branch_data.get("email"),
-            "gstin": branch_data.get("gstin"),
-            "manager_id": branch_data.get("manager_id"),
+            "address": address_jsonb,
+            "branch_phone": branch_data.get("phone") or branch_data.get("branch_phone"),
+            "branch_email": branch_data.get("email") or branch_data.get("branch_email"),
+            "branch_gst_number": branch_data.get("gstin") or branch_data.get("branch_gst_number"),
+            "branch_manager_id": branch_data.get("manager_id") or branch_data.get("branch_manager_id"),
             "is_active": branch_data.get("is_active", True)
         })
         
@@ -212,18 +224,33 @@ async def update_branch(
             "org_id": org_id
         }
         
+        # Handle address JSONB
+        if "address" in branch_data:
+            address_data = branch_data["address"]
+            if isinstance(address_data, str):
+                update_fields.append("address = :address")
+                params["address"] = {
+                    "street": address_data,
+                    "city": branch_data.get("city", ""),
+                    "state": branch_data.get("state", ""),
+                    "pincode": branch_data.get("pincode", "")
+                }
+            elif isinstance(address_data, dict):
+                update_fields.append("address = :address")
+                params["address"] = address_data
+        
         field_mapping = {
             "branch_name": "branch_name",
             "branch_code": "branch_code",
             "branch_type": "branch_type",
-            "address": "address",
-            "city": "city",
-            "state": "state",
-            "pincode": "pincode",
-            "phone": "phone",
-            "email": "email",
-            "gstin": "gstin",
-            "manager_id": "manager_id",
+            "phone": "branch_phone",
+            "branch_phone": "branch_phone",
+            "email": "branch_email",
+            "branch_email": "branch_email",
+            "gstin": "branch_gst_number",
+            "branch_gst_number": "branch_gst_number",
+            "manager_id": "branch_manager_id",
+            "branch_manager_id": "branch_manager_id",
             "is_active": "is_active"
         }
         
