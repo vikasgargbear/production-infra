@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Plus, Edit, Trash2, Search, X, Save, Upload, FileText, User, Filter } from 'lucide-react';
 import { toast } from 'react-toastify';
 import { employeesAPI, apiClient } from '../../services/api';
-import { PHARMA_DESIGNATIONS, PHARMA_DEPARTMENTS, getDesignationsByCategory } from '../../constants/pharmaEmployeeOptions';
+import { PHARMA_DESIGNATIONS, PHARMA_DEPARTMENTS } from '../../constants/pharmaEmployeeOptions';
 
 const EmployeeManagementEnhanced = () => {
   const [employees, setEmployees] = useState([]);
@@ -693,14 +693,10 @@ const EmployeeManagementEnhanced = () => {
                         className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                       >
                         <option value="">Select Designation</option>
-                        {Object.entries(getDesignationsByCategory()).map(([category, designations]) => (
-                          <optgroup key={category} label={category}>
-                            {designations.map((des) => (
-                              <option key={des.value} value={des.value}>
-                                {des.label}
-                              </option>
-                            ))}
-                          </optgroup>
+                        {PHARMA_DESIGNATIONS.map((des) => (
+                          <option key={des.value} value={des.value}>
+                            {des.label}
+                          </option>
                         ))}
                       </select>
                     </div>
