@@ -33,24 +33,40 @@ async def list_employees(
             SELECT 
                 e.employee_id,
                 e.employee_code,
-                e.employee_name,
+                e.full_name as employee_name,
+                e.first_name,
+                e.last_name,
                 e.designation,
                 e.department_id,
                 d.department_name,
                 e.branch_id,
                 b.branch_name,
-                e.date_of_joining,
-                e.is_active,
+                e.joining_date as date_of_joining,
+                e.personal_mobile,
+                e.personal_email,
+                e.date_of_birth,
+                e.gender,
+                e.pan_number,
+                e.aadhar_number,
+                e.current_address,
+                e.permanent_address,
+                e.emergency_contact,
+                e.bank_account_details,
+                e.employment_status,
+                CASE WHEN e.employment_status = 'active' THEN true ELSE false END as is_active,
                 e.created_at
             FROM master.employees e
             LEFT JOIN master.departments d ON e.department_id = d.department_id AND d.org_id = e.org_id
             LEFT JOIN master.org_branches b ON e.branch_id = b.branch_id AND b.org_id = e.org_id
             WHERE e.org_id = :org_id
             AND (:search IS NULL OR 
-                 LOWER(e.employee_name) LIKE LOWER(:search_pattern) OR
+                 LOWER(e.full_name) LIKE LOWER(:search_pattern) OR
                  LOWER(e.employee_code) LIKE LOWER(:search_pattern))
-            AND (:is_active IS NULL OR e.is_active = :is_active)
-            ORDER BY e.employee_name
+            AND (:is_active IS NULL OR (
+                CASE WHEN :is_active THEN e.employment_status = 'active'
+                ELSE e.employment_status != 'active' END
+            ))
+            ORDER BY e.full_name
             LIMIT :limit OFFSET :offset
         """)
         
@@ -74,9 +90,12 @@ async def list_employees(
             SELECT COUNT(*) FROM master.employees e
             WHERE e.org_id = :org_id
             AND (:search IS NULL OR 
-                 LOWER(e.employee_name) LIKE LOWER(:search_pattern) OR
+                 LOWER(e.full_name) LIKE LOWER(:search_pattern) OR
                  LOWER(e.employee_code) LIKE LOWER(:search_pattern))
-            AND (:is_active IS NULL OR e.is_active = :is_active)
+            AND (:is_active IS NULL OR (
+                CASE WHEN :is_active THEN e.employment_status = 'active'
+                ELSE e.employment_status != 'active' END
+            ))
         """)
         
         count_result = db.execute(count_query, {
@@ -159,29 +178,67 @@ async def create_employee(
             count = count_result.scalar() + 1
             employee_code = f"EMP{count:04d}"
         
+        # Extract name parts
+        employee_name = employee_data.get("employee_name", "")
+        name_parts = employee_name.split(" ", 1)
+        first_name = name_parts[0] if name_parts else ""
+        last_name = name_parts[1] if len(name_parts) > 1 else None
+        
         query = text("""
             INSERT INTO master.employees (
-                org_id, employee_code, employee_name, designation,
-                department_id, branch_id, date_of_joining,
-                emergency_contact, bank_account_details, is_active
+                org_id, employee_code, first_name, last_name,
+                designation, department_id, branch_id, joining_date,
+                personal_mobile, personal_email,
+                date_of_birth, gender,
+                pan_number, aadhar_number,
+                current_address, permanent_address,
+                emergency_contact, bank_account_details,
+                employment_status
             ) VALUES (
-                :org_id, :employee_code, :employee_name, :designation,
-                :department_id, :branch_id, :date_of_joining,
-                :emergency_contact, :bank_account_details, :is_active
-            ) RETURNING employee_id, employee_name, employee_code
+                :org_id, :employee_code, :first_name, :last_name,
+                :designation, :department_id, :branch_id, :joining_date,
+                :personal_mobile, :personal_email,
+                :date_of_birth, :gender,
+                :pan_number, :aadhar_number,
+                :current_address, :permanent_address,
+                :emergency_contact, :bank_account_details,
+                :employment_status
+            ) RETURNING employee_id, full_name, employee_code
         """)
+        
+        # Get personal details
+        personal_details = employee_data.get("personal_details", {})
+        
+        # Build address JSONB
+        current_address = None
+        if personal_details.get("address") or personal_details.get("city"):
+            current_address = {
+                "address": personal_details.get("address"),
+                "city": personal_details.get("city"),
+                "state": personal_details.get("state"),
+                "pincode": personal_details.get("pincode")
+            }
         
         result = db.execute(query, {
             "org_id": org_id,
             "employee_code": employee_code,
-            "employee_name": employee_data.get("employee_name"),
+            "first_name": first_name,
+            "last_name": last_name,
             "designation": employee_data.get("designation"),
             "department_id": employee_data.get("department_id"),
             "branch_id": employee_data.get("branch_id"),
-            "date_of_joining": employee_data.get("date_of_joining"),
+            "joining_date": employee_data.get("date_of_joining"),
+            "personal_mobile": personal_details.get("mobile") or employee_data.get("mobile"),
+            "personal_email": personal_details.get("email") or employee_data.get("email"),
+            "date_of_birth": personal_details.get("date_of_birth"),
+            "gender": personal_details.get("gender"),
+            "pan_number": personal_details.get("pan_number"),
+            "aadhar_number": personal_details.get("aadhar_number"),
+            "current_address": current_address,
+            "permanent_address": current_address,  # Same as current for now
             "emergency_contact": employee_data.get("emergency_contact"),
             "bank_account_details": employee_data.get("bank_account_details"),
-            "is_active": employee_data.get("is_active", True)
+            "employment_status": 'active' if employee_data.get("is_active", True) else 'inactive'
         })
         
         db.commit()
@@ -219,22 +276,84 @@ async def update_employee(
             "org_id": org_id
         }
         
-        field_mapping = {
-            "employee_name": "employee_name",
-            "employee_code": "employee_code",
-            "designation": "designation",
-            "department_id": "department_id",
-            "branch_id": "branch_id",
-            "date_of_joining": "date_of_joining",
-            "emergency_contact": "emergency_contact",
-            "bank_account_details": "bank_account_details",
-            "is_active": "is_active"
-        }
+        # Handle name update
+        if "employee_name" in employee_data:
+            name_parts = employee_data["employee_name"].split(" ", 1)
+            update_fields.append("first_name = :first_name")
+            params["first_name"] = name_parts[0] if name_parts else ""
+            if len(name_parts) > 1:
+                update_fields.append("last_name = :last_name")
+                params["last_name"] = name_parts[1]
         
-        for api_field, db_field in field_mapping.items():
-            if api_field in employee_data:
-                update_fields.append(f"{db_field} = :{db_field}")
-                params[db_field] = employee_data[api_field]
+        # Get personal details
+        personal_details = employee_data.get("personal_details", {})
+        
+        # Map API fields to database columns
+        if "designation" in employee_data:
+            update_fields.append("designation = :designation")
+            params["designation"] = employee_data["designation"]
+            
+        if "department_id" in employee_data:
+            update_fields.append("department_id = :department_id")
+            params["department_id"] = employee_data["department_id"]
+            
+        if "branch_id" in employee_data:
+            update_fields.append("branch_id = :branch_id")
+            params["branch_id"] = employee_data["branch_id"]
+            
+        if "date_of_joining" in employee_data:
+            update_fields.append("joining_date = :joining_date")
+            params["joining_date"] = employee_data["date_of_joining"]
+        
+        # Personal details
+        if personal_details.get("mobile") or employee_data.get("mobile"):
+            update_fields.append("personal_mobile = :personal_mobile")
+            params["personal_mobile"] = personal_details.get("mobile") or employee_data.get("mobile")
+            
+        if personal_details.get("email") or employee_data.get("email"):
+            update_fields.append("personal_email = :personal_email")
+            params["personal_email"] = personal_details.get("email") or employee_data.get("email")
+            
+        if personal_details.get("date_of_birth"):
+            update_fields.append("date_of_birth = :date_of_birth")
+            params["date_of_birth"] = personal_details["date_of_birth"]
+            
+        if personal_details.get("gender"):
+            update_fields.append("gender = :gender")
+            params["gender"] = personal_details["gender"]
+            
+        if personal_details.get("pan_number"):
+            update_fields.append("pan_number = :pan_number")
+            params["pan_number"] = personal_details["pan_number"]
+            
+        if personal_details.get("aadhar_number"):
+            update_fields.append("aadhar_number = :aadhar_number")
+            params["aadhar_number"] = personal_details["aadhar_number"]
+        
+        # Address
+        if personal_details.get("address") or personal_details.get("city"):
+            current_address = {
+                "address": personal_details.get("address"),
+                "city": personal_details.get("city"),
+                "state": personal_details.get("state"),
+                "pincode": personal_details.get("pincode")
+            }
+            update_fields.append("current_address = :current_address")
+            params["current_address"] = current_address
+            
+        # JSONB fields
+        if "emergency_contact" in employee_data:
+            update_fields.append("emergency_contact = :emergency_contact")
+            params["emergency_contact"] = employee_data["emergency_contact"]
+            
+        if "bank_account_details" in employee_data:
+            update_fields.append("bank_account_details = :bank_account_details")
+            params["bank_account_details"] = employee_data["bank_account_details"]
+        
+        # Employment status
+        if "is_active" in employee_data:
+            update_fields.append("employment_status = :employment_status")
+            params["employment_status"] = 'active' if employee_data["is_active"] else 'inactive'
         
         if not update_fields:
             raise HTTPException(status_code=400, detail="No fields to update")
@@ -243,7 +362,7 @@ async def update_employee(
             UPDATE master.employees 
             SET {', '.join(update_fields)}, updated_at = CURRENT_TIMESTAMP
             WHERE employee_id = :employee_id AND org_id = :org_id
-            RETURNING employee_id, employee_name
+            RETURNING employee_id, full_name
         """)
         
         result = db.execute(query, params)
@@ -278,12 +397,12 @@ async def delete_employee(
 ):
     """Delete (soft delete) employee"""
     try:
-        # Soft delete by setting is_active to False
+        # Soft delete by setting employment_status to inactive
         query = text("""
             UPDATE master.employees 
-            SET is_active = false, updated_at = CURRENT_TIMESTAMP
+            SET employment_status = 'inactive', updated_at = CURRENT_TIMESTAMP
             WHERE employee_id = :employee_id AND org_id = :org_id
-            RETURNING employee_id, employee_name
+            RETURNING employee_id, full_name
         """)
         
         result = db.execute(query, {

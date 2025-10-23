@@ -21,7 +21,7 @@ import WarehouseMaster from './WarehouseMaster';
 import BatchMaster from './BatchMaster';
 import DataValidationEngine from './DataValidationEngine';
 import BulkOperations from './BulkOperations';
-import EmployeeManagement from '../settings/EmployeeManagement';
+import EmployeeManagement from '../settings/EmployeeManagementEnhanced';
 
 interface MasterHubProps {
   open?: boolean;
