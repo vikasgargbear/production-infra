@@ -81,31 +81,25 @@ const EmployeeManagementEnhanced = () => {
 
   const loadDepartments = async () => {
     try {
-      // Assuming departments API exists
-      const response = await apiClient.get('/departments/');
+      const response = await apiClient.get('/departments/', { timeout: 5000 });
       if (response.data) {
         setDepartments(response.data.data || response.data || []);
       }
     } catch (error) {
       console.error('Error loading departments:', error);
-      // Set some default departments if API fails
-      setDepartments([
-        { department_id: 1, department_name: 'Sales' },
-        { department_id: 2, department_name: 'Warehouse' },
-        { department_id: 3, department_name: 'Accounts' },
-        { department_id: 4, department_name: 'Management' }
-      ]);
+      setDepartments([]); // Empty - optional field
     }
   };
 
   const loadBranches = async () => {
     try {
-      const response = await apiClient.get('/branches/');
+      const response = await apiClient.get('/branches/', { timeout: 5000 });
       if (response.data) {
         setBranches(response.data.data || response.data || []);
       }
     } catch (error) {
       console.error('Error loading branches:', error);
+      setBranches([]); // Empty - optional field
     }
   };
 
