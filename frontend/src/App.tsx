@@ -318,10 +318,21 @@ function App(): JSX.Element {
     );
   }
 
-  // Skip login - always authenticated with test token
-  // if (!isAuthenticated) {
-  //   return <LoadingSpinner />;
-  // }
+  // Require authentication - show login if not authenticated
+  if (!isAuthenticated) {
+    return (
+      <ErrorBoundary>
+        <ToastProvider>
+          <Suspense fallback={<LoadingSpinner />}>
+            <EnhancedLogin onLoginSuccess={() => {
+              setIsAuthenticated(true);
+              window.location.reload();
+            }} />
+          </Suspense>
+        </ToastProvider>
+      </ErrorBoundary>
+    );
+  }
 
   return (
     <QueryClientProvider client={queryClient}>
