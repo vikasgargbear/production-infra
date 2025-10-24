@@ -17,7 +17,8 @@ import CreditDebitNoteFlow from './components/notes/CreditDebitNoteFlow';
 import GSTHub from './components/gst/GSTHub';
 import MasterHub from './components/master/MasterHub';
 import ReportsHub from './components/reports/ReportsHub';
-import AuthDiagnostic from './components/AuthDiagnostic';
+// OLD AUTH DIAGNOSTIC - Not needed with new AuthContext
+// import AuthDiagnostic from './components/AuthDiagnostic';
 import { AuthProvider } from './contexts/AuthContext';
 import { CompanyProvider } from './contexts/CompanyContext';
 import { EscapeKeyProvider } from './contexts/EscapeKeyContext';
@@ -30,10 +31,9 @@ import SyncStatusIndicator from './components/global/ui/SyncStatusIndicator';
 import * as serviceWorkerRegistration from './serviceWorkerRegistration';
 import { ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
-// @ts-ignore - JavaScript module
-import authService from './services/auth/AuthService';
-// @ts-ignore - JavaScript module
-import './setupAuth';
+// OLD AUTH REMOVED - Now using AuthContext
+// import authService from './services/auth/AuthService';
+// import './setupAuth';
 // import ReceivablesCollectionCenter from './components/receivables/ReceivablesCollectionCenter';
 
 // Lazy load components for better performance and code splitting
@@ -141,11 +141,7 @@ const CompliancePlaceholder = React.memo(() => (
 
 function App(): JSX.Element {
   const [activeTab, setActiveTab] = useState<TabName>('home');
-  // Check authentication status
-  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {
-    return authService.isAuthenticated();
-  });
-  const [isAuthLoading, setIsAuthLoading] = useState<boolean>(!authService.isAuthenticated());
+  // Authentication now managed by AuthContext - no local state needed
   const [setupComplete, setSetupComplete] = useState<boolean | null>(null);
   const [isCheckingSetup, setIsCheckingSetup] = useState<boolean>(true);
 
@@ -180,31 +176,10 @@ function App(): JSX.Element {
     }
   };
 
-  // Initialize Authentication on app load
+  // Authentication handled by AuthContext - no manual initialization needed
   useEffect(() => {
-    const initAuth = async () => {
-      // Auto-login if credentials are available
-      if (!isAuthenticated) {
-        setIsAuthLoading(true);
-        try {
-          const result = await authService.autoLogin();
-          if (result.success) {
-            setIsAuthenticated(true);
-          }
-        } catch (error) {
-          console.error('Auto-login failed:', error);
-        } finally {
-          setIsAuthLoading(false);
-        }
-      }
-    };
-
-    initAuth();
-
-    // OrgIdManager handles org_id initialization automatically
-    import('./services/OrgIdManager').then(module => {
-      const manager = module.default;
-    });
+    // OLD AUTH CODE REMOVED
+    // AuthContext automatically initializes from token on mount
 
     // Listen for navigation events from Settings buttons
     const handleNavigate = (event: Event) => {
@@ -291,17 +266,12 @@ function App(): JSX.Element {
 
   // Check if user wants to see auth diagnostic
   if (window.location.pathname === '/auth-diagnostic' || window.location.hash === '#auth-diagnostic') {
-    return (
-      <ErrorBoundary>
-        <ToastProvider>
-          <AuthDiagnostic />
-        </ToastProvider>
-      </ErrorBoundary>
-    );
+    // OLD AUTH DIAGNOSTIC REMOVED
+    return null;
   }
 
   // Show loading while checking setup status or initializing auth
-  if (isCheckingSetup || isAuthLoading) {
+  if (isCheckingSetup) {
     return <LoadingSpinner />;
   }
 
