@@ -245,11 +245,66 @@ class AuthService {
   }
 
   /**
+   * Initialize auth state from existing token
+   * Extracts user data and org_id from JWT and populates localStorage
+   */
+  initializeFromToken() {
+    const token = this.getToken();
+    if (!token || !this.isTokenValid(token)) {
+      return false;
+    }
+
+    try {
+      // Decode token payload
+      const actualToken = token.startsWith('Bearer ') ? token.slice(7) : token;
+      const parts = actualToken.split('.');
+      if (parts.length !== 3) return false;
+
+      const payload = JSON.parse(atob(parts[1]));
+      
+      // Extract user data from token
+      const userData = {
+        user_id: payload.user_id,
+        email: payload.email,
+        org_id: payload.org_id,
+        role_id: payload.role_id,
+        branch_id: payload.branch_id,
+        permissions: payload.permissions || {}
+      };
+
+      // Store user data
+      localStorage.setItem(this.USER_KEY, JSON.stringify(userData));
+
+      // Ensure org_id is set
+      if (payload.org_id) {
+        this.ensureOrgId(payload.org_id);
+      }
+
+      // Store branch_id if available
+      if (payload.branch_id) {
+        localStorage.setItem('pharma_branch_id', payload.branch_id);
+      }
+
+      return true;
+    } catch (error) {
+      console.error('Failed to initialize from token:', error);
+      return false;
+    }
+  }
+
+  /**
    * Check if user is authenticated
    */
   isAuthenticated() {
     const token = this.getToken();
-    return token && this.isTokenValid(token);
+    const isValid = token && this.isTokenValid(token);
+    
+    // If valid token exists, ensure user data is initialized
+    if (isValid) {
+      this.initializeFromToken();
+    }
+    
+    return isValid;
   }
 
   /**

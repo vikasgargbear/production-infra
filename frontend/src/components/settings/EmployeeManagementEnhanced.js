@@ -65,17 +65,10 @@ const EmployeeManagementEnhanced = () => {
   const loadEmployees = async () => {
     setLoading(true);
     try {
-      // Check org_id in localStorage
-      const orgId = localStorage.getItem('pharma_org_id') || localStorage.getItem('org_id');
-      console.log('Current org_id from localStorage:', orgId);
-      
       const response = await employeesAPI.getAll({ limit: 100 });
-      console.log('Employees API response:', response);
       if (response.success) {
         setEmployees(response.data || []);
-        console.log('Employees set:', response.data);
       } else {
-        console.error('API returned success=false:', response);
         toast.error('Failed to load employees');
       }
     } catch (error) {
