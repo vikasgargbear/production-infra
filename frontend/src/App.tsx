@@ -18,6 +18,7 @@ import GSTHub from './components/gst/GSTHub';
 import MasterHub from './components/master/MasterHub';
 import ReportsHub from './components/reports/ReportsHub';
 import AuthDiagnostic from './components/AuthDiagnostic';
+import { AuthProvider } from './contexts/AuthContext';
 import { CompanyProvider } from './contexts/CompanyContext';
 import { EscapeKeyProvider } from './contexts/EscapeKeyContext';
 import { PaymentProvider } from './contexts/PaymentContext';
@@ -335,10 +336,11 @@ function App(): JSX.Element {
   }
 
   return (
-    <QueryClientProvider client={queryClient}>
-      <CompanyProvider>
-        <EscapeKeyProvider>
-          <ToastProvider>
+    <AuthProvider>
+      <QueryClientProvider client={queryClient}>
+        <CompanyProvider>
+          <EscapeKeyProvider>
+            <ToastProvider>
             <ErrorBoundary>
               <div className="min-h-screen bg-gray-50">
                 <Suspense fallback={<LoadingSpinner />}>
@@ -351,10 +353,11 @@ function App(): JSX.Element {
                 <ToastContainer position="top-right" />
               </div>
             </ErrorBoundary>
-          </ToastProvider>
-        </EscapeKeyProvider>
-      </CompanyProvider>
-    </QueryClientProvider>
+            </ToastProvider>
+          </EscapeKeyProvider>
+        </CompanyProvider>
+      </QueryClientProvider>
+    </AuthProvider>
   );
 }
 
