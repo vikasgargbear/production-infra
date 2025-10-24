@@ -6,7 +6,6 @@
 // Use dynamic import to avoid initialization order issues
 import axios from 'axios';
 import { getApiBaseUrl } from '../../config/apiBase';
-import orgIdManager from '../OrgIdManager';
 
 // Create our own apiClient instance to avoid circular dependency
 // Use HTTPS for Railway production deployment
@@ -22,21 +21,20 @@ const apiClient = axios.create({
 
 // Add request interceptor for auth token and org_id
 apiClient.interceptors.request.use((config) => {
-  // ALWAYS get org_id from OrgIdManager (guaranteed to return a value)
-  const orgId = orgIdManager.getOrgId();
-  
-  // Add org_id header
-  config.headers['X-Org-Id'] = orgId;
-  
-  // Log only if there's an issue
-  const isPublicEndpoint = config.url?.includes('/setup/check') || 
-                          config.url?.includes('/auth/') ||
-                          config.url?.includes('/login');
-  
-  if (!orgIdManager.isValidOrgId(orgId) && !isPublicEndpoint) {
+  // Get org_id from user data (set by AuthContext)
+  const userStr = localStorage.getItem('pharma_user');
+  if (userStr) {
+    try {
+      const user = JSON.parse(userStr);
+      if (user.org_id) {
+        config.headers['X-Org-Id'] = user.org_id;
+      }
+    } catch (error) {
+      console.error('Failed to parse user data:', error);
+    }
   }
   
-  // Then add auth token if it exists
+  // Add auth token if it exists
   const token = localStorage.getItem('authToken') || localStorage.getItem('auth_token');
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
