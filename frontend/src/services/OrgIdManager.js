@@ -8,8 +8,8 @@
 
 class OrgIdManager {
   constructor() {
-    // Default org_id for the system (from MIGRATION_GUIDE)
-    this.DEFAULT_ORG_ID = 'e78d6777-35f6-4b19-994f-caaede2f021a';
+    // NO DEFAULT ORG_ID - must come from authentication
+    this.DEFAULT_ORG_ID = null;
     
     // Storage keys to check (in priority order)
     this.STORAGE_KEYS = [
@@ -28,31 +28,18 @@ class OrgIdManager {
    * This runs synchronously to ensure org_id is available
    */
   initialize() {
-    // Try to get existing org_id
-    let orgId = this.getFromStorage();
+    // Try to get existing org_id from storage
+    const orgId = this.getFromStorage();
     
-    if (!orgId) {
-      // Check if user is authenticated
-      const token = localStorage.getItem('authToken') || 
-                   localStorage.getItem('auth_token') ||
-                   sessionStorage.getItem('authToken');
-      
-      if (token) {
-        // User is authenticated but no org_id - use default
-        orgId = this.DEFAULT_ORG_ID;
-        this.setInStorage(orgId);
-      } else {
-        // Not authenticated - still set default for demo/testing
-        orgId = this.DEFAULT_ORG_ID;
-        this.setInStorage(orgId);
-      }
-    } else {
+    if (orgId) {
       // Ensure it's in all storage locations
       this.syncStorage(orgId);
+      this.currentOrgId = orgId;
+    } else {
+      // NO org_id - user must login
+      this.currentOrgId = null;
+      console.warn('OrgIdManager: No org_id found. User must login.');
     }
-    
-    // Store the current org_id
-    this.currentOrgId = orgId;
     
     // Set up storage event listener for cross-tab sync
     this.setupStorageListener();
@@ -114,7 +101,7 @@ class OrgIdManager {
   }
 
   /**
-   * Get current org_id (with fallback)
+   * Get current org_id (NO FALLBACK - must be authenticated)
    */
   getOrgId() {
     // First try memory
@@ -129,10 +116,9 @@ class OrgIdManager {
       return storedOrgId;
     }
     
-    // Last resort - use default and save it
-    this.currentOrgId = this.DEFAULT_ORG_ID;
-    this.setInStorage(this.DEFAULT_ORG_ID);
-    return this.DEFAULT_ORG_ID;
+    // NO FALLBACK - return null if not authenticated
+    console.error('CRITICAL: No org_id available. User must login first.');
+    return null;
   }
 
   /**
