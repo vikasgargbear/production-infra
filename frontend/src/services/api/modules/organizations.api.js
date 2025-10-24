@@ -5,10 +5,14 @@
 
 import apiClient from '../apiClient';
 
-// Get org_id directly from localStorage
+// Get org_id directly from localStorage - NO HARDCODED FALLBACK
 const getOrgId = () => {
   const orgId = localStorage.getItem('pharma_org_id') || localStorage.getItem('org_id');
-  return orgId || '8c89e4d1-0777-4a9a-9d29-dc5c654d8094'; // Fallback to test org
+  if (!orgId) {
+    console.error('CRITICAL: No org_id found in localStorage. User must login.');
+    return null;
+  }
+  return orgId;
 };
 
 /**
