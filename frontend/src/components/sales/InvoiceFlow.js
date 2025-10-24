@@ -8,7 +8,7 @@ import {
 import { toast } from 'react-toastify';
 import KeyboardShortcuts, { SHORTCUT_SETS } from '../global/ui/KeyboardShortcuts';
 import { StandardDatePicker } from '../global';
-import { customerAPI, productAPI, invoiceAPI, ordersAPI, salesOrdersAPI, apiClient } from '../../services/api';
+import { customerAPI, productAPI, invoiceAPI, ordersAPI, salesOrdersAPI, apiClient, employeesAPI } from '../../services/api';
 import { searchCache, smartSearch } from '../../utils/searchCache';
 // MIGRATED: Using enterprise API-only calculations
 // MIGRATED: Use new enterprise calculation architecture  
@@ -19,6 +19,7 @@ import DataTransformer from '../../services/dataTransformer';
 import DateFormatter from '../../services/dateFormatter';
 import InvoiceApiService from '../../services/invoiceApiService';
 import { ProductSearchSimple, ItemsTable, ModuleHeader, CustomerSearch, ProductCreationModal, ViewHistoryButton, GSTCalculator, DocumentFooter, GenericSuccessModal, AddressForm, NotesSection, PrintUtility } from '../global';
+import ItemsTableKeyboard from '../global/ui/display/ItemsTableKeyboard';
 import CustomerCreation from '../global/ui/forms/CustomerCreation';
 import BankAccountSelector from '../common/BankAccountSelector';
 import { useCompany } from '../../contexts/CompanyContext';
@@ -49,10 +50,21 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
   const [toastMessage, setToastMessage] = useState({ show: false, message: '', type: 'info' });
+  const [employees, setEmployees] = useState([]);
+  const [selectedMR, setSelectedMR] = useState(null);
 
   // Refs for keyboard navigation
   const customerSearchRef = useRef(null);
   const productSearchRef = useRef(null);
+  const itemsTableRef = useRef(null); // For keyboard navigation in items table
+  
+  // Summary page refs for keyboard navigation
+  const deliveryTypeRef = useRef(null);
+  const transportRef = useRef(null);
+  const vehicleRef = useRef(null);
+  const deliveryChargesRef = useRef(null);
+  const notesRef = useRef(null);
+  const saveButtonRef = useRef(null);
   
   // Backend connection already tested in App.tsx - removed redundant test
   
@@ -171,7 +183,8 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
       // Preload data for search cache
       await Promise.all([
         searchCache.preloadData('customers', () => customerAPI.search('', { limit: 100 })),
-        searchCache.preloadData('products', () => productAPI.search('', { limit: 100 }))
+        searchCache.preloadData('products', () => productAPI.search('', { limit: 100 })),
+        loadEmployees()
       ]);
       
       // Don't generate invoice number here - keep it as TEMP until save
@@ -183,6 +196,18 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
       toast(errorMessage, { type: 'error' });
     } finally {
       setIsLoading(false);
+    }
+  };
+  
+  // Load employees for M.R. dropdown
+  const loadEmployees = async () => {
+    try {
+      const response = await employeesAPI.getAll({ is_active: true, limit: 100 });
+      if (response.success) {
+        setEmployees(response.data || []);
+      }
+    } catch (error) {
+      console.error('Failed to load employees:', error);
     }
   };
 
@@ -525,6 +550,13 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
       // Simply update items - calculation happens in useEffect
       setInvoice(prev => ({ ...prev, items: updatedItems }));
       
+      // Auto-focus quantity field of newly added item for keyboard data entry
+      setTimeout(() => {
+        if (itemsTableRef.current) {
+          itemsTableRef.current.focusFirstField();
+        }
+      }, 150);
+      
       // Backend validation removed - instant local calculations only
     }
   };
@@ -562,6 +594,41 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
     if (validateInvoice()) {
       setCurrentStep(2);
       setMessage('');
+      
+      // Auto-focus first field on summary page
+      setTimeout(() => {
+        if (deliveryTypeRef.current) {
+          deliveryTypeRef.current.focus();
+        }
+      }, 200);
+    }
+  };
+  
+  // Keyboard navigation for summary page
+  const handleSummaryKeyDown = (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      const activeElement = document.activeElement;
+      
+      // Navigate through fields on Enter
+      if (activeElement === deliveryTypeRef.current) {
+        e.preventDefault();
+        transportRef.current?.focus();
+      } else if (activeElement === transportRef.current) {
+        e.preventDefault();
+        vehicleRef.current?.focus();
+      } else if (activeElement === vehicleRef.current) {
+        e.preventDefault();
+        deliveryChargesRef.current?.focus();
+      } else if (activeElement === deliveryChargesRef.current) {
+        e.preventDefault();
+        notesRef.current?.focus();
+      } else if (activeElement === notesRef.current) {
+        e.preventDefault();
+        saveButtonRef.current?.focus();
+      } else if (activeElement === saveButtonRef.current) {
+        e.preventDefault();
+        handleSaveInvoice();
+      }
     }
   };
 
@@ -1517,7 +1584,15 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
             onSaveDraft={() => {
               // TODO: Implement save draft
             }}
-            additionalActions={[]}
+            additionalActions={[
+              {
+                label: 'Import from Order/Challan',
+                icon: FileInput,
+                onClick: () => setShowImportModal(true),
+                variant: 'secondary',
+                className: 'text-sm'
+              }
+            ]}
           />
 
           {/* Keyboard Shortcuts Help */}
@@ -1545,9 +1620,9 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
             </div>
           )}
 
-          {/* Content */}
+          {/* Content - FULL WIDTH for desktop software experience */}
           <div className="flex-1 overflow-y-auto bg-blue-50">
-            <div className="max-w-6xl mx-auto px-6 py-6">
+            <div className="w-full px-8 py-6">
             
             {/* Message Display */}
             {message && (
@@ -1585,15 +1660,27 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
                 tabIndex={2}
               />
               <div>
-                <label className="block text-sm font-medium text-gray-600 mb-2 opacity-0">Import</label>
-                <button
-                  onClick={() => setShowImportModal(true)}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg hover:bg-blue-50 transition-colors flex items-center justify-center gap-2"
-                  type="button"
+                <label className="block text-sm font-medium text-gray-600 mb-2">
+                  M.R. (Medical Representative)
+                </label>
+                <select
+                  value={selectedMR?.employee_id || ''}
+                  onChange={(e) => {
+                    const employeeId = parseInt(e.target.value);
+                    const employee = employees.find(emp => emp.employee_id === employeeId);
+                    setSelectedMR(employee || null);
+                    setInvoice(prev => ({ ...prev, sales_person_id: employeeId || null }));
+                  }}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                  tabIndex={3}
                 >
-                  <FileInput className="w-4 h-4 text-gray-600" />
-                  <span className="text-sm">Import from Order/Challan</span>
-                </button>
+                  <option value="">Select M.R.</option>
+                  {employees.map((employee) => (
+                    <option key={employee.employee_id} value={employee.employee_id}>
+                      {employee.employee_name} {employee.designation ? `(${employee.designation})` : ''}
+                    </option>
+                  ))}
+                </select>
               </div>
             </div>
 
@@ -1649,17 +1736,17 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
                 <h3 className="text-sm font-semibold text-blue-700 uppercase tracking-wider mb-3 flex items-center">
                   <Package className="w-4 h-4 mr-2" />
                   INVOICE ITEMS
+                  <span className="ml-2 text-xs font-normal text-gray-500">
+                    (Use Tab/Enter for quick data entry)
+                  </span>
                 </h3>
-                <ItemsTable
+                <ItemsTableKeyboard
+                  ref={itemsTableRef}
                   items={invoice.items}
                   onUpdateItem={handleUpdateItem}
                   onRemoveItem={handleRemoveItem}
-                  totals={{
-                    finalAmount: invoice.net_amount,
-                    grandTotal: invoice.net_amount
-                  }}
-                  showTotals={false}
-                  title=""
+                  productSearchRef={productSearchRef}
+                  currencySymbol="₹"
                 />
               </div>
             )}
@@ -1759,9 +1846,9 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
         {/* Keyboard Shortcuts Help */}
         <KeyboardShortcuts shortcuts={SHORTCUT_SETS.REVIEW} />
 
-        {/* Content - Invoice Preview */}
+        {/* Content - Invoice Preview - FULL WIDTH for desktop software experience */}
         <div className="flex-1 overflow-y-auto bg-blue-50">
-          <div className="max-w-6xl mx-auto px-6 py-6">
+          <div className="w-full px-8 py-6">
           {message && (
             <div className={`
               mb-4 p-3 rounded flex items-start text-sm
@@ -1834,13 +1921,17 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
           </div>
 
           {/* Delivery Details - Separated and Compact */}
-          <div className="mb-4">
-            <h3 className="text-xs font-semibold text-gray-600 uppercase tracking-wider mb-1.5 px-1">DELIVERY DETAILS</h3>
+          <div className="mb-4" onKeyDown={handleSummaryKeyDown}>
+            <h3 className="text-xs font-semibold text-gray-600 uppercase tracking-wider mb-1.5 px-1">
+              DELIVERY DETAILS
+              <span className="ml-2 text-[10px] font-normal text-gray-500">(Press Enter to move through fields)</span>
+            </h3>
             <div className="bg-white rounded-lg border border-gray-200 p-3">
               <div className="grid grid-cols-4 gap-3">
                 <div>
                   <label className="block text-xs font-medium text-gray-600 mb-1">Delivery Type</label>
                   <select
+                    ref={deliveryTypeRef}
                     value={invoice.delivery_type || 'PICKUP'}
                     onChange={(e) => setInvoice(prev => ({ ...prev, delivery_type: e.target.value }))}
                     className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
@@ -1854,6 +1945,7 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
                 <div>
                   <label className="block text-xs font-medium text-gray-600 mb-1">Transport</label>
                   <input
+                    ref={transportRef}
                     type="text"
                     value={invoice.transport_company || ''}
                     onChange={(e) => setInvoice(prev => ({ ...prev, transport_company: e.target.value }))}
@@ -1864,6 +1956,7 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
                 <div>
                   <label className="block text-xs font-medium text-gray-600 mb-1">Vehicle No.</label>
                   <input
+                    ref={vehicleRef}
                     type="text"
                     value={invoice.vehicle_number || ''}
                     onChange={(e) => setInvoice(prev => ({ ...prev, vehicle_number: e.target.value }))}
@@ -1874,6 +1967,7 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
                 <div>
                   <label className="block text-xs font-medium text-gray-600 mb-1">Charges (₹)</label>
                   <input
+                    ref={deliveryChargesRef}
                     type="number"
                     value={invoice.delivery_charges || ''}
                     onChange={(e) => setInvoice(prev => ({ ...prev, delivery_charges: parseFloat(e.target.value) || 0 }))}
@@ -1888,7 +1982,7 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
 
           {/* Address Section - Enhanced forms with dropdowns and multi-field input */}
           {selectedCustomer && (
-            <div className="max-w-6xl mx-auto mb-6">
+            <div className="w-full mb-6">
               <div className="grid grid-cols-2 gap-4">
                 <AddressForm
                   title="Billing Address"
@@ -1981,7 +2075,7 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
           </PrintUtility>
 
           {/* Notes */}
-          <div className="max-w-6xl mx-auto mt-3 mb-3">
+          <div className="w-full mt-3 mb-3">
             <div className="bg-white rounded-lg border border-gray-200 p-2.5">
               <div className="flex items-start gap-2">
                 <label className="text-xs font-medium text-gray-600 mt-1">Notes:</label>
@@ -1999,7 +2093,7 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
 
           {/* E-invoice Section - NEW */}
           {selectedCustomer?.gstin && parseFloat(invoice.net_amount || 0) >= 500 && (
-            <div className="max-w-6xl mx-auto mt-4 mb-4">
+            <div className="w-full mt-4 mb-4">
               <div className="bg-orange-50 rounded-lg border border-orange-200 p-3">
                 <div className="flex items-center justify-between mb-3">
                   <div className="flex items-center">
@@ -2090,7 +2184,7 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
                     
                     {/* E-way Bill Section */}
                     <div className="md:col-span-2 border-t pt-2 mt-2">
-                      <div className="text-xs font-medium text-orange-700 mb-2">E-way Bill Details (Auto-generated for distance > 50km)</div>
+                      <div className="text-xs font-medium text-orange-700 mb-2">E-way Bill Details (Auto-generated for distance &gt; 50km)</div>
                       <div className="grid grid-cols-3 gap-3">
                         <div>
                           <label className="block text-xs font-medium text-blue-700 mb-1">
@@ -2164,6 +2258,7 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
           customerPhone={selectedCustomer?.phone || invoice.customer_details?.phone}
           showActionButtons={true}
           saveLabel="Generate Invoice"
+          saveButtonRef={saveButtonRef}
         />
         )}
 

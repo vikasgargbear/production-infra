@@ -18,18 +18,27 @@ const BatchSelectionModalV2 = ({
   const [batches, setBatches] = useState([]);
   const [loading, setLoading] = useState(false);
   const [selectedBatch, setSelectedBatch] = useState(null);
+  const [highlightedIndex, setHighlightedIndex] = useState(0); // Start with first batch highlighted
   const batchCacheKey = `batches_${product?.product_id}`;
   const hasLoadedRef = useRef(false);
+  const modalRef = useRef(null);
 
   useEffect(() => {
     if (show && product) {
       loadBatches();
       hasLoadedRef.current = true;
+      // Focus modal for keyboard navigation
+      setTimeout(() => {
+        if (modalRef.current) {
+          modalRef.current.focus();
+        }
+      }, 100);
     } else if (!show) {
       // Reset when modal closes
       hasLoadedRef.current = false;
       setSelectedBatch(null);
       setBatches([]);
+      setHighlightedIndex(0);
     }
   }, [show, product]);
 
@@ -38,6 +47,11 @@ const BatchSelectionModalV2 = ({
     const cachedBatches = searchCache.get('batches', { product_id: product.product_id });
     if (cachedBatches) {
       setBatches(cachedBatches);
+      // Auto-select first batch
+      if (cachedBatches.length > 0) {
+        setSelectedBatch(cachedBatches[0]);
+        setHighlightedIndex(0);
+      }
       return;
     }
 
@@ -58,6 +72,12 @@ const BatchSelectionModalV2 = ({
       searchCache.set('batches', { product_id: product.product_id }, availableBatches);
       setBatches(availableBatches);
       
+      // Auto-select first batch
+      if (availableBatches.length > 0) {
+        setSelectedBatch(availableBatches[0]);
+        setHighlightedIndex(0);
+      }
+      
       // If no batches found, create a default batch
       if (availableBatches.length === 0) {
         const defaultBatch = DataTransformer.transformBatch({
@@ -69,6 +89,8 @@ const BatchSelectionModalV2 = ({
           sale_price: product.sale_price || product.mrp || 0
         }, product);
         setBatches([defaultBatch]);
+        setSelectedBatch(defaultBatch);
+        setHighlightedIndex(0);
       }
     } catch (error) {
       
@@ -82,9 +104,59 @@ const BatchSelectionModalV2 = ({
         selling_price: product.sale_price || product.mrp || 0
       }, product);
       setBatches([fallbackBatch]);
+      setSelectedBatch(fallbackBatch);
+      setHighlightedIndex(0);
     } finally {
       setLoading(false);
     }
+  };
+
+  // Keyboard navigation
+  const handleKeyDown = (e) => {
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      setHighlightedIndex(prev => 
+        prev < batches.length - 1 ? prev + 1 : 0
+      );
+      if (batches[highlightedIndex + 1] || batches[0]) {
+        setSelectedBatch(batches[highlightedIndex < batches.length - 1 ? highlightedIndex + 1 : 0]);
+      }
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      setHighlightedIndex(prev => 
+        prev > 0 ? prev - 1 : batches.length - 1
+      );
+      if (batches[highlightedIndex - 1] || batches[batches.length - 1]) {
+        setSelectedBatch(batches[highlightedIndex > 0 ? highlightedIndex - 1 : batches.length - 1]);
+      }
+    } else if (e.key === 'Enter') {
+      e.preventDefault();
+      if (selectedBatch) {
+        confirmBatchSelection();
+      }
+    } else if (e.key === 'Escape') {
+      e.preventDefault();
+      onClose();
+    }
+  };
+
+  const confirmBatchSelection = () => {
+    if (!selectedBatch) return;
+    
+    const productWithBatch = {
+      ...product,
+      batch_id: selectedBatch.batch_id,
+      batch_number: selectedBatch.batch_number || selectedBatch.batch_no,
+      expiry_date: selectedBatch.expiry_date,
+      mfg_date: selectedBatch.mfg_date || selectedBatch.manufacturing_date,
+      available_quantity: selectedBatch.quantity_available,
+      mrp: selectedBatch.mrp,
+      sale_price: selectedBatch.sale_price || selectedBatch.selling_price,
+      gst_percent: selectedBatch.gst_percent || product.gst_percent || 0,
+    };
+    
+    onBatchSelect(productWithBatch);
+    onClose();
   };
 
   const handleBatchSelect = (batch) => {
@@ -146,7 +218,12 @@ const BatchSelectionModalV2 = ({
 
   return (
     <div className={styles.modalOverlay}>
-      <div className={styles.modalContent}>
+      <div 
+        ref={modalRef}
+        className={styles.modalContent}
+        tabIndex={-1}
+        onKeyDown={handleKeyDown}
+      >
         {/* Header */}
         <div className={styles.modalHeader}>
           <div className="flex items-center justify-between">
@@ -194,9 +271,10 @@ const BatchSelectionModalV2 = ({
                 </p>
               </div>
               <div className="space-y-3 max-w-2xl mx-auto">
-              {batches.map((batch) => {
+              {batches.map((batch, index) => {
                 const expiryInfo = getExpiryInfo(batch.expiry_date);
                 const isSelected = selectedBatch?.batch_id === batch.batch_id;
+                const isHighlighted = highlightedIndex === index;
                 
                 return (
                   <div
@@ -204,8 +282,8 @@ const BatchSelectionModalV2 = ({
                     onClick={() => handleBatchSelect(batch)}
                     className={`
                       relative group cursor-pointer rounded-xl border-2 transition-all duration-300
-                      ${isSelected 
-                        ? 'border-blue-500 shadow-lg shadow-blue-100 scale-[1.02]' 
+                      ${isSelected || isHighlighted
+                        ? 'border-blue-500 shadow-lg shadow-blue-100 scale-[1.02] bg-blue-50' 
                         : 'border-gray-200 hover:border-gray-300 hover:shadow-lg'
                       }
                     `}

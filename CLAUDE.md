@@ -66,3 +66,8 @@ psql "$(railway variables --json | python3 -c "import json, sys; data = json.loa
 - **Database**:
   - Run Section 22 of MASTER_DATABASE_FIXES.sql for credit_amount column
   - Trigger auto-calculates credit_amount on insert/update
+
+
+
+  if there are multiple component for same thing, make sure to know which one is for what, and if useless duplicates 
+  exist, confirm with me and move them to archive

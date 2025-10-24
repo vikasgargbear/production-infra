@@ -1,9 +1,9 @@
-import React, { useState, useEffect, useCallback, useRef, forwardRef, useImperativeHandle } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef, forwardRef, useImperativeHandle } from 'react';
 import { User, Search, Plus, Trash2, MapPin, Phone, Mail, Building, X } from 'lucide-react';
 import { Customer } from '../../../types/models/customer';
-import { useCustomerSearch } from '../../../hooks/customers/useCustomers';
 import { debounce } from 'lodash';
 import { AddNewButton } from '../ui';
+import localFirstService from '../../../services/offline/localFirstService';
 
 /**
  * CustomerSearch Component Props
@@ -52,16 +52,66 @@ export const CustomerSearch = forwardRef<CustomerSearchRef, CustomerSearchProps>
   const [searchQuery, setSearchQuery] = useState('');
   const [showDropdown, setShowDropdown] = useState(false);
   const [highlightedIndex, setHighlightedIndex] = useState(-1);
+  const [searchResults, setSearchResults] = useState<Customer[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const resultRefs = useRef<(HTMLDivElement | null)[]>([]);
 
-  // Use the typed React Query hook
-  const { data, isLoading, error } = useCustomerSearch(searchQuery, {
-    enabled: searchQuery.length >= minSearchLength,
-  });
+  // Initialize local-first service on mount
+  useEffect(() => {
+    localFirstService.initialize().catch(console.error);
+  }, []);
 
-  const searchResults = data?.data || [];
+  // Instant search using local-first service
+  const performSearch = useCallback(async (query: string) => {
+    console.log('[CustomerSearch] performSearch called with query:', query);
+    
+    if (!query || query.length < minSearchLength) {
+      console.log('[CustomerSearch] Query too short, clearing results');
+      setSearchResults([]);
+      setHighlightedIndex(-1); // Reset highlight
+      return;
+    }
+
+    setIsLoading(true);
+    try {
+      console.log('[CustomerSearch] Calling localFirstService.searchCustomers');
+      const results = await localFirstService.searchCustomers(query, { limit: 20 });
+      console.log('[CustomerSearch] Got results:', results.length, results);
+      setSearchResults(results as Customer[]);
+      
+      // Auto-highlight first result so Enter key works immediately
+      if (results.length > 0) {
+        console.log('[CustomerSearch] Setting highlightedIndex to 0');
+        setHighlightedIndex(0);
+      } else {
+        console.log('[CustomerSearch] No results, setting highlightedIndex to -1');
+        setHighlightedIndex(-1);
+      }
+    } catch (error) {
+      console.error('[CustomerSearch] Search failed:', error);
+      setSearchResults([]);
+      setHighlightedIndex(-1);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [minSearchLength]);
+
+  // Debounce search for 50ms (near-instant but prevents excessive updates)
+  const debouncedSearch = useMemo(
+    () => debounce((query: string) => {
+      console.log('[CustomerSearch] Debounced search triggered for:', query);
+      performSearch(query);
+    }, 50),
+    [performSearch]
+  );
+
+  // Trigger search when query changes
+  useEffect(() => {
+    console.log('[CustomerSearch] searchQuery changed to:', searchQuery);
+    debouncedSearch(searchQuery);
+  }, [searchQuery, debouncedSearch]);
 
   // Expose methods to parent
   useImperativeHandle(ref, () => ({
@@ -98,6 +148,8 @@ export const CustomerSearch = forwardRef<CustomerSearchRef, CustomerSearchProps>
 
   // Handle keyboard navigation
   const handleKeyDown = (e: React.KeyboardEvent) => {
+    console.log('[CustomerSearch] Key pressed:', e.key, 'highlightedIndex:', highlightedIndex, 'results:', searchResults.length);
+    
     if (e.key === 'ArrowDown') {
       e.preventDefault();
       setHighlightedIndex(prev =>
@@ -110,8 +162,17 @@ export const CustomerSearch = forwardRef<CustomerSearchRef, CustomerSearchProps>
       );
     } else if (e.key === 'Enter') {
       e.preventDefault();
+      console.log('[CustomerSearch] Enter pressed, highlightedIndex:', highlightedIndex, 'searchResults:', searchResults);
+      
+      // If we have results and one is highlighted, select it
       if (highlightedIndex >= 0 && highlightedIndex < searchResults.length) {
+        console.log('[CustomerSearch] Selecting customer:', searchResults[highlightedIndex]);
         handleCustomerSelect(searchResults[highlightedIndex]);
+      } 
+      // If no results and we have a search query, trigger create customer
+      else if (searchResults.length === 0 && searchQuery.length >= minSearchLength && onCreateNew) {
+        console.log('[CustomerSearch] No results, opening create customer modal');
+        onCreateNew();
       }
     } else if (e.key === 'Escape') {
       e.stopPropagation();
@@ -132,9 +193,15 @@ export const CustomerSearch = forwardRef<CustomerSearchRef, CustomerSearchProps>
     }
   }, [highlightedIndex]);
 
-  // Reset highlight when results change
+  // Auto-highlight first result when results change
   useEffect(() => {
-    setHighlightedIndex(-1);
+    if (searchResults.length > 0) {
+      setHighlightedIndex(0);
+      console.log('[CustomerSearch] useEffect: Auto-highlighting first of', searchResults.length, 'results');
+    } else {
+      setHighlightedIndex(-1);
+      console.log('[CustomerSearch] useEffect: No results, clearing highlight');
+    }
   }, [searchResults]);
 
   // Handle remove customer
@@ -242,10 +309,6 @@ export const CustomerSearch = forwardRef<CustomerSearchRef, CustomerSearchProps>
         <div className="text-center py-8 text-gray-500">
           <div className="inline-block animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600"></div>
           <p className="mt-2">Searching...</p>
-        </div>
-      ) : error ? (
-        <div className="text-center py-8 text-red-500">
-          <p>Error searching customers</p>
         </div>
       ) : searchResults.length > 0 ? (
         <div className="space-y-2">
@@ -454,13 +517,7 @@ export const CustomerSearch = forwardRef<CustomerSearchRef, CustomerSearchProps>
                 setSearchQuery(e.target.value);
                 setShowDropdown(true);
               }}
-              onKeyDown={(e) => {
-                if (e.key === 'Escape') {
-                  e.stopPropagation(); // Stop ESC from bubbling up to parent
-                  setSearchQuery('');
-                  setShowDropdown(false);
-                }
-              }}
+              onKeyDown={handleKeyDown}
               onFocus={() => setShowDropdown(true)}
               placeholder={placeholder}
               className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
@@ -559,13 +616,7 @@ export const CustomerSearch = forwardRef<CustomerSearchRef, CustomerSearchProps>
                   type="text"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Escape') {
-                      e.stopPropagation(); // Stop ESC from bubbling up to parent
-                      setSearchQuery('');
-                      setShowSearch(false);
-                    }
-                  }}
+                  onKeyDown={handleKeyDown}
                   placeholder={placeholder}
                   className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   autoFocus

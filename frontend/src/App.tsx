@@ -25,6 +25,7 @@ import InitialSetup from './components/InitialSetup';
 import ModularPaymentEntry from './components/payment/ModularPaymentEntry';
 import apiClient from './services/api/apiClient';
 import OfflineIndicator from './components/global/ui/OfflineIndicator';
+import SyncStatusIndicator from './components/global/ui/SyncStatusIndicator';
 import * as serviceWorkerRegistration from './serviceWorkerRegistration';
 import { ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
@@ -205,14 +206,15 @@ function App(): JSX.Element {
     });
 
     // Listen for navigation events from Settings buttons
-    const handleNavigate = (event: CustomEvent) => {
-      if (event.detail?.tab) {
-        setActiveTab(event.detail.tab as TabName);
+    const handleNavigate = (event: Event) => {
+      const customEvent = event as CustomEvent;
+      if (customEvent.detail?.tab) {
+        setActiveTab(customEvent.detail.tab as TabName);
       }
     };
 
-    window.addEventListener('navigate', handleNavigate);
-    return () => window.removeEventListener('navigate', handleNavigate);
+    window.addEventListener('navigate', handleNavigate as EventListener);
+    return () => window.removeEventListener('navigate', handleNavigate as EventListener);
   }, []);
 
   // Component renderer - removed useCallback to reduce input lag
@@ -331,7 +333,10 @@ function App(): JSX.Element {
                 <Suspense fallback={<LoadingSpinner />}>
                   {renderActiveComponent()}
                 </Suspense>
-                <OfflineIndicator />
+                <div className="fixed bottom-4 right-4 flex flex-col gap-2 z-40">
+                  <SyncStatusIndicator />
+                  <OfflineIndicator />
+                </div>
                 <ToastContainer position="top-right" />
               </div>
             </ErrorBoundary>

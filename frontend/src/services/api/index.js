@@ -15,7 +15,8 @@ import {
   purchasesAPI,
   paymentAPI,
   challansAPI,
-  salesOrdersAPI
+  salesOrdersAPI,
+  employeesAPI
 } from './apiClientExports';
 
 // Import remaining JavaScript modules
@@ -64,6 +65,7 @@ export {
   paymentAPI,
   challansAPI,
   salesOrdersAPI,
+  employeesAPI,
   
   // JavaScript module APIs
   authApi,
@@ -139,6 +141,7 @@ const apiModules = {
   partyLedger: partyLedgerApi,
   bankAccounts: bankAccountsAPI,
   metadata: metadataApi,
+  employees: employeesAPI,
 };
 
 // For backward compatibility: export the raw axios instance as default

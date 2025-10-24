@@ -6,6 +6,7 @@ import BatchSelectionModalV2 from '../../invoice/modals/BatchSelectionModalV2';
 import DataTransformer from '../../../services/dataTransformer';
 import searchCache, { smartSearch } from '../../../utils/searchCache';
 import { debounce } from '../../../utils/debounce';
+import localFirstService from '../../../services/offline/localFirstService';
 
 const ProductSearchSimple = forwardRef(({ onAddItem, onCreateProduct, showBatchSelection = true }, ref) => {
   const [searchQuery, setSearchQuery] = useState('');
@@ -28,84 +29,61 @@ const ProductSearchSimple = forwardRef(({ onAddItem, onCreateProduct, showBatchS
     }
   }));
 
-  // Preload products on mount for ultra-fast search
+  // Initialize local-first service on mount for instant search
   useEffect(() => {
-    const preloadProducts = async () => {
+    const initializeLocalFirst = async () => {
       try {
-        // Check if we already have products in cache
-        const cached = searchCache.get('products', 'all');
-        if (cached && cached.length > 0) {
-          return; // Already cached
-        }
-
-        // Load recent products for quick access
-        const response = await productAPI.list({ limit: 100 });
-        const products = response?.data || response || [];
-        
-        if (products.length > 0) {
-          searchCache.setItems('products', products);
-          searchCache.set('products', 'all', products);
-        }
+        await localFirstService.initialize();
       } catch (error) {
+        console.error('Failed to initialize local-first service:', error);
       }
     };
 
-    preloadProducts();
+    initializeLocalFirst();
   }, []);
 
-  // Debounced search function with smart cache integration
+  // Instant search using local-first service
   const searchProducts = useCallback(
     debounce(async (query) => {
       if (!query || query.length < 2) {
         setSearchResults([]);
+        setHighlightedIndex(-1); // Reset highlight
         return;
       }
 
+      // Show loading only briefly - local search is instant
       setLoading(true);
+      
       try {
-        // Use smartSearch with the product API search function
-        const results = await smartSearch(
-          'products', 
-          query, 
-          productAPI.search.bind(productAPI),
-          { limit: 20 }
-        );
+        // Use local-first service for instant results
+        const results = await localFirstService.searchProducts(query, { limit: 20 });
         
         // Transform results to consistent format
         const transformedResults = results.map(product => 
           DataTransformer.transformProduct(product, 'search')
         );
         setSearchResults(transformedResults);
-      } catch (error) {
         
-        // Fallback to direct API search if smartSearch fails
-        try {
-          const response = await productAPI.search(query);
-          const results = response?.data || response || [];
-          
-          // Transform results to consistent format
-          const transformedResults = results.map(product => 
-            DataTransformer.transformProduct(product, 'search')
-          );
-          setSearchResults(transformedResults);
-          
-          // Cache the results for next time
-          if (results.length > 0) {
-            searchCache.setItems('products', results);
-          }
-        } catch (apiError) {
-          setSearchResults([]);
+        // Auto-highlight first result so Enter key works immediately
+        if (transformedResults.length > 0) {
+          setHighlightedIndex(0);
+        } else {
+          setHighlightedIndex(-1);
         }
+      } catch (error) {
+        console.error('Product search failed:', error);
+        setSearchResults([]);
+        setHighlightedIndex(-1);
       } finally {
         setLoading(false);
       }
-    }, 200), // 200ms to reduce request bursts and timeouts
+    }, 100), // Reduced to 100ms for near-instant feel
     []
   );
 
   useEffect(() => {
     searchProducts(searchQuery);
-    setHighlightedIndex(-1); // Reset highlight on new search
+    // Don't reset highlight here - searchProducts will handle it
   }, [searchQuery, searchProducts]);
 
   // Auto-scroll to highlighted item

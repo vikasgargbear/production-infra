@@ -536,8 +536,6 @@ const CustomerCreationModal = ({ show, onClose, onCustomerCreated }) => {
               </div>
             )}
           </div>
-        </div>
-        
       </div>
     </FullScreenModal>
   );

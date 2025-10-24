@@ -712,5 +712,141 @@ export const salesOrdersAPI = {
   },
 };
 
+export const employeesAPI = {
+  /**
+   * Get all employees
+   */
+  getAll: async (params = {}) => {
+    try {
+      const response = await apiClient.get('/employees/', {
+        params: {
+          limit: params.limit || 100,
+          offset: params.offset || 0,
+          search: params.search || '',
+          is_active: params.is_active
+        },
+      });
+      
+      return {
+        success: true,
+        data: response.data?.data || response.data || [],
+        total: response.data?.total || 0
+      };
+    } catch (error) {
+      return {
+        success: false,
+        data: [],
+        total: 0,
+        error: error.message
+      };
+    }
+  },
+
+  /**
+   * Search employees
+   */
+  search: async (query, options = {}) => {
+    try {
+      const response = await apiClient.get('/employees/', {
+        params: {
+          search: query,
+          limit: options.limit || 20,
+          offset: options.offset || 0,
+          is_active: options.is_active !== undefined ? options.is_active : true
+        },
+        timeout: 5000,
+      });
+      
+      return {
+        success: true,
+        data: response.data?.data || response.data || [],
+        total: response.data?.total || 0
+      };
+    } catch (error) {
+      return {
+        success: false,
+        data: [],
+        total: 0,
+        error: error.message
+      };
+    }
+  },
+
+  /**
+   * Get employee by ID
+   */
+  getById: async (id) => {
+    try {
+      const response = await apiClient.get(`/employees/${id}`);
+      return {
+        success: true,
+        data: response.data?.data || response.data
+      };
+    } catch (error) {
+      return {
+        success: false,
+        data: null,
+        error: error.message
+      };
+    }
+  },
+
+  /**
+   * Create new employee
+   */
+  create: async (employeeData) => {
+    try {
+      const response = await apiClient.post('/employees/', employeeData);
+      return {
+        success: true,
+        data: response.data?.data || response.data
+      };
+    } catch (error) {
+      return {
+        success: false,
+        data: null,
+        error: error.message
+      };
+    }
+  },
+
+  /**
+   * Update employee
+   */
+  update: async (id, employeeData) => {
+    try {
+      const response = await apiClient.put(`/employees/${id}`, employeeData);
+      return {
+        success: true,
+        data: response.data?.data || response.data
+      };
+    } catch (error) {
+      return {
+        success: false,
+        data: null,
+        error: error.message
+      };
+    }
+  },
+
+  /**
+   * Delete (deactivate) employee
+   */
+  delete: async (id) => {
+    try {
+      const response = await apiClient.delete(`/employees/${id}`);
+      return {
+        success: true,
+        message: response.data?.message || 'Employee deactivated successfully'
+      };
+    } catch (error) {
+      return {
+        success: false,
+        error: error.message
+      };
+    }
+  },
+};
+
 // Note: We don't re-export apiClient here to avoid circular dependency
 // The apiClient is already available through the main index.js

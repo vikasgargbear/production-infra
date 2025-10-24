@@ -42,8 +42,10 @@ export const customersApi = {
   
   // Search customers
   search: (query, params = {}) => {
+    // Ensure trailing slash for Django compatibility
+    const url = ENDPOINTS.BASE.endsWith('/') ? ENDPOINTS.BASE : ENDPOINTS.BASE + '/';
     // Use 'search' parameter for backward compatibility with old API
-    return apiHelpers.get(ENDPOINTS.BASE, { 
+    return apiHelpers.get(url, { 
       params: { search: query, ...params } 
     });
   },

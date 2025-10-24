@@ -235,7 +235,7 @@ export const SlideInPanel: React.FC<SlideInPanelProps> = ({
         )}
       </div>
 
-      <style jsx>{`
+      <style>{`
         @keyframes slideInRight {
           from {
             transform: translateX(100%);

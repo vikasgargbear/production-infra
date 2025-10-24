@@ -30,6 +30,7 @@ const DocumentFooter = ({
   continueButtonColor = "blue", // blue, purple, green, etc.
   showContinueButton = true,
   showActionButtons = false, // Show save/print/whatsapp buttons
+  saveButtonRef = null, // Ref for keyboard navigation
   className = ""
 }) => {
   const [showThermalOptions, setShowThermalOptions] = useState(false);
@@ -141,6 +142,7 @@ const DocumentFooter = ({
             {/* Generate Invoice button (right, primary) */}
             {onSave && (
               <button
+                ref={saveButtonRef}
                 onClick={onSave}
                 disabled={isSaving}
                 className="px-8 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed font-medium shadow-sm"

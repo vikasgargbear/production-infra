@@ -7,6 +7,7 @@ import { useQuery, useMutation, useQueryClient, UseQueryOptions, UseMutationOpti
 import { customerAPI } from '../../services/api/apiClientExports';
 import { useCallback } from 'react';
 import { Customer, CustomerCreateInput, CustomerSearchParams } from '../../types/models/customer';
+import localFirstService from '../../services/offline/localFirstService';
 
 interface ApiResponse<T> {
   success: boolean;
@@ -28,6 +29,7 @@ export const customerKeys = {
 
 /**
  * Hook to search customers (most commonly used)
+ * Now with local-first approach for instant results
  */
 export function useCustomerSearch(
   query: string,
@@ -35,7 +37,14 @@ export function useCustomerSearch(
 ) {
   return useQuery<ApiResponse<Customer[]>>(
     customerKeys.search(query),
-    () => customerAPI.search(query),
+    async () => {
+      // Use local-first service for instant results
+      const results = await localFirstService.searchCustomers(query, { limit: 20 });
+      return {
+        success: true,
+        data: results
+      };
+    },
     {
       enabled: query.length >= 2, // Only search with 2+ characters
       staleTime: 1 * 60 * 1000, // 1 minute

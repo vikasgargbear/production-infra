@@ -66,8 +66,10 @@ const EmployeeManagementEnhanced = () => {
     setLoading(true);
     try {
       const response = await employeesAPI.getAll({ limit: 100 });
+      console.log('Employees API response:', response);
       if (response.success) {
         setEmployees(response.data || []);
+        console.log('Employees set:', response.data);
       } else {
         toast.error('Failed to load employees');
       }
