@@ -675,8 +675,8 @@ export const employeesAPI = {
         params: {
           limit: params.limit || 100,
           offset: params.offset || 0,
-          search: params.search || '',
-          is_active: params.is_active
+          ...(params.search && { search: params.search }), // Only include if truthy
+          ...(params.is_active !== undefined && { is_active: params.is_active })
         },
       };
       console.log('[employeesAPI.getAll] Request config:', requestConfig);
