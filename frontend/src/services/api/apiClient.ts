@@ -34,11 +34,22 @@ apiClient.interceptors.request.use(
         const user = JSON.parse(userStr);
         if (user.org_id) {
           config.headers['X-Org-Id'] = user.org_id;
+          console.log('[API Interceptor] Added X-Org-Id:', user.org_id);
+        } else {
+          console.warn('[API Interceptor] No org_id in user data:', user);
         }
       } catch (error) {
-        console.error('Failed to parse user data:', error);
+        console.error('[API Interceptor] Failed to parse user data:', error);
       }
+    } else {
+      console.warn('[API Interceptor] No pharma_user in localStorage');
     }
+
+    console.log('[API Interceptor] Request headers:', {
+      url: config.url,
+      'X-Org-Id': config.headers['X-Org-Id'],
+      'Authorization': config.headers.Authorization ? 'Bearer ***' : 'None'
+    });
 
     return config;
   },
