@@ -243,35 +243,9 @@ function App(): JSX.Element {
 
   // Loading handled by AuthContext - no need for setup check
 
-  // Show initial setup if not complete
-  if (setupComplete === false) {
-    return (
-      <ErrorBoundary>
-        <ToastProvider>
-          <InitialSetup onSetupComplete={() => {
-            setSetupComplete(true);
-            window.location.reload();
-          }} />
-        </ToastProvider>
-      </ErrorBoundary>
-    );
-  }
+  // OLD: Setup flow removed - AuthContext handles everything
 
-  // Require authentication - show login if not authenticated
-  if (!isAuthenticated) {
-    return (
-      <ErrorBoundary>
-        <ToastProvider>
-          <Suspense fallback={<LoadingSpinner />}>
-            <EnhancedLogin onLoginSuccess={() => {
-              setIsAuthenticated(true);
-              window.location.reload();
-            }} />
-          </Suspense>
-        </ToastProvider>
-      </ErrorBoundary>
-    );
-  }
+  // OLD: Login flow removed - AuthContext handles authentication
 
   return (
     <AuthProvider>
