@@ -199,12 +199,17 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
     }
   };
   
-  // Load employees for M.R. dropdown
+  // Load employees for M.R. dropdown - only Medical Representatives
   const loadEmployees = async () => {
     try {
       const response = await employeesAPI.getAll({ is_active: true, limit: 100 });
       if (response.success) {
-        setEmployees(response.data || []);
+        // Filter to show only Medical Representatives
+        const medicalReps = (response.data || []).filter(emp => 
+          emp.designation && emp.designation.toLowerCase().includes('medical representative')
+        );
+        console.log('[InvoiceFlow] Loaded Medical Representatives:', medicalReps.length);
+        setEmployees(medicalReps);
       }
     } catch (error) {
       console.error('Failed to load employees:', error);
@@ -1662,6 +1667,11 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
               <div>
                 <label className="block text-sm font-medium text-gray-600 mb-2">
                   M.R. (Medical Representative)
+                  {employees.length === 0 && (
+                    <span className="ml-2 text-xs text-gray-500">
+                      (No M.R. assigned yet)
+                    </span>
+                  )}
                 </label>
                 <select
                   value={selectedMR?.employee_id || ''}
@@ -1674,10 +1684,12 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
                   tabIndex={3}
                 >
-                  <option value="">Select M.R.</option>
+                  <option value="">
+                    {employees.length === 0 ? 'No Medical Representatives found' : 'Select M.R.'}
+                  </option>
                   {employees.map((employee) => (
                     <option key={employee.employee_id} value={employee.employee_id}>
-                      {employee.employee_name} {employee.designation ? `(${employee.designation})` : ''}
+                      {employee.employee_name} {employee.employee_code ? `(${employee.employee_code})` : ''}
                     </option>
                   ))}
                 </select>
