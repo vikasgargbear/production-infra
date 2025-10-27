@@ -1,6 +1,8 @@
 import React, { useState, useEffect, Suspense, lazy } from 'react';
 import { QueryClientProvider } from 'react-query';
 import queryClient from './queryClient';
+import { useAuth } from './contexts/AuthContext';
+import LoginPage from './components/LoginPage';
 // import Sidebar from './components/Sidebar';
 import ErrorBoundary from './components/ErrorBoundary';
 import LoadingSpinner from './components/LoadingSpinner';
@@ -141,10 +143,28 @@ const CompliancePlaceholder = React.memo(() => (
   </div>
 ));
 
-function App(): JSX.Element {
+const AppContent = (): JSX.Element => {
+  const { isAuthenticated, isLoading, user } = useAuth();
   const [activeTab, setActiveTab] = useState<TabName>('home');
-  // Authentication now managed by AuthContext - no setup check needed
 
+  // Show loading while AuthContext initializes
+  if (isLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <p className="text-gray-600">Loading...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Show login if not authenticated
+  if (!isAuthenticated) {
+    return <LoginPage />;
+  }
+
+  // User is authenticated - show main app
   // Setup check removed - AuthContext handles authentication state
 
   // Authentication handled by AuthContext - no manual initialization needed
@@ -247,12 +267,12 @@ function App(): JSX.Element {
 
   // OLD: Login flow removed - AuthContext handles authentication
 
+  // Main app UI - only shown when authenticated
   return (
-    <AuthProvider>
-      <QueryClientProvider client={queryClient}>
-        <CompanyProvider>
-          <EscapeKeyProvider>
-            <ToastProvider>
+    <QueryClientProvider client={queryClient}>
+      <CompanyProvider>
+        <EscapeKeyProvider>
+          <ToastProvider>
             <ErrorBoundary>
               <div className="min-h-screen bg-gray-50">
                 <Suspense fallback={<LoadingSpinner />}>
@@ -269,6 +289,14 @@ function App(): JSX.Element {
           </EscapeKeyProvider>
         </CompanyProvider>
       </QueryClientProvider>
+  );
+};
+
+// Wrap everything in AuthProvider at the top level
+function App(): JSX.Element {
+  return (
+    <AuthProvider>
+      <AppContent />
     </AuthProvider>
   );
 }
