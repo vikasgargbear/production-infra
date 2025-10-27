@@ -89,10 +89,9 @@ function readRuntimeValue() {
 }
 
 function readDefaultValue() {
-  // FORCE LOCAL DEVELOPMENT - Railway is down
-  // Always use localhost for development
-  console.log('🔧 Using local backend: http://localhost:8000');
-  return 'http://localhost:8000';
+  // Development fallback for non-browser environments (e.g. Jest)
+  // Allows tests to execute without relying on a specific backend hostname
+  return sanitizeUrl('http://localhost:8000');
 }
 
 export function getApiBaseUrl() {
