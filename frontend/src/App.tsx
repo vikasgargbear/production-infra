@@ -23,7 +23,8 @@ import { AuthProvider } from './contexts/AuthContext';
 import { CompanyProvider } from './contexts/CompanyContext';
 import { EscapeKeyProvider } from './contexts/EscapeKeyContext';
 import { PaymentProvider } from './contexts/PaymentContext';
-import InitialSetup from './components/InitialSetup';
+// OLD InitialSetup moved to _OLD - not used with new AuthContext
+// import InitialSetup from './components/InitialSetup';
 import ModularPaymentEntry from './components/payment/ModularPaymentEntry';
 import apiClient from './services/api/apiClient';
 import OfflineIndicator from './components/global/ui/OfflineIndicator';
@@ -45,7 +46,8 @@ const PaymentTracking = lazy(() => import('./components/PaymentTracking'));
 const PaymentDashboard = lazy(() => import('./components/PaymentDashboard'));
 const CreditManagement = lazy(() => import('./components/CreditManagement'));
 const WhatsAppBusiness = lazy(() => import('./components/WhatsAppSimple'));
-const EnhancedLogin = lazy(() => import('./components/EnhancedLogin'));
+// OLD EnhancedLogin moved to _OLD - using AuthContext login flow instead
+// const EnhancedLogin = lazy(() => import('./components/EnhancedLogin'));
 const Profile = lazy(() => import('./components/Profile'));
 const InventoryManagement = lazy(() => import('./components/InventoryManagement'));
 const AccountingLedgers = lazy(() => import('./components/AccountingLedgers'));
@@ -141,40 +143,9 @@ const CompliancePlaceholder = React.memo(() => (
 
 function App(): JSX.Element {
   const [activeTab, setActiveTab] = useState<TabName>('home');
-  // Authentication now managed by AuthContext - no local state needed
-  const [setupComplete, setSetupComplete] = useState<boolean | null>(null);
-  const [isCheckingSetup, setIsCheckingSetup] = useState<boolean>(true);
+  // Authentication now managed by AuthContext - no setup check needed
 
-  // Check if initial setup is complete
-  useEffect(() => {
-    checkSetupStatus();
-  }, []);
-
-  const checkSetupStatus = async () => {
-    try {
-      // First check if we have an org_id stored locally
-      const existingOrgId = localStorage.getItem('pharma_org_id') || 
-                           sessionStorage.getItem('pharma_org_id');
-      
-      if (existingOrgId) {
-        // If we have an org_id, setup is complete
-        setSetupComplete(true);
-        setIsCheckingSetup(false);
-        return;
-      }
-      
-      // Otherwise, check with backend
-      const response = await apiClient.get('/setup/check');
-      setSetupComplete(response.data.setup_complete);
-    } catch (error) {
-      // If backend is unreachable, assume setup is complete to allow login
-      // This prevents getting stuck on loading screen
-      console.log('Setup check failed, assuming setup complete:', error);
-      setSetupComplete(true);
-    } finally {
-      setIsCheckingSetup(false);
-    }
-  };
+  // Setup check removed - AuthContext handles authentication state
 
   // Authentication handled by AuthContext - no manual initialization needed
   useEffect(() => {
@@ -270,10 +241,7 @@ function App(): JSX.Element {
     return null;
   }
 
-  // Show loading while checking setup status or initializing auth
-  if (isCheckingSetup) {
-    return <LoadingSpinner />;
-  }
+  // Loading handled by AuthContext - no need for setup check
 
   // Show initial setup if not complete
   if (setupComplete === false) {
