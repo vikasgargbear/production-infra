@@ -1,47 +1,11 @@
 /**
  * JavaScript wrapper for TypeScript API exports
  * This file provides proper JavaScript exports for the TypeScript APIs
+ * IMPORTANT: Uses the shared apiClient from ./apiClient.ts to ensure interceptors work
  */
 
-// Use dynamic import to avoid initialization order issues
-import axios from 'axios';
-import { getApiBaseUrl } from '../../config/apiBase';
-
-// Create our own apiClient instance to avoid circular dependency
-// Use HTTPS for Railway production deployment
-const API_BASE_URL = getApiBaseUrl();
-const apiClient = axios.create({
-  baseURL: `${API_BASE_URL}/api`,  // Consolidated API - no version numbers
-  timeout: 30000,
-  headers: {
-    'Content-Type': 'application/json',
-    'Accept': 'application/json',
-  },
-});
-
-// Add request interceptor for auth token and org_id
-apiClient.interceptors.request.use((config) => {
-  // Get org_id from user data (set by AuthContext)
-  const userStr = localStorage.getItem('pharma_user');
-  if (userStr) {
-    try {
-      const user = JSON.parse(userStr);
-      if (user.org_id) {
-        config.headers['X-Org-Id'] = user.org_id;
-      }
-    } catch (error) {
-      console.error('Failed to parse user data:', error);
-    }
-  }
-  
-  // Add auth token if it exists
-  const token = localStorage.getItem('authToken') || localStorage.getItem('auth_token');
-  if (token) {
-    config.headers.Authorization = `Bearer ${token}`;
-  }
-  
-  return config;
-});
+// Import the shared apiClient that has proper AuthContext interceptors
+import apiClient from './apiClient';
 
 // Add response interceptor for error handling
 apiClient.interceptors.response.use(
