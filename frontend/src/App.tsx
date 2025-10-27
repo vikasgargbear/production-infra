@@ -147,26 +147,7 @@ const AppContent = (): JSX.Element => {
   const { isAuthenticated, isLoading, user } = useAuth();
   const [activeTab, setActiveTab] = useState<TabName>('home');
 
-  // Show loading while AuthContext initializes
-  if (isLoading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-          <p className="text-gray-600">Loading...</p>
-        </div>
-      </div>
-    );
-  }
-
-  // Show login if not authenticated
-  if (!isAuthenticated) {
-    return <LoginPage />;
-  }
-
-  // User is authenticated - show main app
-  // Setup check removed - AuthContext handles authentication state
-
+  // ALL HOOKS MUST BE CALLED BEFORE ANY CONDITIONAL RETURNS
   // Authentication handled by AuthContext - no manual initialization needed
   useEffect(() => {
     // OLD AUTH CODE REMOVED
@@ -263,11 +244,24 @@ const AppContent = (): JSX.Element => {
 
   // Loading handled by AuthContext - no need for setup check
 
-  // OLD: Setup flow removed - AuthContext handles everything
+  // Show loading while AuthContext initializes
+  if (isLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <p className="text-gray-600">Loading...</p>
+        </div>
+      </div>
+    );
+  }
 
-  // OLD: Login flow removed - AuthContext handles authentication
+  // Show login if not authenticated
+  if (!isAuthenticated) {
+    return <LoginPage />;
+  }
 
-  // Main app UI - only shown when authenticated
+  // User is authenticated - show main app
   return (
     <QueryClientProvider client={queryClient}>
       <CompanyProvider>
