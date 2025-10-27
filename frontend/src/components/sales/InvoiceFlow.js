@@ -32,11 +32,13 @@ import InvoicePreview from '../invoice/components/InvoicePreviewEnterprise';
 import ImportDocumentModal from './components/ImportDocumentModal';
 // Removed testBackendConnection - already tested in App.tsx
 import useEscapeKey from '../../hooks/useEscapeKey';
+import { useEnterAsTab } from '../../hooks/useEnterAsTab';
 import html2pdf from 'html2pdf.js';
 
 const InvoiceFlow = ({ onClose, prefilledData = null }) => {
   const { companyInfo, getOrgId } = useCompany();
   const [currentStep, setCurrentStep] = useState(1);
+  const invoiceFormRef = useRef(null); // For Enter-as-Tab scoping
   const [showCustomerModal, setShowCustomerModal] = useState(false);
   const [showProductModal, setShowProductModal] = useState(false);
   const [showGSTCalculator, setShowGSTCalculator] = useState(false);
@@ -69,6 +71,13 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
   // Backend connection already tested in App.tsx - removed redundant test
   
   const firstInputRef = useRef(null);
+
+  // Enable Enter-as-Tab navigation (Marg ERP style)
+  useEnterAsTab({ 
+    containerRef: invoiceFormRef, 
+    enabled: true,
+    excludeSelectors: ['textarea', 'button[type="submit"]', '[data-no-enter-tab]']
+  });
 
   // Enterprise ESC key handling - hierarchical modal management
   // Main form ESC handler (lowest priority) - only active when no modals are open
