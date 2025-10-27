@@ -670,7 +670,6 @@ export const employeesAPI = {
    */
   getAll: async (params = {}) => {
     try {
-      console.log('[employeesAPI.getAll] Calling with params:', params);
       const requestConfig = {
         params: {
           limit: params.limit || 100,
@@ -679,12 +678,8 @@ export const employeesAPI = {
           ...(params.is_active !== undefined && { is_active: params.is_active })
         },
       };
-      console.log('[employeesAPI.getAll] Request config:', requestConfig);
       
       const response = await apiClient.get('/employees/', requestConfig);
-      
-      console.log('[employeesAPI.getAll] Raw response:', response);
-      console.log('[employeesAPI.getAll] Response data:', response.data);
       
       return {
         success: true,
@@ -692,8 +687,7 @@ export const employeesAPI = {
         total: response.data?.total || 0
       };
     } catch (error) {
-      console.error('[employeesAPI.getAll] Error:', error);
-      console.error('[employeesAPI.getAll] Error response:', error.response?.data);
+      console.error('Error loading employees:', error);
       return {
         success: false,
         data: [],

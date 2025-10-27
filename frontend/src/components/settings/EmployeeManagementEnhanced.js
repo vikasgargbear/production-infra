@@ -65,20 +65,15 @@ const EmployeeManagementEnhanced = () => {
   const loadEmployees = async () => {
     setLoading(true);
     try {
-      console.log('[EmployeeManagement] Loading employees...');
       const response = await employeesAPI.getAll({ limit: 100 });
-      console.log('[EmployeeManagement] Employees response:', response);
       if (response.success) {
-        console.log('[EmployeeManagement] Employees data:', response.data);
         setEmployees(response.data || []);
       } else {
-        console.error('[EmployeeManagement] Failed response:', response);
         toast.error('Failed to load employees');
       }
     } catch (error) {
-      console.error('[EmployeeManagement] Error loading employees:', error);
-      console.error('[EmployeeManagement] Error details:', error.response?.data);
-      toast.error('Failed to load employees: ' + (error.response?.data?.detail || error.message));
+      console.error('Error loading employees:', error);
+      toast.error('Failed to load employees');
     } finally {
       setLoading(false);
     }
