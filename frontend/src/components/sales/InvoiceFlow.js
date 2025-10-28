@@ -26,6 +26,8 @@ import { useCompany } from '../../contexts/CompanyContext';
 // import InvoiceSuccessModal from './InvoiceSuccessModal'; // Replaced with GenericSuccessModal
 import SplitPayment from '../global/ui/SplitPayment';
 import Toast from '../common/Toast';
+import documentNumberGenerator, { DOC_TYPES } from '../../services/documentNumberGenerator';
+import localInvoiceService from '../../services/invoice/localInvoiceService';
 // import BillSummary from './components/BillSummary';
 // MIGRATED: Use enterprise API-driven preview component
 import InvoicePreview from '../invoice/components/InvoicePreviewEnterprise';
@@ -34,6 +36,13 @@ import ImportDocumentModal from './components/ImportDocumentModal';
 import useEscapeKey from '../../hooks/useEscapeKey';
 import { useEnterAsTab } from '../../hooks/useEnterAsTab';
 import html2pdf from 'html2pdf.js';
+
+// Marg ERP Style Shortcut Modals
+import BillDiscountModal from './modals/BillDiscountModal';
+import TaxDetailModal from './modals/TaxDetailModal';
+import CashCalculatorModal from './modals/CashCalculatorModal';
+import LastDealModal from './modals/LastDealModal';
+import ItemProfitModal from './modals/ItemProfitModal';
 
 const InvoiceFlow = ({ onClose, prefilledData = null }) => {
   const { companyInfo, getOrgId } = useCompany();
@@ -45,6 +54,14 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
   const [showImportModal, setShowImportModal] = useState(false);
   const [saving, setSaving] = useState(false);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
+  
+  // Marg ERP Shortcut Modals State
+  const [showBillDiscountModal, setShowBillDiscountModal] = useState(false);
+  const [showTaxDetailModal, setShowTaxDetailModal] = useState(false);
+  const [showCashCalculatorModal, setShowCashCalculatorModal] = useState(false);
+  const [showLastDealModal, setShowLastDealModal] = useState(false);
+  const [showItemProfitModal, setShowItemProfitModal] = useState(false);
+  const [selectedProductForLastDeal, setSelectedProductForLastDeal] = useState(null);
   const [createdInvoiceData, setCreatedInvoiceData] = useState(null);
   const [message, setMessage] = useState('');
   const [messageType, setMessageType] = useState('');
@@ -81,7 +98,11 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
 
   // Enterprise ESC key handling - hierarchical modal management
   // Main form ESC handler (lowest priority) - only active when no modals are open
-  const shouldHandleMainEsc = !showGSTCalculator && !showCustomerModal && !showProductModal && !showImportModal;
+  const anyModalOpen = showGSTCalculator || showCustomerModal || showProductModal || showImportModal ||
+                       showBillDiscountModal || showTaxDetailModal || showCashCalculatorModal ||
+                       showLastDealModal || showItemProfitModal;
+  const shouldHandleMainEsc = !anyModalOpen;
+  
   useEscapeKey(
     useCallback(() => {
       if (onClose) onClose();
@@ -114,23 +135,53 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
     showImportModal,
     'ImportModal'
   );
+  
+  // Marg ERP Shortcut Modals ESC handlers
+  useEscapeKey(
+    useCallback(() => setShowBillDiscountModal(false), []),
+    showBillDiscountModal,
+    'BillDiscountModal'
+  );
+  
+  useEscapeKey(
+    useCallback(() => setShowTaxDetailModal(false), []),
+    showTaxDetailModal,
+    'TaxDetailModal'
+  );
+  
+  useEscapeKey(
+    useCallback(() => setShowCashCalculatorModal(false), []),
+    showCashCalculatorModal,
+    'CashCalculatorModal'
+  );
+  
+  useEscapeKey(
+    useCallback(() => setShowLastDealModal(false), []),
+    showLastDealModal,
+    'LastDealModal'
+  );
+  
+  useEscapeKey(
+    useCallback(() => setShowItemProfitModal(false), []),
+    showItemProfitModal,
+    'ItemProfitModal'
+  );
 
-  // Generate sequential invoice number
+  // Generate sequential invoice number using new enterprise generator
   const generateInvoiceNumber = async () => {
     try {
-      const response = await InvoiceApiService.generateInvoiceNumber();
-      if (response?.success && response?.data?.invoice_number) {
-        return response.data.invoice_number;
-      }
+      // Use enterprise document number generator
+      // Format: INV-YYYYMMDD-XXXX (e.g., INV-20241027-0001)
+      const invoiceNumber = await documentNumberGenerator.generateNumber(
+        DOC_TYPES.INVOICE,
+        true // Try backend first
+      );
+      return invoiceNumber;
     } catch (error) {
-      toast.warning('Using local invoice number generation');
+      console.error('Failed to generate invoice number:', error);
+      toast.error('Failed to generate invoice number');
+      return null;
     }
-    
-    // Fallback to local generation with proper format
-    const date = new Date();
-    const dateStr = date.toISOString().slice(2,10).replace(/-/g, ''); // YYMMDD
-    const randomNum = Math.floor(Math.random() * 10000).toString().padStart(4, '0');
-    return `INV-${dateStr}${randomNum}`; // Format: INV-YYMMDD####
   };
 
   // Invoice data state - merge with prefilled data if provided
@@ -217,7 +268,6 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
         const medicalReps = (response.data || []).filter(emp => 
           emp.designation && emp.designation.toLowerCase().includes('medical representative')
         );
-        console.log('[InvoiceFlow] Loaded Medical Representatives:', medicalReps.length);
         setEmployees(medicalReps);
       }
     } catch (error) {
@@ -225,13 +275,102 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
     }
   };
 
-  // Keyboard shortcuts
+  // Marg ERP Style Keyboard shortcuts - Phase 1
   useEffect(() => {
     const handleKeyDown = (e) => {
-      // Global shortcuts
+      // Prevent shortcuts if typing in input/textarea
+      const isTyping = ['INPUT', 'TEXTAREA'].includes(document.activeElement?.tagName);
+      
+      // F-key shortcuts (work even when typing)
+      if (e.key === 'F4' && !e.ctrlKey && !e.altKey) {
+        e.preventDefault();
+        if (invoice.items.length > 0) {
+          setShowBillDiscountModal(true);
+        } else {
+          toast.info('Add items to invoice first');
+        }
+        return;
+      }
+      
+      if (e.key === 'F10' && !e.ctrlKey && !e.altKey) {
+        e.preventDefault();
+        if (invoice.items.length > 0) {
+          setShowTaxDetailModal(true);
+        } else {
+          toast.info('Add items to invoice first');
+        }
+        return;
+      }
+      
+      if (e.key === 'F11' && !e.ctrlKey && !e.altKey) {
+        e.preventDefault();
+        if (invoice.totals?.grand_total > 0) {
+          setShowCashCalculatorModal(true);
+        } else {
+          toast.info('Complete invoice first');
+        }
+        return;
+      }
+      
+      // Alt key shortcuts (skip if typing)
+      if (e.altKey && !isTyping) {
+        switch (e.key.toLowerCase()) {
+          case 'n':
+            e.preventDefault();
+            // Alt+N: New Invoice (restart)
+            if (window.confirm('Start new invoice? Current data will be lost.')) {
+              window.location.reload();
+            }
+            break;
+          case 'm':
+            e.preventDefault();
+            // Alt+M: Modify bill (navigate to invoice list)
+            if (window.confirm('Go to invoice list to modify existing bills?')) {
+              onClose?.();
+            }
+            break;
+          case 'l':
+            e.preventDefault();
+            // Alt+L: Last Deal (show for first item or focused item)
+            if (invoice.items.length > 0) {
+              const firstItem = invoice.items[0];
+              setSelectedProductForLastDeal({
+                id: firstItem.product_id,
+                name: firstItem.product_name
+              });
+              setShowLastDealModal(true);
+            } else {
+              toast.info('Add items to invoice first');
+            }
+            break;
+        }
+      }
+      
+      // Shift key shortcuts
+      if (e.shiftKey && e.key === '~' && !isTyping) {
+        e.preventDefault();
+        // Shift+~: View item cost/profit
+        if (invoice.items.length > 0) {
+          setShowItemProfitModal(true);
+        } else {
+          toast.info('Add items to invoice first');
+        }
+        return;
+      }
+      
+      // Ctrl/Cmd shortcuts
       if (e.ctrlKey || e.metaKey) {
         switch (e.key) {
           case 's':
+            e.preventDefault();
+            if (currentStep === 2) {
+              handleSaveInvoice();
+            } else {
+              handleProceedToReview();
+            }
+            break;
+          case 'w':
+            // Ctrl+W also saves (Marg ERP style)
             e.preventDefault();
             if (currentStep === 2) {
               handleSaveInvoice();
@@ -268,7 +407,7 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
 
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [currentStep, selectedCustomer]);
+  }, [currentStep, selectedCustomer, invoice.items, invoice.totals]);
 
   // Focus first input on mount and generate invoice number
   useEffect(() => {
@@ -604,6 +743,21 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
     return true;
   };
 
+  // Handler for bill discount modal (F4)
+  const handleApplyBillDiscount = (discountAmount, discountType, discountValue) => {
+    // Apply discount to invoice
+    setInvoice(prev => ({
+      ...prev,
+      bill_discount: discountAmount,
+      bill_discount_type: discountType,
+      bill_discount_value: discountValue
+    }));
+    
+    // Recalculate
+    setTimeout(() => calculateInvoice(), 100);
+    toast.success(`Bill discount of ₹${discountAmount.toFixed(2)} applied`);
+  };
+
   const handleProceedToReview = () => {
     if (validateInvoice()) {
       setCurrentStep(2);
@@ -658,6 +812,10 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
       let finalInvoiceNumber = invoice.invoice_no;
       if (invoice.invoice_no === 'INV-TEMP' || invoice.invoice_no.startsWith('INV-TEMP')) {
         finalInvoiceNumber = await generateInvoiceNumber();
+        if (!finalInvoiceNumber) {
+          setSaving(false);
+          return; // Error already shown in generateInvoiceNumber
+        }
         setInvoice(prev => ({ ...prev, invoice_no: finalInvoiceNumber }));
       }
       
@@ -691,12 +849,8 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
         challan_id: invoice.challan_id ? parseInt(invoice.challan_id) : null
       };
 
-      // Try direct invoice API (as per test file format)
-      let response;
-      let invoiceData; // Declare outside try block for catch block access
-      try {
-        // Build complete invoice data with all user inputs
-        invoiceData = {
+      // Build complete invoice data with all user inputs
+      const invoiceData = {
           // Customer info
           customer_id: parseInt(invoice.customer_id),
           customer_name: selectedCustomer?.customer_name || invoice.customer_name,
@@ -779,139 +933,44 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
           bank_account_id: invoice.bank_account_id || null
         };
 
-        response = await apiClient.post('/invoices/', invoiceData);
-      } catch (error) {
-        
-        // Parse the specific error
-        let errorDetails = 'Unknown error';
-        if (error.response?.data?.detail) {
-          errorDetails = error.response.data.detail;
-          
-          // Check for specific database errors
-          if (errorDetails.includes('not present in table')) {
-            const match = errorDetails.match(/Key \(([^)]+)\)=\(([^)]+)\)/);
-            if (match) {
-              errorDetails = `${match[1]} ${match[2]} doesn't exist in database`;
-            }
-          } else if (errorDetails.includes('null value in column')) {
-            const match = errorDetails.match(/null value in column "([^"]+)"/);
-            if (match) {
-              errorDetails = `Required field missing: ${match[1]}`;
-            }
-          }
-        }
-        
-        // Show error to user
-        toast(`Backend error: ${errorDetails}`, { type: 'error' });
-        
-        // Still save locally and show success
-        const date = new Date();
-        const dateStr = date.toISOString().slice(2,10).replace(/-/g, ''); // YYMMDD
-        const randomNum = Math.floor(Math.random() * 10000).toString().padStart(4, '0');
-        const fallbackInvoiceNumber = `INV-${dateStr}${randomNum}`;
-        
-        // Store in localStorage for debugging
-        localStorage.setItem('lastFailedInvoice', JSON.stringify({
-          invoiceData,
-          error: errorDetails,
-          timestamp: new Date().toISOString()
-        }));
-
-        // Show modal anyway with local save message
-        setTimeout(() => {
-          setCreatedInvoiceData({
-            invoiceNumber: fallbackInvoiceNumber,
-            invoiceId: null,
-            customerName: selectedCustomer?.customer_name || invoice.customer_name,
-            totalAmount: invoice.net_amount,
-            customerPhone: selectedCustomer?.phone || selectedCustomer?.mobile || selectedCustomer?.primary_phone || invoice.customer_phone,
-            customerEmail: selectedCustomer?.email || invoice.customer_email,
-            items: invoice.invoice_items || []
-          });
-          setShowSuccessModal(true);
-          toast.warning(`Invoice ${fallbackInvoiceNumber} saved locally (backend issue)`);
-        }, 3000);
-        
-        setSaving(false);
-        return;
-      }
+      // ⚡ LOCAL-FIRST: Save instantly to IndexedDB (5-10ms)
+      // Syncs to backend automatically in background
+      const result = await localInvoiceService.createInvoice(invoiceData);
       
-      // Store the invoice details for future reference
-      if (response && response.data) {
-        // Use our format regardless of what API returns
-        const apiInvoiceNumber = response.data.invoice_number || response.data.invoiceNumber;
-        let invoiceNumber = invoice.invoice_no; // Keep our format
+      if (result.success) {
+        // Show success IMMEDIATELY
+        setCreatedInvoiceData({
+          invoiceNumber: result.invoice_number || finalInvoiceNumber,
+          invoiceId: result.invoice_number, // Use invoice number as ID until backend syncs
+          customerName: selectedCustomer?.customer_name || invoice.customer_name,
+          totalAmount: invoice.net_amount,
+          customerPhone: selectedCustomer?.phone || selectedCustomer?.mobile || selectedCustomer?.primary_phone,
+          customerEmail: selectedCustomer?.email,
+          items: invoice.items || []
+        });
+        setShowSuccessModal(true);
+        toast.success('Invoice created! ⚡ Syncing to server...', { autoClose: 2000 });
         
-        // Only use API number if ours is still temp
-        if (invoice.invoice_no === 'INV-TEMP' && apiInvoiceNumber) {
-          // Check if API number is in our format, otherwise keep our generated one
-          if (apiInvoiceNumber.match(/^INV-\d{6}\d{4}$/)) {
-            invoiceNumber = apiInvoiceNumber;
+        // Check sync status after 2 seconds (optional)
+        setTimeout(async () => {
+          const syncStatus = await localInvoiceService.getSyncStatus();
+          if (syncStatus.pending === 0) {
+            toast.success('Invoice synced to server ✓', { autoClose: 1500 });
+          } else if (syncStatus.pending > 0 && !navigator.onLine) {
+            toast.info('Invoice will sync when online', { autoClose: 2000 });
           }
-        }
+        }, 2000);
         
-        const invoiceId = response.data.invoice_id || response.data.id || response.data.invoiceId;
+        // Store in localStorage for reference
+        localStorage.setItem('lastCreatedInvoiceNumber', result.invoice_number);
         
-        localStorage.setItem('lastCreatedOrderId', response.data.order_id || '');
-        localStorage.setItem('lastCreatedInvoiceId', invoiceId || '');
-        localStorage.setItem('lastInvoiceNumber', invoiceNumber);
-
-        // Store data for success modal
-        setCreatedInvoiceData({
-          invoiceNumber: invoiceNumber,
-          invoiceId: invoiceId,
-          customerName: selectedCustomer?.customer_name || invoice.customer_name,
-          totalAmount: invoice.net_amount,
-          customerPhone: selectedCustomer?.phone || selectedCustomer?.mobile || selectedCustomer?.primary_phone || invoice.customer_phone,
-          customerEmail: selectedCustomer?.email || invoice.customer_email,
-          items: invoice.invoice_items || []
-        });
-        
-        // Show success modal
-        setShowSuccessModal(true);
-        
-        // Success notification handled by GenericSuccessModal with auto-close
       } else {
-        // If no response data, still show success
-        const date = new Date();
-        const dateStr = date.toISOString().slice(2,10).replace(/-/g, ''); // YYMMDD  
-        const randomNum = Math.floor(Math.random() * 10000).toString().padStart(4, '0');
-        const fallbackInvoiceNumber = `INV-${dateStr}${randomNum}`;
-        toast.success(`Invoice ${fallbackInvoiceNumber} created!`);
-        
-        // Still show modal with fallback data
-        setCreatedInvoiceData({
-          invoiceNumber: fallbackInvoiceNumber,
-          invoiceId: null,
-          customerName: selectedCustomer?.customer_name || invoice.customer_name,
-          totalAmount: invoice.net_amount,
-          customerPhone: selectedCustomer?.phone || selectedCustomer?.mobile || selectedCustomer?.primary_phone || invoice.customer_phone,
-          customerEmail: selectedCustomer?.email || invoice.customer_email,
-          items: invoice.invoice_items || []
-        });
-        setShowSuccessModal(true);
+        // Should never happen, but handle gracefully
+        throw new Error(result.message || 'Failed to save invoice locally');
       }
     } catch (error) {
-      let errorMessage = 'Failed to create invoice';
-      
-      if (error.response?.data?.detail) {
-        // Handle FastAPI validation errors
-        if (typeof error.response.data.detail === 'string') {
-          errorMessage = error.response.data.detail;
-        } else if (Array.isArray(error.response.data.detail)) {
-          // Handle validation error array
-          errorMessage = error.response.data.detail
-            .map(err => err.msg || err.message || JSON.stringify(err))
-            .join(', ');
-        } else if (error.response.data.detail.msg) {
-          // Handle single validation error object
-          errorMessage = error.response.data.detail.msg;
-        }
-      } else if (error.message) {
-        errorMessage = error.message;
-      }
-      
-      toast(errorMessage, { type: 'error' });
+      console.error('Failed to save invoice:', error);
+      toast.error(error.message || 'Failed to create invoice locally');
     } finally {
       setSaving(false);
     }
@@ -1834,6 +1893,41 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
             onImport={handleImport}
           />
         )}
+
+        {/* Marg ERP Style Shortcut Modals */}
+        <BillDiscountModal
+          isOpen={showBillDiscountModal}
+          onClose={() => setShowBillDiscountModal(false)}
+          currentDiscount={invoice.bill_discount || 0}
+          billAmount={invoice.totals?.subtotal || 0}
+          onApply={handleApplyBillDiscount}
+        />
+
+        <TaxDetailModal
+          isOpen={showTaxDetailModal}
+          onClose={() => setShowTaxDetailModal(false)}
+          invoice={invoice}
+        />
+
+        <CashCalculatorModal
+          isOpen={showCashCalculatorModal}
+          onClose={() => setShowCashCalculatorModal(false)}
+          billAmount={invoice.totals?.grand_total || 0}
+        />
+
+        <LastDealModal
+          isOpen={showLastDealModal}
+          onClose={() => setShowLastDealModal(false)}
+          productId={selectedProductForLastDeal?.id}
+          productName={selectedProductForLastDeal?.name}
+          customerId={selectedCustomer?.id}
+        />
+
+        <ItemProfitModal
+          isOpen={showItemProfitModal}
+          onClose={() => setShowItemProfitModal(false)}
+          items={invoice.items}
+        />
 
       </div>
     );

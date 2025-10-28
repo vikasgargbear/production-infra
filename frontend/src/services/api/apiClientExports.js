@@ -277,6 +277,28 @@ export const invoiceAPI = {
     const response = await apiClient.get(`/invoices/${invoiceId}`);
     return response.data;
   },
+  
+  // Get last deals for a product (Marg ERP style - Alt+L)
+  getLastDeals: async (productId, customerId = null) => {
+    try {
+      const params = {};
+      if (customerId) {
+        params.customer_id = customerId;
+      }
+      
+      const response = await apiClient.get(`/invoices/last-deals/${productId}`, { params });
+      return {
+        success: true,
+        data: response.data?.data || response.data || []
+      };
+    } catch (error) {
+      return {
+        success: false,
+        data: [],
+        error: error.message
+      };
+    }
+  },
 };
 
 export const ordersAPI = {

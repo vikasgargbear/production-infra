@@ -122,7 +122,7 @@ class InventoryService:
         """Get batch details with calculated fields"""
         result = db.execute(text("""
             SELECT b.*, p.product_name, p.product_code,
-                   b.quantity_received - b.quantity_available as quantity_sold
+                   b.initial_quantity - b.quantity_available as quantity_sold
             FROM inventory.batches b
             JOIN inventory.products p ON b.product_id = p.product_id
             WHERE b.batch_id = :batch_id

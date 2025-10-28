@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { 
   X, Package, Calendar, AlertCircle, CheckCircle, 
-  TrendingDown, Zap, Shield, Clock, Box
+  TrendingDown, Zap, Shield, Clock, Box, DollarSign
 } from 'lucide-react';
 import { batchesApi } from '../../../services/api';
 import { searchCache } from '../../../utils/searchCache';
@@ -19,6 +19,7 @@ const BatchSelectionModalV2 = ({
   const [loading, setLoading] = useState(false);
   const [selectedBatch, setSelectedBatch] = useState(null);
   const [highlightedIndex, setHighlightedIndex] = useState(0); // Start with first batch highlighted
+  const [showCostInfo, setShowCostInfo] = useState(false);
   const batchCacheKey = `batches_${product?.product_id}`;
   const hasLoadedRef = useRef(false);
   const modalRef = useRef(null);
@@ -113,6 +114,13 @@ const BatchSelectionModalV2 = ({
 
   // Keyboard navigation
   const handleKeyDown = (e) => {
+    // Shift+~ to toggle cost/profit info
+    if (e.shiftKey && e.key === '~') {
+      e.preventDefault();
+      setShowCostInfo(prev => !prev);
+      return;
+    }
+    
     if (e.key === 'ArrowDown') {
       e.preventDefault();
       setHighlightedIndex(prev => 
@@ -220,7 +228,7 @@ const BatchSelectionModalV2 = ({
     <div className={styles.modalOverlay}>
       <div 
         ref={modalRef}
-        className={styles.modalContent}
+        className={`${styles.modalContent} max-w-6xl ml-auto mr-8`}
         tabIndex={-1}
         onKeyDown={handleKeyDown}
       >
@@ -270,93 +278,172 @@ const BatchSelectionModalV2 = ({
                   Showing {batches.length} batch{batches.length !== 1 ? 'es' : ''} • Sorted by latest expiry first
                 </p>
               </div>
-              <div className="space-y-3 max-w-2xl mx-auto">
-              {batches.map((batch, index) => {
-                const expiryInfo = getExpiryInfo(batch.expiry_date);
-                const isSelected = selectedBatch?.batch_id === batch.batch_id;
-                const isHighlighted = highlightedIndex === index;
-                
-                return (
-                  <div
-                    key={batch.batch_id}
-                    onClick={() => handleBatchSelect(batch)}
-                    className={`
-                      relative group cursor-pointer rounded-xl border-2 transition-all duration-300
-                      ${isSelected || isHighlighted
-                        ? 'border-blue-500 shadow-lg shadow-blue-100 scale-[1.02] bg-blue-50' 
-                        : 'border-gray-200 hover:border-gray-300 hover:shadow-lg'
-                      }
-                    `}
-                  >
-                    {/* Selection indicator */}
-                    {isSelected && (
-                      <div className="absolute -top-2 -right-2 w-6 h-6 bg-blue-500 rounded-full flex items-center justify-center animate-scale-in">
-                        <CheckCircle className="w-4 h-4 text-white" />
-                      </div>
-                    )}
+              {/* Table Layout with Header */}
+              <div className="border border-gray-200 rounded-lg overflow-hidden">
+                {/* Header Row */}
+                <div className="bg-gray-50 border-b border-gray-200 px-5 py-2.5">
+                  <div className="flex items-center gap-8">
+                    <div className="w-72 text-xs font-semibold text-gray-600 uppercase">Batch Number</div>
+                    <div className="flex items-center gap-12 flex-1">
+                      <div className="w-16 text-center text-xs font-semibold text-gray-600 uppercase">Stock</div>
+                      <div className="w-32 text-center text-xs font-semibold text-gray-600 uppercase">Expiry</div>
+                      <div className="w-32 text-center text-xs font-semibold text-gray-600 uppercase">Mfg Date</div>
+                      <div className="w-24 text-center text-xs font-semibold text-gray-600 uppercase">MRP</div>
+                      <div className="w-28 text-right text-xs font-semibold text-gray-600 uppercase">Action</div>
+                    </div>
+                  </div>
+                </div>
 
-                    <div className="p-4">
-                      <div className="flex items-center justify-between">
-                        {/* Left side - Batch info */}
-                        <div className="flex items-center gap-4">
-                          <div>
-                            <div className="flex items-center gap-2">
-                              <h4 className="text-base font-bold text-gray-900">
-                                #{batch.batch_number || batch.batch_no}
-                              </h4>
-                              <div className={`px-2 py-0.5 rounded-full ${expiryInfo.bg} ${expiryInfo.border} border`}>
-                                <span className={`text-xs font-medium ${expiryInfo.color}`}>
-                                  {expiryInfo.label} • {expiryInfo.days}
+                {/* Data Rows */}
+                <div className="divide-y divide-gray-100">
+                  {batches.map((batch, index) => {
+                    const expiryInfo = getExpiryInfo(batch.expiry_date);
+                    const isSelected = selectedBatch?.batch_id === batch.batch_id;
+                    const isHighlighted = highlightedIndex === index;
+                    
+                    return (
+                      <div
+                        key={batch.batch_id}
+                        onClick={() => handleBatchSelect(batch)}
+                        className={`
+                          cursor-pointer transition-colors duration-150
+                          ${isSelected
+                            ? 'bg-blue-100' 
+                            : isHighlighted
+                            ? 'bg-blue-50'
+                            : 'hover:bg-gray-50'
+                          }
+                        `}
+                      >
+                        <div className="px-5 py-3">
+                          <div className="flex items-center gap-8">
+                            {/* Batch Number and Status */}
+                            <div className="w-72 flex items-center gap-3">
+                              <span className="font-semibold text-gray-900">#{batch.batch_number || batch.batch_no}</span>
+                              <span className={`px-2 py-0.5 text-xs rounded whitespace-nowrap ${expiryInfo.bg} ${expiryInfo.color}`}>
+                                {expiryInfo.label}
+                              </span>
+                              <span className="text-xs text-gray-500 whitespace-nowrap">{expiryInfo.days}</span>
+                            </div>
+
+                            {/* Data columns */}
+                            <div className="flex items-center gap-12 flex-1">
+                              <div className="w-16 text-center">
+                                <span className="text-sm font-semibold text-gray-900">{batch.quantity_available}</span>
+                              </div>
+                              <div className="w-32 text-center">
+                                <span className="text-sm text-gray-900">{formatDate(batch.expiry_date)}</span>
+                              </div>
+                              <div className="w-32 text-center">
+                                <span className="text-sm text-gray-600">{formatDate(batch.mfg_date || batch.manufacturing_date)}</span>
+                              </div>
+                              <div className="w-24 text-center">
+                                <span className="text-sm font-semibold text-gray-900">₹{batch.mrp || product.mrp}</span>
+                              </div>
+                              
+                              {/* Select button */}
+                              <div className="w-28 text-right">
+                                {isSelected ? (
+                                  <div className="inline-flex items-center gap-1.5 text-blue-600 font-medium text-sm">
+                                    <CheckCircle className="w-4 h-4" />
+                                    <span>Selected</span>
+                                  </div>
+                                ) : (
+                                  <div className="text-gray-500 hover:text-blue-600 font-medium text-sm">
+                                    Select →
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Cost/Profit Overlay - Separate panel (Shift+~ to toggle) */}
+              {showCostInfo && batches.length > 0 && (
+                <div className="mt-6 border-t-2 border-blue-200 pt-4">
+                  <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl p-4 border border-blue-200">
+                    <div className="flex items-center justify-between mb-3">
+                      <h4 className="font-semibold text-gray-900 flex items-center gap-2">
+                        <DollarSign className="w-5 h-5 text-blue-600" />
+                        Cost & Profit Analysis
+                      </h4>
+                      <span className="text-xs text-blue-600 font-medium">Confidential</span>
+                    </div>
+                    
+                    <div className="space-y-2">
+                      {batches.map((batch, index) => {
+                        const costPrice = parseFloat(batch.cost_per_unit) || parseFloat(batch.weighted_average_cost) || 0;
+                        const sellPrice = parseFloat(batch.sale_price_per_unit) || parseFloat(batch.mrp_per_unit) || 0;
+                        const profit = sellPrice - costPrice;
+                        const margin = sellPrice > 0 ? ((profit / sellPrice) * 100) : 0;
+                        
+                        return (
+                          <div key={batch.batch_id} className="bg-white rounded-lg p-3 flex items-center justify-between border border-gray-200">
+                            <div className="flex-1">
+                              <span className="font-medium text-gray-900">#{batch.batch_number}</span>
+                              <span className="text-xs text-gray-500 ml-2">Stock: {batch.quantity_available}</span>
+                            </div>
+                            <div className="flex items-center gap-4 text-sm">
+                              <div>
+                                <span className="text-gray-600">Cost: </span>
+                                <span className="font-semibold">₹{costPrice.toFixed(2)}</span>
+                              </div>
+                              <div>
+                                <span className="text-gray-600">Sell: </span>
+                                <span className="font-semibold">₹{sellPrice.toFixed(2)}</span>
+                              </div>
+                              <div>
+                                <span className="text-gray-600">Profit: </span>
+                                <span className={`font-semibold ${profit >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
+                                  ₹{profit.toFixed(2)}
+                                </span>
+                              </div>
+                              <div>
+                                <span className="text-gray-600">Margin: </span>
+                                <span className={`font-semibold ${margin >= 0 ? 'text-purple-600' : 'text-red-600'}`}>
+                                  {margin.toFixed(1)}%
                                 </span>
                               </div>
                             </div>
-                            <div className="flex items-center gap-4 mt-1 text-sm text-gray-600">
-                              <span>Exp: {formatDate(batch.expiry_date)}</span>
-                              <span>Mfg: {formatDate(batch.mfg_date || batch.manufacturing_date)}</span>
-                            </div>
                           </div>
-                        </div>
-
-                        {/* Right side - Key metrics */}
-                        <div className="flex items-center gap-6">
-                          <div className="text-center">
-                            <p className="text-xs text-gray-500 uppercase">Stock</p>
-                            <p className="text-lg font-bold text-gray-900">{batch.quantity_available}</p>
-                          </div>
-                          <div className="text-center">
-                            <p className="text-xs text-gray-500 uppercase">MRP</p>
-                            <p className="text-lg font-bold text-gray-900">₹{batch.mrp || product.mrp}</p>
-                          </div>
-                          <div className={`
-                            px-4 py-2 rounded-lg transition-all duration-300 cursor-pointer
-                            ${isSelected 
-                              ? 'bg-blue-500 text-white' 
-                              : 'bg-gray-100 text-gray-600 group-hover:bg-gray-200'
-                            }
-                          `}>
-                            <span className="text-sm font-medium flex items-center gap-2">
-                              {isSelected ? (
-                                <>
-                                  <CheckCircle className="w-4 h-4" />
-                                  Selected
-                                </>
-                              ) : (
-                                <>
-                                  <Zap className="w-4 h-4" />
-                                  Select
-                                </>
-                              )}
-                            </span>
-                          </div>
-                        </div>
-                      </div>
+                        );
+                      })}
+                    </div>
+                    
+                    <div className="mt-3 text-xs text-gray-500 text-center">
+                      Press <kbd className="px-1 py-0.5 bg-white rounded border">Shift+~</kbd> again to hide
                     </div>
                   </div>
-                );
-              })}
-              </div>
+                </div>
+              )}
             </>
           )}
+        </div>
+
+        {/* Footer with keyboard hints */}
+        <div className="px-6 py-3 bg-gray-50 border-t border-gray-200 flex items-center justify-between">
+          <div className="flex items-center space-x-4 text-xs text-gray-500">
+            <span className="flex items-center">
+              <kbd className="px-2 py-1 bg-white rounded border border-gray-300 mr-1.5">↑↓</kbd> Navigate
+            </span>
+            <span className="flex items-center">
+              <kbd className="px-2 py-1 bg-white rounded border border-gray-300 mr-1.5">Enter</kbd> Select
+            </span>
+            <span className="flex items-center">
+              <kbd className="px-2 py-1 bg-white rounded border border-gray-300 mr-1.5 flex items-center gap-1">
+                <span>Shift</span><span>+</span><span>~</span>
+              </kbd> 
+              {showCostInfo ? 'Hide' : 'Show'} Cost/Profit
+            </span>
+            <span className="flex items-center">
+              <kbd className="px-2 py-1 bg-white rounded border border-gray-300 mr-1.5">Esc</kbd> Close
+            </span>
+          </div>
         </div>
       </div>
     </div>

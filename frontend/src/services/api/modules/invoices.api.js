@@ -249,4 +249,11 @@ export const invoicesApi = {
       }
     });
   },
+  
+  // Get last deals for a product (Marg ERP style - Alt+L)
+  getLastDeals: (productId, customerId = null) => {
+    return apiHelpers.get(`${ENDPOINTS.BASE}/last-deals/${productId}`, {
+      params: customerId ? { customer_id: customerId } : {}
+    });
+  },
 };

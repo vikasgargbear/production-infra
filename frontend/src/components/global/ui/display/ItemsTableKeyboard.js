@@ -165,23 +165,18 @@ const ItemsTableKeyboard = forwardRef(({
             </th>
             <th className="px-3 py-3 text-center text-xs font-semibold text-gray-700 uppercase tracking-wider">
               MRP
-              <div className="text-[10px] font-normal text-gray-500">(Read-only)</div>
             </th>
             <th className="px-3 py-3 text-center text-xs font-semibold text-gray-700 uppercase tracking-wider">
               Rate
-              <div className="text-[10px] font-normal text-gray-500">Editable</div>
             </th>
             <th className="px-3 py-3 text-center text-xs font-semibold text-gray-700 uppercase tracking-wider">
               Disc %
-              <div className="text-[10px] font-normal text-gray-500">Optional</div>
             </th>
             <th className="px-3 py-3 text-center text-xs font-semibold text-gray-700 uppercase tracking-wider">
               Free
-              <div className="text-[10px] font-normal text-gray-500">Bonus Qty</div>
             </th>
             <th className="px-3 py-3 text-center text-xs font-semibold text-gray-700 uppercase tracking-wider">
               Tax %
-              <div className="text-[10px] font-normal text-gray-500">Editable</div>
             </th>
             <th className="px-3 py-3 text-right text-xs font-semibold text-gray-700 uppercase tracking-wider">
               Total
