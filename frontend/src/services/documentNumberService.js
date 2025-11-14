@@ -40,8 +40,13 @@ class DocumentNumberService {
       }
     }
     
-    // Return a temporary placeholder - the user should retry
-    return 'INV-TEMP-' + Date.now().toString().slice(-6);
+    // Fallback to backend-compatible format: INV-YY######## 
+    const now = new Date();
+    const year = now.getFullYear() % 100;
+    const yearPrefix = year.toString().padStart(2, '0');
+    const timestamp = Date.now();
+    const uniqueNum = 10000000 + (timestamp % 90000000);
+    return `INV-${yearPrefix}${uniqueNum}`;
   }
 
   /**

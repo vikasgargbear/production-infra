@@ -4,6 +4,7 @@ import {
   CheckCircle, MessageCircle, FileInput, Printer, User, MapPin, Package
 } from 'lucide-react';
 import { ModuleHeader, CustomerSearch, ProductSearchSimple, ItemsTable, DocumentFooter, ProductCreationModal, NotesSection, AddressForm, StandardDatePicker, GenericSuccessModal } from '../global';
+import ItemsTableKeyboard from '../global/ui/display/ItemsTableKeyboard';
 import CustomerCreationB2B from '../global/ui/forms/CustomerCreationB2B';
 import KeyboardShortcuts, { SHORTCUT_SETS } from '../global/ui/KeyboardShortcuts';
 // NotesSection is now imported from global
@@ -11,6 +12,8 @@ import ChallanPreview from './components/ChallanPreview';
 import ImportFromInvoiceModal from './components/ImportFromInvoiceModal';
 import { challansApi } from '../../services/api/modules/challans.api';
 import { apiClient, employeesAPI } from '../../services/api';
+import { useEnterAsTab } from '../../hooks/useEnterAsTab';
+import useEscapeKey from '../../hooks/useEscapeKey';
 
 const ModularChallanCreatorV5 = ({ open = true, onClose }) => {
   const [challan, setChallan] = useState({
@@ -65,6 +68,41 @@ const ModularChallanCreatorV5 = ({ open = true, onClose }) => {
   // Refs for keyboard navigation
   const customerSearchRef = useRef(null);
   const productSearchRef = useRef(null);
+  const itemsTableRef = useRef(null);
+  const challanFormRef = useRef(null); // For Enter-as-Tab scoping
+  
+  // Enable Enter-as-Tab navigation (Marg ERP style)
+  useEnterAsTab({ 
+    containerRef: challanFormRef, 
+    enabled: true,
+    excludeSelectors: ['textarea', 'button[type="submit"]', '[data-no-enter-tab]']
+  });
+
+  // ESC key handling - hierarchical modal management
+  const shouldHandleMainEsc = !showCreateCustomer && !showCreateProduct && !showImportModal;
+  useEscapeKey(
+    () => { if (onClose) onClose(); },
+    shouldHandleMainEsc,
+    'ChallanFlow-Main'
+  );
+  
+  useEscapeKey(
+    () => setShowCreateCustomer(false),
+    showCreateCustomer,
+    'CustomerModal'
+  );
+  
+  useEscapeKey(
+    () => setShowCreateProduct(false),
+    showCreateProduct,
+    'ProductModal'
+  );
+  
+  useEscapeKey(
+    () => setShowImportModal(false),
+    showImportModal,
+    'ImportModal'
+  );
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -171,28 +209,27 @@ const ModularChallanCreatorV5 = ({ open = true, onClose }) => {
   };
 
   const generateChallanNumber = async () => {
-    // Generate a proper document-style number instead of timestamp
     try {
-      // Try to get a proper number from backend (if endpoint exists)
-      // For now, generate a more professional format
-      const today = new Date();
-      const year = today.getFullYear().toString().slice(-2);
-      const month = String(today.getMonth() + 1).padStart(2, '0');
-      const day = String(today.getDate()).padStart(2, '0');
-      const serial = Math.floor(Math.random() * 9999).toString().padStart(4, '0');
-      
-      const challanNumber = `DC${year}${month}${day}${serial}`;
+      // Use the document number service for consistent numbering
+      const { generateChallanNumber } = await import('../../services/documentNumberService');
+      const challanNumber = await generateChallanNumber();
       
       setChallan(prev => ({ 
         ...prev, 
         challan_number: challanNumber
       }));
     } catch (error) {
-      // Fallback to simple format
-      const serial = Math.floor(Math.random() * 9999).toString().padStart(4, '0');
+      console.error('Failed to generate challan number:', error);
+      // Use consistent fallback format: DC-YY########
+      const now = new Date();
+      const year = now.getFullYear() % 100;
+      const yearPrefix = year.toString().padStart(2, '0');
+      const timestamp = Date.now();
+      const uniqueNum = 10000000 + (timestamp % 90000000);
+      
       setChallan(prev => ({ 
         ...prev, 
-        challan_number: `DC-${serial}`
+        challan_number: `DC-${yearPrefix}${uniqueNum}`
       }));
     }
   };
@@ -388,6 +425,13 @@ const ModularChallanCreatorV5 = ({ open = true, onClose }) => {
       }));
       
       recalculateTotals([...challan.items, newItem]);
+      
+      // Auto-focus quantity field of newly added item for keyboard data entry
+      setTimeout(() => {
+        if (itemsTableRef.current) {
+          itemsTableRef.current.focusFirstField();
+        }
+      }, 150);
     }
   };
 
@@ -748,7 +792,7 @@ Expected Delivery: ${challan.expected_delivery_date}
           ]} />
 
           {/* Content - Single Page */}
-          <div className="flex-1 overflow-y-auto bg-blue-50">
+          <div className="flex-1 overflow-y-auto bg-blue-50" ref={challanFormRef}>
             <div className="max-w-6xl mx-auto px-6 py-6">
               
               {/* Top Section - Dates and Import */}
@@ -858,21 +902,23 @@ Expected Delivery: ${challan.expected_delivery_date}
                 />
               </div>
 
-              {/* Items Table - Using Global Component */}
+              {/* Items Table - Using Keyboard-Enabled Component */}
               {challan.items.length > 0 && (
                 <div className="mb-6">
                   <h3 className="text-sm font-semibold text-blue-700 uppercase tracking-wider mb-3 flex items-center">
                     <Package className="w-4 h-4 mr-2" />
                     CHALLAN ITEMS
                   </h3>
-                  <ItemsTable
+                  <ItemsTableKeyboard
+                    ref={itemsTableRef}
                     items={challan.items}
                     onUpdateItem={updateItem}
                     onRemoveItem={(index) => removeItem(challan.items[index]?.id)}
+                    productSearchRef={productSearchRef}
+                    currencySymbol="₹"
                     showPricing={true}
                     showGST={false} // Simplified for delivery
                     editable={true}
-                    columns={['product', 'quantity', 'unit', 'rate', 'total']}
                   />
                 </div>
               )}

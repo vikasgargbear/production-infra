@@ -28,6 +28,7 @@ import { challansApi as challansApiModule } from '../../services/api/modules/cha
 import EnterpriseCalculator from '../../services/enterpriseCalculator'; // Use unified calculator
 import { useCompany } from '../../contexts/CompanyContext';
 import ImportFromDocumentModal from './components/ImportFromDocumentModal';
+import documentNumberService from '../../services/documentNumberService';
 
 // Function to convert number to words
 const numberToWords = (num) => {
@@ -112,17 +113,29 @@ const SalesOrderFlow = ({ open = true, onClose }) => {
   const [createdOrderData, setCreatedOrderData] = useState(null);
   const [selectedBankAccount, setSelectedBankAccount] = useState(null);
 
-  // Generate order number with consistent format
-  const generateOrderNumber = () => {
-    const date = new Date();
-    const dateStr = date.toISOString().slice(2,10).replace(/-/g, ''); // YYMMDD
-    const randomNum = Math.floor(Math.random() * 10000).toString().padStart(4, '0');
-    return `SO-${dateStr}${randomNum}`; // Format: SO-YYMMDD####
+  // Generate order number using document number service
+  const generateOrderNumber = async () => {
+    try {
+      const orderNumber = await documentNumberService.generateSalesOrderNumber();
+      setOrder(prev => ({ ...prev, order_number: orderNumber }));
+      return orderNumber;
+    } catch (error) {
+      console.error('Failed to generate order number:', error);
+      // Use consistent fallback format: SO-YY########
+      const now = new Date();
+      const year = now.getFullYear() % 100;
+      const yearPrefix = year.toString().padStart(2, '0');
+      const timestamp = Date.now();
+      const uniqueNum = 10000000 + (timestamp % 90000000);
+      const orderNumber = `SO-${yearPrefix}${uniqueNum}`;
+      setOrder(prev => ({ ...prev, order_number: orderNumber }));
+      return orderNumber;
+    }
   };
 
   // Sales Order data state
   const [order, setOrder] = useState({
-    order_number: generateOrderNumber(),
+    order_number: '',
     order_date: new Date().toISOString().split('T')[0],
     expected_delivery_date: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
     customer_id: '',
@@ -156,6 +169,11 @@ const SalesOrderFlow = ({ open = true, onClose }) => {
 
   const [selectedCustomer, setSelectedCustomer] = useState(null);
   const [sameAsBilling, setSameAsBilling] = useState(true);
+
+  // Generate order number on mount
+  useEffect(() => {
+    generateOrderNumber();
+  }, []);
 
   // Load employees for Created By dropdown
   useEffect(() => {
@@ -1854,8 +1872,9 @@ Expected Delivery: ${order.expected_delivery_date}
               onClick: () => {
                 setShowSuccessModal(false);
                 // Reset for new order
+                generateOrderNumber();
                 setOrder({
-                  order_number: generateOrderNumber(),
+                  order_number: '',
                   order_date: new Date().toISOString().split('T')[0],
                   expected_delivery_date: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
                   customer_name: '',

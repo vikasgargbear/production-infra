@@ -186,7 +186,7 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
 
   // Invoice data state - merge with prefilled data if provided
   const [invoice, setInvoice] = useState({
-    invoice_no: 'INV-TEMP',
+    invoice_no: '', // Will be generated on mount
     invoice_date: new Date().toISOString().split('T')[0],
     due_date: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
     customer_id: prefilledData?.customer_id || '',
@@ -247,8 +247,7 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
         loadEmployees()
       ]);
       
-      // Don't generate invoice number here - keep it as TEMP until save
-      // This prevents wasting numbers on every component load
+      // Invoice number will be generated separately on mount
       
     } catch (error) {
       const errorMessage = 'Failed to load required data. Please check your connection and try again.';
@@ -415,8 +414,18 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
       firstInputRef.current.focus();
     }
     
-    // Don't generate invoice number on mount - wait until save
-    // Keep as INV-TEMP to prevent wasting numbers
+    // Generate invoice number on mount
+    generateInvoiceNumber().then(number => {
+      setInvoice(prev => ({ ...prev, invoice_no: number }));
+    }).catch(err => {
+      console.error('Failed to generate invoice number:', err);
+      // Use fallback format
+      const now = new Date();
+      const year = now.getFullYear() % 100;
+      const timestamp = Date.now();
+      const uniqueNum = 10000000 + (timestamp % 90000000);
+      setInvoice(prev => ({ ...prev, invoice_no: `INV-${year}${uniqueNum}` }));
+    });
   }, []);
 
   // Preload data on mount
@@ -808,9 +817,10 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
 
     setSaving(true);
     try {
-      // Generate real invoice number only when saving
+      // Use the already generated invoice number
       let finalInvoiceNumber = invoice.invoice_no;
-      if (invoice.invoice_no === 'INV-TEMP' || invoice.invoice_no.startsWith('INV-TEMP')) {
+      if (!finalInvoiceNumber || finalInvoiceNumber === '') {
+        // Regenerate if missing
         finalInvoiceNumber = await generateInvoiceNumber();
         if (!finalInvoiceNumber) {
           setSaving(false);
