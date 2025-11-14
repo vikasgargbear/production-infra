@@ -17,7 +17,7 @@ import useEscapeKey from '../../hooks/useEscapeKey';
 
 const ModularChallanCreatorV5 = ({ open = true, onClose }) => {
   const [challan, setChallan] = useState({
-    challan_number: '',
+    challan_number: 'Draft',
     challan_date: new Date().toISOString().split('T')[0],
     expected_delivery_date: new Date(Date.now() + 24*60*60*1000).toISOString().split('T')[0],
     customer_id: '',
@@ -171,9 +171,8 @@ const ModularChallanCreatorV5 = ({ open = true, onClose }) => {
     }
   };
 
-  // Generate challan number and load employees on mount
+  // Load employees on mount (don't generate number until save)
   useEffect(() => {
-    generateChallanNumber();
     loadEmployees();
   }, []);
 
@@ -543,8 +542,15 @@ const ModularChallanCreatorV5 = ({ open = true, onClose }) => {
       // Debug freight amount
 
       // Prepare challan data with complete delivery address
+      // Generate challan number if still draft
+      let finalChallanNumber = challan.challan_number;
+      if (challan.challan_number === 'Draft' || !challan.challan_number) {
+        await generateChallanNumber();
+        finalChallanNumber = challan.challan_number;
+      }
+      
       const challanData = {
-        challan_number: challan.challan_number,
+        challan_number: finalChallanNumber,
         challan_date: challan.challan_date,
         expected_delivery_date: challan.expected_delivery_date || challan.challan_date,
         customer_id: challan.customer_id,

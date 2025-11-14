@@ -135,7 +135,7 @@ const SalesOrderFlow = ({ open = true, onClose }) => {
 
   // Sales Order data state
   const [order, setOrder] = useState({
-    order_number: '',
+    order_number: 'Draft',
     order_date: new Date().toISOString().split('T')[0],
     expected_delivery_date: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
     customer_id: '',
@@ -169,11 +169,6 @@ const SalesOrderFlow = ({ open = true, onClose }) => {
 
   const [selectedCustomer, setSelectedCustomer] = useState(null);
   const [sameAsBilling, setSameAsBilling] = useState(true);
-
-  // Generate order number on mount
-  useEffect(() => {
-    generateOrderNumber();
-  }, []);
 
   // Load employees for Created By dropdown
   useEffect(() => {
@@ -688,7 +683,7 @@ const SalesOrderFlow = ({ open = true, onClose }) => {
         customer_phone: order.customer_phone || '',
         
         // Order details
-        order_number: order.order_number, // Send our generated order number
+        order_number: await generateOrderNumber(), // Generate number only when saving
         order_date: order.order_date || new Date().toISOString().split('T')[0],
         delivery_date: order.expected_delivery_date || order.order_date || new Date().toISOString().split('T')[0],
         delivery_address: order.shipping_address || order.billing_address || '',
@@ -1872,9 +1867,8 @@ Expected Delivery: ${order.expected_delivery_date}
               onClick: () => {
                 setShowSuccessModal(false);
                 // Reset for new order
-                generateOrderNumber();
                 setOrder({
-                  order_number: '',
+                  order_number: 'Draft',
                   order_date: new Date().toISOString().split('T')[0],
                   expected_delivery_date: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
                   customer_name: '',

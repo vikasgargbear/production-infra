@@ -186,7 +186,7 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
 
   // Invoice data state - merge with prefilled data if provided
   const [invoice, setInvoice] = useState({
-    invoice_no: '', // Will be generated on mount
+    invoice_no: 'Draft', // Enterprise standard: show draft until saved
     invoice_date: new Date().toISOString().split('T')[0],
     due_date: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
     customer_id: prefilledData?.customer_id || '',
@@ -414,18 +414,7 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
       firstInputRef.current.focus();
     }
     
-    // Generate invoice number on mount
-    generateInvoiceNumber().then(number => {
-      setInvoice(prev => ({ ...prev, invoice_no: number }));
-    }).catch(err => {
-      console.error('Failed to generate invoice number:', err);
-      // Use fallback format
-      const now = new Date();
-      const year = now.getFullYear() % 100;
-      const timestamp = Date.now();
-      const uniqueNum = 10000000 + (timestamp % 90000000);
-      setInvoice(prev => ({ ...prev, invoice_no: `INV-${year}${uniqueNum}` }));
-    });
+    // Don't generate invoice number on mount - wait until save (enterprise standard)
   }, []);
 
   // Preload data on mount
@@ -817,10 +806,9 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
 
     setSaving(true);
     try {
-      // Use the already generated invoice number
+      // Generate real invoice number only when saving (enterprise standard)
       let finalInvoiceNumber = invoice.invoice_no;
-      if (!finalInvoiceNumber || finalInvoiceNumber === '') {
-        // Regenerate if missing
+      if (invoice.invoice_no === 'Draft' || !finalInvoiceNumber || finalInvoiceNumber === '') {
         finalInvoiceNumber = await generateInvoiceNumber();
         if (!finalInvoiceNumber) {
           setSaving(false);
