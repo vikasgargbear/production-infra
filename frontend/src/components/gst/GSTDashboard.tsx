@@ -204,9 +204,9 @@ const GSTDashboard: React.FC<GSTDashboardProps> = ({ onNavigateToReports }) => {
       } else {
         console.warn(`[GST Dashboard] Returns status API failed:`, returnsStatusResponse.reason);
         returnsData = {
-          gstr1: { status: 'pending', amount: 0, dueDate: null, filedDate: null },
-          gstr3b: { status: 'pending', amount: 0, dueDate: null, filedDate: null },
-          gstr2a: { status: 'available', amount: 0, lastUpdated: null }
+          gstr1: { status: 'pending', amount: 0, dueDate: undefined, filedDate: undefined },
+          gstr3b: { status: 'pending', amount: 0, dueDate: undefined, filedDate: undefined },
+          gstr2a: { status: 'available', amount: 0, lastUpdated: undefined }
         };
       }
 

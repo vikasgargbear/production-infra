@@ -7,7 +7,7 @@ import {
 } from 'lucide-react';
 import { Button, StatusBadge, DataTable, InlineFilterPanel, Pagination } from '../global';
 import InvoiceApiService from '../../services/invoiceApiService';
-import debugLogger from '../../utils/debugLogger';
+// Debug logger removed for production
 
 interface InvoiceListProps {
   onClose?: () => void;
@@ -323,7 +323,7 @@ const InvoiceListV2: React.FC<InvoiceListProps> = ({ onClose }) => {
         searchParams.search = filters.search.trim();
       }
       
-      debugLogger.api('Fetching invoices with params:', searchParams);
+      // debugLogger.api('Fetching invoices with params:', searchParams);
       
       const response = await InvoiceApiService.getInvoices(searchParams);
       
@@ -331,17 +331,17 @@ const InvoiceListV2: React.FC<InvoiceListProps> = ({ onClose }) => {
         // Transform backend data to match our interface
         const transformedInvoices = response.data.invoices.map((invoice: any) => {
           // Log raw backend data for debugging
-          debugLogger.api('Raw invoice from backend:', {
-            invoice_id: invoice.invoice_id,
-            invoice_number: invoice.invoice_number,
-            customer_name: invoice.customer_name,
-            invoice_date: invoice.invoice_date,
-            final_amount: invoice.final_amount,
-            invoice_status: invoice.invoice_status,
-            payment_status: invoice.payment_status,
-            order_number: invoice.order_number,
-            order_date: invoice.order_date
-          });
+          // debugLogger.api('Raw invoice from backend:', {
+          //   invoice_id: invoice.invoice_id,
+          //   invoice_number: invoice.invoice_number,
+          //   customer_name: invoice.customer_name,
+          //   invoice_date: invoice.invoice_date,
+          //   final_amount: invoice.final_amount,
+          //   invoice_status: invoice.invoice_status,
+          //   payment_status: invoice.payment_status,
+          //   order_number: invoice.order_number,
+          //   order_date: invoice.order_date
+          // });
           
           return {
             id: invoice.invoice_id?.toString() || invoice.invoice_number,
@@ -364,7 +364,7 @@ const InvoiceListV2: React.FC<InvoiceListProps> = ({ onClose }) => {
           };
         });
 
-        debugLogger.api('Transformed invoices:', transformedInvoices);
+        // debugLogger.api('Transformed invoices:', transformedInvoices);
         setInvoices(transformedInvoices);
         setPagination({
           total: response.data.total || 0,
@@ -399,7 +399,7 @@ const InvoiceListV2: React.FC<InvoiceListProps> = ({ onClose }) => {
       setRefreshSuccess(true);
       setTimeout(() => setRefreshSuccess(false), 2000);
     } catch (error) {
-      debugLogger.error('Failed to refresh invoices:', error);
+      // debugLogger.error('Failed to refresh invoices:', error);
     } finally {
       setRefreshing(false);
     }
@@ -419,7 +419,7 @@ const InvoiceListV2: React.FC<InvoiceListProps> = ({ onClose }) => {
       setExportSuccess(true);
       setTimeout(() => setExportSuccess(false), 3000);
     } catch (error) {
-      debugLogger.error('Failed to export invoices:', error);
+      // debugLogger.error('Failed to export invoices:', error);
     } finally {
       setExporting(false);
     }
@@ -476,7 +476,7 @@ const InvoiceListV2: React.FC<InvoiceListProps> = ({ onClose }) => {
 
   // Handle filter changes with auto-search
   const handleFilterChange = (filters: any) => {
-    debugLogger.debug('Filters changed:', filters);
+    // debugLogger.debug('Filters changed:', filters);
     // Update local state
     if (filters.status) setFilterStatus(filters.status);
     if (filters.dateFilter) setDateFilter(filters.dateFilter);
@@ -603,7 +603,7 @@ const InvoiceListV2: React.FC<InvoiceListProps> = ({ onClose }) => {
   const getStatusText = (status: string | undefined) => {
     if (!status) return 'Unknown';
     
-    debugLogger.debug('Raw status from backend:', status, 'Type:', typeof status);
+    // debugLogger.debug('Raw status from backend:', status, 'Type:', typeof status);
     
     // Map backend statuses to display text - handle various formats
     const statusMap: Record<string, string> = {
@@ -652,7 +652,7 @@ const InvoiceListV2: React.FC<InvoiceListProps> = ({ onClose }) => {
     }
     
     // If no mapping found, log it and return the original value
-    debugLogger.warn('No status mapping found for:', status, 'Returning original value');
+    // debugLogger.warn('No status mapping found for:', status, 'Returning original value');
     return status;
   };
 
@@ -711,11 +711,11 @@ const InvoiceListV2: React.FC<InvoiceListProps> = ({ onClose }) => {
       header: 'Status',
       render: (value: string, invoice: Invoice) => {
         const statusText = getStatusText(invoice.invoice_status);
-        debugLogger.render('Status column render:', {
-          original: invoice.invoice_status,
-          processed: statusText,
-          invoice_id: invoice.invoice_id
-        });
+        // debugLogger.render('Status column render:', {
+        //   original: invoice.invoice_status,
+        //   processed: statusText,
+        //   invoice_id: invoice.invoice_id
+        // });
         return (
           <StatusBadge 
             status={statusText} 
@@ -730,11 +730,11 @@ const InvoiceListV2: React.FC<InvoiceListProps> = ({ onClose }) => {
       header: 'Payment',
       render: (value: string, invoice: Invoice) => {
         const paymentText = getStatusText(invoice.payment_status);
-        debugLogger.render('Payment column render:', {
-          original: invoice.payment_status,
-          processed: paymentText,
-          invoice_id: invoice.invoice_id
-        });
+        // debugLogger.render('Payment column render:', {
+        //   original: invoice.payment_status,
+        //   processed: paymentText,
+        //   invoice_id: invoice.invoice_id
+        // });
         return (
           <StatusBadge 
             status={paymentText} 

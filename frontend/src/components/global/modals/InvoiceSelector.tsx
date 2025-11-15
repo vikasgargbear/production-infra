@@ -6,7 +6,7 @@ import {
 import Button from '../ui/Button';
 import { StatusBadge, DataTable } from '../ui';
 import InvoiceApiService from '../../../services/invoiceApiService';
-import debugLogger from '../../../utils/debugLogger';
+// Debug logger removed for production
 
 interface InvoiceSelectorProps {
   customerId?: string;
@@ -82,7 +82,7 @@ const InvoiceSelector: React.FC<InvoiceSelectorProps> = ({
         params.returnable = true;
       }
       
-      debugLogger.api('Fetching invoices with params:', params);
+      // debugLogger.api('Fetching invoices with params:', params);
       
       const response = await InvoiceApiService.getInvoices(params);
       
@@ -101,7 +101,7 @@ const InvoiceSelector: React.FC<InvoiceSelectorProps> = ({
           order_date: invoice.order_date
         }));
 
-        debugLogger.api('Transformed invoices:', transformedInvoices);
+        // debugLogger.api('Transformed invoices:', transformedInvoices);
         setInvoices(transformedInvoices);
         setPagination({
           total: response.data.total || 0,
