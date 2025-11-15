@@ -157,7 +157,7 @@ const ModularChallanCreatorV5 = ({ open = true, onClose }) => {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [currentStep, showCreateCustomer, showCreateProduct, showImportModal, challan.customer_id, challan.items]);
+  }, [currentStep, showCreateCustomer, showCreateProduct, showImportModal]);
 
   // Load employees for M.R. dropdown
   const loadEmployees = async () => {

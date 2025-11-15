@@ -99,22 +99,8 @@ const InvoiceListV2: React.FC<InvoiceListProps> = ({ onClose }) => {
   // State for real data
   const [invoices, setInvoices] = useState<Invoice[]>([]);
 
-  // ESC key handler for better UX
-  useEffect(() => {
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape' && onClose) {
-        onClose();
-      }
-    };
-
-    document.addEventListener('keydown', handleKeyDown);
-    return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [onClose]);
-
-  // Client-side filtering for display purposes only (server-side search is handled in fetchInvoices)
-  const filteredInvoices = invoices; // Use server-filtered data directly
-
-  // Multi-select functionality
+  // Define these BEFORE useEffect
+  const filteredInvoices = invoices;
   const isAllSelected = filteredInvoices.length > 0 && filteredInvoices.every(invoice => selectedIds.has(invoice.id));
   const selectedCount = Array.from(selectedIds).filter(id => filteredInvoices.some(f => f.id === id)).length;
 
@@ -141,6 +127,83 @@ const InvoiceListV2: React.FC<InvoiceListProps> = ({ onClose }) => {
       });
     }
   };
+
+  // Marg ERP style keyboard shortcuts
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      // ESC - Close/Exit
+      if (event.key === 'Escape' && onClose) {
+        onClose();
+        return;
+      }
+
+      // Alt+C - Create New Invoice
+      if (event.altKey && event.key.toLowerCase() === 'c') {
+        event.preventDefault();
+        // TODO: Open create invoice modal
+        console.log('Create new invoice');
+        return;
+      }
+
+      // Alt+R or F5 - Refresh
+      if ((event.altKey && event.key.toLowerCase() === 'r') || event.key === 'F5') {
+        event.preventDefault();
+        handleRefresh();
+        return;
+      }
+
+      // Alt+E - Export
+      if (event.altKey && event.key.toLowerCase() === 'e') {
+        event.preventDefault();
+        handleExportExcel();
+        return;
+      }
+
+      // Ctrl+P - Print
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'p' && selectedCount > 0) {
+        event.preventDefault();
+        printSelected();
+        return;
+      }
+
+      // Ctrl+F - Focus Search
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'f') {
+        event.preventDefault();
+        document.querySelector<HTMLInputElement>('[placeholder*="Search"]')?.focus();
+        return;
+      }
+
+      // Alt+S - Focus on status filter
+      if (event.altKey && event.key.toLowerCase() === 's') {
+        event.preventDefault();
+        setShowFilters(true);
+        return;
+      }
+
+      // Alt+A - Select All
+      if (event.altKey && event.key.toLowerCase() === 'a') {
+        event.preventDefault();
+        toggleSelectAll();
+        return;
+      }
+
+      // Page Up/Down - Navigate pages
+      if (event.key === 'PageUp' && pagination.page > 1) {
+        event.preventDefault();
+        fetchInvoices(pagination.page - 1);
+        return;
+      }
+
+      if (event.key === 'PageDown' && pagination.page < pagination.total_pages) {
+        event.preventDefault();
+        fetchInvoices(pagination.page + 1);
+        return;
+      }
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [onClose, pagination, selectedIds, invoices]);
 
   const exportSelectedPDF = async () => {
     const itemsToExport = filteredInvoices.filter(invoice => selectedIds.has(invoice.id));
@@ -548,6 +611,7 @@ const InvoiceListV2: React.FC<InvoiceListProps> = ({ onClose }) => {
       'draft': 'Draft',
       'sent': 'Sent',
       'paid': 'Paid',
+      'posted': 'Posted',
       'overdue': 'Overdue',
       'cancelled': 'Cancelled',
       'canceled': 'Cancelled', // Handle US spelling
@@ -558,6 +622,7 @@ const InvoiceListV2: React.FC<InvoiceListProps> = ({ onClose }) => {
       'DRAFT': 'Draft',
       'SENT': 'Sent',
       'PAID': 'Paid',
+      'POSTED': 'Posted',
       'OVERDUE': 'Overdue',
       'CANCELLED': 'Cancelled',
       'CANCELED': 'Cancelled',
