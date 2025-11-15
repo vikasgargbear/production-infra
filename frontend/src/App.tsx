@@ -239,7 +239,7 @@ const AppContent = (): JSX.Element => {
   // Check if user wants to see auth diagnostic
   if (window.location.pathname === '/auth-diagnostic' || window.location.hash === '#auth-diagnostic') {
     // OLD AUTH DIAGNOSTIC REMOVED
-    return null;
+    return <div>Diagnostic removed</div>;
   }
 
   // Loading handled by AuthContext - no need for setup check
