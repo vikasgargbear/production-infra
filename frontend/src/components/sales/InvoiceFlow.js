@@ -186,7 +186,7 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
 
   // Invoice data state - merge with prefilled data if provided
   const [invoice, setInvoice] = useState({
-    invoice_no: 'Draft', // Enterprise standard: show draft until saved
+    invoice_no: '', // Will be generated on save
     invoice_date: new Date().toISOString().split('T')[0],
     due_date: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
     customer_id: prefilledData?.customer_id || '',
@@ -808,7 +808,7 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
     try {
       // Generate real invoice number only when saving (enterprise standard)
       let finalInvoiceNumber = invoice.invoice_no;
-      if (invoice.invoice_no === 'Draft' || !finalInvoiceNumber || finalInvoiceNumber === '') {
+      if (!finalInvoiceNumber || finalInvoiceNumber === '') {
         finalInvoiceNumber = await generateInvoiceNumber();
         if (!finalInvoiceNumber) {
           setSaving(false);

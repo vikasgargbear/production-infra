@@ -135,7 +135,7 @@ const SalesOrderFlow = ({ open = true, onClose }) => {
 
   // Sales Order data state
   const [order, setOrder] = useState({
-    order_number: 'Draft',
+    order_number: '',
     order_date: new Date().toISOString().split('T')[0],
     expected_delivery_date: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
     customer_id: '',
@@ -1868,7 +1868,7 @@ Expected Delivery: ${order.expected_delivery_date}
                 setShowSuccessModal(false);
                 // Reset for new order
                 setOrder({
-                  order_number: 'Draft',
+                  order_number: '',
                   order_date: new Date().toISOString().split('T')[0],
                   expected_delivery_date: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
                   customer_name: '',

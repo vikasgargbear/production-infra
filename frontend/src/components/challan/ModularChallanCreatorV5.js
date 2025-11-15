@@ -17,7 +17,7 @@ import useEscapeKey from '../../hooks/useEscapeKey';
 
 const ModularChallanCreatorV5 = ({ open = true, onClose }) => {
   const [challan, setChallan] = useState({
-    challan_number: 'Draft',
+    challan_number: '',
     challan_date: new Date().toISOString().split('T')[0],
     expected_delivery_date: new Date(Date.now() + 24*60*60*1000).toISOString().split('T')[0],
     customer_id: '',
@@ -542,9 +542,9 @@ const ModularChallanCreatorV5 = ({ open = true, onClose }) => {
       // Debug freight amount
 
       // Prepare challan data with complete delivery address
-      // Generate challan number if still draft
+      // Generate challan number only when saving
       let finalChallanNumber = challan.challan_number;
-      if (challan.challan_number === 'Draft' || !challan.challan_number) {
+      if (!challan.challan_number) {
         await generateChallanNumber();
         finalChallanNumber = challan.challan_number;
       }
