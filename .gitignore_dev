@@ -1,0 +1,13 @@
+# Development folder - not for production
+dev/
+*.log
+*.tmp
+debug_*
+test_*.html
+.DS_Store
+node_modules/
+build/
+dist/
+*.swp
+*.swo
+*~

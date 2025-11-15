@@ -45,13 +45,13 @@ class LocalFirstService {
    */
   async seedInitialData() {
     try {
-      console.log('[LocalFirst] Seeding initial data...');
+      // // console.log('[LocalFirst] Seeding initial data...');
       
       // Fetch products
       const productsResponse = await productAPI.list({ limit: 1000 });
       const products = productsResponse?.data || productsResponse || [];
       
-      console.log('[LocalFirst] Fetched products from cloud:', products.length);
+      // // console.log('[LocalFirst] Fetched products from cloud:', products.length);
       
       if (products.length > 0) {
         // Transform products to include search fields
@@ -76,13 +76,13 @@ class LocalFirstService {
         }));
         
         await offlineDB.bulkLoad('products', transformedProducts);
-        console.log(`[LocalFirst] Seeded ${transformedProducts.length} products`);
+        // console.log(`[LocalFirst] Seeded ${transformedProducts.length} products`);
       }
       
       // Fetch customers
-      console.log('[LocalFirst] Fetching customers from cloud...');
+      // // console.log('[LocalFirst] Fetching customers from cloud...');
       const customersResponse = await customersApi.getAll({ limit: 1000 });
-      console.log('[LocalFirst] Raw customers response:', customersResponse);
+      // // console.log('[LocalFirst] Raw customers response:', customersResponse);
       
       // Handle different response structures
       let customers = [];
@@ -96,7 +96,7 @@ class LocalFirstService {
         customers = customersResponse;
       }
       
-      console.log('[LocalFirst] Fetched customers from cloud:', customers.length);
+      // // console.log('[LocalFirst] Fetched customers from cloud:', customers.length);
       
       if (customers.length > 0) {
         // Transform customers to include search fields
@@ -119,12 +119,12 @@ class LocalFirstService {
         }));
         
         await offlineDB.bulkLoad('customers', transformedCustomers);
-        console.log(`[LocalFirst] Seeded ${transformedCustomers.length} customers to IndexedDB`);
+        // console.log(`[LocalFirst] Seeded ${transformedCustomers.length} customers to IndexedDB`);
       }
       
       this.lastSyncTime = Date.now();
       this.notifySyncListeners({ status: 'seeded', timestamp: this.lastSyncTime });
-      console.log('[LocalFirst] Initial seed completed successfully');
+      // // console.log('[LocalFirst] Initial seed completed successfully');
     } catch (error) {
       console.error('[LocalFirst] Failed to seed initial data:', error);
       throw error;
@@ -209,7 +209,7 @@ class LocalFirstService {
     if (!forceCloud) {
       try {
         const allCustomers = await offlineDB.getAll('customers');
-        console.log('[LocalFirst] Customer search - total local customers:', allCustomers.length);
+        // // console.log('[LocalFirst] Customer search - total local customers:', allCustomers.length);
         
         // Multi-field fuzzy search
         const matches = allCustomers.filter(customer => {
@@ -225,7 +225,7 @@ class LocalFirstService {
           return isMatch;
         });
         
-        console.log('[LocalFirst] Customer search - matches found:', matches.length);
+        // // console.log('[LocalFirst] Customer search - matches found:', matches.length);
         
         // Sort by relevance
         matches.sort((a, b) => {
@@ -240,13 +240,13 @@ class LocalFirstService {
         
         // If we have local results, return them instantly
         if (results.length > 0) {
-          console.log('[LocalFirst] Returning local customer results:', results.length);
+          // // console.log('[LocalFirst] Returning local customer results:', results.length);
           // Trigger background cloud search to update cache
           this.backgroundCloudSearch('customers', query).catch(() => {});
           return results;
         }
         
-        console.log('[LocalFirst] No local customers found, falling back to cloud');
+        // // console.log('[LocalFirst] No local customers found, falling back to cloud');
       } catch (error) {
         console.error('Local customer search failed:', error);
       }
@@ -281,9 +281,9 @@ class LocalFirstService {
    */
   async cloudSearchCustomers(query, limit = 20) {
     try {
-      console.log('[LocalFirst] Calling cloud API for customers, query:', query);
+      // // console.log('[LocalFirst] Calling cloud API for customers, query:', query);
       const response = await customersApi.search(query, { limit });
-      console.log('[LocalFirst] Cloud API response:', response);
+      // // console.log('[LocalFirst] Cloud API response:', response);
       
       // Handle different response structures
       let results = [];
@@ -297,7 +297,7 @@ class LocalFirstService {
         results = response;
       }
       
-      console.log('[LocalFirst] Extracted customer results:', results.length);
+      // // console.log('[LocalFirst] Extracted customer results:', results.length);
       
       // Update local cache in background
       if (results.length > 0) {

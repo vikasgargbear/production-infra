@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { 
   X,
   IndianRupee, 
@@ -22,6 +22,8 @@ import {
 } from 'lucide-react';
 import { customersApi, invoicesApi, paymentsApi } from './services/api';
 import offlineStorage from './services/offlineStorage';
+import { useEnterAsTab } from './hooks/useEnterAsTab';
+import useEscapeKey from './hooks/useEscapeKey';
 
 const PaymentEntryModal = ({ open, onClose }) => {
   const [activeTab, setActiveTab] = useState('simple');
@@ -71,6 +73,27 @@ const PaymentEntryModal = ({ open, onClose }) => {
   });
   
   const [errors, setErrors] = useState({});
+  
+  // Refs for keyboard navigation
+  const paymentFormRef = useRef(null);
+  const customerSearchRef = useRef(null);
+  const amountInputRef = useRef(null);
+  
+  // Enable Enter-as-Tab navigation (Marg ERP style)
+  useEnterAsTab({ 
+    containerRef: paymentFormRef, 
+    enabled: true,
+    excludeSelectors: ['textarea', 'button[type="submit"]', '[data-no-enter-tab]']
+  });
+
+  // ESC key handling
+  useEscapeKey(
+    useCallback(() => {
+      if (onClose) onClose();
+    }, [onClose]),
+    open,
+    'PaymentEntry-Main'
+  );
 
   // Payment modes
   const paymentModes = [
@@ -263,7 +286,7 @@ const PaymentEntryModal = ({ open, onClose }) => {
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 bg-gray-100 z-50 flex flex-col">
+    <div className="fixed inset-0 bg-gray-100 z-50 flex flex-col" ref={paymentFormRef}>
       {/* Header */}
       <div className="bg-gradient-to-r from-blue-600 to-blue-700 p-6 text-white flex-shrink-0">
         <div className="flex items-center justify-between">

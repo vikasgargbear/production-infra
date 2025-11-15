@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { X, Package, Pill, Building2, Hash, Percent, IndianRupee, Shield, AlertTriangle, Thermometer, FileText } from 'lucide-react';
 import { productAPI, productsApi } from '../../../services/api';
 import PackTypeSelector from '../PackTypeSelector';
@@ -7,6 +7,8 @@ import DataTransformer from '../../../services/dataTransformer';
 import { APP_CONFIG } from '../../../config/app.config';
 import { useToast } from '../ui/feedback/Toast';
 import { FullScreenModal } from '../ui/FullScreenModal';
+import { useEnterAsTab } from '../../../hooks/useEnterAsTab';
+import useEscapeKey from '../../../hooks/useEscapeKey';
 
 const ProductCreationModal = ({ 
   show, 
@@ -15,6 +17,24 @@ const ProductCreationModal = ({
   initialProductName = '' 
 }) => {
   const toast = useToast();
+  const productFormRef = useRef(null);
+  
+  // Enable Enter-as-Tab navigation (Marg ERP style)
+  useEnterAsTab({ 
+    containerRef: productFormRef, 
+    enabled: show,
+    excludeSelectors: ['textarea', 'button[type="submit"]', '[data-no-enter-tab]']
+  });
+
+  // ESC key handling
+  useEscapeKey(
+    useCallback(() => {
+      if (onClose) onClose();
+    }, [onClose]),
+    show,
+    'ProductCreation-Main'
+  );
+  
   const [newProduct, setNewProduct] = useState({
     product_name: initialProductName,
     product_code: '',
@@ -407,7 +427,7 @@ const ProductCreationModal = ({
       }
     >
       {/* Icon Header */}
-      <div className="flex items-center space-x-3 pb-4 border-b border-gray-200 mb-6">
+      <div className="flex items-center space-x-3 pb-4 border-b border-gray-200 mb-6" ref={productFormRef}>
         <div className="w-10 h-10 bg-green-100 rounded-xl flex items-center justify-center">
           <Package className="w-5 h-5 text-green-600" />
         </div>

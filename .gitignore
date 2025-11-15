@@ -102,3 +102,7 @@ test-results/
 .env.local
 .env.production
 */secrets/
+
+# Development files - not for production
+/dev/
+

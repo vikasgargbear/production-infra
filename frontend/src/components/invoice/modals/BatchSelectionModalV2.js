@@ -228,7 +228,7 @@ const BatchSelectionModalV2 = ({
     <div className={styles.modalOverlay}>
       <div 
         ref={modalRef}
-        className={`${styles.modalContent} max-w-6xl ml-auto mr-8`}
+        className="bg-white rounded-2xl shadow-2xl w-full max-w-5xl max-h-[90vh] overflow-hidden"
         tabIndex={-1}
         onKeyDown={handleKeyDown}
       >
@@ -282,14 +282,14 @@ const BatchSelectionModalV2 = ({
               <div className="border border-gray-200 rounded-lg overflow-hidden">
                 {/* Header Row */}
                 <div className="bg-gray-50 border-b border-gray-200 px-5 py-2.5">
-                  <div className="flex items-center gap-8">
-                    <div className="w-72 text-xs font-semibold text-gray-600 uppercase">Batch Number</div>
-                    <div className="flex items-center gap-12 flex-1">
-                      <div className="w-16 text-center text-xs font-semibold text-gray-600 uppercase">Stock</div>
-                      <div className="w-32 text-center text-xs font-semibold text-gray-600 uppercase">Expiry</div>
-                      <div className="w-32 text-center text-xs font-semibold text-gray-600 uppercase">Mfg Date</div>
-                      <div className="w-24 text-center text-xs font-semibold text-gray-600 uppercase">MRP</div>
-                      <div className="w-28 text-right text-xs font-semibold text-gray-600 uppercase">Action</div>
+                  <div className="flex items-center gap-10">
+                    <div className="w-96 text-xs font-semibold text-gray-600 uppercase">Batch Number</div>
+                    <div className="flex items-center gap-16 flex-1">
+                      <div className="w-20 text-center text-xs font-semibold text-gray-600 uppercase">Stock</div>
+                      <div className="w-36 text-center text-xs font-semibold text-gray-600 uppercase">Expiry</div>
+                      <div className="w-36 text-center text-xs font-semibold text-gray-600 uppercase">Mfg Date</div>
+                      <div className="w-28 text-center text-xs font-semibold text-gray-600 uppercase">MRP</div>
+                      <div className="w-32 text-right text-xs font-semibold text-gray-600 uppercase">Action</div>
                     </div>
                   </div>
                 </div>
@@ -316,10 +316,10 @@ const BatchSelectionModalV2 = ({
                         `}
                       >
                         <div className="px-5 py-3">
-                          <div className="flex items-center gap-8">
+                          <div className="flex items-center gap-10">
                             {/* Batch Number and Status */}
-                            <div className="w-72 flex items-center gap-3">
-                              <span className="font-semibold text-gray-900">#{batch.batch_number || batch.batch_no}</span>
+                            <div className="w-96 flex items-center gap-3">
+                              <span className="font-semibold text-gray-900 whitespace-nowrap">#{batch.batch_number || batch.batch_no}</span>
                               <span className={`px-2 py-0.5 text-xs rounded whitespace-nowrap ${expiryInfo.bg} ${expiryInfo.color}`}>
                                 {expiryInfo.label}
                               </span>
@@ -327,22 +327,22 @@ const BatchSelectionModalV2 = ({
                             </div>
 
                             {/* Data columns */}
-                            <div className="flex items-center gap-12 flex-1">
-                              <div className="w-16 text-center">
+                            <div className="flex items-center gap-16 flex-1">
+                              <div className="w-20 text-center">
                                 <span className="text-sm font-semibold text-gray-900">{batch.quantity_available}</span>
                               </div>
-                              <div className="w-32 text-center">
+                              <div className="w-36 text-center">
                                 <span className="text-sm text-gray-900">{formatDate(batch.expiry_date)}</span>
                               </div>
-                              <div className="w-32 text-center">
+                              <div className="w-36 text-center">
                                 <span className="text-sm text-gray-600">{formatDate(batch.mfg_date || batch.manufacturing_date)}</span>
                               </div>
-                              <div className="w-24 text-center">
+                              <div className="w-28 text-center">
                                 <span className="text-sm font-semibold text-gray-900">₹{batch.mrp || product.mrp}</span>
                               </div>
                               
                               {/* Select button */}
-                              <div className="w-28 text-right">
+                              <div className="w-32 text-right">
                                 {isSelected ? (
                                   <div className="inline-flex items-center gap-1.5 text-blue-600 font-medium text-sm">
                                     <CheckCircle className="w-4 h-4" />

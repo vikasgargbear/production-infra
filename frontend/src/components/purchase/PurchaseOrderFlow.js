@@ -9,9 +9,12 @@ import {
 import { suppliersApi, productsApi, purchaseApi } from '../../services/api';
 import { searchCache } from '../../utils/searchCache';
 import { SupplierSearch, PurchaseProductSearch, ItemsTable, NotesSection, ProductCreationModal, GSTCalculator, ViewHistoryButton, ModuleHeader, StandardDatePicker, DocumentFooter } from '../global';
+import ItemsTableKeyboard from '../global/ui/display/ItemsTableKeyboard';
 import PurchaseOrderPreview from './components/PurchaseOrderPreview';
 import SupplierCreationModal from '../global/modals/SupplierCreationModal';
 import ShareModal from '../common/ShareModal';
+import { useEnterAsTab } from '../../hooks/useEnterAsTab';
+import useEscapeKey from '../../hooks/useEscapeKey';
 
 const PurchaseOrderFlow = ({ onClose, prefilledData = null }) => {
   const [currentStep, setCurrentStep] = useState(1);
@@ -191,6 +194,47 @@ const PurchaseOrderFlow = ({ onClose, prefilledData = null }) => {
   const supplierSearchRef = useRef(null);
   const productSearchRef = useRef(null);
   const firstInputRef = useRef(null);
+  const itemsTableRef = useRef(null);
+  const poFormRef = useRef(null); // For Enter-as-Tab scoping
+  
+  // Enable Enter-as-Tab navigation (Marg ERP style)
+  useEnterAsTab({ 
+    containerRef: poFormRef, 
+    enabled: true,
+    excludeSelectors: ['textarea', 'button[type="submit"]', '[data-no-enter-tab]']
+  });
+
+  // ESC key handling - hierarchical modal management
+  const shouldHandleMainEsc = !showSupplierModal && !showProductModal && !showGSTCalculator && !showShareModal;
+  useEscapeKey(
+    () => { if (onClose) onClose(); },
+    shouldHandleMainEsc,
+    'PurchaseOrderFlow-Main'
+  );
+  
+  useEscapeKey(
+    () => setShowSupplierModal(false),
+    showSupplierModal,
+    'SupplierModal'
+  );
+  
+  useEscapeKey(
+    () => setShowProductModal(false),
+    showProductModal,
+    'ProductModal'
+  );
+  
+  useEscapeKey(
+    () => setShowGSTCalculator(false),
+    showGSTCalculator,
+    'GSTCalculator'
+  );
+  
+  useEscapeKey(
+    () => setShowShareModal(false),
+    showShareModal,
+    'ShareModal'
+  );
 
   // Generate sequential PO number with consistent format
   const generatePONumber = async () => {
@@ -467,6 +511,7 @@ const PurchaseOrderFlow = ({ onClose, prefilledData = null }) => {
       manufacturer: product.manufacturer || '',
       schedule: product.schedule || '',
       purchase_price: parseFloat(product.ptr || product.cost_price || product.mrp * 0.7 || 0),
+      rate: parseFloat(product.ptr || product.cost_price || product.mrp * 0.7 || 0),
       mrp: parseFloat(product.mrp || 0),
       quantity: 1,
       free_quantity: 0,
@@ -478,13 +523,20 @@ const PurchaseOrderFlow = ({ onClose, prefilledData = null }) => {
       ...prev,
       items: [...prev.items, newItem]
     }));
+    
+    // Auto-focus quantity field of newly added item for keyboard data entry
+    setTimeout(() => {
+      if (itemsTableRef.current) {
+        itemsTableRef.current.focusFirstField();
+      }
+    }, 150);
   };
 
-  const updateItem = (itemId, field, value) => {
+  const updateItem = (index, field, value) => {
     setPurchaseOrder(prev => ({
       ...prev,
-      items: prev.items.map(item => 
-        item.id === itemId ? { ...item, [field]: value } : item
+      items: prev.items.map((item, i) => 
+        i === index ? { ...item, [field]: value } : item
       )
     }));
   };
@@ -688,7 +740,7 @@ ${localStorage.getItem('company_name') || 'AASO Pharmaceuticals'}
           </div>
 
           {/* Content */}
-          <div className="flex-1 overflow-y-auto">
+          <div className="flex-1 overflow-y-auto" ref={poFormRef}>
             <div className="max-w-6xl mx-auto px-6 py-6 space-y-6">
               {message && (
                 <div className={`rounded-lg p-4 flex items-center gap-3 ${
@@ -875,10 +927,13 @@ ${localStorage.getItem('company_name') || 'AASO Pharmaceuticals'}
                 )}
 
                 {purchaseOrder.items.length > 0 ? (
-                  <ItemsTable
+                  <ItemsTableKeyboard
+                    ref={itemsTableRef}
                     items={purchaseOrder.items}
                     onUpdateItem={updateItem}
                     onRemoveItem={removeItem}
+                    productSearchRef={productSearchRef}
+                    currencySymbol="₹"
                     showBatchSelection={false}
                     showExpiry={false}
                     showManufacturer={true}

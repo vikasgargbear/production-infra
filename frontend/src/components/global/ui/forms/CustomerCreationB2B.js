@@ -1,8 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Building2, User, Phone, Mail, Save, X, AlertCircle, CheckCircle, MapPin, Shield, MessageCircle, FileText, CreditCard, ToggleLeft, ToggleRight, Check } from 'lucide-react';
 import { customersApi } from '../../../../services/api/modules/customers.api';
 import { metadataApi } from '../../../../services/api/modules/metadata.api';
 import offlineStorage from '../../../../services/offlineStorage';
+import { useEnterAsTab } from '../../../../hooks/useEnterAsTab';
+import useEscapeKey from '../../../../hooks/useEscapeKey';
 
 /**
  * Enhanced Customer Creation Component
@@ -21,6 +23,24 @@ const CustomerCreationB2B = ({ onClose, onCustomerCreated }) => {
   const [messageType, setMessageType] = useState('');
   const [customerType, setCustomerType] = useState('B2B'); // B2B or B2C toggle
   const [useBusinessContactInfo, setUseBusinessContactInfo] = useState(false);
+  
+  const customerFormRef = useRef(null);
+  
+  // Enable Enter-as-Tab navigation (Marg ERP style)
+  useEnterAsTab({ 
+    containerRef: customerFormRef, 
+    enabled: true,
+    excludeSelectors: ['textarea', 'button[type="submit"]', '[data-no-enter-tab]']
+  });
+
+  // ESC key handling
+  useEscapeKey(
+    useCallback(() => {
+      if (onClose) onClose();
+    }, [onClose]),
+    true,
+    'CustomerCreation-Main'
+  );
 
   const [formData, setFormData] = useState({
     // Basic Details (aligned with schema)
@@ -292,7 +312,7 @@ const CustomerCreationB2B = ({ onClose, onCustomerCreated }) => {
 
   return (
     <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-5xl mx-4 max-h-[95vh] overflow-hidden transform transition-all animate-slide-up">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-5xl mx-4 max-h-[95vh] overflow-hidden transform transition-all animate-slide-up" ref={customerFormRef}>
         
         {/* Header */}
         <div className="bg-gradient-to-r from-green-50 to-blue-50 px-6 py-4 border-b border-gray-100">
