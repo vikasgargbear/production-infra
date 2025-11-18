@@ -762,8 +762,8 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
         discount_percent: 0,
         free_quantity: 0,
         // GST comes from backend as 'gst_percentage', transformed to 'gst_percent' by DataTransformer
-        gst_percent: product.gst_percent || product.tax_rate || 0,
-        tax_rate: product.gst_percent || product.tax_rate || 0, // Keep both for compatibility
+        gst_percent: product.gst_percent ?? product.tax_rate ?? 0,
+        tax_rate: product.gst_percent ?? product.tax_rate ?? 0, // Keep both for compatibility
         // Pack information
         packages_per_box: product.packages_per_box || null,
         units_per_pack: product.units_per_pack || null,
@@ -772,6 +772,18 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
         category: product.category || '',
         available_quantity: product.available_quantity || product.quantity_available || 0
       };
+      
+      // Debug: Check what GST values we actually set
+      console.log('New invoice item GST:', {
+        product_name: newItem.product_name,
+        gst_percent: newItem.gst_percent,
+        tax_rate: newItem.tax_rate,
+        raw_product: {
+          gst_percent: product.gst_percent,
+          gst_percentage: product.gst_percentage,
+          tax_rate: product.tax_rate
+        }
+      });
       
       const updatedItems = [...invoice.items, newItem];
       
