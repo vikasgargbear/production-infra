@@ -116,7 +116,8 @@ async def create_invoice(
             quantity = float(item.get("quantity", 1))
             unit_price = float(item.get("unit_price", 0))
             discount_percent = float(item.get("discount_percent", 0))
-            gst_percent = float(item.get("gst_percent", 0))  # Default to 0 if not provided
+            # Handle both gst_percent and gst_percentage for backward compatibility
+            gst_percent = float(item.get("gst_percent") or item.get("gst_percentage") or item.get("tax_rate") or 0)
             
             # CRITICAL FIX: Use base_quantity for billing (already accounts for free items)
             if "base_quantity" in item:
@@ -439,7 +440,8 @@ async def create_invoice(
             
             # Calculate amounts - use base_quantity for billing (production logic)
             line_total = (base_quantity * unit_price) - discount_amt
-            gst_percent = item.get("gst_percent", 0)  # Default to 0 if not provided
+            # Handle both gst_percent and gst_percentage for backward compatibility
+            gst_percent = float(item.get("gst_percent") or item.get("gst_percentage") or item.get("tax_rate") or 0)
             taxable_amount = line_total
             
             # Calculate GST amounts based on customer type
