@@ -265,20 +265,20 @@ const CollectionCenter: React.FC<CollectionCenterProps> = ({
             console.log('Using real metrics (no success flag):', realMetrics);
           }
         } catch (metricsError) {
-          console.error('Failed to fetch real metrics, using fallback:', metricsError.response?.data || metricsError.message);
+          console.error('Failed to fetch real metrics, using fallback:', (metricsError as any)?.response?.data || (metricsError as any)?.message);
         }
 
         // Calculate stats - use real metrics if available, otherwise use calculated values
-        const backendTotalOutstanding = realMetrics?.total_outstanding || response.data?.total_outstanding;
+        const backendTotalOutstanding = (realMetrics as any)?.total_outstanding || (response.data as any)?.total_outstanding;
         const totalOutstanding = backendTotalOutstanding !== undefined ?
           backendTotalOutstanding :
           collections.reduce((sum, c) => sum + c.total_outstanding, 0);
 
-        const overdueAmount = realMetrics?.total_overdue || collections.reduce((sum, c) => sum + c.overdue_amount, 0);
-        const criticalCount = realMetrics?.high_risk_accounts || collections.filter(c => c.priority === 'critical').length;
+        const overdueAmount = (realMetrics as any)?.total_overdue || collections.reduce((sum, c) => sum + c.overdue_amount, 0);
+        const criticalCount = (realMetrics as any)?.high_risk_accounts || collections.filter(c => c.priority === 'critical').length;
 
         // Only count customers who actually owe money (positive net position)
-        const actualOwingCustomers = realMetrics?.customers_with_outstanding ||
+        const actualOwingCustomers = (realMetrics as any)?.customers_with_outstanding ||
           (response.data?.customer_summaries ?
             Object.values(response.data.customer_summaries as any).filter((c: any) => c.net_position > 0).length :
             collections.length);
@@ -288,13 +288,13 @@ const CollectionCenter: React.FC<CollectionCenterProps> = ({
           stats: {
             total_outstanding: totalOutstanding,
             total_overdue: overdueAmount,
-            collections_today: realMetrics?.daily_revenue || 0, // Real data or 0, NO MOCK
-            collections_mtd: realMetrics?.mtd_collections || 0, // Real data or 0, NO MOCK
-            promise_amount: realMetrics?.pipeline_value || 0, // Real data or 0, NO MOCK
+            collections_today: (realMetrics as any)?.daily_revenue || 0, // Real data or 0, NO MOCK
+            collections_mtd: (realMetrics as any)?.mtd_collections || 0, // Real data or 0, NO MOCK
+            promise_amount: (realMetrics as any)?.pipeline_value || 0, // Real data or 0, NO MOCK
             customers_count: actualOwingCustomers,
             critical_accounts: criticalCount,
-            success_rate: realMetrics?.collection_efficiency || 0, // Real data or 0, NO MOCK
-            collection_change: realMetrics?.collection_change || 0 // Real data or 0, NO MOCK
+            success_rate: (realMetrics as any)?.collection_efficiency || 0, // Real data or 0, NO MOCK
+            collection_change: (realMetrics as any)?.collection_change || 0 // Real data or 0, NO MOCK
           }
         };
       } catch (error) {
@@ -481,6 +481,7 @@ const CollectionCenter: React.FC<CollectionCenterProps> = ({
             icon={Target}
             iconColor="text-green-600"
             onClose={onClose}
+            historyType="collection"
             onSaveDraft={() => {}}
             additionalActions={[
               {

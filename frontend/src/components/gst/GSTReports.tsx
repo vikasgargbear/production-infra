@@ -276,7 +276,7 @@ const GSTReports: React.FC<GSTReportsProps> = ({ onClose }) => {
       let data: GSTR1Data;
 
       // Load additional data in parallel for better performance
-      const additionalDataPromises = [];
+      const additionalDataPromises: Promise<any>[] = [];
 
       // Load purchase data for Input Credit calculation (for GSTR-3B and other reports that need it)
       if (['gstr-3b', 'gstr-2b', 'payable'].includes(selectedReport)) {
@@ -605,7 +605,7 @@ const GSTReports: React.FC<GSTReportsProps> = ({ onClose }) => {
               const customerData_obj = customer?.data || customer;
 
               if (customerData_obj) {
-                customerData[customerId] = customerData_obj;
+                customerData[customerId as string] = customerData_obj;
                 const possibleGSTIN = customerData_obj.gstin || customerData_obj.gst_number || customerData_obj.gst_no || customerData_obj.gstin_number || customerData_obj.tax_number || customerData_obj.customer_gstin;
 
                 if (possibleGSTIN) {
@@ -736,8 +736,9 @@ const GSTReports: React.FC<GSTReportsProps> = ({ onClose }) => {
       setReportData(prevData => ({
         ...prevData,
         b2b: paginatedData.b2b,
-        summary: prevData?.summary || paginatedData.summary
-      }));
+        summary: prevData?.summary || paginatedData.summary,
+        b2c: prevData?.b2c
+      } as any));
 
       setIsLoadingData(false);
     } catch (err) {
@@ -796,10 +797,13 @@ const GSTReports: React.FC<GSTReportsProps> = ({ onClose }) => {
 
       return {
         b2b: partyWiseData,
-        b2c: [],
+        b2c: {
+          small: { count: 0, taxableValue: 0, cgst: 0, sgst: 0, igst: 0 },
+          large: { count: 0, taxableValue: 0, cgst: 0, sgst: 0, igst: 0 }
+        },
         hsn: [],
         exempted: []
-      };
+      } as any;
     } catch (err) {
       // Return empty data structure instead of mock data
       return {
@@ -840,16 +844,21 @@ const GSTReports: React.FC<GSTReportsProps> = ({ onClose }) => {
 
       return {
         b2b: [{
-          total_taxable_value: totalTaxableValue,
-          total_cgst: totalCGST,
-          total_sgst: totalSGST,
-          total_igst: totalIGST,
-          total_tax: totalCGST + totalSGST + totalIGST
+          gstin: 'CONSOLIDATED',
+          name: 'All Suppliers',
+          invoices: invoices.length,
+          taxableValue: totalTaxableValue,
+          cgst: totalCGST,
+          sgst: totalSGST,
+          igst: totalIGST
         }],
-        b2c: [],
+        b2c: {
+          small: { count: 0, taxableValue: 0, cgst: 0, sgst: 0, igst: 0 },
+          large: { count: 0, taxableValue: 0, cgst: 0, sgst: 0, igst: 0 }
+        },
         hsn: [],
         exempted: []
-      };
+      } as any;
     } catch (err) {
       // Return empty data structure instead of mock data
       return {
@@ -1212,7 +1221,7 @@ const GSTReports: React.FC<GSTReportsProps> = ({ onClose }) => {
         });
       } else if (selectedReport === 'hsn-summary') {
         csvContent = 'HSN Code,Description,UQC,Total Quantity,Total Value,Taxable Value,CGST,SGST,IGST,Total Tax\n';
-        currentHSNData.forEach((item: any) => {
+        hsnSummaryData.forEach((item: any) => {
           csvContent += `"${item.hsn_code}","${item.description}","${item.uqc}",${item.total_quantity},${item.total_value},${item.taxable_value},${item.cgst_amount},${item.sgst_amount},${item.igst_amount},${item.total_tax}\n`;
         });
       }

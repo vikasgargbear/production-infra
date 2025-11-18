@@ -52,7 +52,8 @@ export const CompanyProvider = ({ children }) => {
         state: localStorage.getItem('companyState') || 'Gujarat',
         logo: localStorage.getItem('companyLogo') || null,
         bankAccounts: JSON.parse(localStorage.getItem('companyBankAccounts') || '[]'),
-        paymentQR: localStorage.getItem('companyPaymentQR') || null
+        paymentQR: localStorage.getItem('companyPaymentQR') || null,
+        business_settings: JSON.parse(localStorage.getItem('companyBusinessSettings') || '{}')
       };
       
       const cachedOrgId = localStorage.getItem('orgId');
@@ -80,7 +81,8 @@ export const CompanyProvider = ({ children }) => {
               state: profileData.state || cachedCompanyInfo.state,
               logo: profileData.logo || cachedCompanyInfo.logo,
               bankAccounts: profileData.bank_accounts || [],
-              paymentQR: profileData.payment_qr_code || null
+              paymentQR: profileData.payment_qr_code || null,
+              business_settings: profileData.business_settings || {}
             };
             
             setCompanyInfo(apiCompanyInfo);
@@ -165,6 +167,8 @@ export const CompanyProvider = ({ children }) => {
           localStorage.setItem('companyGST', value);
         } else if (key === 'state') {
           localStorage.setItem('companyState', value);
+        } else if (key === 'business_settings') {
+          localStorage.setItem('companyBusinessSettings', JSON.stringify(value));
         } else {
           localStorage.setItem(`company${key.charAt(0).toUpperCase() + key.slice(1)}`, value);
         }

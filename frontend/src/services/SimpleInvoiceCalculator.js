@@ -12,9 +12,10 @@ class SimpleInvoiceCalculator {
    * @param {Array} items - Invoice items
    * @param {Number} deliveryCharges - Delivery/transport charges
    * @param {String} gstType - GST type (CGST/SGST or IGST)
+   * @param {Number} invoiceDiscount - Overall invoice discount amount
    * @returns {Object} Calculated invoice with items and totals
    */
-  static calculate(items = [], deliveryCharges = 0, gstType = 'CGST/SGST') {
+  static calculate(items = [], deliveryCharges = 0, gstType = 'CGST/SGST', invoiceDiscount = 0) {
     // Step 1: Clean the items - ensure we have proper numeric values
     const cleanItems = items.map(item => {
       // Extract the values we need
@@ -47,7 +48,7 @@ class SimpleInvoiceCalculator {
     const result = EnterpriseCalculator.calculateTotals(cleanItems, {
       gst_type: gstType,
       delivery_charges: parseFloat(deliveryCharges) || 0,
-      additional_discount: 0  // No header-level discount, only item-level
+      additional_discount: parseFloat(invoiceDiscount) || 0  // Pass invoice-level discount
     });
     
     // Step 3: Return clean result

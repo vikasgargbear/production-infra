@@ -11,8 +11,8 @@ const CompanySettings = ({ open = true, onClose }) => {
   const [settings, setSettings] = useState({
     companyName: companyInfo.name || '',
     companyAddress: companyInfo.address || '',
-    companyGST: companyInfo.gst_number || '',
-    companyDL: companyInfo.drug_license || '',
+    companyGST: companyInfo.gst || companyInfo.gst_number || '',
+    companyDL: companyInfo.drugLicense || companyInfo.drug_license || '',
     companyState: companyInfo.state || '',
     companyLogo: companyInfo.logo || '',
     bankName: companyInfo.bank_name || '',
@@ -20,7 +20,8 @@ const CompanySettings = ({ open = true, onClose }) => {
     ifscCode: companyInfo.ifsc_code || '',
     digitalSignature: companyInfo.logo || '',
     businessType: companyInfo.business_settings?.business_type || 'b2b',
-    paymentQR: companyInfo.paymentQR || ''
+    paymentQR: companyInfo.paymentQR || '',
+    showTransportDetails: companyInfo.business_settings?.show_transport_details !== false // Default to true
   });
 
   const [logoPreview, setLogoPreview] = useState(settings.companyLogo);
@@ -32,18 +33,21 @@ const CompanySettings = ({ open = true, onClose }) => {
       setSettings({
         companyName: companyInfo.name || '',
         companyAddress: companyInfo.address || '',
-        companyGST: companyInfo.gst_number || '',
-        companyDL: companyInfo.drug_license || '',
+        companyGST: companyInfo.gst || companyInfo.gst_number || '',
+        companyDL: companyInfo.drugLicense || companyInfo.drug_license || '',
         companyState: companyInfo.state || '',
         companyLogo: companyInfo.logo || '',
         bankName: companyInfo.bank_name || '',
         accountNumber: companyInfo.account_number || '',
         ifscCode: companyInfo.ifsc_code || '',
         digitalSignature: companyInfo.logo || '',
-        businessType: companyInfo.business_settings?.business_type || 'b2b'
+        businessType: companyInfo.business_settings?.business_type || 'b2b',
+        showTransportDetails: companyInfo.business_settings?.show_transport_details !== false, // Default to true
+        paymentQR: companyInfo.paymentQR || ''
       });
       setLogoPreview(companyInfo.logo || '');
       setSignaturePreview(companyInfo.logo || '');
+      setQrPreview(companyInfo.paymentQR || '');
     }
   }, [open, companyInfo]);
 
@@ -92,17 +96,18 @@ const CompanySettings = ({ open = true, onClose }) => {
         address: settings.companyAddress,
         phone: companyInfo.phone || '',
         email: companyInfo.email || '',
-        gst_number: settings.companyGST,
+        gst: settings.companyGST,
         state: settings.companyState,
         logo: settings.companyLogo,
-        drug_license: settings.companyDL,
+        drugLicense: settings.companyDL,
         bank_name: settings.bankName,
         account_number: settings.accountNumber,
         ifsc_code: settings.ifscCode,
         upi_id: companyInfo.upi_id || '',
         business_settings: {
           ...(companyInfo.business_settings || {}),
-          business_type: settings.businessType
+          business_type: settings.businessType,
+          show_transport_details: settings.showTransportDetails
         }
       };
 
@@ -279,6 +284,24 @@ const CompanySettings = ({ open = true, onClose }) => {
             </p>
           </div>
 
+          {/* Transport Details Toggle */}
+          <div>
+            <label className="flex items-center space-x-3 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={settings.showTransportDetails}
+                onChange={(e) => setSettings({ ...settings, showTransportDetails: e.target.checked })}
+                className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500 focus:ring-2"
+              />
+              <div>
+                <span className="text-sm font-medium text-gray-700">Show Transport Details on Invoice</span>
+                <p className="text-xs text-gray-500">
+                  When enabled, transport company, vehicle number, and delivery details will be displayed on invoices.
+                </p>
+              </div>
+            </label>
+          </div>
+
           {/* Bank Details Section */}
           <div className="border-t border-gray-200 pt-6">
             <h3 className="text-lg font-medium text-gray-900 mb-4">Bank Details</h3>
@@ -410,6 +433,36 @@ const CompanySettings = ({ open = true, onClose }) => {
                 </label>
               </div>
             </div>
+          </div>
+
+          {/* Footer with Save Button */}
+          <div className="border-t border-gray-200 px-6 py-4 bg-gray-50 flex justify-end space-x-3">
+            <button
+              onClick={onClose}
+              className="px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleSave}
+              disabled={isLoading}
+              className="px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed flex items-center"
+            >
+              {isLoading ? (
+                <>
+                  <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                  </svg>
+                  Saving...
+                </>
+              ) : (
+                <>
+                  <Save className="w-4 h-4 mr-2" />
+                  Save Changes
+                </>
+              )}
+            </button>
           </div>
         </div>
       </div>

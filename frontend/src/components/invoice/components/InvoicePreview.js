@@ -241,7 +241,7 @@ const InvoicePreview = ({
 
         {/* Customer & Transport Section - Below header */}
         <div className="mb-4">
-          <div className="grid grid-cols-3 gap-3">
+          <div className={`grid ${companyInfo?.business_settings?.show_transport_details !== false ? 'grid-cols-3' : 'grid-cols-2'} gap-3`}>
             {/* Bill To */}
             <div className="bg-gray-50 rounded-xl p-3 print-border print-bg-gray">
               <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">Bill To</h3>
@@ -285,24 +285,26 @@ const InvoicePreview = ({
             </div>
 
             {/* Transport Details */}
-            <div className="bg-gray-50 rounded-xl p-3 print-border print-bg-gray">
-              <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">Transport</h3>
-              {invoice.delivery_type && (
-                <p className="text-xs text-gray-600">Type: <span className="font-medium text-gray-900">{invoice.delivery_type}</span></p>
-              )}
-              {invoice.transport_company && (
-                <p className="text-xs text-gray-600 mt-1">Company: <span className="font-medium text-gray-900">{invoice.transport_company}</span></p>
-              )}
-              {invoice.vehicle_number && (
-                <p className="text-xs text-gray-600 mt-1">Vehicle: <span className="font-medium text-gray-900">{invoice.vehicle_number}</span></p>
-              )}
-              {invoice.lr_number && (
-                <p className="text-xs text-gray-600 mt-1">LR No: <span className="font-medium text-gray-900">{invoice.lr_number}</span></p>
-              )}
-              {!invoice.delivery_type && !invoice.transport_company && !invoice.vehicle_number && !invoice.lr_number && (
-                <p className="text-xs text-gray-400 text-center py-4">No transport details</p>
-              )}
-            </div>
+            {companyInfo?.business_settings?.show_transport_details !== false && (
+              <div className="bg-gray-50 rounded-xl p-3 print-border print-bg-gray">
+                <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">Transport</h3>
+                {invoice.delivery_type && (
+                  <p className="text-xs text-gray-600">Type: <span className="font-medium text-gray-900">{invoice.delivery_type}</span></p>
+                )}
+                {invoice.transport_company && (
+                  <p className="text-xs text-gray-600 mt-1">Company: <span className="font-medium text-gray-900">{invoice.transport_company}</span></p>
+                )}
+                {invoice.vehicle_number && (
+                  <p className="text-xs text-gray-600 mt-1">Vehicle: <span className="font-medium text-gray-900">{invoice.vehicle_number}</span></p>
+                )}
+                {invoice.lr_number && (
+                  <p className="text-xs text-gray-600 mt-1">LR No: <span className="font-medium text-gray-900">{invoice.lr_number}</span></p>
+                )}
+                {!invoice.delivery_type && !invoice.transport_company && !invoice.vehicle_number && !invoice.lr_number && (
+                  <p className="text-xs text-gray-400 text-center py-4">No transport details</p>
+                )}
+              </div>
+            )}
           </div>
         </div>
 

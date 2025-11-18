@@ -148,7 +148,14 @@ const ItemsTable = ({
     mrp: { 
       label: 'MRP', 
       align: 'center',
-      render: (item) => formatCurrency(item.mrp || item.sale_price)
+      render: (item) => (
+        <span 
+          className="text-gray-700 bg-gray-50 px-2 py-1 rounded text-xs font-medium"
+          title="MRP from product master data (read-only)"
+        >
+          {formatCurrency(item.mrp || item.sale_price)}
+        </span>
+      )
     },
     rate: { 
       label: 'Rate', 
@@ -204,26 +211,18 @@ const ItemsTable = ({
       render: (item, index) => {
         // Parse GST value - handle undefined, null, empty string
         const gstValue = item.gst_percent ?? item.tax_rate ?? item.tax ?? '';
-        const gstPercent = gstValue === '' ? '' : parseFloat(gstValue) || 0;
-        const hasGSTSet = gstValue !== '' && gstValue !== null && gstValue !== undefined;
+        const gstPercent = gstValue === '' ? '0' : parseFloat(gstValue) || 0;
         
-        // If readonly mode, always show as text
-        if (readOnly) {
-          return <span>{gstPercent === '' ? '0' : gstPercent}%</span>;
-        }
-        
-        // If GST is already set, show as text with option to edit on click
-        if (hasGSTSet) {
-          return <span className="cursor-pointer hover:text-blue-600" title="Click to edit">{gstPercent}%</span>;
-        }
-        
-        // Show editable input for missing GST (optional field)
-        return <TaxInputCell 
-          item={item} 
-          index={index} 
-          onUpdateItem={onUpdateItem}
-          gstPercent={gstPercent}
-        />;
+        // GST percentage is read-only - comes from product master data
+        // Display with subtle styling to indicate it's from master data
+        return (
+          <span 
+            className="text-gray-700 bg-gray-50 px-2 py-1 rounded text-xs font-medium"
+            title="Tax percentage from product master data (read-only)"
+          >
+            {gstPercent}%
+          </span>
+        );
       }
     },
     total: { 

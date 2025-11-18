@@ -187,7 +187,7 @@ const PartyLedgerV3: React.FC<PartyLedgerV3Props> = ({
 
   const filteredEntries = useMemo(() => {
     // Handle both API response formats
-    const entries = ledgerData?.data?.statement || ledgerData?.data || ledgerData?.statement || [];
+    const entries = ledgerData?.data?.statement || ledgerData?.data || (ledgerData as any)?.statement || [];
 
     if (!Array.isArray(entries)) return [];
 
@@ -244,7 +244,7 @@ const PartyLedgerV3: React.FC<PartyLedgerV3Props> = ({
     });
   }, [dateRange, quickDateRange]);
 
-  const errorMessage = partyError?.message || ledgerError?.message;
+  const errorMessage = (partyError as any)?.message || (ledgerError as any)?.message;
 
   const handleRefresh = async () => {
     setRefreshing(true);
@@ -574,6 +574,7 @@ const PartyLedgerV3: React.FC<PartyLedgerV3Props> = ({
             icon={FileText}
             iconColor="text-blue-600"
             onClose={onClose}
+            historyType="ledger"
             onSaveDraft={() => {}}
             additionalActions={[
               {

@@ -619,7 +619,8 @@ const Outstanding: React.FC<OutstandingProps> = ({
               icon={IndianRupee}
               iconColor="text-blue-600"
               onClose={onClose}
-                onSaveDraft={() => {}}
+              historyType="outstanding"
+              onSaveDraft={() => {}}
               additionalActions={[]}
             />
             <div className="flex-1 flex items-center justify-center">
@@ -647,6 +648,7 @@ const Outstanding: React.FC<OutstandingProps> = ({
             icon={IndianRupee}
             iconColor="text-blue-600"
             onClose={() => setShowDetailsView(false)}
+            historyType="customer-details"
             onSaveDraft={() => {}}
             additionalActions={[
               {
@@ -802,6 +804,7 @@ const Outstanding: React.FC<OutstandingProps> = ({
             icon={IndianRupee}
             iconColor="text-blue-600"
             onClose={onClose}
+            historyType="outstanding"
             onSaveDraft={() => {}}
             additionalActions={[
               {

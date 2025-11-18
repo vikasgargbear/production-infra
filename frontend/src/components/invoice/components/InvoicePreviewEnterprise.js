@@ -106,8 +106,8 @@ const InvoicePreviewEnterprise = ({
             display: block !important;
           }
           @page {
-            size: A4 landscape;
-            margin: 10mm;
+            size: A4 portrait;
+            margin: 15mm;
           }
           /* Ensure colors and backgrounds print */
           * {
@@ -125,10 +125,9 @@ const InvoicePreviewEnterprise = ({
           .print-bg-blue {
             background-color: #eff6ff !important;
           }
-          /* Pack column specific styling for print */
-          .pack-column {
-            max-width: 60px !important;
-            font-size: 9px !important;
+          .print-colors {
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
           }
         }
       `}</style>
@@ -259,120 +258,138 @@ const InvoicePreviewEnterprise = ({
           </div>
         </div>
 
-        {/* Customer & Transport Section - Below header */}
+        {/* Customer & Transport Section - Portrait-Friendly Layout */}
         {showAddresses && (
-          <div className={`mb-4 ${isPrintMode ? '' : 'hidden print:block'}`}>
-            <div className="grid grid-cols-3 gap-3">
+          <div className="mb-4">
+            {/* Customer Details - 2 columns for Bill To and Ship To */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
               {/* Bill To */}
-              <div className="bg-gray-50 rounded-xl p-3 print-border print-bg-gray">
-                <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">Bill To</h3>
-                <p className="font-semibold text-gray-900 text-sm">{invoice.customer_name}</p>
-                {invoice.billing_address ? (
-                  <p className="text-xs text-gray-600 mt-1">{invoice.billing_address}</p>
-                ) : invoice.customer_details ? (
-                  <>
-                    <p className="text-xs text-gray-600 mt-1">{invoice.customer_details.address}</p>
-                    {invoice.customer_details.city && invoice.customer_details.state && (
-                      <p className="text-xs text-gray-600">{invoice.customer_details.city}, {invoice.customer_details.state}</p>
-                    )}
-                  </>
-                ) : null}
-                {(invoice.customer_details?.phone || invoice.customer_details?.mobile || invoice.customer_details?.primary_phone) && (
-                  <p className="text-xs text-gray-600 mt-1">Ph: {invoice.customer_details?.phone || invoice.customer_details?.mobile || invoice.customer_details?.primary_phone}</p>
-                )}
-                {invoice.customer_details?.gstin && (
-                  <p className="text-xs text-gray-600">GST: {invoice.customer_details.gstin}</p>
-                )}
-              </div>
-
-            {/* Ship To */}
-            <div className="bg-gray-50 rounded-xl p-3 print-border print-bg-gray">
-              <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">Ship To</h3>
-              {invoice.is_same_address !== false || invoice.billing_address === invoice.shipping_address ? (
-                <>
-                  <p className="text-xs text-gray-600 mb-1">✓ Same as billing</p>
-                  <p className="font-semibold text-gray-900 text-sm">{invoice.customer_name}</p>
-                  {/* Use exact same format as Bill To */}
+              <div className="border border-gray-300 rounded-lg overflow-hidden print-border">
+                <div className="bg-blue-50 px-3 py-2 border-b border-blue-200 print-bg-blue">
+                  <h3 className="text-xs font-bold text-blue-700 uppercase">Bill To</h3>
+                </div>
+                <div className="p-3 bg-white">
+                  <p className="font-semibold text-gray-900 text-sm mb-1">{invoice.customer_name}</p>
                   {invoice.billing_address ? (
-                    <>
-                      <p className="text-xs text-gray-600 mt-1">{invoice.billing_address}</p>
-                      {/* Always show phone for shipping */}
-                      {(invoice.customer_details?.phone || invoice.customer_details?.mobile || invoice.customer_details?.primary_phone) && (
-                        <p className="text-xs text-gray-600 mt-1">Ph: {invoice.customer_details?.phone || invoice.customer_details?.mobile || invoice.customer_details?.primary_phone}</p>
-                      )}
-                    </>
+                    <p className="text-xs text-gray-600 leading-relaxed">{invoice.billing_address}</p>
                   ) : invoice.customer_details ? (
                     <>
-                      <p className="text-xs text-gray-600 mt-1">{invoice.customer_details.address}</p>
+                      <p className="text-xs text-gray-600 leading-relaxed">{invoice.customer_details.address}</p>
                       {invoice.customer_details.city && invoice.customer_details.state && (
                         <p className="text-xs text-gray-600">{invoice.customer_details.city}, {invoice.customer_details.state}</p>
                       )}
-                      {(invoice.customer_details?.phone || invoice.customer_details?.mobile || invoice.customer_details?.primary_phone) && (
-                        <p className="text-xs text-gray-600 mt-1">Ph: {invoice.customer_details?.phone || invoice.customer_details?.mobile || invoice.customer_details?.primary_phone}</p>
-                      )}
                     </>
                   ) : null}
-                </>
-              ) : (
-                <>
-                  <p className="font-semibold text-gray-900 text-sm">{invoice.shipping_contact_name || invoice.customer_name}</p>
-                  {invoice.shipping_address && (
-                    <p className="text-xs text-gray-600 mt-1">{invoice.shipping_address}</p>
+                  {(invoice.customer_details?.phone || invoice.customer_details?.mobile || invoice.customer_details?.primary_phone) && (
+                    <p className="text-xs text-gray-600 mt-1 font-medium">Ph: {invoice.customer_details?.phone || invoice.customer_details?.mobile || invoice.customer_details?.primary_phone}</p>
                   )}
-                  {/* Always show phone for different shipping address */}
-                  {(invoice.shipping_phone || invoice.customer_details?.phone || invoice.customer_details?.mobile || invoice.customer_details?.primary_phone) && (
-                    <p className="text-xs text-gray-600 mt-1">Ph: {invoice.shipping_phone || invoice.customer_details?.phone || invoice.customer_details?.mobile || invoice.customer_details?.primary_phone}</p>
+                  {invoice.customer_details?.gstin && (
+                    <p className="text-xs text-gray-600 font-medium">GST: {invoice.customer_details.gstin}</p>
                   )}
-                </>
-              )}
+                </div>
+              </div>
+
+              {/* Ship To */}
+              <div className="border border-gray-300 rounded-lg overflow-hidden print-border">
+                <div className="bg-green-50 px-3 py-2 border-b border-green-200 print-bg-gray">
+                  <h3 className="text-xs font-bold text-green-700 uppercase">Ship To</h3>
+                </div>
+                <div className="p-3 bg-white">
+                  {invoice.is_same_address !== false || invoice.billing_address === invoice.shipping_address ? (
+                    <>
+                      <p className="text-xs text-green-600 mb-2 font-medium">✓ Same as billing address</p>
+                      <p className="font-semibold text-gray-900 text-sm mb-1">{invoice.customer_name}</p>
+                      {/* Use exact same format as Bill To */}
+                      {invoice.billing_address ? (
+                        <p className="text-xs text-gray-600 leading-relaxed">{invoice.billing_address}</p>
+                      ) : invoice.customer_details ? (
+                        <>
+                          <p className="text-xs text-gray-600 leading-relaxed">{invoice.customer_details.address}</p>
+                          {invoice.customer_details.city && invoice.customer_details.state && (
+                            <p className="text-xs text-gray-600">{invoice.customer_details.city}, {invoice.customer_details.state}</p>
+                          )}
+                        </>
+                      ) : null}
+                      {/* Always show phone for shipping */}
+                      {(invoice.customer_details?.phone || invoice.customer_details?.mobile || invoice.customer_details?.primary_phone) && (
+                        <p className="text-xs text-gray-600 mt-1 font-medium">Ph: {invoice.customer_details?.phone || invoice.customer_details?.mobile || invoice.customer_details?.primary_phone}</p>
+                      )}
+                    </>
+                  ) : (
+                    <>
+                      <p className="font-semibold text-gray-900 text-sm mb-1">{invoice.shipping_contact_name || invoice.customer_name}</p>
+                      {invoice.shipping_address && (
+                        <p className="text-xs text-gray-600 leading-relaxed">{invoice.shipping_address}</p>
+                      )}
+                      {/* Always show phone for different shipping address */}
+                      {(invoice.shipping_phone || invoice.customer_details?.phone || invoice.customer_details?.mobile || invoice.customer_details?.primary_phone) && (
+                        <p className="text-xs text-gray-600 mt-1 font-medium">Ph: {invoice.shipping_phone || invoice.customer_details?.phone || invoice.customer_details?.mobile || invoice.customer_details?.primary_phone}</p>
+                      )}
+                    </>
+                  )}
+                </div>
+              </div>
             </div>
 
-            {/* Transport Details */}
-            <div className="bg-gray-50 rounded-xl p-3 print-border print-bg-gray">
-              <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">Transport</h3>
-              {invoice.delivery_type && (
-                <p className="text-xs text-gray-600">Type: <span className="font-medium text-gray-900">{invoice.delivery_type}</span></p>
-              )}
-              {invoice.transport_company && (
-                <p className="text-xs text-gray-600 mt-1">Company: <span className="font-medium text-gray-900">{invoice.transport_company}</span></p>
-              )}
-              {invoice.vehicle_number && (
-                <p className="text-xs text-gray-600 mt-1">Vehicle: <span className="font-medium text-gray-900">{invoice.vehicle_number}</span></p>
-              )}
-              {invoice.lr_number && (
-                <p className="text-xs text-gray-600 mt-1">LR No: <span className="font-medium text-gray-900">{invoice.lr_number}</span></p>
-              )}
-              {!invoice.delivery_type && !invoice.transport_company && !invoice.vehicle_number && !invoice.lr_number && (
-                <p className="text-xs text-gray-400 text-center py-4">No transport details</p>
-              )}
-            </div>
+            {/* Transport Details - Full width for better visibility */}
+            {companyInfo?.business_settings?.show_transport_details !== false && (
+              <div className="border border-gray-300 rounded-lg overflow-hidden print-border">
+                <div className="bg-yellow-50 px-3 py-2 border-b border-yellow-200 print-colors">
+                  <h3 className="text-xs font-bold text-yellow-700 uppercase">Transport Details</h3>
+                </div>
+                <div className="p-3 bg-white">
+                  {invoice.delivery_type || invoice.transport_company || invoice.vehicle_number || invoice.lr_number ? (
+                    <div className="grid grid-cols-1 md:grid-cols-4 gap-3 text-xs">
+                      {invoice.delivery_type && (
+                        <div>
+                          <span className="text-gray-500">Type:</span>
+                          <p className="font-medium text-gray-900">{invoice.delivery_type}</p>
+                        </div>
+                      )}
+                      {invoice.transport_company && (
+                        <div>
+                          <span className="text-gray-500">Company:</span>
+                          <p className="font-medium text-gray-900">{invoice.transport_company}</p>
+                        </div>
+                      )}
+                      {invoice.vehicle_number && (
+                        <div>
+                          <span className="text-gray-500">Vehicle:</span>
+                          <p className="font-medium text-gray-900">{invoice.vehicle_number}</p>
+                        </div>
+                      )}
+                      {invoice.lr_number && (
+                        <div>
+                          <span className="text-gray-500">LR No:</span>
+                          <p className="font-medium text-gray-900">{invoice.lr_number}</p>
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <p className="text-xs text-gray-400 text-center py-2">No transport details provided</p>
+                  )}
+                </div>
+              </div>
+            )}
           </div>
-        </div>
         )}
 
-        {/* Items Table */}
-        <div className="mb-8 rounded-lg overflow-hidden border border-gray-200">
-          <table className="w-full">
-            <thead>
-              <tr className="bg-gradient-to-r from-gray-50 to-gray-100">
-                <th className="px-3 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">#</th>
-                <th className="px-3 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Product</th>
-                <th className="px-3 py-3 text-center text-xs font-semibold text-gray-700 uppercase tracking-wider">HSN</th>
-                <th className="px-3 py-3 text-center text-xs font-semibold text-gray-700 uppercase tracking-wider pack-column">Pack</th>
-                <th className="px-3 py-3 text-center text-xs font-semibold text-gray-700 uppercase tracking-wider">Batch</th>
-                <th className="px-3 py-3 text-center text-xs font-semibold text-gray-700 uppercase tracking-wider">Exp</th>
-                <th className="px-3 py-3 text-center text-xs font-semibold text-gray-700 uppercase tracking-wider">Qty</th>
-                <th className="px-3 py-3 text-right text-xs font-semibold text-gray-700 uppercase tracking-wider">MRP</th>
-                <th className="px-3 py-3 text-right text-xs font-semibold text-gray-700 uppercase tracking-wider">Rate</th>
-                <th className="px-3 py-3 text-center text-xs font-semibold text-gray-700 uppercase tracking-wider">Disc%</th>
-                <th className="px-3 py-3 text-center text-xs font-semibold text-gray-700 uppercase tracking-wider">Free</th>
-                <th className="px-3 py-3 text-center text-xs font-semibold text-gray-700 uppercase tracking-wider">GST%</th>
-                <th className="px-3 py-3 text-right text-xs font-semibold text-gray-700 uppercase tracking-wider">CGST</th>
-                <th className="px-3 py-3 text-right text-xs font-semibold text-gray-700 uppercase tracking-wider">SGST</th>
-                <th className="px-3 py-3 text-right text-xs font-semibold text-gray-700 uppercase tracking-wider">Amount</th>
+        {/* Items Table - Less Cramped, Bigger Font */}
+        <div className="mb-10">
+          <table className="w-full border border-gray-300">
+            <thead className="bg-gray-100 print-colors">
+              <tr className="border-b border-gray-300">
+                <th className="text-left py-3 px-4 text-sm font-medium text-gray-700 uppercase border-r border-gray-200">#</th>
+                <th className="text-left py-3 px-4 text-sm font-medium text-gray-700 uppercase border-r border-gray-200">Product</th>
+                <th className="text-center py-3 px-4 text-sm font-medium text-gray-700 uppercase border-r border-gray-200">Batch/Exp</th>
+                <th className="text-center py-3 px-4 text-sm font-medium text-gray-700 uppercase border-r border-gray-200">Qty</th>
+                <th className="text-right py-3 px-4 text-sm font-medium text-gray-700 uppercase border-r border-gray-200">Rate</th>
+                <th className="text-center py-3 px-4 text-sm font-medium text-gray-700 uppercase border-r border-gray-200">Disc%</th>
+                <th className="text-center py-3 px-4 text-sm font-medium text-gray-700 uppercase border-r border-gray-200">GST%</th>
+                <th className="text-right py-3 px-4 text-sm font-medium text-gray-700 uppercase">Amount</th>
               </tr>
             </thead>
-            <tbody className="bg-white">
+            <tbody>
               {invoice.items.map((item, index) => {
                 // Calculate per-item amounts (display only - no business logic)
                 const baseQuantity = parseFloat(item.base_quantity || (item.quantity - (item.free_quantity || 0)));
@@ -387,53 +404,34 @@ const InvoicePreviewEnterprise = ({
                 const lineTotal = taxableAmount + gstAmount;
                 
                 return (
-                  <tr key={index} className="border-b border-gray-100 hover:bg-gray-50 transition-colors">
-                    <td className="px-3 py-3 text-sm text-gray-600">{index + 1}</td>
-                    <td className="px-3 py-3 text-sm font-medium text-gray-900">{item.product_name}</td>
-                    <td className="px-3 py-3 text-sm text-center text-gray-600">{item.hsn_code || '3004'}</td>
-                    <td className="px-3 py-3 text-sm text-center text-gray-600 pack-column">
-                      <span className="text-xs">
-                        {(() => {
-                          // Display pack configuration
-                          if (item.packages_per_box && item.units_per_pack) {
-                            return `${item.packages_per_box}×${item.units_per_pack}`;
-                          } else if (item.pack_type && item.units_per_pack) {
-                            return `${item.units_per_pack} ${item.pack_type}`;
-                          } else if (item.pack_size) {
-                            return `1×${item.pack_size}`;
-                          } else {
-                            return '-';
-                          }
-                        })()}
-                      </span>
+                  <tr key={index} className="border-b border-gray-200">
+                    <td className="py-3 px-4 text-sm border-r border-gray-200">{index + 1}</td>
+                    <td className="py-3 px-4 border-r border-gray-200">
+                      <div className="text-sm font-medium text-gray-900">{item.product_name}</div>
+                      <div className="text-xs text-gray-500">HSN: {item.hsn_code || '3004'}</div>
                     </td>
-                    <td className="px-3 py-3 text-sm text-center text-gray-600">{item.batch_number}</td>
-                    <td className="px-3 py-3 text-sm text-center text-gray-600">
-                      {item.expiry_date ? new Date(item.expiry_date).toLocaleDateString('en-IN', { 
-                        month: '2-digit',
-                        year: '2-digit' 
-                      }) : '-'}
+                    <td className="py-3 px-4 text-sm text-center border-r border-gray-200">
+                      <div className="text-sm font-medium">{item.batch_number}</div>
+                      <div className="text-xs text-gray-500">
+                        {item.expiry_date ? new Date(item.expiry_date).toLocaleDateString('en-IN', { 
+                          month: '2-digit',
+                          year: '2-digit' 
+                        }) : '-'}
+                      </div>
                     </td>
-                    <td className="px-3 py-3 text-sm text-center font-medium text-gray-900">
+                    <td className="py-3 px-4 text-sm text-center border-r border-gray-200 font-medium">
                       {item.quantity}
                       {item.free_quantity > 0 && (
-                        <span className="text-green-600 text-xs"> (+{item.free_quantity})</span>
+                        <div className="text-green-600 text-xs">+{item.free_quantity} free</div>
                       )}
                     </td>
-                    <td className="px-3 py-3 text-sm text-right text-gray-600">{formatCurrency(item.mrp)}</td>
-                    <td className="px-3 py-3 text-sm text-right font-medium text-gray-900">{formatCurrency(rate)}</td>
-                    <td className="px-3 py-3 text-sm text-center text-gray-600">{discount}%</td>
-                    <td className="px-3 py-3 text-sm text-center text-gray-600">{item.free_quantity || 0}</td>
-                    <td className="px-3 py-3 text-sm text-center text-gray-600">{gstPercent}%</td>
-                    <td className="px-3 py-3 text-sm text-right text-gray-600">
-                      {invoice.gst_type !== 'IGST' ? formatCurrency(gstAmount / 2) : '-'}
+                    <td className="py-3 px-4 border-r border-gray-200 text-right">
+                      <div className="text-sm font-medium">{formatCurrency(rate)}</div>
+                      <div className="text-xs text-gray-500">MRP: {formatCurrency(item.mrp)}</div>
                     </td>
-                    <td className="px-3 py-3 text-sm text-right text-gray-600">
-                      {invoice.gst_type !== 'IGST' ? formatCurrency(gstAmount / 2) : '-'}
-                    </td>
-                    <td className="px-3 py-3 text-sm text-right font-semibold text-gray-900">
-                      {formatCurrency(lineTotal)}
-                    </td>
+                    <td className="py-3 px-4 text-sm text-center border-r border-gray-200">{discount}%</td>
+                    <td className="py-3 px-4 text-sm text-center border-r border-gray-200">{gstPercent}%</td>
+                    <td className="py-3 px-4 text-sm text-right font-semibold">{formatCurrency(lineTotal)}</td>
                   </tr>
                 );
               })}
@@ -441,14 +439,26 @@ const InvoicePreviewEnterprise = ({
           </table>
         </div>
 
-        {/* Bottom Section */}
+        {/* Bottom Section - More Space Above */}
         <div className="grid grid-cols-2 gap-6">
-          {/* Left Side - Tax Breakup & Signature */}
-          <div className="flex flex-col h-full">
+          {/* Left Side - Notes & Compact Signature */}
+          <div className="space-y-4">
+            {/* Notes Section - Challan Style */}
+            {invoice.notes && (
+              <div className="border border-gray-300 rounded-lg overflow-hidden">
+                <div className="bg-gray-100 px-3 py-2 border-b border-gray-300">
+                  <h3 className="text-xs font-bold text-gray-800 uppercase">Notes</h3>
+                </div>
+                <div className="p-3">
+                  <p className="text-xs text-gray-700 leading-relaxed">{invoice.notes}</p>
+                </div>
+              </div>
+            )}
+            
             {/* Tax Breakup */}
-            <div className="flex-1">
-              <h3 className="text-xs font-semibold text-gray-700 mb-1.5">Tax Breakup</h3>
-              <div className="bg-gray-50 rounded-lg p-2.5">
+            <div>
+              <h3 className="text-xs font-semibold text-gray-700 mb-2">Tax Breakup</h3>
+              <div className="bg-gray-50 rounded-lg p-3 border border-gray-200">
                 <table className="w-full text-[11px]">
                   <thead>
                     <tr className="border-b border-gray-200">
@@ -478,69 +488,65 @@ const InvoicePreviewEnterprise = ({
               </div>
             </div>
 
-            {/* Authorized Signatory - Aligned with Net Amount */}
-            <div className="mt-auto">
-              <h3 className="text-xs font-semibold text-gray-700 mb-1.5">Authorized Signatory</h3>
-              <div className="h-[52px] border-2 border-dashed border-gray-300 rounded-lg flex items-center justify-center bg-gray-50">
-                <span className="text-[11px] text-gray-400">Digital Signature</span>
-              </div>
+            {/* Compact Authorization - Smaller */}
+            <div className="border border-gray-200 rounded p-2">
+              <p className="text-xs text-gray-600">For {invoice.company_name || companyInfo.name || 'Your Company'}</p>
+              <p className="text-xs text-gray-400 mt-1">Digitally Authorized</p>
+              <p className="text-xs text-gray-400">ERP System Generated</p>
             </div>
           </div>
 
           {/* Right Side - Summary (API-calculated totals) */}
-          <div>
-            <div className="space-y-3">
-              {/* Main Summary */}
-              <div className="bg-gradient-to-br from-gray-50 to-gray-100 rounded-lg p-3">
-                <div className="space-y-1.5 text-xs">
-                  <div className="flex justify-between">
-                    <span className="text-gray-600">Subtotal</span>
-                    <span className="font-medium text-gray-900">{formatCurrency(totals.gross_amount)}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-gray-600">Discount</span>
-                    <span className="font-medium text-gray-900">-{formatCurrency(totals.total_discount)}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-gray-600">Taxable Amount</span>
-                    <span className="font-medium text-gray-900">{formatCurrency(totals.taxable_amount)}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-gray-600">GST (12%)</span>
-                    <span className="font-medium text-gray-900">{formatCurrency(totals.total_tax)}</span>
-                  </div>
-                  {totals.delivery_charges > 0 && (
-                    <div className="flex justify-between">
-                      <span className="text-gray-600">Delivery Charges</span>
-                      <span className="font-medium text-gray-900">{formatCurrency(totals.delivery_charges)}</span>
-                    </div>
-                  )}
-                  <div className="flex justify-between">
-                    <span className="text-gray-600">Round Off</span>
-                    <span className="font-medium text-gray-900">
-                      {totals.round_off >= 0 ? '+' : '-'}{formatCurrency(Math.abs(totals.round_off))}
-                    </span>
-                  </div>
-                </div>
+          <div className="flex justify-end">
+            <div className="border border-gray-300 rounded-lg overflow-hidden w-80">
+              <div className="bg-gray-100 px-3 py-2">
+                <h3 className="text-xs font-bold text-gray-800 uppercase">Invoice Summary</h3>
               </div>
-
-              {/* Total Amount - Blue highlight */}
-              <div className="bg-gradient-to-r from-blue-600 to-blue-700 rounded-lg p-3 shadow-lg">
-                <div className="flex justify-between items-center">
-                  <span className="text-white font-semibold text-sm">Net Amount</span>
-                  <span className="text-xl font-bold text-white">
+              <div className="p-3 space-y-2">
+                <div className="flex justify-between text-xs">
+                  <span className="text-gray-600">Subtotal:</span>
+                  <span className="font-medium">{formatCurrency(totals.gross_amount)}</span>
+                </div>
+                {totals.total_discount > 0 && (
+                  <div className="flex justify-between text-xs">
+                    <span className="text-gray-600">Discount:</span>
+                    <span className="font-medium">-{formatCurrency(totals.total_discount)}</span>
+                  </div>
+                )}
+                <div className="flex justify-between text-xs">
+                  <span className="text-gray-600">Taxable Amount:</span>
+                  <span className="font-medium">{formatCurrency(totals.taxable_amount)}</span>
+                </div>
+                <div className="flex justify-between text-xs">
+                  <span className="text-gray-600">Total GST (12%):</span>
+                  <span className="font-medium">{formatCurrency(totals.total_tax)}</span>
+                </div>
+                {totals.delivery_charges > 0 && (
+                  <div className="flex justify-between text-xs">
+                    <span className="text-gray-600">Delivery Charges:</span>
+                    <span className="font-medium">{formatCurrency(totals.delivery_charges)}</span>
+                  </div>
+                )}
+                <div className="flex justify-between text-xs">
+                  <span className="text-gray-600">Round Off:</span>
+                  <span className="font-medium">
+                    {totals.round_off >= 0 ? '+' : ''}{formatCurrency(totals.round_off)}
+                  </span>
+                </div>
+                <div className="flex justify-between pt-2 border-t border-gray-300">
+                  <span className="text-sm font-bold text-gray-900">Net Amount:</span>
+                  <span className="text-sm font-bold text-blue-600">
                     {formatCurrency(
                       // Net Amount = taxable + tax + roundoff + delivery
-                      // Note: discount is already applied in taxable_amount calculation
                       (totals.taxable_amount || 0) + 
                       (totals.total_tax || totals.tax_amount || 0) + 
                       (totals.round_off || 0) + 
                       (totals.delivery_charges || 0)
                     )}
+                    {isCalculating && (
+                      <div className="inline-block animate-spin rounded-full h-3 w-3 border-b-2 border-blue-600 ml-2"></div>
+                    )}
                   </span>
-                  {isCalculating && (
-                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white ml-2"></div>
-                  )}
                 </div>
               </div>
             </div>

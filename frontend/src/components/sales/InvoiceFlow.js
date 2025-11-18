@@ -46,7 +46,7 @@ import ItemProfitModal from './modals/ItemProfitModal';
 
 const InvoiceFlow = ({ onClose, prefilledData = null }) => {
   const { companyInfo, getOrgId } = useCompany();
-  const [currentStep, setCurrentStep] = useState(1);
+  const [currentStep, setCurrentStep] = useState(1); // 1: Items, 2: Details, 3: Preview
   const invoiceFormRef = useRef(null); // For Enter-as-Tab scoping
   const [showCustomerModal, setShowCustomerModal] = useState(false);
   const [showProductModal, setShowProductModal] = useState(false);
@@ -105,11 +105,21 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
   
   useEscapeKey(
     useCallback(() => {
-      if (onClose) onClose();
-    }, [onClose]),
+      if (currentStep === 3) {
+        // Step 3: Go back to Step 2 (Details)
+        setCurrentStep(2);
+      } else if (currentStep === 2) {
+        // Step 2: Go back to Step 1 (Items)
+        setCurrentStep(1);
+      } else {
+        // Step 1: Close the invoice flow
+        if (onClose) onClose();
+      }
+    }, [onClose, currentStep]),
     shouldHandleMainEsc,
     'InvoiceFlow-Main'
   );
+
   
   // Modal-specific ESC handlers (higher priority)
   useEscapeKey(
@@ -198,8 +208,14 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
     sales_person_id: prefilledData?.sales_person_id || '',  // NEW: For tracking
     bank_account_id: null,  // NEW: Selected bank account for receiving payment
     items: prefilledData?.items || [],
-    payment_mode: '',
-    payment_status: 'Pending',
+    payment_mode: 'credit',
+    payment_status: 'pending',
+    payments: [{
+      id: '1',
+      method: 'credit',
+      amount: 0,
+      reference: ''
+    }],
     gross_amount: 0,
     discount_amount: 0,
     tax_amount: 0,
@@ -228,6 +244,44 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
   });
 
   const [selectedCustomer, setSelectedCustomer] = useState(prefilledData?.customer_details || null);
+
+  // Update credit payment amount when totals change
+  useEffect(() => {
+    const totalAmount = parseFloat(invoice.totals?.final_amount || invoice.net_amount) || 0;
+    if (invoice.payments && invoice.payments.length === 1 && invoice.payments[0].method === 'credit') {
+      setInvoice(prev => ({
+        ...prev,
+        payments: [{
+          ...prev.payments[0],
+          amount: totalAmount
+        }]
+      }));
+    }
+  }, [invoice.totals?.final_amount, invoice.net_amount]);
+
+  // Keyboard shortcuts for quick navigation - After state declarations
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      // Ctrl+1 or Cmd+1: Go to Step 1 (Items)
+      if ((e.ctrlKey || e.metaKey) && e.key === '1' && !anyModalOpen) {
+        e.preventDefault();
+        setCurrentStep(1);
+      }
+      // Ctrl+2 or Cmd+2: Go to Step 2 (Details) - only if items exist
+      else if ((e.ctrlKey || e.metaKey) && e.key === '2' && !anyModalOpen && invoice.items.length > 0) {
+        e.preventDefault();
+        setCurrentStep(2);
+      }
+      // Ctrl+3 or Cmd+3: Go to Step 3 (Preview) - only if customer and items exist
+      else if ((e.ctrlKey || e.metaKey) && e.key === '3' && !anyModalOpen && invoice.items.length > 0 && selectedCustomer) {
+        e.preventDefault();
+        setCurrentStep(3);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [anyModalOpen, invoice.items.length, selectedCustomer]);
 
   // Load data on component mount
   useEffect(() => {
@@ -438,11 +492,27 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
       return;
     }
 
-    // Just call the simple calculator
+    // Calculate invoice discount amount
+    let invoiceDiscountAmount = 0;
+    if (invoice.discount_type === 'fixed') {
+      invoiceDiscountAmount = parseFloat(invoice.discount_amount) || 0;
+    } else if (invoice.discount_type === 'percentage') {
+      // First calculate subtotal without discount to get base amount
+      const tempResult = SimpleInvoiceCalculator.calculate(
+        invoice.items,
+        0, // No delivery charges for percentage calculation
+        invoice.gst_type || 'CGST/SGST'
+      );
+      const grossAmount = tempResult.totals?.gross_amount || 0;
+      invoiceDiscountAmount = (grossAmount * (parseFloat(invoice.discount_percent) || 0)) / 100;
+    }
+
+    // Call calculator with proper discount
     const result = SimpleInvoiceCalculator.calculate(
       invoice.items,
       invoice.delivery_charges || 0,
-      invoice.gst_type || 'CGST/SGST'
+      invoice.gst_type || 'CGST/SGST',
+      invoiceDiscountAmount // Pass the calculated discount
     );
 
     // Update state with calculated values - DON'T update items to prevent infinite loop
@@ -456,6 +526,8 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
       subtotal_amount: result.subtotal,
       tax_amount: result.tax,
       round_off: result.roundOff,
+      // Store the actual discount amount used
+      discount_amount: invoiceDiscountAmount,
       // Store calculated items separately if needed for display
       calculatedItems: result.items
     }));
@@ -482,13 +554,20 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
       totalTax += taxAmount;
     });
 
-    // Include delivery charges and invoice discount
+    // Calculate invoice-level discount
+    let invoiceDiscount = 0;
+    if (invoice.discount_type === 'fixed') {
+      invoiceDiscount = parseFloat(invoice.discount_amount) || 0;
+    } else if (invoice.discount_type === 'percentage') {
+      const grossAmount = subtotal + totalTax; // Before discount
+      invoiceDiscount = (grossAmount * (parseFloat(invoice.discount_percent) || 0)) / 100;
+    }
+
+    // Include delivery charges
     const deliveryCharges = parseFloat(invoice.delivery_charges) || 0;
-    const invoiceDiscount = parseFloat(invoice.discount_amount) || 0;
     
-    // Calculate pre-round total
-    // Note: subtotal is already AFTER discount, don't subtract again
-    const preRoundTotal = subtotal + totalTax + deliveryCharges;
+    // Calculate pre-round total: subtotal + tax - invoice_discount + delivery
+    const preRoundTotal = subtotal + totalTax - invoiceDiscount + deliveryCharges;
     const finalAmount = Math.round(preRoundTotal);
     const roundOff = parseFloat((finalAmount - preRoundTotal).toFixed(2));
 
@@ -506,10 +585,10 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
     };
   };
 
-  // Calculate totals when items or delivery charges change
+  // Calculate totals when items, delivery charges, or discount change
   React.useEffect(() => {
     calculateInvoice();
-  }, [invoice.items, invoice.delivery_charges]); // Now safe since we don't update items in calculateInvoice
+  }, [invoice.items, invoice.delivery_charges, invoice.discount_amount, invoice.discount_percent, invoice.discount_type]); // Now safe since we don't update items in calculateInvoice
 
   // Update item field with debounced calculation  
   const handleUpdateItem = (index, field, value) => {
@@ -528,12 +607,9 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
           updatedItem.free_quantity = parseFloat(value) || 0;
           // Don't change base_quantity when free_quantity changes!
         } else if (field === 'gst_percent' || field === 'tax_rate' || field === 'tax') {
-          // Ensure all GST-related fields are updated together
-          const gstValue = parseFloat(value) || 0;
-          updatedItem.gst_percent = gstValue;
-          updatedItem.tax_rate = gstValue;
-          updatedItem.tax = gstValue;
-          updatedItem.tax_percent = gstValue;
+          // GST percentage is read-only - comes from product master data
+          // Don't allow manual editing of tax rates
+          return updatedItem;
         }
         
         return updatedItem;
@@ -685,8 +761,9 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
         sale_price: product.sale_price || 0,
         discount_percent: 0,
         free_quantity: 0,
-        gst_percent: product.gst_percent || product.tax_rate || '',
-        tax_rate: product.gst_percent || product.tax_rate || '',
+        // GST comes from backend as 'gst_percentage', transformed to 'gst_percent' by DataTransformer
+        gst_percent: product.gst_percent || product.tax_rate || 0,
+        tax_rate: product.gst_percent || product.tax_rate || 0, // Keep both for compatibility
         // Pack information
         packages_per_box: product.packages_per_box || null,
         units_per_pack: product.units_per_pack || null,
@@ -1931,24 +2008,24 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
     );
   }
 
-  // Step 2: Review and Confirm
+  // Step 2 & 3: Review and Preview
   return (
     <div className="h-full bg-blue-50">
       <div className="h-full flex flex-col">
         
         {/* Header - Using Global ModuleHeader */}
         <ModuleHeader
-          title="Invoice"
+          title={currentStep === 2 ? "Invoice Details" : "Invoice Preview"}
           documentNumber={invoice.invoice_no}
-          status="review"
+          status={currentStep === 2 ? "review" : "preview"}
           icon={FileText}
           iconColor="text-blue-600"
           onClose={onClose}
           historyType="invoice"
           additionalActions={[
             {
-              label: "← Back to Edit",
-              onClick: () => setCurrentStep(1),
+              label: currentStep === 2 ? "← Back to Items" : "← Back to Details",
+              onClick: () => setCurrentStep(currentStep === 2 ? 1 : 2),
               icon: null,
               variant: "default",
               className: "bg-white border border-gray-300 text-gray-700 hover:bg-gray-50 font-medium px-4 py-2 rounded-lg shadow-sm"
@@ -1979,156 +2056,451 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
             </div>
           )}
 
-          {/* Ultra-Compact Payment & Bank Section */}
-          <div className="mb-3">
-            <h3 className="text-xs font-semibold text-gray-600 uppercase tracking-wider mb-1.5 px-1">PAYMENT & BANK</h3>
-            <div className="bg-white rounded-lg border border-gray-200 p-2.5">
-              {/* Bank and Payment on same row */}
-              <div className="flex items-center gap-3 mb-2">
-                <div className="flex-1">
-                  <BankAccountSelector
-                    value={invoice.bank_account_id}
-                    onChange={(accountData) => {
-                      setInvoice(prev => ({
-                        ...prev,
-                        bank_account_id: accountData.bank_account_id,
-                        selected_bank_details: accountData
-                      }));
-                    }}
-                    transactionType="receipt"
-                    autoSelectDefault={true}
-                    placeholder="Bank account"
-                    compact={true}
-                  />
+          {/* Step 2: Details Form - Redesigned with better order and UX */}
+          {currentStep === 2 && (
+            <>
+              {/* 1. Delivery Details - First Priority */}
+              <div className="mb-6">
+                <div className="flex items-center mb-4">
+                  <div className="flex items-center justify-center w-8 h-8 bg-blue-100 rounded-full mr-3">
+                    <span className="text-sm font-bold text-blue-600">1</span>
+                  </div>
+                  <h3 className="text-lg font-semibold text-gray-800">Delivery Details</h3>
+                </div>
+                <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6">
+                  <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">Delivery Type</label>
+                      <select
+                        ref={deliveryTypeRef}
+                        value={invoice.delivery_type || 'PICKUP'}
+                        onChange={(e) => setInvoice(prev => ({ ...prev, delivery_type: e.target.value }))}
+                        className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                      >
+                        <option value="PICKUP">Pickup</option>
+                        <option value="SAME_DAY">Same Day</option>
+                        <option value="NEXT_DAY">Next Day</option>
+                        <option value="EXPRESS">Express</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">Transport Company</label>
+                      <input
+                        ref={transportRef}
+                        type="text"
+                        value={invoice.transport_company || ''}
+                        onChange={(e) => setInvoice(prev => ({ ...prev, transport_company: e.target.value }))}
+                        className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                        placeholder="Transport company"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">Vehicle Number</label>
+                      <input
+                        ref={vehicleRef}
+                        type="text"
+                        value={invoice.vehicle_number || ''}
+                        onChange={(e) => setInvoice(prev => ({ ...prev, vehicle_number: e.target.value }))}
+                        className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                        placeholder="MH-01-AB-1234"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">Delivery Charges</label>
+                      <input
+                        ref={deliveryChargesRef}
+                        type="number"
+                        value={invoice.delivery_charges || ''}
+                        onChange={(e) => setInvoice(prev => ({ ...prev, delivery_charges: parseFloat(e.target.value) || 0 }))}
+                        className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                        placeholder="₹0"
+                        min="0"
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* 2. Address Details - Second Priority */}
+              {selectedCustomer && (
+                <div className="mb-6">
+                  <div className="flex items-center mb-4">
+                    <div className="flex items-center justify-center w-8 h-8 bg-green-100 rounded-full mr-3">
+                      <span className="text-sm font-bold text-green-600">2</span>
+                    </div>
+                    <h3 className="text-lg font-semibold text-gray-800">Address Details</h3>
+                  </div>
+                  <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6">
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                      <AddressForm
+                        title="Billing Address"
+                        addressType="billing"
+                        customer={selectedCustomer}
+                        readonly={true}
+                        className=""
+                      />
+                      <AddressForm
+                        title="Shipping Address"
+                        addressType="shipping"
+                        customer={selectedCustomer}
+                        sameAsBilling={sameAsShipping}
+                        onSameAsBillingChange={(same) => {
+                          setSameAsShipping(same);
+                          if (same) {
+                            setInvoice(prev => ({ 
+                              ...prev, 
+                              shipping_address: prev.billing_address,
+                              shipping_address_data: prev.billing_address_data 
+                            }));
+                          }
+                        }}
+                        onChange={(address) => setInvoice(prev => ({ ...prev, shipping_address: address }))}
+                        onSave={(addressData) => setInvoice(prev => ({ ...prev, shipping_address_data: addressData }))}
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* 3. Payment Details - Clean & Compact */}
+              <div className="mb-6">
+                <div className="flex items-center justify-between mb-4">
+                  <div className="flex items-center">
+                    <div className="flex items-center justify-center w-8 h-8 bg-indigo-100 rounded-full mr-3">
+                      <span className="text-sm font-bold text-indigo-600">3</span>
+                    </div>
+                    <h3 className="text-lg font-semibold text-gray-800">Payment Details</h3>
+                  </div>
+                  
+                  {/* Split Payment Toggle - Outside tile for better UX */}
+                  <div className="flex items-center gap-3">
+                    <span className="text-sm text-gray-600">Split Payment</span>
+                    <button
+                      onClick={() => {
+                        const totalAmount = parseFloat(invoice.totals?.final_amount || invoice.net_amount) || 0;
+                        if (invoice.payments && invoice.payments.length > 1) {
+                          // Disable split - Default to credit (pay later)
+                          setInvoice(prev => ({
+                            ...prev,
+                            payments: [{
+                              id: '1',
+                              method: 'credit',
+                              amount: totalAmount,
+                              reference: ''
+                            }],
+                            payment_mode: 'credit',
+                            payment_status: 'pending'
+                          }));
+                        } else {
+                          // Enable split - Start with cash and card
+                          setInvoice(prev => ({
+                            ...prev,
+                            payments: [
+                              { id: '1', method: 'cash', amount: Math.floor(totalAmount / 2), reference: '' },
+                              { id: '2', method: 'card', amount: totalAmount - Math.floor(totalAmount / 2), reference: '' }
+                            ],
+                            payment_mode: 'split',
+                            payment_status: 'partial'
+                          }));
+                        }
+                      }}
+                      className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                        invoice.payments && invoice.payments.length > 1
+                          ? 'bg-indigo-600'
+                          : 'bg-gray-200'
+                      }`}
+                    >
+                      <span
+                        className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                          invoice.payments && invoice.payments.length > 1
+                            ? 'translate-x-6'
+                            : 'translate-x-1'
+                        }`}
+                      />
+                    </button>
+                  </div>
+                </div>
+                
+                <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6">
+
+                  {/* Payment Method Selection - Always show dropdown */}
+                  <div className="space-y-4">
+                    {invoice.payments && invoice.payments.length > 1 ? (
+                      /* Split Payment Mode - Multiple rows + Bank Account */
+                      <>
+                        <div className="space-y-3">
+                          {invoice.payments.map((payment, index) => (
+                            <div key={payment.id || index} className="grid grid-cols-12 gap-3 items-center">
+                              <div className="col-span-4">
+                                {index === 0 && <label className="block text-sm font-medium text-gray-700 mb-2">Payment Methods</label>}
+                                <select
+                                  value={payment.method}
+                                  onChange={(e) => {
+                                    const newPayments = [...invoice.payments];
+                                    newPayments[index] = { ...newPayments[index], method: e.target.value };
+                                    setInvoice(prev => ({ ...prev, payments: newPayments }));
+                                  }}
+                                  className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
+                                >
+                                  <option value="cash">Cash</option>
+                                  <option value="card">Card</option>
+                                  <option value="upi">UPI</option>
+                                  <option value="bank">Bank Transfer</option>
+                                  <option value="check">Check</option>
+                                  <option value="credit">Credit (Pay Later)</option>
+                                </select>
+                              </div>
+                              <div className="col-span-4">
+                                {index === 0 && <label className="block text-sm font-medium text-gray-700 mb-2">Amount</label>}
+                                <input
+                                  type="number"
+                                  value={payment.amount}
+                                  onChange={(e) => {
+                                    const newPayments = [...invoice.payments];
+                                    newPayments[index] = { ...newPayments[index], amount: parseFloat(e.target.value) || 0 };
+                                    setInvoice(prev => ({ ...prev, payments: newPayments }));
+                                  }}
+                                  className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
+                                  placeholder="Amount"
+                                />
+                              </div>
+                              <div className="col-span-3">
+                                {index === 0 && <label className="block text-sm font-medium text-gray-700 mb-2">Reference</label>}
+                                <input
+                                  type="text"
+                                  value={payment.reference || ''}
+                                  onChange={(e) => {
+                                    const newPayments = [...invoice.payments];
+                                    newPayments[index] = { ...newPayments[index], reference: e.target.value };
+                                    setInvoice(prev => ({ ...prev, payments: newPayments }));
+                                  }}
+                                  className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
+                                  placeholder={payment.method === 'upi' ? 'UPI ID' :
+                                              payment.method === 'card' ? 'Last 4' :
+                                              payment.method === 'bank' ? 'Ref#' :
+                                              payment.method === 'check' ? 'Check#' : 'Ref'}
+                                />
+                              </div>
+                              <div className="col-span-1">
+                                {index === 0 && <div className="h-8"></div>}
+                                {invoice.payments.length > 1 && (
+                                  <button
+                                    onClick={() => {
+                                      const newPayments = invoice.payments.filter((_, i) => i !== index);
+                                      setInvoice(prev => ({ ...prev, payments: newPayments }));
+                                    }}
+                                    className="w-full h-10 flex items-center justify-center text-gray-400 hover:text-red-500 transition-colors"
+                                  >
+                                    <X className="w-4 h-4" />
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+
+                        {/* Add Payment Button - More visible design */}
+                        <button
+                          onClick={() => {
+                            const newPayment = { 
+                              id: Date.now().toString(), 
+                              method: 'cash', 
+                              amount: 0, 
+                              reference: '' 
+                            };
+                            setInvoice(prev => ({ 
+                              ...prev, 
+                              payments: [...(prev.payments || []), newPayment] 
+                            }));
+                          }}
+                          className="w-full p-4 bg-indigo-50 border-2 border-indigo-200 rounded-lg text-indigo-700 hover:bg-indigo-100 hover:border-indigo-300 transition-all flex items-center justify-center gap-2 font-medium"
+                        >
+                          <Plus className="w-5 h-5" />
+                          Add Payment Method
+                        </button>
+
+                      </>
+                    ) : (
+                      /* Single Payment Mode - Dynamic layout based on payment method */
+                      <div className={`grid gap-4 ${
+                        invoice.payments?.[0]?.method && !['credit', 'cash'].includes(invoice.payments[0].method)
+                          ? 'grid-cols-12'
+                          : 'grid-cols-2'
+                      }`}>
+                        <div className={invoice.payments?.[0]?.method && !['credit', 'cash'].includes(invoice.payments[0].method) ? 'col-span-4' : ''}>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">Payment Method</label>
+                          <select
+                            value={invoice.payments?.[0]?.method || 'credit'}
+                            onChange={(e) => {
+                              const totalAmount = parseFloat(invoice.totals?.final_amount || invoice.net_amount) || 0;
+                              setInvoice(prev => ({
+                                ...prev,
+                                payments: [{
+                                  id: '1',
+                                  method: e.target.value,
+                                  amount: totalAmount,
+                                  reference: ''
+                                }],
+                                payment_mode: e.target.value
+                              }));
+                            }}
+                            className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                          >
+                            <option value="credit">Credit (Pay Later)</option>
+                            <option value="cash">Cash</option>
+                            <option value="card">Card</option>
+                            <option value="upi">UPI</option>
+                            <option value="bank">Bank Transfer</option>
+                            <option value="check">Check</option>
+                          </select>
+                        </div>
+                        <div className={invoice.payments?.[0]?.method && !['credit', 'cash'].includes(invoice.payments[0].method) ? 'col-span-4' : ''}>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">Amount</label>
+                          <input
+                            type="number"
+                            value={parseFloat(invoice.totals?.final_amount || invoice.net_amount) || 0}
+                            readOnly
+                            className="w-full px-3 py-2.5 border border-gray-200 rounded-lg bg-gray-50 text-gray-600"
+                          />
+                        </div>
+                        {/* Reference field - show for methods that need it */}
+                        {invoice.payments?.[0]?.method && !['credit', 'cash'].includes(invoice.payments[0].method) && (
+                          <div className="col-span-4">
+                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                              {invoice.payments[0].method === 'upi' ? 'UPI ID' :
+                               invoice.payments[0].method === 'card' ? 'Last 4 Digits' :
+                               invoice.payments[0].method === 'bank' ? 'Reference' :
+                               invoice.payments[0].method === 'check' ? 'Check #' : 'Reference'}
+                            </label>
+                            <input
+                              type="text"
+                              value={invoice.payments?.[0]?.reference || ''}
+                              onChange={(e) => {
+                                setInvoice(prev => ({
+                                  ...prev,
+                                  payments: [{
+                                    ...prev.payments[0],
+                                    reference: e.target.value
+                                  }]
+                                }));
+                              }}
+                              placeholder={invoice.payments[0].method === 'upi' ? 'xyz@paytm' :
+                                          invoice.payments[0].method === 'card' ? '1234' :
+                                          invoice.payments[0].method === 'bank' ? 'NEFT123' :
+                                          invoice.payments[0].method === 'check' ? '123456' : 'Optional'}
+                              className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                            />
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Invoice Discount Section */}
+                  <div className="border-t border-gray-100 pt-4 mb-4">
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">Discount Type</label>
+                        <select
+                          value={invoice.discount_type || 'percentage'}
+                          onChange={(e) => {
+                            const type = e.target.value;
+                            setInvoice(prev => ({
+                              ...prev,
+                              discount_type: type,
+                              discount_amount: 0,
+                              discount_percent: 0
+                            }));
+                          }}
+                          className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                        >
+                          <option value="percentage">% Discount</option>
+                          <option value="fixed">₹ Amount</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          {invoice.discount_type === 'fixed' ? 'Discount Amount' : 'Discount Percentage'}
+                        </label>
+                        <input
+                          type="number"
+                          min="0"
+                          max={invoice.discount_type === 'percentage' ? "100" : undefined}
+                          step={invoice.discount_type === 'percentage' ? "0.1" : "0.01"}
+                          value={invoice.discount_type === 'fixed' ? (invoice.discount_amount || 0) : (invoice.discount_percent || 0)}
+                          onChange={(e) => {
+                            const value = parseFloat(e.target.value) || 0;
+                            if (invoice.discount_type === 'fixed') {
+                              setInvoice(prev => ({ ...prev, discount_amount: value }));
+                            } else {
+                              setInvoice(prev => ({ ...prev, discount_percent: value }));
+                            }
+                          }}
+                          className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                          placeholder={invoice.discount_type === 'fixed' ? '₹0' : '0.0'}
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">You Save</label>
+                        <div className="w-full px-3 py-2.5 border border-gray-200 rounded-lg bg-green-50 text-green-700 font-medium">
+                          {((invoice.discount_percent > 0) || (invoice.discount_amount > 0)) ? 
+                            `₹${(
+                              invoice.discount_type === 'fixed' 
+                                ? invoice.discount_amount 
+                                : (parseFloat(invoice.totals?.gross_amount || 0) * (invoice.discount_percent || 0)) / 100
+                            ).toFixed(2)}` : 
+                            '₹0'
+                          }
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Total Summary */}
+                  <div className="border-t border-gray-100 pt-4">
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm text-gray-600">Total Amount</span>
+                      <span className="text-lg font-semibold text-gray-900">
+                        ₹{parseFloat(invoice.totals?.final_amount || invoice.net_amount) || 0}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </>
+          )}
+
+          {/* Step 3: Invoice Preview with Navigation */}
+          {currentStep === 3 && (
+            <>
+              {/* Step Navigation */}
+              <div className="mb-4 flex items-center justify-between bg-white rounded-lg border border-gray-200 p-3">
+                <div className="flex items-center gap-3">
+                  <button
+                    onClick={() => setCurrentStep(1)}
+                    className="flex items-center gap-2 px-3 py-1.5 text-sm text-blue-600 hover:text-blue-700 hover:bg-blue-50 rounded-lg transition-colors"
+                  >
+                    <span className="text-xs">← Step 1:</span> Items
+                  </button>
+                  <span className="text-gray-300">|</span>
+                  <button
+                    onClick={() => setCurrentStep(2)}
+                    className="flex items-center gap-2 px-3 py-1.5 text-sm text-blue-600 hover:text-blue-700 hover:bg-blue-50 rounded-lg transition-colors"
+                  >
+                    <span className="text-xs">← Step 2:</span> Details
+                  </button>
+                  <span className="text-gray-300">|</span>
+                  <span className="flex items-center gap-2 px-3 py-1.5 text-sm text-gray-900 bg-blue-50 rounded-lg">
+                    <span className="text-xs">Step 3:</span> Preview
+                  </span>
+                </div>
+                <div className="text-xs text-gray-500">
+                  Review and generate invoice
                 </div>
               </div>
               
-              {/* Payment component without wrapper */}
-              <SplitPayment
-                totalAmount={parseFloat(invoice.totals?.final_amount || invoice.net_amount) || 0}
-                payments={[
-                  {
-                    id: '1',
-                    method: invoice.payment_mode || 'cash',
-                    amount: invoice.payment_mode === 'cash' ? 
-                      parseFloat(invoice.totals?.final_amount || invoice.net_amount) || 0 : 0
-                  }
-                ]}
-                onChange={(payments) => {
-                  setInvoice(prev => ({
-                    ...prev,
-                    payments: payments,
-                    payment_mode: payments[0]?.method || 'cash',
-                    payment_amount: payments.reduce((sum, p) => sum + (p.amount || 0), 0)
-                  }));
-                }}
-                onPaymentStatusChange={(status) => {
-                  setInvoice(prev => ({
-                    ...prev,
-                    payment_status: status
-                  }));
-                }}
-                allowSplit={true}
-              />
-            </div>
-          </div>
-
-          {/* Delivery Details - Separated and Compact */}
-          <div className="mb-4" onKeyDown={handleSummaryKeyDown}>
-            <h3 className="text-xs font-semibold text-gray-600 uppercase tracking-wider mb-1.5 px-1">
-              DELIVERY DETAILS
-              <span className="ml-2 text-[10px] font-normal text-gray-500">(Press Enter to move through fields)</span>
-            </h3>
-            <div className="bg-white rounded-lg border border-gray-200 p-3">
-              <div className="grid grid-cols-4 gap-3">
-                <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">Delivery Type</label>
-                  <select
-                    ref={deliveryTypeRef}
-                    value={invoice.delivery_type || 'PICKUP'}
-                    onChange={(e) => setInvoice(prev => ({ ...prev, delivery_type: e.target.value }))}
-                    className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                  >
-                    <option value="PICKUP">Pickup</option>
-                    <option value="SAME_DAY">Same Day</option>
-                    <option value="NEXT_DAY">Next Day</option>
-                    <option value="EXPRESS">Express</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">Transport</label>
-                  <input
-                    ref={transportRef}
-                    type="text"
-                    value={invoice.transport_company || ''}
-                    onChange={(e) => setInvoice(prev => ({ ...prev, transport_company: e.target.value }))}
-                    className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                    placeholder="Company name"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">Vehicle No.</label>
-                  <input
-                    ref={vehicleRef}
-                    type="text"
-                    value={invoice.vehicle_number || ''}
-                    onChange={(e) => setInvoice(prev => ({ ...prev, vehicle_number: e.target.value }))}
-                    className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                    placeholder="MH-01-AB-1234"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">Charges (₹)</label>
-                  <input
-                    ref={deliveryChargesRef}
-                    type="number"
-                    value={invoice.delivery_charges || ''}
-                    onChange={(e) => setInvoice(prev => ({ ...prev, delivery_charges: parseFloat(e.target.value) || 0 }))}
-                    className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                    placeholder="0"
-                    min="0"
-                  />
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Address Section - Enhanced forms with dropdowns and multi-field input */}
-          {selectedCustomer && (
-            <div className="w-full mb-6">
-              <div className="grid grid-cols-2 gap-4">
-                <AddressForm
-                  title="Billing Address"
-                  addressType="billing"
-                  customer={selectedCustomer}
-                  readonly={true}
-                  className=""
-                />
-                <AddressForm
-                  title="Shipping Address"
-                  addressType="shipping"
-                  customer={selectedCustomer}
-                  sameAsBilling={sameAsShipping}
-                  onSameAsBillingChange={(same) => {
-                    setSameAsShipping(same);
-                    if (same) {
-                      setInvoice(prev => ({ 
-                        ...prev, 
-                        shipping_address: prev.billing_address,
-                        shipping_address_data: prev.billing_address_data 
-                      }));
-                    }
-                  }}
-                  onChange={(address) => setInvoice(prev => ({ ...prev, shipping_address: address }))}
-                  onSave={(addressData) => setInvoice(prev => ({ ...prev, shipping_address_data: addressData }))}
-                />
-              </div>
-            </div>
-          )}
-
-          {/* Invoice Preview with Thermal Print Support */}
-          <PrintUtility
-            documentData={{
+              <PrintUtility
+              documentData={{
               documentNumber: invoice.invoice_number,
               date: invoice.invoice_date,
               customer: {
@@ -2179,27 +2551,34 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
                   phone: selectedCustomer?.phone || selectedCustomer?.mobile
                 },
                 shipping_address: invoice.shipping_address,
+                billing_address: invoice.billing_address,
                 is_same_address: invoice.billing_address === invoice.shipping_address
               }}
               customer={selectedCustomer}
-              showAddresses={true}  // Show addresses in preview
+              showAddresses={true}  // Always show addresses in preview
+              isPrintMode={false}   // This makes addresses visible
               companyInfo={companyInfo}
             />
           </PrintUtility>
 
-          {/* Notes */}
-          <div className="w-full mt-3 mb-3">
-            <div className="bg-white rounded-lg border border-gray-200 p-2.5">
-              <div className="flex items-start gap-2">
-                <label className="text-xs font-medium text-gray-600 mt-1">Notes:</label>
+          {/* Notes Section - Cleaner Style */}
+          <div className="w-full mt-4 mb-4">
+            <div className="border border-gray-300 rounded-lg overflow-hidden">
+              <div className="bg-gray-100 px-3 py-2 border-b border-gray-300">
+                <h3 className="text-xs font-bold text-gray-800 uppercase">Invoice Notes</h3>
+              </div>
+              <div className="p-3">
                 <textarea
                   value={invoice.notes}
                   onChange={(e) => setInvoice(prev => ({ ...prev, notes: e.target.value }))}
-                  className="flex-1 px-2 py-1 text-sm border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500 resize-none"
-                  rows="1"
-                  placeholder="Add any additional notes or comments..."
-                  style={{ minHeight: '28px' }}
+                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-none"
+                  rows="2"
+                  placeholder="Add any additional notes or comments for this invoice..."
                 />
+                <div className="flex justify-between items-center mt-2">
+                  <span className="text-xs text-gray-500">These notes will appear on the printed invoice</span>
+                  <span className="text-xs text-gray-400">{(invoice.notes || '').length}/500</span>
+                </div>
               </div>
             </div>
           </div>
@@ -2348,31 +2727,49 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
               </div>
             </div>
           )}
+            </>
+          )}
           </div>
         </div>
 
-        {/* Footer */}
+        {/* Footer - Step 2 clean layout */}
         {currentStep === 2 && (
-        <DocumentFooter
-          totalItems={invoice.items?.length || 0}
-          totalAmount={parseFloat(invoice.totals?.net_amount || invoice.net_amount) || 0}
-          subtotalAmount={parseFloat(invoice.totals?.taxable_amount || invoice.subtotal_amount) || 0}
-          taxAmount={parseFloat(invoice.totals?.total_gst || invoice.totals?.total_tax || invoice.totals?.tax_amount || invoice.tax_amount) || 0}
-          roundOffAmount={parseFloat(invoice.totals?.round_off || invoice.round_off) || 0}
-          grandTotal={parseFloat(invoice.totals?.final_amount || invoice.net_amount) || 0}
-          discountAmount={parseFloat(invoice.totals?.total_discount || invoice.discount_amount) || 0}
-          deliveryCharges={parseFloat(invoice.totals?.delivery_charges || invoice.delivery_charges) || 0}
-          onSave={handleSaveInvoice}
-          onPrint={handlePrint}
-          onDownload={handlePDFDownload}
-          onThermalPrint={handleThermalPrint}
-          onWhatsApp={handleWhatsAppShare}
-          isSaving={saving}
-          customerPhone={selectedCustomer?.phone || invoice.customer_details?.phone}
-          showActionButtons={true}
-          saveLabel="Generate Invoice"
-          saveButtonRef={saveButtonRef}
-        />
+          <div className="bg-white border-t border-gray-200 px-6 py-4 flex items-center justify-between">
+            <button
+              onClick={() => setCurrentStep(1)}
+              className="inline-flex items-center px-4 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 bg-white hover:bg-gray-50"
+            >
+              ← Back to Items
+            </button>
+            
+            <button
+              onClick={() => setCurrentStep(3)}
+              className="inline-flex items-center px-6 py-2 border border-transparent rounded-lg text-sm font-medium text-white bg-blue-600 hover:bg-blue-700"
+            >
+              Continue to Preview →
+            </button>
+          </div>
+        )}
+        
+        {/* Footer - Step 3 has the action buttons */}
+        {currentStep === 3 && (
+          <DocumentFooter
+            totalItems={invoice.items.length}
+            totalAmount={parseFloat(invoice.totals?.final_amount || invoice.net_amount) || 0}
+            onCancel={() => setCurrentStep(2)}
+            onPrint={handlePrint}
+            onThermalPrint={handleThermalPrint}
+            onSave={handleSaveInvoice}
+            onGenerate={handleSaveInvoice}
+            saving={saving}
+            cancelLabel="← Back to Details"
+            saveLabel="Generate Invoice"
+            generateLabel="Generate Invoice"
+            showPrintOptions={true}
+            showSaveOption={true}
+            showActionButtons={true}
+            documentType="invoice"
+          />
         )}
 
       </div>

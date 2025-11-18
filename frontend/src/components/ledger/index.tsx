@@ -8,7 +8,6 @@ import LedgerHub from './LedgerHub';
 import Outstanding from './Outstanding';
 import CollectionCenter from './CollectionCenter';
 import LedgerReports from './LedgerReports';
-import PartyLedger from './PartyLedger';
 import PartyLedgerV3 from './PartyLedgerV3';
 
 // Main Hub Component
@@ -20,9 +19,8 @@ export { default as CollectionCenter } from './CollectionCenter';
 export { default as LedgerReports } from './LedgerReports';
 
 // Ledger Components
-export { default as PartyLedger } from './PartyLedger';
 export { default as PartyLedgerV3 } from './PartyLedgerV3';
-// Note: PartyLedgerV2 has been archived - use PartyLedgerV3 instead
+// Main production ledger component
 
 // Ledger Constants
 export const TRANSACTION_TYPES = {
@@ -106,7 +104,6 @@ interface LedgerComponents {
   Outstanding: React.ComponentType<any>;
   CollectionCenter: React.ComponentType<any>;
   LedgerReports: React.ComponentType<any>;
-  PartyLedger: React.ComponentType<any>;
   PartyLedgerV3: React.ComponentType<any>;
 }
 
@@ -140,7 +137,6 @@ const LedgerModule: LedgerModule = {
     LedgerReports,
     
     // Ledger Components
-    PartyLedger,
     PartyLedgerV3
   },
   
