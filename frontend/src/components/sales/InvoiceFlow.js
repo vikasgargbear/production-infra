@@ -744,7 +744,7 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
       );
     } else {
       // Transform product data using DataTransformer to ensure consistent field names
-      const transformedProduct = DataTransformer.transformProductForInvoice(product);
+      const transformedProduct = DataTransformer.transformProduct(product, 'invoice');
       
       // Create new item with all required fields
       const newItem = {
