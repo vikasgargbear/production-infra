@@ -743,27 +743,30 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
         existingItem.quantity + 1
       );
     } else {
+      // Transform product data using DataTransformer to ensure consistent field names
+      const transformedProduct = DataTransformer.transformProductForInvoice(product);
+      
       // Create new item with all required fields
       const newItem = {
         item_id: Date.now(), // Unique identifier
-        product_id: product.product_id,
-        product_name: product.product_name,
-        product_code: product.product_code,
+        product_id: transformedProduct.product_id,
+        product_name: transformedProduct.product_name,
+        product_code: transformedProduct.product_code,
         batch_id: product.batch_id,
         batch_no: product.batch_number || product.batch_no,
         batch_number: product.batch_number || product.batch_no,
-        hsn_code: product.hsn_code,
+        hsn_code: transformedProduct.hsn_code,
         expiry_date: product.expiry_date || product.batch_expiry_date,
         base_quantity: 1,  // Customer pays for 1 
         quantity: 1,       // What customer pays for (same as base_quantity)
-        mrp: product.mrp || product.sale_price || 0,
-        rate: product.rate || product.sale_price || 0,
-        sale_price: product.sale_price || 0,
+        mrp: transformedProduct.mrp || 0,
+        rate: transformedProduct.sale_price || 0,
+        sale_price: transformedProduct.sale_price || 0,
         discount_percent: 0,
         free_quantity: 0,
-        // GST comes from backend as 'gst_percentage', transformed to 'gst_percent' by DataTransformer
-        gst_percent: product.gst_percent ?? product.tax_rate ?? 0,
-        tax_rate: product.gst_percent ?? product.tax_rate ?? 0, // Keep both for compatibility
+        // GST properly transformed from backend 'gst_percentage' to frontend 'gst_percent'
+        gst_percent: transformedProduct.gst_percent,
+        tax_rate: transformedProduct.tax_rate, // Alias for compatibility
         // Pack information
         packages_per_box: product.packages_per_box || null,
         units_per_pack: product.units_per_pack || null,
@@ -772,18 +775,6 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
         category: product.category || '',
         available_quantity: product.available_quantity || product.quantity_available || 0
       };
-      
-      // Debug: Check what GST values we actually set
-      console.log('New invoice item GST:', {
-        product_name: newItem.product_name,
-        gst_percent: newItem.gst_percent,
-        tax_rate: newItem.tax_rate,
-        raw_product: {
-          gst_percent: product.gst_percent,
-          gst_percentage: product.gst_percentage,
-          tax_rate: product.tax_rate
-        }
-      });
       
       const updatedItems = [...invoice.items, newItem];
       
