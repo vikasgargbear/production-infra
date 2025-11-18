@@ -161,10 +161,8 @@ const BatchSelectionModalV2 = ({
       mrp: selectedBatch.mrp,
       sale_price: selectedBatch.sale_price || selectedBatch.selling_price,
       // GST should come from product master, not batch
-      gst_percent: product.gst_percent !== undefined ? product.gst_percent : 
-                   product.tax_rate !== undefined ? product.tax_rate : 0,
-      tax_rate: product.gst_percent !== undefined ? product.gst_percent : 
-                product.tax_rate !== undefined ? product.tax_rate : 0,
+      gst_percent: product.gst_percent ?? 0,
+      tax_rate: product.gst_percent ?? 0,
     };
     
     onBatchSelect(productWithBatch);
@@ -185,10 +183,8 @@ const BatchSelectionModalV2 = ({
       mrp: batch.mrp || product.mrp,
       sale_price: batch.sale_price || batch.selling_price || product.sale_price || product.mrp || 0,
       // GST should come from product master, not batch
-      gst_percent: product.gst_percent !== undefined ? product.gst_percent : 
-                   product.tax_rate !== undefined ? product.tax_rate : 0,
-      tax_rate: product.gst_percent !== undefined ? product.gst_percent : 
-                product.tax_rate !== undefined ? product.tax_rate : 0,
+      gst_percent: product.gst_percent ?? 0,
+      tax_rate: product.gst_percent ?? 0,
       quantity: 1
     };
 
