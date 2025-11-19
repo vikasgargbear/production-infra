@@ -64,7 +64,7 @@ async def get_products(
                 p.product_id, p.product_code, p.product_name, p.generic_name,
                 p.brand, p.manufacturer, p.category_id, p.product_type,
                 p.composition, p.strength, p.hsn_code,
-                p.gst_percentage, p.is_active, p.is_saleable,
+                p.gst_percentage as gst_percent, p.is_active, p.is_saleable,
                 p.created_at, p.updated_at,
                 -- Essential stock data only
                 COALESCE(
@@ -167,7 +167,7 @@ async def search_products(
                     p.brand,
                     p.manufacturer,
                     p.hsn_code,
-                    p.gst_percentage as gst_rate,
+                    p.gst_percentage as gst_percent,
                     COALESCE(AVG(b.mrp), 0) as mrp,
                     COALESCE(AVG(b.selling_price), 0) as sale_rate,
                     COALESCE(AVG(b.cost_per_unit), 0) as purchase_rate,
@@ -202,7 +202,7 @@ async def search_products(
                     brand,
                     manufacturer,
                     hsn_code,
-                    gst_percentage as gst_rate,
+                    gst_percentage as gst_percent,
                     0 as mrp,
                     0 as sale_rate,
                     0 as purchase_rate,
@@ -274,7 +274,7 @@ async def create_product(
             "category_id": product.get("category_id") if product.get("category_id") else None,
             "type_id": product.get("type_id") if product.get("type_id") else None,
             "hsn_code": product.get("hsn_code") or "3004",
-            "gst_percentage": product.get("gst_percentage") or product.get("gst_rate") or 0,  # Let user specify GST, don't hardcode
+            "gst_percentage": product.get("gst_percent") or product.get("gst_percentage") or product.get("gst_rate") or 0,  # Accept frontend standard name
             "base_uom_id": None,  # Let it be NULL if no UOMs exist
             "maintain_batch": True,
             "maintain_expiry": True,

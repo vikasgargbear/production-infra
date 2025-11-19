@@ -89,7 +89,7 @@ const ProductDataValidator = {
       sale_unit: product.base_uom || product.pack_config?.sale_unit || product.unit || 'Units',
       
       // Tax Information
-      gst_percentage: Number(product.gst_percentage || 0),
+      gst_percent: Number(product.gst_percent || 0),
       cess_percentage: Number(product.cess_percentage || 0),
       
       // Status & Alerts

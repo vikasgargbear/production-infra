@@ -261,7 +261,7 @@ const ProductCreationModal = ({
         composition: newProduct.salt_composition ? { active: newProduct.salt_composition } : {},
         strength: newProduct.strength || null,
         hsn_code: newProduct.hsn_code,
-        gst_percentage: parseFloat(newProduct.gst_percent),
+        gst_percent: parseFloat(newProduct.gst_percent),
         barcode: newProduct.barcode || null,
         // Pack configuration - now sent as individual fields for batch creation
         pack_type: packConfig.sale_unit || 'STRIP',

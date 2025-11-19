@@ -14,10 +14,9 @@ class DataTransformer {
       product_id: product.product_id ? String(product.product_id) : null,
       product_name: product.product_name || product.name || product.productName || '',
       hsn_code: product.hsn_code || product.hsnCode || '3004',
-      // Parse GST from backend (gst_percentage) to frontend (gst_percent)
-      // Backend uses 'gst_percentage', frontend uses 'gst_percent'
-      gst_percent: parseFloat(product.gst_percentage ?? product.gst_percent ?? 0),
-      tax_rate: parseFloat(product.gst_percentage ?? product.gst_percent ?? 0), // Alias for compatibility
+      // GST standardized to gst_percent across backend and frontend
+      gst_percent: parseFloat(product.gst_percent ?? 0),
+      tax_rate: parseFloat(product.gst_percent ?? 0), // Alias for compatibility
       mrp: parseFloat(product.mrp || 0),
       sale_price: parseFloat(product.sale_price || product.selling_price || product.rate || product.mrp || 0),
       manufacturer: product.manufacturer || product.company || '',

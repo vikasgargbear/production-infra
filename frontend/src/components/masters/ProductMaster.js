@@ -47,7 +47,7 @@ const ProductMaster = ({
     mrp: 0,
     purchase_price: 0,
     sale_price: 0,
-    gst_percentage: 12,
+    gst_percent: 12,
     cess_percentage: 0,
     
     // Storage & Handling
@@ -561,8 +561,8 @@ const ProductMaster = ({
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">GST %</label>
                         <select
-                          value={formData.gst_percentage || 0}
-                          onChange={(e) => handleInputChange('gst_percentage', parseFloat(e.target.value))}
+                          value={formData.gst_percent || 0}
+                          onChange={(e) => handleInputChange('gst_percent', parseFloat(e.target.value))}
                           disabled={mode === 'view'}
                           className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100"
                         >
