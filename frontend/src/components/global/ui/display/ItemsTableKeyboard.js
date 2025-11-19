@@ -308,25 +308,14 @@ const ItemsTableKeyboard = forwardRef(({
                   />
                 </td>
                 
-                {/* Tax % - Editable */}
+                {/* Tax % - Read-only from product master */}
                 <td className="px-3 py-2">
-                  <EditableCell
-                    ref={(el) => setFieldRef(index, 'tax', el)}
-                    value={item.gst_percent || item.tax_rate || 0}
-                    type="number"
-                    min={0}
-                    max={28}
-                    decimalPlaces={2}
-                    suffix="%"
-                    onSave={(val) => {
-                      onUpdateItem(index, 'gst_percent', val);
-                      onUpdateItem(index, 'tax_rate', val);
-                    }}
-                    onNavigate={(dir) => handleNavigate(index, 'tax', dir)}
-                    readOnly={readOnly}
-                    selectOnFocus={true}
-                    className="w-20"
-                  />
+                  <span 
+                    className="inline-block px-2 py-1 text-sm text-gray-700 bg-gray-50 rounded font-medium"
+                    title="Tax percentage from product master data (read-only)"
+                  >
+                    {item.gst_percent || item.tax_rate || 0}%
+                  </span>
                 </td>
                 
                 {/* Total - Calculated */}
