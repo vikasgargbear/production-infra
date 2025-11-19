@@ -116,8 +116,7 @@ async def create_invoice(
             quantity = float(item.get("quantity", 1))
             unit_price = float(item.get("unit_price", 0))
             discount_percent = float(item.get("discount_percent", 0))
-            # Handle both gst_percent and gst_percentage for backward compatibility
-            gst_percent = float(item.get("gst_percent") or item.get("gst_percentage") or item.get("tax_rate") or 0)
+            gst_percent = float(item.get("gst_percent", 0))  # Single source of truth
             
             # CRITICAL FIX: Use base_quantity for billing (already accounts for free items)
             if "base_quantity" in item:
@@ -440,8 +439,7 @@ async def create_invoice(
             
             # Calculate amounts - use base_quantity for billing (production logic)
             line_total = (base_quantity * unit_price) - discount_amt
-            # Handle both gst_percent and gst_percentage for backward compatibility
-            gst_percent = float(item.get("gst_percent") or item.get("gst_percentage") or item.get("tax_rate") or 0)
+            gst_percent = float(item.get("gst_percent", 0))  # Single source of truth
             taxable_amount = line_total
             
             # Calculate GST amounts based on customer type
@@ -1076,7 +1074,7 @@ async def get_invoice(
             FROM sales.invoices i
             LEFT JOIN sales.orders o ON i.order_id = o.order_id AND o.org_id = i.org_id
             WHERE i.invoice_id = :invoice_id AND i.org_id = :org_id
-        """), {"invoice_id": invoice_id, "org_id": str(org_id)})
+        """), {"invoice_id": invoice_id, "org_id": str(context.org_id)})
         
         invoice = result.fetchone()
         if not invoice:
@@ -1098,7 +1096,7 @@ async def get_invoice(
             LEFT JOIN inventory.batches b ON ii.batch_id = b.batch_id AND b.org_id = :org_id
             WHERE ii.invoice_id = :invoice_id
             ORDER BY ii.invoice_item_id
-        """), {"invoice_id": invoice_id, "org_id": str(org_id)})
+        """), {"invoice_id": invoice_id, "org_id": str(context.org_id)})
         
         invoice_dict["items"] = [dict(item._mapping) for item in items_result]
         
