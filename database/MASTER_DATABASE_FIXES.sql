@@ -5174,3 +5174,24 @@ BEGIN
     RAISE NOTICE '   Expected performance: 3-5s → <100ms for multi-tenant queries';
 END $$;
 
+
+-- =============================================
+-- SECTION 36: STANDARDIZE GST FIELD NAMING
+-- =============================================
+-- Date: 2025-11-19
+-- Issue: Confusion between gst_percentage and gst_percent field names
+-- Root Cause: Database uses gst_percentage, frontend/backend use gst_percent
+-- Impact: Eliminates field name conversion logic, single source of truth
+
+-- Rename column in products table to match API standard
+ALTER TABLE inventory.products 
+RENAME COLUMN gst_percentage TO gst_percent;
+
+DO $$
+BEGIN
+    RAISE NOTICE '✅ SECTION 36: GST field standardization completed';
+    RAISE NOTICE '   - Renamed gst_percentage → gst_percent in inventory.products';
+    RAISE NOTICE '   - Eliminates frontend/backend field name conversion';
+    RAISE NOTICE '   - Single source of truth: gst_percent throughout system';
+END $$;
+
