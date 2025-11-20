@@ -146,7 +146,7 @@ class EnterpriseCalculator {
     return this.calculateTotals(invoiceData.items || [], {
       gst_type: invoiceData.gst_type,
       delivery_charges: invoiceData.delivery_charges,
-      additional_discount: 0  // Don't apply header discount - items already have discounts
+      additional_discount: invoiceData.discount_amount || 0  // Apply invoice-level discount (in addition to item discounts)
     });
   }
   
