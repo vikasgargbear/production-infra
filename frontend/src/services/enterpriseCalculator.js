@@ -112,6 +112,7 @@ class EnterpriseCalculator {
     const finalAmount = Math.round(netAmount);
     const roundOff = parseFloat((finalAmount - netAmount).toFixed(2));
     
+    
     return {
       items: calculatedItems,
       totals: {

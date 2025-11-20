@@ -218,6 +218,8 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
     }],
     gross_amount: 0,
     discount_amount: 0,
+    discount_percent: 0,
+    discount_type: 'percentage',
     tax_amount: 0,
     other_charges: 0,
     round_off: 0,
@@ -514,6 +516,7 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
       invoice.gst_type || 'CGST/SGST',
       invoiceDiscountAmount // Pass the calculated discount
     );
+
 
     // Update state with calculated values - DON'T update items to prevent infinite loop
     setInvoice(prev => ({
