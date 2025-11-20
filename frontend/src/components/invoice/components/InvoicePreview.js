@@ -369,7 +369,7 @@ const InvoicePreview = ({
                   <td className="px-3 py-3 text-sm text-right font-medium text-gray-900">{formatCurrency(item.sale_price || item.rate || 0)}</td>
                   <td className="px-3 py-3 text-sm text-center text-gray-600">{item.discount_percent || 0}%</td>
                   <td className="px-3 py-3 text-sm text-center text-gray-600">{item.free_quantity || 0}</td>
-                  <td className="px-3 py-3 text-sm text-center text-gray-600">{item.gst_percent || 0}%</td>
+                  <td className="px-3 py-3 text-sm text-center text-gray-900 font-medium">{item.gst_percent || 0}%</td>
                   <td className="px-3 py-3 text-sm text-right text-gray-600">
                     {(() => {
                       // Calculate GST on the fly to avoid state issues - FIXED to use base_quantity

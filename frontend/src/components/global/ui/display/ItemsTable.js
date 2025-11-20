@@ -94,7 +94,7 @@ const ItemsTable = ({
       align: 'center',
       render: (item) => (
         <span 
-          className="text-gray-700 bg-gray-50 px-2 py-1 rounded text-xs font-medium"
+          className="text-gray-900 font-medium"
           title="MRP from product master data (read-only)"
         >
           {formatCurrency(item.mrp || item.sale_price)}
@@ -104,7 +104,11 @@ const ItemsTable = ({
     rate: { 
       label: 'Rate', 
       align: 'center',
-      render: (item) => formatCurrency(item.rate || item.sale_price || item.unit_price)
+      render: (item) => (
+        <span className="text-gray-900 font-medium">
+          {formatCurrency(item.rate || item.sale_price || item.unit_price)}
+        </span>
+      )
     },
     discount: { 
       label: 'Discount %', 
@@ -161,7 +165,7 @@ const ItemsTable = ({
         // Display with subtle styling to indicate it's from master data
         return (
           <span 
-            className="text-gray-700 bg-gray-50 px-2 py-1 rounded text-xs font-medium"
+            className="text-gray-900 font-medium"
             title="Tax percentage from product master data (read-only)"
           >
             {gstPercent}%

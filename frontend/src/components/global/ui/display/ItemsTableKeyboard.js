@@ -252,13 +252,13 @@ const ItemsTableKeyboard = forwardRef(({
                 
                 {/* MRP - Read Only */}
                 <td className="px-3 py-2 text-center">
-                  <div className="text-sm text-gray-700 font-medium bg-gray-50 px-2 py-1.5 rounded border border-gray-200">
+                  <div className="text-sm text-gray-900 font-medium">
                     {formatCurrency(item.mrp || 0)}
                   </div>
                 </td>
                 
                 {/* Rate - Editable */}
-                <td className="px-3 py-2">
+                <td className="px-3 py-2 text-center">
                   <EditableCell
                     ref={(el) => setFieldRef(index, 'rate', el)}
                     value={item.rate || item.sale_price || 0}
@@ -275,7 +275,7 @@ const ItemsTableKeyboard = forwardRef(({
                 </td>
                 
                 {/* Discount % - Editable */}
-                <td className="px-3 py-2">
+                <td className="px-3 py-2 text-center">
                   <EditableCell
                     ref={(el) => setFieldRef(index, 'discount', el)}
                     value={item.discount || 0}
@@ -293,7 +293,7 @@ const ItemsTableKeyboard = forwardRef(({
                 </td>
                 
                 {/* Free Quantity - Editable */}
-                <td className="px-3 py-2">
+                <td className="px-3 py-2 text-center">
                   <EditableCell
                     ref={(el) => setFieldRef(index, 'free', el)}
                     value={item.free_quantity || item.free || 0}
@@ -309,9 +309,9 @@ const ItemsTableKeyboard = forwardRef(({
                 </td>
                 
                 {/* Tax % - Read-only from product master */}
-                <td className="px-3 py-2">
+                <td className="px-3 py-2 text-center">
                   <span 
-                    className="inline-block px-2 py-1 text-sm text-gray-700 bg-gray-50 rounded font-medium"
+                    className="text-sm text-gray-900 font-medium"
                     title="Tax percentage from product master data (read-only)"
                   >
                     {item.gst_percent || item.tax_rate || 0}%
