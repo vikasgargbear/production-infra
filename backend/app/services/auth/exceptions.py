@@ -30,6 +30,12 @@ class OrganizationDisabledError(AuthenticationError):
         super().__init__(message, error_code=1003)
 
 
+class OrganizationDisabledError(AuthenticationError):
+    """Raised when organization is disabled"""
+    def __init__(self, message: str = "Organization account is disabled"):
+        super().__init__(message, error_code=1003)
+
+
 class PasswordNotSetError(AuthenticationError):
     """Raised when user has no password configured"""
     def __init__(self, message: str = "Password not configured"):

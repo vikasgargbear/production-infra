@@ -4,6 +4,7 @@ from .exceptions import (
     AuthenticationError,
     InvalidCredentialsError,
     AccountDisabledError,
+    OrganizationDisabledError,
     PasswordNotSetError,
     InvalidTokenError,
     RateLimitExceededError
@@ -14,6 +15,7 @@ __all__ = [
     "AuthenticationError",
     "InvalidCredentialsError",
     "AccountDisabledError",
+    "OrganizationDisabledError",
     "PasswordNotSetError",
     "InvalidTokenError",
     "RateLimitExceededError"
