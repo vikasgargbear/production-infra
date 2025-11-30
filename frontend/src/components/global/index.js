@@ -123,6 +123,7 @@ export {
   PaymentSummary,
   OrderSummary,
   ItemsTable,
+  ItemsTableKeyboard,
   Card,
   CardSection,
   Badge,

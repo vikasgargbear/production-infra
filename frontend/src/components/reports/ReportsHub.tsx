@@ -199,7 +199,6 @@ const ReportsHub: React.FC<ReportsHubProps> = ({ open = true, onClose }) => {
       icon={BarChart3}
       modules={reportModules}
       defaultModule="executive-dashboard"
-      showCategories={true}
     />
   );
 };

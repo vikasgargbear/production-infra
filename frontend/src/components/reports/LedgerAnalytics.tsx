@@ -153,7 +153,10 @@ const LedgerReports: React.FC<LedgerReportsProps> = ({ embedded = false, onClose
     }
   );
 
-  const dashboardStats: DashboardStats = stats || {
+  const dashboardStats: DashboardStats = stats ? {
+    ...stats,
+    cash_flow_trend: (stats.cash_flow_trend as 'positive' | 'negative' | 'neutral') || 'neutral'
+  } : {
     total_receivables: 0,
     total_payables: 0,
     net_position: 0,
@@ -161,7 +164,7 @@ const LedgerReports: React.FC<LedgerReportsProps> = ({ embedded = false, onClose
     overdue_payables: 0,
     collection_efficiency: 0,
     payment_efficiency: 0,
-    cash_flow_trend: 'neutral' as 'positive' | 'negative' | 'neutral'
+    cash_flow_trend: 'neutral'
   };
 
   const handleExport = async (exportFormat: 'pdf' | 'excel') => {

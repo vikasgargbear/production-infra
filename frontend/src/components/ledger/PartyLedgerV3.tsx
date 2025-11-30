@@ -616,7 +616,6 @@ const PartyLedgerV3: React.FC<PartyLedgerV3Props> = ({
                       placeholder="Search customer by name, phone, or code..."
                       displayMode="inline"
                       clearable={true}
-                      showCreateButton={false}
                     />
                   ) : (
                     <SupplierSearch
@@ -624,7 +623,6 @@ const PartyLedgerV3: React.FC<PartyLedgerV3Props> = ({
                       placeholder="Search supplier by name or ID..."
                       displayMode="inline"
                       clearable={true}
-                      showCreateButton={false}
                     />
                   )}
                 </div>

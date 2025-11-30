@@ -45,8 +45,9 @@ const MasterHub: React.FC<MasterHubProps> = ({ open = true, onClose }) => {
 
   // Listen for navigation events
   React.useEffect(() => {
-    const handleNavigateToMaster = (event: CustomEvent) => {
-      if (event.detail.module === 'tax-master') {
+    const handleNavigateToMaster = (event: Event) => {
+      const customEvent = event as CustomEvent;
+      if (customEvent.detail?.module === 'tax-master') {
         setDefaultModule('tax-master');
       }
     };

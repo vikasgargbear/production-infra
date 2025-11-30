@@ -155,7 +155,7 @@ const InvoiceListV2: React.FC<InvoiceListProps> = ({ onClose }) => {
       // Alt+E - Export
       if (event.altKey && event.key.toLowerCase() === 'e') {
         event.preventDefault();
-        handleExportExcel();
+        handleExportAll();
         return;
       }
 
