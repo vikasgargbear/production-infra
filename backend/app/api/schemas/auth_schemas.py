@@ -74,6 +74,7 @@ class LoginResponse(BaseModel):
     token_type: str = Field("bearer", description="Token type")
     expires_in: int = Field(..., description="Token expiry in seconds")
     user: UserSummary = Field(..., description="User information")
+    offline_auth_hash: Optional[str] = Field(None, description="Hash for offline authentication")
     
     class Config:
         schema_extra = {
