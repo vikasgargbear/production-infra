@@ -46,7 +46,9 @@ class UserRepository:
             if not row:
                 return None
             
-            return dict(row._mapping)
+            user_dict = dict(row._mapping)
+            logger.info(f"User query returned keys: {list(user_dict.keys())}")
+            return user_dict
             
         except Exception as e:
             logger.error(f"Error finding user by email {email}: {e}")
