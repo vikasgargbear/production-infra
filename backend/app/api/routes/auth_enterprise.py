@@ -29,7 +29,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 
 
-@router.post("/login")  # Temporarily remove response_model for debugging
+@router.post("/login", response_model=LoginResponse)
 async def login(
     request_data: LoginRequest,
     req: Request,
