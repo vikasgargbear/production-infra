@@ -8,7 +8,7 @@ import os
 
 # Import routers
 from .api.routes import (
-    auth_supabase, customers, products_consolidated, sales, inventory, 
+    customers, products_consolidated, sales, inventory, 
     payments, dashboard, billing, api_wrapper
 )
 
@@ -124,7 +124,11 @@ from fastapi import APIRouter
 api = APIRouter(prefix="/api")
 
 # Register routes
-api.include_router(auth_supabase.router, prefix="/auth", tags=["Authentication"])
+# Enterprise authentication system (email/password + Google OAuth + offline support)
+from .api.routes import auth_enterprise, auth_diagnostics, auth_oauth
+api.include_router(auth_enterprise.router, tags=["Authentication"])
+api.include_router(auth_diagnostics.router, tags=["Auth Diagnostics"])
+api.include_router(auth_oauth.router, tags=["OAuth"])
 api.include_router(customers.router, prefix="/customers", tags=["Customers"])
 api.include_router(products_consolidated.router, prefix="/products", tags=["Products"])
 api.include_router(sales.router, prefix="/sales", tags=["Sales"])
