@@ -44,7 +44,19 @@ async def get_org_context(
     
     try:
         token = credentials.credentials
-        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        
+        # Decode JWT with better error handling
+        try:
+            payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        except Exception as decode_error:
+            # Log specific decode error but don't expose internals
+            logger.error(f"JWT decode error: {decode_error}")
+            raise HTTPException(
+                status_code=401,
+                detail="Invalid or expired authentication token. Please login again.",
+                headers={"WWW-Authenticate": "Bearer"}
+            )
+        
         org_id_str = payload.get("org_id")
         user_id_value = payload.get("user_id")
         
@@ -69,6 +81,8 @@ async def get_org_context(
         
         return OrgContext(org_id, user_id)
         
+    except HTTPException:
+        raise  # Re-raise HTTP exceptions as-is
     except (JWTError, ValueError) as e:
         logger.error(f"JWT token validation failed: {e}")
         raise HTTPException(

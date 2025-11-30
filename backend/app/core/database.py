@@ -2,16 +2,52 @@
 Database Configuration
 """
 import os
+import socket
 from sqlalchemy import create_engine
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 from typing import Generator
+from urllib.parse import urlparse, urlunparse
 
 # Get database URL from environment or use default
 DATABASE_URL = os.getenv(
     "DATABASE_URL",
     "postgresql://postgres:password@localhost:5432/pharma"
 ).strip()  # Remove leading/trailing whitespace
+
+# Force IPv4 resolution for Supabase (Railway doesn't support IPv6)
+def force_ipv4_in_database_url(url: str) -> str:
+    """
+    Force IPv4 resolution for database connections
+    Railway's network doesn't support IPv6, but Supabase returns IPv6 addresses
+    """
+    if "supabase.co" not in url:
+        return url
+    
+    try:
+        parsed = urlparse(url)
+        hostname = parsed.hostname
+        
+        if not hostname:
+            return url
+        
+        # Get IPv4 address only
+        try:
+            ipv4_addr = socket.getaddrinfo(hostname, None, socket.AF_INET)[0][4][0]
+            print(f"[DATABASE] Resolved {hostname} to IPv4: {ipv4_addr}")
+            
+            # Replace hostname with IPv4 in connection string
+            new_netloc = parsed.netloc.replace(hostname, ipv4_addr)
+            new_parsed = parsed._replace(netloc=new_netloc)
+            return urlunparse(new_parsed)
+        except (socket.gaierror, IndexError) as e:
+            print(f"[DATABASE] Warning: Could not resolve IPv4 for {hostname}: {e}")
+            return url
+    except Exception as e:
+        print(f"[DATABASE] Warning: Could not force IPv4: {e}")
+        return url
+
+DATABASE_URL = force_ipv4_in_database_url(DATABASE_URL)
 
 # Supabase connection validation and detection
 IS_SUPABASE = "supabase.com" in DATABASE_URL
