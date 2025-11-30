@@ -66,7 +66,9 @@ class AuthService:
             raise InvalidCredentialsError("Invalid email or password")
         
         # Debug: Log what we got from database
-        logger.info(f"User data keys: {list(user_data.keys()) if isinstance(user_data, dict) else 'NOT A DICT'}")
+        logger.error(f"[DEBUG] Got user_data type: {type(user_data)}")
+        logger.error(f"[DEBUG] User data keys: {list(user_data.keys()) if isinstance(user_data, dict) else 'NOT A DICT'}")
+        logger.error(f"[DEBUG] Has user_id: {'user_id' in user_data if isinstance(user_data, dict) else False}")
         
         # Step 2: Check account status
         if not user_data.get("is_active"):
