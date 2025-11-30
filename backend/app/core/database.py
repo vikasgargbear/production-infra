@@ -13,11 +13,29 @@ DATABASE_URL = os.getenv(
     "postgresql://postgres:password@localhost:5432/pharma"
 )
 
-# Supabase pooler detection and configuration
-IS_SUPABASE_POOLER = "supabase.com" in DATABASE_URL and ":6543" in DATABASE_URL
+# Supabase connection validation and detection
+IS_SUPABASE = "supabase.com" in DATABASE_URL
+IS_POOLER_HOSTNAME = ".pooler.supabase.com" in DATABASE_URL
+IS_POOLER_PORT = ":6543" in DATABASE_URL
+IS_DIRECT_PORT = ":5432" in DATABASE_URL
+
+# Validate configuration
+if IS_SUPABASE:
+    if IS_POOLER_HOSTNAME and IS_DIRECT_PORT:
+        print("[DATABASE] ❌ ERROR: Pooler hostname with direct port detected!")
+        print("[DATABASE] ❌ URL has .pooler.supabase.com:5432 - this is WRONG")
+        print("[DATABASE] ✅ Change to: db.PROJECT-ID.supabase.co:5432 (direct)")
+        print("[DATABASE] ✅ OR to: .pooler.supabase.com:6543 (pooler)")
+        print("[DATABASE] ⚠️  Attempting to connect anyway, but may fail...")
+    
+    if IS_POOLER_HOSTNAME and IS_POOLER_PORT:
+        print(f"[DATABASE] Supabase Transaction Pooler detected (correct config)")
+    elif not IS_POOLER_HOSTNAME and IS_DIRECT_PORT:
+        print(f"[DATABASE] Supabase Direct Connection detected (correct config)")
+
+IS_SUPABASE_POOLER = IS_POOLER_HOSTNAME and IS_POOLER_PORT
 
 if IS_SUPABASE_POOLER:
-    print(f"[DATABASE] Supabase Transaction Pooler detected (port 6543)")
     print(f"[DATABASE] Using aggressive connection recycling for pooler mode")
 
 # Create engine with connection pooling optimized for Supabase
