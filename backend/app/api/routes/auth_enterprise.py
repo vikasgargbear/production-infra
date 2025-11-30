@@ -29,12 +29,12 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 
 
-@router.post("/login", response_model=LoginResponse)
+@router.post("/login")  # Temporarily remove response_model for debugging
 async def login(
     request_data: LoginRequest,
     req: Request,
     db: Session = Depends(get_db)
-) -> Dict[str, Any]:
+):
     """
     Authenticate user and return JWT tokens
     
