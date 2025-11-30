@@ -84,7 +84,22 @@ class UserRepository:
             """), {"user_id": user_id})
             
             row = result.fetchone()
-            return dict(row._mapping) if row else None
+            if not row:
+                return None
+            
+            return {
+                "user_id": row[0],
+                "username": row[1],
+                "email": row[2],
+                "full_name": row[3],
+                "org_id": row[4],
+                "is_active": row[5],
+                "password_hash": row[6],
+                "role_id": row[7],
+                "branch_ids": row[8],
+                "org_name": row[9],
+                "org_active": row[10]
+            }
             
         except Exception as e:
             logger.error(f"Error finding user by ID {user_id}: {e}")
@@ -146,7 +161,7 @@ class UserRepository:
             query += " ORDER BY created_at DESC LIMIT 100"
             
             result = db.execute(text(query), params)
-            return [dict(row._mapping) for row in result]
+            return [{"user_id": row[0], "email": row[1], "username": row[2], "org_id": row[3]} for row in result]
             
         except Exception as e:
             logger.error(f"Error listing users without passwords: {e}")
