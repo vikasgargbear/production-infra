@@ -10,7 +10,7 @@ import logging
 import json
 
 from ...core.database import get_db
-from ...core.secure_auth import get_org_id_string  # SECURE: JWT-based auth, get_user_context_from_token
+from ...core.secure_auth import get_org_id_string  # SECURE: JWT-based auth
 from ...core.permissions import (
     PermissionChecker, 
     require_master_permission,

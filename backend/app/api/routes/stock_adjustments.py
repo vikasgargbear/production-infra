@@ -11,7 +11,7 @@ from datetime import date, datetime
 from decimal import Decimal
 
 from ...core.database import get_db
-from ...core.secure_auth import get_org_id_string  # SECURE: JWT-based auth, get_user_context_from_token
+from ...core.secure_auth import get_org_id_string, get_user_context_secure  # SECURE: JWT-based auth
 from ...utils.branch_utils import get_default_branch_id
 
 logger = logging.getLogger(__name__)
@@ -99,7 +99,7 @@ def get_stock_adjustments(
 @router.post("/")
 def create_stock_adjustment(adjustment_data: dict, db: Session = Depends(get_db),
     org_id: str = Depends(get_org_id_string),
-    user_context: dict = Depends(get_user_context_from_token)):
+    user_context: dict = Depends(get_user_context_secure)):
     """
     Create a stock adjustment using inventory movements
     """
@@ -206,7 +206,7 @@ def create_stock_adjustment(adjustment_data: dict, db: Session = Depends(get_db)
 @router.post("/physical-count")
 def process_physical_count(count_data: dict, db: Session = Depends(get_db),
     org_id: str = Depends(get_org_id_string),
-    user_context: dict = Depends(get_user_context_from_token)):
+    user_context: dict = Depends(get_user_context_secure)):
     """
     Process physical inventory count
     Creates stock adjustments for differences
@@ -298,7 +298,7 @@ def process_physical_count(count_data: dict, db: Session = Depends(get_db),
 @router.post("/expire-batches")
 def expire_batches(db: Session = Depends(get_db),
     org_id: str = Depends(get_org_id_string),
-    user_context: dict = Depends(get_user_context_from_token)):
+    user_context: dict = Depends(get_user_context_secure)):
     """
     Mark expired batches and create stock adjustments
     """
