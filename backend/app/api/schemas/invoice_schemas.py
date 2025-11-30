@@ -115,7 +115,7 @@ class CreateInvoiceRequest(BaseModel):
         
         return v
     
-    @root_validator
+    @root_validator(skip_on_failure=True)
     def validate_delivery_charges(cls, values):
         """freight_charges and delivery_charges are aliases"""
         freight = values.get('freight_charges', Decimal('0'))
