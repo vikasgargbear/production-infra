@@ -65,6 +65,17 @@ async def login(
             """), {"email": request.email}).fetchone()
         except Exception as e:
             logger.error(f"Database query failed during login: {str(e)}")
+            logger.error(f"Database URL info: {os.getenv('DATABASE_URL', 'not set')[:50]}...")
+            
+            # Check if it's a Supabase connection pooler error
+            error_str = str(e)
+            if "Tenant or user not found" in error_str:
+                logger.error("Supabase pooler error detected - DATABASE_URL may need pgbouncer=true parameter")
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail="Database connection configuration error. Please check DATABASE_URL includes pgbouncer=true parameter for Supabase."
+                )
+            
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail=f"Database error: {str(e)}"

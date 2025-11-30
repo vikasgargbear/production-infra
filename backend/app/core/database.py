@@ -13,7 +13,15 @@ DATABASE_URL = os.getenv(
     "postgresql://postgres:password@localhost:5432/pharma"
 )
 
-# Create engine with ultra-conservative connection pooling for Supabase session mode
+# Supabase connection fix: Add pgbouncer=true for connection pooler
+# This tells Supabase to use transaction mode instead of session mode
+if "supabase.com" in DATABASE_URL and "pgbouncer=true" not in DATABASE_URL:
+    # Add pgbouncer parameter if using Supabase pooler
+    separator = "&" if "?" in DATABASE_URL else "?"
+    DATABASE_URL = f"{DATABASE_URL}{separator}pgbouncer=true"
+    print(f"[DATABASE] Supabase pooler detected - added pgbouncer=true parameter")
+
+# Create engine with ultra-conservative connection pooling for Supabase
 engine = create_engine(
     DATABASE_URL,
     pool_size=2,  # Ultra-small for Supabase session mode limits
@@ -21,7 +29,11 @@ engine = create_engine(
     pool_pre_ping=True,
     pool_recycle=60,  # Recycle connections every 1 minute
     pool_timeout=10,  # 10 second timeout
-    echo=False
+    echo=False,
+    # Supabase-specific connection args
+    connect_args={
+        "options": "-c statement_timeout=30000"  # 30 second query timeout
+    } if "supabase.com" in DATABASE_URL else {}
 )
 
 # Create session factory
