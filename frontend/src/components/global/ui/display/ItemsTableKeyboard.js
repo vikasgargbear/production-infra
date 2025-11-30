@@ -239,6 +239,7 @@ const ItemsTableKeyboard = forwardRef(({
                     min={0}
                     step={1}
                     decimalPlaces={0}
+                    onChange={(val) => onUpdateItem(index, 'quantity', val)}  // Real-time update
                     onSave={(val) => onUpdateItem(index, 'quantity', val)}
                     onNavigate={(dir) => handleNavigate(index, 'quantity', dir)}
                     readOnly={readOnly}
@@ -263,6 +264,7 @@ const ItemsTableKeyboard = forwardRef(({
                     min={0}
                     decimalPlaces={2}
                     prefix={currencySymbol}
+                    onChange={(val) => onUpdateItem(index, 'rate', val)}  // Real-time update
                     onSave={(val) => onUpdateItem(index, 'rate', val)}
                     onNavigate={(dir) => handleNavigate(index, 'rate', dir)}
                     readOnly={readOnly}
@@ -281,6 +283,7 @@ const ItemsTableKeyboard = forwardRef(({
                     max={100}
                     decimalPlaces={2}
                     suffix="%"
+                    onChange={(val) => onUpdateItem(index, 'discount', val)}  // Real-time update
                     onSave={(val) => onUpdateItem(index, 'discount', val)}
                     onNavigate={(dir) => handleNavigate(index, 'discount', dir)}
                     readOnly={readOnly}

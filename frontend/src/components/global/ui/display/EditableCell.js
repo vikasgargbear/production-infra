@@ -9,6 +9,7 @@ const EditableCell = forwardRef(({
   value,
   type = 'number',
   onSave,
+  onChange, // NEW: Fires on every keystroke for real-time updates
   onNavigate, // (direction: 'up'|'down'|'left'|'right'|'next') => void
   readOnly = false,
   min = 0,
@@ -183,8 +184,17 @@ const EditableCell = forwardRef(({
       // Allow typing numbers, decimal point, and minus
       const cleaned = val.replace(/[^0-9.-]/g, '');
       setLocalValue(cleaned);
+      
+      // Fire onChange immediately for real-time calculation updates
+      if (onChange) {
+        const num = parseFloat(cleaned) || 0;
+        onChange(num);
+      }
     } else {
       setLocalValue(val);
+      if (onChange) {
+        onChange(val);
+      }
     }
   };
 
