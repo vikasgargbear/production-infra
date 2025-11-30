@@ -10,9 +10,6 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-# DEPLOYMENT MARKER - If you see this, latest code is deployed
-print("[REPO] UserRepository loaded - VERSION: 2024-11-30-FIXED-ROW-MAPPING")
-
 
 class UserRepository:
     """
