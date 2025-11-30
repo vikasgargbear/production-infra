@@ -129,7 +129,9 @@ async def login(
         )
     
     except Exception as e:
+        import traceback
         logger.error(f"Login failed: Unexpected error - {request_data.email}: {e}")
+        logger.error(f"FULL TRACEBACK: {traceback.format_exc()}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail={
