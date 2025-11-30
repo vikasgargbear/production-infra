@@ -12,41 +12,62 @@ import logging
 import re
 from functools import wraps
 from fastapi import Depends
+import contextvars
 
 logger = logging.getLogger(__name__)
 
+# Thread-safe context variables for async environments
+_org_id_context: contextvars.ContextVar[Optional[UUID]] = contextvars.ContextVar('org_id', default=None)
+_user_id_context: contextvars.ContextVar[Optional[UUID]] = contextvars.ContextVar('user_id', default=None)
+_bypass_filter_context: contextvars.ContextVar[bool] = contextvars.ContextVar('bypass_filter', default=False)
+
 
 class TenantContext:
-    """Thread-safe tenant context for current request"""
-    _current_org_id: Optional[UUID] = None
-    _current_user_id: Optional[UUID] = None
-    _bypass_tenant_filter: bool = False
+    """
+    THREAD-SAFE tenant context for current request
+    Uses contextvars to ensure isolation between concurrent requests
+    Fixed: Previously used class variables which could leak between requests
+    """
     
     @classmethod
     def set_context(cls, org_id: UUID, user_id: Optional[UUID] = None):
-        """Set tenant context for current request"""
-        cls._current_org_id = org_id
-        cls._current_user_id = user_id
-        cls._bypass_tenant_filter = False
+        """Set tenant context for current request (thread-safe)"""
+        _org_id_context.set(org_id)
+        _user_id_context.set(user_id)
+        _bypass_filter_context.set(False)
+        logger.debug(f"[SECURITY] Tenant context set: org_id={org_id}, user_id={user_id}")
         
     @classmethod
     def get_org_id(cls) -> UUID:
-        """Get current org_id - throws error if not set"""
-        if cls._current_org_id is None:
+        """Get current org_id - throws error if not set (thread-safe)"""
+        org_id = _org_id_context.get()
+        if org_id is None:
             raise SecurityError("No tenant context set - this is a security bug!")
-        return cls._current_org_id
+        return org_id
+    
+    @classmethod
+    def get_user_id(cls) -> Optional[UUID]:
+        """Get current user_id (thread-safe)"""
+        return _user_id_context.get()
     
     @classmethod
     def clear_context(cls):
-        """Clear tenant context"""
-        cls._current_org_id = None
-        cls._current_user_id = None
-        cls._bypass_tenant_filter = False
+        """Clear tenant context (thread-safe)"""
+        _org_id_context.set(None)
+        _user_id_context.set(None)
+        _bypass_filter_context.set(False)
     
     @classmethod
     def bypass_tenant_filter(cls, enabled: bool = True):
         """Enable/disable tenant filtering bypass (admin operations only)"""
-        cls._bypass_tenant_filter = enabled
+        _bypass_filter_context.set(enabled)
+        if enabled:
+            logger.warning("[SECURITY] Tenant filter bypass ENABLED - admin operation")
+    
+    @classmethod
+    def is_bypass_enabled(cls) -> bool:
+        """Check if tenant filter is bypassed"""
+        return _bypass_filter_context.get()
 
 
 class SecurityError(Exception):
@@ -81,7 +102,7 @@ class TenantQueryBuilder:
         
         Returns: (modified_query, updated_params)
         """
-        if TenantContext._bypass_tenant_filter:
+        if TenantContext.is_bypass_enabled():
             logger.warning("SECURITY: Tenant filter bypassed - admin operation")
             return base_query, params or {}
             

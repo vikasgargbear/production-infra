@@ -61,24 +61,14 @@ def get_org_id_secure(
                 detail="Invalid org_id format in token"
             )
 
-    # TEMPORARY: Fallback to X-Org-Id header during migration
-    # TODO: Remove this after all clients are using JWT tokens
-    if request:
-        x_org_id = request.headers.get("x-org-id") or request.headers.get("X-Org-Id")
-        if x_org_id:
-            logger.warning("DEPRECATED: Using X-Org-Id header - switch to JWT token")
-            try:
-                return UUID(x_org_id)
-            except ValueError:
-                raise HTTPException(
-                    status_code=400,
-                    detail="Invalid org_id format in header"
-                )
-
-    # No valid authentication found
+    # REMOVED: X-Org-Id header fallback (SECURITY FIX - Nov 30, 2025)
+    # Client-controlled headers are a security vulnerability in multi-tenant SaaS
+    # org_id MUST come from JWT token only (cryptographically signed, server-verified)
+    
+    # No valid JWT token found
     raise HTTPException(
         status_code=401,
-        detail="Authentication required. Provide Bearer token.",
+        detail="Authentication required. Provide Bearer token with valid JWT.",
         headers={"WWW-Authenticate": "Bearer"}
     )
 

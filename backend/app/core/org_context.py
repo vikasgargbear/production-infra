@@ -26,45 +26,53 @@ class OrgContext:
 
 
 async def get_org_context(
-    credentials: Optional[HTTPAuthorizationCredentials] = Depends(security),
-    request: Request = None
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(security)
 ) -> OrgContext:
-    """Get organization context from JWT token or header"""
+    """
+    SECURE: Get organization context from JWT token ONLY
     
-    # Try JWT token first
-    if credentials:
-        try:
-            token = credentials.credentials
-            payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-            org_id_str = payload.get("org_id")
-            user_id_value = payload.get("user_id")
-            
-            if org_id_str:
-                org_id = UUID(org_id_str) if isinstance(org_id_str, str) else org_id_str
-                # user_id can be int or string, convert appropriately
-                user_id = None
-                if user_id_value:
-                    if isinstance(user_id_value, int):
-                        user_id = user_id_value  # Keep as int, don't convert to UUID
-                    elif isinstance(user_id_value, str):
-                        try:
-                            user_id = UUID(user_id_value)
-                        except ValueError:
-                            user_id = user_id_value  # Keep as string if not valid UUID
-                return OrgContext(org_id, user_id)
-        except (JWTError, ValueError) as e:
-            logger.warning(f"JWT token invalid: {e}")
+    Security Fix (Nov 30, 2025): Removed X-Org-Id header fallback
+    Multi-tenant SaaS requires server-verified org_id from JWT, not client headers
+    """
     
-    # Fallback to X-Org-Id header
-    if request:
-        x_org_id = request.headers.get("x-org-id") or request.headers.get("X-Org-Id")
-        if x_org_id:
-            try:
-                return OrgContext(UUID(x_org_id))
-            except ValueError:
-                pass
+    if not credentials:
+        raise HTTPException(
+            status_code=401,
+            detail="Authentication required. Provide Bearer token.",
+            headers={"WWW-Authenticate": "Bearer"}
+        )
     
-    raise HTTPException(
-        status_code=401,
-        detail="Authentication required. Provide Bearer token or X-Org-Id header."
-    )
+    try:
+        token = credentials.credentials
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        org_id_str = payload.get("org_id")
+        user_id_value = payload.get("user_id")
+        
+        if not org_id_str:
+            raise HTTPException(
+                status_code=401, 
+                detail="Invalid token: missing org_id"
+            )
+        
+        org_id = UUID(org_id_str) if isinstance(org_id_str, str) else org_id_str
+        
+        # user_id can be int or string, convert appropriately
+        user_id = None
+        if user_id_value:
+            if isinstance(user_id_value, int):
+                user_id = user_id_value  # Keep as int, don't convert to UUID
+            elif isinstance(user_id_value, str):
+                try:
+                    user_id = UUID(user_id_value)
+                except ValueError:
+                    user_id = user_id_value  # Keep as string if not valid UUID
+        
+        return OrgContext(org_id, user_id)
+        
+    except (JWTError, ValueError) as e:
+        logger.error(f"JWT token validation failed: {e}")
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid authentication token",
+            headers={"WWW-Authenticate": "Bearer"}
+        )
