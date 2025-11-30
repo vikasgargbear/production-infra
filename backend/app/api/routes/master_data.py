@@ -428,7 +428,8 @@ async def list_products(
                    COALESCE(g.gst_rate, 12) as gst_percentage
             FROM inventory.products p
             LEFT JOIN gst.gst_rates g ON p.hsn_code = g.hsn_code
-            WHERE (:search IS NULL OR 
+            WHERE p.org_id = :org_id
+            AND (:search IS NULL OR 
                    LOWER(p.product_name) LIKE LOWER(:search_pattern) OR
                    LOWER(p.product_code) LIKE LOWER(:search_pattern))
             ORDER BY p.product_name
@@ -438,6 +439,7 @@ async def list_products(
         search_pattern = f"%{search}%" if search else None
         
         result = db.execute(query, {
+            "org_id": org_id,
             "search": search,
             "search_pattern": search_pattern,
             "limit": limit,
@@ -451,12 +453,14 @@ async def list_products(
         # Get total count
         count_query = text("""
             SELECT COUNT(*) FROM inventory.products p
-            WHERE (:search IS NULL OR 
+            WHERE p.org_id = :org_id
+            AND (:search IS NULL OR 
                    LOWER(p.product_name) LIKE LOWER(:search_pattern) OR
                    LOWER(p.product_code) LIKE LOWER(:search_pattern))
         """)
         
         count_result = db.execute(count_query, {
+            "org_id": org_id,
             "search": search,
             "search_pattern": search_pattern
         })
@@ -489,19 +493,22 @@ async def search_products(
                    COALESCE(
                        (SELECT b.mrp FROM inventory.batches b 
                         WHERE b.product_id = p.product_id 
+                        AND b.org_id = :org_id
                         AND b.quantity_available > 0
                         ORDER BY b.created_at DESC LIMIT 1), 
                        0
                    ) as mrp
             FROM inventory.products p
             LEFT JOIN gst.gst_rates g ON p.hsn_code = g.hsn_code
-            WHERE LOWER(p.product_name) LIKE LOWER(:search_pattern)
-               OR LOWER(p.product_code) LIKE LOWER(:search_pattern)
+            WHERE p.org_id = :org_id
+            AND (LOWER(p.product_name) LIKE LOWER(:search_pattern)
+               OR LOWER(p.product_code) LIKE LOWER(:search_pattern))
             ORDER BY p.product_name
             LIMIT :limit
         """)
         
         result = db.execute(query, {
+            "org_id": org_id,
             "search_pattern": f"%{q}%",
             "limit": limit
         })
@@ -525,10 +532,10 @@ async def get_product(product_id: int, db: Session = Depends(get_db),
             SELECT p.*, g.gst_rate as gst_percentage
             FROM inventory.products p
             LEFT JOIN gst.gst_rates g ON p.hsn_code = g.hsn_code
-            WHERE p.product_id = :product_id
+            WHERE p.product_id = :product_id AND p.org_id = :org_id
         """)
         
-        result = db.execute(query, {"product_id": product_id})
+        result = db.execute(query, {"product_id": product_id, "org_id": org_id})
         product = result.first()
         
         if not product:

@@ -91,8 +91,10 @@ class TenantQueryBuilder:
         # Parse query to find tables that need filtering
         query_upper = base_query.upper()
         
-        # Skip if already has org_id filter
-        if 'ORG_ID' in query_upper:
+        # Skip if already has org_id filter in WHERE clause (not just column selection)
+        # Check for patterns like "WHERE org_id =" or "WHERE ... AND org_id ="
+        if re.search(r'\bWHERE\b.*\bORG_ID\s*=', query_upper, re.DOTALL) or \
+           re.search(r'\bAND\b.*\bORG_ID\s*=', query_upper, re.DOTALL):
             return base_query, params
             
         # Check if query accesses tenant tables
@@ -201,16 +203,23 @@ class TenantAwareSession:
         """Execute query with automatic tenant filtering"""
         self._query_count += 1
         
-        if isinstance(statement, str):
+        # Handle text() objects by extracting the string
+        if hasattr(statement, 'text'):
+            # It's a text() object from SQLAlchemy
+            statement_str = str(statement)
+        elif isinstance(statement, str):
             # Raw SQL string
-            safe_query, safe_params = TenantQueryBuilder.build_safe_query(
-                statement, parameters
-            )
-            logger.debug(f"Tenant query #{self._query_count}: {safe_query[:100]}...")
-            return self.session.execute(text(safe_query), safe_params)
+            statement_str = statement
         else:
-            # SQLAlchemy statement object
+            # SQLAlchemy ORM statement object
             return self._execute_sqlalchemy_statement(statement, parameters)
+        
+        # Apply tenant filtering to the SQL string
+        safe_query, safe_params = TenantQueryBuilder.build_safe_query(
+            statement_str, parameters
+        )
+        logger.debug(f"Tenant query #{self._query_count}: {safe_query[:100]}...")
+        return self.session.execute(text(safe_query), safe_params)
     
     def _execute_sqlalchemy_statement(self, statement, parameters):
         """Handle SQLAlchemy ORM statements with tenant filtering"""
