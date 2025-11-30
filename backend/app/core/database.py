@@ -15,39 +15,11 @@ DATABASE_URL = os.getenv(
     "postgresql://postgres:password@localhost:5432/pharma"
 ).strip()  # Remove leading/trailing whitespace
 
-# Force IPv4 resolution for Supabase (Railway doesn't support IPv6)
-def force_ipv4_in_database_url(url: str) -> str:
-    """
-    Force IPv4 resolution for database connections
-    Railway's network doesn't support IPv6, but Supabase returns IPv6 addresses
-    """
-    if "supabase.co" not in url:
-        return url
-    
-    try:
-        parsed = urlparse(url)
-        hostname = parsed.hostname
-        
-        if not hostname:
-            return url
-        
-        # Get IPv4 address only
-        try:
-            ipv4_addr = socket.getaddrinfo(hostname, None, socket.AF_INET)[0][4][0]
-            print(f"[DATABASE] Resolved {hostname} to IPv4: {ipv4_addr}")
-            
-            # Replace hostname with IPv4 in connection string
-            new_netloc = parsed.netloc.replace(hostname, ipv4_addr)
-            new_parsed = parsed._replace(netloc=new_netloc)
-            return urlunparse(new_parsed)
-        except (socket.gaierror, IndexError) as e:
-            print(f"[DATABASE] Warning: Could not resolve IPv4 for {hostname}: {e}")
-            return url
-    except Exception as e:
-        print(f"[DATABASE] Warning: Could not force IPv4: {e}")
-        return url
-
-DATABASE_URL = force_ipv4_in_database_url(DATABASE_URL)
+# Force IPv4 by adding target_session_attrs to connection string for Supabase
+if "supabase.co" in DATABASE_URL and "target_session_attrs" not in DATABASE_URL:
+    separator = "&" if "?" in DATABASE_URL else "?"
+    DATABASE_URL = f"{DATABASE_URL}{separator}target_session_attrs=read-write"
+    print(f"[DATABASE] Added IPv4 preference for Supabase connection")
 
 # Supabase connection validation and detection
 IS_SUPABASE = "supabase.com" in DATABASE_URL
