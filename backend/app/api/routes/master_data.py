@@ -11,7 +11,7 @@ from uuid import uuid4
 import logging
 
 from ...core.database import get_db
-from ...core.auth_utils import get_org_id_from_header
+from ...core.secure_auth import get_org_id_string  # SECURE: JWT-based auth
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -22,7 +22,7 @@ router = APIRouter()
 
 @router.post("/customers", response_model=Dict[str, Any])
 async def create_customer(customer_data: Dict[str, Any], db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)):
+    org_id: str = Depends(get_org_id_string)):
     """Create a new customer"""
     try:
         # Insert into parties.customers table with actual column names
@@ -89,7 +89,7 @@ async def create_customer(customer_data: Dict[str, Any], db: Session = Depends(g
 
 @router.get("/customers/{customer_id}")
 async def get_customer(customer_id: int, db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)):
+    org_id: str = Depends(get_org_id_string)):
     """Get customer by ID"""
     try:
         query = text("""
@@ -113,7 +113,7 @@ async def get_customer(customer_id: int, db: Session = Depends(get_db),
 
 @router.put("/customers/{customer_id}")
 async def update_customer(customer_id: int, customer_data: Dict[str, Any], db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)):
+    org_id: str = Depends(get_org_id_string)):
     """Update customer"""
     try:
         # Build update query dynamically
@@ -171,7 +171,7 @@ async def update_customer(customer_id: int, customer_data: Dict[str, Any], db: S
 
 @router.post("/suppliers", response_model=Dict[str, Any])
 async def create_supplier(supplier_data: Dict[str, Any], db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)):
+    org_id: str = Depends(get_org_id_string)):
     """Create a new supplier"""
     try:
         query = text("""
@@ -240,7 +240,7 @@ async def list_suppliers(
     offset: int = Query(0, ge=0),
     search: Optional[str] = None,
     db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    org_id: str = Depends(get_org_id_string)
 ):
     """List all suppliers with pagination"""
     try:
@@ -291,7 +291,7 @@ async def list_suppliers(
 
 @router.get("/suppliers/{supplier_id}")
 async def get_supplier(supplier_id: int, db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)):
+    org_id: str = Depends(get_org_id_string)):
     """Get supplier by ID"""
     try:
         query = text("""
@@ -317,7 +317,7 @@ async def get_supplier(supplier_id: int, db: Session = Depends(get_db),
 
 @router.post("/products", response_model=Dict[str, Any])
 async def create_product(product_data: Dict[str, Any], db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)):
+    org_id: str = Depends(get_org_id_string)):
     """Create a new product"""
     try:
         query = text("""
@@ -417,7 +417,7 @@ async def list_products(
     search: Optional[str] = None,
     category: Optional[str] = None,
     db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    org_id: str = Depends(get_org_id_string)
 ):
     """List all products with pagination and search"""
     try:
@@ -482,7 +482,7 @@ async def search_products(
     q: str = Query(..., description="Search query"),
     limit: int = Query(20, ge=1, le=100),
     db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    org_id: str = Depends(get_org_id_string)
 ):
     """Search products by name or code"""
     try:
@@ -525,7 +525,7 @@ async def search_products(
 
 @router.get("/products/{product_id}")
 async def get_product(product_id: int, db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)):
+    org_id: str = Depends(get_org_id_string)):
     """Get product by ID"""
     try:
         query = text("""

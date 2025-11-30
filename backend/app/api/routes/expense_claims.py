@@ -12,7 +12,7 @@ from pydantic import BaseModel, Field
 import logging
 
 from ...core.database import get_db
-from ...core.auth_utils import get_org_id_from_header
+from ...core.secure_auth import get_org_id_string  # SECURE: JWT-based auth
 
 logger = logging.getLogger(__name__)
 
@@ -39,7 +39,7 @@ class ExpenseClaimCreate(BaseModel):
 
 @router.get("/generate-claim-number")
 async def generate_claim_number(db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)):
+    org_id: str = Depends(get_org_id_string)):
     """
     Generate unique expense claim number
     
@@ -119,7 +119,7 @@ async def get_expense_types():
 async def create_expense_claim(
     claim: ExpenseClaimCreate,
     db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    org_id: str = Depends(get_org_id_string)
 ):
     """
     Create a new expense claim
@@ -260,7 +260,7 @@ async def get_expense_claims(
     from_date: Optional[date] = Query(None),
     to_date: Optional[date] = Query(None),
     db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    org_id: str = Depends(get_org_id_string)
 ):
     """
     Get list of expense claims with pagination and filters
@@ -362,7 +362,7 @@ async def get_expense_claims(
 async def get_expense_claim_details(
     claim_id: int,
     db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    org_id: str = Depends(get_org_id_string)
 ):
     """
     Get detailed expense claim with all line items
@@ -434,7 +434,7 @@ async def approve_expense_claim(
     claim_id: int,
     approval_data: dict,
     db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    org_id: str = Depends(get_org_id_string)
 ):
     """
     Approve expense claim
@@ -508,7 +508,7 @@ async def reject_expense_claim(
     claim_id: int,
     rejection_data: dict,
     db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    org_id: str = Depends(get_org_id_string)
 ):
     """
     Reject expense claim

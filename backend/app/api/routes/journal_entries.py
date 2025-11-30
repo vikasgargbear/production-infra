@@ -12,7 +12,7 @@ from pydantic import BaseModel, Field, validator
 import logging
 
 from ...core.database import get_db
-from ...core.auth_utils import get_org_id_from_header
+from ...core.secure_auth import get_org_id_string  # SECURE: JWT-based auth
 
 logger = logging.getLogger(__name__)
 
@@ -61,7 +61,7 @@ class JournalEntryCreate(BaseModel):
 
 @router.get("/generate-journal-number")
 async def generate_journal_number(db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)):
+    org_id: str = Depends(get_org_id_string)):
     """
     Generate unique journal entry number
     
@@ -123,7 +123,7 @@ async def get_chart_of_accounts(
     account_type: Optional[str] = Query(None, description="Filter by account type"),
     active_only: bool = Query(True, description="Show only active accounts"),
     db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    org_id: str = Depends(get_org_id_string)
 ):
     """
     Get chart of accounts for journal entry selection
@@ -185,7 +185,7 @@ async def get_chart_of_accounts(
 async def create_journal_entry(
     journal_entry: JournalEntryCreate,
     db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    org_id: str = Depends(get_org_id_string)
 ):
     """
     Create a new journal entry
@@ -363,7 +363,7 @@ async def get_journal_entries(
     to_date: Optional[date] = Query(None),
     search: Optional[str] = Query(None),
     db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    org_id: str = Depends(get_org_id_string)
 ):
     """
     Get list of journal entries with pagination and filters
@@ -455,7 +455,7 @@ async def get_journal_entries(
 async def get_journal_entry_details(
     journal_id: int,
     db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    org_id: str = Depends(get_org_id_string)
 ):
     """
     Get detailed journal entry with all line items
@@ -522,7 +522,7 @@ async def delete_journal_entry(
     journal_id: int,
     reason: str = Query(..., description="Deletion reason"),
     db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    org_id: str = Depends(get_org_id_string)
 ):
     """
     Delete/cancel journal entry

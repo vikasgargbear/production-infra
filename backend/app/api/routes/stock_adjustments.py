@@ -11,7 +11,7 @@ from datetime import date, datetime
 from decimal import Decimal
 
 from ...core.database import get_db
-from ...core.auth_utils import get_org_id_from_header, get_user_context_from_token
+from ...core.secure_auth import get_org_id_string  # SECURE: JWT-based auth, get_user_context_from_token
 from ...utils.branch_utils import get_default_branch_id
 
 logger = logging.getLogger(__name__)
@@ -28,7 +28,7 @@ def get_stock_adjustments(
     start_date: Optional[date] = Query(None, description="Filter from date"),
     end_date: Optional[date] = Query(None, description="Filter to date"),
     db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    org_id: str = Depends(get_org_id_string)
 ):
     """Get stock adjustments from inventory movements"""
     try:
@@ -98,7 +98,7 @@ def get_stock_adjustments(
 
 @router.post("/")
 def create_stock_adjustment(adjustment_data: dict, db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header),
+    org_id: str = Depends(get_org_id_string),
     user_context: dict = Depends(get_user_context_from_token)):
     """
     Create a stock adjustment using inventory movements
@@ -205,7 +205,7 @@ def create_stock_adjustment(adjustment_data: dict, db: Session = Depends(get_db)
 
 @router.post("/physical-count")
 def process_physical_count(count_data: dict, db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header),
+    org_id: str = Depends(get_org_id_string),
     user_context: dict = Depends(get_user_context_from_token)):
     """
     Process physical inventory count
@@ -297,7 +297,7 @@ def process_physical_count(count_data: dict, db: Session = Depends(get_db),
 
 @router.post("/expire-batches")
 def expire_batches(db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header),
+    org_id: str = Depends(get_org_id_string),
     user_context: dict = Depends(get_user_context_from_token)):
     """
     Mark expired batches and create stock adjustments
@@ -384,7 +384,7 @@ def get_adjustment_analytics(
     start_date: Optional[date] = Query(None),
     end_date: Optional[date] = Query(None),
     db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    org_id: str = Depends(get_org_id_string)
 ):
     """Get stock adjustment analytics"""
     try:

@@ -13,7 +13,7 @@ from decimal import Decimal
 import uuid
 
 from ...core.database import get_db
-from ...core.auth_utils import get_org_id_from_header
+from ...core.secure_auth import get_org_id_string  # SECURE: JWT-based auth
 from ..services.document_number_service import DocumentNumberService
 
 logger = logging.getLogger(__name__)
@@ -36,7 +36,7 @@ class PurchaseReturnCreate(BaseModel):
 async def get_returnable_items(
     invoice_id: int,
     db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    org_id: str = Depends(get_org_id_string)
 ):
     """
     Get supplier invoice items with accurate returnable quantities
@@ -139,7 +139,7 @@ async def get_returnable_items(
 async def create_purchase_return(
     return_data: PurchaseReturnCreate,
     db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header),
+    org_id: str = Depends(get_org_id_string),
     user_id: int = 1  # Should come from auth
 ):
     """

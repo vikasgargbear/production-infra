@@ -12,7 +12,7 @@ from pydantic import BaseModel, Field
 import logging
 
 from ...core.database import get_db
-from ...core.auth_utils import get_org_id_from_header
+from ...core.secure_auth import get_org_id_string  # SECURE: JWT-based auth
 
 logger = logging.getLogger(__name__)
 
@@ -446,7 +446,7 @@ class EnterpriseChallanService:
 async def create_delivery_challan(
     request: ChallanCreationRequest,
     db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    org_id: str = Depends(get_org_id_string)
 ):
     """Create new delivery challan"""
     service = EnterpriseChallanService(db, org_id)
@@ -461,7 +461,7 @@ async def list_delivery_challans(
     start_date: Optional[date] = None,
     end_date: Optional[date] = None,
     db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    org_id: str = Depends(get_org_id_string)
 ):
     """List delivery challans with filters"""
     try:
@@ -523,7 +523,7 @@ async def list_delivery_challans(
 async def get_challan_details(
     challan_id: int,
     db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    org_id: str = Depends(get_org_id_string)
 ):
     """Get detailed challan information"""
     try:
@@ -574,7 +574,7 @@ async def dispatch_challan(
     challan_id: int,
     dispatch_data: Dict[str, Any],
     db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    org_id: str = Depends(get_org_id_string)
 ):
     """Mark challan as dispatched"""
     try:
@@ -639,7 +639,7 @@ async def deliver_challan(
     challan_id: int,
     delivery_data: Dict[str, Any],
     db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    org_id: str = Depends(get_org_id_string)
 ):
     """Mark challan as delivered"""
     try:
@@ -699,7 +699,7 @@ async def add_tracking_update(
     challan_id: int,
     tracking: ChallanTrackingRequest,
     db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    org_id: str = Depends(get_org_id_string)
 ):
     """Add tracking update to challan"""
     try:
@@ -733,7 +733,7 @@ async def get_challan_analytics(
     start_date: Optional[date] = None,
     end_date: Optional[date] = None,
     db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    org_id: str = Depends(get_org_id_string)
 ):
     """Get delivery challan analytics"""
     try:
@@ -800,7 +800,7 @@ async def get_legacy_delivery_challans(
     skip: int = 0,
     limit: int = 100,
     db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    org_id: str = Depends(get_org_id_string)
 ):
     """Legacy endpoint for backward compatibility"""
     # Redirect to main challan list endpoint

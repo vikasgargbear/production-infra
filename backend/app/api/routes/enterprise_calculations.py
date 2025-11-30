@@ -11,7 +11,7 @@ import logging
 import time
 
 from ...core.database import get_db
-from ...core.auth_utils import get_org_id_from_header
+from ...core.secure_auth import get_org_id_string  # SECURE: JWT-based auth
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/calculations", tags=["Enterprise Calculations"])
@@ -24,7 +24,7 @@ router = APIRouter(prefix="/calculations", tags=["Enterprise Calculations"])
 async def calculate_purchase_totals(
     purchase_data: Dict[str, Any],
     db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    org_id: str = Depends(get_org_id_string)
 ):
     """
     Enterprise purchase calculation endpoint
@@ -135,7 +135,7 @@ async def calculate_purchase_totals(
 async def calculate_sales_order_totals(
     order_data: Dict[str, Any],
     db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    org_id: str = Depends(get_org_id_string)
 ):
     """
     Enterprise sales order calculation endpoint
@@ -240,7 +240,7 @@ async def calculate_sales_order_totals(
 async def calculate_sales_return_totals(
     return_data: Dict[str, Any],
     db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    org_id: str = Depends(get_org_id_string)
 ):
     """
     Enterprise sales return calculation endpoint
@@ -343,7 +343,7 @@ async def calculate_sales_return_totals(
 async def calculate_purchase_return_totals(
     return_data: Dict[str, Any],
     db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    org_id: str = Depends(get_org_id_string)
 ):
     """
     Enterprise purchase return calculation endpoint
@@ -446,7 +446,7 @@ async def calculate_purchase_return_totals(
 async def calculate_challan_totals(
     challan_data: Dict[str, Any],
     db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    org_id: str = Depends(get_org_id_string)
 ):
     """
     Enterprise challan calculation endpoint

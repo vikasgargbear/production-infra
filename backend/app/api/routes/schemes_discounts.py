@@ -13,7 +13,7 @@ import logging
 import json
 
 from ...core.database import get_db
-from ...core.auth_utils import get_org_id_from_header
+from ...core.secure_auth import get_org_id_string  # SECURE: JWT-based auth
 
 logger = logging.getLogger(__name__)
 
@@ -78,7 +78,7 @@ class DiscountCalculation(BaseModel):
 @router.post("/", response_model=dict)
 async def create_scheme(
     scheme: SchemeCreate,
-    org_id: str = Depends(get_org_id_from_header),
+    org_id: str = Depends(get_org_id_string),
     db: Session = Depends(get_db)
 ):
     """
@@ -192,7 +192,7 @@ async def get_active_schemes(
     customer_id: Optional[int] = None,
     product_id: Optional[int] = None,
     db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    org_id: str = Depends(get_org_id_string)
 ):
     """
     Get all active schemes
@@ -288,7 +288,7 @@ async def get_active_schemes(
 async def calculate_discount(
     calculation: DiscountCalculation,
     db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    org_id: str = Depends(get_org_id_string)
 ):
     """
     Calculate applicable discounts for given products
@@ -434,7 +434,7 @@ async def calculate_discount(
 async def apply_scheme_to_invoice(
     invoice_data: dict,
     db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    org_id: str = Depends(get_org_id_string)
 ):
     """
     Apply schemes to an invoice
@@ -533,7 +533,7 @@ async def apply_scheme_to_invoice(
 async def get_scheme_details(
     scheme_id: int,
     db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    org_id: str = Depends(get_org_id_string)
 ):
     """Get detailed information about a specific scheme"""
     try:
@@ -600,7 +600,7 @@ async def update_scheme(
     scheme_id: int,
     update_data: dict,
     db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    org_id: str = Depends(get_org_id_string)
 ):
     """Update scheme details"""
     try:
@@ -641,7 +641,7 @@ async def update_scheme(
 async def deactivate_scheme(
     scheme_id: int,
     db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    org_id: str = Depends(get_org_id_string)
 ):
     """Deactivate a scheme (soft delete)"""
     try:
@@ -673,7 +673,7 @@ async def get_scheme_usage_report(
     to_date: Optional[date] = Query(None),
     scheme_id: Optional[int] = Query(None),
     db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    org_id: str = Depends(get_org_id_string)
 ):
     """
     Get scheme usage analytics and report

@@ -10,7 +10,7 @@ import logging
 from datetime import date, datetime
 
 from ...core.database import get_db
-from ...core.auth_utils import get_org_id_from_header
+from ...core.secure_auth import get_org_id_string  # SECURE: JWT-based auth
 from ..services.document_number_service import DocumentNumberService
 from ...utils.branch_utils import get_default_branch_id
 
@@ -21,7 +21,7 @@ router = APIRouter(prefix="/delivery-challan", tags=["delivery-challan"])
 @router.get("/generate-number")
 def generate_delivery_challan_number(
     db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    org_id: str = Depends(get_org_id_string)
 ):
     """Generate next delivery challan number using unified service"""
     try:
@@ -45,7 +45,7 @@ def get_delivery_challans(
     start_date: Optional[date] = Query(None, description="Filter from date"),
     end_date: Optional[date] = Query(None, description="Filter to date"),
     db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    org_id: str = Depends(get_org_id_string)
 ):
     """Get delivery challans with optional filtering"""
     try:
@@ -98,7 +98,7 @@ def get_delivery_challans(
 
 @router.get("/{challan_id}")
 def get_delivery_challan(challan_id: int, db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)):
+    org_id: str = Depends(get_org_id_string)):
     """Get a single delivery challan by ID"""
     try:
         result = db.execute(
@@ -158,7 +158,7 @@ def get_delivery_challan(challan_id: int, db: Session = Depends(get_db),
 
 @router.post("/")
 def create_delivery_challan(challan_data: dict, db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)):
+    org_id: str = Depends(get_org_id_string)):
     """Create a new delivery challan (actually creates an order)"""
     try:
         # Calculate totals from items if provided
@@ -207,7 +207,7 @@ def create_delivery_challan(challan_data: dict, db: Session = Depends(get_db),
 
 @router.put("/{challan_id}")
 def update_delivery_challan(challan_id: int, challan_data: dict, db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)):
+    org_id: str = Depends(get_org_id_string)):
     """Update a delivery challan"""
     try:
         # Check if order exists
@@ -254,7 +254,7 @@ def update_delivery_challan(challan_id: int, challan_data: dict, db: Session = D
 
 @router.delete("/{challan_id}")
 def delete_delivery_challan(challan_id: int, db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)):
+    org_id: str = Depends(get_org_id_string)):
     """Delete a delivery challan"""
     try:
         result = db.execute(
@@ -276,7 +276,7 @@ def delete_delivery_challan(challan_id: int, db: Session = Depends(get_db),
 
 @router.put("/{challan_id}/mark-delivered")
 def mark_challan_delivered(challan_id: int, db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)):
+    org_id: str = Depends(get_org_id_string)):
     """Mark a delivery challan as delivered"""
     try:
         result = db.execute(
@@ -306,7 +306,7 @@ def get_delivery_analytics(
     start_date: Optional[date] = Query(None),
     end_date: Optional[date] = Query(None),
     db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    org_id: str = Depends(get_org_id_string)
 ):
     """Get delivery analytics and summary"""
     try:
@@ -345,7 +345,7 @@ def generate_eway_bill(
     challan_id: int,
     eway_data: dict,
     db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    org_id: str = Depends(get_org_id_string)
 ):
     """
     Generate e-way bill for delivery challan
@@ -444,7 +444,7 @@ def record_proof_of_delivery(
     challan_id: int,
     pod_data: dict,
     db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    org_id: str = Depends(get_org_id_string)
 ):
     """
     Record Proof of Delivery (POD)
@@ -531,7 +531,7 @@ def record_proof_of_delivery(
 
 @router.get("/{challan_id}/tracking")
 def get_delivery_tracking(challan_id: int, db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)):
+    org_id: str = Depends(get_org_id_string)):
     """
     Get real-time delivery tracking information
     
@@ -616,7 +616,7 @@ def update_delivery_tracking(
     challan_id: int,
     tracking_data: dict,
     db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    org_id: str = Depends(get_org_id_string)
 ):
     """
     Update delivery tracking status
@@ -696,7 +696,7 @@ def get_pending_deliveries(
     driver_id: Optional[int] = Query(None),
     date_filter: Optional[date] = Query(None),
     db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    org_id: str = Depends(get_org_id_string)
 ):
     """
     Get list of pending deliveries

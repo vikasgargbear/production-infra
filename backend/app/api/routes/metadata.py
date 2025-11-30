@@ -9,7 +9,7 @@ from typing import List, Dict, Any
 import logging
 
 from ...core.database import get_db
-from ...core.auth_utils import get_org_id_from_header
+from ...core.secure_auth import get_org_id_string  # SECURE: JWT-based auth
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -17,7 +17,7 @@ router = APIRouter()
 @router.get("/categories")
 async def get_product_categories(
     db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    org_id: str = Depends(get_org_id_string)
 ):
     """Get all product categories from database"""
     try:
@@ -42,7 +42,7 @@ async def get_product_categories(
 
 @router.get("/pack-types")
 async def get_pack_types(db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)):
+    org_id: str = Depends(get_org_id_string)):
     """Get all available pack types for products"""
     return {
         "pack_types": [
@@ -66,7 +66,7 @@ async def get_pack_types(db: Session = Depends(get_db),
 
 @router.get("/payment-terms")
 async def get_payment_terms(db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)):
+    org_id: str = Depends(get_org_id_string)):
     """Get all available payment terms"""
     return {
         "payment_terms": [
@@ -91,7 +91,7 @@ async def get_payment_terms(db: Session = Depends(get_db),
 
 @router.get("/payment-modes")
 async def get_payment_modes(db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)):
+    org_id: str = Depends(get_org_id_string)):
     """Get all available payment modes"""
     return {
         "payment_modes": [
@@ -111,7 +111,7 @@ async def get_payment_modes(db: Session = Depends(get_db),
 
 @router.get("/document-statuses")
 async def get_document_statuses(db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)):
+    org_id: str = Depends(get_org_id_string)):
     """Get all document status options"""
     return {
         "invoice_statuses": ["draft", "pending", "paid", "partial", "overdue", "cancelled"],
@@ -124,7 +124,7 @@ async def get_document_statuses(db: Session = Depends(get_db),
 
 @router.get("/units-of-measure")
 async def get_units_of_measure(db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)):
+    org_id: str = Depends(get_org_id_string)):
     """Get all units of measure"""
     return {
         "units": [
@@ -148,7 +148,7 @@ async def get_units_of_measure(db: Session = Depends(get_db),
 
 @router.get("/return-reasons")
 async def get_return_reasons(db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)):
+    org_id: str = Depends(get_org_id_string)):
     """Get all return reason options"""
     return {
         "sales_return_reasons": [
@@ -176,7 +176,7 @@ async def get_return_reasons(db: Session = Depends(get_db),
 
 @router.get("/tax-types")
 async def get_tax_types(db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)):
+    org_id: str = Depends(get_org_id_string)):
     """Get all tax type options"""
     return {
         "tax_types": [
@@ -194,7 +194,7 @@ async def get_tax_types(db: Session = Depends(get_db),
 
 @router.get("/transport-modes")
 async def get_transport_modes(db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)):
+    org_id: str = Depends(get_org_id_string)):
     """Get all transport mode options"""
     return {
         "transport_modes": [
@@ -210,7 +210,7 @@ async def get_transport_modes(db: Session = Depends(get_db),
 
 @router.get("/credit-plans")
 async def get_credit_plans(db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)):
+    org_id: str = Depends(get_org_id_string)):
     """Get available credit plans from customer groups"""
     try:
         # Fetch from customer_groups table filtered by group_type
@@ -263,7 +263,7 @@ async def get_credit_plans(db: Session = Depends(get_db),
 
 @router.get("/credit-days")
 async def get_credit_days_options(db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)):
+    org_id: str = Depends(get_org_id_string)):
     """Get standard credit days options"""
     return {
         "credit_days": [
@@ -284,7 +284,7 @@ async def get_credit_days_options(db: Session = Depends(get_db),
 
 @router.get("/credit-ratings")
 async def get_credit_ratings(db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)):
+    org_id: str = Depends(get_org_id_string)):
     """Get credit rating options from customer_groups table"""
     try:
         # Fetch from customer_groups table with group_type = 'CREDIT_RATING'
@@ -335,7 +335,7 @@ async def get_credit_ratings(db: Session = Depends(get_db),
 
 @router.get("/all")
 async def get_all_metadata(db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)):
+    org_id: str = Depends(get_org_id_string)):
     """Get all metadata in one call for caching - Enterprise approach"""
     try:
         # Fetch all metadata in one go for better performance

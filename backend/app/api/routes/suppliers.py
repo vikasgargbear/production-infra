@@ -9,7 +9,7 @@ from sqlalchemy import text, or_
 import logging
 
 from ...core.database import get_db
-from ...core.auth_utils import get_org_id_from_header
+from ...core.secure_auth import get_org_id_string  # SECURE: JWT-based auth
 from ...models import Supplier
 from ...core.crud_base import create_crud
 from ...schemas.supplier import SupplierCreate, SupplierUpdate, SupplierResponse, SupplierListResponse
@@ -29,7 +29,7 @@ def search_suppliers(
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
     db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    org_id: str = Depends(get_org_id_string)
 ):
     """
     Search suppliers by name, code, GSTIN, phone, or email
@@ -108,7 +108,7 @@ def get_suppliers(
     limit: int = 100,
     search: Optional[str] = Query(None, description="Search by supplier name"),
     db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    org_id: str = Depends(get_org_id_string)
 ):
     """Get suppliers with optional search"""
     try:
@@ -166,7 +166,7 @@ def get_suppliers(
 
 @router.get("/{supplier_id}")
 def get_supplier(supplier_id: int, db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)):
+    org_id: str = Depends(get_org_id_string)):
     """Get a single supplier by ID"""
     try:
         result = db.execute(text("""
@@ -215,7 +215,7 @@ def get_supplier(supplier_id: int, db: Session = Depends(get_db),
 
 @router.post("/")
 def create_supplier(supplier_data: SupplierCreate, db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)):
+    org_id: str = Depends(get_org_id_string)):
     """Create a new supplier"""
     try:
         # Convert org_id to UUID for database operations
@@ -359,7 +359,7 @@ def create_supplier(supplier_data: SupplierCreate, db: Session = Depends(get_db)
 
 @router.put("/{supplier_id}")
 def update_supplier(supplier_id: int, supplier_data: SupplierUpdate, db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)):
+    org_id: str = Depends(get_org_id_string)):
     """Update a supplier"""
     try:
         # Check if supplier exists
@@ -418,7 +418,7 @@ def update_supplier(supplier_id: int, supplier_data: SupplierUpdate, db: Session
 
 @router.delete("/{supplier_id}")
 def delete_supplier(supplier_id: int, db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)):
+    org_id: str = Depends(get_org_id_string)):
     """Delete a supplier"""
     try:
         # Check if supplier exists
@@ -447,7 +447,7 @@ def delete_supplier(supplier_id: int, db: Session = Depends(get_db),
 
 @router.get("/{supplier_id}/products")
 def get_supplier_products(supplier_id: int, db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)):
+    org_id: str = Depends(get_org_id_string)):
     """Get products from a specific supplier"""
     try:
         result = db.execute(
@@ -469,7 +469,7 @@ def get_supplier_products(supplier_id: int, db: Session = Depends(get_db),
 
 @router.get("/{supplier_id}/purchases")
 def get_supplier_purchases(supplier_id: int, skip: int = 0, limit: int = 100, db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)):
+    org_id: str = Depends(get_org_id_string)):
     """Get purchase history for a supplier"""
     try:
         result = db.execute(

@@ -14,7 +14,7 @@ import json
 
 from ...core.database import get_db
 from ...core.config import settings
-from ...core.auth_utils import get_org_id_from_header
+# Removed insecure get_org_id_from_header - using tenant service instead
 from ...core.tenant_service import get_tenant_aware_db, with_tenant_context, TenantAwareSession
 from ...core.org_context import get_org_context, OrgContext
 from ..schemas.product_schema import Product, ProductCreate, ProductUpdate, ProductResponse, ProductSearch

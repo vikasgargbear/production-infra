@@ -11,7 +11,7 @@ from datetime import datetime
 import json
 
 from ...core.database import get_db
-from ...core.auth_utils import get_org_id_from_header
+from ...core.secure_auth import get_org_id_string  # SECURE: JWT-based auth
 
 logger = logging.getLogger(__name__)
 
@@ -20,7 +20,7 @@ router = APIRouter(tags=["company"])
 @router.get("/info")
 def get_company_info(
     db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    org_id: str = Depends(get_org_id_string)
 ):
     """Get company information"""
     try:
@@ -188,7 +188,7 @@ def get_company_info(
 def update_company_info(
     company_data: Dict[str, Any] = Body(...),
     db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    org_id: str = Depends(get_org_id_string)
 ):
     """Update company information"""
     try:
@@ -364,7 +364,7 @@ def update_company_info(
 
 @router.get("/org-id")
 def get_organization_id(
-    org_id: str = Depends(get_org_id_from_header)
+    org_id: str = Depends(get_org_id_string)
 ):
     """Get current organization ID"""
     return {"org_id": org_id}
@@ -372,7 +372,7 @@ def get_organization_id(
 @router.get("/profile")
 def get_company_profile(
     db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    org_id: str = Depends(get_org_id_string)
 ):
     """Get complete company profile including all bank accounts - OPTIMIZED single query"""
     try:
@@ -476,7 +476,7 @@ def get_company_profile(
 @router.get("/bank-accounts")
 def get_bank_accounts(
     db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    org_id: str = Depends(get_org_id_string)
 ):
     """Get all bank accounts for the organization"""
     try:
@@ -528,7 +528,7 @@ def get_bank_accounts(
 def upload_qr_code(
     qr_data: Dict[str, str] = Body(...),
     db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    org_id: str = Depends(get_org_id_string)
 ):
     """Upload payment QR code"""
     try:
@@ -565,7 +565,7 @@ def upload_qr_code(
 @router.get("/settings")
 def get_company_settings(
     db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    org_id: str = Depends(get_org_id_string)
 ):
     """Get company settings"""
     try:
@@ -622,7 +622,7 @@ def get_company_settings(
 def update_company_settings(
     settings: Dict[str, Any] = Body(...),
     db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    org_id: str = Depends(get_org_id_string)
 ):
     """Update company settings"""
     try:

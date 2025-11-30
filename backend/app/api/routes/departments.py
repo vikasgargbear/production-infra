@@ -9,7 +9,7 @@ from typing import List, Optional, Dict, Any
 import logging
 
 from ...core.database import get_db
-from ...core.auth_utils import get_org_id_from_header
+from ...core.secure_auth import get_org_id_string  # SECURE: JWT-based auth
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -22,7 +22,7 @@ async def list_departments(
     search: Optional[str] = None,
     is_active: Optional[bool] = None,
     db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    org_id: str = Depends(get_org_id_string)
 ):
     """List all departments"""
     try:
@@ -98,7 +98,7 @@ async def list_departments(
 async def get_department(
     department_id: int,
     db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    org_id: str = Depends(get_org_id_string)
 ):
     """Get department by ID"""
     try:
@@ -132,7 +132,7 @@ async def get_department(
 async def create_department(
     department_data: Dict[str, Any],
     db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    org_id: str = Depends(get_org_id_string)
 ):
     """Create a new department"""
     try:
@@ -191,7 +191,7 @@ async def update_department(
     department_id: int,
     department_data: Dict[str, Any],
     db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    org_id: str = Depends(get_org_id_string)
 ):
     """Update department"""
     try:
@@ -254,7 +254,7 @@ async def update_department(
 async def delete_department(
     department_id: int,
     db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    org_id: str = Depends(get_org_id_string)
 ):
     """Delete (soft delete) department"""
     try:

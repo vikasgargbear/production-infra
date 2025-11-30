@@ -10,7 +10,7 @@ from datetime import date
 from uuid import UUID
 
 from ...core.database import get_db
-from ...core.auth_utils import get_org_id_from_header
+from ...core.secure_auth import get_org_id_string  # SECURE: JWT-based auth
 from ..schemas.billing import (
     InvoiceCreate, InvoiceResponse,
     PaymentCreate, PaymentResponse,
@@ -25,7 +25,7 @@ router = APIRouter(tags=["Billing & GST"])
 
 @router.get("/")
 async def billing_overview(db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)):
+    org_id: str = Depends(get_org_id_string)):
     """Get billing overview and available services"""
     try:
         # Simple billing stats
@@ -60,7 +60,7 @@ async def billing_overview(db: Session = Depends(get_db),
 async def generate_invoice(
     invoice_data: InvoiceCreate,
     db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    org_id: str = Depends(get_org_id_string)
 ):
     """
     Generate invoice from a confirmed/delivered order
@@ -86,7 +86,7 @@ async def generate_invoice(
 async def get_invoice(
     invoice_id: int,
     db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    org_id: str = Depends(get_org_id_string)
 ):
     """Get invoice details with all line items"""
     try:
@@ -119,7 +119,7 @@ async def list_invoices(
     from_date: Optional[date] = None,
     to_date: Optional[date] = None,
     db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    org_id: str = Depends(get_org_id_string)
 ):
     """
     List invoices with filtering options
@@ -183,7 +183,7 @@ async def list_invoices(
 async def record_payment(
     payment_data: PaymentCreate,
     db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    org_id: str = Depends(get_org_id_string)
 ):
     """
     Record payment against an invoice
@@ -226,7 +226,7 @@ async def list_payments(
     from_date: Optional[date] = None,
     to_date: Optional[date] = None,
     db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    org_id: str = Depends(get_org_id_string)
 ):
     """List payments with filtering options"""
     try:
@@ -268,7 +268,7 @@ async def get_gstr1_summary(
     from_date: date = Query(..., description="Start date for GSTR-1 report"),
     to_date: date = Query(..., description="End date for GSTR-1 report"),
     db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    org_id: str = Depends(get_org_id_string)
 ):
     """
     Generate GSTR-1 summary for outward supplies
@@ -292,7 +292,7 @@ async def get_gstr1_summary(
 @router.get("/summary", response_model=InvoiceSummary)
 async def get_invoice_summary(
     db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    org_id: str = Depends(get_org_id_string)
 ):
     """Get invoice summary for dashboard"""
     try:
@@ -307,7 +307,7 @@ async def cancel_invoice(
     invoice_id: int,
     reason: str = Query(..., description="Reason for cancellation"),
     db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    org_id: str = Depends(get_org_id_string)
 ):
     """Cancel an invoice (only if not paid)"""
     try:
@@ -358,7 +358,7 @@ async def cancel_invoice(
 async def get_printable_invoice(
     invoice_id: int,
     db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    org_id: str = Depends(get_org_id_string)
 ):
     """
     Get invoice data formatted for printing

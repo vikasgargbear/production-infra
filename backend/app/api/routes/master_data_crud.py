@@ -10,7 +10,7 @@ from datetime import datetime
 import logging
 
 from ...core.database import get_db
-from ...core.auth_utils import get_org_id_from_header
+from ...core.secure_auth import get_org_id_string  # SECURE: JWT-based auth
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -21,7 +21,7 @@ async def get_tax_entries(
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=1000),
     db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    org_id: str = Depends(get_org_id_string)
 ):
     """Get all tax entries"""
     try:
@@ -41,7 +41,7 @@ async def get_tax_entries(
 
 @router.post("/tax-entries")
 async def create_tax_entry(data: Dict[str, Any], db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)):
+    org_id: str = Depends(get_org_id_string)):
     """Create new tax entry"""
     try:
         # Mock implementation - should insert into database
@@ -58,7 +58,7 @@ async def update_tax_entry(
     tax_id: int,
     data: Dict[str, Any],
     db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    org_id: str = Depends(get_org_id_string)
 ):
     """Update tax entry"""
     try:
@@ -73,7 +73,7 @@ async def update_tax_entry(
 
 @router.delete("/tax-entries/{tax_id}")
 async def delete_tax_entry(tax_id: int, db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)):
+    org_id: str = Depends(get_org_id_string)):
     """Delete tax entry"""
     try:
         # Mock implementation - should delete from database
@@ -88,7 +88,7 @@ async def get_units_of_measure(
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=1000),
     db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    org_id: str = Depends(get_org_id_string)
 ):
     """Get all units of measure"""
     try:
@@ -109,7 +109,7 @@ async def get_units_of_measure(
 
 @router.post("/units-of-measure")
 async def create_unit_of_measure(data: Dict[str, Any], db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)):
+    org_id: str = Depends(get_org_id_string)):
     """Create new unit of measure"""
     try:
         # Mock implementation - should insert into database
@@ -126,7 +126,7 @@ async def update_unit_of_measure(
     unit_id: int,
     data: Dict[str, Any],
     db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    org_id: str = Depends(get_org_id_string)
 ):
     """Update unit of measure"""
     try:
@@ -141,7 +141,7 @@ async def update_unit_of_measure(
 
 @router.delete("/units-of-measure/{unit_id}")
 async def delete_unit_of_measure(unit_id: int, db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)):
+    org_id: str = Depends(get_org_id_string)):
     """Delete unit of measure"""
     try:
         # Mock implementation - should delete from database
@@ -156,7 +156,7 @@ async def get_storage_locations(
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=1000),
     db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    org_id: str = Depends(get_org_id_string)
 ):
     """Get all storage locations/warehouses"""
     try:
@@ -194,7 +194,7 @@ async def get_storage_locations(
 
 @router.post("/storage-locations")
 async def create_storage_location(data: Dict[str, Any], db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)):
+    org_id: str = Depends(get_org_id_string)):
     """Create new storage location"""
     try:
         # Mock implementation - should insert into database
@@ -211,7 +211,7 @@ async def update_storage_location(
     location_id: int,
     data: Dict[str, Any],
     db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    org_id: str = Depends(get_org_id_string)
 ):
     """Update storage location"""
     try:
@@ -226,7 +226,7 @@ async def update_storage_location(
 
 @router.delete("/storage-locations/{location_id}")
 async def delete_storage_location(location_id: int, db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)):
+    org_id: str = Depends(get_org_id_string)):
     """Delete storage location"""
     try:
         # Mock implementation - should delete from database

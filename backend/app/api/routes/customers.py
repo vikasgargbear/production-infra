@@ -11,7 +11,7 @@ import logging
 from functools import lru_cache
 
 from ...core.database import get_db, SessionLocal
-from ...core.auth_utils import get_org_id_from_header
+from ...core.secure_auth import get_org_id_string  # SECURE: JWT-based auth
 # FIXED: Restored tenant service imports with corrected dependency
 from ...core.tenant_service import get_tenant_aware_db, with_tenant_context, TenantAwareSession, TenantContext  
 from ...core.org_context import get_org_context, OrgContext
@@ -52,7 +52,7 @@ def check_area_column_exists() -> bool:
 async def create_customer(
     customer: CustomerCreate,
     db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    org_id: str = Depends(get_org_id_string)
 ):
     """
     Create a new customer with GST details and credit limit
@@ -348,7 +348,7 @@ async def list_customers(
 async def get_customer(
     customer_id: int,
     db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    org_id: str = Depends(get_org_id_string)
 ):
     """Get customer details with outstanding balance and statistics"""
     try:
@@ -389,7 +389,7 @@ async def update_customer(
     customer_id: int,
     customer_update: CustomerUpdate,
     db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    org_id: str = Depends(get_org_id_string)
 ):
     """Update customer details"""
     try:
@@ -448,7 +448,7 @@ async def get_customer_ledger(
     from_date: Optional[date] = Query(None, description="Start date for ledger"),
     to_date: Optional[date] = Query(None, description="End date for ledger"),
     db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    org_id: str = Depends(get_org_id_string)
 ):
     """Get customer transaction history (ledger)"""
     try:
@@ -463,7 +463,7 @@ async def get_customer_ledger(
 async def get_customer_outstanding(
     customer_id: int,
     db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    org_id: str = Depends(get_org_id_string)
 ):
     """Get outstanding invoices for a customer"""
     try:
@@ -478,7 +478,7 @@ async def get_customer_outstanding(
 async def get_customer_addresses(
     customer_id: int,
     db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    org_id: str = Depends(get_org_id_string)
 ):
     """Get all addresses for a customer"""
     try:
@@ -526,7 +526,7 @@ async def get_customer_addresses(
 async def delete_customer(
     customer_id: int,
     db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    org_id: str = Depends(get_org_id_string)
 ):
     """
     Delete a customer (soft delete)
@@ -589,7 +589,7 @@ async def record_customer_payment(
     customer_id: int,
     payment: PaymentRecord,
     db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    org_id: str = Depends(get_org_id_string)
 ):
     """
     Record payment from customer
@@ -614,7 +614,7 @@ async def check_credit_limit(
     customer_id: int,
     order_amount: float,
     db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    org_id: str = Depends(get_org_id_string)
 ):
     """Check if customer has sufficient credit for a new order"""
     try:

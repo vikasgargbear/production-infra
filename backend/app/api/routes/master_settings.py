@@ -12,7 +12,7 @@ from datetime import datetime
 import json
 
 from ...core.database import get_db
-from ...core.auth_utils import get_org_id_from_header
+from ...core.secure_auth import get_org_id_string  # SECURE: JWT-based auth
 
 logger = logging.getLogger(__name__)
 
@@ -66,7 +66,7 @@ class GeneralSettings(BaseModel):
 
 @router.get("/all")
 async def get_all_settings(
-    org_id: str = Depends(get_org_id_from_header),
+    org_id: str = Depends(get_org_id_string),
     db: Session = Depends(get_db)
 ):
     """
@@ -130,7 +130,7 @@ async def get_all_settings(
 
 @router.get("/billing")
 async def get_billing_settings(
-    org_id: str = Depends(get_org_id_from_header),
+    org_id: str = Depends(get_org_id_string),
     db: Session = Depends(get_db)
 ):
     """Get billing-specific settings"""
@@ -155,7 +155,7 @@ async def get_billing_settings(
 @router.put("/billing")
 async def update_billing_settings(
     settings: BillingSettings,
-    org_id: str = Depends(get_org_id_from_header),
+    org_id: str = Depends(get_org_id_string),
     db: Session = Depends(get_db)
 ):
     """Update billing configuration"""
@@ -203,7 +203,7 @@ async def update_billing_settings(
 
 @router.get("/inventory")
 async def get_inventory_settings(
-    org_id: str = Depends(get_org_id_from_header),
+    org_id: str = Depends(get_org_id_string),
     db: Session = Depends(get_db)
 ):
     """Get inventory-specific settings"""
@@ -227,7 +227,7 @@ async def get_inventory_settings(
 @router.put("/inventory")
 async def update_inventory_settings(
     settings: InventorySettings,
-    org_id: str = Depends(get_org_id_from_header),
+    org_id: str = Depends(get_org_id_string),
     db: Session = Depends(get_db)
 ):
     """Update inventory configuration"""
@@ -273,7 +273,7 @@ async def update_inventory_settings(
 
 @router.get("/compliance")
 async def get_compliance_settings(
-    org_id: str = Depends(get_org_id_from_header),
+    org_id: str = Depends(get_org_id_string),
     db: Session = Depends(get_db)
 ):
     """Get compliance-specific settings"""
@@ -296,7 +296,7 @@ async def get_compliance_settings(
 @router.put("/compliance")
 async def update_compliance_settings(
     settings: ComplianceSettings,
-    org_id: str = Depends(get_org_id_from_header),
+    org_id: str = Depends(get_org_id_string),
     db: Session = Depends(get_db)
 ):
     """Update compliance configuration"""
@@ -341,7 +341,7 @@ async def update_compliance_settings(
 
 @router.post("/initialize-defaults")
 async def initialize_default_settings(
-    org_id: str = Depends(get_org_id_from_header),
+    org_id: str = Depends(get_org_id_string),
     db: Session = Depends(get_db)
 ):
     """
@@ -418,7 +418,7 @@ async def initialize_default_settings(
 async def get_specific_setting(
     category: str,
     key: str,
-    org_id: str = Depends(get_org_id_from_header),
+    org_id: str = Depends(get_org_id_string),
     db: Session = Depends(get_db)
 ):
     """Get a specific setting by category and key"""
@@ -473,7 +473,7 @@ async def update_specific_setting(
     category: str,
     key: str,
     update: SettingUpdate,
-    org_id: str = Depends(get_org_id_from_header),
+    org_id: str = Depends(get_org_id_string),
     db: Session = Depends(get_db)
 ):
     """Update a specific setting"""
@@ -518,7 +518,7 @@ async def update_specific_setting(
 
 @router.get("/export")
 async def export_settings(
-    org_id: str = Depends(get_org_id_from_header),
+    org_id: str = Depends(get_org_id_string),
     db: Session = Depends(get_db)
 ):
     """Export all settings as JSON for backup or migration"""
@@ -538,7 +538,7 @@ async def export_settings(
 @router.post("/import")
 async def import_settings(
     settings_data: dict,
-    org_id: str = Depends(get_org_id_from_header),
+    org_id: str = Depends(get_org_id_string),
     db: Session = Depends(get_db)
 ):
     """Import settings from JSON backup"""

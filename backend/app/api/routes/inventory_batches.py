@@ -11,7 +11,7 @@ from datetime import datetime, date, timedelta
 from decimal import Decimal
 
 from ...core.database import get_db
-from ...core.auth_utils import get_org_id_from_header
+from ...core.secure_auth import get_org_id_string  # SECURE: JWT-based auth
 
 logger = logging.getLogger(__name__)
 
@@ -23,7 +23,7 @@ async def get_batches(
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=500),
     db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    org_id: str = Depends(get_org_id_string)
 ):
     """
     Get batches for a product or all batches
@@ -159,7 +159,7 @@ async def get_batches(
 async def get_available_batches(
     product_id: int,
     db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    org_id: str = Depends(get_org_id_string)
 ):
     """
     Get available (non-expired, with stock) batches for a product
@@ -197,7 +197,7 @@ async def get_available_batches(
 async def get_expiring_batches(
     days: int = Query(30, description="Days until expiry"),
     db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    org_id: str = Depends(get_org_id_string)
 ):
     """
     Get batches expiring within specified days
@@ -240,7 +240,7 @@ async def get_expiring_batches(
 async def create_batch(
     batch_data: dict,
     db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    org_id: str = Depends(get_org_id_string)
 ):
     """
     Create a new batch
@@ -304,7 +304,7 @@ async def update_batch_quantity(
     batch_id: str,
     quantity_data: dict,
     db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    org_id: str = Depends(get_org_id_string)
 ):
     """
     Update batch quantity

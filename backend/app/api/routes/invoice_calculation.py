@@ -10,7 +10,7 @@ import logging
 import time
 
 from ...core.database import get_db
-from ...core.auth_utils import get_org_id_from_header
+from ...core.secure_auth import get_org_id_string  # SECURE: JWT-based auth
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/invoices", tags=["Invoice Calculations"])
@@ -19,7 +19,7 @@ router = APIRouter(prefix="/invoices", tags=["Invoice Calculations"])
 async def calculate_invoice_totals(
     invoice_data: Dict[str, Any],
     db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    org_id: str = Depends(get_org_id_string)
 ):
     """
     Enterprise-grade invoice calculation endpoint
@@ -133,7 +133,7 @@ async def calculate_invoice_totals(
 async def calculate_batch_invoices(
     batch_data: Dict[str, List[Dict[str, Any]]],
     db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    org_id: str = Depends(get_org_id_string)
 ):
     """
     Batch calculation for multiple invoices

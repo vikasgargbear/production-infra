@@ -9,7 +9,7 @@ from sqlalchemy import text
 import logging
 
 from ...core.database import get_db
-from ...core.auth_utils import get_org_id_from_header
+from ...core.secure_auth import get_org_id_string  # SECURE: JWT-based auth
 
 logger = logging.getLogger(__name__)
 
@@ -19,7 +19,7 @@ router = APIRouter(prefix="/customer-outstanding", tags=["customer-outstanding"]
 async def get_customer_net_position(
     customer_id: Optional[int] = Query(None),
     db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    org_id: str = Depends(get_org_id_string)
 ):
     """
     Get customer net position including advances
@@ -189,7 +189,7 @@ async def get_customer_net_position(
 @router.get("/collection-metrics")
 async def get_collection_metrics(
     db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    org_id: str = Depends(get_org_id_string)
 ):
     """
     Get real-time collection metrics for dashboard

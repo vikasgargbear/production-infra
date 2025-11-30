@@ -13,7 +13,7 @@ from decimal import Decimal
 import uuid
 
 from ...core.database import get_db
-from ...core.auth_utils import get_org_id_from_header
+from ...core.secure_auth import get_org_id_string  # SECURE: JWT-based auth
 from ..services.document_number_service import DocumentNumberService
 
 # Pydantic models for request validation
@@ -47,7 +47,7 @@ router = APIRouter(tags=["sale-returns"])
 @router.get("/generate-number")
 async def generate_sales_return_number(
     db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    org_id: str = Depends(get_org_id_string)
 ):
     """Generate next sales return number using unified service"""
     try:
@@ -70,7 +70,7 @@ async def get_sale_returns(
     from_date: Optional[str] = None,
     to_date: Optional[str] = None,
     db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    org_id: str = Depends(get_org_id_string)
 ):
     """
     Get list of sale returns with optional filters
@@ -144,7 +144,7 @@ async def get_returnable_invoices(
     party_id: Optional[str] = None,
     invoice_number: Optional[str] = None,
     db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    org_id: str = Depends(get_org_id_string)
 ):
     """
     Get sales invoices that can be returned
@@ -203,7 +203,7 @@ async def get_returnable_invoices(
 async def get_returns_for_invoice(
     invoice_id: int,
     db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    org_id: str = Depends(get_org_id_string)
 ):
     """
     Get all returns for a specific invoice
@@ -247,7 +247,7 @@ async def get_returns_for_invoice(
 async def get_returnable_items(
     invoice_id: int,
     db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    org_id: str = Depends(get_org_id_string)
 ):
     """
     Get invoice items with accurate returnable quantities
@@ -314,7 +314,7 @@ async def get_returnable_items(
 async def get_invoice_items_for_return(
     invoice_id: str,
     db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    org_id: str = Depends(get_org_id_string)
 ):
     """
     Get items from a specific invoice for return
@@ -405,7 +405,7 @@ async def get_invoice_items_for_return(
 async def create_sale_return(
     return_data: SaleReturnCreate,
     db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    org_id: str = Depends(get_org_id_string)
 ):
     """
     Create a new sale return and generate credit note if customer has GST
@@ -852,7 +852,7 @@ async def create_sale_return(
 async def get_sale_return_detail(
     return_id: str,
     db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    org_id: str = Depends(get_org_id_string)
 ):
     """
     Get detailed information about a specific sale return
@@ -909,7 +909,7 @@ async def get_sale_return_detail(
 async def cancel_sale_return(
     return_id: str,
     db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    org_id: str = Depends(get_org_id_string)
 ):
     """
     Cancel a sale return (if allowed by business rules)

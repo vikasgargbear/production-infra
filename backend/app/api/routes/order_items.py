@@ -9,7 +9,7 @@ from sqlalchemy import text
 import logging
 
 from ...core.database import get_db
-from ...core.auth_utils import get_org_id_from_header
+from ...core.secure_auth import get_org_id_string  # SECURE: JWT-based auth
 from ...models import OrderItem
 from ...core.crud_base import create_crud
 
@@ -27,7 +27,7 @@ def get_order_items(
     order_id: Optional[int] = Query(None, description="Filter by order ID"),
     product_id: Optional[int] = Query(None, description="Filter by product ID"),
     db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    org_id: str = Depends(get_org_id_string)
 ):
     """Get order items with optional filtering"""
     try:
@@ -56,7 +56,7 @@ def get_order_items(
 
 @router.get("/{order_item_id}")
 def get_order_item(order_item_id: int, db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)):
+    org_id: str = Depends(get_org_id_string)):
     """Get a single order item by ID"""
     try:
         order_item = db.query(OrderItem).filter(OrderItem.order_item_id == order_item_id).first()
@@ -71,7 +71,7 @@ def get_order_item(order_item_id: int, db: Session = Depends(get_db),
 
 @router.post("/")
 def create_order_item(order_item_data: dict, db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)):
+    org_id: str = Depends(get_org_id_string)):
     """Create a new order item"""
     try:
         order_item = OrderItem(**order_item_data)
@@ -86,7 +86,7 @@ def create_order_item(order_item_data: dict, db: Session = Depends(get_db),
 
 @router.put("/{order_item_id}")
 def update_order_item(order_item_id: int, order_item_data: dict, db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)):
+    org_id: str = Depends(get_org_id_string)):
     """Update an order item"""
     try:
         order_item = db.query(OrderItem).filter(OrderItem.order_item_id == order_item_id).first()
@@ -108,7 +108,7 @@ def update_order_item(order_item_id: int, order_item_data: dict, db: Session = D
 
 @router.delete("/{order_item_id}")
 def delete_order_item(order_item_id: int, db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)):
+    org_id: str = Depends(get_org_id_string)):
     """Delete an order item"""
     try:
         order_item = db.query(OrderItem).filter(OrderItem.order_item_id == order_item_id).first()

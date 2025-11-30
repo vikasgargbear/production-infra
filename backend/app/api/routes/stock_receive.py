@@ -13,7 +13,7 @@ from sqlalchemy import text
 from pydantic import BaseModel, Field
 
 from ...core.database import get_db
-from ...core.auth_utils import get_org_id_from_header
+from ...core.secure_auth import get_org_id_string  # SECURE: JWT-based auth
 from ...dependencies import get_current_org
 
 # Default org ID for now
@@ -24,7 +24,7 @@ router = APIRouter(
 
 @router.get("/")
 async def stock_overview(db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)):
+    org_id: str = Depends(get_org_id_string)):
     """Get stock overview and available operations"""
     try:
         # Simple stock stats
@@ -279,7 +279,7 @@ async def get_current_stock(
     skip: int = 0,
     limit: int = 100,
     db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    org_id: str = Depends(get_org_id_string)
 ):
     """
     Get current stock levels for all products
@@ -416,7 +416,7 @@ async def update_product_properties(
     purchase_unit: Optional[str] = None,
     sale_unit: Optional[str] = None,
     db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    org_id: str = Depends(get_org_id_string)
 ):
     """
     Update product properties for stock management
@@ -480,7 +480,7 @@ async def update_product_properties(
 async def get_stock_alerts(
     alert_type: Optional[str] = None,
     db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    org_id: str = Depends(get_org_id_string)
 ):
     """
     Get stock alerts for low stock, expiring items, etc.
@@ -584,7 +584,7 @@ async def get_batches(
     skip: int = 0,
     limit: int = 100,
     db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    org_id: str = Depends(get_org_id_string)
 ):
     """
     Get batches with optional filters
@@ -679,7 +679,7 @@ async def get_batches(
 async def create_stock_adjustment(
     adjustment_data: dict,
     db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    org_id: str = Depends(get_org_id_string)
 ):
     """
     Create stock adjustment for damage, loss, or corrections

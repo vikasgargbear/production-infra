@@ -14,7 +14,7 @@ import shutil
 from decimal import Decimal
 
 from ...core.database import get_db
-from ...core.auth_utils import get_org_id_from_header
+from ...core.secure_auth import get_org_id_string  # SECURE: JWT-based auth
 
 # Try to import bill_parser if available
 try:
@@ -112,7 +112,7 @@ async def check_supplier(
     gstin: Optional[str] = None,
     name: Optional[str] = None,
     db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    org_id: str = Depends(get_org_id_string)
 ):
     """
     Check if supplier exists by GSTIN or name
@@ -179,7 +179,7 @@ async def check_supplier(
 async def parse_purchase_invoice_safe(
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    org_id: str = Depends(get_org_id_string)
 ):
     """
     Parse a purchase invoice PDF with better error handling
@@ -377,7 +377,7 @@ async def parse_purchase_invoice_safe(
 async def parse_purchase_invoice(
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    org_id: str = Depends(get_org_id_string)
 ):
     """
     Upload and parse a purchase invoice (PDF/image)
@@ -520,7 +520,7 @@ async def parse_purchase_invoice(
 def create_purchase_from_parsed(
     purchase_data: dict,
     db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    org_id: str = Depends(get_org_id_string)
 ):
     """
     Create purchase order from parsed/verified invoice data
@@ -692,7 +692,7 @@ def get_parse_history(
     skip: int = 0,
     limit: int = 10,
     db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    org_id: str = Depends(get_org_id_string)
 ):
     """
     Get history of parsed invoices (for future enhancement)
@@ -708,7 +708,7 @@ def get_parse_history(
 def validate_invoice_data(
     invoice_data: dict,
     db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    org_id: str = Depends(get_org_id_string)
 ):
     """
     Validate parsed invoice data before creation

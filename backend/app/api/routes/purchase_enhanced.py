@@ -10,7 +10,7 @@ from datetime import datetime
 from decimal import Decimal
 
 from ...core.database import get_db
-from ...core.auth_utils import get_org_id_from_header
+from ...core.secure_auth import get_org_id_string  # SECURE: JWT-based auth
 from ...core.jwt_auth import get_current_user_and_org
 
 logger = logging.getLogger(__name__)
@@ -1234,7 +1234,7 @@ def update_purchase_item(
     item_id: int,
     item_data: dict,
     db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    org_id: str = Depends(get_org_id_string)
 ):
     """Update a purchase item"""
     try:

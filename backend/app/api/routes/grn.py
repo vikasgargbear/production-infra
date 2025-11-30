@@ -11,7 +11,7 @@ from datetime import date, datetime
 from uuid import UUID
 
 from ...core.database import get_db
-from ...core.auth_utils import get_org_id_from_header
+from ...core.secure_auth import get_org_id_string  # SECURE: JWT-based auth
 from ...dependencies import get_current_org_id, get_current_user_id
 from ..services.document_number_service import DocumentNumberService
 
@@ -22,7 +22,7 @@ router = APIRouter(tags=["goods-receipt-notes"])
 @router.get("/generate-number")
 def generate_grn_number(
     db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    org_id: str = Depends(get_org_id_string)
 ):
     """Generate next GRN number using unified service"""
     try:
@@ -41,7 +41,7 @@ def generate_grn_number(
 async def create_grn(
     grn_data: Dict[str, Any],
     db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header),
+    org_id: str = Depends(get_org_id_string),
     user_id: Optional[int] = Depends(get_current_user_id)
 ):
     """Create a new Goods Receipt Note"""
@@ -227,7 +227,7 @@ def get_grns(
     date_from: Optional[date] = Query(None, description="Filter from date"),
     date_to: Optional[date] = Query(None, description="Filter to date"),
     db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    org_id: str = Depends(get_org_id_string)
 ):
     """Get list of GRNs with filtering and pagination"""
     try:
@@ -318,7 +318,7 @@ def get_grns(
 def get_grn_details(
     grn_id: int,
     db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    org_id: str = Depends(get_org_id_string)
 ):
     """Get detailed GRN information"""
     try:
@@ -378,7 +378,7 @@ def update_grn(
     grn_id: int,
     grn_data: Dict[str, Any],
     db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header),
+    org_id: str = Depends(get_org_id_string),
     user_id: Optional[int] = Depends(get_current_user_id)
 ):
     """Update GRN details"""
@@ -422,7 +422,7 @@ def approve_grn(
     grn_id: int,
     approval_data: Dict[str, Any],
     db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header),
+    org_id: str = Depends(get_org_id_string),
     user_id: Optional[int] = Depends(get_current_user_id)
 ):
     """Approve GRN and update stock if not already done"""

@@ -11,7 +11,7 @@ from datetime import datetime, date
 from decimal import Decimal
 
 from ...core.database import get_db
-from ...core.auth_utils import get_org_id_from_header
+from ...core.secure_auth import get_org_id_string  # SECURE: JWT-based auth
 
 logger = logging.getLogger(__name__)
 
@@ -24,7 +24,7 @@ async def get_party_statement(
     from_date: Optional[str] = None,
     to_date: Optional[str] = None,
     db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    org_id: str = Depends(get_org_id_string)
 ):
     """
     Get party statement using ONLY columns we know exist
@@ -217,7 +217,7 @@ async def get_balance(
     party_id: str,
     party_type: str = Query("customer"),
     db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    org_id: str = Depends(get_org_id_string)
 ):
     """Get party balance using verified columns"""
     try:
@@ -249,7 +249,7 @@ async def get_outstanding_bills(
     party_id: str,
     party_type: str = Query("customer"),
     db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    org_id: str = Depends(get_org_id_string)
 ):
     """Get outstanding bills using verified columns"""
     try:
@@ -297,7 +297,7 @@ async def get_outstanding_bills(
 async def get_aging_analysis(
     party_type: str = Query("customer"),
     db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    org_id: str = Depends(get_org_id_string)
 ):
     """Get aging analysis using verified columns"""
     try:

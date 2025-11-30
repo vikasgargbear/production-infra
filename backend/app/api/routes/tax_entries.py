@@ -11,7 +11,7 @@ from datetime import date, datetime
 from decimal import Decimal
 
 from ...core.database import get_db
-from ...core.auth_utils import get_org_id_from_header
+from ...core.secure_auth import get_org_id_string  # SECURE: JWT-based auth
 
 logger = logging.getLogger(__name__)
 
@@ -25,7 +25,7 @@ def get_tax_entries(
     start_date: Optional[date] = Query(None, description="Filter from date"),
     end_date: Optional[date] = Query(None, description="Filter to date"),
     db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    org_id: str = Depends(get_org_id_string)
 ):
     """Get tax entries from sales invoices and purchase records"""
     try:
@@ -82,7 +82,7 @@ def get_tax_entries(
 
 @router.get("/{entry_id}")
 def get_tax_entry(entry_id: int, db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)):
+    org_id: str = Depends(get_org_id_string)):
     """Get a single tax entry by invoice ID"""
     try:
         result = db.execute(
@@ -122,7 +122,7 @@ def get_tax_entry(entry_id: int, db: Session = Depends(get_db),
 
 @router.post("/calculate")
 def calculate_tax(calculation_data: dict, db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)):
+    org_id: str = Depends(get_org_id_string)):
     """Calculate tax for given parameters"""
     try:
         taxable_amount = Decimal(str(calculation_data.get("taxable_amount", 0)))
@@ -161,7 +161,7 @@ def get_gstr1_summary(
     month: int = Query(..., description="Month (1-12)"),
     year: int = Query(..., description="Year"),
     db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    org_id: str = Depends(get_org_id_string)
 ):
     """Get GSTR-1 summary for the specified month using sales data"""
     try:
@@ -268,7 +268,7 @@ def get_tax_analytics(
     start_date: Optional[date] = Query(None),
     end_date: Optional[date] = Query(None),
     db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    org_id: str = Depends(get_org_id_string)
 ):
     """Get tax analytics and summary from sales data"""
     try:

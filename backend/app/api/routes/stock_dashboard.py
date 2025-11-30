@@ -10,7 +10,7 @@ import logging
 from datetime import datetime, date, timedelta
 
 from ...core.database import get_db
-from ...core.auth_utils import get_org_id_from_header
+from ...core.secure_auth import get_org_id_string  # SECURE: JWT-based auth
 
 logger = logging.getLogger(__name__)
 
@@ -18,7 +18,7 @@ router = APIRouter(prefix="/stock", tags=["stock-dashboard"])
 
 @router.get("/dashboard")
 def get_stock_dashboard(db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)):
+    org_id: str = Depends(get_org_id_string)):
     """Get stock dashboard metrics"""
     try:
         dashboard_data = {}
@@ -113,7 +113,7 @@ def get_current_stock(
     category: Optional[str] = Query(None, description="Filter by category"),
     low_stock_only: bool = Query(False, description="Show only low stock items"),
     db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    org_id: str = Depends(get_org_id_string)
 ):
     """Get current stock levels for all products"""
     try:
@@ -224,7 +224,7 @@ def get_current_stock(
 
 @router.get("/alerts")
 def get_stock_alerts(db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)):
+    org_id: str = Depends(get_org_id_string)):
     """Get stock alerts for low stock and out of stock items"""
     try:
         query = """
@@ -297,7 +297,7 @@ def get_stock_alerts(db: Session = Depends(get_db),
 def get_recent_movements(
     limit: int = Query(10, ge=1, le=50),
     db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    org_id: str = Depends(get_org_id_string)
 ):
     """Get recent stock movements"""
     try:

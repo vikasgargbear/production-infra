@@ -12,7 +12,7 @@ from decimal import Decimal
 import uuid
 
 from ...core.database import get_db
-from ...core.auth_utils import get_org_id_from_header
+from ...core.secure_auth import get_org_id_string  # SECURE: JWT-based auth
 
 logger = logging.getLogger(__name__)
 
@@ -31,7 +31,7 @@ def get_inventory_movements(
     sort: Optional[str] = Query("movement_date", description="Sort field"),
     order: Optional[str] = Query("desc", description="Sort order (asc/desc)"),
     db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    org_id: str = Depends(get_org_id_string)
 ):
     """
     Get inventory movements with direct database query
@@ -228,7 +228,7 @@ def get_movement_reasons():
 def create_stock_receive(
     receive_data: dict,
     db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    org_id: str = Depends(get_org_id_string)
 ):
     """
     Create a stock receive entry (increase inventory)
@@ -343,7 +343,7 @@ def create_stock_receive(
 def create_stock_issue(
     issue_data: dict,
     db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    org_id: str = Depends(get_org_id_string)
 ):
     """
     Create a stock issue entry (decrease inventory)
@@ -449,7 +449,7 @@ def create_stock_issue(
 def create_stock_transfer(
     transfer_data: dict,
     db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    org_id: str = Depends(get_org_id_string)
 ):
     """
     Transfer stock between locations/warehouses
@@ -514,7 +514,7 @@ def create_stock_transfer(
 def get_product_batches(
     product_id: str,
     db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    org_id: str = Depends(get_org_id_string)
 ):
     """
     Get available batches for a product with stock info
@@ -556,7 +556,7 @@ def get_product_batches(
 def get_near_expiry_stock(
     days: int = Query(90, description="Days to expiry"),
     db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    org_id: str = Depends(get_org_id_string)
 ):
     """
     Get products nearing expiry
@@ -598,7 +598,7 @@ def get_near_expiry_stock(
 @router.get("/low-stock")
 def get_low_stock_items(
     db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    org_id: str = Depends(get_org_id_string)
 ):
     """
     Get products with low stock based on reorder level

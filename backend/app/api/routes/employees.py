@@ -11,7 +11,7 @@ import logging
 import json
 
 from ...core.database import get_db
-from ...core.auth_utils import get_org_id_from_header
+from ...core.secure_auth import get_org_id_string  # SECURE: JWT-based auth
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -26,7 +26,7 @@ async def list_employees(
     search: Optional[str] = None,
     is_active: Optional[bool] = None,
     db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    org_id: str = Depends(get_org_id_string)
 ):
     """List all employees with pagination and search"""
     try:
@@ -124,7 +124,7 @@ async def list_employees(
 async def get_employee(
     employee_id: int, 
     db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    org_id: str = Depends(get_org_id_string)
 ):
     """Get employee by ID"""
     try:
@@ -164,7 +164,7 @@ async def get_employee(
 async def create_employee(
     employee_data: Dict[str, Any], 
     db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    org_id: str = Depends(get_org_id_string)
 ):
     """Create a new employee"""
     try:
@@ -266,7 +266,7 @@ async def update_employee(
     employee_id: int,
     employee_data: Dict[str, Any], 
     db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    org_id: str = Depends(get_org_id_string)
 ):
     """Update employee"""
     try:
@@ -394,7 +394,7 @@ async def update_employee(
 async def delete_employee(
     employee_id: int,
     db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    org_id: str = Depends(get_org_id_string)
 ):
     """Delete (soft delete) employee"""
     try:

@@ -11,7 +11,7 @@ import logging
 import json
 
 from ...core.database import get_db
-from ...core.auth_utils import get_org_id_from_header
+from ...core.secure_auth import get_org_id_string  # SECURE: JWT-based auth
 
 logger = logging.getLogger(__name__)
 
@@ -26,7 +26,7 @@ router = APIRouter(tags=["Bank Accounts"])
 @router.get("/")
 def get_bank_accounts(
     db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    org_id: str = Depends(get_org_id_string)
 ):
     """Get all bank accounts for an organization"""
     try:
@@ -85,7 +85,7 @@ def get_bank_accounts(
 def create_bank_account(
     account_data: dict = Body(...),
     db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    org_id: str = Depends(get_org_id_string)
 ):
     """Create a new bank account"""
     try:
@@ -147,7 +147,7 @@ def update_bank_account(
     account_id: int,
     account_data: dict = Body(...),
     db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    org_id: str = Depends(get_org_id_string)
 ):
     """Update a bank account"""
     try:
@@ -210,7 +210,7 @@ def update_bank_account(
 def delete_bank_account(
     account_id: int,
     db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    org_id: str = Depends(get_org_id_string)
 ):
     """Delete (soft delete) a bank account"""
     try:
@@ -257,7 +257,7 @@ def delete_bank_account(
 def set_default_account(
     account_id: int,
     db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    org_id: str = Depends(get_org_id_string)
 ):
     """Set a bank account as default"""
     try:

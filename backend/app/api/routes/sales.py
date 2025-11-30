@@ -13,7 +13,7 @@ import uuid
 from pydantic import BaseModel, Field
 
 from ...core.database import get_db
-from ...core.auth_utils import get_org_id_from_header
+from ...core.secure_auth import get_org_id_string  # SECURE: JWT-based auth
 from ..services.gst_service import GSTService
 
 logger = logging.getLogger(__name__)
@@ -77,7 +77,7 @@ class SaleResponse(BaseModel):
 async def create_direct_sale(
     sale_data: SaleCreate,
     db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    org_id: str = Depends(get_org_id_string)
 ):
     """
     Create a direct sale/cash sale with invoice
@@ -296,7 +296,7 @@ async def get_sales(
     limit: int = Query(20, ge=1, le=100),
     party_id: Optional[int] = None,
     from_date: Optional[str] = None,
-    org_id: str = Depends(get_org_id_from_header),
+    org_id: str = Depends(get_org_id_string),
     to_date: Optional[str] = None,
     payment_method: Optional[str] = None,
     db: Session = Depends(get_db)
@@ -370,7 +370,7 @@ async def get_sales(
 async def get_outstanding_sales(
     customer_id: Optional[int] = Query(None),
     db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    org_id: str = Depends(get_org_id_string)
 ):
     """
     Get outstanding sales/invoices with advance payment information
@@ -519,7 +519,7 @@ async def get_outstanding_sales(
 async def get_sale_detail(
     sale_id: str,
     db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    org_id: str = Depends(get_org_id_string)
 ):
     """
     Get detailed sale information including items
@@ -570,7 +570,7 @@ async def get_sale_detail(
 async def calculate_sale_totals(
     sale_data: SaleCreate,
     db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    org_id: str = Depends(get_org_id_string)
 ):
     """
     Calculate sale totals without creating the sale
@@ -626,7 +626,7 @@ async def calculate_sale_totals(
 async def get_sale_by_invoice(
     invoice_number: str,
     db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    org_id: str = Depends(get_org_id_string)
 ):
     """
     Get sale by invoice number
@@ -657,7 +657,7 @@ async def get_sale_by_invoice(
 async def get_sale_print_data(
     sale_id: str,
     db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    org_id: str = Depends(get_org_id_string)
 ):
     """
     Get sale data formatted for printing

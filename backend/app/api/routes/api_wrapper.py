@@ -9,7 +9,7 @@ from typing import List, Optional, Dict, Any
 from datetime import date, datetime
 import json
 from ...core.database import get_db
-from ...core.auth_utils import get_org_id_from_header
+from ...core.secure_auth import get_org_id_string  # SECURE: JWT-based auth
 
 router = APIRouter()
 
@@ -22,7 +22,7 @@ async def search_customers(
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
     db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    org_id: str = Depends(get_org_id_string)
 ):
     """
     Search customers using PostgreSQL function
@@ -55,7 +55,7 @@ async def search_customers(
 async def get_customer_details(
     customer_id: int,
     db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    org_id: str = Depends(get_org_id_string)
 ):
     """
     Get customer details with ledger summary
@@ -79,7 +79,7 @@ async def get_customer_details(
 async def create_customer(
     customer_data: Dict[str, Any] = Body(...),
     db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    org_id: str = Depends(get_org_id_string)
 ):
     """
     Create new customer
@@ -108,7 +108,7 @@ async def search_products(
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
     db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    org_id: str = Depends(get_org_id_string)
 ):
     """
     Search products with filters
@@ -145,7 +145,7 @@ async def get_product_stock(
     branch_id: Optional[int] = None,
     include_reserved: bool = Query(False),
     db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    org_id: str = Depends(get_org_id_string)
 ):
     """
     Get real-time stock availability
@@ -178,7 +178,7 @@ async def get_product_stock(
 async def create_invoice(
     invoice_data: Dict[str, Any] = Body(...),
     db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    org_id: str = Depends(get_org_id_string)
 ):
     """
     Create new invoice with all calculations
@@ -205,7 +205,7 @@ async def create_invoice(
 async def get_invoice_details(
     invoice_id: int,
     db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    org_id: str = Depends(get_org_id_string)
 ):
     """
     Get complete invoice details
@@ -234,7 +234,7 @@ async def search_invoices(
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
     db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    org_id: str = Depends(get_org_id_string)
 ):
     """
     Search invoices with filters
@@ -276,7 +276,7 @@ async def search_invoices(
 async def record_payment(
     payment_data: Dict[str, Any] = Body(...),
     db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    org_id: str = Depends(get_org_id_string)
 ):
     """
     Record customer payment with auto-allocation
@@ -302,7 +302,7 @@ async def record_payment(
 async def get_outstanding_invoices(
     customer_id: int,
     db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    org_id: str = Depends(get_org_id_string)
 ):
     """
     Get outstanding invoices for payment allocation
@@ -326,7 +326,7 @@ async def get_reorder_alerts(
     branch_id: Optional[int] = None,
     category_id: Optional[int] = None,
     db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    org_id: str = Depends(get_org_id_string)
 ):
     """
     Get products requiring reorder
@@ -356,7 +356,7 @@ async def get_expiring_items(
     days_to_expiry: int = Query(30, ge=1, le=365),
     branch_id: Optional[int] = None,
     db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    org_id: str = Depends(get_org_id_string)
 ):
     """
     Get items expiring soon
@@ -387,7 +387,7 @@ async def get_expiring_items(
 async def get_dashboard_stats(
     branch_id: Optional[int] = None,
     db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    org_id: str = Depends(get_org_id_string)
 ):
     """
     Get comprehensive dashboard statistics
@@ -411,7 +411,7 @@ async def get_sales_analytics(
     group_by: str = Query("day", regex="^(day|week|month)$"),
     branch_id: Optional[int] = None,
     db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    org_id: str = Depends(get_org_id_string)
 ):
     """
     Get sales analytics with trends
@@ -447,7 +447,7 @@ async def generate_gstr1(
     month: int = Query(..., ge=1, le=12),
     year: int = Query(..., ge=2000),
     db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    org_id: str = Depends(get_org_id_string)
 ):
     """
     Generate GSTR-1 data

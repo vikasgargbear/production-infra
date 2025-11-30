@@ -13,7 +13,7 @@ from pydantic import BaseModel, Field
 import uuid
 
 from ...core.database import get_db
-from ...core.auth_utils import get_org_id_from_header
+from ...core.secure_auth import get_org_id_string  # SECURE: JWT-based auth
 from ...core.auth import get_current_org
 
 router = APIRouter(
@@ -57,7 +57,7 @@ async def create_quick_sale(
     db: Session = Depends(get_db),
     current_org = Depends(get_current_org)
 ,
-    org_id: str = Depends(get_org_id_from_header)
+    org_id: str = Depends(get_org_id_string)
 ):
     """
     The simplest way to create a sale - just send customer and items!

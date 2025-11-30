@@ -11,7 +11,7 @@ from datetime import datetime
 from decimal import Decimal
 
 from ...core.database import get_db
-from ...core.auth_utils import get_org_id_from_header
+from ...core.secure_auth import get_org_id_string  # SECURE: JWT-based auth
 
 logger = logging.getLogger(__name__)
 
@@ -25,7 +25,7 @@ async def get_supplier_invoices(
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=5000),
     db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    org_id: str = Depends(get_org_id_string)
 ):
     """
     Get all supplier invoices with GST details for input credit calculation
@@ -102,7 +102,7 @@ async def get_returnable_invoices(
     skip: int = Query(0, ge=0),
     limit: int = Query(50, ge=1, le=100),
     db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    org_id: str = Depends(get_org_id_string)
 ):
     """
     Get supplier invoices that have returnable items
@@ -178,7 +178,7 @@ async def get_returnable_invoices(
 async def get_invoice_details(
     invoice_id: int,
     db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    org_id: str = Depends(get_org_id_string)
 ):
     """
     Get detailed information about a supplier invoice
@@ -214,7 +214,7 @@ async def get_invoice_details(
 async def get_invoice_items(
     invoice_id: int,
     db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    org_id: str = Depends(get_org_id_string)
 ):
     """
     Get items for a supplier invoice

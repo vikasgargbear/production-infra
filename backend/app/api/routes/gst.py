@@ -12,7 +12,7 @@ from decimal import Decimal
 
 from ...core.database import get_db
 from ...utils.branch_utils import get_default_branch_id
-from ...core.auth_utils import get_org_id_from_header
+from ...core.secure_auth import get_org_id_string  # SECURE: JWT-based auth
 from ...api.services.gst_service import GSTService
 
 router = APIRouter(tags=["GST"])
@@ -42,7 +42,7 @@ def get_organization_gstin(db: Session, org_id: str) -> Optional[str]:
 async def get_gst_dashboard(
     period: str = Query("current", description="Period: current, previous, or YYYY-MM"),
     db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    org_id: str = Depends(get_org_id_string)
 ):
     """
     Get GST dashboard summary with real data from invoices
@@ -231,7 +231,7 @@ async def get_gst_dashboard(
 async def get_returns_status(
     period: str = Query("current"),
     db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    org_id: str = Depends(get_org_id_string)
 ):
     """
     Get GST returns filing status - OPTIMIZED VERSION
@@ -330,7 +330,7 @@ async def file_gst_return(
     return_type: str,
     data: Dict[str, Any],
     db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    org_id: str = Depends(get_org_id_string)
 ):
     """
     File GST return (simulation)
@@ -364,7 +364,7 @@ async def calculate_gst(
     is_interstate: bool = False,
     gst_rate: float = 18.0,
     db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    org_id: str = Depends(get_org_id_string)
 ):
     """
     Calculate GST amounts for given parameters
@@ -409,7 +409,7 @@ async def calculate_gst(
 async def verify_gst_data(
     period: str = Query("current"),
     db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    org_id: str = Depends(get_org_id_string)
 ):
     """
     Verify GST data for accuracy and compliance
@@ -496,7 +496,7 @@ async def verify_gst_data(
 async def reconcile_gst_data(
     period: str,
     db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    org_id: str = Depends(get_org_id_string)
 ):
     """
     Auto-reconcile GST data with GSTR-2A
@@ -568,7 +568,7 @@ async def reconcile_gst_data(
 @router.get("/compliance/status")
 async def get_compliance_status(
     db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    org_id: str = Depends(get_org_id_string)
 ):
     """
     Get GST compliance status
@@ -638,7 +638,7 @@ async def get_compliance_status(
 @router.get("/settings")
 async def get_gst_settings(
     db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    org_id: str = Depends(get_org_id_string)
 ):
     """
     Get GST configuration settings
@@ -670,7 +670,7 @@ async def get_gst_settings(
 async def get_gst_metrics(
     period: str = Query("current"),
     db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    org_id: str = Depends(get_org_id_string)
 ):
     """Get detailed GST metrics"""
     dashboard_data = await get_gst_dashboard(period, db, org_id)
@@ -698,7 +698,7 @@ async def get_gstr2a_report(
     from_date: str = Query(..., description="Start date (YYYY-MM-DD)"),
     to_date: str = Query(..., description="End date (YYYY-MM-DD)"),
     db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    org_id: str = Depends(get_org_id_string)
 ):
     """
     Get GSTR-2A report data - inward supplies and input credit
@@ -786,7 +786,7 @@ async def get_credit_debit_notes_report(
     to_date: str = Query(..., description="End date (YYYY-MM-DD)"),
     note_type: str = Query("all", description="Type: credit, debit, or all"),
     db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    org_id: str = Depends(get_org_id_string)
 ):
     """
     Get credit/debit notes for GST reporting

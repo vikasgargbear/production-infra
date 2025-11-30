@@ -10,7 +10,7 @@ import logging
 import json
 
 from ...core.database import get_db
-from ...core.auth_utils import get_org_id_from_header
+from ...core.secure_auth import get_org_id_string  # SECURE: JWT-based auth
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -23,7 +23,7 @@ async def list_branches(
     search: Optional[str] = None,
     is_active: Optional[bool] = None,
     db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    org_id: str = Depends(get_org_id_string)
 ):
     """List all branches"""
     try:
@@ -103,7 +103,7 @@ async def list_branches(
 async def get_branch(
     branch_id: int,
     db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    org_id: str = Depends(get_org_id_string)
 ):
     """Get branch by ID"""
     try:
@@ -137,7 +137,7 @@ async def get_branch(
 async def create_branch(
     branch_data: Dict[str, Any],
     db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    org_id: str = Depends(get_org_id_string)
 ):
     """Create a new branch"""
     try:
@@ -215,7 +215,7 @@ async def update_branch(
     branch_id: int,
     branch_data: Dict[str, Any],
     db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    org_id: str = Depends(get_org_id_string)
 ):
     """Update branch"""
     try:
@@ -298,7 +298,7 @@ async def update_branch(
 async def delete_branch(
     branch_id: int,
     db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    org_id: str = Depends(get_org_id_string)
 ):
     """Delete (soft delete) branch"""
     try:

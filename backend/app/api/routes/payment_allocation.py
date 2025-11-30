@@ -12,7 +12,7 @@ from datetime import datetime, date
 from decimal import Decimal
 
 from ...core.database import get_db
-from ...core.auth_utils import get_org_id_from_header
+from ...core.secure_auth import get_org_id_string  # SECURE: JWT-based auth
 
 logger = logging.getLogger(__name__)
 
@@ -36,7 +36,7 @@ class AutoAllocationRequest(BaseModel):
 async def allocate_payment(
     allocation: AllocationRequest,
     db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    org_id: str = Depends(get_org_id_string)
 ):
     """
     Manually allocate a payment to an invoice
@@ -158,7 +158,7 @@ async def allocate_payment(
 async def allocate_payment_bulk(
     request: BulkAllocationRequest,
     db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    org_id: str = Depends(get_org_id_string)
 ):
     """
     Allocate a payment to multiple invoices
@@ -198,7 +198,7 @@ async def allocate_payment_bulk(
 async def auto_allocate_payment(
     request: AutoAllocationRequest,
     db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    org_id: str = Depends(get_org_id_string)
 ):
     """
     Automatically allocate payment to outstanding invoices using FIFO/LIFO
@@ -250,7 +250,7 @@ async def auto_allocate_payment(
 async def get_payment_allocations(
     payment_id: int,
     db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    org_id: str = Depends(get_org_id_string)
 ):
     """
     Get all allocations for a payment
@@ -296,7 +296,7 @@ async def get_payment_allocations(
 async def get_invoice_payments(
     invoice_id: int,
     db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    org_id: str = Depends(get_org_id_string)
 ):
     """
     Get all payments allocated to an invoice
@@ -368,7 +368,7 @@ async def get_invoice_payments(
 async def delete_allocation(
     allocation_id: int,
     db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    org_id: str = Depends(get_org_id_string)
 ):
     """
     Delete an allocation (unallocate payment from invoice)
@@ -412,7 +412,7 @@ async def delete_allocation(
 async def get_unallocated_payments(
     party_id: Optional[int] = None,
     db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    org_id: str = Depends(get_org_id_string)
 ):
     """
     Get payments with unallocated amounts
@@ -471,7 +471,7 @@ async def get_unallocated_payments(
 async def get_unpaid_invoices(
     customer_id: Optional[int] = None,
     db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    org_id: str = Depends(get_org_id_string)
 ):
     """
     Get invoices with outstanding amounts

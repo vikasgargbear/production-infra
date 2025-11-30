@@ -11,7 +11,7 @@ import bcrypt
 from datetime import datetime
 
 from ...core.database import get_db
-from ...core.auth_utils import get_org_id_from_header
+from ...core.secure_auth import get_org_id_string  # SECURE: JWT-based auth
 
 logger = logging.getLogger(__name__)
 
@@ -23,7 +23,7 @@ def get_org_users(
     limit: int = 100,
     search: Optional[str] = Query(None, description="Search by name or email"),
     db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    org_id: str = Depends(get_org_id_string)
 ):
     """Get organization users with optional search"""
     try:
@@ -72,7 +72,7 @@ def get_org_users(
 
 @router.get("/{user_id}")
 def get_org_user(user_id: int, db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)):
+    org_id: str = Depends(get_org_id_string)):
     """Get a single org user by ID"""
     try:
         result = db.execute(
@@ -111,7 +111,7 @@ def get_org_user(user_id: int, db: Session = Depends(get_db),
 
 @router.post("/")
 def create_org_user(user_data: dict, db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)):
+    org_id: str = Depends(get_org_id_string)):
     """Create a new org user"""
     try:
         # IMPORTANT: Convert org_id to UUID as per migration guide
@@ -181,7 +181,7 @@ def create_org_user(user_data: dict, db: Session = Depends(get_db),
 
 @router.put("/{user_id}")
 def update_org_user(user_id: int, user_data: dict, db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)):
+    org_id: str = Depends(get_org_id_string)):
     """Update an org user"""
     try:
         # Don't allow updating password through this endpoint
@@ -253,7 +253,7 @@ def update_org_user(user_id: int, user_data: dict, db: Session = Depends(get_db)
 
 @router.delete("/{user_id}")
 def delete_org_user(user_id: int, db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)):
+    org_id: str = Depends(get_org_id_string)):
     """Delete an org user"""
     try:
         result = db.execute(
@@ -276,7 +276,7 @@ def delete_org_user(user_id: int, db: Session = Depends(get_db),
 
 @router.post("/{user_id}/reset-password")
 def reset_password(user_id: int, db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)):
+    org_id: str = Depends(get_org_id_string)):
     """Reset user password (send reset email)"""
     try:
         # In a real implementation, this would:

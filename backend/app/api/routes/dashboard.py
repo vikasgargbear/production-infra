@@ -10,7 +10,7 @@ import logging
 from datetime import date, datetime, timedelta, timezone
 
 from ...core.database import get_db
-from ...core.auth_utils import get_org_id_from_header
+from ...core.secure_auth import get_org_id_string  # SECURE: JWT-based auth
 
 logger = logging.getLogger(__name__)
 
@@ -18,7 +18,7 @@ router = APIRouter(tags=["dashboard"])
 
 @router.get("/")
 async def get_dashboard_overview(db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)):
+    org_id: str = Depends(get_org_id_string)):
     """Get main dashboard overview"""
     try:
         # Return the same data as stats for consistency
@@ -34,7 +34,7 @@ async def get_dashboard_overview(db: Session = Depends(get_db),
 
 @router.get("/stats")
 def get_dashboard_stats(db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)):
+    org_id: str = Depends(get_org_id_string)):
     """Get overall dashboard statistics"""
     try:
         # Get basic counts
@@ -80,7 +80,7 @@ def get_dashboard_stats(db: Session = Depends(get_db),
 def get_recent_orders(
     limit: int = Query(10, description="Number of recent orders to fetch"),
     db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    org_id: str = Depends(get_org_id_string)
 ):
     """Get recent orders for dashboard"""
     try:
@@ -114,7 +114,7 @@ def get_revenue_data(
     start_date: Optional[date] = Query(None, description="Start date for custom range"),
     end_date: Optional[date] = Query(None, description="End date for custom range"),
     db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    org_id: str = Depends(get_org_id_string)
 ):
     """Get revenue data for charts"""
     try:
@@ -176,7 +176,7 @@ def get_top_products(
     limit: int = Query(10, description="Number of top products"),
     period_days: int = Query(30, description="Period in days"),
     db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    org_id: str = Depends(get_org_id_string)
 ):
     """Get top selling products"""
     try:
@@ -209,7 +209,7 @@ def get_top_products(
 
 @router.get("/inventory-alerts")
 def get_inventory_alerts(db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)):
+    org_id: str = Depends(get_org_id_string)):
     """Get inventory alerts (low stock, expiring soon)"""
     try:
         # Low stock products
@@ -269,7 +269,7 @@ def get_customer_analytics(
     limit: int = Query(10, description="Number of top customers"),
     period_days: int = Query(30, description="Period in days"),
     db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    org_id: str = Depends(get_org_id_string)
 ):
     """Get customer analytics"""
     try:
@@ -306,7 +306,7 @@ def get_financial_summary(
     start_date: Optional[date] = Query(None, description="Start date"),
     end_date: Optional[date] = Query(None, description="End date"),
     db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    org_id: str = Depends(get_org_id_string)
 ):
     """Get financial summary"""
     try:
@@ -343,7 +343,7 @@ def get_financial_summary(
 @router.get("/kpis")
 def get_dashboard_kpis(
     db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    org_id: str = Depends(get_org_id_string)
 ):
     """Get KPI summary for dashboard - matches test expectations"""
     try:
@@ -358,7 +358,7 @@ def get_sales_analytics(
     start_date: Optional[date] = Query(None, description="Start date"),
     end_date: Optional[date] = Query(None, description="End date"),
     db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    org_id: str = Depends(get_org_id_string)
 ):
     """Get sales analytics for dashboard"""
     try:
@@ -371,7 +371,7 @@ def get_sales_analytics(
 @router.get("/inventory-summary")
 def get_inventory_summary(
     db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    org_id: str = Depends(get_org_id_string)
 ):
     """Get inventory summary for dashboard"""
     try:
@@ -400,7 +400,7 @@ def get_inventory_summary(
 def get_top_customers(
     limit: int = Query(10, description="Number of top customers"),
     db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    org_id: str = Depends(get_org_id_string)
 ):
     """Get top customers - matches test expectations"""
     try:
@@ -414,7 +414,7 @@ def get_top_customers(
 def get_expiry_alerts(
     days: int = Query(90, description="Days ahead for expiry check"),
     db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    org_id: str = Depends(get_org_id_string)
 ):
     """Get products expiring soon"""
     try:
@@ -447,7 +447,7 @@ def get_expiry_alerts(
 @router.get("/low-stock-alerts")
 def get_low_stock_alerts(
     db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    org_id: str = Depends(get_org_id_string)
 ):
     """Get low stock products"""
     try:
@@ -479,7 +479,7 @@ def get_low_stock_alerts(
 @router.get("/pending-payments")
 def get_pending_payments(
     db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    org_id: str = Depends(get_org_id_string)
 ):
     """Get pending payments summary"""
     try:
@@ -534,7 +534,7 @@ def get_pending_payments(
 def get_recent_activities(
     limit: int = Query(20, description="Number of recent activities"),
     db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    org_id: str = Depends(get_org_id_string)
 ):
     """Get recent business activities"""
     try:

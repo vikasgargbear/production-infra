@@ -12,7 +12,7 @@ from decimal import Decimal
 import uuid
 
 from ...core.database import get_db
-from ...core.auth_utils import get_org_id_from_header
+from ...core.secure_auth import get_org_id_string  # SECURE: JWT-based auth
 
 logger = logging.getLogger(__name__)
 
@@ -27,7 +27,7 @@ async def get_notes(
     from_date: Optional[str] = None,
     to_date: Optional[str] = None,
     db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    org_id: str = Depends(get_org_id_string)
 ):
     """
     Get list of credit/debit notes with optional filters
@@ -158,7 +158,7 @@ async def get_notes(
 async def create_credit_note(
     note_data: dict,
     db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    org_id: str = Depends(get_org_id_string)
 ):
     """
     Create a credit note (reduce customer liability)
@@ -273,7 +273,7 @@ async def create_credit_note(
 async def create_debit_note(
     note_data: dict,
     db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    org_id: str = Depends(get_org_id_string)
 ):
     """
     Create a debit note (increase customer liability or reduce supplier liability)
@@ -421,7 +421,7 @@ async def create_debit_note(
 async def get_note_detail(
     note_id: str,
     db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    org_id: str = Depends(get_org_id_string)
 ):
     """
     Get detailed information about a specific note
@@ -458,7 +458,7 @@ async def get_note_detail(
 async def get_note_print_data(
     note_id: str,
     db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    org_id: str = Depends(get_org_id_string)
 ):
     """
     Get note data formatted for printing
@@ -467,7 +467,7 @@ async def get_note_print_data(
         # Get organization details
         org_query = """
             SELECT * FROM master.organizations 
-            WHERE org_id: str = Depends(get_org_id_from_header)
+            WHERE org_id: str = Depends(get_org_id_string)
         """
         organization = db.execute(text(org_query)).first()
         
@@ -495,7 +495,7 @@ async def cancel_note(
     note_id: str,
     cancellation_reason: str,
     db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    org_id: str = Depends(get_org_id_string)
 ):
     """
     Cancel a credit/debit note
@@ -655,7 +655,7 @@ async def get_party_invoices_for_linking(
     limit: int = Query(5, ge=1, le=50, description="Items per page"),
     search: str = Query("", description="Search invoice number"),
     db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    org_id: str = Depends(get_org_id_string)
 ):
     """
     Get invoices for a party that can be linked to notes
@@ -793,7 +793,7 @@ async def get_party_invoices_for_linking(
 async def get_invoice_items_for_notes(
     invoice_id: str,
     db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    org_id: str = Depends(get_org_id_string)
 ):
     """
     Get invoice items for creating credit/debit notes
@@ -892,7 +892,7 @@ async def get_debit_note_reasons():
 async def create_credit_note(
     data: dict,
     db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    org_id: str = Depends(get_org_id_string)
 ):
     """Create a new credit note"""
     try:
@@ -981,7 +981,7 @@ async def create_credit_note(
 async def create_debit_note(
     data: dict,
     db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    org_id: str = Depends(get_org_id_string)
 ):
     """Create a new debit note"""
     try:

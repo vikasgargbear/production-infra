@@ -10,7 +10,7 @@ import logging
 import json
 
 from ...core.database import get_db
-from ...core.auth_utils import get_org_id_from_header
+from ...core.secure_auth import get_org_id_string  # SECURE: JWT-based auth
 
 logger = logging.getLogger(__name__)
 
@@ -85,7 +85,7 @@ DEFAULT_FEATURES = {
 @router.get("/features")
 def get_feature_settings(
     db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    org_id: str = Depends(get_org_id_string)
 ):
     """Get all feature settings for an organization"""
     try:
@@ -142,7 +142,7 @@ def get_feature_settings(
 def update_feature_settings(
     features: Dict[str, Any],
     db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    org_id: str = Depends(get_org_id_string)
 ):
     """Update feature settings for an organization"""
     try:
@@ -202,7 +202,7 @@ def update_feature_settings(
 @router.get("/general")
 def get_general_settings(
     db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    org_id: str = Depends(get_org_id_string)
 ):
     """Get general settings for an organization"""
     try:
@@ -255,7 +255,7 @@ def get_general_settings(
 def update_general_settings(
     settings: Dict[str, Any],
     db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    org_id: str = Depends(get_org_id_string)
 ):
     """Update general settings for an organization"""
     try:
@@ -299,7 +299,7 @@ def update_general_settings(
 def update_database_feature_flags(
     features: Dict[str, bool],
     db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    org_id: str = Depends(get_org_id_string)
 ):
     """
     Update database-level feature flags (like system_notifications)

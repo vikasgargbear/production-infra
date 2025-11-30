@@ -10,7 +10,7 @@ import uuid
 from datetime import datetime
 
 from ...core.database import get_db
-from ...core.auth_utils import get_org_id_from_header
+from ...core.secure_auth import get_org_id_string  # SECURE: JWT-based auth
 from ...core.auth import get_current_org
 
 router = APIRouter(prefix="/organizations", tags=["organizations"])
@@ -21,7 +21,7 @@ async def get_organization_profile(
     db: Session = Depends(get_db),
     current_org: Dict = Depends(get_current_org)
 ,
-    org_id: str = Depends(get_org_id_from_header)
+    org_id: str = Depends(get_org_id_string)
 ):
     """Get organization profile and settings"""
     try:
@@ -100,7 +100,7 @@ async def update_organization_profile(
     db: Session = Depends(get_db),
     current_org: Dict = Depends(get_current_org)
 ,
-    org_id: str = Depends(get_org_id_from_header)
+    org_id: str = Depends(get_org_id_string)
 ):
     """Update organization profile and basic settings"""
     try:
@@ -186,7 +186,7 @@ async def get_feature_settings(
     db: Session = Depends(get_db),
     current_org: Dict = Depends(get_current_org)
 ,
-    org_id: str = Depends(get_org_id_from_header)
+    org_id: str = Depends(get_org_id_string)
 ):
     """Get organization feature settings"""
     try:
@@ -291,7 +291,7 @@ async def update_feature_settings(
     db: Session = Depends(get_db),
     current_org: Dict = Depends(get_current_org)
 ,
-    org_id: str = Depends(get_org_id_from_header)
+    org_id: str = Depends(get_org_id_string)
 ):
     """Update organization feature settings"""
     try:
@@ -351,7 +351,7 @@ async def upload_organization_logo(
     db: Session = Depends(get_db),
     current_org: Dict = Depends(get_current_org)
 ,
-    org_id: str = Depends(get_org_id_from_header)
+    org_id: str = Depends(get_org_id_string)
 ):
     """Upload organization logo"""
     try:

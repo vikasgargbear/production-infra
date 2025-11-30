@@ -12,7 +12,7 @@ from pydantic import BaseModel, Field
 import logging
 
 from ...core.database import get_db
-from ...core.auth_utils import get_org_id_from_header
+from ...core.secure_auth import get_org_id_string  # SECURE: JWT-based auth
 
 logger = logging.getLogger(__name__)
 
@@ -56,7 +56,7 @@ class PointsRedemption(BaseModel):
 @router.post("/programs", response_model=dict)
 async def create_loyalty_program(
     program: LoyaltyProgramCreate,
-    org_id: str = Depends(get_org_id_from_header),
+    org_id: str = Depends(get_org_id_string),
     db: Session = Depends(get_db)
 ):
     """
@@ -111,7 +111,7 @@ async def create_loyalty_program(
 
 @router.get("/programs/active")
 async def get_active_program(
-    org_id: str = Depends(get_org_id_from_header),
+    org_id: str = Depends(get_org_id_string),
     db: Session = Depends(get_db)
 ):
     """Get the active loyalty program for the organization"""
@@ -152,7 +152,7 @@ async def add_program_tier(
     program_id: int,
     tier: CustomerTier,
     db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    org_id: str = Depends(get_org_id_string)
 ):
     """Add a tier to a loyalty program"""
     try:
@@ -208,7 +208,7 @@ async def add_program_tier(
 async def get_customer_points(
     customer_id: int,
     db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    org_id: str = Depends(get_org_id_string)
 ):
     """
     Get customer's loyalty points summary
@@ -327,7 +327,7 @@ async def get_customer_points(
 async def earn_points(
     transaction: PointsTransaction,
     db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    org_id: str = Depends(get_org_id_string)
 ):
     """
     Record points earned by customer
@@ -415,7 +415,7 @@ async def earn_points(
 async def redeem_points(
     redemption: PointsRedemption,
     db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    org_id: str = Depends(get_org_id_string)
 ):
     """
     Redeem loyalty points for invoice discount
@@ -554,7 +554,7 @@ async def redeem_points(
 @router.post("/points/expire")
 async def expire_points(
     db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    org_id: str = Depends(get_org_id_string)
 ):
     """
     Process expired points
@@ -627,7 +627,7 @@ async def get_loyalty_analytics(
     from_date: Optional[date] = Query(None),
     to_date: Optional[date] = Query(None),
     db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    org_id: str = Depends(get_org_id_string)
 ):
     """
     Get loyalty program analytics
@@ -721,7 +721,7 @@ async def get_loyalty_analytics(
 async def run_bonus_campaign(
     campaign_data: dict,
     db: Session = Depends(get_db),
-    org_id: str = Depends(get_org_id_from_header)
+    org_id: str = Depends(get_org_id_string)
 ):
     """
     Run a bonus points campaign
