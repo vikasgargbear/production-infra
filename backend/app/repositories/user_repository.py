@@ -46,9 +46,23 @@ class UserRepository:
             if not row:
                 return None
             
-            user_dict = dict(row._mapping)
-            logger.info(f"User query returned keys: {list(user_dict.keys())}")
-            return user_dict
+            # Convert row to dict using column names
+            return {
+                "user_id": row[0],
+                "username": row[1],
+                "email": row[2],
+                "full_name": row[3],
+                "org_id": row[4],
+                "is_active": row[5],
+                "password_hash": row[6],
+                "role_id": row[7],
+                "branch_ids": row[8],
+                "org_name": row[9],
+                "org_active": row[10],
+                "default_branch_id": row[11],
+                "role_name": row[12],
+                "permissions": row[13]
+            }
             
         except Exception as e:
             logger.error(f"Error finding user by email {email}: {e}")
