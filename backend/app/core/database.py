@@ -11,7 +11,7 @@ from typing import Generator
 DATABASE_URL = os.getenv(
     "DATABASE_URL",
     "postgresql://postgres:password@localhost:5432/pharma"
-)
+).strip()  # Remove leading/trailing whitespace
 
 # Supabase connection validation and detection
 IS_SUPABASE = "supabase.com" in DATABASE_URL
