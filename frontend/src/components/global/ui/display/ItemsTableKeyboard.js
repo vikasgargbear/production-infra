@@ -110,10 +110,7 @@ const ItemsTableKeyboard = forwardRef(({
   };
 
   const calculateItemTotal = (item) => {
-    // Use pre-calculated total if available
-    if (item.line_total !== undefined) return item.line_total;
-    if (item.total_amount !== undefined) return item.total_amount;
-    
+    // ALWAYS recalculate based on current values for real-time responsiveness
     const baseQuantity = parseFloat(item.quantity) || 0;
     const rate = parseFloat(item.rate || item.sale_price) || 0;
     const discount = parseFloat(item.discount || item.discount_percent || 0) || 0;
