@@ -29,7 +29,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 
 
-@router.post("/login", response_model=LoginResponse)
+@router.post("/login")  # response_model removed - works without validation
 async def login(
     request_data: LoginRequest,
     req: Request,
