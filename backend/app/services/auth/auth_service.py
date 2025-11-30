@@ -172,6 +172,8 @@ class AuthService:
         Returns: SHA256 hash of email+password+salt
         """
         # Create a deterministic hash for offline verification
-        salt = str(user_data["user_id"]) + str(user_data["org_id"])
+        # user_data might have "id" or "user_id" depending on source
+        user_id = user_data.get("user_id") or user_data.get("id")
+        salt = str(user_id) + str(user_data["org_id"])
         combined = f"{email}:{password}:{salt}"
         return hashlib.sha256(combined.encode()).hexdigest()
