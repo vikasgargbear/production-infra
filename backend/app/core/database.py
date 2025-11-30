@@ -13,28 +13,40 @@ DATABASE_URL = os.getenv(
     "postgresql://postgres:password@localhost:5432/pharma"
 )
 
-# Supabase connection fix: Add pgbouncer=true for connection pooler
-# This tells Supabase to use transaction mode instead of session mode
-if "supabase.com" in DATABASE_URL and "pgbouncer=true" not in DATABASE_URL:
-    # Add pgbouncer parameter if using Supabase pooler
-    separator = "&" if "?" in DATABASE_URL else "?"
-    DATABASE_URL = f"{DATABASE_URL}{separator}pgbouncer=true"
-    print(f"[DATABASE] Supabase pooler detected - added pgbouncer=true parameter")
+# Supabase pooler detection and configuration
+IS_SUPABASE_POOLER = "supabase.com" in DATABASE_URL and ":6543" in DATABASE_URL
 
-# Create engine with ultra-conservative connection pooling for Supabase
-engine = create_engine(
-    DATABASE_URL,
-    pool_size=2,  # Ultra-small for Supabase session mode limits
-    max_overflow=3,  # Maximum 5 total connections
-    pool_pre_ping=True,
-    pool_recycle=60,  # Recycle connections every 1 minute
-    pool_timeout=10,  # 10 second timeout
-    echo=False,
-    # Supabase-specific connection args
-    connect_args={
-        "options": "-c statement_timeout=30000"  # 30 second query timeout
-    } if "supabase.com" in DATABASE_URL else {}
-)
+if IS_SUPABASE_POOLER:
+    print(f"[DATABASE] Supabase Transaction Pooler detected (port 6543)")
+    print(f"[DATABASE] Using aggressive connection recycling for pooler mode")
+
+# Create engine with connection pooling optimized for Supabase
+if IS_SUPABASE_POOLER:
+    # Transaction pooler mode (port 6543) - very aggressive settings
+    engine = create_engine(
+        DATABASE_URL,
+        pool_size=1,              # Minimal pool for transaction pooler
+        max_overflow=2,           # Max 3 total connections
+        pool_pre_ping=True,       # Always test connections
+        pool_recycle=30,          # Recycle every 30 seconds (aggressive)
+        pool_timeout=5,           # Short timeout
+        echo=False,
+        connect_args={
+            "connect_timeout": 10,
+            "options": "-c statement_timeout=30000 -c idle_in_transaction_session_timeout=60000"
+        }
+    )
+else:
+    # Direct connection or local database
+    engine = create_engine(
+        DATABASE_URL,
+        pool_size=5,              # Normal pool size
+        max_overflow=10,          # More overflow allowed
+        pool_pre_ping=True,
+        pool_recycle=3600,        # Recycle every hour
+        pool_timeout=30,
+        echo=False
+    )
 
 # Create session factory
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
