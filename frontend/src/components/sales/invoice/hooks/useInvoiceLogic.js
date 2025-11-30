@@ -199,8 +199,17 @@ export const useInvoiceLogic = (onClose, prefilledData = null) => {
         };
         return { ...prev, items: updatedItems };
       } else {
-        // Add new item
-        return { ...prev, items: [...prev.items, transformedProduct] };
+        // Add new item with default values
+        return { 
+          ...prev, 
+          items: [...prev.items, {
+            ...transformedProduct,
+            quantity: 1,  // Default quantity
+            discount: 0,
+            discount_percent: 0,
+            free_quantity: 0
+          }] 
+        };
       }
     });
 
