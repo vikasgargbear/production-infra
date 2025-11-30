@@ -21,7 +21,7 @@ class LoginRequest(BaseModel):
         return v.lower().strip()
     
     class Config:
-        schema_extra = {
+        json_schema_extra = {
             "example": {
                 "email": "user@example.com",
                 "password": "your_password_here",
@@ -52,7 +52,7 @@ class UserSummary(BaseModel):
     permissions: Dict = Field(default_factory=dict, description="User permissions")
     
     class Config:
-        schema_extra = {
+        json_schema_extra = {
             "example": {
                 "id": 123,
                 "email": "user@pharmacy.com",
@@ -77,7 +77,7 @@ class LoginResponse(BaseModel):
     offline_auth_hash: Optional[str] = Field(None, description="Hash for offline authentication")
     
     class Config:
-        schema_extra = {
+        json_schema_extra = {
             "example": {
                 "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
                 "refresh_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
@@ -89,7 +89,8 @@ class LoginResponse(BaseModel):
                     "full_name": "John Doe",
                     "org_id": "550e8400-e29b-41d4-a716-446655440000",
                     "org_name": "ABC Pharmacy"
-                }
+                },
+                "offline_auth_hash": "abc123..."
             }
         }
 
@@ -140,7 +141,7 @@ class AuthError(BaseModel):
     timestamp: datetime = Field(default_factory=datetime.utcnow)
     
     class Config:
-        schema_extra = {
+        json_schema_extra = {
             "example": {
                 "error": "invalid_credentials",
                 "error_description": "The email or password provided is incorrect",
