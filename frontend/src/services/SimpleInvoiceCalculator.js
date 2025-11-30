@@ -65,6 +65,53 @@ class SimpleInvoiceCalculator {
   }
   
   /**
+   * Debounced calculation for real-time updates
+   */
+  static debounceTimeouts = new Map();
+
+  static calculateDebounced(data, callback, delay = 300, type = 'invoice') {
+    const key = `calc_${type}`;
+
+    // Clear previous timeout
+    if (this.debounceTimeouts.has(key)) {
+      clearTimeout(this.debounceTimeouts.get(key));
+    }
+
+    // Set new timeout
+    const timeoutId = setTimeout(() => {
+      try {
+        // Extract invoice data
+        const items = data.items || [];
+        const deliveryCharges = parseFloat(data.delivery_charges) || 0;
+        const gstType = data.gst_type || 'CGST/SGST';
+
+        // Handle both discount_amount (fixed) and discount_percent (percentage)
+        let invoiceDiscount = 0;
+        if (data.discount_type === 'percentage') {
+          // Calculate percentage discount from subtotal
+          const subtotal = items.reduce((sum, item) => {
+            const quantity = parseFloat(item.base_quantity || item.quantity) || 0;
+            const rate = parseFloat(item.rate || item.sale_price) || 0;
+            return sum + (quantity * rate);
+          }, 0);
+          invoiceDiscount = (subtotal * parseFloat(data.discount_percent || 0)) / 100;
+        } else {
+          invoiceDiscount = parseFloat(data.discount_amount) || 0;
+        }
+
+        // Calculate using the simple calculator
+        const result = this.calculate(items, deliveryCharges, gstType, invoiceDiscount);
+        callback(null, result);
+      } catch (error) {
+        callback(error, null);
+      }
+      this.debounceTimeouts.delete(key);
+    }, delay);
+
+    this.debounceTimeouts.set(key, timeoutId);
+  }
+
+  /**
    * Simple helper to format currency
    */
   static formatCurrency(amount) {
