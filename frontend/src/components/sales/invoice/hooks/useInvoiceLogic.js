@@ -205,22 +205,74 @@ export const useInvoiceLogic = (onClose, prefilledData = null) => {
   // Recalculate totals when items or discounts change
   // Uses EnterpriseCalculator - single source of truth for all calculations
   useEffect(() => {
+    // Skip if no items
+    if (!invoice.items || invoice.items.length === 0) {
+      return;
+    }
+
+    console.log('🧮 Starting calculation with invoice items:', 
+      invoice.items?.map(i => ({ 
+        name: i.product_name || i.name,
+        qty: i.quantity,
+        rate: i.rate || i.unit_price,
+        discount: i.discount || i.discount_percent
+      }))
+    );
+
     EnterpriseCalculator.calculateDebounced(invoice, (error, result) => {
       if (error) {
-        console.error('Calculation error:', error);
+        console.error('❌ Calculation error:', error);
         return;
       }
       
-      if (result) {
-        setInvoice(prev => ({
-          ...prev,
-          items: result.items,
-          totals: result.totals,
-          net_amount: result.totals.final_amount
-        }));
+      if (result && result.totals) {
+        console.log('✅ Calculation result:', {
+          items: result.items?.map(i => ({ 
+            name: i.product_name, 
+            qty: i.quantity, 
+            rate: i.rate,
+            line_total: i.line_total 
+          })),
+          totals: result.totals
+        });
+
+        // CRITICAL FIX: Only update totals, not items
+        // Updating items would trigger this useEffect again (infinite loop)
+        setInvoice(prev => {
+          // Enrich items with calculated values without changing array reference
+          const enrichedItems = prev.items.map((item, idx) => ({
+            ...item,
+            ...(result.items[idx] || {}), // Merge calculated values
+          }));
+
+          console.log('📊 Updating invoice with totals:', {
+            final_amount: result.totals.final_amount,
+            items_count: enrichedItems.length
+          });
+
+          return {
+            ...prev,
+            items: enrichedItems,
+            totals: result.totals,
+            net_amount: result.totals.final_amount
+          };
+        });
       }
     }, 300, 'invoice');
-  }, [invoice.items, invoice.delivery_charges, invoice.discount_amount, invoice.discount_percent]);
+    
+    // Use stringified items to prevent infinite loops
+    // Only recalculate when actual values change, not object references
+  }, [
+    JSON.stringify(invoice.items?.map(i => ({ 
+      quantity: i.quantity, 
+      rate: i.rate, 
+      discount: i.discount,
+      gst_percent: i.gst_percent 
+    }))),
+    invoice.delivery_charges,
+    invoice.discount_amount,
+    invoice.discount_percent
+  ]);
 
   // Handlers
   const handleCustomerSelect = useCallback((customer) => {
