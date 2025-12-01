@@ -117,8 +117,16 @@ export const useInvoiceLogic = (onClose, prefilledData = null) => {
     return () => clearInterval(autoSaveInterval);
   }, [invoice, selectedCustomer]);
 
-  // Load draft on mount
+  // Load draft on mount - use ref to prevent double execution in StrictMode
+  const draftLoadedRef = useRef(false);
+  
   useEffect(() => {
+    // CRITICAL FIX: Prevent double execution in React StrictMode (dev)
+    if (draftLoadedRef.current) {
+      return;
+    }
+    draftLoadedRef.current = true;
+    
     const loadDraft = () => {
       try {
         const savedDraft = localStorage.getItem('invoice_draft');
@@ -141,7 +149,9 @@ export const useInvoiceLogic = (onClose, prefilledData = null) => {
               }
               toast.success('Draft restored successfully');
             } else {
+              // User clicked Cancel - remove the draft
               localStorage.removeItem('invoice_draft');
+              console.log('[Invoice] Draft discarded by user');
             }
           } else {
             // Remove old draft
