@@ -67,7 +67,7 @@ const InvoicePreviewEnterprise = ({
   };
 
   // Use calculated totals from API, fallback to invoice values
-  const totals = calculatedTotals || {
+  const totals = calculatedTotals || invoice.totals || {
     gross_amount: invoice.gross_amount || 0,
     total_discount: invoice.discount_amount || 0,
     taxable_amount: invoice.taxable_amount || invoice.subtotal_amount || 0,
@@ -81,6 +81,11 @@ const InvoicePreviewEnterprise = ({
     net_amount: 0,  // Will be calculated in display
     final_amount: 0  // Will be calculated in display
   };
+  
+  console.log('💰 [PREVIEW DISPLAY] Using totals:', totals);
+  console.log('💰 [PREVIEW DISPLAY] calculatedTotals:', calculatedTotals);
+  console.log('💰 [PREVIEW DISPLAY] invoice.totals:', invoice.totals);
+  console.log('💰 [PREVIEW DISPLAY] Source:', calculatedTotals ? 'calculatedTotals' : (invoice.totals ? 'invoice.totals' : 'fallback'));
 
   return (
     <div className="bg-white">
