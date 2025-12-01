@@ -235,10 +235,14 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
   }, [invoice, setInvoice]);
 
   const handleBackFromStep3 = useCallback((targetStep = 2) => {
-    console.log('🔙 [NAVIGATION] Going back from step 3 to step:', targetStep);
+    // CRITICAL FIX: Handle if event object passed instead of number
+    const stepNumber = typeof targetStep === 'number' ? targetStep : 2;
+    
+    console.log('🔙 [NAVIGATION] Going back from step 3 to step:', stepNumber);
     console.log('🔙 [NAVIGATION] Current invoice state:', invoice);
+    
     try {
-      setCurrentStep(targetStep);
+      setCurrentStep(stepNumber);
     } catch (error) {
       console.error('❌ [NAVIGATION ERROR]:', error);
       alert('Error navigating back: ' + error.message);

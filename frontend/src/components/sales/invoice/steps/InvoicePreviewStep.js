@@ -33,7 +33,7 @@ const InvoicePreviewStep = ({
           additionalActions={[
             {
               label: "← Back to Details",
-              onClick: onBack,
+              onClick: () => onBack(2), // FIXED: Pass step number, not event
               icon: null,
               variant: "default",
               className: "bg-white border border-gray-300 text-gray-700 hover:bg-gray-50 font-medium px-4 py-2 rounded-lg shadow-sm"
