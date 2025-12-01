@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { toast } from 'react-toastify';
 import { searchCache, smartSearch } from '../../../../utils/searchCache';
 import DataTransformer from '../../../../services/dataTransformer';
-import InvoiceApiService from '../../../../services/invoiceApiService';
+import { invoicesApi } from '../../../../services/api/modules/invoices.api';
 import EnterpriseCalculator from '../../../../services/enterpriseCalculator';
 import documentNumberGenerator, { DOC_TYPES } from '../../../../services/documentNumberGenerator';
 import localInvoiceService from '../../../../services/invoice/localInvoiceService';
@@ -505,31 +505,27 @@ export const useInvoiceLogic = (onClose, prefilledData = null) => {
       // ONLINE: Normal API save
       // Backend will generate the real sequential invoice number
       console.log('[Invoice] Saving online - backend will assign invoice number');
-      const response = await InvoiceApiService.createInvoice(invoiceData);
+      const response = await invoicesApi.create(invoiceData);
 
-      if (response.success) {
-        // ✅ Backend returns the real invoice number (sequential, no gaps)
-        const createdData = {
-          invoiceId: response.data.invoice_id,
-          invoiceNumber: response.data.invoice_number, // Real number from backend
-          customerName: selectedCustomer.customer_name || selectedCustomer.name,
-          customerPhone: selectedCustomer.phone || selectedCustomer.primary_phone || '',
-          customerEmail: selectedCustomer.email || '',
-          totalAmount: response.data.total_amount || invoiceData.total_amount,
-          items: response.data.items || invoice.items,
-          isOffline: false
-        };
+      // invoicesApi.create returns the data directly (not wrapped in {success, data})
+      const createdData = {
+        invoiceId: response.invoice_id,
+        invoiceNumber: response.invoice_number, // Real number from backend
+        customerName: selectedCustomer.customer_name || selectedCustomer.name,
+        customerPhone: selectedCustomer.phone || selectedCustomer.primary_phone || '',
+        customerEmail: selectedCustomer.email || '',
+        totalAmount: response.total_amount || invoiceData.total_amount,
+        items: response.items || invoice.items,
+        isOffline: false
+      };
 
-        setCreatedInvoiceData(createdData);
-        setShowSuccessModal(true);
-        
-        // Clear draft after successful save
-        localStorage.removeItem('invoice_draft');
-        
-        toast.success('✅ Invoice created successfully');
-      } else {
-        throw new Error(response.message || 'Failed to create invoice');
-      }
+      setCreatedInvoiceData(createdData);
+      setShowSuccessModal(true);
+      
+      // Clear draft after successful save
+      localStorage.removeItem('invoice_draft');
+      
+      toast.success('✅ Invoice created successfully');
     } catch (error) {
       console.error('Save invoice error:', error);
       
