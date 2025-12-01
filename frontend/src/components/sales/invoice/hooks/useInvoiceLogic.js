@@ -305,7 +305,15 @@ export const useInvoiceLogic = (onClose, prefilledData = null) => {
   const handleAddItem = useCallback((product) => {
     if (!product) return;
 
+    console.log('📦 [ADD ITEM] Raw product from search:', product);
+
     const transformedProduct = DataTransformer.transformProduct(product, 'invoice');
+    
+    console.log('📦 [ADD ITEM] Transformed product:', transformedProduct);
+    console.log('📦 [ADD ITEM] Batch info:', {
+      batch_number: transformedProduct.batch_number,
+      expiry_date: transformedProduct.expiry_date
+    });
     
     if (!transformedProduct || !transformedProduct.product_name) {
       toast.error('Invalid product data');

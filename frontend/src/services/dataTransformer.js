@@ -26,7 +26,12 @@ class DataTransformer {
       packages_per_box: product.packages_per_box || null,
       units_per_pack: product.units_per_pack || null,
       pack_type: product.pack_type || null,
-      pack_size: product.pack_size || null
+      pack_size: product.pack_size || null,
+      // CRITICAL: Batch information (was missing!)
+      batch_number: product.batch_number || product.batch_no || product.batchNo || null,
+      batch_id: product.batch_id || null,
+      expiry_date: product.expiry_date || product.expiryDate || null,
+      manufacturing_date: product.manufacturing_date || product.mfg_date || product.mfgDate || null
     };
 
     switch (context) {
@@ -35,6 +40,9 @@ class DataTransformer {
           ...base,
           // Ensure consistent naming for invoice context
           rate: base.sale_price, // For backward compatibility
+          unit_price: base.sale_price, // Another alias
+          // Ensure batch fields are included
+          batch_no: base.batch_number, // Alias for backward compatibility
         };
       
       case 'batch':
