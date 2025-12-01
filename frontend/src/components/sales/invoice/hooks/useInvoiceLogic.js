@@ -346,12 +346,21 @@ export const useInvoiceLogic = (onClose, prefilledData = null) => {
   }, []);
 
   const handleUpdateItem = useCallback((index, field, value) => {
+    console.log(`🔄 [UPDATE ITEM] Index: ${index}, Field: ${field}, Value: ${value}`);
+    
     setInvoice(prev => {
       const updatedItems = [...prev.items];
       updatedItems[index] = {
         ...updatedItems[index],
         [field]: value
       };
+      
+      console.log('🔄 [UPDATE ITEM] Updated item:', updatedItems[index]);
+      console.log('🔄 [UPDATE ITEM] All items:', updatedItems.map(i => ({ 
+        name: i.product_name, 
+        qty: i.quantity 
+      })));
+      
       return { ...prev, items: updatedItems };
     });
   }, []);
