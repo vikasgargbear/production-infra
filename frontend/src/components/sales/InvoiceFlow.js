@@ -171,8 +171,15 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
   }, []);
 
   const handleBackFromStep3 = useCallback((targetStep = 2) => {
-    setCurrentStep(targetStep);
-  }, []);
+    console.log('🔙 [NAVIGATION] Going back from step 3 to step:', targetStep);
+    console.log('🔙 [NAVIGATION] Current invoice state:', invoice);
+    try {
+      setCurrentStep(targetStep);
+    } catch (error) {
+      console.error('❌ [NAVIGATION ERROR]:', error);
+      alert('Error navigating back: ' + error.message);
+    }
+  }, [invoice]);
 
   const handleBackFromStep2 = useCallback(() => {
     setCurrentStep(1);
