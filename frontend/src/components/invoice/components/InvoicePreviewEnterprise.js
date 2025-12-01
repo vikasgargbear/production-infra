@@ -9,50 +9,19 @@ const InvoicePreviewEnterprise = ({
   showAddresses = true, // Control whether to show Bill To/Ship To sections
   isPrintMode = false // New prop to determine if we're in print/PDF mode
 }) => {
-  const [calculatedTotals, setCalculatedTotals] = useState(null);
-  const [isCalculating, setIsCalculating] = useState(false);
+  // CRITICAL FIX: DO NOT CALCULATE HERE!
+  // Totals are calculated BEFORE navigation in InvoiceFlow handleContinueFromStep2
+  // This component is DISPLAY ONLY - no calculation logic!
   
-  // Calculate totals via API when invoice changes
-  useEffect(() => {
-    if (invoice && invoice.items && invoice.items.length > 0) {
-      calculateTotalsViaAPI();
-    }
-  }, [invoice.items, invoice.gst_type, invoice.delivery_charges, invoice.discount_amount]);
+  // Remove all calculation state - not needed
+  // const [calculatedTotals, setCalculatedTotals] = useState(null);
+  // const [isCalculating, setIsCalculating] = useState(false);
   
-  const calculateTotalsViaAPI = async () => {
-    try {
-      setIsCalculating(true);
-      
-      console.log('🔍 [PREVIEW] Raw invoice.items:', invoice.items);
-      
-      const invoiceData = {
-        items: invoice.items.map(item => ({
-          product_id: item.product_id,
-          quantity: item.quantity, // ALWAYS use quantity as source of truth
-          free_quantity: item.free_quantity || 0,
-          unit_price: item.sale_price || item.rate || item.unit_price,
-          discount_percent: item.discount_percent || 0,
-          gst_percent: item.gst_percent || 0
-        })),
-        gst_type: invoice.gst_type || 'CGST/SGST',
-        delivery_charges: invoice.delivery_charges || 0,
-        discount_amount: invoice.discount_amount || 0
-      };
-      
-      console.log('📤 [PREVIEW] Sending to calculator:', invoiceData);
-      
-      const result = await EnterpriseCalculator.calculateInvoice(invoiceData);
-      
-      console.log('📥 [PREVIEW] Result from calculator:', result);
-      
-      setCalculatedTotals(result.totals);
-      
-    } catch (error) {
-      // Keep existing totals on error
-    } finally {
-      setIsCalculating(false);
-    }
-  };
+  // REMOVED: useEffect that calculated - caused race condition
+  // Now we ONLY use pre-calculated invoice.totals
+  
+  // REMOVED: calculateTotalsViaAPI() - caused race condition with forced calculation
+  // Totals are now calculated ONCE in InvoiceFlow before navigation
 
   const formatCurrency = (amount) => {
     return EnterpriseCalculator.formatCurrency(amount);
@@ -66,26 +35,31 @@ const InvoicePreviewEnterprise = ({
     });
   };
 
-  // Use calculated totals from API, fallback to invoice values
-  const totals = calculatedTotals || invoice.totals || {
-    gross_amount: invoice.gross_amount || 0,
-    total_discount: invoice.discount_amount || 0,
-    taxable_amount: invoice.taxable_amount || invoice.subtotal_amount || 0,
-    total_tax: invoice.total_tax_amount || invoice.tax_amount || 0,
-    cgst_amount: invoice.cgst_amount || 0,
-    sgst_amount: invoice.sgst_amount || 0,
-    igst_amount: invoice.igst_amount || 0,
-    delivery_charges: invoice.delivery_charges || 0,
-    round_off: invoice.round_off || 0,
-    // Don't use net_amount from invoice - calculate it
-    net_amount: 0,  // Will be calculated in display
-    final_amount: 0  // Will be calculated in display
+  // CRITICAL FIX: Use ONLY pre-calculated totals from invoice.totals
+  // These are calculated in InvoiceFlow.handleContinueFromStep2 BEFORE navigation
+  // NO fallbacks, NO independent calculations - SINGLE SOURCE OF TRUTH!
+  
+  const totals = invoice.totals || {
+    // Emergency fallback (should never be used in practice)
+    gross_amount: 0,
+    total_discount: 0,
+    taxable_amount: 0,
+    total_tax: 0,
+    cgst_amount: 0,
+    sgst_amount: 0,
+    igst_amount: 0,
+    delivery_charges: 0,
+    round_off: 0,
+    net_amount: 0,
+    final_amount: 0
   };
   
-  console.log('💰 [PREVIEW DISPLAY] Using totals:', totals);
-  console.log('💰 [PREVIEW DISPLAY] calculatedTotals:', calculatedTotals);
-  console.log('💰 [PREVIEW DISPLAY] invoice.totals:', invoice.totals);
-  console.log('💰 [PREVIEW DISPLAY] Source:', calculatedTotals ? 'calculatedTotals' : (invoice.totals ? 'invoice.totals' : 'fallback'));
+  console.log('💰 [PREVIEW DISPLAY] Using invoice.totals:', totals);
+  console.log('💰 [PREVIEW DISPLAY] Has totals?:', !!invoice.totals);
+  
+  if (!invoice.totals) {
+    console.error('🚨 [PREVIEW] invoice.totals is missing! This should never happen!');
+  }
 
   return (
     <div className="bg-white">
