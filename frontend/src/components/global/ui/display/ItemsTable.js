@@ -34,7 +34,7 @@ const ItemsTable = ({
     if (item.total_amount !== undefined) return item.total_amount;
     if (item.itemTotal !== undefined) return item.itemTotal;
     
-    const baseQuantity = parseFloat(item.base_quantity || item.quantity) || 0;  // What customer pays for
+    const baseQuantity = parseFloat(item.quantity) || 0;  // ALWAYS use quantity as source of truth
     const rate = parseFloat(item.rate || item.sale_price || item.unit_price) || 0;
     const discount = parseFloat(item.discount || item.discount_percent) || 0;
     const tax = parseFloat(item.tax || item.tax_rate || item.gst_percent) || 0;

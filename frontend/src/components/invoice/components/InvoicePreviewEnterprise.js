@@ -26,8 +26,7 @@ const InvoicePreviewEnterprise = ({
       const invoiceData = {
         items: invoice.items.map(item => ({
           product_id: item.product_id,
-          quantity: item.quantity,
-          base_quantity: item.base_quantity || (item.quantity - (item.free_quantity || 0)),
+          quantity: item.quantity, // ALWAYS use quantity as source of truth
           free_quantity: item.free_quantity || 0,
           unit_price: item.sale_price || item.rate || item.unit_price,
           discount_percent: item.discount_percent || 0,
@@ -392,12 +391,13 @@ const InvoicePreviewEnterprise = ({
             <tbody>
               {invoice.items.map((item, index) => {
                 // Calculate per-item amounts (display only - no business logic)
-                const baseQuantity = parseFloat(item.base_quantity || (item.quantity - (item.free_quantity || 0)));
-                const rate = parseFloat(item.sale_price || item.rate || 0);
-                const discount = parseFloat(item.discount_percent || 0);
-                const gstPercent = parseFloat(item.gst_percent || 0);
+                // CRITICAL: ALWAYS use item.quantity (not base_quantity)
+                const quantity = parseFloat(item.quantity || 0); // Source of truth
+                const rate = parseFloat(item.sale_price || item.rate || item.unit_price || 0);
+                const discount = parseFloat(item.discount_percent || item.discount || 0);
+                const gstPercent = parseFloat(item.gst_percent || item.tax_percent || 0);
                 
-                const subtotal = baseQuantity * rate;
+                const subtotal = quantity * rate;
                 const discountAmount = (subtotal * discount) / 100;
                 const taxableAmount = subtotal - discountAmount;
                 const gstAmount = (taxableAmount * gstPercent) / 100;
