@@ -312,23 +312,21 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
 
       {/* Step 2: Invoice Details */}
       {currentStep === 2 && (
-        <ErrorBoundary>
-          <InvoiceDetailsStep
-            invoice={invoice}
-            setInvoice={setInvoice}
-            selectedCustomer={selectedCustomer}
-            sameAsShipping={sameAsShipping}
-            setSameAsShipping={setSameAsShipping}
-            onClose={onClose}
-            onContinue={handleContinueFromStep2}
-            onBack={handleBackFromStep2}
-            // Refs
-            deliveryTypeRef={deliveryTypeRef}
-            transportRef={transportRef}
-            vehicleRef={vehicleRef}
-            deliveryChargesRef={deliveryChargesRef}
-          />
-        </ErrorBoundary>
+        <InvoiceDetailsStep
+          invoice={invoice}
+          setInvoice={setInvoice}
+          selectedCustomer={selectedCustomer}
+          sameAsShipping={sameAsShipping}
+          setSameAsShipping={setSameAsShipping}
+          onClose={onClose}
+          onContinue={handleContinueFromStep2}
+          onBack={handleBackFromStep2}
+          // Refs
+          deliveryTypeRef={deliveryTypeRef}
+          transportRef={transportRef}
+          vehicleRef={vehicleRef}
+          deliveryChargesRef={deliveryChargesRef}
+        />
       )}
 
       {/* Step 3: Invoice Preview */}
