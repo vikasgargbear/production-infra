@@ -529,9 +529,6 @@ const InvoicePreviewEnterprise = ({
                       (totals.round_off || 0) + 
                       (totals.delivery_charges || 0)
                     )}
-                    {isCalculating && (
-                      <div className="inline-block animate-spin rounded-full h-3 w-3 border-b-2 border-blue-600 ml-2"></div>
-                    )}
                   </span>
                 </div>
               </div>
