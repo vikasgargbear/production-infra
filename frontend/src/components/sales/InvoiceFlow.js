@@ -240,11 +240,15 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
     
     console.log('🔙 [NAVIGATION] Going back from step 3 to step:', stepNumber);
     console.log('🔙 [NAVIGATION] Current invoice state:', invoice);
+    console.log('🔙 [NAVIGATION] Invoice items:', invoice.items);
+    console.log('🔙 [NAVIGATION] Invoice totals:', invoice.totals);
     
     try {
       setCurrentStep(stepNumber);
+      console.log('✅ [NAVIGATION] setCurrentStep completed');
     } catch (error) {
-      console.error('❌ [NAVIGATION ERROR]:', error);
+      console.error('❌ [NAVIGATION ERROR] during setCurrentStep:', error);
+      console.error('❌ [NAVIGATION ERROR] Stack:', error.stack);
       alert('Error navigating back: ' + error.message);
     }
   }, [invoice]);
@@ -308,21 +312,23 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
 
       {/* Step 2: Invoice Details */}
       {currentStep === 2 && (
-        <InvoiceDetailsStep
-          invoice={invoice}
-          setInvoice={setInvoice}
-          selectedCustomer={selectedCustomer}
-          sameAsShipping={sameAsShipping}
-          setSameAsShipping={setSameAsShipping}
-          onClose={onClose}
-          onContinue={handleContinueFromStep2}
-          onBack={handleBackFromStep2}
-          // Refs
-          deliveryTypeRef={deliveryTypeRef}
-          transportRef={transportRef}
-          vehicleRef={vehicleRef}
-          deliveryChargesRef={deliveryChargesRef}
-        />
+        <ErrorBoundary>
+          <InvoiceDetailsStep
+            invoice={invoice}
+            setInvoice={setInvoice}
+            selectedCustomer={selectedCustomer}
+            sameAsShipping={sameAsShipping}
+            setSameAsShipping={setSameAsShipping}
+            onClose={onClose}
+            onContinue={handleContinueFromStep2}
+            onBack={handleBackFromStep2}
+            // Refs
+            deliveryTypeRef={deliveryTypeRef}
+            transportRef={transportRef}
+            vehicleRef={vehicleRef}
+            deliveryChargesRef={deliveryChargesRef}
+          />
+        </ErrorBoundary>
       )}
 
       {/* Step 3: Invoice Preview */}
