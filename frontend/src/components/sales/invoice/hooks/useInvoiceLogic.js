@@ -3,12 +3,17 @@ import { toast } from 'react-toastify';
 import { searchCache, smartSearch } from '../../../../utils/searchCache';
 import DataTransformer from '../../../../services/dataTransformer';
 import InvoiceApiService from '../../../../services/invoiceApiService';
-import SimpleInvoiceCalculator from '../../../../services/SimpleInvoiceCalculator';
+import EnterpriseCalculator from '../../../../services/enterpriseCalculator';
 import documentNumberGenerator, { DOC_TYPES } from '../../../../services/documentNumberGenerator';
 import localInvoiceService from '../../../../services/invoice/localInvoiceService';
 import { customerAPI, productAPI, employeesAPI } from '../../../../services/api';
+import offlineDB from '../../../../services/offline/offlineDatabase';
+import { useNetworkStatus } from '../../../../hooks/useNetworkStatus';
 
 export const useInvoiceLogic = (onClose, prefilledData = null) => {
+  // Network Status
+  const { isOnline } = useNetworkStatus();
+  
   // Core State
   const [invoice, setInvoice] = useState({
     invoice_no: '', // Will be generated async in useEffect
@@ -82,6 +87,75 @@ export const useInvoiceLogic = (onClose, prefilledData = null) => {
   const vehicleRef = useRef(null);
   const deliveryChargesRef = useRef(null);
 
+  // Auto-save draft every 30 seconds
+  useEffect(() => {
+    // Don't auto-save if no items or no customer
+    if (invoice.items.length === 0 || !selectedCustomer) {
+      return;
+    }
+
+    const autoSaveInterval = setInterval(async () => {
+      try {
+        const draftData = {
+          ...invoice,
+          customer_id: selectedCustomer.customer_id || selectedCustomer.id,
+          customer_details: selectedCustomer,
+          draft_saved_at: new Date().toISOString()
+        };
+
+        // Save to localStorage as backup
+        localStorage.setItem('invoice_draft', JSON.stringify(draftData));
+        console.log('[Invoice] Auto-saved draft');
+        
+        // Optional: Show subtle notification
+        // toast.info('Draft saved', { autoClose: 1000, position: 'bottom-right' });
+      } catch (error) {
+        console.error('[Invoice] Auto-save failed:', error);
+      }
+    }, 30000); // 30 seconds
+
+    return () => clearInterval(autoSaveInterval);
+  }, [invoice, selectedCustomer]);
+
+  // Load draft on mount
+  useEffect(() => {
+    const loadDraft = () => {
+      try {
+        const savedDraft = localStorage.getItem('invoice_draft');
+        if (savedDraft) {
+          const draft = JSON.parse(savedDraft);
+          
+          // Only load if draft is less than 24 hours old
+          const draftAge = Date.now() - new Date(draft.draft_saved_at).getTime();
+          const maxAge = 24 * 60 * 60 * 1000; // 24 hours
+          
+          if (draftAge < maxAge && draft.items.length > 0) {
+            const shouldRestore = window.confirm(
+              'Found an unsaved invoice draft. Would you like to restore it?'
+            );
+            
+            if (shouldRestore) {
+              setInvoice(draft);
+              if (draft.customer_details) {
+                setSelectedCustomer(draft.customer_details);
+              }
+              toast.success('Draft restored successfully');
+            } else {
+              localStorage.removeItem('invoice_draft');
+            }
+          } else {
+            // Remove old draft
+            localStorage.removeItem('invoice_draft');
+          }
+        }
+      } catch (error) {
+        console.error('[Invoice] Failed to load draft:', error);
+      }
+    };
+
+    loadDraft();
+  }, []); // Only on mount
+
   // Initialize invoice data
   useEffect(() => {
     const initializeInvoice = async () => {
@@ -129,8 +203,9 @@ export const useInvoiceLogic = (onClose, prefilledData = null) => {
   }, [prefilledData]);
 
   // Recalculate totals when items or discounts change
+  // Uses EnterpriseCalculator - single source of truth for all calculations
   useEffect(() => {
-    SimpleInvoiceCalculator.calculateDebounced(invoice, (error, result) => {
+    EnterpriseCalculator.calculateDebounced(invoice, (error, result) => {
       if (error) {
         console.error('Calculation error:', error);
         return;
@@ -296,9 +371,56 @@ export const useInvoiceLogic = (onClose, prefilledData = null) => {
         ...invoice,
         customer_id: selectedCustomer.customer_id || selectedCustomer.id,
         customer_details: selectedCustomer,
-        total_amount: parseFloat(invoice.totals?.final_amount || invoice.net_amount) || 0
+        total_amount: parseFloat(invoice.totals?.final_amount || invoice.net_amount) || 0,
+        invoice_date: invoice.invoice_date || new Date().toISOString().split('T')[0],
+        created_at: new Date().toISOString()
       };
 
+      // OFFLINE-FIRST: Check network status
+      if (!isOnline) {
+        console.log('[Invoice] Saving offline - no internet connection');
+        
+        // Generate local temp ID
+        const tempId = `LOCAL_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+        
+        // Save to IndexedDB
+        await offlineDB.add('invoices', {
+          ...invoiceData,
+          temp_id: tempId,
+          sync_status: 'pending',
+          created_offline: true
+        });
+        
+        // Show offline success message
+        toast.success('✅ Invoice saved offline - Will sync when online', {
+          autoClose: 5000,
+          icon: '📱'
+        });
+        
+        // Create mock success data for UI
+        const createdData = {
+          invoiceId: tempId,
+          invoiceNumber: invoice.invoice_no,
+          customerName: selectedCustomer.customer_name || selectedCustomer.name,
+          customerPhone: selectedCustomer.phone || selectedCustomer.primary_phone || '',
+          customerEmail: selectedCustomer.email || '',
+          totalAmount: invoiceData.total_amount,
+          items: invoice.items,
+          isOffline: true
+        };
+
+        setCreatedInvoiceData(createdData);
+        setShowSuccessModal(true);
+        
+        // Clear draft after successful save
+        localStorage.removeItem('invoice_draft');
+        
+        setSaving(false);
+        return;
+      }
+
+      // ONLINE: Normal API save
+      console.log('[Invoice] Saving online');
       const response = await InvoiceApiService.createInvoice(invoiceData);
 
       if (response.success) {
@@ -309,22 +431,38 @@ export const useInvoiceLogic = (onClose, prefilledData = null) => {
           customerPhone: selectedCustomer.phone || selectedCustomer.primary_phone || '',
           customerEmail: selectedCustomer.email || '',
           totalAmount: response.data.total_amount || invoiceData.total_amount,
-          items: response.data.items || invoice.items
+          items: response.data.items || invoice.items,
+          isOffline: false
         };
 
         setCreatedInvoiceData(createdData);
         setShowSuccessModal(true);
+        
+        // Clear draft after successful save
+        localStorage.removeItem('invoice_draft');
+        
+        toast.success('✅ Invoice created successfully');
       } else {
         throw new Error(response.message || 'Failed to create invoice');
       }
     } catch (error) {
       console.error('Save invoice error:', error);
-      setError(error.message || 'Failed to create invoice');
-      toast.error(error.message || 'Failed to create invoice');
+      
+      // Check if it's a stock conflict
+      if (error.response?.status === 409 && error.response?.data?.detail?.error === 'INSUFFICIENT_STOCK') {
+        const details = error.response.data.detail;
+        setError(`Insufficient stock: Product ${details.product_id} - Required ${details.required_quantity}, Available ${details.available_quantity}`);
+        toast.error(`❌ Insufficient Stock: Only ${details.available_quantity} units available`, {
+          autoClose: 8000
+        });
+      } else {
+        setError(error.message || 'Failed to create invoice');
+        toast.error(error.message || 'Failed to create invoice');
+      }
     } finally {
       setSaving(false);
     }
-  }, [invoice, selectedCustomer]);
+  }, [invoice, selectedCustomer, isOnline]);
 
   const clearMessage = useCallback(() => {
     setMessage('');

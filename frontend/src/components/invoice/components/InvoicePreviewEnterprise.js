@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Calendar, MapPin, Phone, Mail, Truck, CreditCard, FileText } from 'lucide-react';
-import InvoiceCalculator from '../../../services/InvoiceCalculator';
+import EnterpriseCalculator from '../../../services/enterpriseCalculator';
 
 const InvoicePreviewEnterprise = ({ 
   invoice, 
@@ -38,7 +38,7 @@ const InvoicePreviewEnterprise = ({
         discount_amount: invoice.discount_amount || 0
       };
       
-      const result = await InvoiceCalculator.calculate(invoiceData);
+      const result = await EnterpriseCalculator.calculateInvoice(invoiceData);
       setCalculatedTotals(result.totals);
       
     } catch (error) {
@@ -49,7 +49,7 @@ const InvoicePreviewEnterprise = ({
   };
 
   const formatCurrency = (amount) => {
-    return InvoiceCalculator.formatCurrency(amount);
+    return EnterpriseCalculator.formatCurrency(amount);
   };
 
   const formatDate = (date) => {

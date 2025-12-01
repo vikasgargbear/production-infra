@@ -1,7 +1,45 @@
 /**
- * Enterprise Calculator Service
- * Single source of truth for all calculations across Invoice, Challan, Sales Order
- * Architecture: Calculate at item level, aggregate for totals
+ * EnterpriseCalculator - SINGLE SOURCE OF TRUTH FOR ALL CALCULATIONS
+ * 
+ * ⚠️ WARNING: DO NOT CREATE NEW CALCULATORS!
+ * ⚠️ All calculation logic MUST be in this file.
+ * 
+ * This is the ONLY calculator used across the entire application:
+ * ✅ Invoices
+ * ✅ Sales Orders  
+ * ✅ Delivery Challans
+ * ✅ Purchase Orders
+ * ✅ Returns
+ * ✅ Quotations
+ * 
+ * If you need new calculation functionality:
+ * 1. ADD IT TO THIS FILE
+ * 2. Do NOT create wrapper calculators
+ * 3. Update this documentation
+ * 
+ * Architecture:
+ * - calculateItem() → Single item calculations
+ * - calculateTotals() → Aggregate multiple items
+ * - calculateInvoice/Challan/Order() → Document-specific wrappers
+ * - calculateDebounced() → Real-time updates with debouncing
+ * 
+ * Usage:
+ * ```javascript
+ * import EnterpriseCalculator from './services/enterpriseCalculator';
+ * 
+ * // Item-level
+ * const item = EnterpriseCalculator.calculateItem(itemData);
+ * 
+ * // Invoice totals
+ * const result = EnterpriseCalculator.calculateTotals(items, options);
+ * 
+ * // Real-time with debounce
+ * EnterpriseCalculator.calculateDebounced(invoice, callback);
+ * ```
+ * 
+ * Archived Calculators (Do not use):
+ * - SimpleInvoiceCalculator.js → Moved to archive 2024-12-01
+ * - InvoiceCalculator.js → Moved to archive 2024-12-01
  */
 
 class EnterpriseCalculator {
@@ -14,14 +52,15 @@ class EnterpriseCalculator {
   static calculateItem(item, options = {}) {
     const gstType = options.gst_type || 'CGST/SGST';
     
-    // Parse inputs once - CRITICAL: Use base_quantity for billing
+    // Parse inputs once - CRITICAL FIX: ALWAYS use quantity for billing
     const rate = parseFloat(item.sale_price || item.rate || item.selling_price || item.unit_price) || 0;
-    const baseQuantity = parseFloat(item.base_quantity !== undefined ? item.base_quantity : item.quantity) || 0;
+    const quantity = parseFloat(item.quantity) || 0;
+    const baseQuantity = quantity; // base_quantity = billable quantity (always same as quantity)
     const freeQuantity = parseFloat(item.free_quantity) || 0;
     const discountPercent = parseFloat(item.discount_percent || item.discount) || 0;
     const gstPercent = parseFloat(item.gst_percent || item.tax_rate || item.gst) || 0;
     
-    // PRODUCTION LOGIC: Use base_quantity ONLY for billing calculations
+    // PRODUCTION LOGIC: Use quantity for billing calculations
     // Free items are truly FREE and don't affect pricing
     const subtotal = rate * baseQuantity;
     const discountAmount = (subtotal * discountPercent) / 100;
