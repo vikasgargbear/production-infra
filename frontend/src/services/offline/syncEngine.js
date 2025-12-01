@@ -54,7 +54,8 @@ class SyncEngine {
       synced: 0,
       failed: 0,
       conflicts: 0,
-      errors: []
+      errors: [],
+      conflictDetails: [] // Store detailed conflict info
     };
 
     try {
@@ -68,10 +69,15 @@ class SyncEngine {
         return { ...results, message: 'No items to sync' };
       }
 
+      // CRITICAL FIX: Sort items chronologically to maintain order
+      // Invoices must sync in order of creation to prevent stock conflicts
+      const sortedItems = this.sortItemsChronologically(pendingItems);
       
+      console.log(`[SyncEngine] Syncing ${sortedItems.length} items in chronological order`);
 
-      // Process each item
-      for (const item of pendingItems) {
+      // CRITICAL FIX: Process items SEQUENTIALLY to avoid race conditions
+      // Parallel syncing could cause concurrent stock deductions
+      for (const item of sortedItems) {
         try {
           const syncResult = await this.syncItem(item);
           
@@ -83,6 +89,14 @@ class SyncEngine {
             results.conflicts++;
             // Mark as conflict for manual resolution
             await offlineDB.markSyncConflict(item.id, syncResult.error);
+            
+            // Store detailed conflict info for user notification
+            results.conflictDetails.push({
+              itemType: item.entity_type,
+              itemId: item.entity_id,
+              error: syncResult.error,
+              details: syncResult.details
+            });
           } else {
             results.failed++;
             results.errors.push(syncResult.error);
@@ -143,44 +157,79 @@ class SyncEngine {
     try {
       let response;
       
-      switch (item.type) {
+      switch (item.entity_type || item.type) {
+        case 'invoices':
         case 'invoice':
           response = await this.syncInvoice(item.data);
           break;
           
+        case 'customers':
         case 'customer':
           response = await this.syncCustomer(item.data);
           break;
           
+        case 'products':
         case 'product':
           response = await this.syncProduct(item.data);
           break;
           
+        case 'payments':
         case 'payment':
           response = await this.syncPayment(item.data);
           break;
           
         default:
-          throw new Error(`Unknown sync type: ${item.type}`);
+          throw new Error(`Unknown sync type: ${item.entity_type || item.type}`);
       }
 
       return { success: true, response };
       
     } catch (error) {
-      // Check if it's a conflict (409) or version mismatch
+      // Enhanced conflict detection
+      if (error.isConflict) {
+        // Our custom conflict object from syncInvoice
+        return {
+          success: false,
+          conflict: true,
+          error: error.message,
+          details: {
+            type: error.type,
+            productId: error.productId,
+            batchId: error.batchId,
+            requiredQty: error.requiredQty,
+            availableQty: error.availableQty,
+            invoiceNumber: error.invoiceNumber
+          }
+        };
+      }
+      
+      // Check if it's a 409 conflict from server
       if (error.response?.status === 409) {
         return { 
           success: false, 
           conflict: true, 
-          error: 'Version conflict - data was modified on server' 
+          error: error.response?.data?.detail?.message || 'Data conflict - please review' 
         };
       }
       
+      // Regular error
       return { 
         success: false, 
-        error: error.message 
+        error: error.message || 'Sync failed'
       };
     }
+  }
+
+  // Sort items chronologically for proper sync order
+  sortItemsChronologically(items) {
+    return items.slice().sort((a, b) => {
+      // Get timestamps from the data
+      const timeA = a.data?.invoice_date || a.data?.created_at || a.created_at || 0;
+      const timeB = b.data?.invoice_date || b.data?.created_at || b.created_at || 0;
+      
+      // Sort oldest first to maintain chronological order
+      return new Date(timeA) - new Date(timeB);
+    });
   }
 
   // Sync invoice
@@ -188,23 +237,44 @@ class SyncEngine {
     // Remove local-only fields
     const { _localId, _syncStatus, ...invoice } = invoiceData;
     
-    // If it has a server ID, update; otherwise create
-    if (invoice.invoice_id && !invoice.invoice_id.startsWith('LOCAL_')) {
-      return await apiClient.put(`/invoices/${invoice.invoice_id}`, invoice);
-    } else {
-      // Create new invoice
-      const response = await apiClient.post('/invoices', invoice);
-      
-      // Update local database with server ID
-      if (response.data?.invoice_id) {
-        await offlineDB.updateLocalId(
-          'invoices', 
-          invoiceData._localId, 
-          response.data.invoice_id
-        );
+    try {
+      // If it has a server ID, update; otherwise create
+      if (invoice.invoice_id && !invoice.invoice_id.startsWith('LOCAL_')) {
+        return await apiClient.put(`/invoices/${invoice.invoice_id}`, invoice);
+      } else {
+        // Create new invoice
+        const response = await apiClient.post('/invoices', invoice);
+        
+        // Update local database with server ID
+        if (response.data?.invoice_id) {
+          await offlineDB.updateLocalId(
+            'invoices', 
+            invoiceData._localId, 
+            response.data.invoice_id
+          );
+        }
+        
+        return response;
+      }
+    } catch (error) {
+      // Enhanced error handling for stock conflicts
+      if (error.response?.status === 409 && error.response?.data?.detail?.error === 'INSUFFICIENT_STOCK') {
+        // This is a stock conflict - return detailed info
+        const details = error.response.data.detail;
+        throw {
+          isConflict: true,
+          type: 'INSUFFICIENT_STOCK',
+          message: details.message,
+          productId: details.product_id,
+          batchId: details.batch_id,
+          requiredQty: details.required_quantity,
+          availableQty: details.available_quantity,
+          invoiceNumber: details.invoice_number
+        };
       }
       
-      return response;
+      // Re-throw other errors
+      throw error;
     }
   }
 

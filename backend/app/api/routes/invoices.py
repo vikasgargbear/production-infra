@@ -576,7 +576,30 @@ async def create_invoice(
                             logger.warning(f"⚠️ Could not record inventory movement: {movement_error}")
                             # Don't fail the transaction for movement tracking
                     else:
-                        logger.warning(f"❌ Insufficient stock in batch {batch_id} for full quantity {quantity}")
+                        # CRITICAL FIX: Fail the invoice if insufficient stock
+                        # Get current available quantity for better error message
+                        stock_check = db.execute(text("""
+                            SELECT quantity_available FROM inventory.batches
+                            WHERE batch_id = :batch_id AND org_id = :org_id
+                        """), {"batch_id": batch_id, "org_id": str(org_id)})
+                        current_stock = stock_check.fetchone()
+                        available = current_stock[0] if current_stock else 0
+                        
+                        error_msg = f"Insufficient stock for product {product_id} (batch {batch_id}): Required {quantity}, Available {available}"
+                        logger.error(f"❌ INVOICE CREATION FAILED: {error_msg}")
+                        db.rollback()
+                        raise HTTPException(
+                            status_code=409,  # Conflict status
+                            detail={
+                                "error": "INSUFFICIENT_STOCK",
+                                "message": error_msg,
+                                "product_id": product_id,
+                                "batch_id": batch_id,
+                                "required_quantity": quantity,
+                                "available_quantity": available,
+                                "invoice_number": invoice_data.get("invoice_number", "DRAFT")
+                            }
+                        )
                         
                 except Exception as inv_error:
                     logger.error(f"❌ Inventory deduction failed for batch {batch_id}: {inv_error}")

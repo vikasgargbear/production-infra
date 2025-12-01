@@ -1,11 +1,36 @@
 // Offline Status Indicator Component
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { WifiOff, Wifi, Loader2, AlertCircle, CheckCircle } from 'lucide-react';
 import { useNetworkStatus } from '../../../hooks/useNetworkStatus';
+import offlineDB from '../../../services/offline/offlineDatabase';
+import ConflictResolutionModal from '../../sales/ConflictResolutionModal';
 
 const OfflineIndicator = () => {
   const { isOnline, pendingCount, syncStats, forceSync } = useNetworkStatus();
   const totalPending = pendingCount + syncStats.failed + syncStats.conflict;
+  
+  const [showConflicts, setShowConflicts] = useState(false);
+  const [conflicts, setConflicts] = useState([]);
+
+  // Load conflicts when conflict count changes
+  useEffect(() => {
+    if (syncStats.conflict > 0) {
+      loadConflicts();
+    }
+  }, [syncStats.conflict]);
+
+  const loadConflicts = async () => {
+    try {
+      const queue = await offlineDB.getSyncQueue();
+      const conflictItems = queue.filter(item => 
+        item.sync_status === 'conflict' || item.conflict_reason
+      );
+      
+      setConflicts(conflictItems);
+    } catch (error) {
+      console.error('Failed to load conflicts:', error);
+    }
+  };
 
   // Don't show anything if online and no pending items
   if (isOnline && totalPending === 0) {
@@ -16,6 +41,17 @@ const OfflineIndicator = () => {
     if (isOnline && totalPending > 0) {
       await forceSync();
     }
+  };
+
+  const handleViewConflicts = () => {
+    setShowConflicts(true);
+  };
+
+  const handleConflictResolved = async () => {
+    // Reload conflicts
+    await loadConflicts();
+    // Update sync stats
+    await forceSync();
   };
 
   return (
@@ -75,15 +111,26 @@ const OfflineIndicator = () => {
           )}
         </div>
 
-        {/* Force Sync Button */}
+        {/* Actions */}
         {isOnline && totalPending > 0 && (
-          <button
-            onClick={handleForceSync}
-            className="ml-auto px-3 py-1 text-xs font-medium bg-white rounded border border-current hover:bg-gray-50 transition-colors"
-            title="Force sync now"
-          >
-            Sync Now
-          </button>
+          <div className="ml-auto flex gap-2">
+            {syncStats.conflict > 0 && (
+              <button
+                onClick={handleViewConflicts}
+                className="px-3 py-1 text-xs font-medium bg-orange-600 text-white rounded hover:bg-orange-700 transition-colors"
+                title="View conflicts"
+              >
+                View Conflicts
+              </button>
+            )}
+            <button
+              onClick={handleForceSync}
+              className="px-3 py-1 text-xs font-medium bg-white rounded border border-current hover:bg-gray-50 transition-colors"
+              title="Force sync now"
+            >
+              Sync Now
+            </button>
+          </div>
         )}
 
         {/* Offline Mode Info */}
@@ -101,6 +148,14 @@ const OfflineIndicator = () => {
           <p>Your changes will sync automatically when connection returns.</p>
         </div>
       )}
+
+      {/* Conflict Resolution Modal */}
+      <ConflictResolutionModal
+        isOpen={showConflicts}
+        onClose={() => setShowConflicts(false)}
+        conflicts={conflicts}
+        onResolved={handleConflictResolved}
+      />
     </div>
   );
 };

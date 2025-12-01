@@ -1,14 +1,19 @@
-import React, { useState, useRef, useCallback } from 'react';
+import React, { useState, useRef, useCallback, useMemo } from 'react';
 import { toast } from 'react-toastify';
 import { useCompany } from '../../contexts/CompanyContext';
 import useEscapeKey from '../../hooks/useEscapeKey';
 import { useEnterAsTab } from '../../hooks/useEnterAsTab';
 import html2pdf from 'html2pdf.js';
 
-// Step Components
-import InvoiceItemsStep from './invoice/steps/InvoiceItemsStep';
-import InvoiceDetailsStep from './invoice/steps/InvoiceDetailsStep';
-import InvoicePreviewStep from './invoice/steps/InvoicePreviewStep';
+// Step Components (will memoize for performance)
+import InvoiceItemsStepBase from './invoice/steps/InvoiceItemsStep';
+import InvoiceDetailsStepBase from './invoice/steps/InvoiceDetailsStep';
+import InvoicePreviewStepBase from './invoice/steps/InvoicePreviewStep';
+
+// Memoize expensive step components to prevent unnecessary re-renders
+const InvoiceItemsStep = React.memo(InvoiceItemsStepBase);
+const InvoiceDetailsStep = React.memo(InvoiceDetailsStepBase);
+const InvoicePreviewStep = React.memo(InvoicePreviewStepBase);
 
 // Shared Logic
 import { useInvoiceLogic } from './invoice/hooks/useInvoiceLogic';
