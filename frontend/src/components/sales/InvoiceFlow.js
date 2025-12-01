@@ -4,6 +4,7 @@ import { useCompany } from '../../contexts/CompanyContext';
 import useEscapeKey from '../../hooks/useEscapeKey';
 import { useEnterAsTab } from '../../hooks/useEnterAsTab';
 import html2pdf from 'html2pdf.js';
+import EnterpriseCalculator from '../../services/enterpriseCalculator';
 
 // Step Components (will memoize for performance)
 import InvoiceItemsStepBase from './invoice/steps/InvoiceItemsStep';
@@ -154,7 +155,7 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
   }, [invoice.invoice_no]);
 
   // Step navigation handlers
-  const handleContinueFromStep1 = useCallback(() => {
+  const handleContinueFromStep1 = useCallback(async () => {
     if (!selectedCustomer) {
       toast.error('Please select a customer');
       return;
@@ -163,12 +164,75 @@ const InvoiceFlow = ({ onClose, prefilledData = null }) => {
       toast.error('Please add at least one item');
       return;
     }
-    setCurrentStep(2);
-  }, [selectedCustomer, invoice.items.length]);
+    
+    console.log('🔄 [STEP 1→2] Forcing calculation before continuing...');
+    console.log('🔄 [STEP 1→2] Current items:', invoice.items.map(i => ({ name: i.product_name, qty: i.quantity })));
+    
+    // CRITICAL FIX: Force synchronous calculation BEFORE moving to next step
+    try {
+      const result = await new Promise((resolve, reject) => {
+        EnterpriseCalculator.calculateDebounced(invoice, (error, calcResult) => {
+          if (error) reject(error);
+          else resolve(calcResult);
+        }, 0, 'invoice'); // 0ms delay = immediate
+      });
+      
+      console.log('✅ [STEP 1→2] Calculation complete:', {
+        gross_amount: result.totals.gross_amount,
+        final_amount: result.totals.final_amount
+      });
+      
+      // Update invoice with calculated totals
+      setInvoice(prev => ({
+        ...prev,
+        totals: result.totals,
+        net_amount: result.totals.final_amount
+      }));
+      
+      // Small delay to ensure state updates
+      await new Promise(resolve => setTimeout(resolve, 100));
+      
+      setCurrentStep(2);
+    } catch (error) {
+      console.error('❌ [STEP 1→2] Calculation failed:', error);
+      toast.error('Calculation error. Please try again.');
+    }
+  }, [selectedCustomer, invoice, setInvoice]);
 
-  const handleContinueFromStep2 = useCallback(() => {
-    setCurrentStep(3);
-  }, []);
+  const handleContinueFromStep2 = useCallback(async () => {
+    console.log('🔄 [STEP 2→3] Forcing calculation before preview...');
+    
+    // CRITICAL FIX: Force calculation before preview
+    try {
+      const result = await new Promise((resolve, reject) => {
+        EnterpriseCalculator.calculateDebounced(invoice, (error, calcResult) => {
+          if (error) reject(error);
+          else resolve(calcResult);
+        }, 0, 'invoice'); // 0ms delay = immediate
+      });
+      
+      console.log('✅ [STEP 2→3] Calculation complete:', {
+        gross_amount: result.totals.gross_amount,
+        final_amount: result.totals.final_amount
+      });
+      
+      // Update invoice with latest totals
+      setInvoice(prev => ({
+        ...prev,
+        totals: result.totals,
+        net_amount: result.totals.final_amount,
+        items: result.items // Include enriched items with calculated values
+      }));
+      
+      // Small delay to ensure state updates
+      await new Promise(resolve => setTimeout(resolve, 100));
+      
+      setCurrentStep(3);
+    } catch (error) {
+      console.error('❌ [STEP 2→3] Calculation failed:', error);
+      toast.error('Calculation error. Please try again.');
+    }
+  }, [invoice, setInvoice]);
 
   const handleBackFromStep3 = useCallback((targetStep = 2) => {
     console.log('🔙 [NAVIGATION] Going back from step 3 to step:', targetStep);
