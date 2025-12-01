@@ -183,11 +183,23 @@ class EnterpriseCalculator {
    * Calculate invoice - uses base methods
    */
   static calculateInvoice(invoiceData) {
-    return this.calculateTotals(invoiceData.items || [], {
+    console.log('🧮 [CALCULATOR] Received invoice data:', invoiceData);
+    console.log('🧮 [CALCULATOR] Items:', invoiceData.items?.map(i => ({
+      name: i.product_name,
+      qty: i.quantity,
+      rate: i.unit_price,
+      total: i.quantity * i.unit_price
+    })));
+    
+    const result = this.calculateTotals(invoiceData.items || [], {
       gst_type: invoiceData.gst_type,
       delivery_charges: invoiceData.delivery_charges,
       additional_discount: invoiceData.discount_amount || 0  // Apply invoice-level discount (in addition to item discounts)
     });
+    
+    console.log('🧮 [CALCULATOR] Calculated result:', result);
+    
+    return result;
   }
   
   /**

@@ -23,6 +23,8 @@ const InvoicePreviewEnterprise = ({
     try {
       setIsCalculating(true);
       
+      console.log('🔍 [PREVIEW] Raw invoice.items:', invoice.items);
+      
       const invoiceData = {
         items: invoice.items.map(item => ({
           product_id: item.product_id,
@@ -37,7 +39,12 @@ const InvoicePreviewEnterprise = ({
         discount_amount: invoice.discount_amount || 0
       };
       
+      console.log('📤 [PREVIEW] Sending to calculator:', invoiceData);
+      
       const result = await EnterpriseCalculator.calculateInvoice(invoiceData);
+      
+      console.log('📥 [PREVIEW] Result from calculator:', result);
+      
       setCalculatedTotals(result.totals);
       
     } catch (error) {
