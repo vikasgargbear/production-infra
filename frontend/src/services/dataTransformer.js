@@ -243,7 +243,7 @@ class DataTransformer {
   static _getExpiryStatus(expiryDate) {
     if (!expiryDate) return 'unknown';
     
-    const days = dayjs(expiryDate).diff(dayjs(), 'days');
+    const days = differenceInDays(new Date(expiryDate), new Date());
     
     if (days < 0) return 'expired';
     if (days <= 30) return 'expiring_soon';
