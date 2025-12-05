@@ -247,14 +247,26 @@ export const useInvoiceLogic = (onClose, prefilledData = null) => {
           totals: result.totals
         });
 
-        // CRITICAL FIX: Only update totals, not items
-        // Updating items would trigger this useEffect again (infinite loop)
+        // CRITICAL FIX: Only merge CALCULATED fields, preserve user-edited fields
         setInvoice(prev => {
-          // Enrich items with calculated values without changing array reference
-          const enrichedItems = prev.items.map((item, idx) => ({
-            ...item,
-            ...(result.items[idx] || {}), // Merge calculated values
-          }));
+          // Enrich items with ONLY calculated values (not user-editable fields)
+          const enrichedItems = prev.items.map((item, idx) => {
+            const calculatedItem = result.items[idx] || {};
+            
+            return {
+              ...item,
+              // ONLY merge calculated/derived fields - NEVER overwrite user inputs
+              line_subtotal: calculatedItem.line_subtotal,
+              line_discount: calculatedItem.line_discount,
+              line_taxable: calculatedItem.line_taxable,
+              line_gst: calculatedItem.line_gst,
+              line_total: calculatedItem.line_total,
+              cgst_amount: calculatedItem.cgst_amount,
+              sgst_amount: calculatedItem.sgst_amount,
+              igst_amount: calculatedItem.igst_amount,
+              // User editable fields (quantity, rate, discount, gst_percent) are preserved from item
+            };
+          });
 
           console.log('📊 Updating invoice with totals:', {
             final_amount: result.totals.final_amount,
