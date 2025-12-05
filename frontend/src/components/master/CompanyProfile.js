@@ -69,7 +69,12 @@ const CompanyProfile = ({ open, onClose }) => {
     printFormat: 'A4',
     showSignature: true,
     showLogo: true,
-    showBankDetails: true
+    showBankDetails: true,
+    
+    // Regional Settings (NEW - for timezone handling)
+    timezone: 'Asia/Kolkata',
+    dateFormat: 'DD-MM-YYYY',
+    timeFormat: '12h'
   });
 
   // Fetch organization profile on mount
@@ -152,7 +157,12 @@ const CompanyProfile = ({ open, onClose }) => {
           printFormat: data.business_settings?.print_format || data.print_format || 'A4',
           showSignature: data.business_settings?.show_signature !== false,
           showLogo: data.business_settings?.show_logo !== false,
-          showBankDetails: data.business_settings?.show_bank_details !== false
+          showBankDetails: data.business_settings?.show_bank_details !== false,
+          
+          // Regional Settings (NEW)
+          timezone: data.timezone || data.business_settings?.timezone || 'Asia/Kolkata',
+          dateFormat: data.date_format || data.business_settings?.date_format || 'DD-MM-YYYY',
+          timeFormat: data.time_format || data.business_settings?.time_format || '12h'
         });
       } else {
         setError('No organization data available');
@@ -260,8 +270,17 @@ const CompanyProfile = ({ open, onClose }) => {
         print_format: companyData.printFormat,
         show_signature: companyData.showSignature,
         show_logo: companyData.showLogo,
-        show_bank_details: companyData.showBankDetails
+        show_bank_details: companyData.showBankDetails,
+        // Regional Settings
+        timezone: companyData.timezone,
+        date_format: companyData.dateFormat,
+        time_format: companyData.timeFormat
       };
+      
+      // Save timezone to localStorage for quick access
+      localStorage.setItem('company_timezone', companyData.timezone);
+      localStorage.setItem('date_format', companyData.dateFormat);
+      localStorage.setItem('time_format', companyData.timeFormat);
       
       const response = await companyAPI.updateCompanyInfo(profileData);
       
@@ -616,6 +635,74 @@ const CompanyProfile = ({ open, onClose }) => {
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
                   />
                 </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Regional Settings - NEW */}
+          <div className="bg-white rounded-lg border border-gray-200 p-6">
+            <h2 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
+              <Globe className="w-5 h-5 mr-2" />
+              Regional Settings
+            </h2>
+            
+            <div className="grid grid-cols-3 gap-4">
+              {/* Timezone */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Business Timezone
+                </label>
+                <select
+                  value={companyData.timezone}
+                  onChange={(e) => handleInputChange('timezone', e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="Asia/Kolkata">India (IST - UTC+5:30)</option>
+                  <option value="Asia/Dubai">UAE (GST - UTC+4)</option>
+                  <option value="Asia/Singapore">Singapore (SGT - UTC+8)</option>
+                  <option value="Europe/London">UK (GMT/BST)</option>
+                  <option value="America/New_York">US Eastern (EST/EDT)</option>
+                </select>
+                <small className="text-xs text-gray-500 mt-1 block">
+                  All invoices and reports will use this timezone. Should match your GST registration location.
+                </small>
+              </div>
+
+              {/* Date Format */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Date Format
+                </label>
+                <select
+                  value={companyData.dateFormat}
+                  onChange={(e) => handleInputChange('dateFormat', e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="DD-MM-YYYY">31-12-2024 (Indian)</option>
+                  <option value="MM-DD-YYYY">12-31-2024 (US)</option>
+                  <option value="YYYY-MM-DD">2024-12-31 (ISO)</option>
+                </select>
+                <small className="text-xs text-gray-500 mt-1 block">
+                  How dates are displayed in the app
+                </small>
+              </div>
+
+              {/* Time Format */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Time Format
+                </label>
+                <select
+                  value={companyData.timeFormat}
+                  onChange={(e) => handleInputChange('timeFormat', e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="12h">12 Hour (3:30 PM)</option>
+                  <option value="24h">24 Hour (15:30)</option>
+                </select>
+                <small className="text-xs text-gray-500 mt-1 block">
+                  Time display format
+                </small>
               </div>
             </div>
           </div>

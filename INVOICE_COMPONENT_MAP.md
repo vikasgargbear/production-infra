@@ -68,8 +68,9 @@ SalesHub (Entry Point)
 
 ```
 📄 InvoiceFlow.js (425 lines)
-├─ Location: components/sales/InvoiceFlow.js
+├─ Location: /Users/vikasgarg/Documents/AASO/Infrastructure/production-infra/frontend/src/components/sales/InvoiceFlow.js
 ├─ Role: Controls 3-step workflow, navigation, state
+├─ Status: ✅ ACTIVE - PRODUCTION READY
 ├─ Imports:
 │  ├─ useInvoiceLogic (custom hook)
 │  ├─ InvoiceItemsStep
@@ -980,7 +981,197 @@ ItemsTableKeyboard
 
 ---
 
-**Last Updated**: December 1, 2024  
-**Status**: Comprehensive mapping complete  
-**Next**: Test all components after cache clear
+**Last Updated**: December 3, 2024  
+**Status**: Complete file inventory with actual locations added  
+**Next**: Archive unused files after verification
+
+---
+
+## 📂 COMPLETE FILE INVENTORY WITH LOCATIONS
+
+### **🟢 ACTIVE FILES - PRODUCTION READY (Keep & Maintain)**
+
+#### **Core Invoice Creation Flow**
+
+| File | Location | Lines | Purpose | Status |
+|------|----------|-------|---------|--------|
+| **InvoiceFlow.js** | `frontend/src/components/sales/InvoiceFlow.js` | 425 | Main orchestrator, 3-step workflow | ✅ ACTIVE |
+| **useInvoiceLogic.js** | `frontend/src/components/sales/invoice/hooks/useInvoiceLogic.js` | 618 | Business logic hook, state management | ✅ ACTIVE |
+| **InvoiceItemsStep.js** | `frontend/src/components/sales/invoice/steps/InvoiceItemsStep.js` | 364 | Step 1 - Add items & customer | ✅ ACTIVE |
+| **InvoiceDetailsStep.js** | `frontend/src/components/sales/invoice/steps/InvoiceDetailsStep.js` | 727 | Step 2 - Payment & delivery details | ✅ ACTIVE |
+| **InvoicePreviewStep.js** | `frontend/src/components/sales/invoice/steps/InvoicePreviewStep.js` | 463 | Step 3 - Preview wrapper | ✅ ACTIVE |
+| **InvoicePreviewEnterprise.js** | `frontend/src/components/invoice/components/InvoicePreviewEnterprise.js` | 534 | Display component for preview/print | ✅ ACTIVE |
+
+#### **Services & Utilities**
+
+| File | Location | Lines | Purpose | Status |
+|------|----------|-------|---------|--------|
+| **invoices.api.js** | `frontend/src/services/api/modules/invoices.api.js` | 258 | API service - USE THIS ONE | ✅ ACTIVE |
+| **EnterpriseCalculator.js** | `frontend/src/services/enterpriseCalculator.js` | 284 | Single source of truth for calculations | ✅ ACTIVE |
+| **DataTransformer.js** | `frontend/src/services/dataTransformer.js` | ~375 | Data formatting for API/display | ✅ ACTIVE |
+| **offlineDatabase.js** | `frontend/src/services/offline/offlineDatabase.js` | TBD | Offline storage (IndexedDB) | ✅ ACTIVE |
+| **invoiceValidator.js** | `frontend/src/services/invoiceValidator.js` | TBD | Validation rules | ✅ ACTIVE |
+| **invoicePdfGenerator.js** | `frontend/src/utils/invoicePdfGenerator.js` | TBD | PDF generation | ✅ ACTIVE |
+
+#### **Supporting Components**
+
+| File | Location | Lines | Purpose | Status |
+|------|----------|-------|---------|--------|
+| **InvoiceSuccessModal.js** | `frontend/src/components/sales/InvoiceSuccessModal.js` | 184 | Success dialog after save | ✅ ACTIVE |
+| **InvoiceListV2.tsx** | `frontend/src/components/sales/InvoiceListV2.tsx` | 1287 | Invoice history list | ✅ ACTIVE |
+| **InvoiceSelector.tsx** | `frontend/src/components/global/modals/InvoiceSelector.tsx` | TBD | Invoice selection modal (TypeScript) | ✅ ACTIVE |
+| **InvoiceSearch.js** | `frontend/src/components/global/search/InvoiceSearch.js` | TBD | Search functionality | ✅ ACTIVE |
+| **ConflictResolutionModal.js** | `frontend/src/components/sales/ConflictResolutionModal.js` | 261 | Offline sync conflict resolution | ✅ ACTIVE |
+
+---
+
+### **🟡 DUPLICATE/QUESTIONABLE FILES (Review & Consider Archiving)**
+
+#### **Duplicate Preview Components**
+
+| File | Location | Lines | Issue | Action |
+|------|----------|-------|-------|--------|
+| **InvoicePreview.js** | `frontend/src/components/invoice/components/InvoicePreview.js` | 514 | ⚠️ Duplicate of InvoicePreviewEnterprise? | ❓ CHECK IF USED |
+
+**Question**: Are both InvoicePreview.js and InvoicePreviewEnterprise.js being used? Or can we archive one?
+
+#### **Duplicate API Services**
+
+| File | Location | Lines | Issue | Action |
+|------|----------|-------|-------|--------|
+| **invoiceApiService.js** | `frontend/src/services/invoiceApiService.js` | 510 | ⚠️ Mock/duplicate of invoices.api.js | 🔴 LIKELY ARCHIVE |
+
+**Analysis**: This file contains 510 lines of mock responses. The proper API service is `invoices.api.js` (258 lines). This appears to be a development/fallback service.
+
+#### **Duplicate Calculation Hooks**
+
+| File | Location | Lines | Issue | Action |
+|------|----------|-------|-------|--------|
+| **useInvoiceCalculation.js** | `frontend/src/hooks/useInvoiceCalculation.js` | 330 | ⚠️ Duplicate calculator logic? | ❓ CHECK VS EnterpriseCalculator |
+
+**Analysis**: We have EnterpriseCalculator.js (284 lines) as single source of truth. This hook (330 lines) might be duplicate/old.
+
+#### **Wrapper/Container Components**
+
+| File | Location | Lines | Issue | Action |
+|------|----------|-------|-------|--------|
+| **InvoiceContainer.js** | `frontend/src/components/sales/InvoiceContainer.js` | 103 | ⚠️ What does this wrap? | ❓ CHECK USAGE |
+| **InvoiceManagement.js** | `frontend/src/components/sales/InvoiceManagement.js` | 554 | ⚠️ Management interface? | ❓ CHECK USAGE |
+| **InvoiceSidebar.js** | `frontend/src/components/sales/InvoiceSidebar.js` | 188 | ⚠️ Where is this used? | ❓ CHECK USAGE |
+
+**Question**: What do these files do and are they actively used in the invoice creation flow?
+
+#### **Other Selectors**
+
+| File | Location | Lines | Issue | Action |
+|------|----------|-------|-------|--------|
+| **InvoiceSelector.js** | `frontend/src/components/global/InvoiceSelector.js` | TBD | ⚠️ Duplicate of InvoiceSelector.tsx? | ❓ JS vs TSX version |
+| **InvoiceSelector.tsx** | `frontend/src/components/payment/components/InvoiceSelector.tsx` | TBD | ⚠️ Another InvoiceSelector | ❓ WHICH ONE TO USE? |
+
+**Analysis**: We have 3 InvoiceSelector files! Need to determine which is the canonical version.
+
+#### **Utility/Supporting Files**
+
+| File | Location | Lines | Purpose | Status |
+|------|----------|-------|---------|--------|
+| **InvoiceSummaryTop.tsx** | `frontend/src/components/sales/components/InvoiceSummaryTop.tsx` | TBD | Summary header component | ❓ CHECK USAGE |
+| **ConvertToInvoiceButton.tsx** | `frontend/src/components/sales/components/ConvertToInvoiceButton.tsx` | TBD | Convert order to invoice | ✅ LIKELY ACTIVE |
+| **ImportFromInvoiceModal.js** | `frontend/src/components/challan/components/ImportFromInvoiceModal.js` | TBD | Import invoice to challan | ✅ LIKELY ACTIVE |
+| **OutstandingInvoicesTable.js** | `frontend/src/components/global/display/OutstandingInvoicesTable.js` | TBD | Outstanding invoices display | ✅ LIKELY ACTIVE |
+| **localInvoiceService.js** | `frontend/src/services/invoice/localInvoiceService.js` | 235 | Local invoice operations | ❓ CHECK VS offlineDatabase |
+| **invoiceStyles.js** | `frontend/src/components/invoice/styles/invoiceStyles.js` | TBD | Styles for invoice components | ✅ LIKELY ACTIVE |
+| **invoice.config.js** | `frontend/src/config/invoice.config.js` | TBD | Invoice configuration | ✅ ACTIVE |
+
+---
+
+### **🔵 BACKEND FILES (Keep)**
+
+| File | Location | Purpose | Status |
+|------|----------|---------|--------|
+| **invoices.py** | `backend/app/api/routes/invoices.py` | Main invoice routes | ✅ ACTIVE |
+| **invoices_v2.py** | `backend/app/api/routes/invoices_v2.py` | V2 invoice routes | ✅ ACTIVE |
+| **invoice_calculation.py** | `backend/app/api/routes/invoice_calculation.py` | Calculation endpoints | ✅ ACTIVE |
+| **invoice_service.py** | `backend/app/api/services/invoice_service.py` | Invoice business logic | ✅ ACTIVE |
+| **invoice_service.py** | `backend/app/services/invoices/invoice_service.py` | Invoice domain service | ✅ ACTIVE |
+| **calculations.py** | `backend/app/services/invoices/calculations.py` | Backend calculations | ✅ ACTIVE |
+| **invoice_repository.py** | `backend/app/repositories/invoices/invoice_repository.py` | Database operations | ✅ ACTIVE |
+| **invoice_schemas.py** | `backend/app/api/schemas/invoice_schemas.py` | API schemas/validation | ✅ ACTIVE |
+
+---
+
+### **📦 ARCHIVED/BACKUP FILES (Can Ignore)**
+
+| File | Location | Note |
+|------|----------|------|
+| **SimpleInvoiceCalculator.js.2024-12-01.backup** | `frontend/src/services/archive/` | Backup file |
+| **InvoiceCalculator.js.2024-12-01.backup** | `frontend/src/services/archive/` | Backup file |
+
+---
+
+## 🔍 KEY FINDINGS & QUESTIONS
+
+### **Problem 1: Too Many Selectors**
+We have **3 different InvoiceSelector files**:
+1. `components/global/InvoiceSelector.js` (JavaScript)
+2. `components/global/modals/InvoiceSelector.tsx` (TypeScript)
+3. `components/payment/components/InvoiceSelector.tsx` (TypeScript)
+
+**Action Needed**: Determine which one is canonical and archive the others.
+
+### **Problem 2: Duplicate API Services**
+- `services/api/modules/invoices.api.js` (258 lines) - ✅ **USE THIS ONE**
+- `services/invoiceApiService.js` (510 lines) - ❓ Mock/fallback service?
+
+**Action Needed**: Verify if invoiceApiService.js is still needed or can be archived.
+
+### **Problem 3: Duplicate Calculators**
+- `services/enterpriseCalculator.js` (284 lines) - ✅ **SINGLE SOURCE OF TRUTH**
+- `hooks/useInvoiceCalculation.js` (330 lines) - ❓ Duplicate?
+
+**Action Needed**: Check if useInvoiceCalculation.js can be replaced by EnterpriseCalculator.
+
+### **Problem 4: Unknown Usage**
+These files need usage verification:
+- InvoiceContainer.js (103 lines)
+- InvoiceManagement.js (554 lines)
+- InvoiceSidebar.js (188 lines)
+- InvoicePreview.js (514 lines)
+
+**Action Needed**: Search codebase for imports to verify if they're used.
+
+---
+
+## 📊 FILE COUNT SUMMARY
+
+| Category | Count | Status |
+|----------|-------|--------|
+| **Active Core Files** | 6 | ✅ Production ready |
+| **Active Services** | 6 | ✅ Production ready |
+| **Active Supporting** | 5 | ✅ Production ready |
+| **Questionable/Duplicate** | 15+ | ⚠️ Need review |
+| **Backend Files** | 8 | ✅ Active |
+| **Archive/Backup** | 2 | 📦 Ignore |
+| **TOTAL FRONTEND** | ~35 files | ⚠️ TOO MANY |
+
+---
+
+## 🎯 RECOMMENDED ACTIONS
+
+### **Immediate Actions**
+1. ✅ **Verify which InvoiceSelector is canonical** - Check imports across codebase
+2. ✅ **Check if invoiceApiService.js is still used** - Search for imports
+3. ✅ **Verify useInvoiceCalculation.js usage** - Compare vs EnterpriseCalculator
+4. ✅ **Check usage of Container/Management/Sidebar** - Search imports
+
+### **After Verification**
+5. 📦 **Archive unused files** to `frontend/src/components/archive/invoice/`
+6. 📝 **Update imports** if consolidating
+7. 🧪 **Test thoroughly** after any changes
+8. 📚 **Update this documentation** with final decisions
+
+---
+
+**Last Updated**: December 3, 2024  
+**Status**: Complete file inventory with actual locations added  
+**Next**: Verify usage of questionable files, then archive unused ones
 

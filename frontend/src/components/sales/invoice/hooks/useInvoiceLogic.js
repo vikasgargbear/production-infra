@@ -322,6 +322,7 @@ export const useInvoiceLogic = (onClose, prefilledData = null) => {
     
     console.log('📦 [ADD ITEM] Transformed product:', transformedProduct);
     console.log('📦 [ADD ITEM] Batch info:', {
+      batch_id: transformedProduct.batch_id,
       batch_number: transformedProduct.batch_number,
       expiry_date: transformedProduct.expiry_date
     });
@@ -332,29 +333,46 @@ export const useInvoiceLogic = (onClose, prefilledData = null) => {
     }
 
     setInvoice(prev => {
-      const existingItemIndex = prev.items.findIndex(
-        item => item.product_id === transformedProduct.product_id
-      );
+      // CRITICAL FIX: Check by BOTH product_id AND batch_id
+      // This allows multiple batches of same product to appear as separate rows
+      const existingItemIndex = prev.items.findIndex(item => {
+        // If both have batch_id, match on both product_id and batch_id
+        if (item.batch_id && transformedProduct.batch_id) {
+          return item.product_id === transformedProduct.product_id && 
+                 item.batch_id === transformedProduct.batch_id;
+        }
+        // If no batch tracking, match only on product_id (legacy behavior)
+        return item.product_id === transformedProduct.product_id;
+      });
 
       if (existingItemIndex >= 0) {
-        // Update existing item quantity
+        // Update existing item quantity (same product + same batch)
         const updatedItems = [...prev.items];
         updatedItems[existingItemIndex] = {
           ...updatedItems[existingItemIndex],
           quantity: parseFloat(updatedItems[existingItemIndex].quantity || 0) + 1
         };
+        toast.info(`Quantity updated for ${transformedProduct.product_name} (Batch: ${transformedProduct.batch_number})`);
         return { ...prev, items: updatedItems };
       } else {
-        // Add new item with default values
+        // Add new item (different product OR different batch)
+        const newItem = {
+          ...transformedProduct,
+          quantity: 1,  // Default quantity
+          discount: 0,
+          discount_percent: 0,
+          free_quantity: 0
+        };
+        
+        const message = transformedProduct.batch_number 
+          ? `Added ${transformedProduct.product_name} (Batch: ${transformedProduct.batch_number})`
+          : `Added ${transformedProduct.product_name}`;
+        
+        toast.success(message);
+        
         return { 
           ...prev, 
-          items: [...prev.items, {
-            ...transformedProduct,
-            quantity: 1,  // Default quantity
-            discount: 0,
-            discount_percent: 0,
-            free_quantity: 0
-          }] 
+          items: [...prev.items, newItem] 
         };
       }
     });

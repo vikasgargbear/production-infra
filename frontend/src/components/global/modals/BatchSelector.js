@@ -175,13 +175,13 @@ const BatchSelector = ({
       );
     }
     
-    // Sort batches
+    // Sort batches - CRITICAL: Show expiring soon FIRST (pharmaceutical FEFO)
     transformedBatches.sort((a, b) => {
       switch (sortBy) {
         case 'quantity':
           return sortOrder === 'asc' 
-            ? a.quantity_available - b.quantity_available
-            : b.quantity_available - a.quantity_available;
+            ? a.quantity_usable - b.quantity_usable
+            : b.quantity_usable - a.quantity_usable;
         
         case 'manufacturing':
           const dateA = new Date(a.manufacturing_date || 0);
@@ -190,9 +190,14 @@ const BatchSelector = ({
         
         case 'expiry':
         default:
-          const expiryA = new Date(a.expiry_date || 0);
-          const expiryB = new Date(b.expiry_date || 0);
-          return sortOrder === 'asc' ? expiryA - expiryB : expiryB - expiryA;
+          // CRITICAL FIX: Sort by days_to_expiry (closest expiry first)
+          // This implements FEFO (First Expiry First Out) for pharmaceuticals
+          const daysA = a.days_to_expiry ?? 999999;  // Expired/null batches last
+          const daysB = b.days_to_expiry ?? 999999;
+          
+          // Ascending order: Lowest days first (expiring soon on top)
+          // Descending order: Highest days first (furthest expiry on top)
+          return sortOrder === 'asc' ? daysA - daysB : daysB - daysA;
       }
     });
     
@@ -284,95 +289,118 @@ const BatchSelector = ({
         key={batch.batch_id}
         onClick={() => handleBatchSelect(batch)}
         className={cx(
-          'relative group cursor-pointer rounded-xl border-2 transition-all duration-300 p-4',
+          'relative group cursor-pointer rounded-lg border-2 transition-all duration-200 bg-white hover:shadow-md mb-2',
           isSelected 
-            ? 'border-blue-500 shadow-lg shadow-blue-100 scale-[1.02]' 
-            : 'border-gray-200 hover:border-gray-300 hover:shadow-lg'
+            ? 'border-blue-500 shadow-lg bg-blue-50' 
+            : 'border-gray-200 hover:border-blue-300'
         )}
       >
         {/* Selection indicator */}
         {isSelected && (
-          <div className="absolute -top-2 -right-2 w-6 h-6 bg-blue-500 rounded-full flex items-center justify-center animate-scale-in">
+          <div className="absolute -top-2 -right-2 w-6 h-6 bg-blue-500 rounded-full flex items-center justify-center shadow-md z-10">
             <CheckCircle className="w-4 h-4 text-white" />
           </div>
         )}
 
-        <div className="flex items-center justify-between">
-          {/* Left side - Batch info */}
-          <div className="flex items-center gap-4">
-            <div>
-              <div className="flex items-center gap-2">
-                <h4 className="text-base font-bold text-gray-900">
-                  #{batch.batch_number}
-                </h4>
-                {showExpiryStatus && expiryInfo && (
-                  <div className={cx(
-                    'px-2 py-0.5 rounded-full border',
-                    expiryInfo.status === 'expired' ? 'bg-red-50 border-red-200' : '',
-                    expiryInfo.status === 'critical' ? 'bg-red-50 border-red-200' : '',
-                    expiryInfo.status === 'warning' ? 'bg-amber-50 border-amber-200' : '',
-                    expiryInfo.status === 'good' ? 'bg-emerald-50 border-emerald-200' : ''
-                  )}>
-                    <span className={cx(
-                      'text-xs font-medium',
-                      expiryInfo.status === 'expired' ? 'text-red-600' : '',
-                      expiryInfo.status === 'critical' ? 'text-red-600' : '',
-                      expiryInfo.status === 'warning' ? 'text-amber-600' : '',
-                      expiryInfo.status === 'good' ? 'text-emerald-600' : ''
-                    )}>
-                      {expiryInfo.label} • {expiryInfo.days} days
-                    </span>
-                  </div>
-                )}
-              </div>
-              <div className="flex items-center gap-4 mt-1 text-sm text-gray-600">
-                <span>Exp: {DateFormatter.formatDate(batch.expiry_date, 'long')}</span>
-                {batch.manufacturing_date && (
-                  <span>Mfg: {DateFormatter.formatDate(batch.manufacturing_date, 'long')}</span>
-                )}
-              </div>
-            </div>
-          </div>
-
-          {/* Right side - Key metrics */}
-          <div className="flex items-center gap-6">
-            <div className="text-center">
-              <p className="text-xs text-gray-500 uppercase">Stock</p>
-              <p className="text-lg font-bold text-gray-900">
-                {batch.quantity_usable || batch.quantity_available}
-                {batch.has_pending_sync && (
-                  <span className="text-xs text-amber-600 block">
-                    ({batch.quantity_reserved_offline} pending)
-                  </span>
-                )}
-              </p>
-            </div>
-            <div className="text-center">
-              <p className="text-xs text-gray-500 uppercase">MRP</p>
-              <p className="text-lg font-bold text-gray-900">₹{batch.mrp}</p>
-            </div>
-            <div className={cx(
-              'px-4 py-2 rounded-lg transition-all duration-300 cursor-pointer',
-              isSelected 
-                ? 'bg-blue-500 text-white' 
-                : 'bg-gray-100 text-gray-600 group-hover:bg-gray-200'
-            )}>
-              <span className="text-sm font-medium flex items-center gap-2">
-                {isSelected ? (
-                  <>
-                    <CheckCircle className="w-4 h-4" />
-                    Selected
-                  </>
-                ) : (
-                  <>
-                    <Zap className="w-4 h-4" />
-                    Select
-                  </>
-                )}
+        {/* Table-like grid layout - 12 columns matching header */}
+        <div className="grid grid-cols-12 gap-3 p-3 items-center">
+          
+          {/* Column 1: Batch Number (2 cols) */}
+          <div className="col-span-2">
+            <div className="flex items-center gap-1">
+              <Package size={14} className="text-gray-400 flex-shrink-0" />
+              <span className={cx(
+                "font-semibold text-sm truncate",
+                isSelected ? "text-blue-700" : "text-gray-900"
+              )}>
+                {batch.batch_number}
               </span>
             </div>
           </div>
+
+          {/* Column 2: Expiry Date (3 cols) */}
+          <div className="col-span-3">
+            <div className="flex flex-col gap-0.5">
+              <span className="text-sm text-gray-700">
+                {DateFormatter.formatDate(batch.expiry_date, 'short')}
+              </span>
+              {showExpiryStatus && expiryInfo && (
+                <span className={cx(
+                  'text-xs font-medium',
+                  expiryInfo.status === 'expired' ? 'text-red-600' : '',
+                  expiryInfo.status === 'critical' ? 'text-red-600' : '',
+                  expiryInfo.status === 'warning' ? 'text-amber-600' : '',
+                  expiryInfo.status === 'good' ? 'text-emerald-600' : ''
+                )}>
+                  {expiryInfo.days > 0 ? `${expiryInfo.days} days` : 'Expired'}
+                </span>
+              )}
+            </div>
+          </div>
+
+          {/* Column 3: Mfg Date (2 cols) */}
+          <div className="col-span-2">
+            <span className="text-sm text-gray-600">
+              {batch.manufacturing_date 
+                ? DateFormatter.formatDate(batch.manufacturing_date, 'short')
+                : '-'}
+            </span>
+          </div>
+
+          {/* Column 4: Stock (2 cols) */}
+          <div className="col-span-2">
+            <div className="flex flex-col items-center">
+              <span className={cx(
+                "text-base font-bold",
+                (batch.quantity_usable || 0) > 10 ? "text-emerald-600" : 
+                (batch.quantity_usable || 0) > 0 ? "text-amber-600" : "text-red-600"
+              )}>
+                {batch.quantity_usable || batch.quantity_available || 0}
+              </span>
+              {batch.has_pending_sync && (
+                <span className="text-xs text-amber-600">
+                  {batch.quantity_reserved_offline} pending
+                </span>
+              )}
+            </div>
+          </div>
+
+          {/* Column 5: MRP (2 cols) */}
+          <div className="col-span-2 text-right">
+            <span className="text-sm font-semibold text-gray-900">
+              ₹{parseFloat(batch.mrp || 0).toFixed(2)}
+            </span>
+          </div>
+
+          {/* Column 6: Select (1 col) */}
+          <div className="col-span-1 flex justify-end">
+            <div className={cx(
+              'px-3 py-1.5 rounded-md text-xs font-medium transition-all',
+              isSelected 
+                ? 'bg-blue-500 text-white' 
+                : 'bg-gray-100 text-gray-700 group-hover:bg-blue-100 group-hover:text-blue-700'
+            )}>
+              {isSelected ? '✓' : 'Select'}
+            </div>
+          </div>
         </div>
+
+        {/* Expiry warning banner */}
+        {expiryInfo && (expiryInfo.status === 'expired' || expiryInfo.status === 'critical') && (
+          <div className={cx(
+            'px-3 py-1.5 border-t text-xs font-medium',
+            expiryInfo.status === 'expired' ? 'bg-red-50 text-red-700 border-red-200' : 'bg-amber-50 text-amber-700 border-amber-200'
+          )}>
+            <div className="flex items-center gap-1">
+              <AlertCircle size={12} />
+              <span>
+                {expiryInfo.status === 'expired' 
+                  ? 'Expired - Cannot be sold' 
+                  : 'Expiring soon - Prioritize (FEFO)'}
+              </span>
+            </div>
+          </div>
+        )}
       </div>
     );
   };
@@ -408,13 +436,25 @@ const BatchSelector = ({
         </div>
       ) : (
         <>
-          <div className="text-center mb-4">
-            <p className="text-sm text-gray-600">
-              Showing {batches.length} batch{batches.length !== 1 ? 'es' : ''} • 
-              Sorted by {sortBy === 'expiry' ? 'expiry date' : sortBy === 'quantity' ? 'stock quantity' : 'manufacturing date'}
+          {/* Column Headers */}
+          <div className="grid grid-cols-12 gap-3 px-3 py-2 bg-gray-50 border-b border-gray-200 mb-3 rounded-t-lg sticky top-0 z-10">
+            <div className="col-span-2 text-xs font-semibold text-gray-700 uppercase">Batch #</div>
+            <div className="col-span-3 text-xs font-semibold text-gray-700 uppercase">Expiry Date</div>
+            <div className="col-span-2 text-xs font-semibold text-gray-700 uppercase">Mfg Date</div>
+            <div className="col-span-2 text-xs font-semibold text-gray-700 uppercase text-center">Stock</div>
+            <div className="col-span-2 text-xs font-semibold text-gray-700 uppercase text-right">MRP</div>
+            <div className="col-span-1 text-xs font-semibold text-gray-700 uppercase text-right">Action</div>
+          </div>
+          
+          <div className="text-center mb-3 px-3">
+            <p className="text-xs text-gray-500">
+              {batches.length} batch{batches.length !== 1 ? 'es' : ''} • 
+              Sorted by {sortBy === 'expiry' ? 'expiry (FEFO)' : sortBy === 'quantity' ? 'stock' : 'mfg date'}
             </p>
           </div>
-          <div className="space-y-3 max-w-2xl mx-auto">
+          
+          {/* Batch List */}
+          <div className="space-y-0 max-w-full">
             {batches.map((batch) => 
               renderBatchInfo ? renderBatchInfo(batch) : defaultRenderBatchInfo(batch)
             )}
