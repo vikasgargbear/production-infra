@@ -27,6 +27,18 @@ class DataTransformer {
       gst_percent: parseFloat(product.gst_percent ?? 0),
       tax_rate: parseFloat(product.gst_percent ?? 0), // Alias for compatibility
       manufacturer: product.manufacturer ||  '',
+      // CRITICAL: Preserve batch fields if they exist (from BatchSelector)
+      ...(product.batch_id && {
+        batch_id: product.batch_id,
+        batch_number: product.batch_number || product.batch_no,
+        batch_no: product.batch_number || product.batch_no,
+        expiry_date: product.expiry_date,
+        manufacturing_date: product.manufacturing_date,
+        available_quantity: product.available_quantity || product.quantity_available,
+        mrp: parseFloat(product.mrp || 0),
+        sale_price: parseFloat(product.sale_price || 0),
+        rate: parseFloat(product.rate || product.sale_price || 0)
+      })
     };
 
     switch (context) {
@@ -44,6 +56,15 @@ class DataTransformer {
           // Minimal fields for search results
           display_name: `${base.product_name} - ₹${base.sale_price}`,
           search_text: `${base.product_name} ${base.hsn_code} ${base.manufacturer}`.toLowerCase()
+        };
+      
+      case 'invoice':
+        // CRITICAL: For invoice context, preserve ALL batch and pricing fields
+        return {
+          ...base,
+          // Preserve any additional fields that might be needed
+          ...(product.rate && { rate: parseFloat(product.rate) }),
+          ...(product.sale_price && !base.batch_id && { sale_price: parseFloat(product.sale_price) })
         };
       
       default:
