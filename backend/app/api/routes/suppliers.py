@@ -167,22 +167,54 @@ def get_suppliers(
 @router.get("/{supplier_id}")
 def get_supplier(supplier_id: int, db: Session = Depends(get_db),
     org_id: str = Depends(get_org_id_string)):
-    """Get a single supplier by ID"""
+    """Get a single supplier by ID with addresses"""
     try:
         result = db.execute(text("""
             SELECT s.*,
-                   a.city,
-                   a.state_name as state,
-                   a.address_line1 as address,
-                   a.pincode
+                   COALESCE(
+                       json_agg(
+                           json_build_object(
+                               'address_id', a.address_id,
+                               'address_type', a.address_type,
+                               'address_line1', a.address_line1,
+                               'address_line2', a.address_line2,
+                               'landmark', a.landmark,
+                               'city', a.city,
+                               'state_code', a.state_code,
+                               'state_name', a.state_name,
+                               'country', a.country,
+                               'pincode', a.pincode,
+                               'contact_person', a.contact_person,
+                               'contact_number', a.contact_number,
+                               'is_default', a.is_default,
+                               'is_active', a.is_active
+                           ) ORDER BY a.is_default DESC, a.address_type
+                       ) FILTER (WHERE a.address_id IS NOT NULL),
+                       '[]'::json
+                   ) as addresses
             FROM parties.suppliers s
-            LEFT JOIN master.addresses a ON (a.entity_type = 'supplier' AND a.entity_id = s.supplier_id AND a.org_id = s.org_id AND a.is_default = true)
+            LEFT JOIN master.addresses a ON (
+                a.entity_type = 'supplier' 
+                AND a.entity_id = s.supplier_id 
+                AND a.org_id = s.org_id
+                AND a.is_active = true
+            )
             WHERE s.supplier_id = :supplier_id AND s.org_id = :org_id
+            GROUP BY s.supplier_id
         """), {"supplier_id": supplier_id, "org_id": org_id})
         
         supplier = result.fetchone()
         if not supplier:
             raise HTTPException(status_code=404, detail="Supplier not found")
+        
+        # Parse addresses JSON
+        import json
+        addresses = supplier.addresses if hasattr(supplier, 'addresses') else "[]"
+        if isinstance(addresses, str):
+            addresses = json.loads(addresses)
+        
+        # Get default address for backward compatibility
+        default_address = next((a for a in addresses if a.get('is_default')), addresses[0] if addresses else {})
         
         # Map database columns to response schema
         return {
@@ -200,10 +232,15 @@ def get_supplier(supplier_id: int, db: Session = Depends(get_db),
             "contact_person": supplier.contact_person_name,
             "contact_person_name": supplier.contact_person_name,
             "contact_person_phone": supplier.contact_person_phone,
-            "city": supplier.city,
-            "state": supplier.state,
-            "address": supplier.address,
-            "pincode": supplier.pincode,
+            "supplier_type": supplier.supplier_type,
+            "is_active": supplier.is_active,
+            # Flat fields for backward compatibility
+            "city": default_address.get('city'),
+            "state": default_address.get('state_name'),
+            "address": default_address.get('address_line1'),
+            "pincode": default_address.get('pincode'),
+            # Full addresses array
+            "addresses": addresses,
             "created_at": supplier.created_at,
             "updated_at": supplier.updated_at
         }

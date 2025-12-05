@@ -350,11 +350,41 @@ async def get_customer(
     db: Session = Depends(get_db),
     org_id: str = Depends(get_org_id_string)
 ):
-    """Get customer details with outstanding balance and statistics"""
+    """Get customer details with addresses, outstanding balance and statistics"""
     try:
-        # Get customer
+        # Get customer with addresses
         result = db.execute(text("""
-            SELECT * FROM parties.customers WHERE customer_id = :id
+            SELECT c.*,
+                   COALESCE(
+                       json_agg(
+                           json_build_object(
+                               'address_id', a.address_id,
+                               'address_type', a.address_type,
+                               'address_line1', a.address_line1,
+                               'address_line2', a.address_line2,
+                               'landmark', a.landmark,
+                               'city', a.city,
+                               'state_code', a.state_code,
+                               'state_name', a.state_name,
+                               'country', a.country,
+                               'pincode', a.pincode,
+                               'contact_person', a.contact_person,
+                               'contact_number', a.contact_number,
+                               'is_default', a.is_default,
+                               'is_active', a.is_active
+                           ) ORDER BY a.is_default DESC, a.address_type
+                       ) FILTER (WHERE a.address_id IS NOT NULL),
+                       '[]'::json
+                   ) as addresses
+            FROM parties.customers c
+            LEFT JOIN master.addresses a ON (
+                a.entity_type = 'customer' 
+                AND a.entity_id = c.customer_id 
+                AND a.org_id = c.org_id
+                AND a.is_active = true
+            )
+            WHERE c.customer_id = :id
+            GROUP BY c.customer_id
         """), {"id": customer_id})
         
         customer = result.fetchone()
@@ -373,6 +403,12 @@ async def get_customer(
         customer_dict["contact_person"] = customer_dict.pop("contact_person_name", None)
         customer_dict["gstin"] = customer_dict.pop("gst_number", None)
         customer_dict["notes"] = customer_dict.pop("internal_notes", None)
+        
+        # Parse addresses JSON
+        import json
+        addresses = customer_dict.get("addresses", "[]")
+        if isinstance(addresses, str):
+            customer_dict["addresses"] = json.loads(addresses)
         
         customer_dict.update(stats)
         

@@ -12,39 +12,24 @@ class DataTransformer {
   static transformProduct(product, context = 'default') {
     const base = {
       product_id: product.product_id ? String(product.product_id) : null,
-      product_name: product.product_name || product.name || product.productName || '',
-      hsn_code: product.hsn_code || product.hsnCode || '3004',
+      product_name: product.product_name || '',
+      hsn_code: product.hsn_code || '3004',
+      generic_name: product.generic_name || '',
+      brand: product.brand || '',
+      product_class: product.product_class || '',
+      requires_prescription: product.requires_prescription || false,
+      is_controlled_substance: product.is_controlled_substance || false,
+      allow_negative_stock: product.allow_negative_stock || false,
+      reorder_quantity: parseInt(product.reorder_quantity || 0),
+      critical_stock_level: parseInt(product.critical_stock_level || 0),
       // GST standardized to gst_percent across backend and frontend
       gst_percent: parseFloat(product.gst_percent ?? 0),
       tax_rate: parseFloat(product.gst_percent ?? 0), // Alias for compatibility
-      mrp: parseFloat(product.mrp || 0),
-      sale_price: parseFloat(product.sale_price || product.selling_price || product.rate || product.mrp || 0),
-      manufacturer: product.manufacturer || product.company || '',
-      category: product.category || '',
-      quantity_available: product.quantity_available || product.quantity || product.stock || 0,
-      // Pack information
-      packages_per_box: product.packages_per_box || null,
-      units_per_pack: product.units_per_pack || null,
-      pack_type: product.pack_type || null,
-      pack_size: product.pack_size || null,
-      // CRITICAL: Batch information (was missing!)
-      batch_number: product.batch_number || product.batch_no || product.batchNo || null,
-      batch_id: product.batch_id || null,
-      expiry_date: product.expiry_date || product.expiryDate || null,
-      manufacturing_date: product.manufacturing_date || product.mfg_date || product.mfgDate || null
+      manufacturer: product.manufacturer ||  '',
     };
 
     switch (context) {
-      case 'invoice':
-        return {
-          ...base,
-          // Ensure consistent naming for invoice context
-          rate: base.sale_price, // For backward compatibility
-          unit_price: base.sale_price, // Another alias
-          // Ensure batch fields are included
-          batch_no: base.batch_number, // Alias for backward compatibility
-        };
-      
+
       case 'batch':
         return {
           ...base,
@@ -70,28 +55,52 @@ class DataTransformer {
    */
   static transformSupplier(supplier, context = 'default') {
     const base = {
-      supplier_id: String(supplier.id || supplier.supplier_id || ''),
-      name: supplier.name || supplier.supplier_name || '',
-      code: supplier.code || supplier.supplier_code || '',
-      contact_person: supplier.contact_person || '',
-      phone: supplier.phone || supplier.primary_phone || '',
-      email: supplier.email || supplier.primary_email || '',
-      address: supplier.address || '',
-      city: supplier.city || '',
-      state: supplier.state || '',
-      pincode: supplier.pincode || '',
+      supplier_id: String(supplier.supplier_id || ''),
+      name: supplier.supplier_name || '',
+      code: supplier.supplier_code || '',
+      type: supplier.supplier_type || '',
+      contact_person: supplier.contact_person_name || '',
+      phone: supplier.primary_phone || '',
+      email: supplier.primary_email || '',
+      contact_person_phone: supplier.contact_person_phone || '',
       gst_number: supplier.gst_number || supplier.gstin || '',
       pan_number: supplier.pan_number || '',
-      payment_terms: supplier.payment_terms || '',
+      drug_license_number: supplier.drug_license_number || '',
+      drug_license_validity: supplier.drug_license_validity || '',
+      payment_terms: supplier.payment_days || '',
       credit_days: parseInt(supplier.credit_days || 0),
-      is_active: supplier.is_active !== false
+      credit_limit_given: parseFloat(supplier.credit_limit_given || 0),
+      current_outstanding: parseFloat(supplier.current_outstanding || 0),
+      supplier_grade: supplier.supplier_grade || '',
+      bank_name: supplier.bank_name || '',
+      account_number: supplier.account_number || '',
+      ifsc_code: supplier.ifsc_code || '',
+      account_holder_name: supplier.account_holder_name || '',
+      is_active: supplier.is_active || true,
+      blacklisted: supplier.blacklisted || false
     };
+
+    // Handle addresses - available in detail view (GET /suppliers/{id})
+    if (supplier.addresses && Array.isArray(supplier.addresses) && supplier.addresses.length > 0) {
+      const defaultAddress = supplier.addresses.find(a => a.is_default) || supplier.addresses[0];
+      base.addresses = supplier.addresses;
+      base.address = `${defaultAddress.address_line1 || ''} ${defaultAddress.address_line2 || ''}`.trim();
+      base.city = defaultAddress.city || '';
+      base.state = defaultAddress.state_name || defaultAddress.state || '';
+      base.pincode = defaultAddress.pincode || '';
+    } else {
+      // Fallback for list view or old data (flat fields from JOIN)
+      base.address = supplier.address || '';
+      base.city = supplier.city || '';
+      base.state = supplier.state || '';
+      base.pincode = supplier.pincode || '';
+    }
 
     switch (context) {
       case 'search':
         return {
           ...base,
-          display_name: `${base.name} - ${base.city || 'No City'}`,
+          display_name: `${base.name}${base.city ? ' - ' + base.city : ''}`,
           search_text: `${base.name} ${base.phone} ${base.city} ${base.gst_number}`.toLowerCase()
         };
       
@@ -105,22 +114,31 @@ class DataTransformer {
    */
   static transformCustomer(customer, context = 'default') {
     const base = {
-      customer_id: String(customer.customer_id || customer.id || ''),
-      customer_name: customer.customer_name || customer.name || '',
+      customer_id: String(customer.customer_id || ''),
+      customer_name: customer.customer_name ||  '',
       primary_phone: customer.primary_phone || customer.phone || customer.mobile || customer.contact || '',
       primary_email: customer.primary_email || customer.email || '',
-      // Handle address from both single field and address object
-      address: customer.address || (customer.addresses && customer.addresses[0] ? 
-        `${customer.addresses[0].address_line1 || ''} ${customer.addresses[0].address_line2 || ''}`.trim() 
-        : ''),
-      city: customer.city || (customer.addresses && customer.addresses[0] ? customer.addresses[0].city : ''),
-      state: customer.state || (customer.addresses && customer.addresses[0] ? customer.addresses[0].state : ''),
-      pincode: customer.pincode || customer.pin || (customer.addresses && customer.addresses[0] ? customer.addresses[0].pincode : ''),
       gst_number: customer.gst_number || customer.gstin || customer.gstNumber || '',
       credit_limit: parseFloat(customer.credit_limit || customer.creditLimit || 0),
       credit_days: parseInt(customer.credit_days || customer.creditDays || 0),
       customer_type: customer.customer_type || 'retail'
     };
+
+    // Handle addresses - available in detail view (GET /customers/{id})
+    if (customer.addresses && Array.isArray(customer.addresses) && customer.addresses.length > 0) {
+      const defaultAddress = customer.addresses.find(a => a.is_default) || customer.addresses[0];
+      base.addresses = customer.addresses;
+      base.address = `${defaultAddress.address_line1 || ''} ${defaultAddress.address_line2 || ''}`.trim();
+      base.city = defaultAddress.city || '';
+      base.state = defaultAddress.state_name || defaultAddress.state || '';
+      base.pincode = defaultAddress.pincode || '';
+    } else {
+      // Fallback for list view or old data without addresses
+      base.address = customer.address || '';
+      base.city = customer.city || '';
+      base.state = customer.state || '';
+      base.pincode = customer.pincode || customer.pin || '';
+    }
 
     switch (context) {
       case 'invoice':
@@ -136,8 +154,8 @@ class DataTransformer {
         return {
           ...base,
           // Minimal fields for search
-          display_name: `${base.customer_name} - ${base.city}`,
-          search_text: `${base.customer_name} ${base.phone} ${base.city} ${base.gst_number}`.toLowerCase()
+          display_name: `${base.customer_name}${base.city ? ' - ' + base.city : ''}`,
+          search_text: `${base.customer_name} ${base.primary_phone} ${base.city} ${base.gst_number}`.toLowerCase()
         };
       
       default:
@@ -146,22 +164,69 @@ class DataTransformer {
   }
 
   /**
-   * Transform batch data
+   * Transform batch data with optional product context
+   * When product is provided, batch inherits product information for better display and validation
    */
   static transformBatch(batch, product = null) {
-    return {
-      batch_id: String(batch.batch_id || batch.id || ''),
-      batch_number: batch.batch_number || batch.batch_no || batch.batchNumber || '',
-      expiry_date: batch.expiry_date || batch.expiryDate || '',
-      manufacturing_date: batch.manufacturing_date || batch.mfg_date || batch.mfgDate || '',
-      quantity_available: parseInt(batch.quantity_available || batch.quantity || batch.stock || 0),
+    const base = {
+      batch_id: batch.batch_id,
+      batch_number: batch.batch_number || '',
+      expiry_date: batch.expiry_date || '',
+      manufacturing_date: batch.manufacturing_date || '',
+      quantity_available: parseInt(batch.quantity_available || 0),
+      quantity_returned: parseInt(batch.quantity_returned || 0),
+      quantity_reserved: parseInt(batch.quantity_reserved || batch.quantity_allocated || 0),
       // IMPORTANT: Backend sends mrp_per_unit, sale_price_per_unit, cost_per_unit
-      mrp: parseFloat(batch.mrp_per_unit || batch.mrp || product?.mrp || 0),
-      sale_price: parseFloat(batch.sale_price_per_unit || batch.sale_price || batch.selling_price || batch.rate || product?.sale_price || 0),
-      purchase_price: parseFloat(batch.cost_per_unit || batch.purchase_price || batch.cost || 0),
+      mrp: parseFloat(batch.mrp_per_unit || batch.mrp || 0),
+      sale_price: parseFloat(batch.sale_price_per_unit || batch.sale_price || 0),
+      purchase_price: parseFloat(batch.cost_per_unit || batch.purchase_price || 0),
+      // Pack information
+      packages_per_box: batch.packages_per_box || null,
+      units_per_pack: batch.units_per_pack || null,
+      pack_type: batch.pack_type || null,
+      pack_size: batch.pack_size || null,
+      category_name: batch.category_name || null,
       // Calculate days to expiry
-      days_to_expiry: batch.expiry_date ? Math.floor((new Date(batch.expiry_date) - new Date()) / (1000 * 60 * 60 * 24)) : null
+      days_to_expiry: batch.expiry_date ? dayjs(batch.expiry_date).diff(dayjs(), 'days') : null,
+      // Expiry status for UI display
+      expiry_status: this._getExpiryStatus(batch.expiry_date)
     };
+
+    // If product context provided, enrich batch with product information
+    if (product) {
+      base.product_id = product.product_id || batch.product_id;
+      base.product_name = product.product_name || batch.product_name || '';
+      base.manufacturer = product.manufacturer || batch.manufacturer || '';
+      base.hsn_code = product.hsn_code || batch.hsn_code || '';
+      // Inherit GST from product if batch doesn't have it
+      base.gst_percent = parseFloat(batch.gst_percent || batch.gst_rate || product.gst_percent || product.gst_rate || 0);
+      // Display string for dropdown: "Product Name | Batch# | Exp: Date | ₹Price"
+      base.display_name = `${base.product_name} | ${base.batch_number} | Exp: ${base.expiry_date || 'N/A'} | ₹${base.sale_price}`;
+    } else {
+      // Fallback: use batch's own product info if available
+      base.product_id = batch.product_id;
+      base.product_name = batch.product_name || '';
+      base.hsn_code = batch.hsn_code || '';
+      base.gst_percent = parseFloat(batch.gst_percent || batch.gst_rate || 0);
+      base.display_name = `${base.batch_number} | Exp: ${base.expiry_date || 'N/A'} | ₹${base.sale_price}`;
+    }
+
+    return base;
+  }
+
+  /**
+   * Helper to determine expiry status for batch
+   * @private
+   */
+  static _getExpiryStatus(expiryDate) {
+    if (!expiryDate) return 'unknown';
+    
+    const days = dayjs(expiryDate).diff(dayjs(), 'days');
+    
+    if (days < 0) return 'expired';
+    if (days <= 30) return 'expiring_soon';
+    if (days <= 90) return 'expiring_warning';
+    return 'good';
   }
 
   /**
@@ -340,11 +405,10 @@ class DataTransformer {
       supplier_type: supplierData.supplier_type || 'distributor',
       contact_person: supplierData.contact_person || null,
       contact_person_phone: supplierData.contact_person_phone || null,
-      contact_person_email: supplierData.contact_person_email || null,
-      phone: supplierData.phone || supplierData.primary_phone || null,
-      secondary_phone: supplierData.alternate_phone || supplierData.secondary_phone || null,
-      whatsapp_number: supplierData.whatsapp_number || supplierData.phone || null,
-      email: supplierData.email || supplierData.primary_email || null,
+      phone: supplierData.primary_phone || null,
+      secondary_phone: supplierData.secondary_phone || null,
+      whatsapp_number: supplierData.secondary_phone || supplierData.primary_phone || null,
+      email: supplierData.primary_email || null,
       website: supplierData.website || null,
       address: supplierData.address_line1 || supplierData.address || null,
       address_line2: supplierData.address_line2 || null,
