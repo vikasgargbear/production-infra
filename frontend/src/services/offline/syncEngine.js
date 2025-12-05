@@ -235,15 +235,17 @@ class SyncEngine {
   // Sync invoice
   async syncInvoice(invoiceData) {
     // Remove local-only fields
-    const { _localId, _syncStatus, ...invoice } = invoiceData;
+    const { _localId, _syncStatus, reserved_batches, ...invoice } = invoiceData;
     
     try {
+      let response;
+      
       // If it has a server ID, update; otherwise create
       if (invoice.invoice_id && !invoice.invoice_id.startsWith('LOCAL_')) {
-        return await apiClient.put(`/invoices/${invoice.invoice_id}`, invoice);
+        response = await apiClient.put(`/invoices/${invoice.invoice_id}`, invoice);
       } else {
         // Create new invoice
-        const response = await apiClient.post('/invoices', invoice);
+        response = await apiClient.post('/invoices', invoice);
         
         // Update local database with server ID
         if (response.data?.invoice_id) {
@@ -253,9 +255,30 @@ class SyncEngine {
             response.data.invoice_id
           );
         }
-        
-        return response;
       }
+      
+      // SUCCESS: Clear reserved quantities
+      if (reserved_batches && Array.isArray(reserved_batches)) {
+        for (const reservation of reserved_batches) {
+          await offlineDB.clearReservedQuantity(
+            reservation.batch_id, 
+            reservation.quantity
+          );
+        }
+        console.log(`✅ Cleared ${reserved_batches.length} batch reservations after successful sync`);
+      }
+      
+      // Update batch quantities from server response if available
+      if (response.data?.updated_batches) {
+        for (const batchUpdate of response.data.updated_batches) {
+          await offlineDB.updateBatchQuantity(
+            batchUpdate.batch_id,
+            batchUpdate.new_quantity
+          );
+        }
+      }
+      
+      return response;
     } catch (error) {
       // Enhanced error handling for stock conflicts
       if (error.response?.status === 409 && error.response?.data?.detail?.error === 'INSUFFICIENT_STOCK') {

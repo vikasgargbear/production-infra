@@ -444,8 +444,13 @@ class OfflineDatabase {
     const timestamp = new Date().toISOString();
     
     for (const batch of batches) {
+      // Preserve existing reserved quantity if batch already exists
+      const existingBatch = await store.get(batch.batch_id);
+      const reservedOffline = existingBatch?.quantity_reserved_offline || 0;
+      
       await store.put({
         ...batch,
+        quantity_reserved_offline: reservedOffline, // Track offline usage
         updated_at: timestamp  // Track when cached
       });
     }
@@ -482,6 +487,130 @@ class OfflineDatabase {
     const tx = db.transaction('batches', 'readwrite');
     await tx.objectStore('batches').clear();
     await tx.done;
+  }
+
+  /**
+   * Reserve batch quantity for offline invoice (prevents local overselling)
+   * @param {string|number} batchId - Batch ID
+   * @param {number} quantity - Quantity to reserve
+   * @returns {Promise<{success: boolean, availableQuantity: number}>}
+   */
+  async reserveBatchQuantity(batchId, quantity) {
+    const db = await this.init();
+    const tx = db.transaction('batches', 'readwrite');
+    const store = tx.objectStore('batches');
+    
+    const batch = await store.get(String(batchId));
+    
+    if (!batch) {
+      await tx.done;
+      return { success: false, error: 'Batch not found in cache', availableQuantity: 0 };
+    }
+    
+    // Calculate usable quantity
+    const reserved = batch.quantity_reserved_offline || 0;
+    const available = batch.quantity_available || 0;
+    const usable = available - reserved;
+    
+    if (usable < quantity) {
+      await tx.done;
+      return { 
+        success: false, 
+        error: `Insufficient stock. Available: ${usable} (${reserved} pending sync)`,
+        availableQuantity: usable,
+        reservedQuantity: reserved
+      };
+    }
+    
+    // Reserve the quantity
+    batch.quantity_reserved_offline = reserved + quantity;
+    await store.put(batch);
+    await tx.done;
+    
+    return { 
+      success: true, 
+      availableQuantity: usable - quantity,
+      newReserved: batch.quantity_reserved_offline
+    };
+  }
+
+  /**
+   * Clear reserved quantity after successful sync
+   * @param {string|number} batchId - Batch ID
+   * @param {number} quantity - Quantity to clear
+   */
+  async clearReservedQuantity(batchId, quantity) {
+    const db = await this.init();
+    const tx = db.transaction('batches', 'readwrite');
+    const store = tx.objectStore('batches');
+    
+    const batch = await store.get(String(batchId));
+    
+    if (batch) {
+      const currentReserved = batch.quantity_reserved_offline || 0;
+      batch.quantity_reserved_offline = Math.max(0, currentReserved - quantity);
+      await store.put(batch);
+    }
+    
+    await tx.done;
+  }
+
+  /**
+   * Update batch quantity from server response
+   * @param {string|number} batchId - Batch ID
+   * @param {number} newQuantity - New quantity from server
+   */
+  async updateBatchQuantity(batchId, newQuantity) {
+    const db = await this.init();
+    const tx = db.transaction('batches', 'readwrite');
+    const store = tx.objectStore('batches');
+    
+    const batch = await store.get(String(batchId));
+    
+    if (batch) {
+      batch.quantity_available = newQuantity;
+      batch.updated_at = new Date().toISOString();
+      await store.put(batch);
+    }
+    
+    await tx.done;
+  }
+
+  /**
+   * Get usable quantity for a batch (available - reserved)
+   * @param {string|number} batchId - Batch ID
+   * @returns {Promise<{available: number, reserved: number, usable: number}>}
+   */
+  async getBatchUsableQuantity(batchId) {
+    const db = await this.init();
+    const tx = db.transaction('batches', 'readonly');
+    const store = tx.objectStore('batches');
+    
+    const batch = await store.get(String(batchId));
+    await tx.done;
+    
+    if (!batch) {
+      return { available: 0, reserved: 0, usable: 0 };
+    }
+    
+    const available = batch.quantity_available || 0;
+    const reserved = batch.quantity_reserved_offline || 0;
+    const usable = available - reserved;
+    
+    return { available, reserved, usable };
+  }
+
+  /**
+   * Get all batches with pending offline reservations
+   * @returns {Promise<Array>}
+   */
+  async getBatchesWithReservations() {
+    const db = await this.init();
+    const batches = await db.getAll('batches');
+    
+    return batches.filter(batch => 
+      batch.quantity_reserved_offline && batch.quantity_reserved_offline > 0
+    );
   }
 
   // Get sync statistics

@@ -9,6 +9,7 @@ import localInvoiceService from '../../../../services/invoice/localInvoiceServic
 import { customerAPI, productAPI, employeesAPI } from '../../../../services/api';
 import offlineDB from '../../../../services/offline/offlineDatabase';
 import { useNetworkStatus } from '../../../../hooks/useNetworkStatus';
+import { getTodayBusinessDate, getDaysFromToday, getUTCTimestamp } from '../../../../utils/indianDateUtils';
 
 export const useInvoiceLogic = (onClose, prefilledData = null) => {
   // Network Status
@@ -16,9 +17,9 @@ export const useInvoiceLogic = (onClose, prefilledData = null) => {
   
   // Core State
   const [invoice, setInvoice] = useState({
-    invoice_no: `DRAFT-${new Date().toISOString().split('T')[0].replace(/-/g, '')}`, // Temporary draft number
-    invoice_date: new Date().toISOString().split('T')[0],
-    due_date: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0], // 30 days from today
+    invoice_no: `DRAFT-${getTodayBusinessDate().replace(/-/g, '')}`, // Temporary draft number (company timezone)
+    invoice_date: getTodayBusinessDate(), // ✅ Uses company timezone
+    due_date: getDaysFromToday(30), // ✅ 30 days from today in company timezone
     items: [],
     customer_details: null,
     billing_address: '',
@@ -100,7 +101,7 @@ export const useInvoiceLogic = (onClose, prefilledData = null) => {
           ...invoice,
           customer_id: selectedCustomer.customer_id || selectedCustomer.id,
           customer_details: selectedCustomer,
-          draft_saved_at: new Date().toISOString()
+          draft_saved_at: getUTCTimestamp() // ✅ UTC for system timestamps
         };
 
         // Save to localStorage as backup
@@ -451,27 +452,57 @@ export const useInvoiceLogic = (onClose, prefilledData = null) => {
         customer_id: selectedCustomer.customer_id || selectedCustomer.id,
         customer_details: selectedCustomer,
         total_amount: parseFloat(invoice.totals?.final_amount || invoice.net_amount) || 0,
-        invoice_date: invoice.invoice_date || new Date().toISOString().split('T')[0],
-        created_at: new Date().toISOString()
+        invoice_date: invoice.invoice_date || getTodayBusinessDate(), // ✅ Company timezone
+        created_at: getUTCTimestamp() // ✅ UTC for timestamps
       };
 
       // OFFLINE-FIRST: Check network status
       if (!isOnline) {
         console.log('[Invoice] Saving offline - no internet connection');
         
-        // Generate local temp ID
+        // STEP 1: Validate and reserve stock quantities
+        const reservationResults = [];
+        for (const item of invoiceData.items) {
+          if (item.batch_id) {
+            const reservation = await offlineDB.reserveBatchQuantity(
+              item.batch_id, 
+              parseFloat(item.quantity) || 0
+            );
+            
+            if (!reservation.success) {
+              // Rollback previous reservations
+              for (const prevResult of reservationResults) {
+                await offlineDB.clearReservedQuantity(prevResult.batch_id, prevResult.quantity);
+              }
+              
+              // Show error and stop invoice creation
+              toast.error(`❌ ${reservation.error}`, { autoClose: 8000 });
+              setError(reservation.error);
+              setSaving(false);
+              return;
+            }
+            
+            reservationResults.push({
+              batch_id: item.batch_id,
+              quantity: parseFloat(item.quantity) || 0
+            });
+          }
+        }
+        
+        // STEP 2: Generate local temp ID
         const tempId = `LOCAL_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
         
-        // Generate temporary offline invoice number
+        // STEP 3: Generate temporary offline invoice number
         const offlineInvoiceNo = await documentNumberGenerator.generateNumber(DOC_TYPES.INVOICE, false); // false = don't try backend
         
-        // Save to IndexedDB
+        // STEP 4: Save to IndexedDB with reservation tracking
         await offlineDB.add('invoices', {
           ...invoiceData,
           invoice_no: offlineInvoiceNo, // Use offline-generated number
           temp_id: tempId,
           sync_status: 'pending',
-          created_offline: true
+          created_offline: true,
+          reserved_batches: reservationResults // Track what we reserved
         });
         
         // Show offline success message

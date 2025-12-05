@@ -145,11 +145,23 @@ const BatchSelector = ({
 
   const processBatches = (batchesData) => {
     // Transform batches using DataTransformer
-    let transformedBatches = batchesData.map(batch => 
-      DataTransformer.transformBatch(batch, product)
-    );
+    let transformedBatches = batchesData.map(batch => {
+      const transformed = DataTransformer.transformBatch(batch, product);
+      
+      // Add offline reservation info
+      const reserved = batch.quantity_reserved_offline || 0;
+      const available = batch.quantity_available || 0;
+      const usable = available - reserved;
+      
+      return {
+        ...transformed,
+        quantity_reserved_offline: reserved,
+        quantity_usable: usable,
+        has_pending_sync: reserved > 0
+      };
+    });
     
-    // Filter batches
+    // Filter batches (use usable quantity, not just available)
     if (filterExpired) {
       transformedBatches = transformedBatches.filter(batch => {
         const daysToExpiry = batch.days_to_expiry;
@@ -159,7 +171,7 @@ const BatchSelector = ({
     
     if (minQuantity > 0) {
       transformedBatches = transformedBatches.filter(batch => 
-        batch.quantity_available >= minQuantity
+        batch.quantity_usable >= minQuantity  // Check usable, not available
       );
     }
     
@@ -326,7 +338,14 @@ const BatchSelector = ({
           <div className="flex items-center gap-6">
             <div className="text-center">
               <p className="text-xs text-gray-500 uppercase">Stock</p>
-              <p className="text-lg font-bold text-gray-900">{batch.quantity_available}</p>
+              <p className="text-lg font-bold text-gray-900">
+                {batch.quantity_usable || batch.quantity_available}
+                {batch.has_pending_sync && (
+                  <span className="text-xs text-amber-600 block">
+                    ({batch.quantity_reserved_offline} pending)
+                  </span>
+                )}
+              </p>
             </div>
             <div className="text-center">
               <p className="text-xs text-gray-500 uppercase">MRP</p>
