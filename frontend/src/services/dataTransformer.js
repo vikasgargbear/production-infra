@@ -4,7 +4,7 @@
  */
 
 import DateFormatter from './dateFormatter';
-import dayjs from 'dayjs';
+import { differenceInDays } from 'date-fns';
 
 class DataTransformer {
   /**
@@ -208,8 +208,8 @@ class DataTransformer {
       pack_type: batch.pack_type || null,
       pack_size: batch.pack_size || null,
       category_name: batch.category_name || null,
-      // Calculate days to expiry
-      days_to_expiry: batch.expiry_date ? dayjs(batch.expiry_date).diff(dayjs(), 'days') : null,
+      // Calculate days to expiry using date-fns
+      days_to_expiry: batch.expiry_date ? differenceInDays(new Date(batch.expiry_date), new Date()) : null,
       // Expiry status for UI display
       expiry_status: this._getExpiryStatus(batch.expiry_date)
     };
