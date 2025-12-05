@@ -52,6 +52,7 @@ const BatchSelector = ({
   const [loading, setLoading] = useState(false);
   const [selectedBatch, setSelectedBatch] = useState(null);
   const [error, setError] = useState(null);
+  const [showCostInfo, setShowCostInfo] = useState(false);
   const hasLoadedRef = useRef(false);
   const containerRef = useRef(null);
 
@@ -78,32 +79,37 @@ const BatchSelector = ({
   const loadBatches = async () => {
     if (!product) return;
 
+    // STEP 0: Check memory cache FIRST (instant - synchronous)
+    const cachedBatches = searchCache.get('batches', { product_id: product.product_id });
+    if (cachedBatches && cachedBatches.length > 0) {
+      processBatches(cachedBatches);
+      return; // Return immediately - INSTANT loading!
+    }
+
     setLoading(true);
     setError(null);
     
     try {
-      // STEP 1: Try IndexedDB first (instant, works offline)
-      const cachedBatches = await offlineDB.getBatchesByProduct(product.product_id);
+      // STEP 1: Try IndexedDB (fast async, works offline)
+      const offlineBatches = await offlineDB.getBatchesByProduct(product.product_id);
       
-      if (cachedBatches && cachedBatches.length > 0) {
-        // Check if cache is fresh (< 24 hours)
-        const lastUpdate = new Date(cachedBatches[0].updated_at);
-        const hoursSinceUpdate = (Date.now() - lastUpdate) / (1000 * 60 * 60);
+      if (offlineBatches && offlineBatches.length > 0) {
+        processBatches(offlineBatches);
+        setLoading(false);
         
-        if (hoursSinceUpdate < 24) {
-          // Use cached data immediately (INSTANT!)
-          processBatches(cachedBatches);
-          setLoading(false);
-          
-          // Background refresh if stale (> 1 hour)
-          if (hoursSinceUpdate > 1 && navigator.onLine) {
-            fetchAndStoreBatches(product.product_id, false); // silent refresh
-          }
-          return;
+        // Cache in memory for instant access next time
+        searchCache.set('batches', { product_id: product.product_id }, offlineBatches);
+        
+        // Background refresh if online (silent)
+        if (navigator.onLine) {
+          fetchAndStoreBatches(product.product_id, false).catch(() => {
+            // Silent fail - user already has data
+          });
         }
+        return;
       }
       
-      // STEP 2: Cache miss or stale → fetch from API
+      // STEP 2: Cache miss → fetch from API
       await fetchAndStoreBatches(product.product_id, true);
       
     } catch (error) {
@@ -446,13 +452,6 @@ const BatchSelector = ({
             <div className="col-span-1 text-xs font-semibold text-gray-700 uppercase text-right">Action</div>
           </div>
           
-          <div className="text-center mb-3 px-3">
-            <p className="text-xs text-gray-500">
-              {batches.length} batch{batches.length !== 1 ? 'es' : ''} • 
-              Sorted by {sortBy === 'expiry' ? 'expiry (FEFO)' : sortBy === 'quantity' ? 'stock' : 'mfg date'}
-            </p>
-          </div>
-          
           {/* Batch List */}
           <div className="space-y-0 max-w-full">
             {batches.map((batch) => 
@@ -494,12 +493,27 @@ const BatchSelector = ({
     );
   }
 
+  // Keyboard navigation
+  const handleKeyDown = (e) => {
+    // Shift+` to toggle cost/profit info
+    if (e.shiftKey && (e.key === '~' || e.key === '`')) {
+      e.preventDefault();
+      setShowCostInfo(prev => !prev);
+      return;
+    }
+  };
+
   // Default modal mode
   if (!show) return null;
 
   return (
     <div className={styles.modalOverlay}>
-      <div className={styles.modalContent}>
+      <div 
+        className="bg-white rounded-2xl shadow-2xl w-full max-w-6xl max-h-[90vh] overflow-hidden"
+        tabIndex={-1}
+        onKeyDown={handleKeyDown}
+        ref={containerRef}
+      >
         {/* Header */}
         <div className={styles.modalHeader}>
           <div className="flex items-center justify-between">
@@ -512,12 +526,18 @@ const BatchSelector = ({
                 <p className="text-sm text-gray-600 mt-0.5">{product?.product_name}</p>
               </div>
             </div>
-            <button
-              onClick={onClose}
-              className={cx(styles.iconButton, 'hover:bg-white/80 rounded-xl')}
-            >
-              <X className="w-5 h-5 text-gray-500 group-hover:text-gray-700" />
-            </button>
+            <div className="flex items-center gap-3">
+              {/* Cost info toggle hint */}
+              <span className="text-xs text-gray-400">
+                Press <kbd className="px-1.5 py-0.5 bg-gray-100 rounded border border-gray-300 text-gray-600 font-mono">Shift + `</kbd> for cost info
+              </span>
+              <button
+                onClick={onClose}
+                className={cx(styles.iconButton, 'hover:bg-white/80 rounded-xl')}
+              >
+                <X className="w-5 h-5 text-gray-500 group-hover:text-gray-700" />
+              </button>
+            </div>
           </div>
         </div>
 
