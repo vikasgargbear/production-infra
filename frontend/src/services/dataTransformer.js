@@ -4,6 +4,7 @@
  */
 
 import DateFormatter from './dateFormatter';
+import dayjs from 'dayjs';
 
 class DataTransformer {
   /**
