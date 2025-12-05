@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useCallback, forwardRef, useImperat
 import { Search, Package, Plus, X, Loader2 } from 'lucide-react';
 import { productAPI } from '../../../services/api';
 import { AddNewButton } from '../ui';
-import BatchSelectionModalV2 from '../../invoice/modals/BatchSelectionModalV2';
+import BatchSelector from '../modals/BatchSelector';
 import DataTransformer from '../../../services/dataTransformer';
 import searchCache, { smartSearch } from '../../../utils/searchCache';
 import { debounce } from '../../../utils/debounce';
@@ -275,9 +275,10 @@ const ProductSearchSimple = forwardRef(({ onAddItem, onCreateProduct, showBatchS
 
       {/* Batch Selection Modal - Only show if batch selection is enabled */}
       {showBatchSelection && showBatchModal && selectedProduct && (
-        <BatchSelectionModalV2
+        <BatchSelector
           show={showBatchModal}
           product={selectedProduct}
+          mode="modal"
           onClose={() => {
             setShowBatchModal(false);
             setSelectedProduct(null);
