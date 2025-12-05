@@ -318,7 +318,12 @@ export const useInvoiceLogic = (onClose, prefilledData = null) => {
 
     console.log('📦 [ADD ITEM] Raw product from search:', product);
 
-    const transformedProduct = DataTransformer.transformProduct(product, 'invoice');
+    // CRITICAL: If product already has batch_id, it came from BatchSelector
+    // and is already properly formatted. Don't transform it!
+    // Only transform products from ProductSearch (no batch info)
+    const transformedProduct = product.batch_id 
+      ? product  // Already has batch fields from BatchSelector - use as-is
+      : DataTransformer.transformProduct(product, 'invoice'); // Product search - needs transform
     
     console.log('📦 [ADD ITEM] Transformed product:', transformedProduct);
     console.log('📦 [ADD ITEM] Batch info:', {
